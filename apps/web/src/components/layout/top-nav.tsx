@@ -48,7 +48,7 @@ export function TopNav() {
   const { setCommandPaletteOpen } = useUIStore();
   const { user, logout } = useAuthStore();
   
-  const { notifications, unreadCount, fetchNotifications, markAllAsRead, initializeSocketListeners } = useNotificationStore();
+  const { notifications, unreadCount, fetchNotifications, markAllAsRead, markAsRead, initializeSocketListeners } = useNotificationStore();
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -171,8 +171,20 @@ export function TopNav() {
                   ) : (
                     notifications.slice(0, 10).map((n) => {
                       const Icon = notificationIcons[n.type] || AlertCircle;
+                      
+                      const handleNotificationClick = async () => {
+                        if (!n.read) markAsRead(n.id);
+                        setShowNotifications(false);
+                        if (n.metadata?.taskId) router.push(`/tasks?taskId=${n.metadata.taskId}`);
+                        else if (n.metadata?.projectId) router.push(`/projects/${n.metadata.projectId}`);
+                      };
+
                       return (
-                        <div key={n.id} className={`flex gap-3 px-4 py-3 ${!n.read ? 'bg-blue-50/50' : ''}`}>
+                        <div 
+                          key={n.id} 
+                          onClick={handleNotificationClick}
+                          className={`flex gap-3 px-4 py-3 cursor-pointer hover:bg-[#F9FAFB] transition-colors ${!n.read ? 'bg-blue-50/50' : ''}`}
+                        >
                           <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#F3F4F6]">
                             <Icon className="h-3.5 w-3.5 text-[#6B7280]" />
                           </div>

@@ -2,14 +2,20 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { formatDate, getInitials, formatRelativeDate, getAvatarColor } from '@/lib/utils';
-import { ArrowLeft, Mail, Phone, MapPin, Building2, DollarSign } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MapPin, Building2, DollarSign, X, Plus } from 'lucide-react';
+import { Select } from '@/components/ui/select';
+
+interface ClientContact {
+  id: string; name: string; designation?: string | null; email?: string | null; phone?: string | null;
+}
 
 interface ClientDetail {
-  id: string; name: string; company?: string | null; industry?: string | null; contactPerson?: string | null;
-  email?: string | null; phone?: string | null; address?: string | null; contractValue?: number | null;
+  id: string; name: string; company?: string | null; industry?: string | null;
+  contacts?: ClientContact[];
+  address?: string | null; contractValue?: number | null;
   startDate?: string | null; status: string; createdAt: string;
   projects: { id: string; name: string; status: string; progress: number; endDate?: string | null; owner?: { id: string; name: string; avatar?: string | null }; _count?: { tasks: number } }[];
   notes: { id: string; content: string; type: string; createdAt: string; author: { name: string } }[];
@@ -30,6 +36,15 @@ export default function ClientDetailPage() {
   const [tab, setTab] = useState<Tab>('overview');
   const [noteContent, setNoteContent] = useState('');
 
+  // Edit State
+  const [showEdit, setShowEdit] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: '', company: '', industry: '', address: '', contractValue: '', status: 'LEAD',
+    contacts: [{ name: '', designation: '', email: '', phone: '' }] as ClientContact[]
+  });
+  const [editError, setEditError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
   useEffect(() => {
     api.get<ClientDetail>(`/clients/${id}`).then(setClient).catch(() => router.push('/clients'));
   }, [id, router]);
@@ -40,6 +55,38 @@ export default function ClientDetailPage() {
     setNoteContent('');
     const updated = await api.get<ClientDetail>(`/clients/${id}`);
     setClient(updated);
+  }
+
+  function openEdit() {
+    setEditForm({
+      name: client!.name || '',
+      company: client!.company || '',
+      industry: client!.industry || '',
+      address: client!.address || '',
+      contractValue: client!.contractValue?.toString() || '',
+      status: client!.status,
+      contacts: client!.contacts?.length ? [...client!.contacts] : [{ id: '', name: '', designation: '', email: '', phone: '' }]
+    });
+    setShowEdit(true);
+  }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault();
+    setEditError('');
+    setSubmitting(true);
+    try {
+      await api.put(`/clients/${id}`, {
+        ...editForm,
+        contractValue: editForm.contractValue ? parseFloat(editForm.contractValue) : undefined,
+      });
+      setShowEdit(false);
+      const updated = await api.get<ClientDetail>(`/clients/${id}`);
+      setClient(updated);
+    } catch (err: any) {
+      setEditError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   if (!client) return <div className="py-20 text-center text-sm text-[#9CA3AF]">Loading...</div>;
@@ -71,6 +118,9 @@ export default function ClientDetailPage() {
             </div>
           </div>
         </div>
+        <button onClick={openEdit} className="px-4 py-2 bg-white border border-[#E5E7EB] rounded-xl text-sm font-medium text-[#374151] hover:bg-gray-50 transition-colors shadow-sm">
+          Edit Client
+        </button>
       </div>
 
       {/* Tabs */}
@@ -86,13 +136,28 @@ export default function ClientDetailPage() {
       {tab === 'overview' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6 space-y-4">
-            <h3 className="text-sm font-semibold text-[#111827]">Contact Information</h3>
-            {client.contactPerson && <InfoRow icon={Building2} label="Contact" value={client.contactPerson} />}
-            {client.email && <InfoRow icon={Mail} label="Email" value={client.email} />}
-            {client.phone && <InfoRow icon={Phone} label="Phone" value={client.phone} />}
+            <h3 className="text-sm font-semibold text-[#111827]">Company Details</h3>
             {client.address && <InfoRow icon={MapPin} label="Address" value={client.address} />}
             {client.industry && <InfoRow icon={Building2} label="Industry" value={client.industry} />}
             {client.startDate && <InfoRow icon={DollarSign} label="Start Date" value={formatDate(client.startDate)} />}
+
+            {client.contacts && client.contacts.length > 0 && (
+              <div className="pt-4 border-t border-[#F3F4F6]">
+                <h4 className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider mb-3">Contacts</h4>
+                <div className="space-y-3">
+                  {client.contacts.map((c) => (
+                    <div key={c.id} className="p-3 bg-[#FAFAFA] rounded-xl border border-[#E5E7EB]">
+                      <p className="text-sm font-semibold text-[#111827]">{c.name}</p>
+                      {c.designation && <p className="text-xs text-[#6B7280] mb-2">{c.designation}</p>}
+                      <div className="space-y-1 mt-2">
+                        {c.email && <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5 text-[#9CA3AF]" /><span className="text-xs text-[#374151]">{c.email}</span></div>}
+                        {c.phone && <div className="flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-[#9CA3AF]" /><span className="text-xs text-[#374151]">{c.phone}</span></div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6">
             <h3 className="text-sm font-semibold text-[#111827] mb-4">Project Summary</h3>
@@ -163,6 +228,82 @@ export default function ClientDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Edit Modal */}
+      <AnimatePresence>
+        {showEdit && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setShowEdit(false)} />
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-[#E5E7EB] shadow-2xl shadow-black/10 overflow-y-auto"
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
+                <h2 className="text-lg font-semibold text-[#111827]">Edit Client</h2>
+                <button onClick={() => setShowEdit(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
+                  <X className="h-4 w-4 text-[#6B7280]" />
+                </button>
+              </div>
+              <form onSubmit={handleEdit} className="relative p-6 space-y-4">
+                {editError && <div className="absolute top-0 left-6 right-6 -mt-2 z-10 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 shadow-sm border border-red-100">{editError}</div>}
+                <Field label="Client Name *" value={editForm.name} onChange={(v) => setEditForm({ ...editForm, name: v })} required />
+                <Field label="Company" value={editForm.company} onChange={(v) => setEditForm({ ...editForm, company: v })} />
+                <Field label="Industry" value={editForm.industry} onChange={(v) => setEditForm({ ...editForm, industry: v })} />
+                <Field label="Address" value={editForm.address} onChange={(v) => setEditForm({ ...editForm, address: v })} />
+
+                <div className="space-y-3 pt-2 pb-2 border-y border-[#F3F4F6]">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-sm font-medium text-[#374151]">Contacts</label>
+                    <button type="button" onClick={() => setEditForm({ ...editForm, contacts: [...editForm.contacts, { id: '', name: '', designation: '', email: '', phone: '' }] })} className="text-xs font-medium text-[#111827] flex items-center gap-1 hover:bg-[#F3F4F6] px-2 py-1 rounded transition-colors">
+                      <Plus className="h-3 w-3" /> Add Contact
+                    </button>
+                  </div>
+                  {editForm.contacts.map((contact, i) => (
+                    <div key={i} className="p-4 border border-[#E5E7EB] rounded-xl bg-[#FAFAFA] relative">
+                      {editForm.contacts.length > 1 && (
+                        <button type="button" onClick={() => setEditForm({ ...editForm, contacts: editForm.contacts.filter((_, idx) => idx !== i) })} className="absolute top-2 right-2 p-1.5 text-[#9CA3AF] hover:text-red-500 rounded-lg hover:bg-white transition-colors border border-transparent hover:border-red-100 shadow-sm hover:shadow">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      <div className="grid grid-cols-2 gap-3">
+                        <Field label="Name *" value={contact.name} onChange={(v) => { const c = [...editForm.contacts]; c[i].name = v; setEditForm({ ...editForm, contacts: c }); }} required />
+                        <Field label="Designation" value={contact.designation || ''} onChange={(v) => { const c = [...editForm.contacts]; c[i].designation = v; setEditForm({ ...editForm, contacts: c }); }} />
+                        <Field label="Email" type="email" value={contact.email || ''} onChange={(v) => { const c = [...editForm.contacts]; c[i].email = v; setEditForm({ ...editForm, contacts: c }); }} />
+                        <Field label="Phone" value={contact.phone || ''} onChange={(v) => { const c = [...editForm.contacts]; c[i].phone = v; setEditForm({ ...editForm, contacts: c }); }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Status</label>
+                  <Select
+                    value={editForm.status}
+                    onChange={(val) => setEditForm({ ...editForm, status: val })}
+                    options={[
+                      { label: 'Lead', value: 'LEAD' },
+                      { label: 'Active', value: 'ACTIVE' },
+                      { label: 'Paused', value: 'PAUSED' },
+                      { label: 'Completed', value: 'COMPLETED' },
+                      { label: 'Archived', value: 'ARCHIVED' },
+                    ]}
+                  />
+                </div>
+                <div className="pt-4 flex gap-3">
+                  <button type="button" onClick={() => setShowEdit(false)} className="flex-1 rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">
+                    {submitting ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -175,6 +316,23 @@ function InfoRow({ icon: Icon, label, value }: { icon: typeof Mail; label: strin
         <p className="text-xs text-[#9CA3AF]">{label}</p>
         <p className="text-sm text-[#374151]">{value}</p>
       </div>
+    </div>
+  );
+}
+
+function Field({ label, value, onChange, type = 'text', required = false }: {
+  label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean;
+}) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-[#374151] mb-1.5">{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required={required}
+        className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#111827] outline-none focus:border-[#111827] focus:ring-1 focus:ring-[#111827] transition-all"
+      />
     </div>
   );
 }

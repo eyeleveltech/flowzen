@@ -12,6 +12,8 @@ export class AppError extends Error {
   }
 }
 
+import { logger } from '../utils/logger.js';
+
 export function errorHandler(
   err: Error | AppError,
   _req: Request,
@@ -25,7 +27,7 @@ export function errorHandler(
     return;
   }
 
-  console.error('Unhandled error:', err);
+  logger.error('Unhandled error: %O', err);
 
   res.status(500).json({
     error: process.env.NODE_ENV === 'production'

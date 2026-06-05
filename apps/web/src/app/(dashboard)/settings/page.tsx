@@ -17,7 +17,7 @@ interface OrgUser {
 }
 
 interface Template {
-  id: string; name: string; description?: string | null;
+  id: string; name: string; description?: string | null; structure: any;
 }
 
 interface Team {
@@ -44,8 +44,10 @@ export default function SettingsPage() {
   const [users, setUsers] = useState<OrgUser[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [showInvite, setShowInvite] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [editingUser, setEditingUser] = useState<OrgUser | null>(null);
   const [inviteForm, setInviteForm] = useState({ name: '', email: '', role: 'TEAM_MEMBER', teamId: '', password: '', isActive: true });
+  const [templateForm, setTemplateForm] = useState({ name: '', description: '', tasks: [{ title: '' }] });
   const [teams, setTeams] = useState<Team[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -100,6 +102,25 @@ export default function SettingsPage() {
       password: '',
       isActive: u.isActive
     });
+  }
+
+  async function submitTemplate(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const validTasks = templateForm.tasks.filter(t => t.title.trim() !== '');
+      await api.post('/settings/templates', {
+        name: templateForm.name,
+        description: templateForm.description,
+        structure: { tasks: validTasks }
+      });
+      setShowTemplateModal(false);
+      setTemplateForm({ name: '', description: '', tasks: [{ title: '' }] });
+      const data = await api.get<Template[]>('/settings/templates');
+      setTemplates(data);
+    } catch {} finally {
+      setSaving(false);
+    }
   }
 
   const tabs = [
@@ -277,16 +298,81 @@ export default function SettingsPage() {
 
           {tab === 'templates' && (
             <div>
-              <h2 className="text-sm font-semibold text-[#111827] mb-4">Project Templates</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold text-[#111827]">Project Templates</h2>
+                <button onClick={() => setShowTemplateModal(true)} className="flex items-center gap-2 rounded-xl bg-[#111827] px-3 py-2 text-xs font-medium text-white hover:bg-[#1F2937] transition-all">
+                  <Plus className="h-3.5 w-3.5" /> Create Template
+                </button>
+              </div>
               <div className="space-y-3">
                 {templates.map((t) => (
                   <div key={t.id} className="rounded-2xl border border-[#E5E7EB] bg-white p-5 hover:shadow-sm transition-all">
                     <h3 className="text-sm font-semibold text-[#111827]">{t.name}</h3>
                     {t.description && <p className="text-xs text-[#6B7280] mt-1">{t.description}</p>}
+                    {t.structure?.tasks && (
+                      <p className="text-xs font-medium text-[#111827] mt-3">{t.structure.tasks.length} standard tasks included</p>
+                    )}
                   </div>
                 ))}
                 {templates.length === 0 && <p className="text-sm text-[#9CA3AF]">No templates yet</p>}
               </div>
+
+              {showTemplateModal && (
+                <>
+                  <div className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setShowTemplateModal(false)} />
+                  <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg rounded-2xl border border-[#E5E7EB] bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-semibold text-[#111827]">Create Project Template</h3>
+                      <button onClick={() => setShowTemplateModal(false)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-[#6B7280]" /></button>
+                    </div>
+                    <form onSubmit={submitTemplate} className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-[#374151] mb-1.5">Template Name *</label>
+                        <input value={templateForm.name} onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })} required className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
+                        <textarea value={templateForm.description} onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })} className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all resize-none" rows={2} />
+                      </div>
+                      
+                      <div className="pt-2 border-t border-[#F3F4F6]">
+                        <label className="block text-sm font-medium text-[#374151] mb-3">Default Tasks (Auto-created for new projects)</label>
+                        <div className="space-y-2">
+                          {templateForm.tasks.map((task, idx) => (
+                            <div key={idx} className="flex gap-2">
+                              <input 
+                                value={task.title} 
+                                onChange={(e) => {
+                                  const newTasks = [...templateForm.tasks];
+                                  newTasks[idx].title = e.target.value;
+                                  setTemplateForm({ ...templateForm, tasks: newTasks });
+                                }} 
+                                placeholder={`Task ${idx + 1}`} 
+                                className="flex-1 rounded-xl border border-[#E5E7EB] px-4 py-2 text-sm outline-none focus:border-[#111827] transition-all" 
+                              />
+                              {templateForm.tasks.length > 1 && (
+                                <button type="button" onClick={() => {
+                                  const newTasks = templateForm.tasks.filter((_, i) => i !== idx);
+                                  setTemplateForm({ ...templateForm, tasks: newTasks });
+                                }} className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+                                  <X className="h-4 w-4" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        <button type="button" onClick={() => setTemplateForm({ ...templateForm, tasks: [...templateForm.tasks, { title: '' }] })} className="mt-3 flex items-center gap-1.5 text-xs font-medium text-[#111827] hover:opacity-70 transition-opacity">
+                          <Plus className="h-3 w-3" /> Add another task
+                        </button>
+                      </div>
+
+                      <button type="submit" disabled={saving} className="w-full rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all mt-4">
+                        {saving ? 'Creating...' : 'Create Template'}
+                      </button>
+                    </form>
+                  </div>
+                </>
+              )}
             </div>
           )}
 

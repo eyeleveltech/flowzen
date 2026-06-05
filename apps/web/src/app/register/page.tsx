@@ -24,10 +24,10 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const data = await api.post<{ token: string; user: any }>('/auth/register', {
+      const data = await api.post<{ user: any }>('/auth/register', {
         name, email, password, organizationName,
       });
-      setAuth(data.user, data.token);
+      setAuth(data.user);
       router.push('/dashboard');
     } catch (err: any) {
       setError(err.message || 'Registration failed');

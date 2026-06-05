@@ -35,10 +35,26 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
 
   const selectedOption = options.find(opt => opt.value === value);
 
+  // Handle focusing the selected item or first item when opened
+  useEffect(() => {
+    if (isOpen && containerRef.current) {
+      const selected = containerRef.current.querySelector('[aria-selected="true"]') as HTMLElement;
+      if (selected) {
+        selected.focus();
+      } else {
+        const first = containerRef.current.querySelector('[role="option"]') as HTMLElement;
+        if (first) first.focus();
+      }
+    }
+  }, [isOpen]);
+
   return (
     <div className={`relative ${className}`} ref={containerRef}>
       <button
         type="button"
+        role="combobox"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
         disabled={disabled}
         onClick={() => setIsOpen(!isOpen)}
         onKeyDown={(e) => {
@@ -55,7 +71,7 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
         <span className={selectedOption && selectedOption.value !== '' ? 'text-[#111827]' : 'text-[#374151]'}>
           {selectedOption ? selectedOption.label : placeholder}
         </span>
-        <ChevronDown className={`h-4 w-4 text-[#9CA3AF] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`h-4 w-4 text-[#9CA3AF] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
       </button>
       
       {required && (
@@ -85,6 +101,7 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
                 role="option"
                 aria-selected={value === option.value}
                 type="button"
+                tabIndex={isOpen ? 0 : -1}
                 onClick={() => {
                   onChange(option.value);
                   setIsOpen(false);
@@ -105,14 +122,19 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
                   if (e.key === 'ArrowUp') {
                     e.preventDefault();
                     const prev = e.currentTarget.previousElementSibling as HTMLElement;
-                    if (prev) prev.focus();
+                    if (prev) {
+                      prev.focus();
+                    } else {
+                      // Top of list, close it or focus input
+                      containerRef.current?.querySelector('button')?.focus();
+                    }
                   }
                   if (e.key === 'Escape') {
                     setIsOpen(false);
                     containerRef.current?.querySelector('button')?.focus();
                   }
                 }}
-                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-[#111827]/10 focus:bg-[#F9FAFB] ${
                   value === option.value
                     ? 'bg-[#F3F4F6] text-[#111827] font-medium'
                     : 'text-[#374151] hover:bg-[#F9FAFB]'

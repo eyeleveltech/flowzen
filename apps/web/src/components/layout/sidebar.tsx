@@ -28,7 +28,7 @@ const navItems = [
   { label: 'Tasks', href: '/tasks', icon: CheckSquare },
   { label: 'Calendar', href: '/calendar', icon: CalendarDays },
   { label: 'Members', href: '/team', icon: UsersRound },
-  { label: 'Teams', href: '/teams', icon: Network, roles: ['SUPER_ADMIN', 'ADMIN'] },
+  { label: 'Departments', href: '/teams', icon: Network, roles: ['SUPER_ADMIN', 'ADMIN'] },
   { label: 'Reports', href: '/reports', icon: BarChart3, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'] },
 ];
 

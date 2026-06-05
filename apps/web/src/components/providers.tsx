@@ -37,20 +37,20 @@ export function Providers({ children }: { children: ReactNode }) {
 }
 
 function SocketProvider({ children }: { children: ReactNode }) {
-  const { token, isAuthenticated, loadFromStorage } = useAuthStore();
+  const { isAuthenticated, loadFromStorage } = useAuthStore();
 
   useEffect(() => {
     loadFromStorage();
   }, [loadFromStorage]);
 
   useEffect(() => {
-    if (isAuthenticated && token) {
-      connectSocket(token);
+    if (isAuthenticated) {
+      connectSocket();
     }
     return () => {
       disconnectSocket();
     };
-  }, [isAuthenticated, token]);
+  }, [isAuthenticated]);
 
   return <>{children}</>;
 }

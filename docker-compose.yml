@@ -6,19 +6,92 @@ services:
     container_name: elitepm-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: elitepm
-      POSTGRES_PASSWORD: elitepm_secret
-      POSTGRES_DB: elitepm
+      POSTGRES_USER: ${POSTGRES_USER:-elitepm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-elitepm_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-elitepm}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U elitepm"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-elitepm}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    container_name: elitepm-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: flowzen-api
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-elitepm}:${POSTGRES_PASSWORD:-elitepm_secret}@postgres:5432/${POSTGRES_DB:-elitepm}?schema=public
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - NODE_ENV=production
+      - JWT_SECRET=${JWT_SECRET:-super_secret_jwt_key_change_me_in_prod}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      - PORT=4000
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -c "npx prisma migrate deploy && npm run start"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: flowzen-web
+    restart: unless-stopped
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:4000/api}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+  db-backup:
+    image: prodrigestivill/postgres-backup-local
+    container_name: flowzen-db-backup
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=${POSTGRES_DB:-elitepm}
+      - POSTGRES_USER=${POSTGRES_USER:-elitepm}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-elitepm_secret}
+      - POSTGRES_EXTRA_OPTS=-Z9
+      - SCHEDULE=@daily
+      - BACKUP_KEEP_DAYS=7
+      - BACKUP_KEEP_WEEKS=4
+      - BACKUP_KEEP_MONTHS=1
+      - HEALTHCHECK_PORT=8080
+    volumes:
+      - postgres_backups:/backups
+
 volumes:
   postgres_data:
+    driver: local
+  postgres_backups:
+    driver: local
+  redis_data:
     driver: local

@@ -12,14 +12,20 @@ import {
 } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 
+interface ClientContact {
+  id: string;
+  name: string;
+  designation?: string | null;
+  email?: string | null;
+  phone?: string | null;
+}
+
 interface Client {
   id: string;
   name: string;
   company?: string | null;
   industry?: string | null;
-  contactPerson?: string | null;
-  email?: string | null;
-  phone?: string | null;
+  contacts?: ClientContact[];
   contractValue?: number | null;
   status: string;
   createdAt: string;
@@ -47,9 +53,9 @@ export default function ClientsPage() {
 
   // Form state
   const [form, setForm] = useState({
-    name: '', company: '', industry: '', contactPerson: '',
-    email: '', phone: '', address: '', contractValue: '',
+    name: '', company: '', industry: '', address: '', contractValue: '',
     status: 'LEAD',
+    contacts: [{ name: '', designation: '', email: '', phone: '' }]
   });
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -96,7 +102,7 @@ export default function ClientsPage() {
         contractValue: form.contractValue ? parseFloat(form.contractValue) : undefined,
       });
       setShowCreate(false);
-      setForm({ name: '', company: '', industry: '', contactPerson: '', email: '', phone: '', address: '', contractValue: '', status: 'LEAD' });
+      setForm({ name: '', company: '', industry: '', address: '', contractValue: '', status: 'LEAD', contacts: [{ name: '', designation: '', email: '', phone: '' }] });
       fetchClients();
     } catch (err: any) {
       setFormError(err.message);
@@ -197,8 +203,19 @@ export default function ClientsPage() {
                   </td>
                   <td className="px-6 py-4 text-sm text-[#6B7280]">{client.industry || '—'}</td>
                   <td className="px-6 py-4">
-                    <p className="text-sm text-[#374151]">{client.contactPerson || '—'}</p>
-                    {client.email && <p className="text-xs text-[#9CA3AF]">{client.email}</p>}
+                    {client.contacts && client.contacts.length > 0 ? (
+                      <div>
+                        <p className="text-sm text-[#374151] font-medium">{client.contacts[0].name}</p>
+                        {client.contacts[0].designation && <p className="text-[11px] text-[#6B7280]">{client.contacts[0].designation}</p>}
+                        {client.contacts.length > 1 && (
+                          <span className="text-[10px] font-medium bg-[#F3F4F6] text-[#4B5563] px-1.5 py-0.5 rounded mt-1 inline-block">
+                            +{client.contacts.length - 1} more
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-sm text-[#9CA3AF]">—</span>
+                    )}
                   </td>
 
                   <td className="px-6 py-4 text-sm text-[#6B7280] tabular-nums">{client._count?.projects ?? 0}</td>
@@ -239,10 +256,31 @@ export default function ClientsPage() {
                 <Field label="Client Name *" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
                 <Field label="Company" value={form.company} onChange={(v) => setForm({ ...form, company: v })} />
                 <Field label="Industry" value={form.industry} onChange={(v) => setForm({ ...form, industry: v })} />
-                <Field label="Contact Person" value={form.contactPerson} onChange={(v) => setForm({ ...form, contactPerson: v })} />
-                <Field label="Email" type="email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
-                <Field label="Phone" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />
                 <Field label="Address" value={form.address} onChange={(v) => setForm({ ...form, address: v })} />
+
+                <div className="space-y-3 pt-2 pb-2 border-y border-[#F3F4F6]">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-sm font-medium text-[#374151]">Contacts</label>
+                    <button type="button" onClick={() => setForm({ ...form, contacts: [...form.contacts, { name: '', designation: '', email: '', phone: '' }] })} className="text-xs font-medium text-[#111827] flex items-center gap-1 hover:bg-[#F3F4F6] px-2 py-1 rounded transition-colors">
+                      <Plus className="h-3 w-3" /> Add Contact
+                    </button>
+                  </div>
+                  {form.contacts.map((contact, i) => (
+                    <div key={i} className="p-4 border border-[#E5E7EB] rounded-xl bg-[#FAFAFA] relative">
+                      {form.contacts.length > 1 && (
+                        <button type="button" onClick={() => setForm({ ...form, contacts: form.contacts.filter((_, idx) => idx !== i) })} className="absolute top-2 right-2 p-1.5 text-[#9CA3AF] hover:text-red-500 rounded-lg hover:bg-white transition-colors border border-transparent hover:border-red-100 shadow-sm hover:shadow">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      <div className="grid grid-cols-2 gap-3">
+                        <Field label="Name *" value={contact.name} onChange={(v) => { const c = [...form.contacts]; c[i].name = v; setForm({ ...form, contacts: c }); }} required />
+                        <Field label="Designation" value={contact.designation} onChange={(v) => { const c = [...form.contacts]; c[i].designation = v; setForm({ ...form, contacts: c }); }} />
+                        <Field label="Email" type="email" value={contact.email} onChange={(v) => { const c = [...form.contacts]; c[i].email = v; setForm({ ...form, contacts: c }); }} />
+                        <Field label="Phone" value={contact.phone} onChange={(v) => { const c = [...form.contacts]; c[i].phone = v; setForm({ ...form, contacts: c }); }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Status</label>

@@ -83,8 +83,8 @@ export default function TeamsPage() {
 
   async function handleDelete(id: string) {
     const confirmed = await confirm({
-      title: 'Delete Team',
-      message: 'Are you sure you want to delete this team? This action cannot be undone.',
+      title: 'Delete Department',
+      message: 'Are you sure you want to delete this department? This action cannot be undone.',
       confirmText: 'Delete',
       cancelText: 'Cancel',
       variant: 'danger',
@@ -94,7 +94,7 @@ export default function TeamsPage() {
       await api.delete(`/teams/${id}`);
       fetchTeams();
     } catch (err: any) {
-      alert(err.message || 'Failed to delete team');
+      alert(err.message || 'Failed to delete department');
     }
   }
 
@@ -125,7 +125,7 @@ export default function TeamsPage() {
     <div className="p-8 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-[#111827]">Teams</h1>
+          <h1 className="text-2xl font-bold text-[#111827]">Departments</h1>
           <p className="text-[#6B7280] mt-1 text-sm">Manage departments and groups within your organization.</p>
         </div>
         <button
@@ -133,7 +133,7 @@ export default function TeamsPage() {
           className="inline-flex items-center gap-2 rounded-xl bg-[#111827] px-4 py-2 text-sm font-medium text-white hover:bg-[#1F2937] transition-all shadow-sm hover:shadow-md"
         >
           <Plus className="h-4 w-4" />
-          Create Team
+          Create Department
         </button>
       </div>
 
@@ -141,8 +141,8 @@ export default function TeamsPage() {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
-              <th className="px-6 py-4 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Team Name</th>
-              <th className="px-6 py-4 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Leader</th>
+              <th className="px-6 py-4 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Department Name</th>
+              <th className="px-6 py-4 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Head / Leader</th>
               <th className="px-6 py-4 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Members</th>
               <th className="px-6 py-4 text-xs font-semibold text-[#6B7280] uppercase tracking-wider text-right">Actions</th>
             </tr>
@@ -212,7 +212,7 @@ export default function TeamsPage() {
             ))}
             {teams.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-6 py-8 text-center text-sm text-[#6B7280]">No teams found.</td>
+                <td colSpan={4} className="px-6 py-8 text-center text-sm text-[#6B7280]">No departments found.</td>
               </tr>
             )}
           </tbody>
@@ -225,7 +225,7 @@ export default function TeamsPage() {
               <div className="fixed inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowCreate(false)} />
               <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative z-10 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl my-auto">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-[#111827]">{isEditing ? 'Edit Team' : 'Create Team'}</h2>
+                <h2 className="text-xl font-bold text-[#111827]">{isEditing ? 'Edit Department' : 'Create Department'}</h2>
                 <button onClick={() => setShowCreate(false)} className="p-2 text-[#6B7280] hover:bg-[#F3F4F6] rounded-xl transition-colors"><X className="h-5 w-5" /></button>
               </div>
               
@@ -233,7 +233,7 @@ export default function TeamsPage() {
                 {formError && <div className="absolute top-0 left-0 right-0 -mt-2 z-10 rounded-xl bg-red-50 p-3 text-sm text-red-600 shadow-sm border border-red-100">{formError}</div>}
                 
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Team Name *</label>
+                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Department Name *</label>
                   <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] focus:ring-1 focus:ring-[#111827] transition-all" />
                 </div>
                 
@@ -243,16 +243,16 @@ export default function TeamsPage() {
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Team Leader</label>
+                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Department Head</label>
                   <Select
                     value={form.leaderId}
                     onChange={(val) => setForm({ ...form, leaderId: val })}
-                    options={[{ label: 'Select a leader (optional)', value: '' }, ...users.map(u => ({ label: u.name, value: u.id }))]}
+                    options={[{ label: 'Select a head (optional)', value: '' }, ...users.map(u => ({ label: u.name, value: u.id }))]}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Team Members</label>
+                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Department Members</label>
                   <MultiSelect
                     options={users.filter(u => u.id !== form.leaderId).map(u => ({ 
                       label: u.name, 
@@ -268,7 +268,7 @@ export default function TeamsPage() {
                 
                 <div className="pt-4 flex gap-3">
                   <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
-                  <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submitting ? 'Saving...' : 'Save Team'}</button>
+                  <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submitting ? 'Saving...' : 'Save Department'}</button>
                 </div>
               </form>
               </motion.div>

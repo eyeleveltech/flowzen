@@ -75,6 +75,9 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
         
         <input
           type="text"
+          role="combobox"
+          aria-expanded={isOpen}
+          aria-haspopup="listbox"
           className="flex-1 min-w-[50px] bg-transparent outline-none text-sm placeholder:text-[#9CA3AF]"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -98,7 +101,11 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
       </div>
 
       {isOpen && (
-        <div className="absolute top-full mt-1.5 w-full rounded-xl border border-[#E5E7EB] bg-white py-1.5 shadow-lg z-50 max-h-60 overflow-auto">
+        <div 
+          role="listbox"
+          aria-multiselectable="true"
+          className="absolute top-full mt-1.5 w-full rounded-xl border border-[#E5E7EB] bg-white py-1.5 shadow-lg z-50 max-h-60 overflow-auto"
+        >
           {filteredOptions.length === 0 ? (
             <div className="px-4 py-2.5 text-sm text-[#6B7280]">No results found.</div>
           ) : (
@@ -108,9 +115,9 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
                 <div
                   key={opt.value}
                   role="option"
-                  tabIndex={0}
+                  tabIndex={isOpen ? 0 : -1}
                   aria-selected={isSelected}
-                  className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-[#F9FAFB] focus:bg-[#F9FAFB] outline-none transition-colors"
+                  className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-[#F9FAFB] focus:bg-[#F9FAFB] focus:ring-2 focus:ring-inset focus:ring-[#111827]/10 outline-none transition-colors"
                   onClick={(e) => { e.stopPropagation(); handleSelect(opt.value); }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {

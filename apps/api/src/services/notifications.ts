@@ -3,16 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { io } from '../index.js';
 import { NotificationType } from '@prisma/client';
 
-// Configure Nodemailer transporter
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || '465'),
-  secure: process.env.SMTP_PORT === '465', // true for 465, false for other ports like 587
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+// Transporter will be initialized lazily to ensure env vars are loaded
 
 interface NotificationPayload {
   userId: string;
@@ -81,6 +72,16 @@ export class NotificationService {
     }
 
     try {
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port: parseInt(process.env.SMTP_PORT || '465'),
+        secure: process.env.SMTP_PORT === '465', // true for 465, false for other ports like 587
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+      });
+
       await transporter.sendMail({
         from: `"${process.env.SMTP_FROM_NAME || 'Flowzen'}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
         to,

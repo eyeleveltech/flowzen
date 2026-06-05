@@ -18,8 +18,13 @@ import { notificationRouter } from './routes/notifications.js';
 import { searchRouter } from './routes/search.js';
 import { settingsRouter } from './routes/settings.js';
 import { setupSocketIO } from './socket.js';
+import { morganMiddleware } from './middleware/logger.js';
+import { logger } from './utils/logger.js';
+
+import path from 'path';
 
 dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
 
 const app = express();
 const httpServer = createServer(app);
@@ -38,12 +43,16 @@ setupSocketIO(io);
 // Make io accessible to routes
 app.set('io', io);
 
+import cookieParser from 'cookie-parser';
+
 // Middleware
 app.use(helmet());
+app.use(morganMiddleware);
 app.use(cors({
   origin: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
   credentials: true,
 }));
+app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -84,8 +93,8 @@ app.use(errorHandler);
 const PORT = process.env.API_PORT || 4000;
 if (process.env.NODE_ENV !== 'test') {
   httpServer.listen(PORT, () => {
-    console.log(`\n  🚀 Flowzen API running on http://localhost:${PORT}`);
-    console.log(`  📡 Socket.IO ready\n`);
+    logger.info(`🚀 Flowzen API running on http://localhost:${PORT}`);
+    logger.info(`📡 Socket.IO ready`);
   });
 }
 

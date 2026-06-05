@@ -15,8 +15,10 @@ interface NotificationState {
   notifications: Notification[];
   unreadCount: number;
   isLoading: boolean;
+  activeToast: Notification | null;
   
   // Actions
+  clearToast: () => void;
   fetchNotifications: () => Promise<void>;
   markAsRead: (id: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
@@ -28,6 +30,9 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   notifications: [],
   unreadCount: 0,
   isLoading: true,
+  activeToast: null,
+
+  clearToast: () => set({ activeToast: null }),
 
   fetchNotifications: async () => {
     try {
@@ -79,8 +84,14 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   addRealTimeNotification: (notification: Notification) => {
     set((state) => ({
       notifications: [notification, ...state.notifications],
-      unreadCount: state.unreadCount + 1
+      unreadCount: state.unreadCount + 1,
+      activeToast: notification
     }));
+    
+    // Auto-clear toast after 5 seconds
+    setTimeout(() => {
+      set((state) => (state.activeToast?.id === notification.id ? { activeToast: null } : state));
+    }, 5000);
   },
 
   initializeSocketListeners: () => {

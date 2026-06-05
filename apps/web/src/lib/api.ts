@@ -13,31 +13,21 @@ class ApiClient {
     this.baseUrl = baseUrl;
   }
 
-  private getToken(): string | null {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem('flowzen-token');
-  }
-
   private async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-    const token = this.getToken();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...options.headers,
     };
 
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       method: options.method || 'GET',
       headers,
+      credentials: 'include',
       body: options.body ? JSON.stringify(options.body) : undefined,
     });
 
     if (response.status === 401) {
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('flowzen-token');
         localStorage.removeItem('flowzen-user');
         window.location.href = '/login';
       }

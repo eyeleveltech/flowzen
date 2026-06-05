@@ -9,7 +9,23 @@ interface AuthenticatedSocket extends Socket {
 export function setupSocketIO(io: Server) {
   // Authentication middleware
   io.use((socket: AuthenticatedSocket, next) => {
-    const token = socket.handshake.auth.token;
+    // Try to get token from cookies first
+    const cookieHeader = socket.request.headers.cookie;
+    let token = null;
+    
+    if (cookieHeader) {
+      const cookies = cookieHeader.split(';').map(c => c.trim());
+      const tokenCookie = cookies.find(c => c.startsWith('token='));
+      if (tokenCookie) {
+        token = tokenCookie.split('=')[1];
+      }
+    }
+
+    // Fallback to handshake auth
+    if (!token) {
+      token = socket.handshake.auth.token;
+    }
+
     if (!token) {
       return next(new Error('Authentication required'));
     }

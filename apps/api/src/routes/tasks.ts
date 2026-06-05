@@ -5,6 +5,7 @@ import { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { emitToOrganization, emitToUser } from '../socket.js';
 import { NotificationService } from '../services/notifications.js';
+import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
 
 export const taskRouter = Router();
 taskRouter.use(authenticate);
@@ -171,6 +172,7 @@ taskRouter.post('/', validate(taskSchema), async (req: AuthRequest, res: Respons
 
     const io = req.app.get('io');
     emitToOrganization(io, req.user!.organizationId, 'task:created', task);
+    await invalidateOrganizationCache(req.user!.organizationId);
 
     res.status(201).json(task);
   } catch (error) {
@@ -251,6 +253,7 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
 
     const io = req.app.get('io');
     emitToOrganization(io, req.user!.organizationId, 'task:updated', task);
+    await invalidateOrganizationCache(req.user!.organizationId);
 
     res.json(task);
   } catch (error) {
@@ -279,6 +282,7 @@ taskRouter.delete('/:id', async (req: AuthRequest, res: Response, next) => {
 
     const io = req.app.get('io');
     emitToOrganization(io, req.user!.organizationId, 'task:deleted', { id: (req.params.id as string), projectId: task.projectId });
+    await invalidateOrganizationCache(req.user!.organizationId);
 
     res.json({ message: 'Task deleted' });
   } catch (error) {
@@ -413,6 +417,7 @@ taskRouter.patch('/reorder', async (req: AuthRequest, res: Response, next) => {
 
     const io = req.app.get('io');
     emitToOrganization(io, req.user!.organizationId, 'tasks:reordered', { tasks });
+    await invalidateOrganizationCache(req.user!.organizationId);
 
     res.json({ message: 'Tasks reordered' });
   } catch (error) {

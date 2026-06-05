@@ -117,7 +117,7 @@ All API routes are prefixed with `/api` and require a valid Bearer JWT token. Pr
 - `POST /`: Create project (Protected for Admin/Manager).
 - `GET /:id`, `PUT /:id`, `DELETE /:id`: Details and updates (PUT/DELETE protected for Admin/Manager).
 - `POST /from-template`: Scaffolds a project from a JSON template.
-- `POST /:id/milestones`: Add milestones.
+- `POST /:id/milestones`, `PUT /:id/milestones/:milestoneId`, `DELETE /:id/milestones/:milestoneId`: Add, edit, or delete project milestones.
 
 ### Tasks (`/api/tasks`)
 - `GET /`, `POST /`: List and create tasks (auto-assigns order for Kanban).
@@ -154,7 +154,7 @@ The Next.js App Router is used, divided into the `(auth)` and `(dashboard)` rout
    - List View: Clean table with status badges.
    - Detail View: Tabbed interface (Overview, Projects, Activity, Notes).
 3. **Projects (`/projects`)**:
-   - Multi-View: Table List, Kanban Board, Timeline (Gantt-style), Calendar.
+   - Multi-View: Table List, Kanban Board, Timeline (Gantt-style), Calendar (Clean, icon-based timeline showing Project Start Dates, Deadlines, and Milestones without task clutter).
    - Detail View: Tabbed interface (Tasks, Milestones, Team, Activity). Header separates the Project Owner from the unified list of direct members and assigned team members. Modals for project editing conditionally hidden for normal members.
 4. **Tasks (`/tasks`)**:
    - Board View: 5-column Kanban board.

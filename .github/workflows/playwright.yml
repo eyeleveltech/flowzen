@@ -1,0 +1,35 @@
+name: Playwright Tests
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+jobs:
+  test:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: lts/*
+    - name: Install dependencies
+      run: npm ci
+    - name: Install Playwright Browsers
+      run: npm run test:e2e:install --if-present || npx playwright install --with-deps
+    - name: Start Database and API
+      run: |
+        # Setup your database, environment variables, and run migrations here
+        # Example: docker-compose up -d db
+        # npm run migrate
+        # npm run dev &
+    - name: Run Playwright tests
+      run: npm run test:e2e --workspace=apps/web
+      env:
+        NEXT_PUBLIC_APP_URL: http://localhost:3000
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: playwright-report
+        path: apps/web/playwright-report/
+        retention-days: 30

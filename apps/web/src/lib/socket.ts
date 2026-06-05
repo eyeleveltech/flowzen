@@ -10,11 +10,11 @@ export function getSocket(): Socket | null {
   return socket;
 }
 
-export function connectSocket(token: string): Socket {
+export function connectSocket(): Socket {
   if (socket?.connected) return socket;
 
   socket = io(SOCKET_URL, {
-    auth: { token },
+    withCredentials: true,
     transports: ['websocket', 'polling'],
     reconnection: true,
     reconnectionAttempts: 5,

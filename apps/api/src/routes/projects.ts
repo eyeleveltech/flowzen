@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { emitToOrganization } from '../socket.js';
+import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
 
 export const projectRouter = Router();
 projectRouter.use(authenticate);
@@ -68,6 +69,9 @@ projectRouter.get('/', async (req: AuthRequest, res: Response, next) => {
           members: { include: { user: { select: { id: true, name: true, avatar: true } } } },
           teams: { include: { team: { include: { members: { select: { id: true, name: true, avatar: true } } } } } },
           _count: { select: { tasks: true } },
+          ...(req.query.includeCalendarData === 'true' && {
+            milestones: { select: { id: true, name: true, dueDate: true, completed: true } },
+          }),
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -187,6 +191,7 @@ projectRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), va
 
     const io = req.app.get('io');
     emitToOrganization(io, req.user!.organizationId, 'project:created', project);
+    await invalidateOrganizationCache(req.user!.organizationId);
 
     res.status(201).json(project);
   } catch (error) {
@@ -282,6 +287,7 @@ projectRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), 
 
     const io = req.app.get('io');
     emitToOrganization(io, req.user!.organizationId, 'project:updated', project);
+    await invalidateOrganizationCache(req.user!.organizationId);
 
     res.json(project);
   } catch (error) {
@@ -305,6 +311,7 @@ projectRouter.delete('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'
 
     const io = req.app.get('io');
     emitToOrganization(io, req.user!.organizationId, 'project:deleted', { id: (req.params.id as string) });
+    await invalidateOrganizationCache(req.user!.organizationId);
 
     res.json({ message: 'Project deleted' });
   } catch (error) {
@@ -367,6 +374,7 @@ projectRouter.post('/from-template', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_
       }
     }
 
+    await invalidateOrganizationCache(req.user!.organizationId);
     res.status(201).json(project);
   } catch (error) {
     next(error);
@@ -385,6 +393,37 @@ projectRouter.post('/:id/milestones', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT
     });
 
     res.status(201).json(milestone);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PUT /api/projects/:id/milestones/:milestoneId
+projectRouter.put('/:id/milestones/:milestoneId', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const milestone = await prisma.milestone.update({
+      where: { id: req.params.milestoneId as string },
+      data: {
+        name: req.body.name,
+        dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
+        completed: req.body.completed !== undefined ? req.body.completed : undefined,
+      },
+    });
+
+    res.json(milestone);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /api/projects/:id/milestones/:milestoneId
+projectRouter.delete('/:id/milestones/:milestoneId', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    await prisma.milestone.delete({
+      where: { id: req.params.milestoneId as string },
+    });
+
+    res.status(204).send();
   } catch (error) {
     next(error);
   }

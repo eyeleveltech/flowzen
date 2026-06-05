@@ -9,6 +9,7 @@ interface User {
   role: string;
   avatar?: string | null;
   department?: string | null;
+  isEmailVerified?: boolean;
   organization?: {
     id: string;
     name: string;
@@ -18,39 +19,41 @@ interface User {
 
 interface AuthStore {
   user: User | null;
-  token: string | null;
+  token?: never; // Removed
   isAuthenticated: boolean;
-  setAuth: (user: User, token: string) => void;
-  logout: () => void;
+  setAuth: (user: User) => void;
+  logout: () => Promise<void>;
   loadFromStorage: () => void;
 }
 
 export const useAuthStore = create<AuthStore>((set) => ({
   user: null,
-  token: null,
   isAuthenticated: false,
 
-  setAuth: (user, token) => {
-    localStorage.setItem('flowzen-token', token);
+  setAuth: (user) => {
     localStorage.setItem('flowzen-user', JSON.stringify(user));
-    set({ user, token, isAuthenticated: true });
+    set({ user, isAuthenticated: true });
   },
 
-  logout: () => {
-    localStorage.removeItem('flowzen-token');
+  logout: async () => {
+    try {
+      await fetch(process.env.NEXT_PUBLIC_API_URL ? `${process.env.NEXT_PUBLIC_API_URL}/auth/logout` : 'http://localhost:4000/api/auth/logout', { method: 'POST', credentials: 'include' });
+    } catch (e) {
+      console.error('Logout failed', e);
+    }
     localStorage.removeItem('flowzen-user');
-    set({ user: null, token: null, isAuthenticated: false });
+    set({ user: null, isAuthenticated: false });
+    window.location.href = '/login';
   },
 
   loadFromStorage: () => {
-    const token = localStorage.getItem('flowzen-token');
     const userStr = localStorage.getItem('flowzen-user');
-    if (token && userStr) {
+    if (userStr) {
       try {
         const user = JSON.parse(userStr);
-        set({ user, token, isAuthenticated: true });
+        set({ user, isAuthenticated: true });
       } catch {
-        set({ user: null, token: null, isAuthenticated: false });
+        set({ user: null, isAuthenticated: false });
       }
     }
   },

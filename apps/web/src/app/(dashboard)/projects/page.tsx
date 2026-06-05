@@ -15,8 +15,9 @@ import { MultiSelect } from '@/components/ui/multi-select';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useProjects, useClients, useMembers, useTeams } from '@/hooks/useQueries';
+import { useProjects, useClients, useMembers, useTeams, useTemplates } from '@/hooks/useQueries';
 import { projectSchema, type ProjectFormValues } from '@/lib/validations';
+import { CalendarView } from '@/components/projects/calendar-view';
 
 interface Project {
   id: string; name: string; description?: string | null; status: string; priority: string; progress: number;
@@ -70,12 +71,23 @@ export default function ProjectsPage() {
   });
   const formValues = watch();
 
-  const { data: projects = [], isLoading: isLoadingProjects, refetch: refetchProjects } = useProjects(search);
+  const {
+    data,
+    isLoading: isLoadingProjects,
+    refetch: refetchProjects,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage
+  } = useProjects(search, view === 'calendar');
+
+  const projects = data?.pages.flatMap((page) => page.projects) || [];
   const { data: clients = [] } = useClients();
   const { data: members = [] } = useMembers();
   const { data: teams = [] } = useTeams();
+  const { data: templates = [] } = useTemplates();
   const loading = isLoadingProjects;
 
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -93,14 +105,21 @@ export default function ProjectsPage() {
     setFormError('');
     setSubmitting(true);
     try {
-      await api.post('/projects', {
+      const payload = {
         ...data,
-        budget: data.budget ? parseFloat(data.budget) : undefined,
+        budget: data.budget ? parseFloat(data.budget as any) : undefined,
         startDate: data.startDate || undefined,
         endDate: data.endDate || undefined,
-      });
+      };
+
+      if (selectedTemplateId) {
+        await api.post('/projects/from-template', { ...payload, templateId: selectedTemplateId });
+      } else {
+        await api.post('/projects', payload);
+      }
       setShowCreate(false);
       reset();
+      setSelectedTemplateId('');
       refetchProjects();
     } catch (err: any) { setFormError(err.message); } finally { setSubmitting(false); }
   });
@@ -273,8 +292,19 @@ export default function ProjectsPage() {
       )}
 
       {view === 'calendar' && (
-        <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6 text-center text-sm text-[#9CA3AF] py-20">
-          Calendar view — Coming soon with task and milestone visualization
+        <CalendarView projects={projects} />
+      )}
+
+      {/* Load More Button */}
+      {hasNextPage && (
+        <div className="mt-6 flex justify-center pb-8">
+          <button
+            onClick={() => fetchNextPage()}
+            disabled={isFetchingNextPage}
+            className="rounded-xl border border-[#E5E7EB] bg-white px-6 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50 transition-all"
+          >
+            {isFetchingNextPage ? 'Loading...' : 'Load More Projects'}
+          </button>
         </div>
       )}
 
@@ -291,6 +321,28 @@ export default function ProjectsPage() {
               <form onSubmit={handleCreate} className="relative p-6 space-y-4">
                 {formError && <div className="absolute top-0 left-6 right-6 -mt-2 z-10 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 shadow-sm border border-red-100">{formError}</div>}
                 
+                {templates.length > 0 && (
+                  <div className="mb-2 pb-4 border-b border-[#F3F4F6]">
+                    <label className="block text-sm font-medium text-[#374151] mb-1.5 flex items-center gap-2">
+                      Start from a Template <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">New</span>
+                    </label>
+                    <Select
+                      value={selectedTemplateId}
+                      onChange={(val) => {
+                        setSelectedTemplateId(val);
+                        if (val) {
+                           const t = templates.find(x => x.id === val);
+                           if (t && !formValues.name) setValue('name', t.name, { shouldValidate: true });
+                        }
+                      }}
+                      options={[
+                        { label: 'Start from scratch', value: '' },
+                        ...templates.map((t) => ({ label: t.name, value: t.id }))
+                      ]}
+                    />
+                  </div>
+                )}
+
                 <div>
                   <Field label="Project Name *" value={formValues.name} onChange={(v) => setValue('name', v, { shouldValidate: true })} required />
                   {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>}

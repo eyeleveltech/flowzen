@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { z } from 'zod';
@@ -13,6 +13,7 @@ import { Plus, Search, X, MessageSquare, CheckCircle2, ListChecks } from 'lucide
 import { Select } from '@/components/ui/select';
 import { useAuthStore } from '@/stores';
 import { useTasks, useProjects, useMembers } from '@/hooks/useQueries';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
 interface Task {
   id: string; title: string; description?: string | null; priority: string; status: string;
@@ -81,10 +82,25 @@ export default function TasksPage() {
   const [selectedTask, setSelectedTaskState] = useState<Task | null>(null);
   const [isEditing, setIsEditing] = useState(false);
 
-  const { data: tasks = [], isLoading: isLoadingTasks, refetch: refetchTasks } = useTasks(search, statusFilter, projectFilter, assigneeFilter);
-  const { data: projects = [] } = useProjects();
+  const {
+    data,
+    isLoading: isLoadingTasks,
+    refetch: refetchTasks,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage
+  } = useTasks(search, statusFilter, projectFilter, assigneeFilter);
+
+  const tasks = useMemo(() => data?.pages.flatMap((page) => page.tasks) || [], [data]);
+  const { data: projectsData } = useProjects();
+  const projects = useMemo(() => projectsData?.pages.flatMap((page) => page.projects) || [], [projectsData]);
   const { data: members = [] } = useMembers();
   const loading = isLoadingTasks;
+
+  const [boardTasks, setBoardTasks] = useState<Task[]>([]);
+  useEffect(() => {
+    setBoardTasks(tasks);
+  }, [tasks]);
 
   useEffect(() => {
     if (taskIdParam && tasks.length > 0) {
@@ -171,6 +187,24 @@ export default function TasksPage() {
     } catch {}
   }
 
+  const onDragEnd = async (result: DropResult) => {
+    const { destination, source, draggableId } = result;
+    if (!destination) return;
+    if (destination.droppableId === source.droppableId && destination.index === source.index) return;
+    
+    const newStatus = destination.droppableId;
+    
+    // Optimistic UI update
+    setBoardTasks(prev => prev.map(t => t.id === draggableId ? { ...t, status: newStatus } : t));
+    
+    try {
+      await api.put(`/tasks/${draggableId}`, { status: newStatus });
+      refetchTasks();
+    } catch {
+      setBoardTasks(tasks);
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -217,53 +251,71 @@ export default function TasksPage() {
 
       {/* Board View */}
       {view === 'board' && (
-        <div className="flex gap-4 overflow-x-auto pb-4">
-          {kanbanCols.map((col) => {
-            const colTasks = tasks.filter((t) => t.status === col);
-            return (
-              <div key={col} className="min-w-[260px] flex-1">
-                <div className="flex items-center gap-2 mb-3 px-1">
-                  <div className={`h-2 w-2 rounded-full ${statusColors[col]?.split(' ')[0] || 'bg-gray-200'}`} />
-                  <span className="text-xs font-semibold text-[#374151] uppercase tracking-wider">{kanbanLabels[col]}</span>
-                  <span className="ml-auto text-xs text-[#9CA3AF] bg-[#F3F4F6] rounded-full px-2 py-0.5 tabular-nums">{colTasks.length}</span>
-                </div>
-                <div className="space-y-2">
-                  {colTasks.map((t) => (
-                    <motion.div
-                      key={t.id}
-                      layout
-                      className="rounded-xl border border-[#E5E7EB] bg-white p-3.5 hover:shadow-sm cursor-pointer transition-all group"
-                      onClick={() => setSelectedTask(t)}
-                    >
-                      <div className="flex items-start gap-2 mb-2">
-                        <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${priorityDots[t.priority]}`} />
-                        <p className="text-sm font-medium text-[#111827] leading-snug">{t.title}</p>
+        <DragDropContext onDragEnd={onDragEnd}>
+          <div className="flex gap-4 overflow-x-auto pb-4 h-full">
+            {kanbanCols.map((col) => {
+              const colTasks = boardTasks.filter((t) => t.status === col);
+              return (
+                <div key={col} className="min-w-[260px] flex-1 flex flex-col">
+                  <div className="flex items-center gap-2 mb-3 px-1">
+                    <div className={`h-2 w-2 rounded-full ${statusColors[col]?.split(' ')[0] || 'bg-gray-200'}`} />
+                    <span className="text-xs font-semibold text-[#374151] uppercase tracking-wider">{kanbanLabels[col]}</span>
+                    <span className="ml-auto text-xs text-[#9CA3AF] bg-[#F3F4F6] rounded-full px-2 py-0.5 tabular-nums">{colTasks.length}</span>
+                  </div>
+                  <Droppable droppableId={col}>
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.droppableProps}
+                        className={`flex-1 space-y-2 rounded-xl transition-colors ${snapshot.isDraggingOver ? 'bg-gray-50/50' : ''}`}
+                        style={{ minHeight: '150px' }}
+                      >
+                        {colTasks.map((t, index) => (
+                          <Draggable key={t.id} draggableId={t.id} index={index}>
+                            {(provided, snapshot) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                {...provided.dragHandleProps}
+                                style={{ ...provided.draggableProps.style }}
+                                className={`rounded-xl border border-[#E5E7EB] bg-white p-3.5 hover:shadow-sm cursor-pointer transition-shadow group ${snapshot.isDragging ? 'shadow-lg rotate-2' : ''}`}
+                                onClick={() => setSelectedTask(t)}
+                              >
+                                <div className="flex items-start gap-2 mb-2">
+                                  <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${priorityDots[t.priority]}`} />
+                                  <p className="text-sm font-medium text-[#111827] leading-snug">{t.title}</p>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[11px] text-[#9CA3AF]">{t.project?.name}</span>
+                                  <div className="flex items-center gap-2">
+                                    {(t._count?.comments ?? 0) > 0 && (
+                                      <span className="flex items-center gap-0.5 text-[10px] text-[#9CA3AF]">
+                                        <MessageSquare className="h-3 w-3" /> {t._count?.comments}
+                                      </span>
+                                    )}
+                                    {t.assignee && (
+                                      <div className={`flex h-[26px] w-[26px] items-center justify-center rounded-full text-white text-[10px] font-medium border-2 border-white shadow-sm ${getAvatarColor(t.assignee.name)}`}>
+                                        {getInitials(t.assignee.name)}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                {t.dueDate && (
+                                  <p className="text-[10px] text-[#9CA3AF] mt-2">{formatDate(t.dueDate)}</p>
+                                )}
+                              </div>
+                            )}
+                          </Draggable>
+                        ))}
+                        {provided.placeholder}
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-[#9CA3AF]">{t.project?.name}</span>
-                        <div className="flex items-center gap-2">
-                          {(t._count?.comments ?? 0) > 0 && (
-                            <span className="flex items-center gap-0.5 text-[10px] text-[#9CA3AF]">
-                              <MessageSquare className="h-3 w-3" /> {t._count?.comments}
-                            </span>
-                          )}
-                          {t.assignee && (
-                            <div className={`flex h-[26px] w-[26px] items-center justify-center rounded-full text-white text-[10px] font-medium border-2 border-white shadow-sm ${getAvatarColor(t.assignee.name)}`}>
-                              {getInitials(t.assignee.name)}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      {t.dueDate && (
-                        <p className="text-[10px] text-[#9CA3AF] mt-2">{formatDate(t.dueDate)}</p>
-                      )}
-                    </motion.div>
-                  ))}
+                    )}
+                  </Droppable>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        </DragDropContext>
       )}
 
       {/* List View */}
@@ -311,6 +363,19 @@ export default function TasksPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Load More Button */}
+      {hasNextPage && (
+        <div className="mt-6 flex justify-center pb-8">
+          <button
+            onClick={() => fetchNextPage()}
+            disabled={isFetchingNextPage}
+            className="rounded-xl border border-[#E5E7EB] bg-white px-6 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50 transition-all"
+          >
+            {isFetchingNextPage ? 'Loading...' : 'Load More Tasks'}
+          </button>
         </div>
       )}
 
@@ -367,7 +432,7 @@ export default function TasksPage() {
                       <Select
                         value={field.value || ''}
                         onChange={field.onChange}
-                        options={[{ label: 'Unassigned', value: '' }, ...Array.from(new Map([...(members), ...(projects.flatMap(p => p.teams?.flatMap((t: any) => t.team.members.map((tm: any) => tm.user)) || []))].map(item => [item.id, item])).values()).map((m) => ({ label: m.name, value: m.id }))]}
+                        options={[{ label: 'Unassigned', value: '' }, ...Array.from(new Map([...(members), ...(projects.flatMap(p => p.teams?.flatMap((t: any) => t.team?.members?.map((tm: any) => tm.user) || []) || []))].filter(Boolean).map(item => [item.id, item])).values()).map((m: any) => ({ label: m.name, value: m.id }))]}
                       />
                     )} />
                   </div>
@@ -480,7 +545,7 @@ export default function TasksPage() {
                     <Select
                       value={field.value || ''}
                       onChange={field.onChange}
-                      options={[{ label: 'Unassigned', value: '' }, ...Array.from(new Map([...(members), ...(projects.flatMap(p => p.teams?.flatMap((t: any) => t.team.members.map((tm: any) => tm.user)) || []))].map(item => [item.id, item])).values()).map((m) => ({ label: m.name, value: m.id }))]}
+                      options={[{ label: 'Unassigned', value: '' }, ...Array.from(new Map([...(members), ...(projects.flatMap(p => p.teams?.flatMap((t: any) => t.team?.members?.map((tm: any) => tm.user) || []) || []))].filter(Boolean).map(item => [item.id, item])).values()).map((m: any) => ({ label: m.name, value: m.id }))]}
                     />
                   )} />
                 </div>

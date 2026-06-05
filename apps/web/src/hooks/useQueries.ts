@@ -1,34 +1,39 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 
 // --- Projects ---
-export function useProjects(search?: string) {
-  return useQuery({
-    queryKey: ['projects', search],
-    queryFn: async () => {
+export function useProjects(search?: string, includeCalendarData?: boolean) {
+  return useInfiniteQuery({
+    queryKey: ['projects', search, includeCalendarData],
+    queryFn: async ({ pageParam = 1 }) => {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
-      params.set('limit', '100');
-      const data = await api.get<{ projects: any[] }>(`/projects?${params}`);
-      return data.projects;
+      if (includeCalendarData) params.set('includeCalendarData', 'true');
+      params.set('page', String(pageParam));
+      params.set('limit', '50');
+      return api.get<{ projects: any[], page: number, totalPages: number }>(`/projects?${params}`);
     },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined,
   });
 }
 
 // --- Tasks ---
 export function useTasks(search?: string, statusFilter?: string, projectFilter?: string, assigneeId?: string) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ['tasks', search, statusFilter, projectFilter, assigneeId],
-    queryFn: async () => {
+    queryFn: async ({ pageParam = 1 }) => {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
       if (statusFilter) params.set('status', statusFilter);
       if (projectFilter) params.set('projectId', projectFilter);
       if (assigneeId) params.set('assigneeId', assigneeId);
-      params.set('limit', '200');
-      const data = await api.get<{ tasks: any[] }>(`/tasks?${params}`);
-      return data.tasks;
+      params.set('page', String(pageParam));
+      params.set('limit', '50');
+      return api.get<{ tasks: any[], page: number, totalPages: number }>(`/tasks?${params}`);
     },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined,
   });
 }
 
@@ -58,6 +63,16 @@ export function useTeams() {
     queryFn: async () => {
       const data = await api.get<{ teams: any[] }>('/teams');
       return data.teams;
+    },
+  });
+}
+
+// --- Templates ---
+export function useTemplates() {
+  return useQuery({
+    queryKey: ['templates'],
+    queryFn: async () => {
+      return api.get<any[]>('/settings/templates');
     },
   });
 }

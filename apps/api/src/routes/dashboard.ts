@@ -1,9 +1,13 @@
 import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { cacheMiddleware } from '../middleware/cache.js';
 
 export const dashboardRouter = Router();
 dashboardRouter.use(authenticate);
+
+// Cache all dashboard routes for 5 minutes (invalidated on mutation)
+dashboardRouter.use(cacheMiddleware(300));
 
 // GET /api/dashboard/stats
 dashboardRouter.get('/stats', async (req: AuthRequest, res: Response, next) => {

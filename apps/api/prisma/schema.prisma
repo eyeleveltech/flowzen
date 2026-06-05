@@ -110,11 +110,15 @@ model User {
   department     String?
   phone          String?
   joiningDate    DateTime @default(now())
-  isActive       Boolean  @default(true)
-  organizationId String
-  teamId         String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  isActive         Boolean  @default(true)
+  isEmailVerified  Boolean  @default(false)
+  emailVerifyToken String?  @unique
+  resetToken       String?  @unique
+  resetTokenExpiry DateTime?
+  organizationId   String
+  teamId           String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   team           Team?           @relation("TeamMembers", fields: [teamId], references: [id])
@@ -128,6 +132,7 @@ model User {
   ledTeam        Team?           @relation("TeamLeader")
 
   @@index([organizationId])
+  @@index([organizationId, isActive])
   @@map("users")
 }
 
@@ -147,12 +152,14 @@ model Client {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   projects     Project[]
   notes        Note[]
-  activities   Activity[]   @relation("ClientActivities")
+  activities   Activity[]    @relation("ClientActivities")
+  contacts     ClientContact[]
 
   @@index([organizationId])
+  @@index([organizationId, status])
   @@map("clients")
 }
 
@@ -181,6 +188,8 @@ model Project {
   members    ProjectMember[]
   teams      ProjectTeam[]
 
+  @@index([clientId, status])
+  @@index([ownerId, status])
   @@map("projects")
 }
 
@@ -250,6 +259,8 @@ model Task {
   checklist  ChecklistItem[]
   activities Activity[]      @relation("TaskActivities")
 
+  @@index([projectId, status, assigneeId])
+  @@index([assigneeId, status])
   @@map("tasks")
 }
 
@@ -357,4 +368,19 @@ model ProjectTemplate {
   projects Project[]
 
   @@map("project_templates")
+}
+
+model ClientContact {
+  id          String   @id @default(cuid())
+  name        String
+  designation String?
+  email       String?
+  phone       String?
+  clientId    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("client_contacts")
 }
