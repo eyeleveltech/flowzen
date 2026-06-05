@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
+import { api } from '@/lib/api';
 import { useAuthStore, useUIStore } from '@/stores';
 import { Sidebar } from '@/components/layout/sidebar';
 import { TopNav } from '@/components/layout/top-nav';
@@ -14,7 +15,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const { user, isAuthenticated, loadFromStorage } = useAuthStore();
   const { sidebarCollapsed } = useUIStore();
-  const { activeToast, clearToast } = useNotificationStore();
+  const { activeToast, clearToast, addToast } = useNotificationStore();
+  const [isResending, setIsResending] = useState(false);
 
   useEffect(() => {
     loadFromStorage();
@@ -41,6 +43,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <p className="text-sm text-[#991B1B]">
               <strong>Please verify your email.</strong> We sent a verification link to {user.email}.
             </p>
+            <button
+              onClick={async () => {
+                try {
+                  setIsResending(true);
+                  await api.post('/auth/resend-verification');
+                  addToast({ id: Date.now().toString(), type: 'SUCCESS', message: 'Verification email sent!', read: false, createdAt: new Date().toISOString() });
+                } catch (err: any) {
+                  addToast({ id: Date.now().toString(), type: 'ERROR', message: err.message || 'Failed to send email', read: false, createdAt: new Date().toISOString() });
+                } finally {
+                  setIsResending(false);
+                }
+              }}
+              disabled={isResending}
+              className="text-xs font-medium px-3 py-1.5 bg-white text-[#991B1B] border border-[#FCA5A5] rounded-md hover:bg-[#FEF2F2] disabled:opacity-50 transition-colors"
+            >
+              {isResending ? 'Sending...' : 'Resend Email'}
+            </button>
           </div>
         )}
         <div className="px-8 py-6">

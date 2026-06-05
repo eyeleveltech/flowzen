@@ -95,5 +95,38 @@ export const EmailService = {
     } catch (error) {
       logger.error('Failed to send password reset email', { error });
     }
+  },
+
+  sendWelcomeEmail: async (to: string, generatedPassword: string) => {
+    try {
+      const mailer = await getTransporter();
+      const loginUrl = `${APP_URL}/login`;
+
+      const info = await mailer.sendMail({
+        from: '"Flowzen" <noreply@flowzen.app>',
+        to,
+        subject: 'Welcome to Flowzen! Your Account Details',
+        html: `
+          <div style="font-family: Arial, sans-serif; padding: 20px;">
+            <h2>Welcome to Flowzen!</h2>
+            <p>An administrator has created an account for you. Here are your login details:</p>
+            <div style="background-color: #f3f4f6; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              <p style="margin: 0;"><strong>Email:</strong> ${to}</p>
+              <p style="margin: 10px 0 0 0;"><strong>Password:</strong> ${generatedPassword}</p>
+            </div>
+            <p>Please log in and change your password as soon as possible.</p>
+            <a href="${loginUrl}" style="display: inline-block; padding: 10px 20px; background-color: #111827; color: #ffffff; text-decoration: none; border-radius: 5px; margin-top: 10px;">Log In to Flowzen</a>
+            <p style="margin-top: 20px; font-size: 12px; color: #6b7280;">If you believe this email was sent in error, please ignore it.</p>
+          </div>
+        `,
+      });
+
+      logger.info(`Welcome email sent to ${to}`);
+      if (!process.env.SMTP_USER && !process.env.EMAIL_USER) {
+        logger.info(`[ETHEREAL MAIL URL]: ${nodemailer.getTestMessageUrl(info)}`);
+      }
+    } catch (error) {
+      logger.error('Failed to send welcome email', { error });
+    }
   }
 };

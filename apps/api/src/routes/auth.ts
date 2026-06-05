@@ -223,6 +223,35 @@ authRouter.post('/verify-email', async (req: Request, res: Response, next) => {
   }
 });
 
+// POST /api/auth/resend-verification
+authRouter.post('/resend-verification', authenticate, authLimiter, async (req: AuthRequest, res: Response, next) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
+    
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    
+    if (user.isEmailVerified) {
+      res.status(400).json({ error: 'Email is already verified' });
+      return;
+    }
+
+    const emailVerifyToken = crypto.randomBytes(32).toString('hex');
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { emailVerifyToken },
+    });
+
+    await EmailService.sendVerificationEmail(user.email, emailVerifyToken);
+
+    res.json({ success: true, message: 'Verification email sent successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // POST /api/auth/request-reset
 authRouter.post('/request-reset', async (req: Request, res: Response, next) => {
   try {

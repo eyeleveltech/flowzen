@@ -23,6 +23,7 @@ interface NotificationState {
   markAsRead: (id: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
   addRealTimeNotification: (notification: Notification) => void;
+  addToast: (notification: Notification) => void;
   initializeSocketListeners: () => void;
 }
 
@@ -89,6 +90,14 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     }));
     
     // Auto-clear toast after 5 seconds
+    setTimeout(() => {
+      set((state) => (state.activeToast?.id === notification.id ? { activeToast: null } : state));
+    }, 5000);
+  },
+
+  addToast: (notification: Notification) => {
+    set({ activeToast: notification });
+    
     setTimeout(() => {
       set((state) => (state.activeToast?.id === notification.id ? { activeToast: null } : state));
     }, 5000);

@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
 import { hashPassword } from '../utils/password.js';
+import { EmailService } from '../services/email.js';
 
 export const settingsRouter = Router();
 settingsRouter.use(authenticate);
@@ -97,6 +98,9 @@ settingsRouter.post('/users', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
         isActive: true,
       },
     });
+
+    const generatedPassword = password || 'Welcome@123';
+    await EmailService.sendWelcomeEmail(email, generatedPassword);
 
     res.status(201).json(user);
   } catch (error) {
