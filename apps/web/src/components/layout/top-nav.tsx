@@ -229,13 +229,15 @@ export function TopNav() {
                   <p className="text-xs text-[#9CA3AF]">{user?.email}</p>
                 </div>
                 <div className="border-t border-[#F3F4F6] pt-1">
-                  <button
-                    onClick={() => { router.push('/settings'); setShowUserMenu(false); }}
-                    className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-[#374151] hover:bg-[#F9FAFB] transition-colors"
-                  >
-                    <Settings className="h-4 w-4 text-[#9CA3AF]" />
-                    Settings
-                  </button>
+                  {(user?.role === 'ADMIN' || user?.role === 'OWNER') && (
+                    <button
+                      onClick={() => { router.push('/settings'); setShowUserMenu(false); }}
+                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-[#374151] hover:bg-[#F9FAFB] transition-colors"
+                    >
+                      <Settings className="h-4 w-4 text-[#9CA3AF]" />
+                      Settings
+                    </button>
+                  )}
                   <button
                     onClick={() => { logout(); window.location.href = '/login'; }}
                     className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-[#EF4444] hover:bg-red-50 transition-colors"

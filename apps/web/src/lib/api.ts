@@ -27,11 +27,12 @@ class ApiClient {
     });
 
     if (response.status === 401) {
-      if (typeof window !== 'undefined') {
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login') && !window.location.pathname.includes('/register') && !window.location.pathname.includes('/forgot-password') && !window.location.pathname.includes('/reset-password')) {
         localStorage.removeItem('flowzen-user');
         window.location.href = '/login';
       }
-      throw new Error('Unauthorized');
+      const error = await response.json().catch(() => ({ error: 'Unauthorized' }));
+      throw new Error(error.error || 'Unauthorized');
     }
 
     if (!response.ok) {

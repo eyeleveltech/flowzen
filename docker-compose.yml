@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-elitepm_secret}
       POSTGRES_DB: ${POSTGRES_DB:-elitepm}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -45,6 +45,11 @@ services:
       - NODE_ENV=production
       - JWT_SECRET=${JWT_SECRET:-super_secret_jwt_key_change_me_in_prod}
       - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_FROM=${SMTP_FROM}
       - PORT=4000
     ports:
       - "4000:4000"
