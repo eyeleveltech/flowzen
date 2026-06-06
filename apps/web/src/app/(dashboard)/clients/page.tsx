@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '@/stores';
@@ -40,7 +40,7 @@ const statusColors: Record<string, string> = {
   ARCHIVED: 'bg-gray-50 text-gray-400',
 };
 
-export default function ClientsPage() {
+function ClientsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuthStore();
@@ -308,6 +308,18 @@ export default function ClientsPage() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+export default function ClientsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#111827] border-t-transparent" />
+      </div>
+    }>
+      <ClientsContent />
+    </Suspense>
   );
 }
 

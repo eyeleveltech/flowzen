@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
@@ -49,7 +49,7 @@ const kanbanLabels: Record<string, string> = {
   PLANNING: 'Planning', IN_PROGRESS: 'In Progress', REVIEW: 'Review', COMPLETED: 'Completed',
 };
 
-export default function ProjectsPage() {
+function ProjectsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuthStore();
@@ -469,6 +469,18 @@ export default function ProjectsPage() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+export default function ProjectsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#111827] border-t-transparent" />
+      </div>
+    }>
+      <ProjectsContent />
+    </Suspense>
   );
 }
 

@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, Suspense } from 'react';
 import { Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-export default function VerifyEmailPage() {
+function VerifyEmailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
@@ -45,7 +45,6 @@ export default function VerifyEmailPage() {
   }, [token, router]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#FAFAFA] p-4">
       <div className="w-full max-w-md space-y-8 rounded-2xl bg-white p-8 shadow-xl shadow-black/5 ring-1 ring-[#E5E7EB] text-center">
         
         {status === 'loading' && (
@@ -85,6 +84,23 @@ export default function VerifyEmailPage() {
           </div>
         )}
       </div>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#FAFAFA] p-4">
+      <Suspense fallback={
+        <div className="w-full max-w-md space-y-8 rounded-2xl bg-white p-8 shadow-xl shadow-black/5 ring-1 ring-[#E5E7EB] text-center">
+          <div className="flex flex-col items-center justify-center py-8">
+            <Loader2 className="h-12 w-12 text-[#111827] animate-spin mb-4" />
+            <h2 className="text-xl font-semibold text-[#111827]">Loading...</h2>
+            <p className="mt-2 text-sm text-[#6B7280]">Please wait a moment...</p>
+          </div>
+        </div>
+      }>
+        <VerifyEmailContent />
+      </Suspense>
     </div>
   );
 }

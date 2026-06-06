@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { z } from 'zod';
@@ -53,7 +53,7 @@ const kanbanLabels: Record<string, string> = {
   BACKLOG: 'Backlog', TODO: 'To Do', IN_PROGRESS: 'In Progress', REVIEW: 'Review', BLOCKED: 'Blocked', COMPLETED: 'Done',
 };
 
-export default function TasksPage() {
+function TasksContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuthStore();
@@ -630,5 +630,17 @@ export default function TasksPage() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+export default function TasksPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#111827] border-t-transparent" />
+      </div>
+    }>
+      <TasksContent />
+    </Suspense>
   );
 }
