@@ -6,9 +6,11 @@ import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores';
 import { useRouter } from 'next/navigation';
 import { getInitials, getAvatarColor } from '@/lib/utils';
-import { Building2, Users, Shield, FileText, Plus, X, Edit2 } from 'lucide-react';
+import { Building2, Users, Shield, FileText, Plus, X, Edit2, Crown } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useConfirmStore } from '@/stores';
 
 type Tab = 'organization' | 'users' | 'templates' | 'permissions';
 
@@ -36,7 +38,8 @@ const permissions: Record<string, Record<string, boolean>> = {
 };
 
 export default function SettingsPage() {
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
+  const confirm = useConfirmStore((s) => s.confirm);
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('organization');
   const [orgName, setOrgName] = useState('');
@@ -50,16 +53,19 @@ export default function SettingsPage() {
   const [templateForm, setTemplateForm] = useState({ name: '', description: '', tasks: [{ title: '' }] });
   const [teams, setTeams] = useState<Team[]>([]);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (user && (user.role === 'TEAM_MEMBER' || user.role === 'PROJECT_MANAGER')) {
       router.push('/dashboard');
       return;
     }
-    api.get<{ name: string; website?: string }>('/settings/organization').then((d) => { setOrgName(d.name); setOrgWebsite(d.website || ''); }).catch(() => {});
-    api.get<OrgUser[]>('/settings/users').then(setUsers).catch(() => {});
-    api.get<Template[]>('/settings/templates').then(setTemplates).catch(() => {});
-    api.get<{ teams: Team[] }>('/teams').then((res) => setTeams(res.teams || [])).catch(() => {});
+    Promise.all([
+      api.get<{ name: string; website?: string }>('/settings/organization').then((d) => { setOrgName(d.name); setOrgWebsite(d.website || ''); }).catch(() => {}),
+      api.get<OrgUser[]>('/settings/users').then(setUsers).catch(() => {}),
+      api.get<Template[]>('/settings/templates').then(setTemplates).catch(() => {}),
+      api.get<{ teams: Team[] }>('/teams').then((res) => setTeams(res.teams || [])).catch(() => {})
+    ]).finally(() => setLoading(false));
   }, [user, router]);
 
   async function saveOrg() {
@@ -102,6 +108,24 @@ export default function SettingsPage() {
       password: '',
       isActive: u.isActive
     });
+  }
+
+  async function handleTransferSuperAdmin(targetUserId: string) {
+    const confirmed = await confirm({
+      title: 'Transfer Super Admin',
+      message: 'Are you completely sure? This will promote the selected user to Super Admin and downgrade you to a standard Admin immediately. You will lose top-level access.',
+      confirmText: 'Yes, Transfer Ownership',
+      cancelText: 'Cancel',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+
+    try {
+      await api.post(`/settings/users/${targetUserId}/transfer-super-admin`);
+      logout();
+    } catch (err: any) {
+      alert(err.message || 'Failed to transfer role');
+    }
   }
 
   async function submitTemplate(e: React.FormEvent) {
@@ -153,7 +177,21 @@ export default function SettingsPage() {
 
         {/* Content */}
         <div className="flex-1">
-          {tab === 'organization' && (
+          {loading ? (
+            <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6 max-w-4xl space-y-6">
+              <Skeleton className="h-6 w-48 mb-4" />
+              <div className="space-y-4">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="space-y-2">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-10 w-full rounded-xl" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <>
+              {tab === 'organization' && (
             <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6 max-w-lg">
               <h2 className="text-sm font-semibold text-[#111827] mb-4">Organization Settings</h2>
               <div className="space-y-4">
@@ -211,9 +249,22 @@ export default function SettingsPage() {
                           </span>
                         </td>
                         <td className="px-6 py-3.5 text-right">
-                          <button onClick={() => openEditUser(u)} className="p-1.5 text-[#6B7280] hover:text-[#111827] bg-[#F9FAFB] hover:bg-[#F3F4F6] rounded-xl transition-colors">
-                            <Edit2 className="h-4 w-4" />
-                          </button>
+                          <div className="flex gap-2 justify-end">
+                            {user?.role === 'SUPER_ADMIN' && user.id !== u.id && (
+                              <button 
+                                onClick={() => handleTransferSuperAdmin(u.id)} 
+                                className="p-1.5 text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-xl transition-colors" 
+                                title="Transfer Super Admin"
+                              >
+                                <Crown className="h-4 w-4" />
+                              </button>
+                            )}
+                            {(u.role !== 'SUPER_ADMIN' || user?.role === 'SUPER_ADMIN') && (
+                              <button onClick={() => openEditUser(u)} className="p-1.5 text-[#6B7280] hover:text-[#111827] bg-[#F9FAFB] hover:bg-[#F3F4F6] rounded-xl transition-colors" title="Edit User">
+                                <Edit2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -267,15 +318,21 @@ export default function SettingsPage() {
                       <input value={inviteForm.name} onChange={(e) => setInviteForm({ ...inviteForm, name: e.target.value })} placeholder="Full name" required className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
                       <input type="email" value={inviteForm.email} disabled className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-2.5 text-sm text-[#9CA3AF] outline-none transition-all cursor-not-allowed" title="Email cannot be changed" />
                       <input type="text" value={inviteForm.password} onChange={(e) => setInviteForm({ ...inviteForm, password: e.target.value })} placeholder="New Password (leave blank to keep current)" className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
-                      <Select
-                        value={inviteForm.role}
-                        onChange={(val) => setInviteForm({ ...inviteForm, role: val })}
-                        options={[
-                          { label: 'Team Member', value: 'TEAM_MEMBER' },
-                          { label: 'Project Manager', value: 'PROJECT_MANAGER' },
-                          { label: 'Admin', value: 'ADMIN' }
-                        ]}
-                      />
+                      {editingUser.role === 'SUPER_ADMIN' ? (
+                        <div className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-2.5 text-sm text-[#9CA3AF] cursor-not-allowed">
+                          Role: Super Admin
+                        </div>
+                      ) : (
+                        <Select
+                          value={inviteForm.role}
+                          onChange={(val) => setInviteForm({ ...inviteForm, role: val })}
+                          options={[
+                            { label: 'Team Member', value: 'TEAM_MEMBER' },
+                            { label: 'Project Manager', value: 'PROJECT_MANAGER' },
+                            { label: 'Admin', value: 'ADMIN' }
+                          ]}
+                        />
+                      )}
                       <Select
                         value={inviteForm.teamId}
                         onChange={(val) => setInviteForm({ ...inviteForm, teamId: val })}
@@ -408,6 +465,8 @@ export default function SettingsPage() {
                 </table>
               </div>
             </div>
+          )}
+            </>
           )}
         </div>
       </div>

@@ -17,6 +17,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   PieChart, Pie, Cell, BarChart, Bar
 } from 'recharts';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface Stats {
   activeClients: number; activeProjects: number; openTasks: number;
@@ -75,7 +76,55 @@ export default function DashboardPage() {
     }
   }, [user, fetchAll]);
 
-  if (!user || !stats) return null;
+  if (!user) return null;
+
+  if (!stats) {
+    return (
+      <div className="pb-8 max-w-[1400px] mx-auto">
+        <div className="mb-6 flex items-baseline gap-3">
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-4 w-20" />
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="p-4 md:p-5 rounded-2xl bg-white border border-[#E5E7EB]">
+              <div className="flex items-center justify-between mb-3">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-8 w-8 rounded-xl" />
+              </div>
+              <Skeleton className="h-8 w-16" />
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          <div className="lg:col-span-2 p-5 md:p-6 rounded-2xl bg-white border border-[#E5E7EB]">
+            <div className="mb-4 flex items-center justify-between">
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-4 w-20" />
+            </div>
+            <Skeleton className="h-[220px] w-full" />
+          </div>
+          <div className="p-5 md:p-6 rounded-2xl bg-white border border-[#E5E7EB]">
+             <div className="mb-4 flex items-center justify-between">
+               <Skeleton className="h-5 w-32" />
+               <Skeleton className="h-4 w-4 rounded-full" />
+             </div>
+             <div className="space-y-3 mt-4">
+               {[1, 2, 3, 4].map(i => (
+                 <div key={i} className="flex justify-between items-center">
+                   <div>
+                     <Skeleton className="h-4 w-32 mb-1" />
+                     <Skeleton className="h-3 w-20" />
+                   </div>
+                   <Skeleton className="h-6 w-16 rounded-md" />
+                 </div>
+               ))}
+             </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const statCards = [];
   if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
@@ -129,6 +178,30 @@ export default function DashboardPage() {
       {/* Row 1: Velocity & Deadlines */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         
+        {/* TEAM_MEMBER Deadlines (Moved to top for Team Members) */}
+        {user.role === 'TEAM_MEMBER' && (
+          <motion.div variants={item} className="lg:col-span-3 p-5 md:p-6 rounded-2xl bg-white border border-[#E5E7EB] flex flex-col max-h-[300px]">
+            <div className="mb-4">
+              <h2 className="text-base font-semibold text-[#1D1D1F] tracking-tight">Upcoming Deadlines</h2>
+            </div>
+            <div className="flex-1 overflow-y-auto pr-1 space-y-1 custom-scrollbar">
+              {deadlines.length === 0 ? (
+                <p className="text-sm text-[#86868B] py-2 text-center">No upcoming deadlines</p>
+              ) : (
+                deadlines.map((d) => (
+                  <div key={d.id} onClick={() => router.push(`/projects/${d.project.id}`)} className="group flex items-center justify-between py-2 border-b border-[#F3F4F6] last:border-0 hover:bg-[#F9FAFB] -mx-3 px-3 transition-colors cursor-pointer rounded-xl">
+                    <div className="flex-1 min-w-0 pr-3">
+                      <p className="text-sm font-medium text-[#1D1D1F] truncate">{d.title}</p>
+                      <p className="text-xs text-[#86868B] truncate">{d.project.name}</p>
+                    </div>
+                    <span className="text-xs font-medium text-[#1D1D1F] tabular-nums bg-[#F5F5F7] group-hover:bg-white px-2 py-1 rounded-md shrink-0 border border-[#E5E7EB] transition-colors">{formatDate(d.dueDate)}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </motion.div>
+        )}
+
         {/* Task Velocity Area Chart */}
         <motion.div variants={item} className={`p-5 md:p-6 rounded-2xl bg-white border border-[#E5E7EB] ${user.role === 'TEAM_MEMBER' ? 'lg:col-span-3' : 'lg:col-span-2'}`}>
           <div className="mb-4 flex items-center justify-between">
@@ -154,36 +227,12 @@ export default function DashboardPage() {
           </div>
         </motion.div>
 
-        {/* Upcoming Deadlines (Moved to Row 1) */}
+        {/* Upcoming Deadlines (For Non-Team Members) */}
         {user.role !== 'TEAM_MEMBER' && (
           <motion.div variants={item} className="p-5 md:p-6 rounded-2xl bg-white border border-[#E5E7EB] flex flex-col max-h-[300px]">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-base font-semibold text-[#1D1D1F] tracking-tight">Upcoming Deadlines</h2>
               <Clock className="h-4 w-4 text-[#86868B]" />
-            </div>
-            <div className="flex-1 overflow-y-auto pr-1 space-y-1 custom-scrollbar">
-              {deadlines.length === 0 ? (
-                <p className="text-sm text-[#86868B] py-2 text-center">No upcoming deadlines</p>
-              ) : (
-                deadlines.map((d) => (
-                  <div key={d.id} onClick={() => router.push(`/projects/${d.project.id}`)} className="group flex items-center justify-between py-2 border-b border-[#F3F4F6] last:border-0 hover:bg-[#F9FAFB] -mx-3 px-3 transition-colors cursor-pointer rounded-xl">
-                    <div className="flex-1 min-w-0 pr-3">
-                      <p className="text-sm font-medium text-[#1D1D1F] truncate">{d.title}</p>
-                      <p className="text-xs text-[#86868B] truncate">{d.project.name}</p>
-                    </div>
-                    <span className="text-xs font-medium text-[#1D1D1F] tabular-nums bg-[#F5F5F7] group-hover:bg-white px-2 py-1 rounded-md shrink-0 border border-[#E5E7EB] transition-colors">{formatDate(d.dueDate)}</span>
-                  </div>
-                ))
-              )}
-            </div>
-          </motion.div>
-        )}
-        
-        {/* TEAM_MEMBER Deadlines */}
-        {user.role === 'TEAM_MEMBER' && (
-          <motion.div variants={item} className="lg:col-span-3 p-5 md:p-6 rounded-2xl bg-white border border-[#E5E7EB] flex flex-col max-h-[300px]">
-            <div className="mb-4">
-              <h2 className="text-base font-semibold text-[#1D1D1F] tracking-tight">Upcoming Deadlines</h2>
             </div>
             <div className="flex-1 overflow-y-auto pr-1 space-y-1 custom-scrollbar">
               {deadlines.length === 0 ? (

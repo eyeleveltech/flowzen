@@ -9,9 +9,10 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { formatDate, getInitials, getAvatarColor } from '@/lib/utils';
-import { Plus, Search, X, MessageSquare, CheckCircle2, ListChecks } from 'lucide-react';
+import { Plus, Search, X, MessageSquare, CheckCircle2, ListChecks, Trash2 } from 'lucide-react';
 import { Select } from '@/components/ui/select';
-import { useAuthStore } from '@/stores';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useAuthStore, useConfirmStore } from '@/stores';
 import { useTasks, useProjects, useMembers } from '@/hooks/useQueries';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
@@ -56,6 +57,7 @@ export default function TasksPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuthStore();
+  const { confirm } = useConfirmStore();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
@@ -187,6 +189,27 @@ export default function TasksPage() {
     } catch {}
   }
 
+  async function deleteTask() {
+    if (!selectedTask) return;
+    
+    const isConfirmed = await confirm({
+      title: 'Delete Task',
+      message: 'Are you sure you want to delete this task? This action cannot be undone.',
+      confirmText: 'Delete Task',
+      cancelText: 'Cancel',
+    });
+
+    if (isConfirmed) {
+      try {
+        await api.delete(`/tasks/${selectedTask.id}`);
+        setSelectedTask(null);
+        refetchTasks();
+      } catch (error) {
+        console.error('Failed to delete task', error);
+      }
+    }
+  }
+
   const onDragEnd = async (result: DropResult) => {
     const { destination, source, draggableId } = result;
     if (!destination) return;
@@ -217,7 +240,6 @@ export default function TasksPage() {
         </button>
       </div>
 
-      {/* Filters */}
       <div className="flex items-center gap-3 mb-6 flex-wrap">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
@@ -249,8 +271,34 @@ export default function TasksPage() {
         </div>
       </div>
 
-      {/* Board View */}
-      {view === 'board' && (
+      {loading ? (
+        <div className="flex gap-4 overflow-x-auto pb-4 h-full">
+          {kanbanCols.map((col) => (
+            <div key={col} className="min-w-[260px] flex-1 flex flex-col">
+              <div className="flex items-center gap-2 mb-3 px-1">
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-6 rounded-full ml-auto" />
+              </div>
+              <div className="flex-1 space-y-3">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="rounded-xl border border-[#E5E7EB] bg-white p-3.5">
+                    <div className="flex items-start gap-2 mb-3">
+                      <Skeleton className="h-4 w-32" />
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <Skeleton className="h-3 w-16" />
+                      <Skeleton className="h-6 w-6 rounded-full" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <>
+          {/* Board View */}
+          {view === 'board' && (
         <DragDropContext onDragEnd={onDragEnd}>
           <div className="flex gap-4 overflow-x-auto pb-4 h-full">
             {kanbanCols.map((col) => {
@@ -366,17 +414,19 @@ export default function TasksPage() {
         </div>
       )}
 
-      {/* Load More Button */}
-      {hasNextPage && (
-        <div className="mt-6 flex justify-center pb-8">
-          <button
-            onClick={() => fetchNextPage()}
-            disabled={isFetchingNextPage}
-            className="rounded-xl border border-[#E5E7EB] bg-white px-6 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50 transition-all"
-          >
-            {isFetchingNextPage ? 'Loading...' : 'Load More Tasks'}
-          </button>
-        </div>
+          {/* Load More Button */}
+          {hasNextPage && (
+            <div className="mt-6 flex justify-center pb-8">
+              <button
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+                className="rounded-xl border border-[#E5E7EB] bg-white px-6 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50 transition-all"
+              >
+                {isFetchingNextPage ? 'Loading...' : 'Load More Tasks'}
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* Task Detail Slide-over */}
@@ -397,9 +447,14 @@ export default function TasksPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   {!isEditing && (user?.role !== 'TEAM_MEMBER' || selectedTask.assignee?.id === user?.id) && (
-                    <button onClick={startEditing} className="rounded-xl border border-[#E5E7EB] px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
-                      Edit
-                    </button>
+                    <>
+                      <button onClick={startEditing} className="rounded-xl border border-[#E5E7EB] px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
+                        Edit
+                      </button>
+                      <button onClick={deleteTask} className="rounded-xl border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 hover:border-red-300 transition-all flex items-center gap-1.5">
+                        <Trash2 className="h-3.5 w-3.5" /> Delete
+                      </button>
+                    </>
                   )}
                   <button onClick={() => { setSelectedTask(null); setIsEditing(false); }} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-[#6B7280]" /></button>
                 </div>

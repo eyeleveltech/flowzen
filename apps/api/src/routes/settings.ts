@@ -111,9 +111,29 @@ settingsRouter.post('/users', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
 // PUT /api/settings/users/:id
 settingsRouter.put('/users/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
+    const targetUserId = req.params.id as string;
+    const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!targetUser) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    if (targetUser.role === 'SUPER_ADMIN' && req.user!.role !== 'SUPER_ADMIN') {
+      res.status(403).json({ error: 'Admins cannot edit Super Admins' });
+      return;
+    }
+
+    let roleToSet = req.body.role;
+    if (targetUser.role === 'SUPER_ADMIN') {
+      roleToSet = 'SUPER_ADMIN'; // Cannot be demoted here
+    } else if (req.body.role === 'SUPER_ADMIN') {
+      res.status(400).json({ error: 'Cannot promote to Super Admin directly' });
+      return;
+    }
+
     const dataToUpdate: any = {
       name: req.body.name,
-      role: req.body.role,
+      role: roleToSet,
       department: req.body.department,
       teamId: req.body.teamId || null,
       isActive: req.body.isActive,
@@ -124,7 +144,7 @@ settingsRouter.put('/users/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: 
     }
 
     const user = await prisma.user.update({
-      where: { id: (req.params.id as string) },
+      where: { id: targetUserId },
       data: dataToUpdate,
       select: {
         id: true,
@@ -168,6 +188,45 @@ settingsRouter.post('/templates', authorize('SUPER_ADMIN', 'ADMIN'), async (req:
     });
 
     res.status(201).json(template);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/settings/users/:id/transfer-super-admin
+settingsRouter.post('/users/:id/transfer-super-admin', authorize('SUPER_ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const targetUserId = req.params.id as string;
+    const currentUserId = req.user!.userId;
+
+    if (targetUserId === currentUserId) {
+      res.status(400).json({ error: 'Cannot transfer role to yourself' });
+      return;
+    }
+
+    // Verify target user belongs to same org
+    const targetUser = await prisma.user.findUnique({
+      where: { id: targetUserId },
+    });
+
+    if (!targetUser || targetUser.organizationId !== req.user!.organizationId) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    // Perform transfer in a transaction
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: targetUserId },
+        data: { role: 'SUPER_ADMIN' },
+      }),
+      prisma.user.update({
+        where: { id: currentUserId },
+        data: { role: 'ADMIN' },
+      }),
+    ]);
+
+    res.json({ message: 'Super Admin role transferred successfully' });
   } catch (error) {
     next(error);
   }

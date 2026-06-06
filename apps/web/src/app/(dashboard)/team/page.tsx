@@ -10,6 +10,7 @@ import {
   CheckCircle2, Clock, X, ChevronRight, Shield, 
   Activity, FileText, Sparkles, AlertCircle, Folder, User, Zap, Leaf
 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface TeamMember {
   id: string; name: string; email: string; avatar?: string | null;
@@ -418,7 +419,7 @@ export default function TeamPage() {
           {loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {[...Array(8)].map((_, i) => (
-                <div key={i} className="h-56 w-full bg-gray-50 border border-gray-100 rounded-3xl animate-pulse" />
+                <Skeleton key={i} className="h-56 w-full rounded-[1.5rem]" />
               ))}
             </div>
           ) : (
@@ -532,20 +533,20 @@ export default function TeamPage() {
 // Sidebar Loading Skeleton
 function SidebarSkeleton() {
   return (
-    <div className="animate-pulse space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <div className="h-16 w-16 rounded-2xl bg-gray-200" />
+        <Skeleton className="h-16 w-16 rounded-2xl" />
         <div className="flex-1 space-y-2">
-          <div className="h-4 w-32 bg-gray-200 rounded" />
-          <div className="h-3.5 w-24 bg-gray-200 rounded" />
+          <Skeleton className="h-4 w-32 rounded" />
+          <Skeleton className="h-3.5 w-24 rounded" />
         </div>
       </div>
-      <div className="h-10 w-full bg-gray-150 rounded-xl" />
-      <div className="h-20 w-full bg-gray-100 rounded-2xl" />
+      <Skeleton className="h-10 w-full rounded-xl" />
+      <Skeleton className="h-20 w-full rounded-2xl" />
       <div className="space-y-3">
-        <div className="h-3.5 w-28 bg-gray-200 rounded" />
-        <div className="h-16 w-full bg-gray-100 rounded-xl" />
-        <div className="h-16 w-full bg-gray-100 rounded-xl" />
+        <Skeleton className="h-3.5 w-28 rounded" />
+        <Skeleton className="h-16 w-full rounded-xl" />
+        <Skeleton className="h-16 w-full rounded-xl" />
       </div>
     </div>
   );

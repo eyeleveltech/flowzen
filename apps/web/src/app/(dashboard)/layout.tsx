@@ -15,8 +15,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const { user, isAuthenticated, loadFromStorage } = useAuthStore();
   const { sidebarCollapsed } = useUIStore();
-  const { activeToast, clearToast, addToast } = useNotificationStore();
-  const [isResending, setIsResending] = useState(false);
+  const { activeToast, clearToast } = useNotificationStore();
 
   useEffect(() => {
     loadFromStorage();
@@ -35,33 +34,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <motion.main
         animate={{ marginLeft: sidebarCollapsed ? 72 : 260 }}
         transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
-        className="flex-1 min-w-0"
+        className="flex-1 flex flex-col min-w-0 bg-[#FAFAFA]"
       >
         <TopNav />
-        {user && user.isEmailVerified === false && (
-          <div className="bg-[#FEF2F2] border-b border-[#FEE2E2] px-8 py-3 flex items-center justify-between">
-            <p className="text-sm text-[#991B1B]">
-              <strong>Please verify your email.</strong> We sent a verification link to {user.email}.
-            </p>
-            <button
-              onClick={async () => {
-                try {
-                  setIsResending(true);
-                  await api.post('/auth/resend-verification');
-                  addToast({ id: Date.now().toString(), type: 'SUCCESS', message: 'Verification email sent!', read: false, createdAt: new Date().toISOString() });
-                } catch (err: any) {
-                  addToast({ id: Date.now().toString(), type: 'ERROR', message: err.message || 'Failed to send email', read: false, createdAt: new Date().toISOString() });
-                } finally {
-                  setIsResending(false);
-                }
-              }}
-              disabled={isResending}
-              className="text-xs font-medium px-3 py-1.5 bg-white text-[#991B1B] border border-[#FCA5A5] rounded-md hover:bg-[#FEF2F2] disabled:opacity-50 transition-colors"
-            >
-              {isResending ? 'Sending...' : 'Resend Email'}
-            </button>
-          </div>
-        )}
         <div className="px-8 py-6">
           {children}
         </div>

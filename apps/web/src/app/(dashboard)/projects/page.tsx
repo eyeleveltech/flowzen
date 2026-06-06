@@ -12,6 +12,7 @@ import {
 import { useAuthStore } from '@/stores';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
+import { Skeleton } from '@/components/ui/skeleton';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -164,8 +165,22 @@ export default function ProjectsPage() {
         </div>
       </div>
 
-      {/* Views */}
-      {view === 'list' && (
+      {loading ? (
+        <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6 space-y-4">
+          {[1, 2, 3, 4, 5].map(i => (
+            <div key={i} className="flex items-center gap-4 py-3 border-b border-[#F3F4F6] last:border-0">
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-4 w-24 ml-auto" />
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-6 w-20 rounded-lg" />
+              <Skeleton className="h-6 w-6 rounded-full" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <>
+          {/* Views */}
+          {view === 'list' && (
         <div className="rounded-2xl border border-[#E5E7EB] bg-white overflow-hidden">
           <table className="w-full">
             <thead>
@@ -295,17 +310,19 @@ export default function ProjectsPage() {
         <CalendarView projects={projects} />
       )}
 
-      {/* Load More Button */}
-      {hasNextPage && (
-        <div className="mt-6 flex justify-center pb-8">
-          <button
-            onClick={() => fetchNextPage()}
-            disabled={isFetchingNextPage}
-            className="rounded-xl border border-[#E5E7EB] bg-white px-6 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50 transition-all"
-          >
-            {isFetchingNextPage ? 'Loading...' : 'Load More Projects'}
-          </button>
-        </div>
+          {/* Load More Button */}
+          {hasNextPage && (
+            <div className="mt-6 flex justify-center pb-8">
+              <button
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+                className="rounded-xl border border-[#E5E7EB] bg-white px-6 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50 transition-all"
+              >
+                {isFetchingNextPage ? 'Loading...' : 'Load More Projects'}
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* Create Modal */}

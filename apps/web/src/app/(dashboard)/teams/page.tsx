@@ -9,6 +9,7 @@ import { getInitials, getAvatarColor } from '@/lib/utils';
 import { Plus, X, Users, Edit2, Trash2 } from 'lucide-react';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { Select } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface User {
   id: string;
@@ -118,7 +119,31 @@ export default function TeamsPage() {
   }
 
   if (loading) {
-    return <div className="p-8 flex justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-[#111827] border-t-transparent" /></div>;
+    return (
+      <div className="p-8 max-w-7xl mx-auto space-y-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+          <div>
+            <Skeleton className="h-8 w-40 mb-2" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <Skeleton className="h-10 w-40 rounded-xl" />
+        </div>
+        <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-sm overflow-hidden p-6 space-y-4">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="flex items-center gap-4 py-3 border-b border-[#F3F4F6] last:border-0">
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-10 w-10 rounded-xl" />
+                <div>
+                  <Skeleton className="h-5 w-32 mb-1" />
+                  <Skeleton className="h-4 w-48" />
+                </div>
+              </div>
+              <Skeleton className="h-6 w-24 ml-auto" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
