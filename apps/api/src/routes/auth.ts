@@ -13,7 +13,7 @@ export const authRouter = Router();
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 login/register requests per windowMs
+  max: 5, // Limit each IP to 5 auth requests per windowMs
   message: { error: 'Too many authentication attempts, please try again after 15 minutes' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -44,7 +44,6 @@ authRouter.post('/register', authLimiter, validate(registerSchema), async (req, 
     }
 
     const hashedPassword = await hashPassword(password);
-    const emailVerifyToken = crypto.randomBytes(32).toString('hex');
 
     const organization = await prisma.organization.create({
       data: {
@@ -55,7 +54,6 @@ authRouter.post('/register', authLimiter, validate(registerSchema), async (req, 
             email,
             password: hashedPassword,
             role: 'SUPER_ADMIN',
-            emailVerifyToken,
           },
         },
       },
@@ -63,9 +61,6 @@ authRouter.post('/register', authLimiter, validate(registerSchema), async (req, 
     });
 
     const user = organization.users[0];
-    
-    // Send verification email
-    await EmailService.sendVerificationEmail(user.email, emailVerifyToken);
     const token = generateToken({
       userId: user.id,
       email: user.email,
@@ -108,7 +103,7 @@ authRouter.post('/login', authLimiter, validate(loginSchema), async (req, res: R
       include: { organization: true },
     });
 
-    if (!user || !user.isActive) {
+    if (!user || user.status !== 'ACTIVE') {
       res.status(401).json({ error: 'Invalid credentials' });
       return;
     }
@@ -141,7 +136,6 @@ authRouter.post('/login', authLimiter, validate(loginSchema), async (req, res: R
         role: user.role,
         avatar: user.avatar,
         department: user.department,
-        isEmailVerified: user.isEmailVerified,
         organization: {
           id: user.organization.id,
           name: user.organization.name,
@@ -176,7 +170,6 @@ authRouter.get('/me', authenticate, async (req: AuthRequest, res: Response, next
       department: user.department,
       phone: user.phone,
       joiningDate: user.joiningDate,
-      isEmailVerified: user.isEmailVerified,
       organization: {
         id: user.organization.id,
         name: user.organization.name,
@@ -194,66 +187,9 @@ authRouter.post('/logout', (req: Request, res: Response) => {
   res.json({ success: true });
 });
 
-// POST /api/auth/verify-email
-authRouter.post('/verify-email', async (req: Request, res: Response, next) => {
-  try {
-    const { token } = req.body;
-    if (!token) {
-      res.status(400).json({ error: 'Token is required' });
-      return;
-    }
-
-    const user = await prisma.user.findUnique({ where: { emailVerifyToken: token } });
-    if (!user) {
-      res.status(400).json({ error: 'Invalid or expired verification token' });
-      return;
-    }
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        isEmailVerified: true,
-        emailVerifyToken: null,
-      },
-    });
-
-    res.json({ success: true, message: 'Email verified successfully' });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// POST /api/auth/resend-verification
-authRouter.post('/resend-verification', authenticate, authLimiter, async (req: AuthRequest, res: Response, next) => {
-  try {
-    const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
-    
-    if (!user) {
-      res.status(404).json({ error: 'User not found' });
-      return;
-    }
-    
-    if (user.isEmailVerified) {
-      res.status(400).json({ error: 'Email is already verified' });
-      return;
-    }
-
-    const emailVerifyToken = crypto.randomBytes(32).toString('hex');
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { emailVerifyToken },
-    });
-
-    await EmailService.sendVerificationEmail(user.email, emailVerifyToken);
-
-    res.json({ success: true, message: 'Verification email sent successfully' });
-  } catch (error) {
-    next(error);
-  }
-});
 
 // POST /api/auth/request-reset
-authRouter.post('/request-reset', async (req: Request, res: Response, next) => {
+authRouter.post('/request-reset', authLimiter, async (req: Request, res: Response, next) => {
   try {
     const { email } = req.body;
     if (!email) {

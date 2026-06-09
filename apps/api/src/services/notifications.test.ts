@@ -1,15 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NotificationService } from './notifications.js';
 import { prisma } from '../lib/prisma.js';
-import { io } from '../index.js';
+import { emitToUser } from '../sse.js';
 import nodemailer from 'nodemailer';
 
-// Mock Socket.io
-vi.mock('../index.js', () => ({
-  io: {
-    to: vi.fn().mockReturnThis(),
-    emit: vi.fn(),
-  },
+// Mock SSE
+vi.mock('../sse.js', () => ({
+  emitToUser: vi.fn(),
 }));
 
 // Mock Nodemailer
@@ -59,7 +56,7 @@ describe('NotificationService', () => {
     expect(result?.id).toBe('notif-1');
   });
 
-  it('should emit a socket.io event to the specific user room', async () => {
+  it('should emit an SSE event to the specific user', async () => {
     const payload = {
       userId: 'user-123',
       type: 'COMMENT_ADDED' as const,
@@ -70,9 +67,8 @@ describe('NotificationService', () => {
 
     await NotificationService.send(payload);
 
-    // Verify Socket.io
-    expect(io.to).toHaveBeenCalledWith('user_user-123');
-    expect(io.emit).toHaveBeenCalledWith('notification:new', { id: 'notif-2' });
+    // Verify SSE
+    expect(emitToUser).toHaveBeenCalledWith(null, 'user-123', 'notification:new', { id: 'notif-2' });
   });
 
   it('should attempt to send an email for high priority notifications', async () => {

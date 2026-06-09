@@ -40,34 +40,6 @@ async function getTransporter() {
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
 export const EmailService = {
-  sendVerificationEmail: async (to: string, token: string) => {
-    try {
-      const mailer = await getTransporter();
-      const verifyUrl = `${APP_URL}/verify-email?token=${token}`;
-
-      const info = await mailer.sendMail({
-        from: '"Flowzen" <noreply@flowzen.app>',
-        to,
-        subject: 'Verify your email address - Flowzen',
-        html: `
-          <div style="font-family: Arial, sans-serif; padding: 20px;">
-            <h2>Welcome to Flowzen!</h2>
-            <p>Please verify your email address by clicking the link below:</p>
-            <a href="${verifyUrl}" style="display: inline-block; padding: 10px 20px; background-color: #111827; color: #ffffff; text-decoration: none; border-radius: 5px;">Verify Email</a>
-            <p style="margin-top: 20px; font-size: 12px; color: #6b7280;">If you did not create this account, please ignore this email.</p>
-          </div>
-        `,
-      });
-
-      logger.info(`Verification email sent to ${to}`);
-      // If we are using ethereal, log the preview URL
-      if (!process.env.SMTP_USER && !process.env.EMAIL_USER) {
-        logger.info(`[ETHEREAL MAIL URL]: ${nodemailer.getTestMessageUrl(info)}`);
-      }
-    } catch (error) {
-      logger.error('Failed to send verification email', { error });
-    }
-  },
 
   sendPasswordResetEmail: async (to: string, token: string) => {
     try {
@@ -97,36 +69,32 @@ export const EmailService = {
     }
   },
 
-  sendWelcomeEmail: async (to: string, generatedPassword: string) => {
+  sendSetupPasswordEmail: async (to: string, token: string) => {
     try {
       const mailer = await getTransporter();
-      const loginUrl = `${APP_URL}/login`;
+      const setupUrl = `${APP_URL}/setup-password?token=${token}`;
 
       const info = await mailer.sendMail({
         from: '"Flowzen" <noreply@flowzen.app>',
         to,
-        subject: 'Welcome to Flowzen! Your Account Details',
+        subject: 'Welcome to Flowzen! Set Up Your Account',
         html: `
           <div style="font-family: Arial, sans-serif; padding: 20px;">
             <h2>Welcome to Flowzen!</h2>
-            <p>An administrator has created an account for you. Here are your login details:</p>
-            <div style="background-color: #f3f4f6; padding: 15px; border-radius: 5px; margin: 20px 0;">
-              <p style="margin: 0;"><strong>Email:</strong> ${to}</p>
-              <p style="margin: 10px 0 0 0;"><strong>Password:</strong> ${generatedPassword}</p>
-            </div>
-            <p>Please log in and change your password as soon as possible.</p>
-            <a href="${loginUrl}" style="display: inline-block; padding: 10px 20px; background-color: #111827; color: #ffffff; text-decoration: none; border-radius: 5px; margin-top: 10px;">Log In to Flowzen</a>
-            <p style="margin-top: 20px; font-size: 12px; color: #6b7280;">If you believe this email was sent in error, please ignore it.</p>
+            <p>An administrator has invited you to join their team.</p>
+            <p>Please click the link below to set up your password and access your account:</p>
+            <a href="${setupUrl}" style="display: inline-block; padding: 10px 20px; background-color: #111827; color: #ffffff; text-decoration: none; border-radius: 5px; margin-top: 10px;">Set Up Account</a>
+            <p style="margin-top: 20px; font-size: 12px; color: #6b7280;">This link will expire in 24 hours. If you believe this email was sent in error, please ignore it.</p>
           </div>
         `,
       });
 
-      logger.info(`Welcome email sent to ${to}`);
+      logger.info(`Setup password email sent to ${to}`);
       if (!process.env.SMTP_USER && !process.env.EMAIL_USER) {
         logger.info(`[ETHEREAL MAIL URL]: ${nodemailer.getTestMessageUrl(info)}`);
       }
     } catch (error) {
-      logger.error('Failed to send welcome email', { error });
+      logger.error('Failed to send setup password email', { error });
     }
   }
 };

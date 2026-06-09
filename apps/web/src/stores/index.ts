@@ -9,7 +9,6 @@ interface User {
   role: string;
   avatar?: string | null;
   department?: string | null;
-  isEmailVerified?: boolean;
   organization?: {
     id: string;
     name: string;
@@ -64,18 +63,22 @@ export const useAuthStore = create<AuthStore>((set) => ({
 interface UIStore {
   sidebarOpen: boolean;
   sidebarCollapsed: boolean;
+  mobileSidebarOpen: boolean;
   commandPaletteOpen: boolean;
   toggleSidebar: () => void;
   toggleCollapse: () => void;
+  setMobileSidebarOpen: (open: boolean) => void;
   setCommandPaletteOpen: (open: boolean) => void;
 }
 
 export const useUIStore = create<UIStore>((set) => ({
   sidebarOpen: true,
   sidebarCollapsed: false,
+  mobileSidebarOpen: false,
   commandPaletteOpen: false,
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   toggleCollapse: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+  setMobileSidebarOpen: (open) => set({ mobileSidebarOpen: open }),
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
 }));
 

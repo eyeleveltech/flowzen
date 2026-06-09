@@ -18,12 +18,31 @@ enum UserRole {
   TEAM_MEMBER
 }
 
-enum ClientStatus {
-  LEAD
+enum UserStatus {
+  PENDING
   ACTIVE
-  PAUSED
-  COMPLETED
-  ARCHIVED
+  INACTIVE
+}
+
+enum ClientStatus {
+  PROSPECT
+  ACTIVE
+  ONHOLD
+  CHURNED
+}
+
+enum ProjectType {
+  RETAINER
+  ONE_TIME
+  EVENT
+  INTERNAL
+}
+
+enum ReportingCadence {
+  WEEKLY
+  FORTNIGHTLY
+  MONTHLY
+  NONE
 }
 
 enum ProjectStatus {
@@ -47,6 +66,7 @@ enum TaskStatus {
   TODO
   IN_PROGRESS
   REVIEW
+  APPROVED
   BLOCKED
   COMPLETED
 }
@@ -56,6 +76,16 @@ enum TaskPriority {
   MEDIUM
   HIGH
   URGENT
+}
+
+enum TaskType {
+  DESIGN
+  CONTENT
+  VIDEO
+  DIGITAL_MARKETING
+  DEVELOPMENT
+  STRATEGY
+  OTHER
 }
 
 enum NoteType {
@@ -90,6 +120,11 @@ model Organization {
   name      String
   logo      String?
   website   String?
+  industry  String?
+  companySize String?
+  phone     String?
+  address   String?
+  description String?
   settings  Json     @default("{}")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -110,9 +145,7 @@ model User {
   department     String?
   phone          String?
   joiningDate    DateTime @default(now())
-  isActive         Boolean  @default(true)
-  isEmailVerified  Boolean  @default(false)
-  emailVerifyToken String?  @unique
+  status           UserStatus @default(PENDING)
   resetToken       String?  @unique
   resetTokenExpiry DateTime?
   organizationId   String
@@ -124,15 +157,18 @@ model User {
   team           Team?           @relation("TeamMembers", fields: [teamId], references: [id])
   ownedProjects  Project[]       @relation("ProjectOwner")
   assignedTasks  Task[]          @relation("TaskAssignee")
+  reviewedTasks  Task[]          @relation("TaskReviewer")
   comments       Comment[]
   activities     Activity[]
   notifications  Notification[]
   notes          Note[]
   projectMembers ProjectMember[]
   ledTeam        Team?           @relation("TeamLeader")
+  managedClients Client[]        @relation("ClientAccountManager")
+  createdWorkflows WorkflowRule[] @relation("WorkflowCreator")
 
   @@index([organizationId])
-  @@index([organizationId, isActive])
+  @@index([organizationId, status])
   @@map("users")
 }
 
@@ -147,7 +183,13 @@ model Client {
   address        String?
   contractValue  Float?
   startDate      DateTime?
-  status         ClientStatus @default(LEAD)
+  status         ClientStatus @default(PROSPECT)
+  engagementType String?
+  website        String?
+  city           String?
+  scope          String?
+  assetLinks     String?
+  accountManagerId String?
   organizationId String
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
@@ -157,6 +199,7 @@ model Client {
   notes        Note[]
   activities   Activity[]    @relation("ClientActivities")
   contacts     ClientContact[]
+  accountManager User?       @relation("ClientAccountManager", fields: [accountManagerId], references: [id])
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -167,15 +210,23 @@ model Project {
   id          String          @id @default(cuid())
   name        String
   description String?
+  type        ProjectType     @default(ONE_TIME)
+  scope       String?
   startDate   DateTime?
   endDate     DateTime?
   priority    ProjectPriority @default(MEDIUM)
   status      ProjectStatus   @default(PLANNING)
   budget      Float?
   progress    Int             @default(0)
+  reportingCadence ReportingCadence @default(NONE)
+  clientApprovalRequired Boolean @default(false)
+  tags        String[]
+  projectNotes String?
+  folderLink  String?
   clientId    String
   ownerId     String
   templateId  String?
+  color       String          @default("#3B82F6")
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
@@ -187,6 +238,7 @@ model Project {
   activities Activity[]       @relation("ProjectActivities")
   members    ProjectMember[]
   teams      ProjectTeam[]
+  comments               Comment[]
 
   @@index([clientId, status])
   @@index([ownerId, status])
@@ -240,19 +292,26 @@ model Task {
   id          String       @id @default(cuid())
   title       String
   description String?
+  type        TaskType     @default(OTHER)
   priority    TaskPriority @default(MEDIUM)
   status      TaskStatus   @default(BACKLOG)
   dueDate     DateTime?
   order       Int          @default(0)
   projectId   String
   assigneeId  String?
+  reviewerId  String?
   parentId    String?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   completedAt DateTime?
+  readAt      DateTime?
+  loggedHours Float?       @default(0)
+  estimatedHours Float?    @default(0)
+  driveLink   String?
 
   project    Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   assignee   User?           @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  reviewer   User?           @relation("TaskReviewer", fields: [reviewerId], references: [id])
   parent     Task?           @relation("SubTasks", fields: [parentId], references: [id])
   subtasks   Task[]          @relation("SubTasks")
   comments   Comment[]
@@ -281,14 +340,16 @@ model Milestone {
 model Comment {
   id        String   @id @default(cuid())
   content   String
-  taskId    String
+  taskId    String?
+  projectId String?
   authorId  String
   mentions  String[] @default([])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  author User @relation(fields: [authorId], references: [id])
+  task    Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author  User     @relation(fields: [authorId], references: [id])
 
   @@map("comments")
 }
@@ -358,12 +419,13 @@ model Note {
 }
 
 model ProjectTemplate {
-  id          String   @id @default(cuid())
+  id          String      @id @default(cuid())
   name        String
   description String?
+  type        ProjectType @default(RETAINER)
   structure   Json
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 
   projects Project[]
 
@@ -383,4 +445,44 @@ model ClientContact {
   client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@map("client_contacts")
+}
+
+// ──────────────────────────────────────────────
+// WORKFLOW AUTOMATION
+// ──────────────────────────────────────────────
+
+enum WorkflowTrigger {
+  TASK_STATUS_CHANGE
+  TASK_ASSIGNED
+  TASK_DEADLINE_APPROACHING
+  TASK_OVERDUE
+  TASK_CREATED
+  PROJECT_STATUS_CHANGE
+}
+
+enum WorkflowAction {
+  NOTIFY
+  EMAIL
+  NOTIFY_AND_EMAIL
+  CHANGE_TASK_STATUS
+  REASSIGN_TASK
+}
+
+model WorkflowRule {
+  id             String          @id @default(cuid())
+  name           String
+  trigger        WorkflowTrigger
+  condition      Json            @default("{}")
+  action         WorkflowAction  @default(NOTIFY)
+  targets        String[]        @default([])
+  isActive       Boolean         @default(true)
+  organizationId String
+  creatorId      String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  creator        User            @relation("WorkflowCreator", fields: [creatorId], references: [id])
+
+  @@index([organizationId, isActive])
+  @@map("workflow_rules")
 }

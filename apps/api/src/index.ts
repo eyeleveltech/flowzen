@@ -2,8 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import { createServer } from 'http';
-import { Server } from 'socket.io';
 import dotenv from 'dotenv';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authRouter } from './routes/auth.js';
@@ -17,7 +15,9 @@ import { reportRouter } from './routes/reports.js';
 import { notificationRouter } from './routes/notifications.js';
 import { searchRouter } from './routes/search.js';
 import { settingsRouter } from './routes/settings.js';
-import { setupSocketIO } from './socket.js';
+import { profileRouter } from './routes/profile.js';
+import { workflowRouter } from './routes/workflows.js';
+import { sseRouter } from './sse.js';
 import { morganMiddleware } from './middleware/logger.js';
 import { logger } from './utils/logger.js';
 
@@ -27,21 +27,6 @@ dotenv.config();
 dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
 
 const app = express();
-const httpServer = createServer(app);
-
-// Socket.IO
-const io = new Server(httpServer, {
-  cors: {
-    origin: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-    methods: ['GET', 'POST'],
-    credentials: true,
-  },
-});
-
-setupSocketIO(io);
-
-// Make io accessible to routes
-app.set('io', io);
 
 import cookieParser from 'cookie-parser';
 
@@ -85,6 +70,9 @@ app.use('/api/reports', reportRouter);
 app.use('/api/notifications', notificationRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/profile', profileRouter);
+app.use('/api/workflows', workflowRouter);
+app.use('/api/stream', sseRouter);
 
 // Error handler
 app.use(errorHandler);
@@ -92,10 +80,10 @@ app.use(errorHandler);
 // Start
 const PORT = process.env.API_PORT || 4000;
 if (process.env.NODE_ENV !== 'test') {
-  httpServer.listen(PORT, () => {
+  app.listen(PORT, () => {
     logger.info(`🚀 Flowzen API running on http://localhost:${PORT}`);
-    logger.info(`📡 Socket.IO ready`);
+    logger.info(`📡 SSE ready on /api/stream`);
   });
 }
 
-export { app, io };
+export { app };

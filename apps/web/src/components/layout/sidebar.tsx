@@ -36,16 +36,24 @@ const bottomItems = [
   { label: 'Settings', href: '/settings', icon: Settings, roles: ['SUPER_ADMIN', 'ADMIN'] },
 ];
 
-export function Sidebar() {
+export function Sidebar({ isMobile }: { isMobile?: boolean }) {
   const pathname = usePathname();
-  const { sidebarCollapsed, toggleCollapse } = useUIStore();
+  const { sidebarCollapsed, toggleCollapse, mobileSidebarOpen } = useUIStore();
   const { user, logout } = useAuthStore();
 
   return (
     <motion.aside
-      animate={{ width: sidebarCollapsed ? 72 : 260 }}
+      initial={false}
+      animate={
+        isMobile
+          ? { x: mobileSidebarOpen ? 0 : '-100%', width: 260 }
+          : { x: 0, width: sidebarCollapsed ? 72 : 260 }
+      }
       transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
-      className="fixed left-0 top-0 bottom-0 z-40 flex flex-col border-r border-[#E5E7EB] bg-white"
+      className={cn(
+        "fixed left-0 top-0 bottom-0 flex flex-col border-r border-[#E5E7EB] bg-white",
+        isMobile ? "z-50 shadow-2xl" : "z-40"
+      )}
     >
       {/* Logo */}
       <div className={cn("flex h-16 items-center px-5 border-b border-[#E5E7EB]", sidebarCollapsed ? "justify-center px-0" : "justify-start")}>
@@ -130,25 +138,27 @@ export function Sidebar() {
         })}
 
         {/* Collapse toggle */}
-        <button
-          onClick={toggleCollapse}
-          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#111827] transition-all duration-150"
-        >
-          <motion.div animate={{ rotate: sidebarCollapsed ? 180 : 0 }} transition={{ duration: 0.2 }}>
-            <ChevronLeft className="h-[18px] w-[18px] text-[#9CA3AF]" />
-          </motion.div>
-          <AnimatePresence>
-            {!sidebarCollapsed && (
-              <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="whitespace-nowrap">
-                Collapse
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </button>
+        {!isMobile && (
+          <button
+            onClick={toggleCollapse}
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#111827] transition-all duration-150"
+          >
+            <motion.div animate={{ rotate: sidebarCollapsed ? 180 : 0 }} transition={{ duration: 0.2 }}>
+              <ChevronLeft className="h-[18px] w-[18px] text-[#9CA3AF]" />
+            </motion.div>
+            <AnimatePresence>
+              {!sidebarCollapsed && (
+                <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="whitespace-nowrap">
+                  Collapse
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </button>
+        )}
 
         {/* User */}
         <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 mt-2">
-          <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white text-xs font-semibold ${user ? getAvatarColor(user.name) : 'bg-[#111827]'}`}>
+          <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${user ? getAvatarColor(user.name) : 'bg-[#111827] text-white'}`}>
             {user ? getInitials(user.name) : '??'}
           </div>
           <AnimatePresence>

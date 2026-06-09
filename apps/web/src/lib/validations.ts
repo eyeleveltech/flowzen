@@ -3,6 +3,13 @@ import { z } from 'zod';
 export const projectSchema = z.object({
   name: z.string().min(1, 'Project name is required').max(100),
   description: z.string().optional(),
+  type: z.enum(['RETAINER', 'ONE_TIME', 'EVENT', 'INTERNAL']),
+  scope: z.string().optional(),
+  reportingCadence: z.enum(['WEEKLY', 'FORTNIGHTLY', 'MONTHLY', 'NONE']),
+  clientApprovalRequired: z.boolean(),
+  tags: z.array(z.string()),
+  projectNotes: z.string().optional(),
+  folderLink: z.string().optional(),
   clientId: z.string().optional(),
   ownerId: z.string().min(1, 'Owner is required'),
   startDate: z.string().optional(),
@@ -19,6 +26,14 @@ export const projectSchema = z.object({
   return true;
 }, {
   message: "End date cannot be before start date",
+  path: ["endDate"],
+}).refine((data) => {
+  if ((data.type === 'ONE_TIME' || data.type === 'EVENT') && !data.endDate) {
+    return false;
+  }
+  return true;
+}, {
+  message: "End date is required for this project type",
   path: ["endDate"],
 });
 

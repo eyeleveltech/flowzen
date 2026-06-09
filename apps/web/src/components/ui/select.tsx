@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
+import { useMediaQuery } from '@/hooks/use-media-query';
+import { Drawer } from '@/components/ui/drawer';
 
 export interface Option {
   label: string;
@@ -22,6 +24,21 @@ export interface SelectProps {
 export function Select({ value, onChange, options, placeholder = 'Select...', className = '', disabled = false, required = false }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSearchQuery('');
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    }
+  }, [isOpen]);
+
+  const filteredOptions = options.filter(opt => 
+    opt.label.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -49,7 +66,31 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
   }, [isOpen]);
 
   return (
-    <div className={`relative ${className}`} ref={containerRef}>
+    <div 
+      className={`relative ${className}`} 
+      ref={containerRef}
+      onKeyDown={(e) => {
+        if (!isOpen) return;
+        // Ignore navigation/selection keys
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === 'Escape') return;
+        
+        if (e.key === 'Backspace') {
+          e.preventDefault();
+          setSearchQuery(prev => prev.slice(0, -1));
+        } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          // If space is pressed while typing a search, add it to search instead of selecting
+          if (e.key === ' ' && searchQuery.length > 0) {
+            e.preventDefault();
+          } else if (e.key === ' ' && searchQuery.length === 0) {
+            return; // let space select the item if we aren't searching
+          }
+          setSearchQuery(prev => prev + e.key);
+        }
+
+        if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+        searchTimeoutRef.current = setTimeout(() => setSearchQuery(''), 2000);
+      }}
+    >
       <button
         type="button"
         role="combobox"
@@ -84,68 +125,101 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
         />
       )}
 
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            role="listbox"
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
-            transition={{ duration: 0.15 }}
-            className="absolute left-0 z-50 mt-2 min-w-full max-h-60 overflow-y-auto rounded-xl border border-[#E5E7EB] bg-white p-1.5 shadow-lg shadow-black/5"
-            style={{ width: 'max-content' }}
-          >
-            {options.map((option) => (
+      {isMobile ? (
+        <Drawer isOpen={isOpen} onClose={() => setIsOpen(false)} title={placeholder}>
+          <div className="flex flex-col space-y-1">
+            {filteredOptions.length === 0 && (
+              <div className="px-4 py-3.5 text-sm text-[#9CA3AF]">No options found</div>
+            )}
+            {filteredOptions.map((option) => (
               <button
                 key={option.value}
-                role="option"
-                aria-selected={value === option.value}
-                type="button"
-                tabIndex={isOpen ? 0 : -1}
                 onClick={() => {
                   onChange(option.value);
                   setIsOpen(false);
-                  containerRef.current?.querySelector('button')?.focus();
                 }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onChange(option.value);
-                    setIsOpen(false);
-                    containerRef.current?.querySelector('button')?.focus();
-                  }
-                  if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    const next = e.currentTarget.nextElementSibling as HTMLElement;
-                    if (next) next.focus();
-                  }
-                  if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    const prev = e.currentTarget.previousElementSibling as HTMLElement;
-                    if (prev) {
-                      prev.focus();
-                    } else {
-                      // Top of list, close it or focus input
-                      containerRef.current?.querySelector('button')?.focus();
-                    }
-                  }
-                  if (e.key === 'Escape') {
-                    setIsOpen(false);
-                    containerRef.current?.querySelector('button')?.focus();
-                  }
-                }}
-                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-[#111827]/10 focus:bg-[#F9FAFB] ${
+                className={`w-full text-left px-4 py-3.5 rounded-xl text-base transition-colors ${
                   value === option.value
-                    ? 'bg-[#F3F4F6] text-[#111827] font-medium'
-                    : 'text-[#374151] hover:bg-[#F9FAFB]'
+                    ? 'bg-[#F3F4F6] text-[#111827] font-semibold'
+                    : 'text-[#374151] active:bg-[#F9FAFB]'
                 }`}
               >
                 {option.label}
               </button>
             ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </Drawer>
+      ) : (
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div
+              role="listbox"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4 }}
+              transition={{ duration: 0.15 }}
+              className="absolute left-0 z-50 mt-2 min-w-full max-h-60 overflow-y-auto rounded-xl border border-[#E5E7EB] bg-white p-1.5 shadow-lg shadow-black/5"
+              style={{ width: 'max-content' }}
+            >
+              {searchQuery && (
+                <div className="px-3 py-1.5 text-[10px] font-medium text-[#9CA3AF] uppercase tracking-wide border-b border-[#F3F4F6] mb-1">
+                  Filtering: "{searchQuery}"
+                </div>
+              )}
+              {filteredOptions.length === 0 && (
+                <div className="px-3 py-2 text-sm text-[#9CA3AF]">No options found</div>
+              )}
+              {filteredOptions.map((option) => (
+                <button
+                  key={option.value}
+                  role="option"
+                  aria-selected={value === option.value}
+                  type="button"
+                  tabIndex={isOpen ? 0 : -1}
+                  onClick={() => {
+                    onChange(option.value);
+                    setIsOpen(false);
+                    containerRef.current?.querySelector('button')?.focus();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onChange(option.value);
+                      setIsOpen(false);
+                      containerRef.current?.querySelector('button')?.focus();
+                    }
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      const next = e.currentTarget.nextElementSibling as HTMLElement;
+                      if (next) next.focus();
+                    }
+                    if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      const prev = e.currentTarget.previousElementSibling as HTMLElement;
+                      if (prev) {
+                        prev.focus();
+                      } else {
+                        containerRef.current?.querySelector('button')?.focus();
+                      }
+                    }
+                    if (e.key === 'Escape') {
+                      setIsOpen(false);
+                      containerRef.current?.querySelector('button')?.focus();
+                    }
+                  }}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-[#111827]/10 focus:bg-[#F9FAFB] ${
+                    value === option.value
+                      ? 'bg-[#F3F4F6] text-[#111827] font-medium'
+                      : 'text-[#374151] hover:bg-[#F9FAFB]'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      )}
     </div>
   );
 }

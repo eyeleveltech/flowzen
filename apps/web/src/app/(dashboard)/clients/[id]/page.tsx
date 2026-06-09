@@ -5,8 +5,12 @@ import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { formatDate, getInitials, formatRelativeDate, getAvatarColor } from '@/lib/utils';
-import { ArrowLeft, Mail, Phone, MapPin, Building2, DollarSign, X, Plus } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MapPin, Building2, DollarSign, X, Plus, Users, Globe, Briefcase, Trash2 } from 'lucide-react';
 import { Select } from '@/components/ui/select';
+import { RichTextEditor } from '@/components/ui/rich-text-editor';
+import toast from 'react-hot-toast';
+import { useMembers } from '@/hooks/useQueries';
+import { useConfirmStore } from '@/stores';
 
 interface ClientContact {
   id: string; name: string; designation?: string | null; email?: string | null; phone?: string | null;
@@ -16,6 +20,8 @@ interface ClientDetail {
   id: string; name: string; company?: string | null; industry?: string | null;
   contacts?: ClientContact[];
   address?: string | null; contractValue?: number | null;
+  engagementType?: string | null; website?: string | null; city?: string | null; scope?: string | null; assetLinks?: string | null; accountManagerId?: string | null;
+  accountManager?: { id: string; name: string; avatar?: string | null } | null;
   startDate?: string | null; status: string; createdAt: string;
   projects: { id: string; name: string; status: string; progress: number; endDate?: string | null; owner?: { id: string; name: string; avatar?: string | null }; _count?: { tasks: number } }[];
   notes: { id: string; content: string; type: string; createdAt: string; author: { name: string } }[];
@@ -25,36 +31,70 @@ interface ClientDetail {
 type Tab = 'overview' | 'projects' | 'activity' | 'notes';
 
 const statusColors: Record<string, string> = {
-  LEAD: 'bg-blue-50 text-blue-700', ACTIVE: 'bg-emerald-50 text-emerald-700',
-  PAUSED: 'bg-amber-50 text-amber-700', COMPLETED: 'bg-gray-100 text-gray-600',
+  PROSPECT: 'bg-blue-50 text-blue-700', ACTIVE: 'bg-emerald-50 text-emerald-700',
+  ONHOLD: 'bg-amber-50 text-amber-700', CHURNED: 'bg-gray-50 text-gray-400',
 };
 
 export default function ClientDetailPage() {
   const { id } = useParams();
+  const confirm = useConfirmStore((s) => s.confirm);
   const router = useRouter();
   const [client, setClient] = useState<ClientDetail | null>(null);
   const [tab, setTab] = useState<Tab>('overview');
   const [noteContent, setNoteContent] = useState('');
+  const [viewModalContent, setViewModalContent] = useState<{ title: string, content: string } | null>(null);
+
+  const { data: members = [] } = useMembers();
 
   // Edit State
   const [showEdit, setShowEdit] = useState(false);
   const [editForm, setEditForm] = useState({
-    name: '', company: '', industry: '', address: '', contractValue: '', status: 'LEAD',
+    name: '', company: '', industry: '', address: '', contractValue: '', status: 'PROSPECT',
+    engagementType: '', website: '', city: '', scope: '', assetLinks: '', accountManagerId: '',
     contacts: [{ name: '', designation: '', email: '', phone: '' }] as ClientContact[]
   });
   const [editError, setEditError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [orgProfile, setOrgProfile] = useState<any>(null);
 
   useEffect(() => {
     api.get<ClientDetail>(`/clients/${id}`).then(setClient).catch(() => router.push('/clients'));
   }, [id, router]);
 
+  useEffect(() => {
+    if (client && client.name.includes('(Internal)')) {
+      api.get('/settings/organization').then(setOrgProfile).catch(() => {});
+    }
+  }, [client]);
+
   async function addNote() {
     if (!noteContent.trim()) return;
-    await api.post(`/clients/${id}/notes`, { content: noteContent, type: 'INTERNAL' });
-    setNoteContent('');
-    const updated = await api.get<ClientDetail>(`/clients/${id}`);
-    setClient(updated);
+    try {
+      await api.post(`/clients/${id}/notes`, { content: noteContent, type: 'INTERNAL' });
+      toast.success('Note added');
+      setNoteContent('');
+      const updated = await api.get<ClientDetail>(`/clients/${id}`);
+      setClient(updated);
+    } catch (err: any) { toast.error(err.message || 'Failed to add note'); }
+  }
+
+
+  async function handleDelete() {
+    const isConfirmed = await confirm({
+      title: 'Delete Client',
+      message: 'Are you sure you want to delete this client? All associated projects will also be removed. This action cannot be undone.',
+      confirmText: 'Delete Client',
+      cancelText: 'Cancel',
+      variant: 'danger',
+    });
+    if (!isConfirmed) return;
+    try {
+      await api.delete(`/clients/${id}`);
+      toast.success('Client deleted successfully');
+      router.push('/clients');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete client');
+    }
   }
 
   function openEdit() {
@@ -65,6 +105,12 @@ export default function ClientDetailPage() {
       address: client!.address || '',
       contractValue: client!.contractValue?.toString() || '',
       status: client!.status,
+      engagementType: client!.engagementType || '',
+      website: client!.website || '',
+      city: client!.city || '',
+      scope: client!.scope || '',
+      assetLinks: client!.assetLinks || '',
+      accountManagerId: client!.accountManagerId || '',
       contacts: client!.contacts?.length ? [...client!.contacts] : [{ id: '', name: '', designation: '', email: '', phone: '' }]
     });
     setShowEdit(true);
@@ -79,10 +125,12 @@ export default function ClientDetailPage() {
         ...editForm,
         contractValue: editForm.contractValue ? parseFloat(editForm.contractValue) : undefined,
       });
+      toast.success('Client updated successfully');
       setShowEdit(false);
       const updated = await api.get<ClientDetail>(`/clients/${id}`);
       setClient(updated);
     } catch (err: any) {
+      toast.error(err.message || 'Failed to update client');
       setEditError(err.message);
     } finally {
       setSubmitting(false);
@@ -107,7 +155,7 @@ export default function ClientDetailPage() {
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div className="flex items-start gap-4">
-          <div className={`flex h-16 w-16 items-center justify-center rounded-2xl text-white text-xl font-bold shadow-inner ${getAvatarColor(client.name)}`}>
+ <div className={`flex h-16 w-16 items-center justify-center rounded-2xl text-xl font-bold ${getAvatarColor(client.name)}`}>
             {getInitials(client.name)}
           </div>
           <div>
@@ -118,9 +166,17 @@ export default function ClientDetailPage() {
             </div>
           </div>
         </div>
-        <button onClick={openEdit} className="px-4 py-2 bg-white border border-[#E5E7EB] rounded-xl text-sm font-medium text-[#374151] hover:bg-gray-50 transition-colors shadow-sm">
-          Edit Client
-        </button>
+        {!client.name.includes('(Internal)') && (
+          <div className="flex items-center gap-2">
+            <button onClick={openEdit} className="px-4 py-2 bg-white border border-[#E5E7EB] rounded-xl text-sm font-medium text-[#374151] hover:bg-gray-50 transition-colors shadow-sm">
+              Edit Client
+            </button>
+            <button onClick={handleDelete} className="px-4 py-2 bg-white border border-red-200 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors shadow-sm flex items-center gap-1.5">
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -136,10 +192,47 @@ export default function ClientDetailPage() {
       {tab === 'overview' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6 space-y-4">
-            <h3 className="text-sm font-semibold text-[#111827]">Company Details</h3>
-            {client.address && <InfoRow icon={MapPin} label="Address" value={client.address} />}
-            {client.industry && <InfoRow icon={Building2} label="Industry" value={client.industry} />}
-            {client.startDate && <InfoRow icon={DollarSign} label="Start Date" value={formatDate(client.startDate)} />}
+            <h3 className="text-sm font-semibold text-[#111827]">
+              {client.name.includes('(Internal)') ? 'Organization Profile' : 'Company Details'}
+            </h3>
+            
+            {client.name.includes('(Internal)') && orgProfile ? (
+              <div className="space-y-4 pt-1">
+                <p className="text-sm text-[#374151] leading-relaxed">
+                  {orgProfile.settings?.description || 'No organization description provided.'}
+                </p>
+                <InfoRow icon={Briefcase} label="Industry" value={orgProfile.settings?.industry || 'Not specified'} />
+                <InfoRow icon={MapPin} label="Address" value={orgProfile.settings?.address || 'Not specified'} />
+                <InfoRow icon={Phone} label="Main Phone" value={orgProfile.settings?.phone || 'Not specified'} />
+              </div>
+            ) : (
+              <>
+                {client.engagementType && <InfoRow icon={Briefcase} label="Engagement Type" value={client.engagementType} />}
+                {client.website && <InfoRow icon={Globe} label="Website" value={client.website} />}
+                {client.city && <InfoRow icon={MapPin} label="City" value={client.city} />}
+                {client.address && <InfoRow icon={MapPin} label="Address" value={client.address} />}
+                {client.industry && <InfoRow icon={Building2} label="Industry" value={client.industry} />}
+                {client.accountManager && <InfoRow icon={Users} label="Account Manager" value={client.accountManager.name} />}
+                {client.assetLinks && <InfoRow icon={Globe} label="Asset Links" value={client.assetLinks} />}
+                {client.startDate && <InfoRow icon={DollarSign} label="Start Date" value={formatDate(client.startDate)} />}
+                
+                {client.scope && (
+                  <div className="mt-4 pt-4 border-t border-[#F3F4F6]">
+                    <span className="block text-xs font-semibold text-[#6B7280] uppercase tracking-wider mb-3">Scope</span>
+                    <div 
+                      className="text-sm text-[#374151] line-clamp-2 prose prose-sm max-w-none"
+                      dangerouslySetInnerHTML={{ __html: client.scope }}
+                    />
+                    <button 
+                      onClick={() => setViewModalContent({ title: 'Scope', content: client.scope || '' })}
+                      className="mt-3 text-xs font-medium text-[#2563EB] hover:text-[#1D4ED8]"
+                    >
+                      View full scope
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
 
             {client.contacts && client.contacts.length > 0 && (
               <div className="pt-4 border-t border-[#F3F4F6]">
@@ -202,7 +295,7 @@ export default function ClientDetailPage() {
         <div className="space-y-3">
           {client.activities.map((a) => (
             <div key={a.id} className="flex items-start gap-3 py-2">
-              <div className={`h-7 w-7 rounded-full text-white text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(a.user.name)}`}>{getInitials(a.user.name)}</div>
+ <div className={`h-7 w-7 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(a.user.name)}`}>{getInitials(a.user.name)}</div>
               <div>
                 <p className="text-sm text-[#374151]"><span className="font-medium">{a.user.name}</span> {a.message}</p>
                 <p className="text-xs text-[#9CA3AF]">{formatRelativeDate(a.createdAt)}</p>
@@ -251,14 +344,58 @@ export default function ClientDetailPage() {
                 <Field label="Client Name *" value={editForm.name} onChange={(v) => setEditForm({ ...editForm, name: v })} required />
                 <Field label="Company" value={editForm.company} onChange={(v) => setEditForm({ ...editForm, company: v })} />
                 <Field label="Industry" value={editForm.industry} onChange={(v) => setEditForm({ ...editForm, industry: v })} />
+                
+                <div>
+                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Engagement Type</label>
+                  <Select
+                    value={editForm.engagementType}
+                    onChange={(v) => setEditForm({ ...editForm, engagementType: v })}
+                    options={[
+                      { label: 'Select type', value: '' },
+                      { label: 'Retainer', value: 'Retainer' },
+                      { label: 'Project', value: 'Project' },
+                      { label: 'Event', value: 'Event' },
+                      { label: 'Ad-hoc', value: 'Ad-hoc' }
+                    ]}
+                  />
+                </div>
+
+                <Field label="Website" value={editForm.website} onChange={(v) => setEditForm({ ...editForm, website: v })} />
+                <Field label="City" value={editForm.city} onChange={(v) => setEditForm({ ...editForm, city: v })} />
                 <Field label="Address" value={editForm.address} onChange={(v) => setEditForm({ ...editForm, address: v })} />
+
+                <div>
+                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Scope</label>
+                  <RichTextEditor
+                    value={editForm.scope}
+                    onChange={(val) => setEditForm({ ...editForm, scope: val })}
+                    placeholder="Enter the scope of work..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Account Manager</label>
+                  <Select
+                    value={editForm.accountManagerId}
+                    onChange={(v) => setEditForm({ ...editForm, accountManagerId: v })}
+                    options={[
+                      { label: 'Unassigned', value: '' },
+                      ...members.map((m: any) => ({ label: m.name, value: m.id }))
+                    ]}
+                  />
+                </div>
+
+                <Field label="Asset Links" value={editForm.assetLinks} onChange={(v) => setEditForm({ ...editForm, assetLinks: v })} />
+
 
                 <div className="space-y-3 pt-2 pb-2 border-y border-[#F3F4F6]">
                   <div className="flex items-center justify-between">
                     <label className="block text-sm font-medium text-[#374151]">Contacts</label>
-                    <button type="button" onClick={() => setEditForm({ ...editForm, contacts: [...editForm.contacts, { id: '', name: '', designation: '', email: '', phone: '' }] })} className="text-xs font-medium text-[#111827] flex items-center gap-1 hover:bg-[#F3F4F6] px-2 py-1 rounded transition-colors">
-                      <Plus className="h-3 w-3" /> Add Contact
-                    </button>
+                    {editForm.contacts.length < 5 && (
+                      <button type="button" onClick={() => setEditForm({ ...editForm, contacts: [...editForm.contacts, { id: '', name: '', designation: '', email: '', phone: '' }] })} className="text-xs font-medium text-[#111827] flex items-center gap-1 hover:bg-[#F3F4F6] px-2 py-1 rounded transition-colors">
+                        <Plus className="h-3 w-3" /> Add Contact
+                      </button>
+                    )}
                   </div>
                   {editForm.contacts.map((contact, i) => (
                     <div key={i} className="p-4 border border-[#E5E7EB] rounded-xl bg-[#FAFAFA] relative">
@@ -283,11 +420,10 @@ export default function ClientDetailPage() {
                     value={editForm.status}
                     onChange={(val) => setEditForm({ ...editForm, status: val })}
                     options={[
-                      { label: 'Lead', value: 'LEAD' },
+                      { label: 'Prospect', value: 'PROSPECT' },
                       { label: 'Active', value: 'ACTIVE' },
-                      { label: 'Paused', value: 'PAUSED' },
-                      { label: 'Completed', value: 'COMPLETED' },
-                      { label: 'Archived', value: 'ARCHIVED' },
+                      { label: 'On Hold', value: 'ONHOLD' },
+                      { label: 'Churned', value: 'CHURNED' },
                     ]}
                   />
                 </div>
@@ -300,6 +436,26 @@ export default function ClientDetailPage() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {viewModalContent && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] bg-black/20 backdrop-blur-sm" onClick={() => setViewModalContent(null)} />
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-[60] w-full max-w-lg bg-white border-l border-[#E5E7EB] shadow-2xl shadow-black/10 flex flex-col">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] shrink-0">
+                <h2 className="text-lg font-semibold text-[#111827]">{viewModalContent.title}</h2>
+                <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-[#6B7280]" /></button>
+              </div>
+              <div className="p-6 overflow-y-auto flex-1">
+                <div 
+                  className="prose prose-sm max-w-none text-[#374151]"
+                  dangerouslySetInnerHTML={{ __html: viewModalContent.content }}
+                />
+              </div>
             </motion.div>
           </>
         )}

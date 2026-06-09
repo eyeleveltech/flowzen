@@ -61,4 +61,48 @@ test.describe('Authentication & Onboarding Flow', () => {
     const token = await page.evaluate(() => localStorage.getItem('flowzen-token'));
     expect(token).toBeNull();
   });
+
+
+  test('Registration form validation prevents empty submission', async ({ page }) => {
+    await page.goto('/register');
+    
+    // Submit empty form
+    await page.click('button[type="submit"]', { force: true });
+    
+    // Check that we're still on the register page and validation messages might appear
+    // The exact error text depends on the Zod schema, but we can verify it doesn't navigate
+    await expect(page).toHaveURL(/.*\/register/);
+    
+    // Fill invalid email
+    await page.fill('input[placeholder="you@company.com"]', 'not-an-email');
+    await page.click('button[type="submit"]', { force: true });
+    await expect(page).toHaveURL(/.*\/register/);
+  });
+
+  test('Login form validation prevents empty submission', async ({ page }) => {
+    await page.goto('/login');
+    
+    // Submit empty form
+    await page.click('button[type="submit"]', { force: true });
+    await expect(page).toHaveURL(/.*\/login/);
+  });
+
+  test('Forgot password flow', async ({ page }) => {
+    // Navigate to forgot password from login page
+    await page.goto('/login');
+    await page.click('text="Forgot password?"');
+    
+    await expect(page).toHaveURL(/.*\/forgot-password/);
+    
+    // Submit empty should fail
+    await page.click('button[type="submit"]', { force: true });
+    
+    // Fill email and submit
+    await page.fill('input[type="email"]', testEmail);
+    await page.click('button[type="submit"]', { force: true });
+    
+    // Should see success message or toast
+    // The UI should show "Check your email" or similar
+    await expect(page.locator('text=/check your email/i').or(page.locator('text=/reset link sent/i'))).toBeVisible({ timeout: 10000 });
+  });
 });

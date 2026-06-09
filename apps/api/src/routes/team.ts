@@ -11,7 +11,7 @@ teamRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     const orgId = req.user!.organizationId;
 
     const members = await prisma.user.findMany({
-      where: { organizationId: orgId, isActive: true },
+      where: { organizationId: orgId, status: 'ACTIVE' },
       select: {
         id: true,
         name: true,

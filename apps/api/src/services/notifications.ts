@@ -1,7 +1,8 @@
 import nodemailer from 'nodemailer';
 import { prisma } from '../lib/prisma.js';
-import { io } from '../index.js';
+import { emitToUser, emitToOrganization } from '../sse.js';
 import { NotificationType } from '@prisma/client';
+import { enqueueEmail } from '../lib/queue.js';
 
 // Transporter will be initialized lazily to ensure env vars are loaded
 
@@ -29,9 +30,8 @@ export class NotificationService {
         },
       });
 
-      // 2. Dispatch via Socket.io (Real-time)
-      // Assuming users join a room named by their user ID: `user_${userId}`
-      io.to(`user_${payload.userId}`).emit('notification:new', notification);
+      // 2. Dispatch via SSE (Real-time)
+      emitToUser(null, payload.userId, 'notification:new', notification);
 
       // 3. Fallback: Send Email
       // To prevent spam, we can only send emails for high priority items, 
@@ -65,32 +65,7 @@ export class NotificationService {
     }
   }
 
-  private static async sendEmail({ to, subject, html }: { to: string; subject: string; html: string }) {
-    if (!process.env.SMTP_USER || !process.env.SMTP_PASS || process.env.SMTP_USER === 'your-email@gmail.com') {
-      console.warn('[NotificationService] SMTP not fully configured. Skipping email to:', to);
-      return;
-    }
-
-    try {
-      const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.gmail.com',
-        port: parseInt(process.env.SMTP_PORT || '465'),
-        secure: process.env.SMTP_PORT === '465', // true for 465, false for other ports like 587
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS,
-        },
-      });
-
-      await transporter.sendMail({
-        from: `"${process.env.SMTP_FROM_NAME || 'Flowzen'}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
-        to,
-        subject,
-        html,
-      });
-      console.log(`[NotificationService] Email sent to ${to}`);
-    } catch (error) {
-      console.error('[NotificationService] Error sending email:', error);
-    }
+  static async sendEmail(data: { to: string; subject: string; html: string }) {
+    await enqueueEmail(data);
   }
 }

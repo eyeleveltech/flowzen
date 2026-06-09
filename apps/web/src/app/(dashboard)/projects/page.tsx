@@ -4,15 +4,16 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
-import { getSocket } from '@/lib/socket';
+import { getSSE } from '@/lib/sse';
 import { formatDate, getInitials, getAvatarColor } from '@/lib/utils';
-import {
-  Plus, Search, LayoutList, Columns3, Calendar, GanttChartSquare, X, ChevronRight,
-} from 'lucide-react';
+import { Plus, LayoutList, GanttChartSquare, Calendar, ChevronRight, BarChart3, Clock, LayoutGrid, Search, X } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useAuthStore } from '@/stores';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
+import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { Skeleton } from '@/components/ui/skeleton';
+import { TagsInput } from '@/components/ui/tags-input';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -22,6 +23,8 @@ import { CalendarView } from '@/components/projects/calendar-view';
 
 interface Project {
   id: string; name: string; description?: string | null; status: string; priority: string; progress: number;
+  type: string; scope?: string | null; reportingCadence: string; clientApprovalRequired: boolean;
+  tags: string[]; projectNotes?: string | null; folderLink?: string | null;
   startDate?: string | null; endDate?: string | null; budget?: number | null;
   client?: { id: string; name: string };
   owner?: { id: string; name: string; avatar?: string | null };
@@ -32,7 +35,7 @@ interface Client { id: string; name: string; }
 interface Member { id: string; name: string; }
 interface Team { id: string; name: string; }
 
-type ViewMode = 'list' | 'kanban' | 'timeline' | 'calendar';
+type ViewMode = 'list' | 'timeline' | 'calendar';
 
 const statusColors: Record<string, string> = {
   PLANNING: 'bg-violet-50 text-violet-700', IN_PROGRESS: 'bg-blue-50 text-blue-700',
@@ -44,10 +47,7 @@ const priorityColors: Record<string, string> = {
   LOW: 'text-gray-400', MEDIUM: 'text-blue-500', HIGH: 'text-orange-500', CRITICAL: 'text-red-500',
 };
 
-const kanbanColumns = ['PLANNING', 'IN_PROGRESS', 'REVIEW', 'COMPLETED'];
-const kanbanLabels: Record<string, string> = {
-  PLANNING: 'Planning', IN_PROGRESS: 'In Progress', REVIEW: 'Review', COMPLETED: 'Completed',
-};
+
 
 function ProjectsContent() {
   const router = useRouter();
@@ -55,6 +55,9 @@ function ProjectsContent() {
   const { user } = useAuthStore();
   const [search, setSearch] = useState('');
   const [view, setView] = useState<ViewMode>('list');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [clientFilter, setClientFilter] = useState('');
+  const [ownerFilter, setOwnerFilter] = useState('');
   const showCreate = searchParams.get('create') === 'true';
   const setShowCreate = (open: boolean) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -67,6 +70,7 @@ function ProjectsContent() {
     resolver: zodResolver(projectSchema),
     defaultValues: {
       name: '', description: '', clientId: '', ownerId: '',
+      type: 'ONE_TIME', scope: '', reportingCadence: 'NONE', clientApprovalRequired: false, tags: [], projectNotes: '', folderLink: '',
       startDate: '', endDate: '', priority: 'MEDIUM', budget: '', status: 'PLANNING', memberIds: [], teamIds: [],
     }
   });
@@ -79,7 +83,7 @@ function ProjectsContent() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage
-  } = useProjects(search, view === 'calendar');
+  } = useProjects(search, view === 'calendar', statusFilter, clientFilter, ownerFilter);
 
   const projects = data?.pages.flatMap((page) => page.projects) || [];
   const { data: clients = [] } = useClients();
@@ -93,12 +97,12 @@ function ProjectsContent() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const socket = getSocket();
-    if (socket) {
-      socket.on('project:created', refetchProjects);
-      socket.on('project:updated', refetchProjects);
-      socket.on('project:deleted', refetchProjects);
-      return () => { socket.off('project:created'); socket.off('project:updated'); socket.off('project:deleted'); };
+    const sse = getSSE();
+    if (sse) {
+      sse.on('project:created', refetchProjects);
+      sse.on('project:updated', refetchProjects);
+      sse.on('project:deleted', refetchProjects);
+      return () => { sse.off('project:created'); sse.off('project:updated'); sse.off('project:deleted'); };
     }
   }, [refetchProjects]);
 
@@ -118,16 +122,19 @@ function ProjectsContent() {
       } else {
         await api.post('/projects', payload);
       }
+      toast.success('Project created successfully');
       setShowCreate(false);
       reset();
       setSelectedTemplateId('');
       refetchProjects();
-    } catch (err: any) { setFormError(err.message); } finally { setSubmitting(false); }
+    } catch (err: any) { 
+      toast.error(err.message || 'Failed to create project');
+      setFormError(err.message); 
+    } finally { setSubmitting(false); }
   });
 
   const viewButtons = [
     { mode: 'list' as ViewMode, icon: LayoutList, label: 'List' },
-    { mode: 'kanban' as ViewMode, icon: Columns3, label: 'Board' },
     { mode: 'timeline' as ViewMode, icon: GanttChartSquare, label: 'Timeline' },
     { mode: 'calendar' as ViewMode, icon: Calendar, label: 'Calendar' },
   ];
@@ -136,7 +143,7 @@ function ProjectsContent() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-[#111827] tracking-tight">Projects</h1>
+          <h1 className="text-2xl font-semibold text-[#111827] tracking-tight">Projects</h1>
           <p className="text-sm text-[#6B7280] mt-1">{projects.length} projects</p>
         </div>
         {user?.role !== 'TEAM_MEMBER' && (
@@ -147,12 +154,56 @@ function ProjectsContent() {
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search projects..." className="w-full rounded-xl border border-[#E5E7EB] bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
+      <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3 mb-6">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">
+          <div className="relative w-full sm:w-64 shrink-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search projects..." className="w-full rounded-xl border border-[#E5E7EB] bg-white pl-9 pr-4 py-2 text-sm outline-none focus:border-[#111827] transition-all" />
+          </div>
+          
+          {/* Filters */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="w-32">
+              <Select
+                value={statusFilter}
+                onChange={setStatusFilter}
+                options={[
+                  { label: 'All Statuses', value: '' },
+                  { label: 'Planning', value: 'PLANNING' },
+                  { label: 'In Progress', value: 'IN_PROGRESS' },
+                  { label: 'In Review', value: 'REVIEW' },
+                  { label: 'Completed', value: 'COMPLETED' },
+                  { label: 'On Hold', value: 'ON_HOLD' },
+                  { label: 'Cancelled', value: 'CANCELLED' }
+                ]}
+              />
+            </div>
+            <div className="w-40">
+              <Select
+                value={clientFilter}
+                onChange={setClientFilter}
+                options={[
+                  { label: 'All Clients', value: '' },
+                  ...clients.filter(c => c._count?.projects > 0).map(c => ({ label: c.name, value: c.id }))
+                ]}
+              />
+            </div>
+            {user?.role !== 'TEAM_MEMBER' && (
+              <div className="w-40">
+                <Select
+                  value={ownerFilter}
+                  onChange={setOwnerFilter}
+                  options={[
+                    { label: 'All Owners', value: '' },
+                    ...members.filter(m => m.totalProjects > 0).map(m => ({ label: m.name, value: m.id }))
+                  ]}
+                />
+              </div>
+            )}
+          </div>
         </div>
-        <div className="flex items-center rounded-xl border border-[#E5E7EB] p-1">
+
+        <div className="flex items-center shrink-0 rounded-xl border border-[#E5E7EB] p-1 bg-white">
           {viewButtons.map((v) => (
             <button
               key={v.mode}
@@ -181,93 +232,129 @@ function ProjectsContent() {
         <>
           {/* Views */}
           {view === 'list' && (
-        <div className="rounded-2xl border border-[#E5E7EB] bg-white overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-[#F3F4F6]">
-                <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Project</th>
-                <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Client</th>
-                <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Progress</th>
-                <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Owner</th>
-                <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Due Date</th>
-                <th className="px-6 py-3.5"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#F3F4F6]">
-              {projects.map((p) => (
-                <motion.tr key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="hover:bg-[#FAFAFA] cursor-pointer transition-colors" onClick={() => router.push(`/projects/${p.id}`)}>
-                  <td className="px-6 py-4">
-                    <p className="text-sm font-medium text-[#111827]">{p.name}</p>
-                    <p className="text-xs text-[#9CA3AF]">{p._count?.tasks ?? 0} tasks</p>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-[#6B7280]">{p.client?.name || '—'}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <div className="h-1.5 w-20 rounded-full bg-[#F3F4F6] overflow-hidden">
-                        <div className="h-full rounded-full bg-[#111827]" style={{ width: `${p.progress}%` }} />
-                      </div>
-                      <span className="text-xs text-[#6B7280] tabular-nums">{p.progress}%</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[p.status] || 'bg-gray-50 text-gray-500'}`}>
-                      {p.status.replace('_', ' ')}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    {p.owner && (
-                      <div className="flex items-center gap-2">
-                        <div className={`flex h-6 w-6 items-center justify-center rounded-full text-white text-[10px] font-semibold ${getAvatarColor(p.owner.name)}`}>
-                          {getInitials(p.owner.name)}
-                        </div>
-                        <span className="text-sm text-[#374151]">{p.owner.name}</span>
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-[#6B7280]">{formatDate(p.endDate)}</td>
-                  <td className="px-6 py-4"><ChevronRight className="h-4 w-4 text-[#D1D5DB]" /></td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block rounded-2xl border border-[#E5E7EB] bg-white overflow-hidden">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[800px]">
+                  <thead>
+                    <tr className="border-b border-[#F3F4F6]">
+                      <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Project</th>
+                      <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Client</th>
+                      <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Progress</th>
+                      <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Status</th>
+                      <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Owner</th>
+                      <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Due Date</th>
+                      <th className="px-6 py-3.5"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#F3F4F6]">
+                    {projects.map((p) => (
+                      <motion.tr key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="hover:bg-[#FAFAFA] cursor-pointer transition-colors" onClick={() => router.push(`/projects/${p.id}`)}>
+                        <td className="px-6 py-4">
+                          <p className="text-sm font-medium text-[#111827]">{p.name}</p>
+                          <p className="text-xs text-[#9CA3AF]">{p._count?.tasks ?? 0} tasks</p>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-[#6B7280]">{p.client?.name || '—'}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <div className="h-1.5 w-20 rounded-full bg-[#F3F4F6] overflow-hidden">
+                              <div className="h-full rounded-full bg-[#111827]" style={{ width: `${p.progress}%` }} />
+                            </div>
+                            <span className="text-xs text-[#6B7280] tabular-nums">{p.progress}%</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[p.status] || 'bg-gray-50 text-gray-500'}`}>
+                            {p.status.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          {p.owner && (
+                            <div className="flex items-center gap-2">
+ <div className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold ${getAvatarColor(p.owner.name)}`}>
+                                {getInitials(p.owner.name)}
+                              </div>
+                              <span className="text-sm text-[#374151]">{p.owner.name}</span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-[#6B7280]">{formatDate(p.endDate)}</td>
+                        <td className="px-6 py-4"><ChevronRight className="h-4 w-4 text-[#D1D5DB]" /></td>
+                      </motion.tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-      {view === 'kanban' && (
-        <div className="flex gap-4 overflow-x-auto pb-4">
-          {kanbanColumns.map((col) => {
-            const colProjects = projects.filter((p) => p.status === col);
-            return (
-              <div key={col} className="min-w-[280px] flex-1">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className={`h-2 w-2 rounded-full ${statusColors[col]?.split(' ')[0] || 'bg-gray-200'}`} />
-                  <span className="text-sm font-medium text-[#374151]">{kanbanLabels[col]}</span>
-                  <span className="ml-auto text-xs text-[#9CA3AF] tabular-nums">{colProjects.length}</span>
+            {/* Mobile Card View */}
+            <div className="md:hidden flex flex-col gap-3">
+              {projects.length === 0 ? (
+                <div className="p-8 text-center text-sm text-[#9CA3AF] bg-white rounded-xl border border-[#E5E7EB]">
+                  No projects found.
                 </div>
-                <div className="space-y-3">
-                  {colProjects.map((p) => (
-                    <motion.div key={p.id} layout className="rounded-2xl border border-[#E5E7EB] bg-white p-4 hover:shadow-sm cursor-pointer transition-all" onClick={() => router.push(`/projects/${p.id}`)}>
-                      <p className="text-sm font-medium text-[#111827] mb-1">{p.name}</p>
-                      <p className="text-xs text-[#9CA3AF] mb-3">{p.client?.name}</p>
-                      <div className="flex items-center justify-between">
-                        <div className="h-1 w-16 rounded-full bg-[#F3F4F6] overflow-hidden">
+              ) : (
+                projects.map((p) => (
+                  <motion.div
+                    key={p.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    onClick={() => router.push(`/projects/${p.id}`)}
+                    className="p-4 rounded-xl border border-[#E5E7EB] bg-white hover:shadow-sm cursor-pointer transition-all"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <p className="text-sm font-medium text-[#111827] leading-tight">{p.name}</p>
+                        <p className="text-xs text-[#6B7280] mt-0.5">{p.client?.name || 'Internal Project'}</p>
+                      </div>
+                      <span className={`shrink-0 inline-flex items-center rounded-lg px-2 py-0.5 text-[10px] font-medium ${statusColors[p.status] || 'bg-gray-50 text-gray-500'}`}>
+                        {p.status.replace('_', ' ')}
+                      </span>
+                    </div>
+
+                    <div className="mb-4">
+                      <div className="flex items-center gap-2">
+                        <div className="h-1.5 flex-1 rounded-full bg-[#F3F4F6] overflow-hidden">
                           <div className="h-full rounded-full bg-[#111827]" style={{ width: `${p.progress}%` }} />
                         </div>
-                        {p.owner && (
-                          <div className={`flex h-5 w-5 items-center justify-center rounded-full text-white text-[8px] font-semibold border-2 border-white shadow-sm -ml-1.5 first:ml-0 ${getAvatarColor(p.owner.name)}`} title={p.owner.name}>
-                            {getInitials(p.owner.name)}
-                          </div>
+                        <span className="text-xs text-[#6B7280] tabular-nums shrink-0">{p.progress}%</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {p.owner ? (
+                          <>
+ <div className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold ${getAvatarColor(p.owner.name)}`}>
+                              {getInitials(p.owner.name)}
+                            </div>
+                            <span className="text-xs font-medium text-[#374151]">{p.owner.name}</span>
+                          </>
+                        ) : (
+                          <span className="text-xs text-[#9CA3AF]">Unassigned</span>
                         )}
                       </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+                      
+                      <div className="flex items-center gap-2 text-xs font-medium text-[#6B7280]">
+                        <span className="bg-[#F3F4F6] px-1.5 py-0.5 rounded">
+                          {p._count?.tasks ?? 0} tasks
+                        </span>
+                        {p.endDate && (
+                          <span className="bg-[#F3F4F6] px-1.5 py-0.5 rounded">
+                            {formatDate(p.endDate)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                ))
+              )}
+            </div>
+            </>
+          )}
+
+
 
       {view === 'timeline' && (
         <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6">
@@ -281,12 +368,12 @@ function ProjectsContent() {
               const pct = Math.min(100, (elapsed / totalDays) * 100);
 
               return (
-                <div key={p.id} className="flex items-center gap-4 py-2 cursor-pointer hover:bg-[#FAFAFA] rounded-xl px-3 -mx-3 transition-colors" onClick={() => router.push(`/projects/${p.id}`)}>
-                  <div className="w-48 shrink-0">
+                <div key={p.id} className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4 py-3 md:py-2 cursor-pointer hover:bg-[#FAFAFA] rounded-xl px-3 -mx-3 transition-colors border-b border-[#F3F4F6] last:border-0 md:border-0" onClick={() => router.push(`/projects/${p.id}`)}>
+                  <div className="w-full md:w-48 shrink-0">
                     <p className="text-sm font-medium text-[#111827] truncate">{p.name}</p>
-                    <p className="text-xs text-[#9CA3AF]">{p.client?.name}</p>
+                    <p className="text-xs text-[#9CA3AF]">{p.client?.name || 'Internal Project'}</p>
                   </div>
-                  <div className="flex-1">
+                  <div className="flex-1 w-full">
                     <div className="relative h-8 rounded-lg bg-[#F3F4F6] overflow-hidden">
                       <div className="absolute inset-y-0 left-0 rounded-lg bg-[#111827]/10" style={{ width: `${pct}%` }} />
                       <div className="absolute inset-y-0 left-0 rounded-lg bg-[#111827]" style={{ width: `${p.progress}%`, maxWidth: `${pct}%` }} />
@@ -294,7 +381,7 @@ function ProjectsContent() {
                         <span className="text-xs font-medium text-white mix-blend-difference">{p.progress}%</span>
                       </div>
                     </div>
-                    <div className="flex justify-between mt-1">
+                    <div className="flex justify-between mt-1.5">
                       <span className="text-[10px] text-[#9CA3AF]">{formatDate(p.startDate)}</span>
                       <span className="text-[10px] text-[#9CA3AF]">{formatDate(p.endDate)}</span>
                     </div>
@@ -330,13 +417,13 @@ function ProjectsContent() {
         {showCreate && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setShowCreate(false)} />
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-[#E5E7EB] shadow-2xl overflow-y-auto">
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-[#E5E7EB] shadow-2xl shadow-black/10 overflow-y-auto">
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
                 <h2 className="text-lg font-semibold text-[#111827]">New Project</h2>
                 <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-[#6B7280]" /></button>
               </div>
-              <form onSubmit={handleCreate} className="relative p-6 space-y-4">
-                {formError && <div className="absolute top-0 left-6 right-6 -mt-2 z-10 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 shadow-sm border border-red-100">{formError}</div>}
+              <form onSubmit={handleCreate} className="relative p-6 space-y-8">
+                {formError && <div className="absolute top-0 left-6 right-6 -mt-2 z-10 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 border border-red-100">{formError}</div>}
                 
                 {templates.length > 0 && (
                   <div className="mb-2 pb-4 border-b border-[#F3F4F6]">
@@ -360,102 +447,193 @@ function ProjectsContent() {
                   </div>
                 )}
 
-                <div>
-                  <Field label="Project Name *" value={formValues.name} onChange={(v) => setValue('name', v, { shouldValidate: true })} required />
-                  {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>}
+                {/* Basic Info */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-[#111827] border-b border-[#F3F4F6] pb-2">Basic Info</h3>
+                  <div>
+                    <Field label="Project Name *" value={formValues.name} onChange={(v) => setValue('name', v, { shouldValidate: true })} required />
+                    {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
+                    <RichTextEditor value={formValues.description || ''} onChange={(val) => setValue('description', val, { shouldValidate: true })} placeholder="Project description..." />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Project Type</label>
+                      <Select
+                        value={formValues.type}
+                        onChange={(val) => setValue('type', val as any, { shouldValidate: true })}
+                        options={[
+                          { label: 'Retainer', value: 'RETAINER' },
+                          { label: 'One-Time Project', value: 'ONE_TIME' },
+                          { label: 'Event', value: 'EVENT' },
+                          { label: 'Internal', value: 'INTERNAL' },
+                        ]}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Status</label>
+                      <Select
+                        value={formValues.status}
+                        onChange={(val) => setValue('status', val as any)}
+                        options={[
+                          { label: 'Planning', value: 'PLANNING' },
+                          { label: 'Active', value: 'IN_PROGRESS' },
+                          { label: 'On Hold', value: 'ON_HOLD' },
+                          { label: 'Completed', value: 'COMPLETED' },
+                          { label: 'Cancelled', value: 'CANCELLED' },
+                        ]}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority</label>
+                      <Select
+                        value={formValues.priority}
+                        onChange={(val) => setValue('priority', val as any)}
+                        options={[
+                          { label: 'Low', value: 'LOW' },
+                          { label: 'Medium', value: 'MEDIUM' },
+                          { label: 'High', value: 'HIGH' },
+                          { label: 'Urgent', value: 'CRITICAL' },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Client & Ownership */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-[#111827] border-b border-[#F3F4F6] pb-2">Client & Ownership</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Client (Leave empty for Internal)</label>
+                      <Select
+                        value={formValues.clientId || ''}
+                        onChange={(val) => setValue('clientId', val, { shouldValidate: true })}
+                        options={[
+                          { label: 'Internal Project', value: '' },
+                          ...clients.map((c) => ({ label: c.name, value: c.id }))
+                        ]}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Project Owner *</label>
+                      <Select
+                        required
+                        value={formValues.ownerId}
+                        onChange={(val) => setValue('ownerId', val, { shouldValidate: true })}
+                        options={[
+                          { label: 'Select owner', value: '' },
+                          ...members.map((m) => ({ label: m.name, value: m.id }))
+                        ]}
+                      />
+                      {errors.ownerId && <p className="mt-1 text-xs text-red-500">{errors.ownerId.message}</p>}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Team Members</label>
+                    <MultiSelect
+ options={members.filter(m => m.id !== formValues.ownerId).map(m => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name) }))}
+                      value={formValues.memberIds || []}
+                      onChange={(val) => setValue('memberIds', val)}
+                      placeholder="Search and select team members..."
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
-                  <textarea value={formValues.description || ''} onChange={(e) => setValue('description', e.target.value)} rows={3} className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all resize-none" />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Client (Leave empty for Internal)</label>
-                  <Select
-                    value={formValues.clientId || ''}
-                    onChange={(val) => setValue('clientId', val, { shouldValidate: true })}
-                    options={[
-                      { label: 'Internal Project', value: '' },
-                      ...clients.map((c) => ({ label: c.name, value: c.id }))
-                    ]}
-                  />
-                  {errors.clientId && <p className="mt-1 text-xs text-red-500">{errors.clientId.message}</p>}
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Owner *</label>
-                  <Select
-                    required
-                    value={formValues.ownerId}
-                    onChange={(val) => setValue('ownerId', val, { shouldValidate: true })}
-                    options={[
-                      { label: 'Select owner', value: '' },
-                      ...members.map((m) => ({ label: m.name, value: m.id }))
-                    ]}
-                  />
-                  {errors.ownerId && <p className="mt-1 text-xs text-red-500">{errors.ownerId.message}</p>}
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Field label="Start Date" type="date" value={formValues.startDate || ''} onChange={(v) => setValue('startDate', v, { shouldValidate: true })} />
-                    {errors.startDate && <p className="mt-1 text-xs text-red-500">{errors.startDate.message}</p>}
-                  </div>
-                  <div>
-                    <Field label="End Date" type="date" value={formValues.endDate || ''} onChange={(v) => setValue('endDate', v, { shouldValidate: true })} />
-                    {errors.endDate && <p className="mt-1 text-xs text-red-500">{errors.endDate.message}</p>}
+                {/* Timeline */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-[#111827] border-b border-[#F3F4F6] pb-2">Timeline</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Field label="Start Date" type="date" value={formValues.startDate || ''} onChange={(v) => setValue('startDate', v, { shouldValidate: true })} />
+                    </div>
+                    <div>
+                      <Field 
+                        label={`End Date ${(formValues.type === 'ONE_TIME' || formValues.type === 'EVENT') ? '*' : ''}`} 
+                        type="date" 
+                        value={formValues.endDate || ''} 
+                        onChange={(v) => setValue('endDate', v, { shouldValidate: true })} 
+                        required={formValues.type === 'ONE_TIME' || formValues.type === 'EVENT'} 
+                      />
+                      {errors.endDate && <p className="mt-1 text-xs text-red-500">{errors.endDate.message}</p>}
+                    </div>
                   </div>
                 </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Assigned Teams</label>
-                  <MultiSelect
-                    options={teams.map(t => ({ value: t.id, label: t.name }))}
-                    value={formValues.teamIds || []}
-                    onChange={(val) => setValue('teamIds', val)}
-                    placeholder="Search and select teams..."
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Additional Members</label>
-                  <MultiSelect
-                    options={members.filter(m => m.id !== formValues.ownerId).map(m => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name) }))}
-                    value={formValues.memberIds || []}
-                    onChange={(val) => setValue('memberIds', val)}
-                    placeholder="Search and select members..."
-                  />
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
+
+                {/* Scope */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-[#111827] border-b border-[#F3F4F6] pb-2">Scope</h3>
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority</label>
-                    <Select
-                      value={formValues.priority}
-                      onChange={(val) => setValue('priority', val as any)}
-                      options={[
-                        { label: 'Low', value: 'LOW' },
-                        { label: 'Medium', value: 'MEDIUM' },
-                        { label: 'High', value: 'HIGH' },
-                        { label: 'Critical', value: 'CRITICAL' },
-                      ]}
+                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Scope of Work</label>
+                    <RichTextEditor
+                      value={formValues.scope || ''}
+                      onChange={(val) => setValue('scope', val)}
+                      placeholder="Enter the scope of work..."
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Status</label>
-                    <Select
-                      value={formValues.status}
-                      onChange={(val) => setValue('status', val as any)}
-                      options={[
-                        { label: 'Planning', value: 'PLANNING' },
-                        { label: 'In Progress', value: 'IN_PROGRESS' },
-                        { label: 'Review', value: 'REVIEW' },
-                        { label: 'Completed', value: 'COMPLETED' },
-                        { label: 'On Hold', value: 'ON_HOLD' },
-                        { label: 'Cancelled', value: 'CANCELLED' },
-                      ]}
+                    <Field label="Budget" type="number" value={formValues.budget || ''} onChange={(v) => setValue('budget', v)} />
+                  </div>
+                </div>
+
+                {/* Workflow */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-[#111827] border-b border-[#F3F4F6] pb-2">Workflow</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Reporting Cadence</label>
+                      <Select
+                        value={formValues.reportingCadence}
+                        onChange={(val) => setValue('reportingCadence', val as any)}
+                        options={[
+                          { label: 'None', value: 'NONE' },
+                          { label: 'Weekly', value: 'WEEKLY' },
+                          { label: 'Fortnightly', value: 'FORTNIGHTLY' },
+                          { label: 'Monthly', value: 'MONTHLY' },
+                        ]}
+                      />
+                    </div>
+                    <div className="flex items-center gap-3 h-full pt-6">
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          className="sr-only peer" 
+                          checked={formValues.clientApprovalRequired} 
+                          onChange={(e) => setValue('clientApprovalRequired', e.target.checked)} 
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#111827]"></div>
+                        <span className="ml-3 text-sm font-medium text-[#374151]">Client approval required</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Reference */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-[#111827] border-b border-[#F3F4F6] pb-2">Reference</h3>
+                  <div>
+                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Tags</label>
+                    <TagsInput 
+                      value={formValues.tags || []} 
+                      onChange={(val) => setValue('tags', val)} 
+                      placeholder="Type and press Enter to add tags..."
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Notes</label>
+                    <textarea
+                      value={formValues.projectNotes || ''}
+                      onChange={(e) => setValue('projectNotes', e.target.value)}
+                      className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all min-h-[80px]"
+                      placeholder="Internal project notes..."
+                    />
+                  </div>
+                  <div>
+                    <Field label="Folder Link (URL)" type="url" value={formValues.folderLink || ''} onChange={(v) => setValue('folderLink', v)} />
                   </div>
                 </div>
 

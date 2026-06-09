@@ -14,8 +14,12 @@ class ApiClient {
   }
 
   private async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+    const method = options.method || 'GET';
+    const isMutation = ['POST', 'PUT', 'PATCH'].includes(method.toUpperCase());
+    
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      ...(isMutation ? { 'X-Idempotency-Key': crypto.randomUUID() } : {}),
       ...options.headers,
     };
 

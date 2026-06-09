@@ -16,7 +16,7 @@ dashboardRouter.get('/stats', async (req: AuthRequest, res: Response, next) => {
     const role = req.user!.role;
     const userId = req.user!.userId;
 
-    const [activeClients, activeProjects, openTasks, completedTasks, delayedProjects, totalMembers] =
+    const [activeClients, activeProjects, openTasks, completedTasks, delayedProjects, totalMembers, overdueTasks] =
       await Promise.all([
         prisma.client.count({ where: { organizationId: orgId, status: 'ACTIVE' } }),
         prisma.project.count({
@@ -50,7 +50,15 @@ dashboardRouter.get('/stats', async (req: AuthRequest, res: Response, next) => {
             ...(role === 'TEAM_MEMBER' ? { members: { some: { userId } } } : {})
           },
         }),
-        prisma.user.count({ where: { organizationId: orgId, isActive: true } }),
+        prisma.user.count({ where: { organizationId: orgId, status: 'ACTIVE' } }),
+        prisma.task.count({
+          where: {
+            project: { client: { organizationId: orgId } },
+            dueDate: { lt: new Date() },
+            status: { notIn: ['COMPLETED'] },
+            ...(role === 'TEAM_MEMBER' ? { assigneeId: userId } : {})
+          }
+        }),
       ]);
 
     res.json({
@@ -60,6 +68,7 @@ dashboardRouter.get('/stats', async (req: AuthRequest, res: Response, next) => {
       completedTasks,
       delayedProjects,
       totalMembers,
+      overdueTasks,
     });
   } catch (error) {
     next(error);
@@ -164,7 +173,7 @@ dashboardRouter.get('/team-workload', async (req: AuthRequest, res: Response, ne
     const orgId = req.user!.organizationId;
 
     const members = await prisma.user.findMany({
-      where: { organizationId: orgId, isActive: true },
+      where: { organizationId: orgId, status: 'ACTIVE' },
       select: {
         id: true,
         name: true,
@@ -280,6 +289,111 @@ dashboardRouter.get('/status-distribution', async (req: AuthRequest, res: Respon
     }));
     
     res.json(data);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/dashboard/my-tasks
+dashboardRouter.get('/my-tasks', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const userId = req.user!.userId;
+
+    const tasks = await prisma.task.findMany({
+      where: {
+        assigneeId: userId,
+        project: { client: { organizationId: orgId } },
+        status: { notIn: ['COMPLETED'] }
+      },
+      include: {
+        project: { select: { id: true, name: true } }
+      },
+      orderBy: { dueDate: 'asc' }
+    });
+    res.json(tasks);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/dashboard/pending-approvals
+dashboardRouter.get('/pending-approvals', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const role = req.user!.role;
+    
+    if (role === 'TEAM_MEMBER') return res.json([]);
+
+    const tasks = await prisma.task.findMany({
+      where: {
+        project: { client: { organizationId: orgId } },
+        status: 'REVIEW'
+      },
+      include: {
+        project: { select: { id: true, name: true } },
+        assignee: { select: { id: true, name: true, avatar: true } }
+      },
+      orderBy: { updatedAt: 'desc' }
+    });
+    res.json(tasks);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/dashboard/client-health
+dashboardRouter.get('/client-health', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    
+    const clients = await prisma.client.findMany({
+      where: { organizationId: orgId, status: 'ACTIVE' },
+      select: {
+        id: true,
+        name: true,
+        projects: {
+          where: { status: { notIn: ['COMPLETED', 'CANCELLED'] } },
+          select: {
+            endDate: true,
+            tasks: { select: { status: true, dueDate: true } }
+          }
+        }
+      }
+    });
+
+    const healthData = clients.map(c => {
+      let overdueTasks = 0;
+      let nextDueDate: Date | null = null;
+      let projectPastEndDate = false;
+
+      c.projects.forEach(p => {
+        if (p.endDate && new Date(p.endDate) < new Date()) projectPastEndDate = true;
+        p.tasks.forEach(t => {
+          if (t.status !== 'COMPLETED') {
+            if (t.dueDate && new Date(t.dueDate) < new Date()) overdueTasks++;
+            if (t.dueDate && new Date(t.dueDate) >= new Date()) {
+              if (!nextDueDate || new Date(t.dueDate) < nextDueDate) nextDueDate = new Date(t.dueDate);
+            }
+          }
+        });
+      });
+
+      let health = 'Green';
+      if (overdueTasks >= 3 || projectPastEndDate) health = 'Red';
+      else if (overdueTasks > 0) health = 'Amber';
+
+      return {
+        id: c.id,
+        name: c.name,
+        activeProjects: c.projects.length,
+        overdueTasks,
+        nextDueDate,
+        health
+      };
+    });
+
+    res.json(healthData);
   } catch (error) {
     next(error);
   }

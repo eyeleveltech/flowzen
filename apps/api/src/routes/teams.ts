@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
-import { emitToOrganization } from '../socket.js';
+import { emitToOrganization } from '../sse.js';
 
 export const teamRouter = Router();
 teamRouter.use(authenticate);

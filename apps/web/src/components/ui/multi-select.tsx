@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Check, ChevronsUpDown } from 'lucide-react';
+import { useMediaQuery } from '@/hooks/use-media-query';
+import { Drawer } from '@/components/ui/drawer';
 
 interface Option {
   value: string;
@@ -19,6 +21,7 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -61,7 +64,7 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
             key={opt.value} 
             className="flex items-center gap-1 bg-[#F3F4F6] text-[#374151] px-2 py-1 rounded-lg text-xs font-medium"
           >
-            {opt.image && <div className={`w-4 h-4 rounded-full text-white flex items-center justify-center text-[8px] font-bold ${opt.colorClass || 'bg-[#111827]'}`}>{opt.image}</div>}
+            {opt.image && <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-semibold ${opt.colorClass || 'bg-[#111827] text-white'}`}>{opt.image}</div>}
             {opt.label}
             <button 
               type="button" 
@@ -100,7 +103,37 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
         </div>
       </div>
 
-      {isOpen && (
+      {isOpen && isMobile ? (
+        <Drawer isOpen={isOpen} onClose={() => setIsOpen(false)} title={placeholder}>
+          <div className="flex flex-col space-y-1 mb-4">
+            {filteredOptions.length === 0 ? (
+              <div className="px-4 py-2.5 text-sm text-[#6B7280]">No results found.</div>
+            ) : (
+              filteredOptions.map((opt) => {
+                const isSelected = value.includes(opt.value);
+                return (
+                  <button
+                    type="button"
+                    key={opt.value}
+                    onClick={(e) => { e.stopPropagation(); handleSelect(opt.value); }}
+                    className={`flex w-full items-center text-left gap-3 px-4 py-3.5 rounded-xl text-base transition-colors ${
+                      isSelected
+                        ? 'bg-[#F3F4F6] text-[#111827] font-semibold'
+                        : 'text-[#374151] active:bg-[#F9FAFB]'
+                    }`}
+                  >
+                    <div className={`flex items-center justify-center w-5 h-5 rounded border shrink-0 ${isSelected ? 'bg-[#111827] border-[#111827]' : 'border-[#D1D5DB]'}`}>
+                      {isSelected && <Check className="h-3.5 w-3.5 text-white" />}
+                    </div>
+                    {opt.image && <div className={`w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-[#111827] text-white'}`}>{opt.image}</div>}
+                    <span className="truncate">{opt.label}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </Drawer>
+      ) : isOpen && (
         <div 
           role="listbox"
           aria-multiselectable="true"
@@ -147,7 +180,7 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
                   <div className={`flex items-center justify-center w-4 h-4 rounded border ${isSelected ? 'bg-[#111827] border-[#111827]' : 'border-[#D1D5DB]'}`}>
                     {isSelected && <Check className="h-3 w-3 text-white" />}
                   </div>
-                  {opt.image && <div className={`w-5 h-5 rounded-full text-white flex items-center justify-center text-[10px] font-bold ${opt.colorClass || 'bg-[#111827]'}`}>{opt.image}</div>}
+                  {opt.image && <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-[#111827] text-white'}`}>{opt.image}</div>}
                   <span className="text-[#374151]">{opt.label}</span>
                 </div>
               );

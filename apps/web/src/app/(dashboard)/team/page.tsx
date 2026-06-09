@@ -136,7 +136,7 @@ export default function TeamPage() {
     if (!memberDetail) {
       return (
         <div className="h-[550px] flex flex-col items-center justify-center text-center p-8 bg-gray-50/50 rounded-3xl border border-dashed border-[#E5E7EB]">
-          <div className="h-14 w-14 rounded-2xl bg-white flex items-center justify-center shadow-xs border border-[#E5E7EB]/60 text-[#9CA3AF] mb-5">
+          <div className="h-14 w-14 rounded-2xl bg-white flex items-center justify-center border border-[#E5E7EB] text-[#9CA3AF] mb-5">
             <Sparkles className="h-6 w-6 text-indigo-500" />
           </div>
           <h3 className="text-sm font-semibold text-[#111827]">Workload Inspector</h3>
@@ -154,11 +154,11 @@ export default function TeamPage() {
       <div className="space-y-6">
         {/* Profile Card Header */}
         <div className="flex items-center gap-4">
-          <div className={`h-16 w-16 rounded-2xl text-white flex items-center justify-center font-bold text-2xl shadow-md border border-white shrink-0 ${getAvatarColor(name)}`}>
+ <div className={`h-16 w-16 rounded-2xl flex items-center justify-center font-semibold text-2xl shrink-0 ${getAvatarColor(name)}`}>
             {getInitials(name)}
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-lg font-bold text-[#111827] truncate leading-5">{name}</h2>
+            <h2 className="text-lg font-semibold text-[#111827] truncate leading-5">{name}</h2>
             <div className="flex flex-wrap items-center gap-2 mt-2">
               <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-md bg-gray-100 text-gray-800 border border-gray-200">
                 <Shield className="h-3 w-3" />
@@ -212,8 +212,8 @@ export default function TeamPage() {
               {/* Capacity Bar */}
               <div className="bg-[#FAFAFA] p-5 rounded-2xl border border-[#E5E7EB]/80">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-[#111827]">Workload Allocation</span>
-                  <span className="text-xs font-extrabold text-[#111827] tabular-nums">{stats.capacity}%</span>
+                  <span className="text-xs font-semibold text-[#111827]">Workload Allocation</span>
+                  <span className="text-xs font-bold text-[#111827] tabular-nums">{stats.capacity}%</span>
                 </div>
                 <div className="h-2 w-full rounded-full bg-[#E5E7EB] overflow-hidden">
                   <div
@@ -247,7 +247,7 @@ export default function TeamPage() {
                       className="p-3.5 bg-white border border-[#E5E7EB] rounded-xl hover:border-gray-300 transition-colors shadow-xs"
                     >
                       <div className="flex justify-between items-start gap-2 mb-2">
-                        <h4 className="text-xs font-bold text-[#111827] line-clamp-1">{t.title}</h4>
+                        <h4 className="text-xs font-semibold text-[#111827] line-clamp-1">{t.title}</h4>
                         <span className={`shrink-0 text-[9px] font-bold px-2 py-0.5 rounded-sm border ${statusColors[t.status] || ''}`}>
                           {t.status.replace('_', ' ')}
                         </span>
@@ -286,7 +286,7 @@ export default function TeamPage() {
                       key={p.id}
                       className="p-3.5 bg-white border border-[#E5E7EB] rounded-xl hover:border-gray-300 transition-colors shadow-xs"
                     >
-                      <h4 className="text-xs font-bold text-[#111827] line-clamp-1">{p.name}</h4>
+                      <h4 className="text-xs font-semibold text-[#111827] line-clamp-1">{p.name}</h4>
                       <div className="flex justify-between items-center text-[10px] text-[#9CA3AF] mt-2">
                         <span className="truncate max-w-[170px] font-medium flex items-center gap-1.5">
                           <User className="h-3 w-3" />
@@ -317,7 +317,7 @@ export default function TeamPage() {
             >
               {/* Contact Info Card */}
               <div className="bg-[#FAFAFA] rounded-2xl p-5 border border-[#E5E7EB]/80 space-y-3.5 text-xs text-[#4B5563]">
-                <h4 className="text-[10px] text-[#86868B] font-bold uppercase tracking-wider mb-1">Contact Information</h4>
+                <h4 className="text-[10px] text-[#86868B] font-medium uppercase tracking-wide mb-1">Contact Information</h4>
                 <div className="flex items-center gap-3">
                   <Mail className="h-4 w-4 text-[#9CA3AF]" />
                   <a href={`mailto:${email}`} className="hover:underline hover:text-[#111827] font-medium truncate">{email}</a>
@@ -340,21 +340,21 @@ export default function TeamPage() {
               <div>
                 <h3 className="text-xs font-bold text-[#111827] uppercase tracking-wider mb-3">Overall Performance</h3>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-white p-4 rounded-2xl border border-[#E5E7EB] shadow-xs">
-                    <span className="text-[10px] text-[#86868B] font-bold uppercase tracking-wider block mb-1">Active Tasks</span>
-                    <p className="text-2xl font-black text-[#111827] tabular-nums">{stats.activeTasks}</p>
+                  <div className="bg-white p-4 rounded-2xl border border-[#E5E7EB]">
+                    <span className="text-[10px] text-[#86868B] font-medium uppercase tracking-wide block mb-1">Active Tasks</span>
+                    <p className="text-2xl font-bold text-[#111827] tabular-nums">{stats.activeTasks}</p>
                   </div>
-                  <div className="bg-white p-4 rounded-2xl border border-[#E5E7EB] shadow-xs">
-                    <span className="text-[10px] text-[#86868B] font-bold uppercase tracking-wider block mb-1">Completed</span>
-                    <p className="text-2xl font-black text-emerald-600 tabular-nums">{stats.completedTasks}</p>
+                  <div className="bg-white p-4 rounded-2xl border border-[#E5E7EB]">
+                    <span className="text-[10px] text-[#86868B] font-medium uppercase tracking-wide block mb-1">Completed</span>
+                    <p className="text-2xl font-bold text-emerald-600 tabular-nums">{stats.completedTasks}</p>
                   </div>
-                  <div className="bg-white p-4 rounded-2xl border border-[#E5E7EB] shadow-xs">
-                    <span className="text-[10px] text-[#86868B] font-bold uppercase tracking-wider block mb-1">Total Assigned</span>
-                    <p className="text-2xl font-black text-[#111827] tabular-nums">{stats.totalTasks}</p>
+                  <div className="bg-white p-4 rounded-2xl border border-[#E5E7EB]">
+                    <span className="text-[10px] text-[#86868B] font-medium uppercase tracking-wide block mb-1">Total Assigned</span>
+                    <p className="text-2xl font-bold text-[#111827] tabular-nums">{stats.totalTasks}</p>
                   </div>
-                  <div className="bg-white p-4 rounded-2xl border border-[#E5E7EB] shadow-xs">
-                    <span className="text-[10px] text-[#86868B] font-bold uppercase tracking-wider block mb-1">Led Projects</span>
-                    <p className="text-2xl font-black text-blue-600 tabular-nums">{stats.totalProjects}</p>
+                  <div className="bg-white p-4 rounded-2xl border border-[#E5E7EB]">
+                    <span className="text-[10px] text-[#86868B] font-medium uppercase tracking-wide block mb-1">Led Projects</span>
+                    <p className="text-2xl font-bold text-blue-600 tabular-nums">{stats.totalProjects}</p>
                   </div>
                 </div>
               </div>
@@ -369,7 +369,7 @@ export default function TeamPage() {
     <div className="max-w-[1400px] mx-auto p-4 md:p-8">
       {/* Page Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-[#111827] tracking-tight">Team Workspace</h1>
+        <h1 className="text-2xl font-semibold text-[#111827] tracking-tight">Team Workspace</h1>
         <p className="text-sm text-[#6B7280] mt-1">Monitor capacity, active workloads, and individual output of your team.</p>
       </div>
 
@@ -431,15 +431,15 @@ export default function TeamPage() {
                   <div
                     key={m.id}
                     onClick={() => setSelectedId(m.id)}
-                    className={`group relative flex flex-col p-6 rounded-[1.5rem] bg-white cursor-pointer transition-all duration-300 ${
+                    className={`group relative flex flex-col p-6 rounded-[1.5rem] bg-white cursor-pointer transition-all duration-300 border ${
                       isSelected 
-                        ? 'shadow-[0_0_0_2px_#111827]' 
-                        : 'shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.04] hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] hover:-translate-y-0.5'
+                        ? 'border-[#111827] ring-1 ring-[#111827]' 
+                        : 'border-[#E5E7EB] hover:shadow-sm'
                     }`}
                   >
                     <div className="flex items-center gap-4 mb-5">
                       {/* Avatar */}
-                      <div className={`h-12 w-12 rounded-[1rem] text-white flex items-center justify-center font-medium text-lg shadow-inner shrink-0 ${getAvatarColor(m.name)}`}>
+ <div className={`h-12 w-12 rounded-[1rem] flex items-center justify-center font-medium text-lg shrink-0 ${getAvatarColor(m.name)}`}>
                         {getInitials(m.name)}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -467,7 +467,7 @@ export default function TeamPage() {
                       
                       {/* Minimal Capacity Dot */}
                       <div className="flex items-center gap-1.5" title={`Capacity: ${m.capacity}%`}>
-                        <div className={`w-2 h-2 rounded-full shadow-sm ${
+                        <div className={`w-2 h-2 rounded-full ${
                           m.capacity > 80 ? 'bg-red-500' : m.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'
                         }`} />
                         <span className="text-[#86868B] font-medium">{m.capacity}%</span>

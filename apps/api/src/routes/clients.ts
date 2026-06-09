@@ -3,8 +3,9 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
-import { emitToOrganization } from '../socket.js';
+import { emitToOrganization } from '../sse.js';
 import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
+import { NotificationService } from '../services/notifications.js';
 
 export const clientRouter = Router();
 clientRouter.use(authenticate);
@@ -19,24 +20,34 @@ const clientSchema = z.object({
   address: z.string().optional(),
   contractValue: z.number().optional(),
   startDate: z.string().optional(),
-  status: z.enum(['LEAD', 'ACTIVE', 'PAUSED', 'COMPLETED', 'ARCHIVED']).optional(),
+  engagementType: z.string().optional(),
+  website: z.string().optional(),
+  city: z.string().optional(),
+  scope: z.string().optional(),
+  assetLinks: z.string().optional(),
+  accountManagerId: z.string().optional(),
+  status: z.enum(['PROSPECT', 'ACTIVE', 'ONHOLD', 'CHURNED']).optional(),
   contacts: z.array(z.object({
     id: z.string().optional(),
     name: z.string().min(1),
     designation: z.string().optional(),
     email: z.string().optional(),
     phone: z.string().optional(),
-  })).optional(),
+  })).max(5).optional(),
 });
 
 // GET /api/clients
 clientRouter.get('/', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const { search, status, page = '1', limit = '20' } = req.query;
+    const { search, status, city, accountManagerId, engagementType, industry, page = '1', limit = '20' } = req.query;
 
     const where: Record<string, unknown> = { organizationId: orgId };
     if (status) where.status = status as string;
+    if (city) where.city = { contains: city as string, mode: 'insensitive' };
+    if (accountManagerId) where.accountManagerId = accountManagerId as string;
+    if (engagementType) where.engagementType = engagementType as string;
+    if (industry) where.industry = { contains: industry as string, mode: 'insensitive' };
     if (search) {
       where.OR = [
         { name: { contains: search as string, mode: 'insensitive' } },
@@ -80,6 +91,7 @@ clientRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
           },
           orderBy: { createdAt: 'desc' },
         },
+        accountManager: { select: { id: true, name: true, avatar: true } },
         notes: {
           include: { author: { select: { id: true, name: true, avatar: true } } },
           orderBy: { createdAt: 'desc' },
@@ -112,6 +124,7 @@ clientRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), val
     const client = await prisma.client.create({
       data: {
         ...data,
+        accountManagerId: data.accountManagerId || null,
         startDate: startDate ? new Date(startDate) : undefined,
         organizationId: req.user!.organizationId,
         contacts: contacts ? {
@@ -149,6 +162,72 @@ clientRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), val
   }
 });
 
+// POST /api/clients/bulk
+clientRouter.post('/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const clientsData = req.body.clients;
+    if (!Array.isArray(clientsData) || clientsData.length === 0) {
+      res.status(400).json({ error: 'Invalid or empty clients array' });
+      return;
+    }
+
+    let createdCount = 0;
+    
+    // Process sequentially or use a transaction depending on complexity. 
+    // Sequential allows us to skip invalid rows easily or handle constraints.
+    for (const data of clientsData) {
+      if (!data.name) continue;
+      
+      await prisma.client.create({
+        data: {
+          name: data.name,
+          company: data.company || null,
+          industry: data.industry || null,
+          engagementType: data.engagementType || null,
+          status: ['PROSPECT', 'ACTIVE', 'ONHOLD', 'CHURNED'].includes(data.status?.toUpperCase()) ? data.status.toUpperCase() : 'PROSPECT',
+          website: data.website || null,
+          city: data.city || null,
+          address: data.address || null,
+          scope: data.scope || null,
+          assetLinks: data.assetLinks || null,
+          startDate: data.startDate ? new Date(data.startDate) : null,
+          contractValue: data.contractValue ? parseFloat(data.contractValue) : null,
+          accountManagerId: data.accountManagerId || null,
+          organizationId: req.user!.organizationId,
+          contacts: (data.contactName || data.contactEmail) ? {
+            create: [{
+              name: data.contactName || 'Primary Contact',
+              designation: data.contactDesignation || null,
+              email: data.contactEmail || null,
+              phone: data.contactPhone || null
+            }]
+          } : undefined
+        }
+      });
+      createdCount++;
+    }
+
+    // Activity log
+    await prisma.activity.create({
+      data: {
+        type: 'CLIENT_CREATED',
+        message: `bulk imported ${createdCount} clients`,
+        entityType: 'ORGANIZATION',
+        entityId: req.user!.organizationId,
+        userId: req.user!.userId,
+      },
+    });
+
+    const io = req.app.get('io');
+    emitToOrganization(io, req.user!.organizationId, 'client:created', { bulk: true });
+    await invalidateOrganizationCache(req.user!.organizationId);
+
+    res.status(201).json({ message: `Successfully imported ${createdCount} clients`, count: createdCount });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // PUT /api/clients/:id
 clientRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), validate(clientSchema), async (req: AuthRequest, res: Response, next) => {
   try {
@@ -167,6 +246,7 @@ clientRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), v
       where: { id: existing.id },
       data: {
         ...data,
+        accountManagerId: data.accountManagerId || null,
         startDate: startDate ? new Date(startDate) : undefined,
         contacts: {
           deleteMany: {},

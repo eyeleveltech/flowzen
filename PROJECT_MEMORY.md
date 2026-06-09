@@ -1,99 +1,111 @@
 # Flowzen — Comprehensive Project Memory & AI System Context
 
+This document is the ultimate master blueprint of the Flowzen project, detailing everything from micro-interactions on specific pages to the core backend architecture and deployment workflows.
+
 **CRITICAL INSTRUCTION FOR ALL AI AGENTS**: Before writing any code, modifying configurations, or proposing UI changes, you MUST read this entire document. This file contains the exact technical rules, architecture constraints, database schemas, and historical bug fixes for the Flowzen SaaS platform. Deviating from these constraints will break the production environment.
 
-## 1. Project Overview & Vision
-**Name**: Flowzen
-**Type**: Internal SaaS Agency Project Management Platform
-**Philosophy**: "Apple-level simplicity, Linear-level productivity, Notion-level flexibility."
-**Goal**: Combine Client Management, Project Management, Task Management, Team Collaboration, and Operational Visibility into a single, highly focused, and premium workspace.
+---
+
+## 1. Application Pages & Real-Time Features Map
+
+The frontend is divided into two route groups: `(auth)` and `(dashboard)`. Below is the exhaustive feature breakdown.
+
+### `(dashboard)` Routes
+All dashboard pages rely heavily on `@tanstack/react-query` for data fetching and caching, combined with an active `EventSource` (SSE) connection to automatically re-fetch data upon receiving server pushes.
+
+*   **`/dashboard` (Overview):**
+    *   **Features:** Renders dynamic KPI stats (Active Clients, Overdue Tasks). For Managers, it displays Recharts visualizations (Team Workload Bar Chart, Project Status Pie Chart) and a Client Health summary. Contains an "Activity Feed" and a "My Tasks" section.
+    *   **Real-time:** Listens to `client:created`, `project:created`, `task:created`, `task:updated`, and `project:updated` via SSE. Triggers a full dashboard re-fetch instantly when changes occur.
+*   **`/projects`:**
+    *   **Features:** Lists projects with rich metadata. The Project Details view features a pristine **Apple-Level Minimalist 4-column grid dashboard** (Key Dates, Client Details, Progress, Assigned Team). Long-form fields like "Scope of Work" and "Internal Notes" utilize a **Rich Text Editor** and truncate automatically, expanding into **Slide-Over Modals** for a clean reading experience. Includes a "Project-Level Comments" tab.
+    *   **Real-time:** Webhooks/SSE push updates to project status or new comments, instantly updating the UI for all connected users.
+*   **`/tasks`:**
+    *   **Features:** Advanced Kanban/List views. Supports sub-tasks, `Reviewer` assignments, and `DriveLink` URLs instead of native file attachments.
+*   **`/calendar`:**
+    *   **Features:** Advanced Monthly and Weekly timeline views with powerful frontend filtering (by Client, Assignee, Status) driven by the Project's hex color.
+*   **`/clients`:**
+    *   **Features:** Client CRUD, advanced filtering (City, Engagement Type), and a robust Bulk Import/Export feature using `papaparse` for CSVs.
+*   **`/settings` & `/team`:**
+    *   **Features:** Organization management. Admin-only sections for inviting new users (triggers secure email workflows).
+*   **`/profile`:**
+    *   **Features:** User self-management (Name, Department, secure password resets).
+
+### Global Real-Time Events
+*   **Notifications:** The `<GlobalEvents />` component is mounted at the root layout. It listens for the `notification:new` SSE event. When received, it triggers a global `toast` and invalidates the `['notifications']` query cache to update the notification bell icon.
 
 ---
 
-## 2. Directory Structure & Architecture Overview
-Flowzen is a **Turborepo Monorepo** containing two main apps: `apps/web` (Frontend) and `apps/api` (Backend).
+## 2. Next.js SSR vs. Client Rendering Architecture
 
-### `apps/web` (Frontend)
-- **`src/app`**: Next.js 16 App Router. Divided into `(auth)` for login/registration and `(dashboard)` for protected views.
-- **`src/components`**: 
-  - `ui/`: Highly reusable atomic components (buttons, custom selects, modals, dialogs). 
-  - `layout/`: AppShell, TopNav, Sidebar.
-- **`src/lib/api.ts`**: **CRITICAL FILE.** The global Axios wrapper. It automatically attaches the JWT token from cookies/Zustand state to every outgoing request. If an API call returns `401 Unauthorized`, this wrapper automatically catches it, forces `useAuthStore.getState().logout()`, and clears the local session to trigger a redirect to `/login`.
-- **`src/stores/`**: Zustand state management.
-  - `useAuthStore.ts`: Hydrates from local storage. Manages JWT persistence and user context.
-  - `useNotificationStore.ts`: Manages the real-time notification queue and active toasts.
-  - `useUIStore.ts` & `useConfirmStore.ts`: Manages global UI elements (Sidebar, Command Palette, Confirmation Modals).
+Flowzen is built on **Next.js 16 (App Router)**.
 
-### `apps/api` (Backend)
-- **`src/routes/`**: Express route handlers (Auth, Dashboard, Clients, Projects, Tasks, Teams, Settings).
-- **`src/middleware/`**: 
-  - `auth.ts`: Contains `authenticate` (validates JWT) and `authorize` (enforces RBAC).
-  - `validate.ts`: Zod schema validation middleware.
-- **`src/services/email.ts`**: Nodemailer service for handling Verification, Welcome Emails, and Password Resets.
+### Rendering Strategy
+1.  **Server Components (Default):**
+    *   The root `layout.tsx` and nested `layout` files are React Server Components (RSCs). They handle basic metadata (title, icons, manifest) and structure without shipping JavaScript to the client.
+    *   **Strict SSR Pages:** Only the root `app/layout.tsx` (metadata injection) and `app/page.tsx` (executes a server-side `redirect('/dashboard')`) are pure Server Components.
+2.  **Client Components (`"use client"` / CSR):**
+    *   Due to the highly interactive nature of this SaaS (Zustand state, React Query, Framer Motion animations, SSE hooks), almost all functional routing is explicitly marked with `"use client"`.
+    *   **Strict CSR Pages:** `login`, `register`, `dashboard`, `projects`, `tasks`, `calendar`, `clients`, `settings`, `team`, `profile`, and all auth sub-pages (`forgot-password`, `reset-password`, `verify-email`, `setup-password`). The `(dashboard)/layout.tsx` is also a Client Component.
+    *   **How it works:** The initial HTML is pre-rendered on the server (SSR) to improve perceived load times and SEO, but interactivity is fully hydrated on the client for all the pages listed above.
+3.  **Data Fetching:**
+    *   Server-Side data fetching (`fetch` inside RSCs) is bypassed in favor of Client-Side data fetching via `useQueries.ts` (`@tanstack/react-query`). This allows for complex caching, pagination, and real-time invalidation.
 
 ---
 
-## 3. Strict AI Coding Rules & Guidelines
+## 3. Core Workflows Deep-Dive
 
-**UI/UX Design Constraints:**
-1. **Never Use Native Selects**: NEVER use native HTML `<select>` elements. Always use `@/components/ui/select` or `@/components/ui/multi-select` to maintain styling.
-2. **Apple-Level Minimalism**: Avoid clunky data grids, heavy badges, and bulky progress bars. Keep the UI ultra-clean.
-3. **No Emojis**: Never use emojis in the UI. Exclusively use `lucide-react` icons for all visual indicators.
-4. **Strict Color Palette**: 
-   - Backgrounds: `#FFFFFF` (White) and `#FAFAFA` (Surfaces).
-   - Borders: `#E5E7EB`.
-   - Text: `#111827` (Primary) and `#6B7280` (Secondary).
-   - Accent: `#000000` (Black).
-   - *Do not arbitrarily introduce heavy colors or a dark mode.*
+### Authentication Workflow
+The system utilizes a secure, JWT-based hybrid approach.
+1.  **Login (`/api/auth/login`):** The Express backend validates credentials and issues an `HttpOnly`, `Secure` cookie containing the JWT, protecting it from XSS attacks.
+2.  **Client Hydration (`useAuthStore.ts`):** The frontend stores basic user metadata (Name, Role, ID) in `localStorage` for fast UI hydration, but the actual security token remains in the HTTP cookie.
+3.  **API Wrapper (`api.ts`):** All outgoing requests automatically include `credentials: 'include'` to pass the cookie. If the backend returns a `401 Unauthorized` (e.g., token expired), the `api.ts` wrapper automatically clears the Zustand store and forcefully redirects the user to `/login`.
+4.  **Admin Invites (`/api/settings/users`):** Admins trigger an invite. The backend generates a 24-hour cryptographically secure `resetToken` and fires an email via Nodemailer (`EmailService`). The user clicks the link to `/setup-password`, verifying the token and setting their credentials.
 
-**Backend Constraints:**
-1. **Never Remove RBAC**: All protected routes MUST use the `authorize` middleware appropriately. `TEAM_MEMBER` roles are strictly forbidden from accessing `Clients`, `Teams`, and `Settings`.
-2. **Transactions**: Use Prisma transactions `$transaction` when updating tasks, projects, or milestones to prevent race conditions.
+### File Attachment Alternative Workflow
+To optimize storage costs, native file uploading has been banned.
+*   Instead, Task and Client models use a `DriveLink` field. Users paste Google Drive, Figma, or Dropbox URLs.
 
 ---
 
-## 4. Deep-Dive Prisma Relationships
+## 4. Frontend Design & UI/UX Audit
 
-The database is powered by PostgreSQL via Prisma.
-- **Organization**: The root tenant (`name`, `settings`). 
-- **User**: Belongs to an `Organization`. Holds `role` (`SUPER_ADMIN`, `ADMIN`, `PROJECT_MANAGER`, `TEAM_MEMBER`). Tracks email verification via `isEmailVerified` and `emailVerifyToken`.
-- **Team**: Has a designated `leaderId` (User) and multiple `members` (User[]).
-- **Project**: Owned by a `User`. Tied to a `Client`. Has a direct `members` array (User[]) AND a `teams` array (Team[]).
-- **Task**: Belongs to a `Project`. Assigned to a `User`. Can have a parent `Task` (subtasks). Statuses: `BACKLOG`, `TODO`, `IN_PROGRESS`, `REVIEW`, `BLOCKED`, `COMPLETED`.
-
-*(File uploads and attachments have been explicitly removed from this architecture to save storage costs. Do not implement file upload features.)*
-
----
-
-## 5. Deployment & Execution Quirks (CRITICAL)
-
-The deployment architecture is fully containerized via Docker on a VPS. **Any AI modifying Docker or build configurations must adhere to these rules:**
-
-1. **Next.js Build-Time Variables (`NEXT_PUBLIC_*`)**:
-   - Next.js hardcodes `NEXT_PUBLIC_*` variables into the static HTML *during the build process*. 
-   - The `apps/web/Dockerfile` has been specifically modified to accept `ARG NEXT_PUBLIC_API_URL` and `ARG NEXT_PUBLIC_APP_URL`. 
-   - `docker-compose.yml` passes these `args` into the web build block. *Do not remove these `args`, or the frontend will break in production.*
-
-2. **PostgreSQL Custom Port (`5433`)**:
-   - To avoid conflicts on the host VPS, the database port is mapped to `5433` on the host side (`5433:5432` in `docker-compose.yml`).
-   - Locally, ensure `DATABASE_URL` uses port `5433` when connecting from the host machine.
-
-3. **Email & SMTP Configurations**:
-   - Email is handled via Nodemailer in `EmailService`.
-   - The `docker-compose.yml` file explicitly maps `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, and `SMTP_PASS` into the backend `api` service.
-
-4. **WebSockets (`/socket.io/`) Reverse Proxy**:
-   - The platform relies on Socket.IO for real-time updates.
-   - The production VPS runs Apache (or Nginx) which MUST be configured to pass `/socket.io/` traffic via proxy to the `api` container port `4000` with WebSockets upgraded (`Upgrade: websocket`).
+*   **Typography:** Strict `Inter` font stack. Apple-Level Minimalism dictates softer weights:
+    *   **Page Titles:** `font-semibold` (not bold).
+    *   **Table Headers:** `font-medium uppercase tracking-wide` (not tracking-wider).
+*   **Color Palette (Apple-Level Minimalism):**
+    *   `--color-surface`: `#FAFAFA`
+    *   `--color-border`: `#E5E7EB`
+    *   `--color-primary`: `#111827` (Main Text)
+    *   `--color-secondary`: `#6B7280` (Muted Text)
+    *   `--color-accent`: `#000000`
+    *   **Status Colors:** Success (`#22C55E`), Warning (`#F59E0B`), Danger (`#EF4444`).
+*   **Shadows & Spacing:** 
+    *   **NO Static Shadows:** Static shadows (`shadow-sm`, `shadow-md`, etc.) are completely banned on resting UI elements (Cards, Tables, Metrics) to maintain a perfectly flat, crisp aesthetic.
+    *   **Modal Depth:** Pop-ups and Slide-Over Modals are the only elements that utilize deep drop shadows (`shadow-2xl shadow-black/10`) to explicitly separate them from the flat background.
+    *   **Dynamic Interactive Depth:** Instead of static depth, interactive cards use `border-[#E5E7EB]` combined with `hover:shadow-sm transition-all` to create a smooth, subtle elevation only when the user interacts with them.
+*   **Avatars:** Globally standardized to a minimalist grey style (`bg-[#F3F4F6] text-[#111827] border border-[#E5E7EB]`). Multi-colored, randomized Material Design style avatars are banned to maintain monochromatic consistency.
+*   **Animations:** Uses Framer Motion for page transitions (`container`/`item` stagger effects) and Tailwind keyframes (`animate-in`, `skeleton`).
 
 ---
 
-## 6. Authentication & Email Workflows
+## 5. System Architecture & Database Schema
 
-- **Registration (`/api/auth/register`)**: Creates an organization, the first user (`SUPER_ADMIN`), generates an `emailVerifyToken`, and sends a Verification Email.
-- **Admin User Creation (`/api/settings/users`)**: When an Admin creates a new team member from the settings page, the system immediately generates a password and triggers `EmailService.sendWelcomeEmail`, which emails the user their login credentials.
-- **Resend Verification (`/api/auth/resend-verification`)**: If an unverified user logs in, the dashboard layout (`apps/web/src/app/(dashboard)/layout.tsx`) displays a red banner. This banner contains a "Resend Email" button which hits this endpoint to generate a new token and send a fresh verification email.
+*   **Monorepo Structure:** Turborepo handles `apps/web` (Next.js) and `apps/api` (Express).
+*   **Database (Prisma/PostgreSQL):** Includes 16 heavily normalized tables. Enforces strict Foreign Key constraints and cascading deletes.
+*   **RBAC Matrix:**
+    *   `SUPER_ADMIN` / `ADMIN`: Full system access.
+    *   `PROJECT_MANAGER`: Can create/edit projects and tasks, but cannot manage organizational billing/settings.
+    *   `TEAM_MEMBER`: Isolated view. Can only see assigned tasks. Denied access to `/clients` or `/teams`.
 
 ---
 
-*(End of Document - Flowzen v1.0 Architecture & Memory)*
+## 6. Performance & Testing Status
+
+### Performance Details
+*   **Vite/Turbopack:** Ensures rapid local HMR (Hot Module Replacement).
+*   **Monolithic Speed:** React 19 optimizations make the SPA routing near instantaneous.
+*   **Recharts Optimization:** Dashboard charts are lazy-loaded within `ResponsiveContainer`s, preventing main-thread blocking during initial render.
+
+### Deployment & Testing
+*   **Testing Coverage:** ✅ **PASS.** Playwright E2E tests (`apps/web/tests`) successfully cover the 6 core flows (Auth, Clients, Projects, Settings, Tasks, Teams). Vitest handles unit tests.
+*   **Deployment Status:** ✅ **READY.** Dockerized via `docker-compose.yml` orchestrating Postgres (Port 5433), Redis, API, Web, and an automated backup sidecar. Automated via `.github/workflows/deploy.yml`. Security headers and rate-limiting are fully active.

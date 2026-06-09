@@ -29,22 +29,72 @@ test.describe('Project Management Flow', () => {
   });
 
   test('User can create a new project', async ({ page }) => {
-    // Navigate to projects page
     await page.click('a[href="/projects"]');
     await expect(page).toHaveURL(/.*\/projects/);
-
-    // Click "New Project" button
     await page.click('button:has-text("New Project")');
+    
+    // Empty form validation
+    await page.click('button[type="submit"]', { force: true });
+    // Still in modal because validation failed
+    await expect(page.locator('button:has-text("New Project")')).toBeVisible();
 
-    // Fill in project details
     await page.fill('input[name="name"]', projectName);
     await page.fill('textarea[name="description"]', 'A test project created by automated E2E tests.');
-    
-    // Select a client if there's a client dropdown, or create without it
-    // Wait for the modal submit button
     await page.click('button[type="submit"]', { force: true });
+    await expect(page.locator(`text=${projectName}`).first()).toBeVisible();
+  });
 
-    // Should appear in the projects list
-    await expect(page.locator(`text=${projectName}`)).toBeVisible();
+  test('User can edit project details', async ({ page }) => {
+    await page.click('a[href="/projects"]');
+    await page.click(`text=${projectName}`);
+    
+    // Check we navigated to project details
+    await expect(page).toHaveURL(/.*\/projects\/.+/);
+
+    await page.click('button:has-text("Edit Project")');
+    await page.fill('textarea[name="description"]', 'Updated description from E2E.');
+    await page.click('button:has-text("Save Changes")');
+    
+    await expect(page.locator('text=Updated description from E2E.')).toBeVisible();
+  });
+
+  test('User can create milestones and tasks inside a project', async ({ page }) => {
+    await page.click('a[href="/projects"]');
+    await page.click(`text=${projectName}`);
+    await expect(page).toHaveURL(/.*\/projects\/.+/);
+
+    // Create Milestone
+    await page.click('button:has-text("Add Milestone")');
+    await page.fill('input[name="title"]', 'E2E Milestone');
+    await page.click('button:has-text("Save Milestone")');
+    
+    // Should see milestone
+    await expect(page.locator('text=E2E Milestone')).toBeVisible();
+
+    // Create Task inside project
+    await page.click('button:has-text("Add Task")');
+    await page.fill('input[name="title"]', 'E2E Project Task');
+    await page.click('button:has-text("Create Task")');
+
+    // Should see task
+    await expect(page.locator('text=E2E Project Task')).toBeVisible();
+  });
+
+  test('User can delete a project', async ({ page }) => {
+    await page.click('a[href="/projects"]');
+    await page.click(`text=${projectName}`);
+    
+    // Click Delete button on project details
+    await page.click('button:has-text("Delete")');
+    
+    // Confirm delete dialog
+    // The confirm dialog has a "Delete" confirm text
+    await page.click('button:has-text("Delete"):not([class*="bg-red-50"])'); // The confirm button is usually red, but not the same class as the trigger
+
+    // It redirects to projects page
+    await expect(page).toHaveURL(/.*\/projects/);
+    
+    // The project should no longer be visible
+    await expect(page.locator(`text=${projectName}`).first()).toBeHidden();
   });
 });

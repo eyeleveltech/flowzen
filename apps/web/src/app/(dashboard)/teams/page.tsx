@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import toast from 'react-hot-toast';
 import { useAuthStore, useConfirmStore } from '@/stores';
 import { api } from '@/lib/api';
 import { getInitials, getAvatarColor } from '@/lib/utils';
@@ -93,9 +94,10 @@ export default function TeamsPage() {
     if (!confirmed) return;
     try {
       await api.delete(`/teams/${id}`);
+      toast.success('Department deleted successfully');
       fetchTeams();
     } catch (err: any) {
-      alert(err.message || 'Failed to delete department');
+      toast.error(err.message || 'Failed to delete department');
     }
   }
 
@@ -106,13 +108,16 @@ export default function TeamsPage() {
     try {
       if (isEditing) {
         await api.put(`/teams/${editingId}`, form);
+        toast.success('Department updated successfully');
       } else {
         await api.post('/teams', form);
+        toast.success('Department created successfully');
       }
       setShowCreate(false);
       fetchTeams();
     } catch (err: any) {
       setFormError(err.message || 'An error occurred');
+      toast.error(err.message || 'Failed to save department');
     } finally {
       setSubmitting(false);
     }
@@ -150,26 +155,27 @@ export default function TeamsPage() {
     <div className="p-8 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-[#111827]">Departments</h1>
+          <h1 className="text-2xl font-semibold text-[#111827]">Departments</h1>
           <p className="text-[#6B7280] mt-1 text-sm">Manage departments and groups within your organization.</p>
         </div>
         <button
           onClick={openCreate}
-          className="inline-flex items-center gap-2 rounded-xl bg-[#111827] px-4 py-2 text-sm font-medium text-white hover:bg-[#1F2937] transition-all shadow-sm hover:shadow-md"
+          className="inline-flex items-center gap-2 rounded-xl bg-[#111827] px-4 py-2 text-sm font-medium text-white hover:bg-[#1F2937] transition-all hover:shadow-sm"
         >
           <Plus className="h-4 w-4" />
           Create Department
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-sm overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
+      <div className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden">
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[800px]">
+            <thead>
             <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
-              <th className="px-6 py-4 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Department Name</th>
-              <th className="px-6 py-4 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Head / Leader</th>
-              <th className="px-6 py-4 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Members</th>
-              <th className="px-6 py-4 text-xs font-semibold text-[#6B7280] uppercase tracking-wider text-right">Actions</th>
+              <th className="px-6 py-4 text-xs font-medium text-[#6B7280] uppercase tracking-wide">Department Name</th>
+              <th className="px-6 py-4 text-xs font-medium text-[#6B7280] uppercase tracking-wide">Head / Leader</th>
+              <th className="px-6 py-4 text-xs font-medium text-[#6B7280] uppercase tracking-wide">Members</th>
+              <th className="px-6 py-4 text-xs font-medium text-[#6B7280] uppercase tracking-wide text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#E5E7EB]">
@@ -177,7 +183,7 @@ export default function TeamsPage() {
               <tr key={team.id} className="hover:bg-[#F9FAFB] transition-colors group">
                 <td className="px-6 py-5">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 text-blue-600 flex items-center justify-center shadow-inner border border-blue-100/50 shrink-0">
+                    <div className="h-10 w-10 rounded-xl bg-[#F3F4F6] text-[#111827] flex items-center justify-center border border-[#E5E7EB] shrink-0">
                       <Users className="h-5 w-5" />
                     </div>
                     <div>
@@ -189,7 +195,7 @@ export default function TeamsPage() {
                 <td className="px-6 py-5">
                   {team.leader ? (
                     <div className="flex items-center gap-2">
-                      <div className={`h-7 w-7 rounded-full text-white flex items-center justify-center text-[10px] font-bold ${getAvatarColor(team.leader.name)}`}>
+ <div className={`h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold ${getAvatarColor(team.leader.name)}`}>
                         {getInitials(team.leader.name)}
                       </div>
                       <span className="text-sm font-medium text-[#111827]">{team.leader.name}</span>
@@ -204,7 +210,7 @@ export default function TeamsPage() {
                       {team.members.slice(0, 5).map((m, i) => (
                         <div 
                           key={m.id} 
-                          className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-2 ring-white text-white text-[10px] font-bold shadow-sm ${getAvatarColor(m.name)}`} 
+ className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-2 ring-white text-[10px] font-bold ${getAvatarColor(m.name)}`} 
                           style={{ zIndex: 5 - i }}
                           title={m.name}
                         >
@@ -213,7 +219,7 @@ export default function TeamsPage() {
                       ))}
                       {team.members.length > 5 && (
                         <div 
-                          className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-2 ring-white bg-white text-[#374151] border border-[#E5E7EB] text-[10px] font-bold shadow-sm" 
+                          className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-2 ring-white bg-[#F3F4F6] text-[#111827] border border-[#E5E7EB] text-[10px] font-semibold" 
                           style={{ zIndex: 0 }}
                         >
                           +{team.members.length - 5}
@@ -225,10 +231,10 @@ export default function TeamsPage() {
                 </td>
                 <td className="px-6 py-5 text-right">
                   <div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => openEdit(team)} className="p-2 text-[#6B7280] hover:text-[#111827] bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] rounded-xl transition-all shadow-sm">
+                    <button onClick={() => openEdit(team)} className="p-2 text-[#6B7280] hover:text-[#111827] bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] rounded-xl transition-all hover:shadow-sm">
                       <Edit2 className="h-4 w-4" />
                     </button>
-                    <button onClick={() => handleDelete(team.id)} className="p-2 text-[#6B7280] hover:text-red-600 bg-white border border-[#E5E7EB] hover:bg-red-50 hover:border-red-100 rounded-xl transition-all shadow-sm">
+                    <button onClick={() => handleDelete(team.id)} className="p-2 text-[#6B7280] hover:text-red-600 bg-white border border-[#E5E7EB] hover:bg-red-50 hover:border-red-100 rounded-xl transition-all hover:shadow-sm">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
@@ -242,19 +248,99 @@ export default function TeamsPage() {
             )}
           </tbody>
         </table>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden flex flex-col divide-y divide-[#E5E7EB]">
+          {teams.map((team) => (
+            <div key={team.id} className="p-4 hover:bg-[#F9FAFB] transition-colors relative">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 text-blue-600 flex items-center justify-center border border-blue-100/50 shrink-0">
+                    <Users className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-[#111827]">{team.name}</h3>
+                    <p className="text-xs text-[#6B7280] line-clamp-1">{team.description || 'No description'}</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => openEdit(team)} className="p-1.5 text-[#6B7280] hover:text-[#111827] bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] rounded-xl transition-all hover:shadow-sm">
+                    <Edit2 className="h-4 w-4" />
+                  </button>
+                  <button onClick={() => handleDelete(team.id)} className="p-1.5 text-[#6B7280] hover:text-red-600 bg-white border border-[#E5E7EB] hover:bg-red-50 hover:border-red-100 rounded-xl transition-all hover:shadow-sm">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mt-4 bg-[#F9FAFB] p-3 rounded-xl border border-[#E5E7EB]">
+                <div>
+                  <span className="text-[10px] font-medium text-[#6B7280] uppercase tracking-wide block mb-1">Head</span>
+                  {team.leader ? (
+                    <div className="flex items-center gap-2">
+ <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${getAvatarColor(team.leader.name)}`}>
+                        {getInitials(team.leader.name)}
+                      </div>
+                      <span className="text-xs font-medium text-[#111827] truncate">{team.leader.name}</span>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-[#9CA3AF] italic">No Leader</span>
+                  )}
+                </div>
+                
+                <div>
+                  <span className="text-[10px] font-medium text-[#6B7280] uppercase tracking-wide block mb-1">Members ({team.members.length})</span>
+                  <div className="flex -space-x-1.5">
+                    {team.members.slice(0, 4).map((m, i) => (
+                      <div 
+                        key={m.id} 
+ className={`relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full ring-2 ring-[#F9FAFB] text-[8px] font-bold ${getAvatarColor(m.name)}`} 
+                        style={{ zIndex: 4 - i }}
+                        title={m.name}
+                      >
+                        {getInitials(m.name)}
+                      </div>
+                    ))}
+                    {team.members.length > 4 && (
+                      <div 
+                        className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full ring-2 ring-[#F9FAFB] bg-[#F3F4F6] text-[#111827] border border-[#E5E7EB] text-[8px] font-semibold" 
+                        style={{ zIndex: 0 }}
+                      >
+                        +{team.members.length - 4}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+          {teams.length === 0 && (
+            <div className="p-8 text-center text-sm text-[#6B7280]">No departments found.</div>
+          )}
+        </div>
       </div>
 
       <AnimatePresence>
         {showCreate && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
-              <div className="fixed inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowCreate(false)} />
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative z-10 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl my-auto">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-[#111827]">{isEditing ? 'Edit Department' : 'Create Department'}</h2>
-                <button onClick={() => setShowCreate(false)} className="p-2 text-[#6B7280] hover:bg-[#F3F4F6] rounded-xl transition-colors"><X className="h-5 w-5" /></button>
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setShowCreate(false)} />
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md bg-white border-l border-[#E5E7EB] shadow-2xl shadow-black/10 overflow-y-auto"
+            >
+              <div className="flex flex-col border-b border-[#F3F4F6]">
+                <div className="flex items-center justify-between px-6 py-4">
+                  <h2 className="text-lg font-semibold text-[#111827]">{isEditing ? 'Edit Department' : 'Create Department'}</h2>
+                  <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
+                    <X className="h-4 w-4 text-[#6B7280]" />
+                  </button>
+                </div>
               </div>
               
-              <form onSubmit={handleSubmit} className="relative space-y-4">
+              <form onSubmit={handleSubmit} className="relative space-y-4 p-6">
                 {formError && <div className="absolute top-0 left-0 right-0 -mt-2 z-10 rounded-xl bg-red-50 p-3 text-sm text-red-600 shadow-sm border border-red-100">{formError}</div>}
                 
                 <div>
@@ -268,27 +354,33 @@ export default function TeamsPage() {
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Department Head</label>
-                  <Select
-                    value={form.leaderId}
-                    onChange={(val) => setForm({ ...form, leaderId: val })}
-                    options={[{ label: 'Select a head (optional)', value: '' }, ...users.map(u => ({ label: u.name, value: u.id }))]}
+                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Department Members *</label>
+                  <MultiSelect
+                    options={users.map(u => ({ 
+                      label: u.name, 
+                      value: u.id, 
+                      image: getInitials(u.name),
+ colorClass: getAvatarColor(u.name)
+                    }))}
+                    value={form.memberIds}
+                    onChange={(val) => {
+                      const newLeaderId = val.includes(form.leaderId) ? form.leaderId : '';
+                      setForm({ ...form, memberIds: val, leaderId: newLeaderId });
+                    }}
+                    placeholder="Search and select members..."
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Department Members</label>
-                  <MultiSelect
-                    options={users.filter(u => u.id !== form.leaderId).map(u => ({ 
-                      label: u.name, 
-                      value: u.id, 
-                      image: getInitials(u.name),
-                      colorClass: getAvatarColor(u.name)
-                    }))}
-                    value={form.memberIds}
-                    onChange={(val) => setForm({ ...form, memberIds: val })}
-                    placeholder="Search and select members..."
+                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Department Head</label>
+                  <Select
+                    value={form.leaderId}
+                    onChange={(val) => setForm({ ...form, leaderId: val })}
+                    options={[{ label: 'Select a head (optional)', value: '' }, ...users.filter(u => form.memberIds.includes(u.id)).map(u => ({ label: u.name, value: u.id }))]}
                   />
+                  {form.memberIds.length === 0 && (
+                    <p className="text-xs text-[#6B7280] mt-1">Please add members first before assigning a head.</p>
+                  )}
                 </div>
                 
                 <div className="pt-4 flex gap-3">
@@ -296,8 +388,8 @@ export default function TeamsPage() {
                   <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submitting ? 'Saving...' : 'Save Department'}</button>
                 </div>
               </form>
-              </motion.div>
             </motion.div>
+          </>
         )}
       </AnimatePresence>
     </div>

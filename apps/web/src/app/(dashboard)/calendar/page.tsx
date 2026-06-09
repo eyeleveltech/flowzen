@@ -1,19 +1,25 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
-import { formatDate } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, User } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { useAuthStore } from '@/stores';
 
 interface CalendarTask {
-  id: string; title: string; dueDate: string; priority: string; status: string;
-  project: { id: string; name: string };
+  id: string;
+  title: string;
+  dueDate: string;
+  priority: string;
+  status: string;
+  type: string;
+  project: { id: string; name: string; color?: string };
+  assignee?: { id: string; name: string };
 }
 
 interface Member { id: string; name: string; }
+interface Project { id: string; name: string; }
+interface Client { id: string; name: string; }
 
 const priorityDots: Record<string, string> = {
   LOW: 'bg-gray-300', MEDIUM: 'bg-blue-400', HIGH: 'bg-orange-500', URGENT: 'bg-red-500',
@@ -23,125 +29,281 @@ export default function CalendarPage() {
   const { user } = useAuthStore();
   const isStaff = user?.role === 'TEAM_MEMBER';
   
+  const [view, setView] = useState<'month' | 'week'>('month');
   const [date, setDate] = useState(new Date());
+  
   const [tasks, setTasks] = useState<CalendarTask[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  
+  // Filters
   const [assigneeFilter, setAssigneeFilter] = useState(isStaff ? (user?.id || '') : '');
+  const [projectIdFilter, setProjectIdFilter] = useState('');
+  const [clientIdFilter, setClientIdFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [hideDone, setHideDone] = useState(true);
 
   const year = date.getFullYear();
   const month = date.getMonth();
-  const firstDay = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
   const today = new Date();
 
   useEffect(() => {
     fetchTasks();
-  }, [assigneeFilter]);
+  }, [assigneeFilter, projectIdFilter, clientIdFilter, typeFilter, hideDone, date, view]);
 
   useEffect(() => {
     if (!isStaff) {
       api.get<Member[]>('/team').then(setMembers).catch(() => {});
     }
+    api.get<{projects: Project[]}>('/projects').then(res => setProjects(res.projects || [])).catch(() => {});
+    api.get<{clients: Client[]}>('/clients').then(res => setClients(res.clients || [])).catch(() => {});
   }, [isStaff]);
 
   function fetchTasks() {
     const params = new URLSearchParams();
-    params.set('limit', '200');
+    params.set('limit', '500');
     if (assigneeFilter) params.set('assigneeId', assigneeFilter);
-    else if (isStaff && user?.id) params.set('assigneeId', user.id); // Fallback safeguard
+    else if (isStaff && user?.id) params.set('assigneeId', user.id);
+    
+    if (projectIdFilter) params.set('projectId', projectIdFilter);
+    if (clientIdFilter) params.set('clientId', clientIdFilter);
+    if (typeFilter) params.set('type', typeFilter);
 
     api.get<{ tasks: CalendarTask[] }>(`/tasks?${params}`)
-      .then((d) => setTasks(d.tasks.filter((t) => t.dueDate)))
+      .then((d) => {
+        let filtered = d.tasks.filter((t) => t.dueDate);
+        if (hideDone) {
+          filtered = filtered.filter((t) => t.status !== 'COMPLETED');
+        }
+        setTasks(filtered);
+      })
       .catch(() => {});
   }
 
-  function prevMonth() { setDate(new Date(year, month - 1, 1)); }
-  function nextMonth() { setDate(new Date(year, month + 1, 1)); }
+  function prevPeriod() {
+    if (view === 'month') setDate(new Date(year, month - 1, 1));
+    else setDate(new Date(year, month, date.getDate() - 7));
+  }
+  function nextPeriod() {
+    if (view === 'month') setDate(new Date(year, month + 1, 1));
+    else setDate(new Date(year, month, date.getDate() + 7));
+  }
 
+  // Month Math
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
   const days = Array.from({ length: 42 }, (_, i) => {
     const dayNum = i - firstDay + 1;
     if (dayNum < 1 || dayNum > daysInMonth) return null;
     return dayNum;
   });
 
-  function getTasksForDay(day: number) {
+  // Week Math
+  const startOfWeek = new Date(date);
+  startOfWeek.setDate(date.getDate() - date.getDay());
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(startOfWeek);
+    d.setDate(startOfWeek.getDate() + i);
+    return d;
+  });
+
+  function getTasksForDate(d: Date) {
     return tasks.filter((t) => {
-      const d = new Date(t.dueDate!);
-      return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day;
+      const tDate = new Date(t.dueDate);
+      return tDate.getFullYear() === d.getFullYear() && tDate.getMonth() === d.getMonth() && tDate.getDate() === d.getDate();
     });
   }
 
-  const monthName = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  function renderTaskPill(t: CalendarTask, compact: boolean = false) {
+    const pColor = t.project.color || '#3B82F6';
+    
+    if (compact) {
+      return (
+        <div key={t.id} className="flex items-center gap-1.5 rounded-md px-1.5 py-0.5 border" style={{ backgroundColor: `${pColor}15`, borderColor: `${pColor}30` }}>
+          <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${priorityDots[t.priority] || 'bg-gray-300'}`} />
+          <span className="text-[10px] truncate font-medium" style={{ color: pColor }}>{t.title}</span>
+        </div>
+      );
+    }
+    
+    return (
+      <div 
+        key={t.id} 
+        className="flex flex-col gap-1 rounded-md px-2 py-1.5 border text-[10px] leading-tight"
+        style={{ backgroundColor: `${pColor}15`, borderColor: `${pColor}30` }}
+      >
+        <div className="flex items-center justify-between gap-1">
+          <span className="font-semibold truncate" style={{ color: pColor }}>{t.title}</span>
+          <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${priorityDots[t.priority] || 'bg-gray-300'}`} />
+        </div>
+        <div className="flex items-center justify-between text-[#6B7280]">
+           <span className="truncate max-w-[80%]">{t.project.name}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-[#111827] tracking-tight">Calendar</h1>
-          <p className="text-sm text-[#6B7280] mt-1">Tasks and deadlines overview</p>
+      <div className="flex flex-col gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-[#111827] tracking-tight">Calendar</h1>
+            <p className="text-sm text-[#6B7280] mt-1">Tasks and deadlines overview</p>
+          </div>
+          <div className="flex items-center gap-2 p-1 bg-[#F3F4F6] rounded-xl border border-[#E5E7EB]">
+            <button 
+              onClick={() => setView('month')} 
+              className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${view === 'month' ? 'bg-white text-[#111827] shadow-sm' : 'text-[#6B7280] hover:text-[#111827]'}`}
+            >Month</button>
+            <button 
+              onClick={() => setView('week')} 
+              className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${view === 'week' ? 'bg-white text-[#111827] shadow-sm' : 'text-[#6B7280] hover:text-[#111827]'}`}
+            >Week</button>
+          </div>
         </div>
-        {!isStaff && (
-          <div className="w-64">
+        
+        {/* Filters Header */}
+        <div className="flex flex-wrap items-center gap-3 p-4 bg-white border border-[#E5E7EB] rounded-2xl">
+          <button
+            onClick={() => setAssigneeFilter(assigneeFilter === user?.id ? '' : (user?.id || ''))}
+            className={`px-4 py-2 text-xs font-medium rounded-xl transition-all ${assigneeFilter === user?.id ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-[#FAFAFA] border border-[#E5E7EB] text-[#374151] hover:bg-[#F3F4F6]'}`}
+          >
+            My Tasks
+          </button>
+          
+          <div className="w-40">
             <Select
-              value={assigneeFilter}
-              onChange={(val) => setAssigneeFilter(val)}
+              value={projectIdFilter}
+              onChange={(val) => setProjectIdFilter(val)}
+              options={[{ label: 'All Projects', value: '' }, ...projects.map(p => ({ label: p.name, value: p.id }))]}
+            />
+          </div>
+          <div className="w-40">
+            <Select
+              value={clientIdFilter}
+              onChange={(val) => setClientIdFilter(val)}
+              options={[{ label: 'All Clients', value: '' }, ...clients.map(c => ({ label: c.name, value: c.id }))]}
+            />
+          </div>
+          <div className="w-40">
+            <Select
+              value={typeFilter}
+              onChange={(val) => setTypeFilter(val)}
               options={[
-                { label: 'All Team Members', value: '' },
-                ...members.map((m) => ({ label: m.name, value: m.id }))
+                { label: 'All Types', value: '' },
+                { label: 'Design', value: 'DESIGN' },
+                { label: 'Content', value: 'CONTENT' },
+                { label: 'Video', value: 'VIDEO' },
+                { label: 'Digital Marketing', value: 'DIGITAL_MARKETING' },
+                { label: 'Development', value: 'DEVELOPMENT' },
+                { label: 'Strategy', value: 'STRATEGY' },
+                { label: 'Other', value: 'OTHER' },
               ]}
             />
           </div>
-        )}
+          {!isStaff && (
+            <div className="w-40">
+              <Select
+                value={assigneeFilter === user?.id ? '' : assigneeFilter}
+                onChange={(val) => setAssigneeFilter(val)}
+                options={[{ label: 'All Assignees', value: '' }, ...members.map(m => ({ label: m.name, value: m.id }))]}
+              />
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setHideDone(!hideDone)}
+            className="flex items-center gap-2 text-xs font-medium text-[#374151] ml-auto cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-[#111827]/10 rounded-md"
+          >
+            <div className={`flex items-center justify-center w-4 h-4 rounded-[4px] border transition-colors ${hideDone ? 'bg-[#111827] border-[#111827]' : 'border-[#D1D5DB] bg-white'}`}>
+              {hideDone && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
+            </div>
+            Hide Done Tasks
+          </button>
+        </div>
       </div>
 
       <div className="rounded-2xl border border-[#E5E7EB] bg-white overflow-hidden">
-        {/* Month Navigation */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
-          <button onClick={prevMonth} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
-            <ChevronLeft className="h-4 w-4 text-[#6B7280]" />
-          </button>
-          <h2 className="text-sm font-semibold text-[#111827]">{monthName}</h2>
-          <button onClick={nextMonth} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
-            <ChevronRight className="h-4 w-4 text-[#6B7280]" />
-          </button>
-        </div>
-
-        {/* Day Headers */}
-        <div className="grid grid-cols-7 border-b border-[#F3F4F6]">
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-            <div key={d} className="px-2 py-2.5 text-center text-xs font-medium text-[#9CA3AF] uppercase tracking-wider">
-              {d}
+        <div className="overflow-x-auto md:overflow-x-visible">
+          <div className="min-w-full md:min-w-[700px]">
+            {/* Navigation */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
+              <button onClick={prevPeriod} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
+                <ChevronLeft className="h-4 w-4 text-[#6B7280]" />
+              </button>
+              <h2 className="text-sm font-semibold text-[#111827]">
+                {view === 'month' 
+                  ? date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+                  : `Week of ${startOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                }
+              </h2>
+              <button onClick={nextPeriod} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
+                <ChevronRight className="h-4 w-4 text-[#6B7280]" />
+              </button>
             </div>
-          ))}
-        </div>
 
-        {/* Days Grid */}
-        <div className="grid grid-cols-7">
-          {days.map((day, i) => {
-            if (day === null) return <div key={i} className="min-h-[100px] border-b border-r border-[#F3F4F6] bg-[#FAFAFA]" />;
-
-            const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
-            const dayTasks = getTasksForDay(day);
-
-            return (
-              <div key={i} className="min-h-[100px] border-b border-r border-[#F3F4F6] p-2">
-                <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${isToday ? 'bg-[#111827] text-white' : 'text-[#374151]'}`}>
-                  {day}
-                </span>
-                <div className="mt-1 space-y-0.5">
-                  {dayTasks.slice(0, 3).map((t) => (
-                    <div key={t.id} className="flex items-center gap-1 rounded-md bg-[#F3F4F6] px-1.5 py-0.5">
-                      <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${priorityDots[t.priority]}`} />
-                      <span className="text-[10px] text-[#374151] truncate">{t.title}</span>
-                    </div>
-                  ))}
-                  {dayTasks.length > 3 && (
-                    <span className="text-[10px] text-[#9CA3AF] px-1.5">+{dayTasks.length - 3} more</span>
-                  )}
+            {/* Desktop Grid Headers */}
+            <div className="hidden md:grid grid-cols-7 border-b border-[#F3F4F6]">
+              {(view === 'month' ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] : weekDays).map((d, i) => (
+                <div key={i} className="px-2 py-2.5 text-center text-xs font-medium text-[#9CA3AF] uppercase tracking-wide">
+                  {view === 'month' ? d as string : (d as Date).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })}
                 </div>
+              ))}
+            </div>
+
+            {/* Desktop Grid Body */}
+            {view === 'month' && (
+              <div className="hidden md:grid grid-cols-7">
+                {days.map((day, i) => {
+                  if (day === null) return <div key={i} className="min-h-[110px] border-b border-r border-[#F3F4F6] bg-[#FAFAFA]" />;
+
+                  const dObj = new Date(year, month, day);
+                  const isToday = today.toDateString() === dObj.toDateString();
+                  const dayTasks = getTasksForDate(dObj);
+
+                  return (
+                    <div key={i} className="min-h-[110px] border-b border-r border-[#F3F4F6] p-2 hover:bg-[#F9FAFB] transition-colors">
+                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium mb-1.5 ${isToday ? 'bg-[#111827] text-white' : 'text-[#374151]'}`}>
+                        {day}
+                      </span>
+                      <div className="space-y-1">
+                        {dayTasks.slice(0, 3).map((t) => renderTaskPill(t, true))}
+                        {dayTasks.length > 3 && (
+                          <span className="text-[10px] text-[#9CA3AF] px-1 font-medium block mt-1">+{dayTasks.length - 3} more</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            )}
+
+            {view === 'week' && (
+              <div className="hidden md:grid grid-cols-7">
+                {weekDays.map((dObj, i) => {
+                  const isToday = today.toDateString() === dObj.toDateString();
+                  const dayTasks = getTasksForDate(dObj);
+
+                  return (
+                    <div key={i} className="min-h-[400px] border-b border-r border-[#F3F4F6] p-2 hover:bg-[#F9FAFB] transition-colors flex flex-col gap-2">
+                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium self-center mb-2 ${isToday ? 'bg-[#111827] text-white' : 'text-[#374151]'}`}>
+                        {dObj.getDate()}
+                      </span>
+                      {dayTasks.map((t) => renderTaskPill(t, false))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Mobile View (Agenda) */}
+            <div className="md:hidden flex flex-col p-4 gap-4 bg-[#FAFAFA] min-h-[400px]">
+              <div className="text-center text-sm text-[#9CA3AF] py-8">Please use a larger screen to view the calendar.</div>
+            </div>
+
+          </div>
         </div>
       </div>
     </div>

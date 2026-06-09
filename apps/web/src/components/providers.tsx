@@ -3,9 +3,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useAuthStore } from '@/stores';
-import { connectSocket, disconnectSocket } from '@/lib/socket';
+import { connectSSE, disconnectSSE } from '@/lib/sse';
+import { Toaster } from 'react-hot-toast';
 
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { GlobalEvents } from '@/components/global-events';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,7 +24,9 @@ export function Providers({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <SocketProvider>
         {children}
+        <GlobalEvents />
         <ConfirmDialog />
+        <Toaster position="top-right" />
       </SocketProvider>
     </QueryClientProvider>
   );
@@ -33,14 +37,19 @@ function SocketProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     loadFromStorage();
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {
+        // fail silently in dev
+      });
+    }
   }, [loadFromStorage]);
 
   useEffect(() => {
     if (isAuthenticated) {
-      connectSocket();
+      connectSSE();
     }
     return () => {
-      disconnectSocket();
+      disconnectSSE();
     };
   }, [isAuthenticated]);
 

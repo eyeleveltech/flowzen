@@ -42,7 +42,9 @@ export function formatCurrency(value: number | null | undefined): string {
 
 export function getInitials(name: string): string {
   if (!name) return '??';
-  return name
+  const cleanName = name.replace(/[^a-zA-Z0-9 ]/g, '').trim();
+  if (!cleanName) return '??';
+  return cleanName
     .split(' ')
     .filter(Boolean)
     .map((n) => n[0])
@@ -51,28 +53,26 @@ export function getInitials(name: string): string {
     .slice(0, 2);
 }
 
-const AVATAR_COLORS = [
-  'bg-blue-600',
-  'bg-emerald-600',
-  'bg-violet-600',
-  'bg-rose-600',
-  'bg-amber-600',
-  'bg-cyan-600',
-  'bg-fuchsia-600',
-  'bg-pink-600',
-  'bg-indigo-600',
-  'bg-teal-600',
-];
-
 export function getAvatarColor(name: string): string {
-  if (!name) return AVATAR_COLORS[0];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+  return 'bg-[#F3F4F6] text-[#111827] border border-[#E5E7EB]';
 }
 
 export function capitalize(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase().replace(/_/g, ' ');
+}
+
+export function triggerHaptic(type: 'light' | 'medium' | 'heavy' = 'medium') {
+  if (typeof window === 'undefined' || !navigator.vibrate) return;
+  
+  switch (type) {
+    case 'light':
+      navigator.vibrate(20);
+      break;
+    case 'medium':
+      navigator.vibrate(40);
+      break;
+    case 'heavy':
+      navigator.vibrate([40, 50, 40]);
+      break;
+  }
 }

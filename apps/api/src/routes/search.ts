@@ -53,7 +53,7 @@ searchRouter.get('/', async (req: AuthRequest, res: Response, next) => {
       prisma.user.findMany({
         where: {
           organizationId: orgId,
-          isActive: true,
+          status: 'ACTIVE',
           OR: [
             { name: { contains: query, mode: 'insensitive' } },
             { email: { contains: query, mode: 'insensitive' } },

@@ -3,8 +3,9 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
-import { emitToOrganization } from '../socket.js';
+import { emitToOrganization } from '../sse.js';
 import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
+import { NotificationService } from '../services/notifications.js';
 
 export const projectRouter = Router();
 projectRouter.use(authenticate);
@@ -12,6 +13,13 @@ projectRouter.use(authenticate);
 const projectSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
+  type: z.enum(['RETAINER', 'ONE_TIME', 'EVENT', 'INTERNAL']).optional(),
+  scope: z.string().optional(),
+  reportingCadence: z.enum(['WEEKLY', 'FORTNIGHTLY', 'MONTHLY', 'NONE']).optional(),
+  clientApprovalRequired: z.boolean().optional(),
+  tags: z.array(z.string()).optional(),
+  projectNotes: z.string().optional(),
+  folderLink: z.string().url().optional().or(z.literal('')),
   clientId: z.string().optional(),
   ownerId: z.string(),
   startDate: z.string().optional(),
@@ -20,7 +28,6 @@ const projectSchema = z.object({
   status: z.enum(['PLANNING', 'IN_PROGRESS', 'REVIEW', 'COMPLETED', 'ON_HOLD', 'CANCELLED']).optional(),
   budget: z.number().optional(),
   memberIds: z.array(z.string()).optional(),
-  teamIds: z.array(z.string()).optional(),
 });
 
 // GET /api/projects
@@ -118,6 +125,10 @@ projectRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
           orderBy: { createdAt: 'desc' },
           take: 20,
         },
+        comments: {
+          include: { author: { select: { id: true, name: true, avatar: true } } },
+          orderBy: { createdAt: 'desc' },
+        },
       },
     });
 
@@ -135,7 +146,12 @@ projectRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
 // POST /api/projects
 projectRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), validate(projectSchema), async (req: AuthRequest, res: Response, next) => {
   try {
-    const { memberIds, teamIds, ...projectData } = req.body;
+    const { memberIds, teamIds, folderLink, ...projectData } = req.body;
+
+    if ((projectData.type === 'ONE_TIME' || projectData.type === 'EVENT') && !projectData.endDate) {
+      res.status(400).json({ error: 'End date is required for One-Time and Event projects' });
+      return;
+    }
 
     let finalClientId = projectData.clientId;
     if (!finalClientId) {
@@ -157,6 +173,7 @@ projectRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), va
     const project = await prisma.project.create({
       data: {
         ...projectData,
+        folderLink: folderLink || null,
         clientId: finalClientId,
         startDate: projectData.startDate ? new Date(projectData.startDate) : undefined,
         endDate: projectData.endDate ? new Date(projectData.endDate) : undefined,
@@ -165,11 +182,6 @@ projectRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), va
             ? Array.from(new Set([...req.body.memberIds, req.body.ownerId])).map((id: string) => ({ userId: id as string }))
             : [{ userId: req.body.ownerId }],
         },
-        ...(req.body.teamIds && {
-          teams: {
-            create: req.body.teamIds.map((id: string) => ({ teamId: id as string })),
-          }
-        }),
       },
       include: {
         client: { select: { id: true, name: true } },
@@ -211,7 +223,12 @@ projectRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), 
       return;
     }
 
-    const { memberIds, teamIds, ...projectData } = req.body;
+    const { memberIds, teamIds, folderLink, ...projectData } = req.body;
+
+    if ((projectData.type === 'ONE_TIME' || projectData.type === 'EVENT') && !projectData.endDate) {
+      res.status(400).json({ error: 'End date is required for One-Time and Event projects' });
+      return;
+    }
 
     let finalClientId = projectData.clientId;
     if (!finalClientId) {
@@ -234,6 +251,7 @@ projectRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), 
       where: { id: (req.params.id as string) },
       data: {
         ...projectData,
+        folderLink: folderLink || null,
         clientId: finalClientId,
         startDate: projectData.startDate ? new Date(projectData.startDate) : undefined,
         endDate: projectData.endDate ? new Date(projectData.endDate) : undefined,
@@ -241,12 +259,6 @@ projectRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), 
           members: {
             deleteMany: {},
             create: Array.from(new Set([...req.body.memberIds, req.body.ownerId || existing.ownerId])).map((id: string) => ({ userId: id as string })),
-          },
-        } : {}),
-        ...(req.body.teamIds ? {
-          teams: {
-            deleteMany: {},
-            create: req.body.teamIds.map((id: string) => ({ teamId: id as string })),
           },
         } : {}),
       },
@@ -424,6 +436,55 @@ projectRouter.delete('/:id/milestones/:milestoneId', authorize('SUPER_ADMIN', 'A
     });
 
     res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/projects/:id/comments
+projectRouter.post('/:id/comments', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const existing = await prisma.project.findFirst({
+      where: { id: (req.params.id as string), client: { organizationId: req.user!.organizationId } },
+    });
+
+    if (!existing) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+
+    if (req.user!.role === 'TEAM_MEMBER') {
+      const isMember = await prisma.projectMember.findFirst({
+        where: { projectId: existing.id, userId: req.user!.userId }
+      });
+      let isTeamMember = false;
+      if (!isMember) {
+        const projectTeams = await prisma.projectTeam.findMany({
+          where: { projectId: existing.id },
+          include: { team: { include: { members: true } } }
+        });
+        isTeamMember = projectTeams.some((pt: any) => pt.team.members.some((m: any) => m.id === req.user!.userId));
+      }
+      if (!isMember && !isTeamMember) {
+        res.status(403).json({ error: 'You are not a member of this project' });
+        return;
+      }
+    }
+
+    const comment = await prisma.comment.create({
+      data: {
+        content: req.body.content,
+        mentions: req.body.mentions || [],
+        projectId: (req.params.id as string),
+        authorId: req.user!.userId,
+      },
+      include: { author: { select: { id: true, name: true, avatar: true } } },
+    });
+
+    const io = req.app.get('io');
+    emitToOrganization(io, req.user!.organizationId, 'project_comment:created', { ...comment, projectId: (req.params.id as string) });
+
+    res.status(201).json(comment);
   } catch (error) {
     next(error);
   }

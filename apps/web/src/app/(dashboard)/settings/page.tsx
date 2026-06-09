@@ -1,59 +1,36 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores';
 import { useRouter } from 'next/navigation';
-import { getInitials, getAvatarColor } from '@/lib/utils';
-import { Building2, Users, Shield, FileText, Plus, X, Edit2, Crown } from 'lucide-react';
-import { Select } from '@/components/ui/select';
-import { MultiSelect } from '@/components/ui/multi-select';
+import { Building2, Users, FileText, Shield, Zap } from 'lucide-react';
+import { OrganizationTab } from '@/components/settings/OrganizationTab';
+import { UsersTab } from '@/components/settings/UsersTab';
+import { WorkflowsTab } from '@/components/settings/WorkflowsTab';
+import { TemplatesTab } from '@/components/settings/TemplatesTab';
+import { PermissionsTab } from '@/components/settings/PermissionsTab';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useConfirmStore } from '@/stores';
 
-type Tab = 'organization' | 'users' | 'templates' | 'permissions';
-
-interface OrgUser {
-  id: string; name: string; email: string; role: string; team?: { name: string } | null; isActive: boolean;
-}
-
-interface Template {
-  id: string; name: string; description?: string | null; structure: any;
-}
-
-interface Team {
-  id: string; name: string;
-}
-
-const roleLabels: Record<string, string> = {
-  SUPER_ADMIN: 'Super Admin', ADMIN: 'Admin', PROJECT_MANAGER: 'Project Manager', TEAM_MEMBER: 'Team Member',
-};
-
-const permissions: Record<string, Record<string, boolean>> = {
-  SUPER_ADMIN: { 'Full Access': true, 'Manage Clients': true, 'Manage Projects': true, 'Manage Team': true, 'View Reports': true, 'Settings': true },
-  ADMIN: { 'Full Access': false, 'Manage Clients': true, 'Manage Projects': true, 'Manage Team': true, 'View Reports': true, 'Settings': true },
-  PROJECT_MANAGER: { 'Full Access': false, 'Manage Clients': false, 'Manage Projects': true, 'Manage Team': false, 'View Reports': true, 'Settings': false },
-  TEAM_MEMBER: { 'Full Access': false, 'Manage Clients': false, 'Manage Projects': false, 'Manage Team': false, 'View Reports': false, 'Settings': false },
-};
+type Tab = 'organization' | 'users' | 'templates' | 'permissions' | 'workflows';
 
 export default function SettingsPage() {
-  const { user, logout } = useAuthStore();
-  const confirm = useConfirmStore((s) => s.confirm);
+  const { user } = useAuthStore();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('organization');
-  const [orgName, setOrgName] = useState('');
-  const [orgWebsite, setOrgWebsite] = useState('');
-  const [users, setUsers] = useState<OrgUser[]>([]);
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [showInvite, setShowInvite] = useState(false);
-  const [showTemplateModal, setShowTemplateModal] = useState(false);
-  const [editingUser, setEditingUser] = useState<OrgUser | null>(null);
-  const [inviteForm, setInviteForm] = useState({ name: '', email: '', role: 'TEAM_MEMBER', teamId: '', password: '', isActive: true });
-  const [templateForm, setTemplateForm] = useState({ name: '', description: '', tasks: [{ title: '' }] });
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Data
+  const [orgData, setOrgData] = useState<any>({});
+  const [users, setUsers] = useState<any[]>([]);
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [workflows, setWorkflows] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
+
+  const fetchUsers = () => api.get<any[]>('/settings/users').then(setUsers).catch(() => {});
+  const fetchWorkflows = () => api.get<any[]>('/settings/workflows').then(setWorkflows).catch(() => {});
+  const fetchTemplates = () => api.get<any[]>('/settings/templates').then(setTemplates).catch(() => {});
 
   useEffect(() => {
     if (user && (user.role === 'TEAM_MEMBER' || user.role === 'PROJECT_MANAGER')) {
@@ -61,415 +38,71 @@ export default function SettingsPage() {
       return;
     }
     Promise.all([
-      api.get<{ name: string; website?: string }>('/settings/organization').then((d) => { setOrgName(d.name); setOrgWebsite(d.website || ''); }).catch(() => {}),
-      api.get<OrgUser[]>('/settings/users').then(setUsers).catch(() => {}),
-      api.get<Template[]>('/settings/templates').then(setTemplates).catch(() => {}),
-      api.get<{ teams: Team[] }>('/teams').then((res) => setTeams(res.teams || [])).catch(() => {})
+      api.get<any>('/settings/organization').then(setOrgData).catch(() => {}),
+      fetchUsers(),
+      fetchWorkflows(),
+      fetchTemplates(),
+      api.get<{ teams: any[] }>('/teams').then((res) => setTeams(res.teams || [])).catch(() => {})
     ]).finally(() => setLoading(false));
   }, [user, router]);
 
-  async function saveOrg() {
-    setSaving(true);
-    try { await api.put('/settings/organization', { name: orgName, website: orgWebsite }); } catch {}
-    finally { setSaving(false); }
-  }
-
-  async function inviteUser(e: React.FormEvent) {
-    e.preventDefault();
-    try {
-      await api.post('/settings/users', { ...inviteForm, password: inviteForm.password || 'Welcome@123' });
-      setShowInvite(false);
-      setEditingUser(null);
-      setInviteForm({ name: '', email: '', role: 'TEAM_MEMBER', teamId: '', password: '', isActive: true });
-      const data = await api.get<OrgUser[]>('/settings/users');
-      setUsers(data);
-    } catch {}
-  }
-
-  async function submitEditUser(e: React.FormEvent) {
-    e.preventDefault();
-    if (!editingUser) return;
-    try {
-      await api.put(`/settings/users/${editingUser.id}`, { ...inviteForm });
-      setEditingUser(null);
-      setInviteForm({ name: '', email: '', role: 'TEAM_MEMBER', teamId: '', password: '', isActive: true });
-      const data = await api.get<OrgUser[]>('/settings/users');
-      setUsers(data);
-    } catch {}
-  }
-
-  function openEditUser(u: OrgUser) {
-    setEditingUser(u);
-    setInviteForm({
-      name: u.name,
-      email: u.email,
-      role: u.role,
-      teamId: u.team ? teams.find(t => t.name === u.team?.name)?.id || '' : '',
-      password: '',
-      isActive: u.isActive
-    });
-  }
-
-  async function handleTransferSuperAdmin(targetUserId: string) {
-    const confirmed = await confirm({
-      title: 'Transfer Super Admin',
-      message: 'Are you completely sure? This will promote the selected user to Super Admin and downgrade you to a standard Admin immediately. You will lose top-level access.',
-      confirmText: 'Yes, Transfer Ownership',
-      cancelText: 'Cancel',
-      variant: 'danger',
-    });
-    if (!confirmed) return;
-
-    try {
-      await api.post(`/settings/users/${targetUserId}/transfer-super-admin`);
-      logout();
-    } catch (err: any) {
-      alert(err.message || 'Failed to transfer role');
-    }
-  }
-
-  async function submitTemplate(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      const validTasks = templateForm.tasks.filter(t => t.title.trim() !== '');
-      await api.post('/settings/templates', {
-        name: templateForm.name,
-        description: templateForm.description,
-        structure: { tasks: validTasks }
-      });
-      setShowTemplateModal(false);
-      setTemplateForm({ name: '', description: '', tasks: [{ title: '' }] });
-      const data = await api.get<Template[]>('/settings/templates');
-      setTemplates(data);
-    } catch {} finally {
-      setSaving(false);
-    }
+  if (loading) {
+    return (
+      <div className="max-w-6xl mx-auto space-y-6">
+        <div className="flex gap-4">
+          <Skeleton className="h-10 w-32 rounded-xl" />
+          <Skeleton className="h-10 w-32 rounded-xl" />
+        </div>
+        <Skeleton className="h-[400px] w-full rounded-2xl" />
+      </div>
+    );
   }
 
   const tabs = [
-    { id: 'organization' as Tab, label: 'Organization', icon: Building2 },
-    { id: 'users' as Tab, label: 'Users', icon: Users },
-    { id: 'templates' as Tab, label: 'Templates', icon: FileText },
-    { id: 'permissions' as Tab, label: 'Permissions', icon: Shield },
+    { id: 'organization', label: 'Organization', icon: Building2 },
+    { id: 'users', label: 'Users', icon: Users },
+    { id: 'workflows', label: 'Workflows', icon: Zap },
+    { id: 'templates', label: 'Templates', icon: FileText },
+    { id: 'permissions', label: 'Permissions', icon: Shield },
   ];
 
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-[#111827] tracking-tight">Settings</h1>
-        <p className="text-sm text-[#6B7280] mt-1">Manage your workspace</p>
+    <div className="max-w-6xl mx-auto space-y-8">
+      <div>
+        <h1 className="text-2xl font-semibold text-[#111827] tracking-tight">Settings</h1>
+        <p className="text-sm text-[#6B7280] mt-1">Manage your organization, team, and preferences.</p>
       </div>
 
-      <div className="flex gap-8">
-        {/* Sidebar */}
-        <div className="w-48 shrink-0 space-y-1">
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${tab === t.id ? 'bg-[#111827] text-white' : 'text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#111827]'}`}
-            >
-              <t.icon className="h-4 w-4" /> {t.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Content */}
-        <div className="flex-1">
-          {loading ? (
-            <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6 max-w-4xl space-y-6">
-              <Skeleton className="h-6 w-48 mb-4" />
-              <div className="space-y-4">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="space-y-2">
-                    <Skeleton className="h-4 w-24" />
-                    <Skeleton className="h-10 w-full rounded-xl" />
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <>
-              {tab === 'organization' && (
-            <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6 max-w-lg">
-              <h2 className="text-sm font-semibold text-[#111827] mb-4">Organization Settings</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Name</label>
-                  <input value={orgName} onChange={(e) => setOrgName(e.target.value)} className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Website</label>
-                  <input value={orgWebsite} onChange={(e) => setOrgWebsite(e.target.value)} className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
-                </div>
-                <button onClick={saveOrg} disabled={saving} className="rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">
-                  {saving ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {tab === 'users' && (
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-[#111827]">Team Members</h2>
-                <button onClick={() => setShowInvite(true)} className="flex items-center gap-2 rounded-xl bg-[#111827] px-3 py-2 text-xs font-medium text-white hover:bg-[#1F2937] transition-all">
-                  <Plus className="h-3.5 w-3.5" /> Invite
-                </button>
-              </div>
-              <div className="rounded-2xl border border-[#E5E7EB] bg-white overflow-hidden">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-[#F3F4F6]">
-                      <th className="px-6 py-3 text-left text-xs font-medium text-[#6B7280] uppercase">Name</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-[#6B7280] uppercase">Role</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-[#6B7280] uppercase">Team</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-[#6B7280] uppercase">Status</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-[#6B7280] uppercase">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#F3F4F6]">
-                    {users.map((u) => (
-                      <tr key={u.id} className="hover:bg-[#FAFAFA] transition-colors">
-                        <td className="px-6 py-3.5">
-                          <div className="flex items-center gap-2.5">
-                            <div className={`h-7 w-7 rounded-full text-white text-[10px] font-semibold flex items-center justify-center ${getAvatarColor(u.name)}`}>{getInitials(u.name)}</div>
-                            <div>
-                              <p className="text-sm font-medium text-[#111827]">{u.name}</p>
-                              <p className="text-xs text-[#9CA3AF]">{u.email}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-3.5 text-sm text-[#6B7280]">{roleLabels[u.role]}</td>
-                        <td className="px-6 py-3.5 text-sm text-[#6B7280]">{u.team?.name || '—'}</td>
-                        <td className="px-6 py-3.5">
-                          <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${u.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
-                            {u.isActive ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-3.5 text-right">
-                          <div className="flex gap-2 justify-end">
-                            {user?.role === 'SUPER_ADMIN' && user.id !== u.id && (
-                              <button 
-                                onClick={() => handleTransferSuperAdmin(u.id)} 
-                                className="p-1.5 text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-xl transition-colors" 
-                                title="Transfer Super Admin"
-                              >
-                                <Crown className="h-4 w-4" />
-                              </button>
-                            )}
-                            {(u.role !== 'SUPER_ADMIN' || user?.role === 'SUPER_ADMIN') && (
-                              <button onClick={() => openEditUser(u)} className="p-1.5 text-[#6B7280] hover:text-[#111827] bg-[#F9FAFB] hover:bg-[#F3F4F6] rounded-xl transition-colors" title="Edit User">
-                                <Edit2 className="h-4 w-4" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Invite Modal */}
-              {showInvite && (
-                <>
-                  <div className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setShowInvite(false)} />
-                  <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md rounded-2xl border border-[#E5E7EB] bg-white p-6 shadow-2xl">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-sm font-semibold text-[#111827]">Invite Team Member</h3>
-                      <button onClick={() => setShowInvite(false)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-[#6B7280]" /></button>
-                    </div>
-                    <form onSubmit={inviteUser} className="space-y-3">
-                      <input value={inviteForm.name} onChange={(e) => setInviteForm({ ...inviteForm, name: e.target.value })} placeholder="Full name" required className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
-                      <input type="email" value={inviteForm.email} onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })} placeholder="Email" required className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
-                      <input type="text" value={inviteForm.password} onChange={(e) => setInviteForm({ ...inviteForm, password: e.target.value })} placeholder="Password (default: Welcome@123)" className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
-                      <Select
-                        value={inviteForm.role}
-                        onChange={(val) => setInviteForm({ ...inviteForm, role: val })}
-                        options={[
-                          { label: 'Team Member', value: 'TEAM_MEMBER' },
-                          { label: 'Project Manager', value: 'PROJECT_MANAGER' },
-                          { label: 'Admin', value: 'ADMIN' }
-                        ]}
-                      />
-                      <Select
-                        value={inviteForm.teamId}
-                        onChange={(val) => setInviteForm({ ...inviteForm, teamId: val })}
-                        options={[{ label: 'Assign to team (optional)', value: '' }, ...teams.map((t) => ({ label: t.name, value: t.id }))]}
-                      />
-                      <button type="submit" className="w-full rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all">Send Invite</button>
-                    </form>
-                  </div>
-                </>
-              )}
-
-              {/* Edit Modal */}
-              {editingUser && (
-                <>
-                  <div className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setEditingUser(null)} />
-                  <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md rounded-2xl border border-[#E5E7EB] bg-white p-6 shadow-2xl">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-sm font-semibold text-[#111827]">Edit User</h3>
-                      <button onClick={() => setEditingUser(null)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-[#6B7280]" /></button>
-                    </div>
-                    <form onSubmit={submitEditUser} className="space-y-3">
-                      <input value={inviteForm.name} onChange={(e) => setInviteForm({ ...inviteForm, name: e.target.value })} placeholder="Full name" required className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
-                      <input type="email" value={inviteForm.email} disabled className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-2.5 text-sm text-[#9CA3AF] outline-none transition-all cursor-not-allowed" title="Email cannot be changed" />
-                      <input type="text" value={inviteForm.password} onChange={(e) => setInviteForm({ ...inviteForm, password: e.target.value })} placeholder="New Password (leave blank to keep current)" className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
-                      {editingUser.role === 'SUPER_ADMIN' ? (
-                        <div className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-2.5 text-sm text-[#9CA3AF] cursor-not-allowed">
-                          Role: Super Admin
-                        </div>
-                      ) : (
-                        <Select
-                          value={inviteForm.role}
-                          onChange={(val) => setInviteForm({ ...inviteForm, role: val })}
-                          options={[
-                            { label: 'Team Member', value: 'TEAM_MEMBER' },
-                            { label: 'Project Manager', value: 'PROJECT_MANAGER' },
-                            { label: 'Admin', value: 'ADMIN' }
-                          ]}
-                        />
-                      )}
-                      <Select
-                        value={inviteForm.teamId}
-                        onChange={(val) => setInviteForm({ ...inviteForm, teamId: val })}
-                        options={[{ label: 'Assign to team (optional)', value: '' }, ...teams.map((t) => ({ label: t.name, value: t.id }))]}
-                      />
-                      <div className="flex items-center justify-between px-1 mt-2">
-                        <span className="text-sm font-medium text-[#374151]">Account Status</span>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input type="checkbox" checked={inviteForm.isActive} onChange={(e) => setInviteForm({ ...inviteForm, isActive: e.target.checked })} className="sr-only peer" />
-                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#111827]"></div>
-                        </label>
-                      </div>
-                      <button type="submit" className="w-full rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all mt-4">Save Changes</button>
-                    </form>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {tab === 'templates' && (
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-[#111827]">Project Templates</h2>
-                <button onClick={() => setShowTemplateModal(true)} className="flex items-center gap-2 rounded-xl bg-[#111827] px-3 py-2 text-xs font-medium text-white hover:bg-[#1F2937] transition-all">
-                  <Plus className="h-3.5 w-3.5" /> Create Template
-                </button>
-              </div>
-              <div className="space-y-3">
-                {templates.map((t) => (
-                  <div key={t.id} className="rounded-2xl border border-[#E5E7EB] bg-white p-5 hover:shadow-sm transition-all">
-                    <h3 className="text-sm font-semibold text-[#111827]">{t.name}</h3>
-                    {t.description && <p className="text-xs text-[#6B7280] mt-1">{t.description}</p>}
-                    {t.structure?.tasks && (
-                      <p className="text-xs font-medium text-[#111827] mt-3">{t.structure.tasks.length} standard tasks included</p>
-                    )}
-                  </div>
-                ))}
-                {templates.length === 0 && <p className="text-sm text-[#9CA3AF]">No templates yet</p>}
-              </div>
-
-              {showTemplateModal && (
-                <>
-                  <div className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setShowTemplateModal(false)} />
-                  <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg rounded-2xl border border-[#E5E7EB] bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-sm font-semibold text-[#111827]">Create Project Template</h3>
-                      <button onClick={() => setShowTemplateModal(false)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-[#6B7280]" /></button>
-                    </div>
-                    <form onSubmit={submitTemplate} className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1.5">Template Name *</label>
-                        <input value={templateForm.name} onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })} required className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
-                        <textarea value={templateForm.description} onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })} className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all resize-none" rows={2} />
-                      </div>
-                      
-                      <div className="pt-2 border-t border-[#F3F4F6]">
-                        <label className="block text-sm font-medium text-[#374151] mb-3">Default Tasks (Auto-created for new projects)</label>
-                        <div className="space-y-2">
-                          {templateForm.tasks.map((task, idx) => (
-                            <div key={idx} className="flex gap-2">
-                              <input 
-                                value={task.title} 
-                                onChange={(e) => {
-                                  const newTasks = [...templateForm.tasks];
-                                  newTasks[idx].title = e.target.value;
-                                  setTemplateForm({ ...templateForm, tasks: newTasks });
-                                }} 
-                                placeholder={`Task ${idx + 1}`} 
-                                className="flex-1 rounded-xl border border-[#E5E7EB] px-4 py-2 text-sm outline-none focus:border-[#111827] transition-all" 
-                              />
-                              {templateForm.tasks.length > 1 && (
-                                <button type="button" onClick={() => {
-                                  const newTasks = templateForm.tasks.filter((_, i) => i !== idx);
-                                  setTemplateForm({ ...templateForm, tasks: newTasks });
-                                }} className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors">
-                                  <X className="h-4 w-4" />
-                                </button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                        <button type="button" onClick={() => setTemplateForm({ ...templateForm, tasks: [...templateForm.tasks, { title: '' }] })} className="mt-3 flex items-center gap-1.5 text-xs font-medium text-[#111827] hover:opacity-70 transition-opacity">
-                          <Plus className="h-3 w-3" /> Add another task
-                        </button>
-                      </div>
-
-                      <button type="submit" disabled={saving} className="w-full rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all mt-4">
-                        {saving ? 'Creating...' : 'Create Template'}
-                      </button>
-                    </form>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {tab === 'permissions' && (
-            <div>
-              <h2 className="text-sm font-semibold text-[#111827] mb-4">Role Permissions</h2>
-              <div className="rounded-2xl border border-[#E5E7EB] bg-white overflow-hidden">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-[#F3F4F6]">
-                      <th className="px-6 py-3 text-left text-xs font-medium text-[#6B7280] uppercase">Permission</th>
-                      {Object.keys(roleLabels).map((r) => (
-                        <th key={r} className="px-4 py-3 text-center text-xs font-medium text-[#6B7280] uppercase">{roleLabels[r]}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#F3F4F6]">
-                    {Object.keys(permissions.SUPER_ADMIN).map((perm) => (
-                      <tr key={perm} className="hover:bg-[#FAFAFA]">
-                        <td className="px-6 py-3 text-sm text-[#374151]">{perm}</td>
-                        {Object.keys(roleLabels).map((role) => (
-                          <td key={role} className="px-4 py-3 text-center">
-                            {permissions[role][perm] ? (
-                              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50 text-emerald-500 text-xs">✓</span>
-                            ) : (
-                              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-gray-50 text-gray-300 text-xs">—</span>
-                            )}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-            </>
-          )}
-        </div>
+      <div className="flex gap-2 p-1 bg-[#F3F4F6] rounded-xl overflow-x-auto w-max max-w-full">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id as Tab)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              tab === t.id
+                ? 'bg-white text-[#111827] shadow-sm'
+                : 'text-[#6B7280] hover:text-[#111827] hover:bg-white/50'
+            }`}
+          >
+            <t.icon className="h-4 w-4" />
+            {t.label}
+          </button>
+        ))}
       </div>
+
+      <motion.div
+        key={tab}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2 }}
+        className="bg-white p-6 rounded-2xl border border-[#E5E7EB]"
+      >
+        {tab === 'organization' && <OrganizationTab initialData={orgData} />}
+        {tab === 'users' && <UsersTab users={users} fetchUsers={fetchUsers} teams={teams} />}
+        {tab === 'workflows' && <WorkflowsTab workflows={workflows} fetchWorkflows={fetchWorkflows} users={users} />}
+        {tab === 'templates' && <TemplatesTab templates={templates} fetchTemplates={fetchTemplates} />}
+        {tab === 'permissions' && <PermissionsTab />}
+      </motion.div>
     </div>
   );
 }

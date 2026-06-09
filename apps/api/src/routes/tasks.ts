@@ -3,9 +3,11 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
-import { emitToOrganization, emitToUser } from '../socket.js';
+import { emitToOrganization, emitToUser } from '../sse.js';
 import { NotificationService } from '../services/notifications.js';
+import { executeWorkflowRules } from '../services/workflowEngine.js';
 import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
+import { idempotency } from '../middleware/idempotency.js';
 
 export const taskRouter = Router();
 taskRouter.use(authenticate);
@@ -13,23 +15,32 @@ taskRouter.use(authenticate);
 const taskSchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
+  type: z.enum(['DESIGN', 'CONTENT', 'VIDEO', 'DIGITAL_MARKETING', 'DEVELOPMENT', 'STRATEGY', 'OTHER']).optional(),
   projectId: z.string(),
   assigneeId: z.string().optional().nullable(),
+  reviewerId: z.string().optional().nullable(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
-  status: z.enum(['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'BLOCKED', 'COMPLETED']).optional(),
+  status: z.enum(['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'APPROVED', 'BLOCKED', 'COMPLETED']).optional(),
   dueDate: z.string().optional().nullable(),
   parentId: z.string().optional().nullable(),
+  loggedHours: z.number().optional().nullable(),
+  estimatedHours: z.number().optional().nullable(),
+  driveLink: z.string().optional().nullable(),
 });
 
 // GET /api/tasks
 taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const { search, status, priority, projectId, assigneeId, page = '1', limit = '50' } = req.query;
+    const { search, status, priority, projectId, assigneeId, type, clientId, page = '1', limit = '50' } = req.query;
 
-    const where: Record<string, unknown> = { project: { client: { organizationId: orgId } } };
+    const projectFilter: any = { client: { organizationId: orgId } };
+    if (clientId) projectFilter.clientId = clientId as string;
+    
+    const where: Record<string, unknown> = { project: projectFilter };
     if (status) where.status = status as string;
     if (priority) where.priority = priority as string;
+    if (type) where.type = type as string;
     if (projectId) where.projectId = projectId;
     
     if (req.user!.role === 'TEAM_MEMBER') {
@@ -49,8 +60,9 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
       prisma.task.findMany({
         where: where as any,
         include: {
-          project: { select: { id: true, name: true } },
+          project: { select: { id: true, name: true, color: true } },
           assignee: { select: { id: true, name: true, avatar: true } },
+          reviewer: { select: { id: true, name: true, avatar: true } },
           _count: { select: { subtasks: true, comments: true, checklist: true } },
         },
         orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
@@ -72,8 +84,9 @@ taskRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
     const task = await prisma.task.findFirst({
       where: { id: (req.params.id as string), project: { client: { organizationId: req.user!.organizationId } } },
       include: {
-        project: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true, color: true } },
         assignee: { select: { id: true, name: true, avatar: true, email: true } },
+        reviewer: { select: { id: true, name: true, avatar: true, email: true } },
         subtasks: {
           include: { assignee: { select: { id: true, name: true, avatar: true } } },
           orderBy: { order: 'asc' },
@@ -107,8 +120,8 @@ taskRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
   }
 });
 
-// POST /api/tasks
-taskRouter.post('/', validate(taskSchema), async (req: AuthRequest, res: Response, next) => {
+// POST /api/tasks — Create a task (Idempotent)
+taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     if (req.user!.role === 'TEAM_MEMBER') {
       const isMember = await prisma.projectMember.findFirst({
@@ -130,21 +143,28 @@ taskRouter.post('/', validate(taskSchema), async (req: AuthRequest, res: Respons
       }
     }
 
-    const maxOrder = await prisma.task.findFirst({
-      where: { projectId: req.body.projectId, parentId: req.body.parentId || null },
-      orderBy: { order: 'desc' },
-      select: { order: true },
-    });
+    const { title, description, type, projectId, assigneeId, reviewerId, priority, status, dueDate, parentId, estimatedHours, driveLink } = req.body;
 
     const task = await prisma.task.create({
       data: {
-        ...req.body,
-        dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
-        order: (maxOrder?.order ?? -1) + 1,
+        title,
+        description,
+        type: type || 'OTHER',
+        projectId,
+        assigneeId,
+        reviewerId,
+        priority: priority || 'MEDIUM',
+        status: status || 'TODO',
+        dueDate: dueDate ? new Date(dueDate) : null,
+        parentId,
+        estimatedHours,
+        driveLink,
+        order: await prisma.task.count({ where: { projectId, parentId: parentId || null } }),
       },
       include: {
         project: { select: { id: true, name: true } },
         assignee: { select: { id: true, name: true, avatar: true } },
+        reviewer: { select: { id: true, name: true, avatar: true } },
       },
     });
 
@@ -211,6 +231,7 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
       include: {
         project: { select: { id: true, name: true } },
         assignee: { select: { id: true, name: true, avatar: true } },
+        reviewer: { select: { id: true, name: true, avatar: true } },
       },
     });
 
@@ -239,6 +260,14 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
         where: { id: task.projectId },
         data: { progress },
       });
+
+      // Execute workflow automation rules
+      await executeWorkflowRules('TASK_STATUS_CHANGE', {
+        task,
+        oldStatus: existing.status,
+        newStatus: task.status,
+        orgId: req.user!.organizationId,
+      });
     }
 
     // Notify if assignee changed
@@ -249,7 +278,61 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
         userId: req.body.assigneeId,
         metadata: { taskId: task.id, projectId: task.projectId },
       });
+
+      // Execute workflow automation rules for assignment
+      await executeWorkflowRules('TASK_ASSIGNED', {
+        task,
+        orgId: req.user!.organizationId,
+      });
     }
+
+    const io = req.app.get('io');
+    emitToOrganization(io, req.user!.organizationId, 'task:updated', task);
+    await invalidateOrganizationCache(req.user!.organizationId);
+
+    res.json(task);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PUT /api/tasks/:id/status — Quick status update (Idempotent)
+taskRouter.put('/:id/status', idempotency, async (req: AuthRequest, res: Response, next) => {
+  try {
+    const existing = await prisma.task.findFirst({
+      where: { id: (req.params.id as string), project: { client: { organizationId: req.user!.organizationId } } },
+    });
+
+    if (!existing) {
+      res.status(404).json({ error: 'Task not found' });
+      return;
+    }
+
+    if (req.user!.role === 'TEAM_MEMBER' && existing.assigneeId !== req.user!.userId) {
+      res.status(403).json({ error: 'You do not have permission to edit this task' });
+      return;
+    }
+
+    const { status } = req.body;
+    const task = await prisma.task.update({
+      where: { id: (req.params.id as string) },
+      data: {
+        status: status,
+        completedAt: status === 'COMPLETED' ? new Date() : null,
+      },
+    });
+
+    // Update progress
+    const projectTasks = await prisma.task.findMany({
+      where: { projectId: task.projectId, parentId: null },
+      select: { status: true },
+    });
+    const completed = projectTasks.filter((t) => t.status === 'COMPLETED').length;
+    const progress = projectTasks.length > 0 ? Math.round((completed / projectTasks.length) * 100) : 0;
+    await prisma.project.update({
+      where: { id: task.projectId },
+      data: { progress },
+    });
 
     const io = req.app.get('io');
     emitToOrganization(io, req.user!.organizationId, 'task:updated', task);

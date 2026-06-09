@@ -1,40 +1,25 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useNotificationStore } from './useNotificationStore';
-
-// Mock the API client
-vi.mock('@/lib/api', () => ({
-  api: {
-    get: vi.fn(),
-    patch: vi.fn(),
-  },
-}));
-
-// Mock Socket.io
-vi.mock('@/lib/socket', () => ({
-  getSocket: vi.fn(() => ({
-    on: vi.fn(),
-    off: vi.fn(),
-  })),
-}));
 
 describe('useNotificationStore', () => {
   beforeEach(() => {
     // Reset Zustand state before each test
     useNotificationStore.setState({
-      notifications: [],
-      unreadCount: 0,
-      isLoading: false,
+      activeToast: null,
     });
-    vi.clearAllMocks();
+    vi.useFakeTimers();
   });
 
-  it('should initialize with empty state', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('should initialize with empty toast state', () => {
     const state = useNotificationStore.getState();
-    expect(state.notifications).toEqual([]);
-    expect(state.unreadCount).toBe(0);
+    expect(state.activeToast).toBeNull();
   });
 
-  it('should add a real-time notification and increment unread count', () => {
+  it('should show a toast notification', () => {
     const mockNotification = {
       id: '1',
       type: 'TASK_ASSIGNED',
@@ -43,15 +28,13 @@ describe('useNotificationStore', () => {
       createdAt: new Date().toISOString(),
     };
 
-    useNotificationStore.getState().addRealTimeNotification(mockNotification);
+    useNotificationStore.getState().showToast(mockNotification);
 
     const state = useNotificationStore.getState();
-    expect(state.notifications).toHaveLength(1);
-    expect(state.notifications[0]).toEqual(mockNotification);
-    expect(state.unreadCount).toBe(1);
+    expect(state.activeToast).toEqual(mockNotification);
   });
 
-  it('should optimally mark a notification as read and decrement count', () => {
+  it('should clear the toast notification manually', () => {
     const mockNotification = {
       id: '1',
       type: 'TASK_ASSIGNED',
@@ -60,27 +43,28 @@ describe('useNotificationStore', () => {
       createdAt: new Date().toISOString(),
     };
 
-    useNotificationStore.setState({
-      notifications: [mockNotification],
-      unreadCount: 1,
-    });
-
-    useNotificationStore.getState().markAsRead('1');
+    useNotificationStore.setState({ activeToast: mockNotification });
+    useNotificationStore.getState().clearToast();
 
     const state = useNotificationStore.getState();
-    expect(state.notifications[0].read).toBe(true);
-    expect(state.unreadCount).toBe(0);
+    expect(state.activeToast).toBeNull();
   });
 
-  it('should not decrement unreadCount below 0', () => {
-    useNotificationStore.setState({
-      notifications: [
-        { id: '1', read: false } as any
-      ],
-      unreadCount: 0, // Force invalid state to test bounds
-    });
+  it('should auto-clear the toast notification after 5 seconds', () => {
+    const mockNotification = {
+      id: '1',
+      type: 'TASK_ASSIGNED',
+      message: 'New Task',
+      read: false,
+      createdAt: new Date().toISOString(),
+    };
 
-    useNotificationStore.getState().markAsRead('1');
-    expect(useNotificationStore.getState().unreadCount).toBe(0);
+    useNotificationStore.getState().showToast(mockNotification);
+    
+    // Advance time by 5 seconds
+    vi.advanceTimersByTime(5000);
+
+    const state = useNotificationStore.getState();
+    expect(state.activeToast).toBeNull();
   });
 });
