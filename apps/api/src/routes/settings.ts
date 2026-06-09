@@ -337,7 +337,7 @@ settingsRouter.put('/workflows/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (r
     const { name, trigger, condition, action, targets, isActive } = req.body;
     
     const workflow = await prisma.workflowRule.update({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       data: {
         name,
         trigger,
@@ -361,7 +361,7 @@ settingsRouter.put('/workflows/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (r
 settingsRouter.delete('/workflows/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     await prisma.workflowRule.delete({
-      where: { id: req.params.id }
+      where: { id: req.params.id as string }
     });
     res.json({ success: true });
   } catch (error) {

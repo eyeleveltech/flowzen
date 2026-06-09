@@ -49,7 +49,7 @@ workflowRouter.post('/', validate(workflowSchema), async (req: AuthRequest, res:
 workflowRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
   try {
     const existing = await prisma.workflowRule.findFirst({
-      where: { id: req.params.id, organizationId: req.user!.organizationId },
+      where: { id: req.params.id as string, organizationId: req.user!.organizationId },
     });
 
     if (!existing) {
@@ -58,7 +58,7 @@ workflowRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
     }
 
     const rule = await prisma.workflowRule.update({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       data: req.body,
     });
 
@@ -72,7 +72,7 @@ workflowRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
 workflowRouter.patch('/:id/toggle', async (req: AuthRequest, res: Response, next) => {
   try {
     const existing = await prisma.workflowRule.findFirst({
-      where: { id: req.params.id, organizationId: req.user!.organizationId },
+      where: { id: req.params.id as string, organizationId: req.user!.organizationId },
     });
 
     if (!existing) {
@@ -81,7 +81,7 @@ workflowRouter.patch('/:id/toggle', async (req: AuthRequest, res: Response, next
     }
 
     const rule = await prisma.workflowRule.update({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       data: { isActive: !existing.isActive },
     });
 
@@ -95,7 +95,7 @@ workflowRouter.patch('/:id/toggle', async (req: AuthRequest, res: Response, next
 workflowRouter.delete('/:id', async (req: AuthRequest, res: Response, next) => {
   try {
     const existing = await prisma.workflowRule.findFirst({
-      where: { id: req.params.id, organizationId: req.user!.organizationId },
+      where: { id: req.params.id as string, organizationId: req.user!.organizationId },
     });
 
     if (!existing) {
@@ -103,7 +103,7 @@ workflowRouter.delete('/:id', async (req: AuthRequest, res: Response, next) => {
       return;
     }
 
-    await prisma.workflowRule.delete({ where: { id: req.params.id } });
+    await prisma.workflowRule.delete({ where: { id: req.params.id as string } });
     res.json({ message: 'Rule deleted' });
   } catch (error) {
     next(error);
