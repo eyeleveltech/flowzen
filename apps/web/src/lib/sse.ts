@@ -8,8 +8,8 @@ class SSEClient {
   connect() {
     if (this.eventSource) return;
 
-    const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-    this.eventSource = new EventSource(`${url}/api/stream`, { withCredentials: true });
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+    this.eventSource = new EventSource(`${apiUrl}/stream`, { withCredentials: true });
 
     this.eventSource.onmessage = (event) => {
       try {
