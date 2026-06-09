@@ -244,6 +244,7 @@ authRouter.post('/reset-password', async (req: Request, res: Response, next) => 
         password: hashedPassword,
         resetToken: null,
         resetTokenExpiry: null,
+        status: 'ACTIVE',
       },
     });
 
