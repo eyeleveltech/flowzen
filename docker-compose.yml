@@ -56,7 +56,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: sh -c "npx prisma db push && npm run start"
+    command: sh -c "npx prisma db push --accept-data-loss && npm run start"
 
   web:
     build:

@@ -80,7 +80,7 @@ app.use(errorHandler);
 // Start
 const PORT = process.env.API_PORT || 4000;
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
+  app.listen(Number(PORT), '0.0.0.0', () => {
     logger.info(`🚀 Flowzen API running on http://localhost:${PORT}`);
     logger.info(`📡 SSE ready on /api/stream`);
   });
