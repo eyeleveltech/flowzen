@@ -22,7 +22,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 
 interface Task {
   id: string; title: string; description?: string | null; priority: string; status: string;
-  dueDate?: string | null; completedAt?: string | null; projectId: string;
+  dueDate?: string | null; completedAt?: string | null; createdAt: string; projectId: string;
   loggedHours?: number | null;
   type: string; driveLink?: string | null; reviewerId?: string | null;
   project?: { id: string; name: string };
@@ -141,13 +141,40 @@ function TasksContent() {
     }
   };
 
-  const { register, handleSubmit, control, reset, formState: { errors } } = useForm<TaskFormValues>({
+  const { register, handleSubmit, control, reset, watch, formState: { errors } } = useForm<TaskFormValues>({
     resolver: zodResolver(taskSchema),
     defaultValues: { title: '', description: '', type: 'OTHER', projectId: '', assigneeId: '', reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: '', loggedHours: 0, driveLink: '' },
   });
   const [submitting, setSubmitting] = useState(false);
   const [commentContent, setCommentContent] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
+
+  const selectedProjectId = watch('projectId');
+
+  const availableAssignees = useMemo(() => {
+    let users = new Map<string, { id: string; name: string }>();
+    if (selectedProjectId) {
+      const proj = projects.find(p => p.id === selectedProjectId);
+      if (proj) {
+        proj.members?.forEach((m: any) => {
+          if (m.user) users.set(m.user.id, m.user);
+        });
+        proj.teams?.forEach((t: any) => {
+          t.team?.members?.forEach((m: any) => {
+            // m is the User object directly in team.members
+            if (m.id) users.set(m.id, m);
+          });
+        });
+        // Also add the project owner as a fallback assignee if needed
+        if (proj.owner?.id) {
+          users.set(proj.owner.id, proj.owner);
+        }
+      }
+    } else {
+      members.forEach((m: any) => users.set(m.id, m));
+    }
+    return Array.from(users.values());
+  }, [selectedProjectId, projects, members]);
 
   async function handleAddComment() {
     if (!selectedTask || !commentContent.trim()) return;
@@ -649,7 +676,7 @@ function TasksContent() {
                       <Select
                         value={field.value || ''}
                         onChange={field.onChange}
-                        options={[{ label: 'Unassigned', value: '' }, ...Array.from(new Map([...(members), ...(projects.flatMap(p => p.teams?.flatMap((t: any) => t.team?.members?.map((tm: any) => tm.user) || []) || []))].filter(Boolean).map(item => [item.id, item])).values()).map((m: any) => ({ label: m.name, value: m.id }))]}
+                        options={[{ label: 'Unassigned', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id }))]}
                       />
                     )} />
                   </div>
@@ -659,7 +686,7 @@ function TasksContent() {
                       <Select
                         value={field.value || ''}
                         onChange={field.onChange}
-                        options={[{ label: 'No Reviewer', value: '' }, ...Array.from(new Map([...(members), ...(projects.flatMap(p => p.teams?.flatMap((t: any) => t.team?.members?.map((tm: any) => tm.user) || []) || []))].filter(Boolean).map(item => [item.id, item])).values()).map((m: any) => ({ label: m.name, value: m.id }))]}
+                        options={[{ label: 'No Reviewer', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id }))]}
                       />
                     )} />
                   </div>
@@ -704,6 +731,10 @@ function TasksContent() {
                   <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
                     <span className="text-sm text-[#6B7280]">Assignee</span>
                     <span className="text-sm font-medium text-[#111827]">{selectedTask.assignee?.name || 'Unassigned'}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
+                    <span className="text-sm text-[#6B7280]">Created</span>
+                    <span className="text-sm font-medium text-[#111827]">{formatDate(selectedTask.createdAt)}</span>
                   </div>
                   <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
                     <span className="text-sm text-[#6B7280]">Due Date</span>
@@ -879,7 +910,7 @@ function TasksContent() {
                 <Select
                   value={field.value || ''}
                   onChange={field.onChange}
-                  options={[{ label: 'Unassigned', value: '' }, ...Array.from(new Map([...(members), ...(projects.flatMap(p => p.teams?.flatMap((t: any) => t.team?.members?.map((tm: any) => tm.user) || []) || []))].filter(Boolean).map(item => [item.id, item])).values()).map((m: any) => ({ label: m.name, value: m.id }))]}
+                  options={[{ label: 'Unassigned', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id }))]}
                 />
               )} />
             </div>
@@ -889,7 +920,7 @@ function TasksContent() {
                 <Select
                   value={field.value || ''}
                   onChange={field.onChange}
-                  options={[{ label: 'No Reviewer', value: '' }, ...Array.from(new Map([...(members), ...(projects.flatMap(p => p.teams?.flatMap((t: any) => t.team?.members?.map((tm: any) => tm.user) || []) || []))].filter(Boolean).map(item => [item.id, item])).values()).map((m: any) => ({ label: m.name, value: m.id }))]}
+                  options={[{ label: 'No Reviewer', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id }))]}
                 />
               )} />
             </div>

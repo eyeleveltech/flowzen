@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import { useMediaQuery } from '@/hooks/use-media-query';
@@ -28,6 +29,26 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
   
   const [searchQuery, setSearchQuery] = useState('');
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+
+  // Update bounds
+  useEffect(() => {
+    if (isOpen && containerRef.current) {
+      setRect(containerRef.current.getBoundingClientRect());
+    }
+  }, [isOpen]);
+
+  // Close on scroll to prevent detached portaled dropdowns
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleScroll = (e: Event) => {
+      // Don't close if scrolling inside the dropdown itself
+      if ((e.target as HTMLElement)?.closest?.('[role="listbox"]')) return;
+      setIsOpen(false);
+    };
+    window.addEventListener('scroll', handleScroll, true);
+    return () => window.removeEventListener('scroll', handleScroll, true);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -40,9 +61,16 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
     opt.label.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      if (
+        containerRef.current && 
+        !containerRef.current.contains(event.target as Node) &&
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false);
       }
     }
@@ -54,13 +82,13 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
 
   // Handle focusing the selected item or first item when opened
   useEffect(() => {
-    if (isOpen && containerRef.current) {
-      const selected = containerRef.current.querySelector('[aria-selected="true"]') as HTMLElement;
+    if (isOpen && dropdownRef.current) {
+      const selected = dropdownRef.current.querySelector('[aria-selected="true"]') as HTMLElement;
       if (selected) {
-        selected.focus();
+        selected.focus({ preventScroll: true });
       } else {
-        const first = containerRef.current.querySelector('[role="option"]') as HTMLElement;
-        if (first) first.focus();
+        const first = dropdownRef.current.querySelector('[role="option"]') as HTMLElement;
+        if (first) first.focus({ preventScroll: true });
       }
     }
   }, [isOpen]);
@@ -150,17 +178,24 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
           </div>
         </Drawer>
       ) : (
-        <AnimatePresence>
-          {isOpen && (
-            <motion.div
-              role="listbox"
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 4 }}
-              transition={{ duration: 0.15 }}
-              className="absolute left-0 z-50 mt-2 min-w-full max-h-60 overflow-y-auto rounded-xl border border-[#E5E7EB] bg-white p-1.5 shadow-lg shadow-black/5"
-              style={{ width: 'max-content' }}
-            >
+        <>
+          {typeof document !== 'undefined' && createPortal(
+            <AnimatePresence>
+              {isOpen && (
+                <motion.div
+                  ref={dropdownRef}
+                  role="listbox"
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 4 }}
+                  transition={{ duration: 0.15 }}
+                  className="fixed z-[9999] mt-2 max-h-60 overflow-y-auto rounded-xl border border-[#E5E7EB] bg-white p-1.5 shadow-lg shadow-black/5"
+                  style={{ 
+                    width: rect ? Math.max(rect.width, 160) : 'auto',
+                    top: rect ? rect.bottom : 0,
+                    left: rect ? rect.left : 0
+                  }}
+                >
               {searchQuery && (
                 <div className="px-3 py-1.5 text-[10px] font-medium text-[#9CA3AF] uppercase tracking-wide border-b border-[#F3F4F6] mb-1">
                   Filtering: "{searchQuery}"
@@ -216,9 +251,12 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
                   {option.label}
                 </button>
               ))}
-            </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>,
+            document.body
           )}
-        </AnimatePresence>
+        </>
       )}
     </div>
   );

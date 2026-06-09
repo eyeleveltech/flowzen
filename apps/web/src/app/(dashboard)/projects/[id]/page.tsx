@@ -978,9 +978,10 @@ export default function ProjectDetailPage() {
                         onChange={(val) => setEditForm({ ...editForm, status: val })}
                         options={[
                           { label: 'Planning', value: 'PLANNING' },
-                          { label: 'Active', value: 'IN_PROGRESS' },
-                          { label: 'On Hold', value: 'ON_HOLD' },
+                          { label: 'In Progress', value: 'IN_PROGRESS' },
+                          { label: 'In Review', value: 'REVIEW' },
                           { label: 'Completed', value: 'COMPLETED' },
+                          { label: 'On Hold', value: 'ON_HOLD' },
                           { label: 'Cancelled', value: 'CANCELLED' },
                         ]}
                       />

@@ -265,7 +265,7 @@ function ProjectsContent() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[p.status] || 'bg-gray-50 text-gray-500'}`}>
+                          <span className={`inline-flex items-center whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[p.status] || 'bg-gray-50 text-gray-500'}`}>
                             {p.status.replace('_', ' ')}
                           </span>
                         </td>
@@ -308,7 +308,7 @@ function ProjectsContent() {
                         <p className="text-sm font-medium text-[#111827] leading-tight">{p.name}</p>
                         <p className="text-xs text-[#6B7280] mt-0.5">{p.client?.name || 'Internal Project'}</p>
                       </div>
-                      <span className={`shrink-0 inline-flex items-center rounded-lg px-2 py-0.5 text-[10px] font-medium ${statusColors[p.status] || 'bg-gray-50 text-gray-500'}`}>
+                      <span className={`shrink-0 inline-flex items-center whitespace-nowrap rounded-lg px-2 py-0.5 text-[10px] font-medium ${statusColors[p.status] || 'bg-gray-50 text-gray-500'}`}>
                         {p.status.replace('_', ' ')}
                       </span>
                     </div>
@@ -481,9 +481,10 @@ function ProjectsContent() {
                         onChange={(val) => setValue('status', val as any)}
                         options={[
                           { label: 'Planning', value: 'PLANNING' },
-                          { label: 'Active', value: 'IN_PROGRESS' },
-                          { label: 'On Hold', value: 'ON_HOLD' },
+                          { label: 'In Progress', value: 'IN_PROGRESS' },
+                          { label: 'In Review', value: 'REVIEW' },
                           { label: 'Completed', value: 'COMPLETED' },
+                          { label: 'On Hold', value: 'ON_HOLD' },
                           { label: 'Cancelled', value: 'CANCELLED' },
                         ]}
                       />
