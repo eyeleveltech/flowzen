@@ -18,6 +18,7 @@ import { settingsRouter } from './routes/settings.js';
 import { profileRouter } from './routes/profile.js';
 import { workflowRouter } from './routes/workflows.js';
 import { sseRouter } from './sse.js';
+import './workers/emailWorker.js'; // Initialize BullMQ email worker
 import { morganMiddleware } from './middleware/logger.js';
 import { logger } from './utils/logger.js';
 
