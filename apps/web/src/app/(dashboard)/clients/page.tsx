@@ -71,7 +71,7 @@ function ClientsContent() {
 
   // Form state
   const [form, setForm] = useState({
-    name: '', company: '', industry: '', address: '', contractValue: '',
+    name: '', company: '', industry: '', address: '', startDate: '',
     engagementType: '', website: '', city: '', scope: '', assetLinks: '', accountManagerId: '',
     status: 'PROSPECT',
     contacts: [{ name: '', designation: '', email: '', phone: '' }]
@@ -130,11 +130,12 @@ function ClientsContent() {
     try {
       await api.post('/clients', {
         ...form,
-        contractValue: form.contractValue ? parseFloat(form.contractValue) : undefined,
+        startDate: form.startDate || undefined,
+        contacts: form.contacts.filter(c => c.name.trim() !== ''),
       });
       toast.success('Client created successfully');
       setShowCreate(false);
-      setForm({ name: '', company: '', industry: '', address: '', contractValue: '', engagementType: '', website: '', city: '', scope: '', assetLinks: '', accountManagerId: '', status: 'PROSPECT', contacts: [{ name: '', designation: '', email: '', phone: '' }] });
+      setForm({ name: '', company: '', industry: '', address: '', startDate: '', engagementType: '', website: '', city: '', scope: '', assetLinks: '', accountManagerId: '', status: 'PROSPECT', contacts: [{ name: '', designation: '', email: '', phone: '' }] });
       fetchClients();
     } catch (err: any) {
       toast.error(err.message || 'Failed to create client');
@@ -586,6 +587,7 @@ function ClientsContent() {
                   <Field label="Website" value={form.website} onChange={(v) => setForm({ ...form, website: v })} />
                   <Field label="City" value={form.city} onChange={(v) => setForm({ ...form, city: v })} />
                   <Field label="Address" value={form.address} onChange={(v) => setForm({ ...form, address: v })} />
+                  <Field label="Start Date" type="date" value={form.startDate} onChange={(v) => setForm({ ...form, startDate: v })} />
                   
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Scope</label>

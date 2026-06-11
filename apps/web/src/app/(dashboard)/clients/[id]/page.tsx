@@ -50,8 +50,8 @@ export default function ClientDetailPage() {
   const [showEdit, setShowEdit] = useState(false);
   const [editForm, setEditForm] = useState({
     name: '', company: '', industry: '', address: '', contractValue: '', status: 'PROSPECT',
-    engagementType: '', website: '', city: '', scope: '', assetLinks: '', accountManagerId: '',
-    contacts: [{ name: '', designation: '', email: '', phone: '' }] as ClientContact[]
+    engagementType: '', website: '', city: '', scope: '', assetLinks: '', accountManagerId: '', startDate: '',
+    contacts: [{ id: '', name: '', designation: '', email: '', phone: '' }] as ClientContact[]
   });
   const [editError, setEditError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -104,6 +104,7 @@ export default function ClientDetailPage() {
       industry: client!.industry || '',
       address: client!.address || '',
       contractValue: client!.contractValue?.toString() || '',
+      startDate: client!.startDate ? new Date(client!.startDate).toISOString().split('T')[0] : '',
       status: client!.status,
       engagementType: client!.engagementType || '',
       website: client!.website || '',
@@ -124,6 +125,8 @@ export default function ClientDetailPage() {
       await api.put(`/clients/${id}`, {
         ...editForm,
         contractValue: editForm.contractValue ? parseFloat(editForm.contractValue) : undefined,
+        startDate: editForm.startDate || undefined,
+        contacts: editForm.contacts.filter(c => c.name.trim() !== ''),
       });
       toast.success('Client updated successfully');
       setShowEdit(false);
@@ -366,6 +369,7 @@ export default function ClientDetailPage() {
                 <Field label="Website" value={editForm.website} onChange={(v) => setEditForm({ ...editForm, website: v })} />
                 <Field label="City" value={editForm.city} onChange={(v) => setEditForm({ ...editForm, city: v })} />
                 <Field label="Address" value={editForm.address} onChange={(v) => setEditForm({ ...editForm, address: v })} />
+                <Field label="Start Date" type="date" value={editForm.startDate} onChange={(v) => setEditForm({ ...editForm, startDate: v })} />
 
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Scope</label>
