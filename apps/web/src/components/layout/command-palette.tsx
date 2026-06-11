@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '@/stores';
+import { getInitials, getAvatarColor, getClientDisplayName } from '@/lib/utils';
 import { api } from '@/lib/api';
 import {
   Search,
@@ -144,7 +145,7 @@ export function CommandPalette() {
                       items={results!.projects.map((p) => ({
                         id: p.id,
                         label: p.name,
-                        sub: p.client.name,
+                        sub: p.client ? getClientDisplayName(p.client) : 'Internal',
                         href: `/projects/${p.id}`,
                       }))}
                       onNavigate={navigate}

@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import { useAuthStore } from '@/stores';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
-import { formatDate, formatCurrency, getInitials, getAvatarColor } from '@/lib/utils';
+import { formatDate, formatCurrency, getInitials, getAvatarColor, getClientDisplayName } from '@/lib/utils';
 import {
   Plus, Search, Filter, Users, Building2, Mail, Phone, X, ChevronRight, FolderKanban, Download, Upload, FileText
 } from 'lucide-react';
@@ -401,14 +401,14 @@ function ClientsContent() {
                 >
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className={`h-8 w-8 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(client.name === 'Internal' ? (client.company || 'O') : client.name)}`}>
-                        {getInitials(client.name === 'Internal' ? (client.company || 'O') : client.name)}
+                      <div className={`h-8 w-8 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(getClientDisplayName(client))}`}>
+                        {getInitials(getClientDisplayName(client))}
                       </div>
                       <div>
                         <p className="text-sm font-medium text-[#111827]">
-                          {client.name === 'Internal' ? client.company : client.name}
+                          {getClientDisplayName(client)}
                         </p>
-                        {client.company && client.name !== 'Internal' && <p className="text-xs text-[#9CA3AF]">{client.company}</p>}
+                        {client.name !== 'Internal' && client.company && <p className="text-xs text-[#9CA3AF]">{client.name}</p>}
                         {client.name === 'Internal' && <p className="text-xs font-medium text-[#9CA3AF]">(Internal)</p>}
                       </div>
                     </div>
@@ -484,17 +484,17 @@ function ClientsContent() {
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
-                  <div className={`h-10 w-10 rounded-full text-xs font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(client.name === 'Internal' ? (client.company || 'O') : client.name)}`}>
-                    {getInitials(client.name === 'Internal' ? (client.company || 'O') : client.name)}
+                  <div className={`h-10 w-10 rounded-full text-xs font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(getClientDisplayName(client))}`}>
+                    {getInitials(getClientDisplayName(client))}
                   </div>
                   <div>
                     <p className="text-sm font-medium text-[#111827] leading-tight">
-                      {client.name === 'Internal' ? client.company : client.name}
+                      {getClientDisplayName(client)}
                     </p>
                     {client.name === 'Internal' ? (
                       <p className="text-xs font-medium text-[#6B7280] mt-0.5">(Internal)</p>
                     ) : client.company ? (
-                      <p className="text-xs text-[#6B7280] mt-0.5">{client.company}</p>
+                      <p className="text-xs text-[#6B7280] mt-0.5">{client.name}</p>
                     ) : (
                       <p className="text-xs text-[#6B7280] mt-0.5">{client.industry || '—'}</p>
                     )}

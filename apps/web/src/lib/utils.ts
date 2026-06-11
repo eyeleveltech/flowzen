@@ -76,3 +76,9 @@ export function triggerHaptic(type: 'light' | 'medium' | 'heavy' = 'medium') {
       break;
   }
 }
+
+export function getClientDisplayName(client: { name: string, company?: string | null } | null | undefined): string {
+  if (!client) return '—';
+  if (client.name === 'Internal') return client.company || 'Internal';
+  return client.company || client.name;
+}

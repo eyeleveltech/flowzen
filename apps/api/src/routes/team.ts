@@ -83,7 +83,7 @@ teamRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
         },
         ownedProjects: {
           include: {
-            client: { select: { id: true, name: true } },
+            client: { select: { id: true, name: true, company: true } },
             _count: { select: { tasks: true } },
           },
           orderBy: { createdAt: 'desc' },

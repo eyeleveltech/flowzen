@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
-import { formatDate, getInitials, formatRelativeDate, getAvatarColor } from '@/lib/utils';
+import { formatDate, formatCurrency, getInitials, getAvatarColor, getClientDisplayName } from '@/lib/utils';
 import { ArrowLeft, Mail, Phone, MapPin, Building2, DollarSign, X, Plus, Users, Globe, Briefcase, Trash2 } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
@@ -158,15 +158,15 @@ export default function ClientDetailPage() {
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div className="flex items-start gap-4">
-          <div className={`flex h-16 w-16 items-center justify-center rounded-2xl text-xl font-bold ${getAvatarColor(client.name === 'Internal' ? (client.company || 'O') : client.name)}`}>
-            {getInitials(client.name === 'Internal' ? (client.company || 'O') : client.name)}
+          <div className={`flex h-16 w-16 items-center justify-center rounded-2xl text-xl font-bold ${getAvatarColor(getClientDisplayName(client))}`}>
+            {getInitials(getClientDisplayName(client))}
           </div>
           <div>
             <h1 className="text-2xl font-bold text-[#111827]">
-              {client.name === 'Internal' ? client.company : client.name}
+              {getClientDisplayName(client)}
             </h1>
             <div className="flex items-center gap-3 mt-1">
-              {client.company && client.name !== 'Internal' && <span className="text-sm text-[#6B7280]">{client.company}</span>}
+              {client.name !== 'Internal' && client.company && <span className="text-sm text-[#6B7280]">{client.name}</span>}
               {client.name === 'Internal' && <span className="text-sm font-medium text-[#6B7280]">(Internal)</span>}
               <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[client.status]}`}>{client.status}</span>
             </div>

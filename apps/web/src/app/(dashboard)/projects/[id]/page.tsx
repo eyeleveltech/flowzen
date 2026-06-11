@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
-import { formatDate, getInitials, formatRelativeDate, getAvatarColor } from '@/lib/utils';
+import { formatDate, getInitials, formatRelativeDate, getAvatarColor, getClientDisplayName } from '@/lib/utils';
 import { ArrowLeft, Clock, MessageSquare, MoreHorizontal, CheckCircle2, ChevronRight, Plus, X, Trash2, Users, DollarSign, Briefcase } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
@@ -413,7 +413,7 @@ export default function ProjectDetailPage() {
               {project.status.replace('_', ' ')}
             </span>
           </div>
-          <p className="text-base font-medium text-[#6B7280]">{project.client?.name || 'Internal Project'}</p>
+          <p className="text-base font-medium text-[#6B7280]">{project.client ? getClientDisplayName(project.client) : 'Internal Project'}</p>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           {project.folderLink && (
@@ -483,12 +483,14 @@ export default function ProjectDetailPage() {
           <div className="space-y-3">
             <div className="flex justify-between text-sm">
               <span className="text-[#6B7280]">Client</span>
-              <span className="font-medium text-[#111827]">{project.client?.name || 'Internal'}</span>
+              <span className="font-medium text-[#111827]">{project.client ? getClientDisplayName(project.client) : 'Internal'}</span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-[#6B7280]">Company</span>
-              <span className="font-medium text-[#111827]">{project.client?.company || '—'}</span>
-            </div>
+            {project.client?.name !== 'Internal' && project.client?.company && (
+              <div className="flex justify-between text-sm">
+                <span className="text-[#6B7280]">Contact</span>
+                <span className="font-medium text-[#111827]">{project.client.name}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1011,7 +1013,7 @@ export default function ProjectDetailPage() {
                       <Select
                         value={editForm.clientId}
                         onChange={(val) => setEditForm({ ...editForm, clientId: val })}
-                        options={[{ label: 'Select a client...', value: '' }, ...clients.map(c => ({ label: c.company ? `${c.company} (${c.name})` : c.name, value: c.id }))]}
+                        options={[{ label: 'Select a client...', value: '' }, ...clients.map(c => ({ label: getClientDisplayName(c), value: c.id }))]}
                       />
                     </div>
                     <div>

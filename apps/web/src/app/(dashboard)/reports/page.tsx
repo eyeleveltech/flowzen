@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores';
 import { useRouter } from 'next/navigation';
-import { formatDate, getInitials, getAvatarColor } from '@/lib/utils';
+import { formatDate, getAvatarColor, getInitials, getClientDisplayName } from '@/lib/utils';
 import { PieChart, ListTodo, Users, FolderKanban, Clock, AlertTriangle, TrendingUp } from 'lucide-react';
 
 interface ProjectReport {
@@ -294,8 +294,10 @@ export default function ReportsPage() {
                   {clientReport.clients.map((c) => (
                     <tr key={c.id} className="hover:bg-[#F9FAFB] transition-colors">
                       <td className="px-6 py-4">
-                        <p className="text-sm font-semibold text-[#111827]">{c.name}</p>
-                        {c.company && <p className="text-xs text-[#6B7280] mt-0.5">{c.company}</p>}
+                        <p className="text-sm font-semibold text-[#111827]">{getClientDisplayName(c)}</p>
+                        {c.name !== 'Internal' && c.company ? (
+                          <p className="text-xs text-[#6B7280] mt-0.5">{c.name}</p>
+                        ) : null}
                       </td>
                       <td className="px-6 py-4 text-center">
                         <div className="flex flex-col items-center">

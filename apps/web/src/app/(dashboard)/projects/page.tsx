@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
-import { formatDate, getInitials, getAvatarColor } from '@/lib/utils';
+import { formatDate, getInitials, getAvatarColor, getClientDisplayName } from '@/lib/utils';
 import { Plus, LayoutList, GanttChartSquare, Calendar, ChevronRight, BarChart3, Clock, LayoutGrid, Search, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '@/stores';
@@ -184,7 +184,7 @@ function ProjectsContent() {
                 onChange={setClientFilter}
                 options={[
                   { label: 'All Clients', value: '' },
-                  ...clients.filter(c => c._count?.projects > 0).map(c => ({ label: c.name, value: c.id }))
+                  ...clients.filter(c => c._count?.projects > 0).map(c => ({ label: getClientDisplayName(c), value: c.id }))
                 ]}
               />
             </div>
@@ -255,7 +255,7 @@ function ProjectsContent() {
                           <p className="text-sm font-medium text-[#111827]">{p.name}</p>
                           <p className="text-xs text-[#9CA3AF]">{p._count?.tasks ?? 0} tasks</p>
                         </td>
-                        <td className="px-6 py-4 text-sm text-[#6B7280]">{p.client?.name || '—'}</td>
+                        <td className="px-6 py-4 text-sm text-[#6B7280]">{p.client ? getClientDisplayName(p.client) : '—'}</td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
                             <div className="h-1.5 w-20 rounded-full bg-[#F3F4F6] overflow-hidden">
@@ -306,7 +306,7 @@ function ProjectsContent() {
                     <div className="flex items-start justify-between mb-3">
                       <div>
                         <p className="text-sm font-medium text-[#111827] leading-tight">{p.name}</p>
-                        <p className="text-xs text-[#6B7280] mt-0.5">{p.client?.name || 'Internal Project'}</p>
+                        <p className="text-xs text-[#6B7280] mt-0.5">{p.client ? getClientDisplayName(p.client) : 'Internal Project'}</p>
                       </div>
                       <span className={`shrink-0 inline-flex items-center whitespace-nowrap rounded-lg px-2 py-0.5 text-[10px] font-medium ${statusColors[p.status] || 'bg-gray-50 text-gray-500'}`}>
                         {p.status.replace('_', ' ')}
@@ -371,7 +371,7 @@ function ProjectsContent() {
                 <div key={p.id} className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4 py-3 md:py-2 cursor-pointer hover:bg-[#FAFAFA] rounded-xl px-3 -mx-3 transition-colors border-b border-[#F3F4F6] last:border-0 md:border-0" onClick={() => router.push(`/projects/${p.id}`)}>
                   <div className="w-full md:w-48 shrink-0">
                     <p className="text-sm font-medium text-[#111827] truncate">{p.name}</p>
-                    <p className="text-xs text-[#9CA3AF]">{p.client?.name || 'Internal Project'}</p>
+                    <p className="text-xs text-[#9CA3AF]">{p.client ? getClientDisplayName(p.client) : 'Internal Project'}</p>
                   </div>
                   <div className="flex-1 w-full">
                     <div className="relative h-8 rounded-lg bg-[#F3F4F6] overflow-hidden">
@@ -516,7 +516,7 @@ function ProjectsContent() {
                         onChange={(val) => setValue('clientId', val, { shouldValidate: true })}
                         options={[
                           { label: 'Select a client...', value: '' },
-                          ...clients.map((c) => ({ label: c.name, value: c.id }))
+                          ...clients.map((c) => ({ label: getClientDisplayName(c), value: c.id }))
                         ]}
                       />
                     </div>

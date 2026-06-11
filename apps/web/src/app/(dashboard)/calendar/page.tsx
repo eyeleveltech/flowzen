@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { Select } from '@/components/ui/select';
+import { getClientDisplayName } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
 
 interface CalendarTask {
@@ -184,7 +185,7 @@ export default function CalendarPage() {
             <Select
               value={clientIdFilter}
               onChange={(val) => setClientIdFilter(val)}
-              options={[{ label: 'All Clients', value: '' }, ...clients.map(c => ({ label: c.name, value: c.id }))]}
+              options={[{ label: 'All Clients', value: '' }, ...clients.map(c => ({ label: getClientDisplayName(c), value: c.id }))]}
             />
           </div>
           <div className="w-40">

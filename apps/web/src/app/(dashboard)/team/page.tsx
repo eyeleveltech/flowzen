@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
-import { getInitials, getAvatarColor } from '@/lib/utils';
+import { formatDate, getInitials, getAvatarColor, getClientDisplayName } from '@/lib/utils';
 import { Select } from '@/components/ui/select';
 import { 
   Search, Mail, Phone, Calendar, Briefcase, 
@@ -297,7 +297,7 @@ export default function TeamPage() {
                       <div className="flex justify-between items-center text-[10px] text-[#9CA3AF] mt-2">
                         <span className="truncate max-w-[170px] font-medium flex items-center gap-1.5">
                           <User className="h-3 w-3" />
-                          {p.client?.name || 'Internal'}
+                          {p.client ? getClientDisplayName(p.client) : 'Internal'}
                         </span>
                         <span className="font-semibold text-[#6B7280]">
                           {p._count.tasks} tasks

@@ -36,7 +36,7 @@ searchRouter.get('/', async (req: AuthRequest, res: Response, next) => {
             { description: { contains: query, mode: 'insensitive' } },
           ],
         },
-        select: { id: true, name: true, status: true, client: { select: { name: true } } },
+        select: { id: true, name: true, status: true, client: { select: { name: true, company: true } } },
         take: 5,
       }),
       prisma.task.findMany({

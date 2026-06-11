@@ -71,7 +71,7 @@ projectRouter.get('/', async (req: AuthRequest, res: Response, next) => {
       prisma.project.findMany({
         where: where as any,
         include: {
-          client: { select: { id: true, name: true } },
+          client: { select: { id: true, name: true, company: true } },
           owner: { select: { id: true, name: true, avatar: true } },
           members: { include: { user: { select: { id: true, name: true, avatar: true } } } },
           teams: { include: { team: { include: { members: { select: { id: true, name: true, avatar: true } } } } } },
@@ -184,7 +184,7 @@ projectRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), va
         },
       },
       include: {
-        client: { select: { id: true, name: true } },
+        client: { select: { id: true, name: true, company: true } },
         owner: { select: { id: true, name: true, avatar: true } },
       },
     });
@@ -263,7 +263,7 @@ projectRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), 
         } : {}),
       },
       include: {
-        client: { select: { id: true, name: true } },
+        client: { select: { id: true, name: true, company: true } },
         owner: { select: { id: true, name: true, avatar: true } },
         members: { include: { user: { select: { id: true, name: true, avatar: true, role: true } } } },
         teams: { include: { team: { include: { members: { select: { id: true, name: true, avatar: true, role: true } } } } } },

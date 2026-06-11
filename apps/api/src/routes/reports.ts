@@ -29,7 +29,7 @@ reportRouter.get('/projects', async (req: AuthRequest, res: Response, next) => {
         select: {
           status: true,
           type: true,
-          client: { select: { name: true } },
+          client: { select: { name: true, company: true } },
         }
       })
     ]);
@@ -39,7 +39,7 @@ reportRouter.get('/projects', async (req: AuthRequest, res: Response, next) => {
     const projectsByClient = projectsList
       .filter(p => p.status === 'IN_PROGRESS')
       .reduce((acc, curr) => {
-        const clientName = curr.client.name;
+        const clientName = (curr.client.name === 'Internal' ? curr.client.company || 'Internal' : curr.client.company || curr.client.name) as string;
         acc[clientName] = (acc[clientName] || 0) + 1;
         return acc;
       }, {} as Record<string, number>);
