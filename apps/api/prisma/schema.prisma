@@ -143,6 +143,7 @@ model User {
   avatar         String?
   role           UserRole @default(TEAM_MEMBER)
   department     String?
+  designation    String?
   phone          String?
   joiningDate    DateTime @default(now())
   status           UserStatus @default(PENDING)

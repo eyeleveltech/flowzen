@@ -240,6 +240,11 @@ clientRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), v
       return;
     }
 
+    if (existing.name === 'Internal') {
+      res.status(403).json({ error: 'The Internal client syncs automatically and cannot be manually edited' });
+      return;
+    }
+
     const { contacts, startDate, ...data } = req.body;
 
     const updated = await prisma.client.update({
@@ -274,14 +279,23 @@ clientRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), v
 // DELETE /api/clients/:id
 clientRouter.delete('/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
-    const client = await prisma.client.deleteMany({
-      where: { id: (req.params.id as string), organizationId: req.user!.organizationId },
+    const existing = await prisma.client.findFirst({
+      where: { id: (req.params.id as string), organizationId: req.user!.organizationId }
     });
 
-    if (client.count === 0) {
+    if (!existing) {
       res.status(404).json({ error: 'Client not found' });
       return;
     }
+
+    if (existing.name === 'Internal') {
+      res.status(403).json({ error: 'The Internal client cannot be deleted' });
+      return;
+    }
+
+    const client = await prisma.client.deleteMany({
+      where: { id: (req.params.id as string), organizationId: req.user!.organizationId },
+    });
 
     const io = req.app.get('io');
     emitToOrganization(io, req.user!.organizationId, 'client:deleted', { id: (req.params.id as string) });

@@ -14,7 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 interface TeamMember {
   id: string; name: string; email: string; avatar?: string | null;
-  role: string; department?: string | null; phone?: string | null;
+  role: string; department?: string | null; designation?: string | null; phone?: string | null;
   totalTasks: number; totalProjects: number; activeTasks: number; capacity: number;
 }
 
@@ -42,6 +42,7 @@ interface MemberDetail {
   avatar?: string | null;
   role: string;
   department?: string | null;
+  designation?: string | null;
   phone?: string | null;
   joiningDate?: string | null;
   assignedTasks: TaskDetail[];
@@ -147,7 +148,7 @@ export default function TeamPage() {
       );
     }
 
-    const { name, email, role, department, phone, joiningDate, assignedTasks, ownedProjects, stats } = memberDetail;
+    const { name, email, role, department, designation, phone, joiningDate, assignedTasks, ownedProjects, stats } = memberDetail;
     const activeTasks = assignedTasks.filter((t) => t.status !== 'COMPLETED');
 
     return (
@@ -164,6 +165,12 @@ export default function TeamPage() {
                 <Shield className="h-3 w-3" />
                 {roleLabels[role] || role}
               </span>
+              {designation && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-100">
+                  <Briefcase className="h-3 w-3" />
+                  {designation}
+                </span>
+              )}
               {department && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-100">
                   <Briefcase className="h-3 w-3" />
@@ -445,7 +452,7 @@ export default function TeamPage() {
                       <div className="flex-1 min-w-0">
                         <h3 className="text-[15px] font-semibold text-[#111827] truncate leading-snug group-hover:text-black transition-colors">{m.name}</h3>
                         <p className="text-[13px] text-[#86868B] truncate mt-0.5">
-                          {roleLabels[m.role] || m.role}
+                          {m.designation || roleLabels[m.role] || m.role}
                           {m.department && <span className="mx-1.5 opacity-50">·</span>}
                           {m.department && m.department}
                         </p>

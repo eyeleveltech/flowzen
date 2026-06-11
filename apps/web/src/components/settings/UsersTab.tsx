@@ -1,18 +1,20 @@
 import { useState } from 'react';
 import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
-import { Plus, X, Edit2, Shield, Trash2, Mail, Building2, UserCircle } from 'lucide-react';
+import { Plus, X, Edit2, Shield, Trash2, Mail, Building2, UserCircle, UserX } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { getInitials, getAvatarColor } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useConfirmStore } from '@/stores';
 
 export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUsers: () => void, teams: any[] }) {
   const [showInvite, setShowInvite] = useState(false);
   const [editingUser, setEditingUser] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
+  const confirm = useConfirmStore(state => state.confirm);
 
   const [inviteForm, setInviteForm] = useState({
-    name: '', email: '', role: 'TEAM_MEMBER', department: ''
+    name: '', email: '', role: 'TEAM_MEMBER', department: '', designation: ''
   });
 
   const roleOptions = [
@@ -29,7 +31,7 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
       await api.post('/settings/users', inviteForm);
       toast.success('Invitation sent');
       setShowInvite(false);
-      setInviteForm({ name: '', email: '', role: 'TEAM_MEMBER', department: '' });
+      setInviteForm({ name: '', email: '', role: 'TEAM_MEMBER', department: '', designation: '' });
       fetchUsers();
     } catch (err: any) {
       toast.error(err.message || 'Failed to send invite');
@@ -47,6 +49,7 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
         name: editingUser.name,
         role: editingUser.role,
         department: editingUser.department,
+        designation: editingUser.designation,
         status: editingUser.status
       });
       toast.success('User updated');
@@ -60,13 +63,36 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
   };
 
   const handleDeactivate = async (userId: string) => {
-    if (!confirm('Are you sure you want to deactivate this user?')) return;
+    const isConfirmed = await confirm({
+      title: 'Deactivate User',
+      message: 'Are you sure you want to deactivate this user?',
+      confirmText: 'Deactivate',
+      variant: 'warning'
+    });
+    if (!isConfirmed) return;
     try {
       await api.put(`/settings/users/${userId}`, { status: 'INACTIVE' });
       toast.success('User deactivated');
       fetchUsers();
     } catch (err: any) {
       toast.error(err.message || 'Failed to deactivate user');
+    }
+  };
+
+  const handleDelete = async (userId: string) => {
+    const isConfirmed = await confirm({
+      title: 'Permanently Delete User',
+      message: 'Are you sure you want to PERMANENTLY delete this user? This cannot be undone.',
+      confirmText: 'Delete',
+      variant: 'danger'
+    });
+    if (!isConfirmed) return;
+    try {
+      await api.delete(`/settings/users/${userId}`);
+      toast.success('User permanently deleted');
+      fetchUsers();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete user');
     }
   };
 
@@ -96,6 +122,7 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
               <th className="px-5 py-3 font-semibold text-[#6B7280] uppercase tracking-wide text-xs">Name</th>
               <th className="px-5 py-3 font-semibold text-[#6B7280] uppercase tracking-wide text-xs">Role</th>
               <th className="px-5 py-3 font-semibold text-[#6B7280] uppercase tracking-wide text-xs">Department</th>
+              <th className="px-5 py-3 font-semibold text-[#6B7280] uppercase tracking-wide text-xs">Designation</th>
               <th className="px-5 py-3 font-semibold text-[#6B7280] uppercase tracking-wide text-xs">Status</th>
               <th className="px-5 py-3 font-semibold text-[#6B7280] uppercase tracking-wide text-xs text-right">Actions</th>
             </tr>
@@ -120,6 +147,9 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
                 <td className="px-5 py-3 text-[#6B7280]">
                   {u.department || '—'}
                 </td>
+                <td className="px-5 py-3 text-[#6B7280]">
+                  {u.designation || '—'}
+                </td>
                 <td className="px-5 py-3">
                   {u.status === 'ACTIVE' && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[#F3F4F6] text-[#111827] border border-[#E5E7EB] uppercase tracking-wide">Active</span>}
                   {u.status === 'PENDING' && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[#F3F4F6] text-[#6B7280] border border-[#E5E7EB] uppercase tracking-wide">Pending</span>}
@@ -131,10 +161,13 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
                       <Edit2 className="h-4 w-4" />
                     </button>
                     {u.status !== 'INACTIVE' && (
-                      <button onClick={() => handleDeactivate(u.id)} className="p-1.5 text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6] rounded-md transition-colors">
-                        <Trash2 className="h-4 w-4" />
+                      <button onClick={() => handleDeactivate(u.id)} title="Deactivate" className="p-1.5 text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6] rounded-md transition-colors">
+                        <UserX className="h-4 w-4" />
                       </button>
                     )}
+                    <button onClick={() => handleDelete(u.id)} title="Permanently Delete" className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -172,6 +205,10 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
                     onChange={(val) => setInviteForm({ ...inviteForm, department: val })} 
                     options={[{ label: 'None', value: '' }, ...(teams?.map(t => ({ label: t.name, value: t.name })) || [])]} 
                   />
+                </div>
+                <div className="space-y-1.5 relative">
+                  <label className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">Designation (Optional)</label>
+                  <input value={inviteForm.designation || ''} onChange={(e) => setInviteForm({ ...inviteForm, designation: e.target.value })} className="w-full bg-white border border-[#E5E7EB] rounded-xl px-4 py-2.5 text-sm font-medium text-[#111827] focus:border-[#111827] focus:ring-1 focus:ring-[#111827] outline-none transition-all" />
                 </div>
                 <div className="pt-8 flex gap-3">
                   <button type="button" onClick={() => setShowInvite(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E5E7EB] text-[#374151] font-medium hover:bg-[#FAFAFA] transition-colors">Cancel</button>
@@ -211,7 +248,11 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
                     options={[{ label: 'None', value: '' }, ...(teams?.map(t => ({ label: t.name, value: t.name })) || [])]} 
                   />
                 </div>
-                <div className="space-y-1.5 z-10 relative">
+                <div className="space-y-1.5 relative">
+                  <label className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">Designation (Optional)</label>
+                  <input value={editingUser.designation || ''} onChange={(e) => setEditingUser({ ...editingUser, designation: e.target.value })} className="w-full bg-white border border-[#E5E7EB] rounded-xl px-4 py-2.5 text-sm font-medium text-[#111827] focus:border-[#111827] focus:ring-1 focus:ring-[#111827] outline-none transition-all" />
+                </div>
+                <div className="space-y-1.5 relative">
                   <label className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">Status</label>
                   <Select value={editingUser.status} onChange={(val) => setEditingUser({ ...editingUser, status: val })} options={[{label: 'Active', value: 'ACTIVE'}, {label: 'Pending', value: 'PENDING'}, {label: 'Inactive', value: 'INACTIVE'}]} />
                 </div>

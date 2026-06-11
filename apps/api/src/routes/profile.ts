@@ -13,6 +13,7 @@ profileRouter.use(authenticate);
 const updateProfileSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   department: z.string().optional().nullable(),
+  designation: z.string().optional().nullable(),
 });
 
 const updatePasswordSchema = z.object({
@@ -31,6 +32,7 @@ profileRouter.get('/', async (req: AuthRequest, res: Response, next) => {
         email: true,
         role: true,
         department: true,
+        designation: true,
         avatar: true,
         organizationId: true,
         teamId: true,
@@ -59,6 +61,7 @@ profileRouter.put('/', async (req: AuthRequest, res: Response, next) => {
       data: {
         name: data.name,
         department: data.department,
+        designation: data.designation,
       },
       select: {
         id: true,
@@ -66,6 +69,7 @@ profileRouter.put('/', async (req: AuthRequest, res: Response, next) => {
         email: true,
         role: true,
         department: true,
+        designation: true,
         avatar: true,
         organizationId: true,
         teamId: true,

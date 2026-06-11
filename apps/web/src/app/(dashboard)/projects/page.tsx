@@ -510,12 +510,12 @@ function ProjectsContent() {
                   <h3 className="text-sm font-semibold text-[#111827] border-b border-[#F3F4F6] pb-2">Client & Ownership</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Client (Leave empty for Internal)</label>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Client</label>
                       <Select
                         value={formValues.clientId || ''}
                         onChange={(val) => setValue('clientId', val, { shouldValidate: true })}
                         options={[
-                          { label: 'Internal Project', value: '' },
+                          { label: 'Select a client...', value: '' },
                           ...clients.map((c) => ({ label: c.name, value: c.id }))
                         ]}
                       />

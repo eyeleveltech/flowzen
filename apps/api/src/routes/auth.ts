@@ -56,6 +56,14 @@ authRouter.post('/register', authLimiter, validate(registerSchema), async (req, 
             role: 'SUPER_ADMIN',
           },
         },
+        clients: {
+          create: {
+            name: 'Internal',
+            company: organizationName,
+            status: 'ACTIVE',
+            engagementType: 'INTERNAL',
+          },
+        },
       },
       include: { users: true },
     });

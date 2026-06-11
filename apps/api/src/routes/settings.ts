@@ -48,6 +48,28 @@ settingsRouter.put('/organization', authorize('SUPER_ADMIN', 'ADMIN'), async (re
       },
     });
 
+    // Sync or create the Internal client
+    const existingInternalClient = await prisma.client.findFirst({
+      where: { organizationId: req.user!.organizationId, name: 'Internal' }
+    });
+
+    if (existingInternalClient) {
+      await prisma.client.update({
+        where: { id: existingInternalClient.id },
+        data: { company: req.body.name }
+      });
+    } else {
+      await prisma.client.create({
+        data: {
+          name: 'Internal',
+          company: req.body.name,
+          organizationId: req.user!.organizationId,
+          status: 'ACTIVE',
+          engagementType: 'INTERNAL'
+        }
+      });
+    }
+
     res.json(org);
   } catch (error) {
     next(error);
@@ -66,6 +88,7 @@ settingsRouter.get('/users', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Auth
         avatar: true,
         role: true,
         department: true,
+        designation: true,
         team: { select: { name: true } },
         status: true,
         joiningDate: true,
@@ -82,7 +105,7 @@ settingsRouter.get('/users', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Auth
 // POST /api/settings/users (invite)
 settingsRouter.post('/users', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimiter, async (req: AuthRequest, res: Response, next) => {
   try {
-    const { name, email, role, department, password, teamId } = req.body;
+    const { name, email, role, department, designation, password, teamId } = req.body;
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
@@ -102,6 +125,7 @@ settingsRouter.post('/users', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimiter
         password: hashedPassword,
         role: role || 'TEAM_MEMBER',
         department,
+        designation,
         resetToken,
         resetTokenExpiry,
         organizationId: req.user!.organizationId,
@@ -115,6 +139,7 @@ settingsRouter.post('/users', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimiter
         email: true,
         role: true,
         department: true,
+        designation: true,
         status: true,
       },
     });
@@ -154,6 +179,7 @@ settingsRouter.put('/users/:id', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimi
       name: req.body.name,
       role: roleToSet,
       department: req.body.department,
+      designation: req.body.designation,
       teamId: req.body.teamId || null,
       status: req.body.status,
     };
@@ -167,6 +193,7 @@ settingsRouter.put('/users/:id', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimi
         email: true,
         role: true,
         department: true,
+        designation: true,
         team: { select: { name: true } },
         status: true,
       },

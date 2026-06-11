@@ -28,11 +28,11 @@ interface TeamReport {
 
 interface ClientReport {
   totalClients: number; totalRevenue: number;
-  clients: { 
-    id: string; name: string; company?: string | null; contractValue?: number | null; 
-    totalProjects: number; completedProjects: number; completionRate: number; 
-    totalTasks: number; completedTasks: number; deliverablesRate: number; 
-    overdueTasks: number; nextDueDate: string | null 
+  clients: {
+    id: string; name: string; company?: string | null; contractValue?: number | null;
+    totalProjects: number; completedProjects: number; completionRate: number;
+    totalTasks: number; completedTasks: number; deliverablesRate: number;
+    overdueTasks: number; nextDueDate: string | null
   }[];
 }
 
@@ -45,7 +45,7 @@ export default function ReportsPage() {
   const { user } = useAuthStore();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('projects');
-  
+
   const [projectReport, setProjectReport] = useState<ProjectReport | null>(null);
   const [taskReport, setTaskReport] = useState<TaskReport | null>(null);
   const [teamReport, setTeamReport] = useState<TeamReport | null>(null);
@@ -56,12 +56,12 @@ export default function ReportsPage() {
       router.push('/dashboard');
       return;
     }
-    
+
     // Fetch all reports
-    api.get<ProjectReport>('/reports/projects').then(setProjectReport).catch(() => {});
-    api.get<TaskReport>('/reports/tasks').then(setTaskReport).catch(() => {});
-    api.get<TeamReport>('/reports/team').then(setTeamReport).catch(() => {});
-    api.get<ClientReport>('/reports/clients').then(setClientReport).catch(() => {});
+    api.get<ProjectReport>('/reports/projects').then(setProjectReport).catch(() => { });
+    api.get<TaskReport>('/reports/tasks').then(setTaskReport).catch(() => { });
+    api.get<TeamReport>('/reports/team').then(setTeamReport).catch(() => { });
+    api.get<ClientReport>('/reports/clients').then(setClientReport).catch(() => { });
   }, [user, router]);
 
   const tabs = [
@@ -87,11 +87,10 @@ export default function ReportsPage() {
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all border ${
-                active 
-                  ? 'bg-[#111827] text-white border-[#111827] shadow-sm' 
-                  : 'bg-white text-[#6B7280] border-[#E5E7EB] hover:text-[#111827] hover:bg-[#F9FAFB] hover:border-[#D1D5DB]'
-              }`}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all border ${active
+                ? 'bg-[#111827] text-white border-[#111827] shadow-sm'
+                : 'bg-white text-[#6B7280] border-[#E5E7EB] hover:text-[#111827] hover:bg-[#F9FAFB] hover:border-[#D1D5DB]'
+                }`}
             >
               <Icon className="h-4 w-4" />
               {t.label}
@@ -101,6 +100,7 @@ export default function ReportsPage() {
       </div>
 
       {/* ---------------- PROJECT REPORTS ---------------- */}
+      {tab === 'projects' && !projectReport && <ReportSkeleton />}
       {tab === 'projects' && projectReport && (
         <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
           <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -143,7 +143,7 @@ export default function ReportsPage() {
                   {projectReport.projectsByType.length === 0 && <span className="text-sm text-[#9CA3AF]">No data available.</span>}
                 </div>
               </div>
-              
+
               <div className="flex-1 border-t border-[#F3F4F6] pt-6">
                 <h3 className="text-sm font-semibold text-[#111827] mb-4">Active Projects by Client</h3>
                 <div className="space-y-3 max-h-[200px] overflow-y-auto pr-2">
@@ -162,6 +162,7 @@ export default function ReportsPage() {
       )}
 
       {/* ---------------- TASK REPORTS ---------------- */}
+      {tab === 'tasks' && !taskReport && <ReportSkeleton />}
       {tab === 'tasks' && taskReport && (
         <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
           <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -210,6 +211,7 @@ export default function ReportsPage() {
       )}
 
       {/* ---------------- TEAM REPORTS ---------------- */}
+      {tab === 'team' && !teamReport && <ReportSkeleton />}
       {tab === 'team' && teamReport && (
         <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
           <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -235,7 +237,7 @@ export default function ReportsPage() {
                     <tr key={m.id} className="hover:bg-[#F9FAFB] transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
- <div className={`h-8 w-8 rounded-full text-[11px] font-semibold flex items-center justify-center ${getAvatarColor(m.name)}`}>{getInitials(m.name)}</div>
+                          <div className={`h-8 w-8 rounded-full text-[11px] font-semibold flex items-center justify-center ${getAvatarColor(m.name)}`}>{getInitials(m.name)}</div>
                           <span className="text-sm font-semibold text-[#111827]">{m.name}</span>
                         </div>
                       </td>
@@ -268,6 +270,7 @@ export default function ReportsPage() {
       )}
 
       {/* ---------------- CLIENT REPORTS ---------------- */}
+      {tab === 'clients' && !clientReport && <ReportSkeleton />}
       {tab === 'clients' && clientReport && (
         <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
           <motion.div variants={item} className="grid grid-cols-2 gap-4">
@@ -302,13 +305,13 @@ export default function ReportsPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-col items-center">
-                           <div className="flex items-center gap-2 mb-1">
-                             <div className="h-2 w-20 rounded-full bg-[#F3F4F6] overflow-hidden">
-                                <div className="h-full rounded-full bg-[#8B5CF6]" style={{ width: `${c.deliverablesRate}%` }} />
-                             </div>
-                             <span className="text-xs font-semibold text-[#111827] w-8">{c.deliverablesRate}%</span>
-                           </div>
-                           <span className="text-[10px] font-medium text-[#6B7280]">{c.completedTasks} of {c.totalTasks} tasks</span>
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="h-2 w-20 rounded-full bg-[#F3F4F6] overflow-hidden">
+                              <div className="h-full rounded-full bg-[#8B5CF6]" style={{ width: `${c.deliverablesRate}%` }} />
+                            </div>
+                            <span className="text-xs font-semibold text-[#111827] w-8">{c.deliverablesRate}%</span>
+                          </div>
+                          <span className="text-[10px] font-medium text-[#6B7280]">{c.completedTasks} of {c.totalTasks} tasks</span>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-center">
@@ -353,6 +356,42 @@ function MetricCard({ label, value, suffix, danger, icon: Icon }: { label: strin
         {value}
         {suffix && <span className={`text-sm font-medium ml-2 ${danger ? 'text-red-400' : 'text-[#9CA3AF]'}`}>{suffix}</span>}
       </p>
+    </div>
+  );
+}
+
+function ReportSkeleton() {
+  return (
+    <div className="space-y-6 animate-pulse">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="p-4 sm:p-5 rounded-2xl border border-[#E5E7EB] bg-white h-[104px]">
+            <div className="h-3 w-24 bg-[#F3F4F6] rounded mb-4" />
+            <div className="h-8 w-16 bg-[#F3F4F6] rounded" />
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6 h-[300px]">
+          <div className="h-4 w-32 bg-[#F3F4F6] rounded mb-6" />
+          <div className="space-y-6">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="flex gap-4">
+                <div className="h-4 w-24 bg-[#F3F4F6] rounded" />
+                <div className="h-4 flex-1 bg-[#F3F4F6] rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6 h-[300px]">
+          <div className="h-4 w-32 bg-[#F3F4F6] rounded mb-6" />
+          <div className="flex gap-2 flex-wrap">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="h-8 w-24 bg-[#F3F4F6] rounded-lg" />
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

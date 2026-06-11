@@ -9,6 +9,7 @@ interface User {
   role: string;
   avatar?: string | null;
   department?: string | null;
+  designation?: string | null;
   organization?: {
     id: string;
     name: string;

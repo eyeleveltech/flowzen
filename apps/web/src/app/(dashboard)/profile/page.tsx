@@ -15,6 +15,7 @@ export default function ProfilePage() {
   const [profileForm, setProfileForm] = useState({
     name: '',
     department: '',
+    designation: '',
   });
   
   const [passwordForm, setPasswordForm] = useState({
@@ -32,6 +33,7 @@ export default function ProfilePage() {
       setProfileForm({
         name: user.name || '',
         department: user.department || '',
+        designation: user.designation || '',
       });
     }
   }, [user]);
@@ -126,6 +128,15 @@ export default function ProfilePage() {
                     value={user.email}
                     className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-2.5 text-sm text-[#9CA3AF] cursor-not-allowed"
                     title="Email cannot be changed"
+                  />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="text-sm font-medium text-[#374151]">Designation (Job Title)</label>
+                  <input
+                    type="text"
+                    value={profileForm.designation}
+                    onChange={(e) => setProfileForm({ ...profileForm, designation: e.target.value })}
+                    className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm outline-none focus:border-[#111827] focus:ring-1 focus:ring-[#111827] transition-all"
                   />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">

@@ -62,7 +62,7 @@ export default function ClientDetailPage() {
   }, [id, router]);
 
   useEffect(() => {
-    if (client && client.name.includes('(Internal)')) {
+    if (client && client.name === 'Internal') {
       api.get('/settings/organization').then(setOrgProfile).catch(() => {});
     }
   }, [client]);
@@ -155,18 +155,21 @@ export default function ClientDetailPage() {
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div className="flex items-start gap-4">
- <div className={`flex h-16 w-16 items-center justify-center rounded-2xl text-xl font-bold ${getAvatarColor(client.name)}`}>
-            {getInitials(client.name)}
+          <div className={`flex h-16 w-16 items-center justify-center rounded-2xl text-xl font-bold ${getAvatarColor(client.name === 'Internal' ? (client.company || 'O') : client.name)}`}>
+            {getInitials(client.name === 'Internal' ? (client.company || 'O') : client.name)}
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-[#111827]">{client.name}</h1>
+            <h1 className="text-2xl font-bold text-[#111827]">
+              {client.name === 'Internal' ? client.company : client.name}
+            </h1>
             <div className="flex items-center gap-3 mt-1">
-              {client.company && <span className="text-sm text-[#6B7280]">{client.company}</span>}
+              {client.company && client.name !== 'Internal' && <span className="text-sm text-[#6B7280]">{client.company}</span>}
+              {client.name === 'Internal' && <span className="text-sm font-medium text-[#6B7280]">(Internal)</span>}
               <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[client.status]}`}>{client.status}</span>
             </div>
           </div>
         </div>
-        {!client.name.includes('(Internal)') && (
+        {client.name !== 'Internal' && (
           <div className="flex items-center gap-2">
             <button onClick={openEdit} className="px-4 py-2 bg-white border border-[#E5E7EB] rounded-xl text-sm font-medium text-[#374151] hover:bg-gray-50 transition-colors shadow-sm">
               Edit Client
@@ -193,17 +196,17 @@ export default function ClientDetailPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6 space-y-4">
             <h3 className="text-sm font-semibold text-[#111827]">
-              {client.name.includes('(Internal)') ? 'Organization Profile' : 'Company Details'}
+              {client.name === 'Internal' ? 'Organization Profile' : 'Company Details'}
             </h3>
             
-            {client.name.includes('(Internal)') && orgProfile ? (
+            {client.name === 'Internal' && orgProfile ? (
               <div className="space-y-4 pt-1">
                 <p className="text-sm text-[#374151] leading-relaxed">
-                  {orgProfile.settings?.description || 'No organization description provided.'}
+                  {orgProfile.description || 'No organization description provided.'}
                 </p>
-                <InfoRow icon={Briefcase} label="Industry" value={orgProfile.settings?.industry || 'Not specified'} />
-                <InfoRow icon={MapPin} label="Address" value={orgProfile.settings?.address || 'Not specified'} />
-                <InfoRow icon={Phone} label="Main Phone" value={orgProfile.settings?.phone || 'Not specified'} />
+                <InfoRow icon={Briefcase} label="Industry" value={orgProfile.industry || 'Not specified'} />
+                <InfoRow icon={MapPin} label="Address" value={orgProfile.address || 'Not specified'} />
+                <InfoRow icon={Phone} label="Main Phone" value={orgProfile.phone || 'Not specified'} />
               </div>
             ) : (
               <>

@@ -299,8 +299,44 @@ export default function CalendarPage() {
             )}
 
             {/* Mobile View (Agenda) */}
-            <div className="md:hidden flex flex-col p-4 gap-4 bg-[#FAFAFA] min-h-[400px]">
-              <div className="text-center text-sm text-[#9CA3AF] py-8">Please use a larger screen to view the calendar.</div>
+            <div className="md:hidden flex flex-col p-4 gap-6 bg-[#FAFAFA] min-h-[400px]">
+              {(() => {
+                const daysToRender = view === 'month' 
+                  ? days.filter(d => d !== null).map(d => new Date(year, month, d as number))
+                  : weekDays;
+                
+                const agendaDays = daysToRender.map(dObj => ({
+                  date: dObj,
+                  tasks: getTasksForDate(dObj)
+                })).filter(day => day.tasks.length > 0);
+
+                if (agendaDays.length === 0) {
+                  return <div className="text-center text-sm text-[#9CA3AF] py-8 bg-white rounded-xl border border-[#E5E7EB]">No tasks scheduled for this period.</div>;
+                }
+
+                return agendaDays.map((day, i) => (
+                  <div key={i} className="flex flex-col gap-3 bg-white p-4 rounded-xl border border-[#E5E7EB]">
+                    <h3 className="text-sm font-semibold text-[#111827] border-b border-[#F3F4F6] pb-2">
+                      {day.date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                    </h3>
+                    <div className="flex flex-col gap-2">
+                      {day.tasks.map(t => (
+                        <div 
+                          key={t.id} 
+                          className="flex flex-col gap-1.5 rounded-lg px-3 py-2.5 border text-xs"
+                          style={{ backgroundColor: `${t.project.color || '#3B82F6'}10`, borderColor: `${t.project.color || '#3B82F6'}30` }}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium truncate" style={{ color: t.project.color || '#3B82F6' }}>{t.title}</span>
+                            <div className={`h-2 w-2 rounded-full shrink-0 ${priorityDots[t.priority] || 'bg-gray-300'}`} />
+                          </div>
+                          <span className="text-[#6B7280] truncate">{t.project.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ));
+              })()}
             </div>
 
           </div>

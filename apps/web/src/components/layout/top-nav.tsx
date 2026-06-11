@@ -50,7 +50,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
   const router = useRouter();
   const { setCommandPaletteOpen, setMobileSidebarOpen } = useUIStore();
   const { user, logout } = useAuthStore();
-  
+
   const queryClient = useQueryClient();
   const { data: notifData } = useNotifications();
   const notifications = notifData?.notifications || [];
@@ -203,7 +203,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                 ) : (
                   notifications.slice(0, 10).map((n) => {
                     const Icon = notificationIcons[n.type] || AlertCircle;
-                    
+
                     const handleNotificationClick = async () => {
                       if (!n.read) markAsRead(n.id);
                       setShowNotifications(false);
@@ -212,8 +212,8 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                     };
 
                     return (
-                      <div 
-                        key={n.id} 
+                      <div
+                        key={n.id}
                         onClick={handleNotificationClick}
                         className={`flex gap-3 px-6 py-4 cursor-pointer hover:bg-[#F9FAFB] transition-colors ${!n.read ? 'bg-blue-50/50' : ''}`}
                       >
@@ -255,7 +255,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                     ) : (
                       notifications.slice(0, 10).map((n) => {
                         const Icon = notificationIcons[n.type] || AlertCircle;
-                        
+
                         const handleNotificationClick = async () => {
                           if (!n.read) markAsRead(n.id);
                           setShowNotifications(false);
@@ -264,8 +264,8 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                         };
 
                         return (
-                          <div 
-                            key={n.id} 
+                          <div
+                            key={n.id}
                             onClick={handleNotificationClick}
                             className={`flex gap-3 px-4 py-3 cursor-pointer hover:bg-[#F9FAFB] transition-colors ${!n.read ? 'bg-blue-50/50' : ''}`}
                           >

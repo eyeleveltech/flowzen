@@ -11,6 +11,7 @@ export interface User {
   avatar?: string | null;
   role: UserRole;
   department?: string | null;
+  designation?: string | null;
   phone?: string | null;
   joiningDate: string;
   isActive: boolean;

@@ -400,23 +400,26 @@ function ClientsContent() {
                 >
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
- <div className={`h-8 w-8 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(client.name)}`}>
-                        {getInitials(client.name)}
+                      <div className={`h-8 w-8 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(client.name === 'Internal' ? (client.company || 'O') : client.name)}`}>
+                        {getInitials(client.name === 'Internal' ? (client.company || 'O') : client.name)}
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-[#111827]">{client.name}</p>
-                        {client.company && <p className="text-xs text-[#9CA3AF]">{client.company}</p>}
+                        <p className="text-sm font-medium text-[#111827]">
+                          {client.name === 'Internal' ? client.company : client.name}
+                        </p>
+                        {client.company && client.name !== 'Internal' && <p className="text-xs text-[#9CA3AF]">{client.company}</p>}
+                        {client.name === 'Internal' && <p className="text-xs font-medium text-[#9CA3AF]">(Internal)</p>}
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-sm text-[#6B7280]">
-                    {client.name.includes('(Internal)') && orgProfile?.settings?.industry ? orgProfile.settings.industry : client.industry || '—'}
+                    {client.name === 'Internal' && orgProfile?.industry ? orgProfile.industry : client.industry || '—'}
                   </td>
                   <td className="px-6 py-4">
-                    {client.name.includes('(Internal)') ? (
+                    {client.name === 'Internal' ? (
                       <div>
                         <p className="text-sm text-[#374151] font-medium">Internal Contact</p>
-                        {orgProfile?.settings?.phone && <p className="text-[11px] text-[#6B7280]">{orgProfile.settings.phone}</p>}
+                        {orgProfile?.phone && <p className="text-[11px] text-[#6B7280]">{orgProfile.phone}</p>}
                       </div>
                     ) : client.contacts && client.contacts.length > 0 ? (
                       <div>
@@ -480,12 +483,16 @@ function ClientsContent() {
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
- <div className={`h-10 w-10 rounded-full text-xs font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(client.name)}`}>
-                    {getInitials(client.name)}
+                  <div className={`h-10 w-10 rounded-full text-xs font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(client.name === 'Internal' ? (client.company || 'O') : client.name)}`}>
+                    {getInitials(client.name === 'Internal' ? (client.company || 'O') : client.name)}
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-[#111827] leading-tight">{client.name}</p>
-                    {client.company ? (
+                    <p className="text-sm font-medium text-[#111827] leading-tight">
+                      {client.name === 'Internal' ? client.company : client.name}
+                    </p>
+                    {client.name === 'Internal' ? (
+                      <p className="text-xs font-medium text-[#6B7280] mt-0.5">(Internal)</p>
+                    ) : client.company ? (
                       <p className="text-xs text-[#6B7280] mt-0.5">{client.company}</p>
                     ) : (
                       <p className="text-xs text-[#6B7280] mt-0.5">{client.industry || '—'}</p>
