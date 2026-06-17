@@ -186,7 +186,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
                   logout();
                   window.location.href = '/login';
                 }}
-                className="p-1.5 rounded-lg text-[#9CA3AF] hover:text-[#EF4444] hover:bg-red-50 transition-colors"
+                className="p-1.5 rounded-lg text-[#9CA3AF] hover:text-danger hover:bg-red-50 transition-colors"
               >
                 <LogOut className="h-4 w-4" />
               </motion.button>

@@ -783,7 +783,7 @@ export default function ProjectDetailPage() {
                 value={commentContent}
                 onChange={(e) => setCommentContent(e.target.value)}
                 placeholder="Write a project comment or update..."
-                className="w-full min-h-[100px] text-sm text-primary outline-none resize-y"
+                className="w-full min-h-25 text-sm text-primary outline-none resize-y"
               />
               <div className="mt-4 flex justify-end">
                 <button

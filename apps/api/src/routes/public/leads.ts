@@ -1,0 +1,403 @@
+import { Router, Request, Response } from 'express';
+import { PrismaClient, LeadStage, LeadSource, ActivityEntityType, LostReason, ClientStatus } from '@prisma/client';
+
+const prisma = new PrismaClient();
+const leadRouter = Router();
+
+// --- Translators ---
+
+const stageMapToEnum: Record<string, LeadStage> = {
+  '1. New Lead': 'LEAD',
+  '2. First Contact Made': 'REACH_OUT',
+  '3. Discovery Scheduled': 'MQL',
+  '4. Discovery Done': 'DISCOVERY',
+  '5. Proposal Building': 'PRESENTATION',
+  '6. Proposal Sent': 'PROPOSAL',
+  '7. Negotiation': 'NEGOTIATION',
+  '8. Closed Won': 'WON_CLOSED',
+  '9. Closed Lost': 'LOST_CLOSED',
+  '10. Dead / No Response': 'LOST_CLOSED',
+};
+
+const stageEnumToMap: Record<LeadStage, string> = {
+  LEAD: '1. New Lead',
+  MQL: '3. Discovery Scheduled',
+  SQL: '3. Discovery Scheduled',
+  REACH_OUT: '2. First Contact Made',
+  DISCOVERY: '4. Discovery Done',
+  AUDIT: '4. Discovery Done',
+  PRESENTATION: '5. Proposal Building',
+  PROPOSAL: '6. Proposal Sent',
+  NEGOTIATION: '7. Negotiation',
+  FINALIZATION: '7. Negotiation',
+  CONTRACT: '7. Negotiation',
+  ACTIVE_RETAINER: '8. Closed Won',
+  ACTIVE_PROJECT: '8. Closed Won',
+  WON_CLOSED: '8. Closed Won',
+  LOST_CLOSED: '9. Closed Lost',
+};
+
+const mapStageToEnum = (aiStage: string): LeadStage => stageMapToEnum[aiStage] || 'LEAD';
+const mapEnumToStage = (dbStage: LeadStage): string => stageEnumToMap[dbStage] || '1. New Lead';
+
+const mapSourceToEnum = (aiSource: string): LeadSource => {
+  switch (aiSource) {
+    case 'LinkedIn Outreach': return 'LINKEDIN';
+    case 'Referral': return 'REFERRAL';
+    case 'Inbound': return 'INBOUND';
+    case 'Cold Email': return 'API'; // or MANUAL
+    case 'Event': return 'OTHER';
+    default: return 'OTHER';
+  }
+};
+
+const mapEnumToSource = (dbSource: LeadSource): string => {
+  switch (dbSource) {
+    case 'LINKEDIN': return 'LinkedIn Outreach';
+    case 'REFERRAL': return 'Referral';
+    case 'INBOUND': return 'Inbound';
+    default: return 'Other';
+  }
+};
+
+// Formats a DB Lead to match the AI Brief JSON requirement
+const formatLeadResponse = (dbLead: any) => {
+  const now = new Date();
+  const lastContact = dbLead.activities?.[0]?.createdAt;
+  const daysSinceContact = lastContact ? Math.floor((now.getTime() - lastContact.getTime()) / (1000 * 3600 * 24)) : 0;
+  
+  // Calculate days in current stage from StageHistory if possible
+  let daysInStage = 0;
+  if (dbLead.stageHistory && dbLead.stageHistory.length > 0) {
+    const lastChange = dbLead.stageHistory[0].changedAt;
+    daysInStage = Math.floor((now.getTime() - lastChange.getTime()) / (1000 * 3600 * 24));
+  } else {
+    daysInStage = Math.floor((now.getTime() - dbLead.createdAt.getTime()) / (1000 * 3600 * 24));
+  }
+
+  let notes = "";
+  if (dbLead.client?.notes && dbLead.client.notes.length > 0) {
+    notes = dbLead.client.notes[0].content;
+  }
+
+  return {
+    id: dbLead.id,
+    company_name: dbLead.client.company || dbLead.client.name,
+    contact_name: dbLead.client.contactPerson || dbLead.client.name,
+    contact_email: dbLead.client.email || '',
+    contact_phone: dbLead.client.phone || '',
+    contact_whatsapp: dbLead.client.phone || '',
+    vertical: dbLead.client.industry || '',
+    source: mapEnumToSource(dbLead.source),
+    stage: mapEnumToStage(dbLead.stage),
+    monthly_value: dbLead.dealValue || 0,
+    assigned_to: dbLead.assignedTo ? {
+      id: dbLead.assignedTo.id,
+      name: dbLead.assignedTo.name,
+      role: dbLead.assignedTo.role
+    } : null,
+    last_contact_date: lastContact ? lastContact.toISOString().split('T')[0] : null,
+    next_followup_date: dbLead.expectedCloseDate ? dbLead.expectedCloseDate.toISOString().split('T')[0] : null,
+    days_since_contact: daysSinceContact,
+    days_in_current_stage: daysInStage,
+    notes: notes,
+    created_at: dbLead.createdAt,
+    updated_at: dbLead.updatedAt
+  };
+};
+
+
+// --- Endpoints ---
+
+// GET /leads
+leadRouter.get('/', async (req: Request, res: Response) => {
+  try {
+    const orgId = (req as any).user.organizationId;
+    const { stage, stage_not, vertical, assigned_to_id, days_since_contact_gte, next_followup_before, next_followup_on, monthly_value_gte } = req.query;
+
+    const where: any = { organizationId: orgId };
+
+    if (stage) {
+      where.stage = mapStageToEnum(stage as string);
+    }
+    
+    if (stage_not) {
+      const excludedStages = (stage_not as string).split(',').map(s => mapStageToEnum(s.trim()));
+      where.stage = { notIn: excludedStages };
+    }
+
+    if (assigned_to_id) {
+      where.assignedToId = assigned_to_id;
+    }
+
+    if (monthly_value_gte) {
+      where.dealValue = { gte: parseFloat(monthly_value_gte as string) };
+    }
+
+    if (vertical) {
+      where.client = { industry: vertical };
+    }
+
+    if (next_followup_on) {
+      const date = new Date(next_followup_on as string);
+      where.expectedCloseDate = {
+        gte: new Date(date.setHours(0,0,0,0)),
+        lt: new Date(date.setHours(23,59,59,999))
+      };
+    } else if (next_followup_before) {
+      where.expectedCloseDate = { lte: new Date(next_followup_before as string) };
+    }
+
+    // Fetch leads
+    const leads = await prisma.lead.findMany({
+      where,
+      include: {
+        client: { include: { notes: { orderBy: { createdAt: 'desc' }, take: 1 } } },
+        assignedTo: true,
+        activities: { orderBy: { createdAt: 'desc' }, take: 1 },
+        stageHistory: { orderBy: { changedAt: 'desc' }, take: 1 }
+      }
+    });
+
+    // Post-process filters (like days_since_contact_gte which can't easily be queried natively)
+    let processedLeads = leads.map(formatLeadResponse);
+
+    if (days_since_contact_gte) {
+      const minDays = parseInt(days_since_contact_gte as string, 10);
+      processedLeads = processedLeads.filter(l => l.days_since_contact >= minDays);
+    }
+
+    res.json(processedLeads);
+  } catch (error) {
+    console.error('[Public API GET /leads Error]:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /leads/:id
+leadRouter.get('/:id', async (req: Request, res: Response) => {
+  try {
+    const lead = await prisma.lead.findFirst({
+      where: { id: req.params.id as string, organizationId: (req as any).user.organizationId },
+      include: {
+        client: { include: { notes: { orderBy: { createdAt: 'desc' }, take: 1 } } },
+        assignedTo: true,
+        activities: { 
+          orderBy: { createdAt: 'desc' },
+          include: { user: true }
+        },
+        stageHistory: { orderBy: { changedAt: 'desc' }, take: 1 }
+      }
+    });
+
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+    const formattedLead = formatLeadResponse(lead) as any;
+    
+    // Add full activity timeline
+    formattedLead.activities = (lead as any).activities.map((act: any) => ({
+      id: act.id,
+      lead_id: act.leadId,
+      type: act.type,
+      direction: act.direction || 'outbound',
+      summary: act.message,
+      done_by: {
+        id: act.userId,
+        name: act.user?.name || 'System'
+      },
+      activity_date: act.createdAt,
+      created_at: act.createdAt
+    }));
+
+    res.json(formattedLead);
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /leads
+leadRouter.post('/', async (req: Request, res: Response) => {
+  try {
+    const orgId = (req as any).user.organizationId;
+    const { company_name, contact_name, contact_email, contact_phone, vertical, source, stage, monthly_value, assigned_to_id, next_followup_date, notes } = req.body;
+
+    const dbStage = mapStageToEnum(stage);
+    const dbSource = mapSourceToEnum(source);
+
+    // Create client wrapper first
+    const client = await prisma.client.create({
+      data: {
+        name: contact_name || company_name || 'Unknown Lead',
+        company: company_name,
+        email: contact_email,
+        phone: contact_phone,
+        industry: vertical,
+        organizationId: orgId,
+        status: 'PROSPECT',
+        notes: notes ? {
+          create: {
+            content: notes,
+            authorId: (req as any).user.userId
+          }
+        } : undefined
+      }
+    });
+
+    const lead = await prisma.lead.create({
+      data: {
+        clientId: client.id,
+        organizationId: orgId,
+        source: dbSource,
+        stage: dbStage,
+        dealValue: monthly_value,
+        assignedToId: assigned_to_id || (req as any).user.userId,
+        expectedCloseDate: next_followup_date ? new Date(next_followup_date) : undefined,
+      },
+      include: {
+        client: { include: { notes: true } },
+        assignedTo: true,
+        activities: true,
+        stageHistory: true
+      }
+    });
+
+    res.status(201).json(formatLeadResponse(lead));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /leads/:id
+leadRouter.patch('/:id', async (req: Request, res: Response) => {
+  try {
+    const { stage, next_followup_date, notes } = req.body;
+    
+    const existing = await prisma.lead.findFirst({ where: { id: req.params.id as string, organizationId: (req as any).user.organizationId }, include: { client: true } });
+    if (!existing) return res.status(404).json({ error: 'Lead not found' });
+
+    const updateData: any = {};
+    if (stage) updateData.stage = mapStageToEnum(stage);
+    if (next_followup_date) updateData.expectedCloseDate = new Date(next_followup_date);
+
+    // If stage is dead, set lost reason
+    if (stage === '10. Dead / No Response') {
+      updateData.lostReason = 'UNRESPONSIVE';
+    }
+
+    const lead = await prisma.lead.update({
+      where: { id: req.params.id as string },
+      data: updateData,
+      include: {
+        client: { include: { notes: true } },
+        assignedTo: true,
+        activities: true,
+        stageHistory: true
+      }
+    });
+
+    if (notes) {
+      await prisma.note.create({
+        data: {
+          content: notes,
+          clientId: lead.clientId,
+          authorId: (req as any).user.userId
+        }
+      });
+    }
+
+    res.json(formatLeadResponse(lead));
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /leads/:id/activities
+leadRouter.post('/:id/activities', async (req: Request, res: Response) => {
+  try {
+    const { type, direction, summary, done_by_id, activity_date } = req.body;
+    
+    const activity = await prisma.activity.create({
+      data: {
+        type: type,
+        direction: direction || 'outbound',
+        message: summary,
+        entityType: 'LEAD',
+        entityId: req.params.id as string,
+        leadId: req.params.id as string,
+        userId: done_by_id || (req as any).user.userId,
+        createdAt: activity_date ? new Date(activity_date) : new Date()
+      },
+      include: { user: true }
+    });
+
+    res.status(201).json({
+      id: activity.id,
+      lead_id: activity.leadId,
+      type: activity.type,
+      direction: activity.direction,
+      summary: activity.message,
+      done_by: { id: activity.userId, name: (activity as any).user?.name },
+      activity_date: activity.createdAt,
+      created_at: activity.createdAt
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /leads/:id/convert
+leadRouter.post('/:id/convert', async (req: Request, res: Response) => {
+  try {
+    const { poc_name, poc_email, poc_phone, monthly_retainer, retainer_start_date } = req.body;
+
+    const lead = await prisma.lead.findFirst({ where: { id: req.params.id as string, organizationId: (req as any).user.organizationId }, include: { client: true } });
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+    // Update Client record to Active
+    const client = await prisma.client.update({
+      where: { id: lead.clientId },
+      data: {
+        status: 'ACTIVE',
+        contactPerson: poc_name || (lead as any).client.contactPerson,
+        email: poc_email || (lead as any).client.email,
+        phone: poc_phone || (lead as any).client.phone,
+        contractValue: monthly_retainer || lead.dealValue,
+        startDate: retainer_start_date ? new Date(retainer_start_date) : new Date(),
+      }
+    });
+
+    // Create a new Project for this client automatically
+    const project = await prisma.project.create({
+      data: {
+        name: `${client.name} — Onboarding`,
+        clientId: client.id,
+        ownerId: lead.assignedToId || (req as any).user.userId,
+        status: 'IN_PROGRESS',
+        type: 'RETAINER',
+        startDate: client.startDate,
+        description: 'Auto-generated via AI Client Conversion'
+      }
+    });
+
+    res.status(200).json({
+      id: client.id,
+      name: client.name,
+      lead_id: lead.id,
+      poc_name: client.contactPerson,
+      poc_email: client.email,
+      poc_phone: client.phone,
+      vertical: client.industry,
+      monthly_retainer: client.contractValue,
+      retainer_start_date: client.startDate?.toISOString().split('T')[0],
+      status: 'active',
+      created_at: client.createdAt,
+      project_id: project.id,
+      project_name: project.name
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+export default leadRouter;

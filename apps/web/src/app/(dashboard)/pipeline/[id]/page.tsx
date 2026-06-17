@@ -268,7 +268,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 {/* Stage History */}
                 {lead.stageHistory.map((history: any) => (
                   <div key={history.id} className="relative pl-6">
-                    <div className="absolute w-3 h-3 bg-primary rounded-full -left-[7px] top-1.5 ring-4 ring-white" />
+                    <div className="absolute w-3 h-3 bg-primary rounded-full -left-1.75 top-1.5 ring-4 ring-white" />
                     <p className="text-xs text-secondary mb-1 font-medium">{format(new Date(history.changedAt), 'PPp')}</p>
                     <p className="text-sm text-primary">
                       Moved to <span className="font-semibold text-primary">{history.toStage.replace('_', ' ')}</span>
@@ -287,7 +287,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   const notes = activity.metadata?.notes;
                   return (
                   <div key={activity.id} className="relative pl-6">
-                    <div className="absolute w-2.5 h-2.5 bg-gray-300 rounded-full -left-[6px] top-1.5 ring-4 ring-white" />
+                    <div className="absolute w-2.5 h-2.5 bg-gray-300 rounded-full -left-1.5 top-1.5 ring-4 ring-white" />
                     <p className="text-xs text-secondary mb-1">{format(new Date(activity.createdAt), 'PPp')}</p>
                     <p className="text-sm text-primary">{activity.user.name} <span className="text-[#4B5563]">{activity.message}</span></p>
                     {notes && (

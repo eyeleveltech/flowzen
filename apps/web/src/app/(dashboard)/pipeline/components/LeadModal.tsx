@@ -232,7 +232,7 @@ export function LeadModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                   <textarea
                     value={form.notes}
                     onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                    className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all min-h-[100px]"
+                    className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all min-h-25"
                     placeholder="Enter any initial notes about this lead..."
                   />
                 </div>
