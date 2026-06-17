@@ -112,7 +112,7 @@ While your apps are running on ports 3000 and 4000, you likely want them accessi
 1. **Enable Apache Proxy Modules:**
    ```bash
    sudo apt install apache2 -y
-   sudo a2enmod proxy proxy_http proxy_wstunnel rewrite headers
+   sudo a2enmod proxy proxy_http rewrite headers
    sudo systemctl restart apache2
    ```
 

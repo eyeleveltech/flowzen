@@ -22,6 +22,7 @@ const taskSchema = z.object({
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
   status: z.enum(['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'APPROVED', 'BLOCKED', 'COMPLETED']).optional(),
   dueDate: z.string().optional().nullable(),
+  assignedDate: z.string().optional().nullable(),
   parentId: z.string().optional().nullable(),
   loggedHours: z.number().optional().nullable(),
   estimatedHours: z.number().optional().nullable(),
@@ -32,7 +33,7 @@ const taskSchema = z.object({
 taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const { search, status, priority, projectId, assigneeId, type, clientId, page = '1', limit = '50' } = req.query;
+    const { search, status, priority, projectId, assigneeId, type, clientId, filter, page = '1', limit = '50' } = req.query;
 
     const projectFilter: any = { client: { organizationId: orgId } };
     if (clientId) projectFilter.clientId = clientId as string;
@@ -42,6 +43,17 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     if (priority) where.priority = priority as string;
     if (type) where.type = type as string;
     if (projectId) where.projectId = projectId;
+    
+    if (filter === 'overdue') {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      where.dueDate = { lt: todayStart };
+      if (!status) {
+        where.status = { notIn: ['COMPLETED'] };
+      }
+    } else if (filter === 'approval') {
+      where.status = 'REVIEW';
+    }
     
     if (req.user!.role === 'TEAM_MEMBER') {
       where.assigneeId = req.user!.userId;
@@ -143,7 +155,7 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
       }
     }
 
-    const { title, description, type, projectId, assigneeId, reviewerId, priority, status, dueDate, parentId, estimatedHours, driveLink } = req.body;
+    const { title, description, type, projectId, assigneeId, reviewerId, priority, status, dueDate, assignedDate, parentId, estimatedHours, driveLink } = req.body;
 
     const task = await prisma.task.create({
       data: {
@@ -156,6 +168,7 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
         priority: priority || 'MEDIUM',
         status: status || 'TODO',
         dueDate: dueDate ? new Date(dueDate) : null,
+        assignedDate: assignedDate ? new Date(assignedDate) : new Date(),
         parentId,
         estimatedHours,
         driveLink,
@@ -222,6 +235,7 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
       data: {
         ...req.body,
         dueDate: req.body.dueDate ? new Date(req.body.dueDate) : req.body.dueDate === null ? null : undefined,
+        assignedDate: req.body.assignedDate ? new Date(req.body.assignedDate) : req.body.assignedDate === null ? null : undefined,
         ...(req.body.status === 'COMPLETED' && existing.status !== 'COMPLETED' 
              ? { completedAt: new Date() } 
              : req.body.status && req.body.status !== 'COMPLETED' && existing.status === 'COMPLETED'

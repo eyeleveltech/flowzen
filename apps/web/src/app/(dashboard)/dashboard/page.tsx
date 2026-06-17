@@ -223,8 +223,11 @@ export default function DashboardPage() {
 
           {/* PENDING APPROVALS */}
           {isManager && (
-            <motion.div variants={item} className="rounded-2xl bg-white border border-[#E5E7EB] hover:shadow-sm transition-shadow overflow-hidden">
-              <div className="p-5 border-b border-[#E5E7EB] flex justify-between items-center">
+            <motion.div variants={item} className="rounded-2xl bg-white border border-[#E5E7EB] hover:shadow-sm transition-shadow overflow-hidden flex flex-col h-full">
+              <div 
+                onClick={() => router.push('/tasks?filter=approval')} 
+                className="p-5 border-b border-[#E5E7EB] flex justify-between items-center cursor-pointer hover:bg-[#FAFAFA] transition-colors"
+              >
                 <h2 className="flex items-center gap-2 text-sm font-semibold text-[#111827]"><CheckCircle2 className="w-4 h-4 text-[#6B7280]"/> Pending Approvals</h2>
                 {pendingApprovals.length > 0 && <span className="text-xs font-medium text-[#111827] bg-[#F3F4F6] border border-[#E5E7EB] px-2 py-0.5 rounded-md">{pendingApprovals.length}</span>}
               </div>

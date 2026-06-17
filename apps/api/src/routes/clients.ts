@@ -43,7 +43,25 @@ clientRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     const { search, status, city, accountManagerId, engagementType, industry, page = '1', limit = '20' } = req.query;
 
     const where: Record<string, unknown> = { organizationId: orgId };
-    if (status) where.status = status as string;
+    if (status) {
+      where.status = status as string;
+    } else {
+      where.AND = [
+        {
+          OR: [
+            { status: { not: 'PROSPECT' } },
+            {
+              status: 'PROSPECT',
+              lead: {
+                stage: {
+                  in: ['SQL', 'REACH_OUT', 'DISCOVERY', 'AUDIT', 'PRESENTATION', 'PROPOSAL', 'NEGOTIATION', 'FINALIZATION', 'CONTRACT']
+                }
+              }
+            }
+          ]
+        }
+      ];
+    }
     if (city) where.city = { contains: city as string, mode: 'insensitive' };
     if (accountManagerId) where.accountManagerId = accountManagerId as string;
     if (engagementType) where.engagementType = engagementType as string;
@@ -224,7 +242,10 @@ clientRouter.post('/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRe
 
     res.status(201).json({ message: `Successfully imported ${createdCount} clients`, count: createdCount });
   } catch (error) {
-    next(error);
+    console.error('[Bulk Import Error (Clients)]:', error);
+    res.status(400).json({ 
+      error: 'Failed to process bulk import. Please check your CSV data format, ensure no required fields are missing, and try again.' 
+    });
   }
 });
 

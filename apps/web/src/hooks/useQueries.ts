@@ -22,9 +22,9 @@ export function useProjects(search?: string, includeCalendarData?: boolean, stat
 }
 
 // --- Tasks ---
-export function useTasks(search?: string, statusFilter?: string, projectFilter?: string, assigneeId?: string, priorityFilter?: string) {
+export function useTasks(search?: string, statusFilter?: string, projectFilter?: string, assigneeId?: string, priorityFilter?: string, filter?: string | null) {
   return useInfiniteQuery({
-    queryKey: ['tasks', search, statusFilter, projectFilter, assigneeId, priorityFilter],
+    queryKey: ['tasks', search, statusFilter, projectFilter, assigneeId, priorityFilter, filter],
     queryFn: async ({ pageParam = 1 }) => {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
@@ -32,6 +32,7 @@ export function useTasks(search?: string, statusFilter?: string, projectFilter?:
       if (projectFilter) params.set('projectId', projectFilter);
       if (assigneeId) params.set('assigneeId', assigneeId);
       if (priorityFilter) params.set('priority', priorityFilter);
+      if (filter) params.set('filter', filter);
       params.set('page', String(pageParam));
       params.set('limit', '50');
       return api.get<{ tasks: any[], page: number, totalPages: number }>(`/tasks?${params}`);

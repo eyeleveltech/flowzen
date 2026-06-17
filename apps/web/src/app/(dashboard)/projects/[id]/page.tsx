@@ -56,7 +56,7 @@ export default function ProjectDetailPage() {
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [isEditingTask, setIsEditingTask] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState('');
-  const [taskForm, setTaskForm] = useState({ title: '', description: '', type: 'OTHER', assigneeId: '', reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: '', loggedHours: 0, driveLink: '' });
+  const [taskForm, setTaskForm] = useState({ title: '', description: '', type: 'OTHER', assigneeId: '', reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: '', assignedDate: '', loggedHours: 0, driveLink: '' });
   const [submittingTask, setSubmittingTask] = useState(false);
 
   // Edit Project States
@@ -113,6 +113,7 @@ export default function ProjectDetailPage() {
           assigneeId: taskForm.assigneeId || undefined,
           reviewerId: taskForm.reviewerId || undefined,
           dueDate: taskForm.dueDate || undefined,
+          assignedDate: taskForm.assignedDate || undefined,
           driveLink: taskForm.driveLink || undefined,
         });
       }
@@ -120,7 +121,7 @@ export default function ProjectDetailPage() {
       setShowCreateTask(false);
       setIsEditingTask(false);
       setEditingTaskId('');
-      setTaskForm({ title: '', description: '', type: 'OTHER', assigneeId: '', reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: '', loggedHours: 0, driveLink: '' });
+      setTaskForm({ title: '', description: '', type: 'OTHER', assigneeId: '', reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: new Date().toISOString().split('T')[0], assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '' });
       const updated = await api.get<ProjectDetail>(`/projects/${id}`);
       setProject(updated);
     } catch (err: any) {
@@ -138,7 +139,8 @@ export default function ProjectDetailPage() {
       reviewerId: t.reviewer?.id || '',
       priority: t.priority,
       status: t.status,
-      dueDate: t.dueDate ? new Date(t.dueDate).toISOString().split('T')[0] : '',
+      dueDate: t.dueDate ? new Date(t.dueDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      assignedDate: t.assignedDate ? new Date(t.assignedDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       loggedHours: t.loggedHours || 0,
       driveLink: t.driveLink || '',
     });
@@ -148,7 +150,7 @@ export default function ProjectDetailPage() {
   }
 
   function openCreateTask() {
-    setTaskForm({ title: '', description: '', type: 'OTHER', assigneeId: '', reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: '', loggedHours: 0, driveLink: '' });
+    setTaskForm({ title: '', description: '', type: 'OTHER', assigneeId: '', reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: new Date().toISOString().split('T')[0], assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '' });
     setIsEditingTask(false);
     setEditingTaskId('');
     setShowCreateTask(true);
@@ -374,12 +376,14 @@ export default function ProjectDetailPage() {
     { id: 'activity' as Tab, label: 'Activity' },
   ];
 
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
   const completedTasks = project.tasks?.filter((t) => t.status === 'COMPLETED').length ?? 0;
   const totalTasks = project.tasks?.length ?? 0;
-  const overdueTasksCount = project.tasks?.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'COMPLETED').length || 0;
+  const overdueTasksCount = project.tasks?.filter(t => t.dueDate && new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED').length || 0;
 
   let projectHealth: 'GREEN' | 'AMBER' | 'RED' = 'GREEN';
-  if (overdueTasksCount >= 3 || (project.endDate && new Date(project.endDate) < new Date() && project.status !== 'COMPLETED')) {
+  if (overdueTasksCount >= 3 || (project.endDate && new Date(project.endDate) < todayStart && project.status !== 'COMPLETED')) {
     projectHealth = 'RED';
   } else if (overdueTasksCount >= 1) {
     projectHealth = 'AMBER';
@@ -897,6 +901,10 @@ export default function ProjectDetailPage() {
                         { label: 'Urgent', value: 'URGENT' },
                       ]}
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Assigned Date</label>
+                    <input type="date" value={taskForm.assignedDate} onChange={(e) => setTaskForm({ ...taskForm, assignedDate: e.target.value })} className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>

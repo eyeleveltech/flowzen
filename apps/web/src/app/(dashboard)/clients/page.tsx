@@ -85,6 +85,7 @@ function ClientsContent() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importPreview, setImportPreview] = useState<any[]>([]);
   const [importing, setImporting] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     if (user && user.role === 'TEAM_MEMBER') {
@@ -186,9 +187,24 @@ function ClientsContent() {
     }
   }
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(false);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) processFile(file);
+  }
+
+  function processFile(file: File) {
     setImportFile(file);
     Papa.parse(file, {
       header: true,
@@ -200,6 +216,11 @@ function ClientsContent() {
         toast.error('Failed to parse CSV file');
       }
     });
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) processFile(file);
   }
 
   async function handleBulkImport() {
@@ -673,7 +694,12 @@ function ClientsContent() {
                   </div>
 
                   <div>
-                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-[#D1D5DB] hover:border-[#111827] hover:bg-gray-50 transition-colors rounded-xl cursor-pointer">
+                    <label 
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                      className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed transition-colors rounded-xl cursor-pointer ${isDragging ? 'border-[#111827] bg-gray-50' : 'border-[#D1D5DB] hover:border-[#111827] hover:bg-gray-50'}`}
+                    >
                       <div className="flex flex-col items-center justify-center pt-5 pb-6">
                         <Upload className="w-8 h-8 mb-3 text-[#9CA3AF]" />
                         <p className="mb-2 text-sm text-[#4B5563]">

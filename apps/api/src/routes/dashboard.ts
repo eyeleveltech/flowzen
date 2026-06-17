@@ -16,6 +16,9 @@ dashboardRouter.get('/stats', async (req: AuthRequest, res: Response, next) => {
     const role = req.user!.role;
     const userId = req.user!.userId;
 
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
     const [activeClients, activeProjects, openTasks, completedTasks, delayedProjects, totalMembers, overdueTasks] =
       await Promise.all([
         prisma.client.count({ where: { organizationId: orgId, status: 'ACTIVE' } }),
@@ -44,7 +47,7 @@ dashboardRouter.get('/stats', async (req: AuthRequest, res: Response, next) => {
         prisma.project.count({
           where: {
             client: { organizationId: orgId },
-            endDate: { lt: new Date() },
+            endDate: { lt: todayStart },
             status: { notIn: ['COMPLETED', 'CANCELLED'] },
             ...(role === 'PROJECT_MANAGER' ? { ownerId: userId } : {}),
             ...(role === 'TEAM_MEMBER' ? { members: { some: { userId } } } : {})
@@ -54,7 +57,7 @@ dashboardRouter.get('/stats', async (req: AuthRequest, res: Response, next) => {
         prisma.task.count({
           where: {
             project: { client: { organizationId: orgId } },
-            dueDate: { lt: new Date() },
+            dueDate: { lt: todayStart },
             status: { notIn: ['COMPLETED'] },
             ...(role === 'TEAM_MEMBER' ? { assigneeId: userId } : {})
           }
@@ -82,6 +85,8 @@ dashboardRouter.get('/project-health', async (req: AuthRequest, res: Response, n
     const role = req.user!.role;
     const userId = req.user!.userId;
     const now = new Date();
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
 
     const projects = await prisma.project.findMany({
       where: {
@@ -98,7 +103,7 @@ dashboardRouter.get('/project-health', async (req: AuthRequest, res: Response, n
     let delayed = 0;
 
     projects.forEach((p) => {
-      if (p.endDate && p.endDate < now) {
+      if (p.endDate && p.endDate < todayStart) {
         delayed++;
       } else if (p.endDate) {
         const total = p.endDate.getTime() - now.getTime();
@@ -144,12 +149,14 @@ dashboardRouter.get('/deadlines', async (req: AuthRequest, res: Response, next) 
     const role = req.user!.role;
     const userId = req.user!.userId;
     const now = new Date();
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
     const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
     const tasks = await prisma.task.findMany({
       where: {
         project: { client: { organizationId: orgId } },
-        dueDate: { gte: now, lte: nextWeek },
+        dueDate: { gte: todayStart, lte: nextWeek },
         status: { notIn: ['COMPLETED'] },
         ...(role === 'TEAM_MEMBER' ? { assigneeId: userId } : {})
       },
@@ -346,6 +353,8 @@ dashboardRouter.get('/pending-approvals', async (req: AuthRequest, res: Response
 dashboardRouter.get('/client-health', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
     
     const clients = await prisma.client.findMany({
       where: { organizationId: orgId, status: 'ACTIVE' },
@@ -368,11 +377,11 @@ dashboardRouter.get('/client-health', async (req: AuthRequest, res: Response, ne
       let projectPastEndDate = false;
 
       c.projects.forEach(p => {
-        if (p.endDate && new Date(p.endDate) < new Date()) projectPastEndDate = true;
+        if (p.endDate && new Date(p.endDate) < todayStart) projectPastEndDate = true;
         p.tasks.forEach(t => {
           if (t.status !== 'COMPLETED') {
-            if (t.dueDate && new Date(t.dueDate) < new Date()) overdueTasks++;
-            if (t.dueDate && new Date(t.dueDate) >= new Date()) {
+            if (t.dueDate && new Date(t.dueDate) < todayStart) overdueTasks++;
+            if (t.dueDate && new Date(t.dueDate) >= todayStart) {
               if (!nextDueDate || new Date(t.dueDate) < nextDueDate) nextDueDate = new Date(t.dueDate);
             }
           }

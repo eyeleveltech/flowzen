@@ -22,7 +22,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 
 interface Task {
   id: string; title: string; description?: string | null; priority: string; status: string;
-  dueDate?: string | null; completedAt?: string | null; createdAt: string; projectId: string;
+  dueDate?: string | null; assignedDate?: string | null; completedAt?: string | null; createdAt: string; projectId: string;
   loggedHours?: number | null;
   type: string; driveLink?: string | null; reviewerId?: string | null;
   project?: { id: string; name: string };
@@ -56,6 +56,7 @@ const taskSchema = z.object({
   priority: z.string(),
   status: z.string(),
   dueDate: z.string().optional(),
+  assignedDate: z.string().optional(),
   loggedHours: z.number().min(0).optional(),
   driveLink: z.string().url('Must be a valid URL').optional().or(z.literal('')),
 });
@@ -84,7 +85,7 @@ function TasksContent() {
       filterHydrated.current = true;
     }
   }, [user?.id]);
-  const [view, setView] = useState<'list' | 'board'>('board');
+  const [view, setView] = useState<'list' | 'board'>('list');
 
   const showCreate = searchParams.get('create') === 'true';
   const setShowCreate = (open: boolean) => {
@@ -105,7 +106,7 @@ function TasksContent() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage
-  } = useTasks(search, statusFilter, projectFilter, assigneeFilter, priorityFilter);
+  } = useTasks(search, statusFilter, projectFilter, assigneeFilter, priorityFilter, searchParams.get('filter'));
 
   const tasks = useMemo(() => data?.pages.flatMap((page) => page.tasks) || [], [data]);
   const { data: projectsData } = useProjects();
@@ -143,7 +144,7 @@ function TasksContent() {
 
   const { register, handleSubmit, control, reset, watch, formState: { errors } } = useForm<TaskFormValues>({
     resolver: zodResolver(taskSchema),
-    defaultValues: { title: '', description: '', type: 'OTHER', projectId: '', assigneeId: '', reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: '', loggedHours: 0, driveLink: '' },
+    defaultValues: { title: '', description: '', type: 'OTHER', projectId: '', assigneeId: '', reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: '', assignedDate: '', loggedHours: 0, driveLink: '' },
   });
   const [submitting, setSubmitting] = useState(false);
   const [commentContent, setCommentContent] = useState('');
@@ -213,6 +214,7 @@ function TasksContent() {
         assigneeId: data.assigneeId || undefined,
         reviewerId: data.reviewerId || undefined,
         dueDate: data.dueDate || undefined,
+        assignedDate: data.assignedDate || undefined,
         driveLink: data.driveLink || undefined,
       });
       toast.success('Task created successfully');
@@ -231,6 +233,7 @@ function TasksContent() {
         assigneeId: data.assigneeId || undefined,
         reviewerId: data.reviewerId || undefined,
         dueDate: data.dueDate || undefined,
+        assignedDate: data.assignedDate || undefined,
         driveLink: data.driveLink || undefined,
       });
       toast.success('Task updated successfully');
@@ -253,6 +256,7 @@ function TasksContent() {
       priority: selectedTask.priority,
       status: selectedTask.status,
       dueDate: selectedTask.dueDate ? new Date(selectedTask.dueDate).toISOString().split('T')[0] : '',
+      assignedDate: selectedTask.assignedDate ? new Date(selectedTask.assignedDate).toISOString().split('T')[0] : '',
       loggedHours: selectedTask.loggedHours || 0,
       driveLink: selectedTask.driveLink || '',
     });
@@ -318,9 +322,35 @@ function TasksContent() {
           <h1 className="text-2xl font-semibold text-[#111827] tracking-tight">Tasks</h1>
           <p className="text-sm text-[#6B7280] mt-1">{tasks.length} tasks</p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all">
-          <Plus className="h-4 w-4" /> New Task
-        </button>
+        <div className="flex items-center gap-3">
+          {searchParams.get('filter') === 'overdue' && (
+            <button 
+              onClick={() => {
+                const params = new URLSearchParams(searchParams.toString());
+                params.delete('filter');
+                router.replace(`?${params.toString()}`);
+              }}
+              className="flex items-center gap-1.5 rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-100 transition-colors border border-red-100"
+            >
+              Showing Overdue <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {searchParams.get('filter') === 'approval' && (
+            <button 
+              onClick={() => {
+                const params = new URLSearchParams(searchParams.toString());
+                params.delete('filter');
+                router.replace(`?${params.toString()}`);
+              }}
+              className="flex items-center gap-1.5 rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 hover:bg-amber-100 transition-colors border border-amber-100"
+            >
+              Showing Pending Approvals <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all">
+            <Plus className="h-4 w-4" /> New Task
+          </button>
+        </div>
       </div>
 
       <div className="flex items-center gap-3 mb-6 flex-wrap">
@@ -701,6 +731,10 @@ function TasksContent() {
                     )} />
                   </div>
                   <div>
+                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Assigned Date</label>
+                    <input type="date" {...register('assignedDate')} className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
+                  </div>
+                  <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
                     <input type="date" {...register('dueDate')} className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
                   </div>
@@ -933,6 +967,10 @@ function TasksContent() {
                   options={[{ label: 'Low', value: 'LOW' }, { label: 'Medium', value: 'MEDIUM' }, { label: 'High', value: 'HIGH' }, { label: 'Urgent', value: 'URGENT' }]}
                 />
               )} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-[#374151] mb-1.5">Assigned Date</label>
+              <input type="date" {...register('assignedDate')} className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
             </div>
             <div>
               <label className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>

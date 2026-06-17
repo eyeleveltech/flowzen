@@ -8,13 +8,13 @@ Welcome to the Flowzen project. This document provides a comprehensive guide for
 
 Flowzen is a **Turborepo Monorepo** containing two main applications:
 1. **Frontend (`apps/web`)**: A Next.js 16 (App Router) application serving the UI.
-2. **Backend (`apps/api`)**: A Node.js/Express application handling REST APIs and real-time WebSocket (`Socket.IO`) connections.
+2. **Backend (`apps/api`)**: A Node.js/Express application handling REST APIs and real-time Server-Sent Events (SSE) connections.
 
 ### Tech Stack
 - **Frontend**: Next.js, React, Tailwind CSS, Zustand, Framer Motion.
-- **Backend**: Node.js, Express, Socket.IO, Prisma ORM.
+- **Backend**: Node.js, Express, Prisma ORM.
 - **Database**: PostgreSQL.
-- **Cache / PubSub**: Redis (Used for Socket.IO multi-instance scaling if needed).
+- **Cache / PubSub**: Redis.
 
 ---
 
@@ -46,8 +46,8 @@ To run the project on your local machine for development:
 3. **Database Initialization**:
    Ensure your local PostgreSQL instance is running. Then apply the Prisma schema:
    ```bash
-   npx prisma generate --workspace=apps/api
-   npx prisma db push --workspace=apps/api
+   npm exec -w apps/api -- prisma generate
+   npm exec -w apps/api -- prisma db push
    ```
 
 4. **Start Development Servers**:
@@ -86,7 +86,7 @@ docker compose up -d --build
 
 ## 4. Apache Reverse Proxy Configuration
 
-The VPS uses Apache (or Nginx) to route public traffic to the internal Docker containers. Because Flowzen relies heavily on real-time **WebSockets (Socket.IO)**, standard proxy routing is not enough. You must explicitly configure the proxy to handle HTTP protocol upgrades for WebSockets.
+The VPS uses Apache (or Nginx) to route public traffic to the internal Docker containers. Because Flowzen relies on standard HTTP for both REST and Server-Sent Events (SSE), standard proxy routing is sufficient. No special WebSocket upgrades are needed.
 
 ### Standard Apache VirtualHost Configuration
 Below is the reference configuration for routing the domain `project.eyelevelstudio.in` to the Docker containers.
@@ -110,23 +110,13 @@ Below is the reference configuration for routing the domain `project.eyelevelstu
     SSLCertificateKeyFile /etc/letsencrypt/live/project.eyelevelstudio.in/privkey.pem
 
     # Enable required Proxy Modules
-    # Run: sudo a2enmod proxy proxy_http proxy_wstunnel rewrite
+    # Run: sudo a2enmod proxy proxy_http rewrite
 
-    # 1. Route WebSocket Traffic specifically
-    # This MUST come before the standard /api rule
-    RewriteEngine On
-    RewriteCond %{HTTP:Upgrade} websocket [NC]
-    RewriteRule /(.*) ws://127.0.0.1:4000/$1 [P,L]
-
-    # Socket.IO Polling Fallback Routing
-    ProxyPass "/socket.io/" "http://127.0.0.1:4000/socket.io/"
-    ProxyPassReverse "/socket.io/" "http://127.0.0.1:4000/socket.io/"
-
-    # 2. Route standard REST API Traffic
+    # 1. Route API and SSE Traffic
     ProxyPass "/api" "http://127.0.0.1:4000/api"
     ProxyPassReverse "/api" "http://127.0.0.1:4000/api"
 
-    # 3. Route all other traffic to the Next.js Frontend
+    # 2. Route all other traffic to the Next.js Frontend
     ProxyPass "/" "http://127.0.0.1:3000/"
     ProxyPassReverse "/" "http://127.0.0.1:3000/"
 

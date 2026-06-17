@@ -99,6 +99,59 @@ enum ActivityEntityType {
   TASK
   TEAM
   ORGANIZATION
+  LEAD
+}
+
+enum LeadSource {
+  EXCEL
+  MANUAL
+  API
+  REFERRAL
+  INBOUND
+  LINKEDIN
+  INSTAGRAM
+  WHATSAPP
+  OTHER
+}
+
+enum LeadStage {
+  LEAD
+  MQL
+  SQL
+  REACH_OUT
+  DISCOVERY
+  AUDIT
+  PRESENTATION
+  PROPOSAL
+  NEGOTIATION
+  FINALIZATION
+  CONTRACT
+  ACTIVE_RETAINER
+  ACTIVE_PROJECT
+  WON_CLOSED
+  LOST_CLOSED
+}
+
+enum ContractType {
+  RETAINER
+  ONE_TIME
+}
+
+enum HealthStatus {
+  GREEN
+  AMBER
+  RED
+}
+
+enum LostReason {
+  BUDGET
+  COMPETITOR
+  NO_BUDGET
+  TIMING
+  UNRESPONSIVE
+  SCOPE_MISMATCH
+  INTERNAL_CHANGE
+  OTHER
 }
 
 enum NotificationType {
@@ -131,6 +184,7 @@ model Organization {
 
   users   User[]
   clients Client[]
+  leads   Lead[]
 
   @@map("organizations")
 }
@@ -167,6 +221,8 @@ model User {
   ledTeam        Team?           @relation("TeamLeader")
   managedClients Client[]        @relation("ClientAccountManager")
   createdWorkflows WorkflowRule[] @relation("WorkflowCreator")
+  assignedLeads  Lead[]          @relation("LeadAssignee")
+  stageChanges   StageHistory[]  @relation("StageChanger")
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -201,6 +257,7 @@ model Client {
   activities   Activity[]    @relation("ClientActivities")
   contacts     ClientContact[]
   accountManager User?       @relation("ClientAccountManager", fields: [accountManagerId], references: [id])
+  lead         Lead?
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -297,6 +354,7 @@ model Task {
   priority    TaskPriority @default(MEDIUM)
   status      TaskStatus   @default(BACKLOG)
   dueDate     DateTime?
+  assignedDate DateTime?
   order       Int          @default(0)
   projectId   String
   assigneeId  String?
@@ -378,12 +436,14 @@ model Activity {
   clientId   String?
   projectId  String?
   taskId     String?
+  leadId     String?
   createdAt  DateTime           @default(now())
 
   user    User     @relation(fields: [userId], references: [id])
   client  Client?  @relation("ClientActivities", fields: [clientId], references: [id], onDelete: SetNull)
   project Project? @relation("ProjectActivities", fields: [projectId], references: [id], onDelete: SetNull)
   task    Task?    @relation("TaskActivities", fields: [taskId], references: [id], onDelete: SetNull)
+  lead    Lead?    @relation("LeadActivities", fields: [leadId], references: [id], onDelete: SetNull)
 
   @@index([entityType, entityId])
   @@map("activities")
@@ -446,6 +506,66 @@ model ClientContact {
   client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@map("client_contacts")
+}
+
+// ──────────────────────────────────────────────
+// CRM PIPELINE
+// ──────────────────────────────────────────────
+
+model Lead {
+  id                String       @id @default(cuid())
+  clientId          String       @unique
+  organizationId    String
+  source            LeadSource   @default(MANUAL)
+  stage             LeadStage    @default(LEAD)
+  assignedToId      String?
+  dealValue         Float?
+  expectedCloseDate DateTime?
+  contractType      ContractType?
+  healthStatus      HealthStatus?
+  lostReason        LostReason?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  client            Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignedTo        User?        @relation("LeadAssignee", fields: [assignedToId], references: [id])
+  stageHistory      StageHistory[]
+  dealFields        DealField[]
+  activities        Activity[]   @relation("LeadActivities")
+
+  @@index([organizationId])
+  @@index([organizationId, stage])
+  @@map("leads")
+}
+
+model StageHistory {
+  id          String    @id @default(cuid())
+  leadId      String
+  fromStage   LeadStage
+  toStage     LeadStage
+  notes       String?
+  changedById String
+  changedAt   DateTime  @default(now())
+
+  lead        Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  changedBy   User      @relation("StageChanger", fields: [changedById], references: [id])
+
+  @@index([leadId])
+  @@map("stage_history")
+}
+
+model DealField {
+  id         String   @id @default(cuid())
+  leadId     String
+  fieldKey   String
+  fieldValue String?
+  updatedAt  DateTime @updatedAt
+
+  lead       Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([leadId, fieldKey])
+  @@map("deal_fields")
 }
 
 // ──────────────────────────────────────────────

@@ -10,6 +10,8 @@ reportRouter.use(authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'));
 reportRouter.get('/projects', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
 
     const [total, completed, active, delayed, planning, onHold, projectsList] = await Promise.all([
       prisma.project.count({ where: { client: { organizationId: orgId } } }),
@@ -18,7 +20,7 @@ reportRouter.get('/projects', async (req: AuthRequest, res: Response, next) => {
       prisma.project.count({
         where: {
           client: { organizationId: orgId },
-          endDate: { lt: new Date() },
+          endDate: { lt: todayStart },
           status: { notIn: ['COMPLETED', 'CANCELLED'] },
         },
       }),
@@ -77,6 +79,8 @@ reportRouter.get('/projects', async (req: AuthRequest, res: Response, next) => {
 reportRouter.get('/tasks', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
 
     const [total, completed, overdue, tasksList] = await Promise.all([
       prisma.task.count({ where: { project: { client: { organizationId: orgId } } } }),
@@ -84,7 +88,7 @@ reportRouter.get('/tasks', async (req: AuthRequest, res: Response, next) => {
       prisma.task.count({ 
         where: { 
           project: { client: { organizationId: orgId } }, 
-          dueDate: { lt: new Date() },
+          dueDate: { lt: todayStart },
           status: { notIn: ['COMPLETED'] }
         } 
       }),
@@ -184,6 +188,8 @@ reportRouter.get('/team', async (req: AuthRequest, res: Response, next) => {
 reportRouter.get('/clients', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
 
     const clients = await prisma.client.findMany({
       where: { organizationId: orgId },
@@ -221,10 +227,10 @@ reportRouter.get('/clients', async (req: AuthRequest, res: Response, next) => {
           if (t.status === 'COMPLETED') {
             completedTasks++;
           } else {
-            if (t.dueDate && new Date(t.dueDate) < new Date()) {
+            if (t.dueDate && new Date(t.dueDate) < todayStart) {
               overdueTasks++;
             }
-            if (t.dueDate && new Date(t.dueDate) > new Date()) {
+            if (t.dueDate && new Date(t.dueDate) > todayStart) {
               if (!nextDueDate || new Date(t.dueDate) < nextDueDate) {
                 nextDueDate = new Date(t.dueDate);
               }

@@ -10,7 +10,7 @@ Flowzen operates as a multi-tenant project management SaaS with strict Role-Base
 **Core Features & Mechanics:**
 - **Hierarchical Data Model:** Operations are scoped at the **Organization** level. Underneath are **Clients**, **Projects** (tied to Clients), **Teams**, and individual **Tasks**.
 - **Role-Based Access Control:** Highly restricted. Roles include `SUPER_ADMIN`, `ADMIN`, `PROJECT_MANAGER`, and `TEAM_MEMBER`. The `TEAM_MEMBER` role is rigidly isolated from `Clients`, `Teams`, and `Settings` routes via backend `authorize` middleware.
-- **Real-Time Engine:** Uses Socket.IO for live updates on tasks and notifications, passing through an Nginx/Apache reverse proxy on the VPS.
+- **Real-Time Engine:** Uses Server-Sent Events (SSE) for live updates on tasks and notifications, passing through an Nginx/Apache reverse proxy on the VPS.
 - **Global Auth Intercepts:** A global Axios wrapper guarantees that any `401 Unauthorized` responses automatically log the user out via Zustand (`useAuthStore`) and redirect them.
 - **Calendar & Reports:** Provides a macro-level overview of project timelines and productivity metrics.
 
