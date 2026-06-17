@@ -264,16 +264,18 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
       });
 
       // Update project progress
-      const projectTasks = await prisma.task.findMany({
-        where: { projectId: task.projectId, parentId: null },
-        select: { status: true },
-      });
-      const completed = projectTasks.filter((t) => t.status === 'COMPLETED').length;
-      const progress = projectTasks.length > 0 ? Math.round((completed / projectTasks.length) * 100) : 0;
-      await prisma.project.update({
-        where: { id: task.projectId },
-        data: { progress },
-      });
+      if (task.projectId) {
+        const projectTasks = await prisma.task.findMany({
+          where: { projectId: task.projectId, parentId: null },
+          select: { status: true },
+        });
+        const completed = projectTasks.filter((t) => t.status === 'COMPLETED').length;
+        const progress = projectTasks.length > 0 ? Math.round((completed / projectTasks.length) * 100) : 0;
+        await prisma.project.update({
+          where: { id: task.projectId },
+          data: { progress },
+        });
+      }
 
       // Execute workflow automation rules
       await executeWorkflowRules('TASK_STATUS_CHANGE', {
@@ -337,16 +339,18 @@ taskRouter.put('/:id/status', idempotency, async (req: AuthRequest, res: Respons
     });
 
     // Update progress
-    const projectTasks = await prisma.task.findMany({
-      where: { projectId: task.projectId, parentId: null },
-      select: { status: true },
-    });
-    const completed = projectTasks.filter((t) => t.status === 'COMPLETED').length;
-    const progress = projectTasks.length > 0 ? Math.round((completed / projectTasks.length) * 100) : 0;
-    await prisma.project.update({
-      where: { id: task.projectId },
-      data: { progress },
-    });
+    if (task.projectId) {
+      const projectTasks = await prisma.task.findMany({
+        where: { projectId: task.projectId, parentId: null },
+        select: { status: true },
+      });
+      const completed = projectTasks.filter((t) => t.status === 'COMPLETED').length;
+      const progress = projectTasks.length > 0 ? Math.round((completed / projectTasks.length) * 100) : 0;
+      await prisma.project.update({
+        where: { id: task.projectId },
+        data: { progress },
+      });
+    }
 
     const io = req.app.get('io');
     emitToOrganization(io, req.user!.organizationId, 'task:updated', task);
@@ -400,11 +404,11 @@ taskRouter.post('/:id/comments', async (req: AuthRequest, res: Response, next) =
     }
 
     if (req.user!.role === 'TEAM_MEMBER') {
-      const isMember = await prisma.projectMember.findFirst({
+      const isMember = existing.projectId ? await prisma.projectMember.findFirst({
         where: { projectId: existing.projectId, userId: req.user!.userId }
-      });
+      }) : null;
       let isTeamMember = false;
-      if (!isMember) {
+      if (!isMember && existing.projectId) {
         const projectTeams = await prisma.projectTeam.findMany({
           where: { projectId: existing.projectId },
           include: { team: { include: { members: true } } }
@@ -485,11 +489,11 @@ taskRouter.patch('/reorder', async (req: AuthRequest, res: Response, next) => {
     if (tasks.length > 0 && req.user!.role === 'TEAM_MEMBER') {
       const firstTask = await prisma.task.findUnique({ where: { id: tasks[0].id } });
       if (firstTask) {
-        const isMember = await prisma.projectMember.findFirst({
+        const isMember = firstTask.projectId ? await prisma.projectMember.findFirst({
           where: { projectId: firstTask.projectId, userId: req.user!.userId }
-        });
+        }) : null;
         let isTeamMember = false;
-        if (!isMember) {
+        if (!isMember && firstTask.projectId) {
           const projectTeams = await prisma.projectTeam.findMany({
             where: { projectId: firstTask.projectId },
             include: { team: { include: { members: true } } }
