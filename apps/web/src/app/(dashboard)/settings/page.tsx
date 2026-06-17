@@ -53,7 +53,7 @@ export default function SettingsPage() {
           <Skeleton className="h-10 w-32 rounded-xl" />
           <Skeleton className="h-10 w-32 rounded-xl" />
         </div>
-        <Skeleton className="h-[400px] w-full rounded-2xl" />
+        <Skeleton className="h-100 w-full rounded-2xl" />
       </div>
     );
   }
@@ -69,8 +69,8 @@ export default function SettingsPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold text-[#111827] tracking-tight">Settings</h1>
-        <p className="text-sm text-[#6B7280] mt-1">Manage your organization, team, and preferences.</p>
+        <h1 className="text-2xl font-semibold text-primary tracking-tight">Settings</h1>
+        <p className="text-sm text-secondary mt-1">Manage your organization, team, and preferences.</p>
       </div>
 
       <div className="flex gap-2 p-1 bg-[#F3F4F6] rounded-xl overflow-x-auto w-max max-w-full">
@@ -80,8 +80,8 @@ export default function SettingsPage() {
             onClick={() => setTab(t.id as Tab)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
               tab === t.id
-                ? 'bg-white text-[#111827] shadow-sm'
-                : 'text-[#6B7280] hover:text-[#111827] hover:bg-white/50'
+                ? 'bg-white text-primary shadow-sm'
+                : 'text-secondary hover:text-primary hover:bg-white/50'
             }`}
           >
             <t.icon className="h-4 w-4" />
@@ -95,7 +95,7 @@ export default function SettingsPage() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2 }}
-        className="bg-white p-6 rounded-2xl border border-[#E5E7EB]"
+        className="bg-white p-6 rounded-2xl border border-border"
       >
         {tab === 'organization' && <OrganizationTab initialData={orgData} />}
         {tab === 'users' && <UsersTab users={users} fetchUsers={fetchUsers} teams={teams} />}

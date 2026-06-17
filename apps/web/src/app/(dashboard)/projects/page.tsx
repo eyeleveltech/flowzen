@@ -143,11 +143,11 @@ function ProjectsContent() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-[#111827] tracking-tight">Projects</h1>
-          <p className="text-sm text-[#6B7280] mt-1">{projects.length} projects</p>
+          <h1 className="text-2xl font-semibold text-primary tracking-tight">Projects</h1>
+          <p className="text-sm text-secondary mt-1">{projects.length} projects</p>
         </div>
         {user?.role !== 'TEAM_MEMBER' && (
-          <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all">
+          <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all">
             <Plus className="h-4 w-4" /> New Project
           </button>
         )}
@@ -158,7 +158,7 @@ function ProjectsContent() {
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">
           <div className="relative w-full sm:w-64 shrink-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search projects..." className="w-full rounded-xl border border-[#E5E7EB] bg-white pl-9 pr-4 py-2 text-sm outline-none focus:border-[#111827] transition-all" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search projects..." className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2 text-sm outline-none focus:border-primary transition-all" />
           </div>
           
           {/* Filters */}
@@ -203,12 +203,12 @@ function ProjectsContent() {
           </div>
         </div>
 
-        <div className="flex items-center shrink-0 rounded-xl border border-[#E5E7EB] p-1 bg-white">
+        <div className="flex items-center shrink-0 rounded-xl border border-border p-1 bg-white">
           {viewButtons.map((v) => (
             <button
               key={v.mode}
               onClick={() => setView(v.mode)}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${view === v.mode ? 'bg-[#111827] text-white' : 'text-[#6B7280] hover:text-[#111827]'}`}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${view === v.mode ? 'bg-primary text-white' : 'text-secondary hover:text-primary'}`}
             >
               <v.icon className="h-3.5 w-3.5" /> {v.label}
             </button>
@@ -217,7 +217,7 @@ function ProjectsContent() {
       </div>
 
       {loading ? (
-        <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6 space-y-4">
+        <div className="rounded-2xl border border-border bg-white p-6 space-y-4">
           {[1, 2, 3, 4, 5].map(i => (
             <div key={i} className="flex items-center gap-4 py-3 border-b border-[#F3F4F6] last:border-0">
               <Skeleton className="h-6 w-48" />
@@ -234,34 +234,34 @@ function ProjectsContent() {
           {view === 'list' && (
             <>
               {/* Desktop Table View */}
-              <div className="hidden md:block rounded-2xl border border-[#E5E7EB] bg-white overflow-hidden">
+              <div className="hidden md:block rounded-2xl border border-border bg-white overflow-hidden">
                 <div className="overflow-x-auto">
                 <table className="w-full min-w-[800px]">
                   <thead>
                     <tr className="border-b border-[#F3F4F6]">
-                      <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Project</th>
-                      <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Client</th>
-                      <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Progress</th>
-                      <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Status</th>
-                      <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Owner</th>
-                      <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Due Date</th>
+                      <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Project</th>
+                      <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>
+                      <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Progress</th>
+                      <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Status</th>
+                      <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Owner</th>
+                      <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Due Date</th>
                       <th className="px-6 py-3.5"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#F3F4F6]">
                     {projects.map((p) => (
-                      <motion.tr key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="hover:bg-[#FAFAFA] cursor-pointer transition-colors" onClick={() => router.push(`/projects/${p.id}`)}>
+                      <motion.tr key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="hover:bg-surface cursor-pointer transition-colors" onClick={() => router.push(`/projects/${p.id}`)}>
                         <td className="px-6 py-4">
-                          <p className="text-sm font-medium text-[#111827]">{p.name}</p>
+                          <p className="text-sm font-medium text-primary">{p.name}</p>
                           <p className="text-xs text-[#9CA3AF]">{p._count?.tasks ?? 0} tasks</p>
                         </td>
-                        <td className="px-6 py-4 text-sm text-[#6B7280]">{p.client ? getClientDisplayName(p.client) : '—'}</td>
+                        <td className="px-6 py-4 text-sm text-secondary">{p.client ? getClientDisplayName(p.client) : '—'}</td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
                             <div className="h-1.5 w-20 rounded-full bg-[#F3F4F6] overflow-hidden">
-                              <div className="h-full rounded-full bg-[#111827]" style={{ width: `${p.progress}%` }} />
+                              <div className="h-full rounded-full bg-primary" style={{ width: `${p.progress}%` }} />
                             </div>
-                            <span className="text-xs text-[#6B7280] tabular-nums">{p.progress}%</span>
+                            <span className="text-xs text-secondary tabular-nums">{p.progress}%</span>
                           </div>
                         </td>
                         <td className="px-6 py-4">
@@ -279,7 +279,7 @@ function ProjectsContent() {
                             </div>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-sm text-[#6B7280]">{formatDate(p.endDate)}</td>
+                        <td className="px-6 py-4 text-sm text-secondary">{formatDate(p.endDate)}</td>
                         <td className="px-6 py-4"><ChevronRight className="h-4 w-4 text-[#D1D5DB]" /></td>
                       </motion.tr>
                     ))}
@@ -291,7 +291,7 @@ function ProjectsContent() {
             {/* Mobile Card View */}
             <div className="md:hidden flex flex-col gap-3">
               {projects.length === 0 ? (
-                <div className="p-8 text-center text-sm text-[#9CA3AF] bg-white rounded-xl border border-[#E5E7EB]">
+                <div className="p-8 text-center text-sm text-[#9CA3AF] bg-white rounded-xl border border-border">
                   No projects found.
                 </div>
               ) : (
@@ -301,12 +301,12 @@ function ProjectsContent() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     onClick={() => router.push(`/projects/${p.id}`)}
-                    className="p-4 rounded-xl border border-[#E5E7EB] bg-white hover:shadow-sm cursor-pointer transition-all"
+                    className="p-4 rounded-xl border border-border bg-white hover:shadow-sm cursor-pointer transition-all"
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div>
-                        <p className="text-sm font-medium text-[#111827] leading-tight">{p.name}</p>
-                        <p className="text-xs text-[#6B7280] mt-0.5">{p.client ? getClientDisplayName(p.client) : 'Internal Project'}</p>
+                        <p className="text-sm font-medium text-primary leading-tight">{p.name}</p>
+                        <p className="text-xs text-secondary mt-0.5">{p.client ? getClientDisplayName(p.client) : 'Internal Project'}</p>
                       </div>
                       <span className={`shrink-0 inline-flex items-center whitespace-nowrap rounded-lg px-2 py-0.5 text-[10px] font-medium ${statusColors[p.status] || 'bg-gray-50 text-gray-500'}`}>
                         {p.status.replace('_', ' ')}
@@ -316,9 +316,9 @@ function ProjectsContent() {
                     <div className="mb-4">
                       <div className="flex items-center gap-2">
                         <div className="h-1.5 flex-1 rounded-full bg-[#F3F4F6] overflow-hidden">
-                          <div className="h-full rounded-full bg-[#111827]" style={{ width: `${p.progress}%` }} />
+                          <div className="h-full rounded-full bg-primary" style={{ width: `${p.progress}%` }} />
                         </div>
-                        <span className="text-xs text-[#6B7280] tabular-nums shrink-0">{p.progress}%</span>
+                        <span className="text-xs text-secondary tabular-nums shrink-0">{p.progress}%</span>
                       </div>
                     </div>
 
@@ -336,7 +336,7 @@ function ProjectsContent() {
                         )}
                       </div>
                       
-                      <div className="flex items-center gap-2 text-xs font-medium text-[#6B7280]">
+                      <div className="flex items-center gap-2 text-xs font-medium text-secondary">
                         <span className="bg-[#F3F4F6] px-1.5 py-0.5 rounded">
                           {p._count?.tasks ?? 0} tasks
                         </span>
@@ -357,7 +357,7 @@ function ProjectsContent() {
 
 
       {view === 'timeline' && (
-        <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6">
+        <div className="rounded-2xl border border-border bg-white p-6">
           <div className="space-y-3">
             {projects.filter((p) => p.startDate && p.endDate).map((p) => {
               const start = new Date(p.startDate!);
@@ -368,15 +368,15 @@ function ProjectsContent() {
               const pct = Math.min(100, (elapsed / totalDays) * 100);
 
               return (
-                <div key={p.id} className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4 py-3 md:py-2 cursor-pointer hover:bg-[#FAFAFA] rounded-xl px-3 -mx-3 transition-colors border-b border-[#F3F4F6] last:border-0 md:border-0" onClick={() => router.push(`/projects/${p.id}`)}>
+                <div key={p.id} className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4 py-3 md:py-2 cursor-pointer hover:bg-surface rounded-xl px-3 -mx-3 transition-colors border-b border-[#F3F4F6] last:border-0 md:border-0" onClick={() => router.push(`/projects/${p.id}`)}>
                   <div className="w-full md:w-48 shrink-0">
-                    <p className="text-sm font-medium text-[#111827] truncate">{p.name}</p>
+                    <p className="text-sm font-medium text-primary truncate">{p.name}</p>
                     <p className="text-xs text-[#9CA3AF]">{p.client ? getClientDisplayName(p.client) : 'Internal Project'}</p>
                   </div>
                   <div className="flex-1 w-full">
                     <div className="relative h-8 rounded-lg bg-[#F3F4F6] overflow-hidden">
-                      <div className="absolute inset-y-0 left-0 rounded-lg bg-[#111827]/10" style={{ width: `${pct}%` }} />
-                      <div className="absolute inset-y-0 left-0 rounded-lg bg-[#111827]" style={{ width: `${p.progress}%`, maxWidth: `${pct}%` }} />
+                      <div className="absolute inset-y-0 left-0 rounded-lg bg-primary/10" style={{ width: `${pct}%` }} />
+                      <div className="absolute inset-y-0 left-0 rounded-lg bg-primary" style={{ width: `${p.progress}%`, maxWidth: `${pct}%` }} />
                       <div className="absolute inset-0 flex items-center px-3">
                         <span className="text-xs font-medium text-white mix-blend-difference">{p.progress}%</span>
                       </div>
@@ -403,7 +403,7 @@ function ProjectsContent() {
               <button
                 onClick={() => fetchNextPage()}
                 disabled={isFetchingNextPage}
-                className="rounded-xl border border-[#E5E7EB] bg-white px-6 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50 transition-all"
+                className="rounded-xl border border-border bg-white px-6 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50 transition-all"
               >
                 {isFetchingNextPage ? 'Loading...' : 'Load More Projects'}
               </button>
@@ -417,10 +417,10 @@ function ProjectsContent() {
         {showCreate && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setShowCreate(false)} />
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-[#E5E7EB] shadow-2xl shadow-black/10 overflow-y-auto">
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto">
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
-                <h2 className="text-lg font-semibold text-[#111827]">New Project</h2>
-                <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-[#6B7280]" /></button>
+                <h2 className="text-lg font-semibold text-primary">New Project</h2>
+                <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
               </div>
               <form onSubmit={handleCreate} className="relative p-6 space-y-8">
                 {formError && <div className="absolute top-0 left-6 right-6 -mt-2 z-10 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 border border-red-100">{formError}</div>}
@@ -449,7 +449,7 @@ function ProjectsContent() {
 
                 {/* Basic Info */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-[#111827] border-b border-[#F3F4F6] pb-2">Basic Info</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Basic Info</h3>
                   <div>
                     <Field label="Project Name *" value={formValues.name} onChange={(v) => setValue('name', v, { shouldValidate: true })} required />
                     {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>}
@@ -507,7 +507,7 @@ function ProjectsContent() {
                 
                 {/* Client & Ownership */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-[#111827] border-b border-[#F3F4F6] pb-2">Client & Ownership</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Client & Ownership</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Client</label>
@@ -547,7 +547,7 @@ function ProjectsContent() {
 
                 {/* Timeline */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-[#111827] border-b border-[#F3F4F6] pb-2">Timeline</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Timeline</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Field label="Start Date" type="date" value={formValues.startDate || ''} onChange={(v) => setValue('startDate', v, { shouldValidate: true })} />
@@ -567,7 +567,7 @@ function ProjectsContent() {
 
                 {/* Scope */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-[#111827] border-b border-[#F3F4F6] pb-2">Scope</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Scope</h3>
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Scope of Work</label>
                     <RichTextEditor
@@ -583,7 +583,7 @@ function ProjectsContent() {
 
                 {/* Workflow */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-[#111827] border-b border-[#F3F4F6] pb-2">Workflow</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Workflow</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Reporting Cadence</label>
@@ -606,7 +606,7 @@ function ProjectsContent() {
                           checked={formValues.clientApprovalRequired} 
                           onChange={(e) => setValue('clientApprovalRequired', e.target.checked)} 
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#111827]"></div>
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                         <span className="ml-3 text-sm font-medium text-[#374151]">Client approval required</span>
                       </label>
                     </div>
@@ -615,7 +615,7 @@ function ProjectsContent() {
 
                 {/* Reference */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-[#111827] border-b border-[#F3F4F6] pb-2">Reference</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Reference</h3>
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Tags</label>
                     <TagsInput 
@@ -629,7 +629,7 @@ function ProjectsContent() {
                     <textarea
                       value={formValues.projectNotes || ''}
                       onChange={(e) => setValue('projectNotes', e.target.value)}
-                      className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all min-h-[80px]"
+                      className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all min-h-[80px]"
                       placeholder="Internal project notes..."
                     />
                   </div>
@@ -639,8 +639,8 @@ function ProjectsContent() {
                 </div>
 
                 <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
-                  <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submitting ? 'Creating...' : 'Create Project'}</button>
+                  <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
+                  <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submitting ? 'Creating...' : 'Create Project'}</button>
                 </div>
               </form>
             </motion.div>
@@ -654,8 +654,8 @@ function ProjectsContent() {
 export default function ProjectsPage() {
   return (
     <Suspense fallback={
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#111827] border-t-transparent" />
+      <div className="flex items-center justify-center min-h-100">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
       </div>
     }>
       <ProjectsContent />
@@ -669,7 +669,7 @@ function Field({ label, value, onChange, type = 'text', required = false }: {
   return (
     <div>
       <label className="block text-sm font-medium text-[#374151] mb-1.5">{label}</label>
-      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} required={required} className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#111827] outline-none focus:border-[#111827] focus:ring-1 focus:ring-[#111827] transition-all" />
+      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} required={required} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" />
     </div>
   );
 }

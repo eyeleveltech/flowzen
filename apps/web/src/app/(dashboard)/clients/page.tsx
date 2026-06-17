@@ -293,14 +293,14 @@ function ClientsContent() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-[#111827] tracking-tight">Clients</h1>
-          <p className="text-sm text-[#6B7280] mt-1">{total} total clients</p>
+          <h1 className="text-2xl font-semibold text-primary tracking-tight">Clients</h1>
+          <p className="text-sm text-secondary mt-1">{total} total clients</p>
         </div>
         <div className="flex items-center gap-3">
           <button
             onClick={handleExport}
             disabled={isExporting}
-            className="flex items-center gap-2 rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl border border-border bg-white px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all disabled:opacity-50"
           >
             <Download className="h-4 w-4" />
             {isExporting ? 'Exporting...' : 'Export CSV'}
@@ -310,7 +310,7 @@ function ClientsContent() {
               setShowCreate(true);
               setCreationMode('MANUAL');
             }}
-            className="flex items-center gap-2 rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all"
+            className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all"
           >
             <Plus className="h-4 w-4" /> Add Client
           </button>
@@ -325,10 +325,10 @@ function ClientsContent() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search clients..."
-            className="w-full rounded-xl border border-[#E5E7EB] bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all"
+            className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
           />
         </div>
-        <div className="w-full sm:w-auto min-w-[140px]">
+        <div className="w-full sm:w-auto min-w-35">
           <Select
             value={statusFilter}
             onChange={(val) => setStatusFilter(val)}
@@ -341,7 +341,7 @@ function ClientsContent() {
             ]}
           />
         </div>
-        <div className="w-full sm:w-auto min-w-[140px]">
+        <div className="w-full sm:w-auto min-w-35">
           <Select
             value={engagementTypeFilter}
             onChange={(val) => setEngagementTypeFilter(val)}
@@ -369,7 +369,7 @@ function ClientsContent() {
             value={cityFilter}
             onChange={(e) => setCityFilter(e.target.value)}
             placeholder="Filter by city..."
-            className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all"
+            className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
           />
         </div>
         <div className="w-full sm:w-auto relative">
@@ -377,22 +377,22 @@ function ClientsContent() {
             value={industryFilter}
             onChange={(e) => setIndustryFilter(e.target.value)}
             placeholder="Filter by industry..."
-            className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all"
+            className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
           />
         </div>
       </div>
 
       {/* Desktop Table View */}
-      <div className="hidden md:block rounded-2xl border border-[#E5E7EB] bg-white overflow-hidden">
+      <div className="hidden md:block rounded-2xl border border-border bg-white overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[800px]">
             <thead>
             <tr className="border-b border-[#F3F4F6]">
-              <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Client</th>
-              <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Industry</th>
-              <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Contact</th>
-              <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Projects</th>
-              <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Status</th>
+              <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>
+              <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Industry</th>
+              <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Contact</th>
+              <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Projects</th>
+              <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Status</th>
               <th className="px-6 py-3.5"></th>
             </tr>
           </thead>
@@ -417,7 +417,7 @@ function ClientsContent() {
                   key={client.id}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="hover:bg-[#FAFAFA] cursor-pointer transition-colors"
+                  className="hover:bg-surface cursor-pointer transition-colors"
                   onClick={() => router.push(`/clients/${client.id}`)}
                 >
                   <td className="px-6 py-4">
@@ -426,7 +426,7 @@ function ClientsContent() {
                         {getInitials(getClientDisplayName(client))}
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-[#111827]">
+                        <p className="text-sm font-medium text-primary">
                           {getClientDisplayName(client)}
                         </p>
                         {client.name !== 'Internal' && client.company && <p className="text-xs text-[#9CA3AF]">{client.name}</p>}
@@ -434,19 +434,19 @@ function ClientsContent() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-[#6B7280]">
+                  <td className="px-6 py-4 text-sm text-secondary">
                     {client.name === 'Internal' && orgProfile?.industry ? orgProfile.industry : client.industry || '—'}
                   </td>
                   <td className="px-6 py-4">
                     {client.name === 'Internal' ? (
                       <div>
                         <p className="text-sm text-[#374151] font-medium">Internal Contact</p>
-                        {orgProfile?.phone && <p className="text-[11px] text-[#6B7280]">{orgProfile.phone}</p>}
+                        {orgProfile?.phone && <p className="text-[11px] text-secondary">{orgProfile.phone}</p>}
                       </div>
                     ) : client.contacts && client.contacts.length > 0 ? (
                       <div>
                         <p className="text-sm text-[#374151] font-medium">{client.contacts[0].name}</p>
-                        {client.contacts[0].designation && <p className="text-[11px] text-[#6B7280]">{client.contacts[0].designation}</p>}
+                        {client.contacts[0].designation && <p className="text-[11px] text-secondary">{client.contacts[0].designation}</p>}
                         {client.contacts.length > 1 && (
                           <span className="text-[10px] font-medium bg-[#F3F4F6] text-[#4B5563] px-1.5 py-0.5 rounded mt-1 inline-block">
                             +{client.contacts.length - 1} more
@@ -458,7 +458,7 @@ function ClientsContent() {
                     )}
                   </td>
 
-                  <td className="px-6 py-4 text-sm text-[#6B7280] tabular-nums">{client._count?.projects ?? 0}</td>
+                  <td className="px-6 py-4 text-sm text-secondary tabular-nums">{client._count?.projects ?? 0}</td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[client.status] || 'bg-gray-50 text-gray-500'}`}>
                       {client.status.replace('_', ' ')}
@@ -479,7 +479,7 @@ function ClientsContent() {
       <div className="md:hidden flex flex-col gap-3 pb-4">
         {loading ? (
           Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="p-4 rounded-xl border border-[#E5E7EB] bg-white">
+            <div key={i} className="p-4 rounded-xl border border-border bg-white">
               <div className="flex items-center gap-3 mb-3">
                 <div className="h-10 w-10 rounded-full skeleton" />
                 <div className="space-y-2">
@@ -491,7 +491,7 @@ function ClientsContent() {
             </div>
           ))
         ) : clients.length === 0 ? (
-          <div className="p-8 text-center text-sm text-[#9CA3AF] bg-white rounded-xl border border-[#E5E7EB]">
+          <div className="p-8 text-center text-sm text-[#9CA3AF] bg-white rounded-xl border border-border">
             No clients found.
           </div>
         ) : (
@@ -501,7 +501,7 @@ function ClientsContent() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               onClick={() => router.push(`/clients/${client.id}`)}
-              className="p-4 rounded-xl border border-[#E5E7EB] bg-white hover:shadow-sm cursor-pointer transition-all"
+              className="p-4 rounded-xl border border-border bg-white hover:shadow-sm cursor-pointer transition-all"
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
@@ -509,15 +509,15 @@ function ClientsContent() {
                     {getInitials(getClientDisplayName(client))}
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-[#111827] leading-tight">
+                    <p className="text-sm font-medium text-primary leading-tight">
                       {getClientDisplayName(client)}
                     </p>
                     {client.name === 'Internal' ? (
-                      <p className="text-xs font-medium text-[#6B7280] mt-0.5">(Internal)</p>
+                      <p className="text-xs font-medium text-secondary mt-0.5">(Internal)</p>
                     ) : client.company ? (
-                      <p className="text-xs text-[#6B7280] mt-0.5">{client.name}</p>
+                      <p className="text-xs text-secondary mt-0.5">{client.name}</p>
                     ) : (
-                      <p className="text-xs text-[#6B7280] mt-0.5">{client.industry || '—'}</p>
+                      <p className="text-xs text-secondary mt-0.5">{client.industry || '—'}</p>
                     )}
                   </div>
                 </div>
@@ -532,14 +532,14 @@ function ClientsContent() {
                     <>
                       <p className="text-[11px] font-medium text-[#374151]">{client.contacts[0].name}</p>
                       {client.contacts.length > 1 && (
-                        <p className="text-[10px] text-[#6B7280]">+{client.contacts.length - 1} more</p>
+                        <p className="text-[10px] text-secondary">+{client.contacts.length - 1} more</p>
                       )}
                     </>
                   ) : (
                     <p className="text-[11px] text-[#9CA3AF]">No contacts</p>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5 text-xs font-medium text-[#6B7280] bg-[#F3F4F6] px-2 py-1 rounded-md">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-secondary bg-[#F3F4F6] px-2 py-1 rounded-md">
                   <FolderKanban className="h-3 w-3" />
                   {client._count?.projects ?? 0}
                 </div>
@@ -558,25 +558,25 @@ function ClientsContent() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
-              className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-[#E5E7EB] shadow-2xl shadow-black/10 overflow-y-auto"
+              className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto"
             >
               <div className="flex flex-col border-b border-[#F3F4F6]">
                 <div className="flex items-center justify-between px-6 py-4">
-                  <h2 className="text-lg font-semibold text-[#111827]">Add Client</h2>
+                  <h2 className="text-lg font-semibold text-primary">Add Client</h2>
                   <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
-                    <X className="h-4 w-4 text-[#6B7280]" />
+                    <X className="h-4 w-4 text-secondary" />
                   </button>
                 </div>
                 <div className="flex gap-4 px-6">
                   <button
                     onClick={() => setCreationMode('MANUAL')}
-                    className={`pb-2 text-sm font-medium border-b-2 transition-colors ${creationMode === 'MANUAL' ? 'border-[#111827] text-[#111827]' : 'border-transparent text-[#6B7280] hover:text-[#374151]'}`}
+                    className={`pb-2 text-sm font-medium border-b-2 transition-colors ${creationMode === 'MANUAL' ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-[#374151]'}`}
                   >
                     Manual Entry
                   </button>
                   <button
                     onClick={() => setCreationMode('BULK')}
-                    className={`pb-2 text-sm font-medium border-b-2 transition-colors ${creationMode === 'BULK' ? 'border-[#111827] text-[#111827]' : 'border-transparent text-[#6B7280] hover:text-[#374151]'}`}
+                    className={`pb-2 text-sm font-medium border-b-2 transition-colors ${creationMode === 'BULK' ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-[#374151]'}`}
                   >
                     Bulk Import
                   </button>
@@ -637,13 +637,13 @@ function ClientsContent() {
                     <div className="flex items-center justify-between">
                       <label className="block text-sm font-medium text-[#374151]">Contacts</label>
                       {form.contacts.length < 5 && (
-                        <button type="button" onClick={() => setForm({ ...form, contacts: [...form.contacts, { name: '', designation: '', email: '', phone: '' }] })} className="text-xs font-medium text-[#111827] flex items-center gap-1 hover:bg-[#F3F4F6] px-2 py-1 rounded transition-colors">
+                        <button type="button" onClick={() => setForm({ ...form, contacts: [...form.contacts, { name: '', designation: '', email: '', phone: '' }] })} className="text-xs font-medium text-primary flex items-center gap-1 hover:bg-[#F3F4F6] px-2 py-1 rounded transition-colors">
                           <Plus className="h-3 w-3" /> Add Contact
                         </button>
                       )}
                     </div>
                     {form.contacts.map((contact, i) => (
-                      <div key={i} className="p-4 border border-[#E5E7EB] rounded-xl bg-[#FAFAFA] relative">
+                      <div key={i} className="p-4 border border-border rounded-xl bg-surface relative">
                         {form.contacts.length > 1 && (
                           <button type="button" onClick={() => setForm({ ...form, contacts: form.contacts.filter((_, idx) => idx !== i) })} className="absolute top-2 right-2 p-1.5 text-[#9CA3AF] hover:text-red-500 rounded-lg hover:bg-white transition-colors border border-transparent hover:border-red-100 shadow-sm hover:shadow">
                             <X className="h-3.5 w-3.5" />
@@ -673,22 +673,22 @@ function ClientsContent() {
                     />
                   </div>
                   <div className="pt-4 flex gap-3">
-                    <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
+                    <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
                       Cancel
                     </button>
-                    <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">
+                    <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">
                       {submitting ? 'Creating...' : 'Create Client'}
                     </button>
                   </div>
                 </form>
               ) : (
                 <div className="p-6 space-y-6">
-                  <div className="flex items-center justify-between p-4 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB]">
+                  <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-[#F9FAFB]">
                     <div>
-                      <h3 className="text-sm font-semibold text-[#111827]">Need a template?</h3>
-                      <p className="text-xs text-[#6B7280] mt-1">Download our CSV template to see the required format.</p>
+                      <h3 className="text-sm font-semibold text-primary">Need a template?</h3>
+                      <p className="text-xs text-secondary mt-1">Download our CSV template to see the required format.</p>
                     </div>
-                    <button onClick={downloadTemplate} className="flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-gray-50 transition-all">
+                    <button onClick={downloadTemplate} className="flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-gray-50 transition-all">
                       <FileText className="h-3.5 w-3.5" /> Template
                     </button>
                   </div>
@@ -698,7 +698,7 @@ function ClientsContent() {
                       onDragOver={handleDragOver}
                       onDragLeave={handleDragLeave}
                       onDrop={handleDrop}
-                      className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed transition-colors rounded-xl cursor-pointer ${isDragging ? 'border-[#111827] bg-gray-50' : 'border-[#D1D5DB] hover:border-[#111827] hover:bg-gray-50'}`}
+                      className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed transition-colors rounded-xl cursor-pointer ${isDragging ? 'border-primary bg-gray-50' : 'border-[#D1D5DB] hover:border-primary hover:bg-gray-50'}`}
                     >
                       <div className="flex flex-col items-center justify-center pt-5 pb-6">
                         <Upload className="w-8 h-8 mb-3 text-[#9CA3AF]" />
@@ -710,7 +710,7 @@ function ClientsContent() {
                       <input type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
                     </label>
                     {importFile && (
-                      <p className="text-xs text-[#111827] mt-2 font-medium flex items-center gap-1.5">
+                      <p className="text-xs text-primary mt-2 font-medium flex items-center gap-1.5">
                         <FileText className="h-3 w-3 text-[#10B981]" /> {importFile.name}
                       </p>
                     )}
@@ -724,13 +724,13 @@ function ClientsContent() {
                   )}
 
                   <div className="pt-4 flex gap-3">
-                    <button type="button" onClick={() => { setShowCreate(false); setImportFile(null); setImportPreview([]); }} className="flex-1 rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
+                    <button type="button" onClick={() => { setShowCreate(false); setImportFile(null); setImportPreview([]); }} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
                       Cancel
                     </button>
                     <button 
                       onClick={handleBulkImport} 
                       disabled={importing || importPreview.length === 0} 
-                      className="flex-1 rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all"
+                      className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all"
                     >
                       {importing ? 'Importing...' : 'Import Clients'}
                     </button>
@@ -748,8 +748,8 @@ function ClientsContent() {
 export default function ClientsPage() {
   return (
     <Suspense fallback={
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#111827] border-t-transparent" />
+      <div className="flex items-center justify-center min-h-100">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
       </div>
     }>
       <ClientsContent />
@@ -768,7 +768,7 @@ function Field({ label, value, onChange, type = 'text', required = false }: {
         value={value}
         onChange={(e) => onChange(e.target.value)}
         required={required}
-        className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#111827] outline-none focus:border-[#111827] focus:ring-1 focus:ring-[#111827] transition-all"
+        className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
       />
     </div>
   );

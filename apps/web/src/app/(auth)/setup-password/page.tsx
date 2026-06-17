@@ -60,10 +60,10 @@ function SetupPasswordForm() {
         
         <div className="text-center">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#F3F4F6] mb-4">
-            <KeyRound className="h-6 w-6 text-[#111827]" />
+            <KeyRound className="h-6 w-6 text-primary" />
           </div>
-          <h2 className="text-2xl font-bold tracking-tight text-[#111827]">Set your password</h2>
-          <p className="mt-2 text-sm text-[#6B7280]">
+          <h2 className="text-2xl font-bold tracking-tight text-primary">Set your password</h2>
+          <p className="mt-2 text-sm text-secondary">
             Welcome to Flowzen! Please enter your new password below.
           </p>
         </div>
@@ -75,7 +75,7 @@ function SetupPasswordForm() {
               <p className="mt-1">You can now sign in with your new password.</p>
             </div>
             <Link href="/login" className="w-full">
-              <button className="w-full rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all duration-150 h-11 group flex items-center justify-center">
+              <button className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all duration-150 h-11 group flex items-center justify-center">
                 Go to login
                 <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
               </button>
@@ -103,13 +103,13 @@ function SetupPasswordForm() {
                     disabled={!token}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full appearance-none rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-3 pr-10 text-[#111827] placeholder-[#9CA3AF] focus:border-[#111827] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#111827] transition-all sm:text-sm disabled:opacity-50"
+                    className="block w-full appearance-none rounded-xl border border-border bg-[#F9FAFB] px-4 py-3 pr-10 text-primary placeholder-[#9CA3AF] focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-all sm:text-sm disabled:opacity-50"
                     placeholder="••••••••"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] hover:text-[#6B7280]"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] hover:text-secondary"
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -129,7 +129,7 @@ function SetupPasswordForm() {
                     disabled={!token}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="block w-full appearance-none rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-3 pr-10 text-[#111827] placeholder-[#9CA3AF] focus:border-[#111827] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#111827] transition-all sm:text-sm disabled:opacity-50"
+                    className="block w-full appearance-none rounded-xl border border-border bg-[#F9FAFB] px-4 py-3 pr-10 text-primary placeholder-[#9CA3AF] focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-all sm:text-sm disabled:opacity-50"
                     placeholder="••••••••"
                   />
                 </div>
@@ -139,7 +139,7 @@ function SetupPasswordForm() {
             <button
               type="submit"
               disabled={loading || !token}
-              className="w-full rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all duration-150 h-11"
+              className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all duration-150 h-11"
             >
               {loading ? 'Setting password...' : 'Set password'}
             </button>
@@ -151,10 +151,10 @@ function SetupPasswordForm() {
 
 export default function SetupPasswordPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#FAFAFA] p-4">
+    <div className="flex min-h-screen items-center justify-center bg-surface p-4">
       <Suspense fallback={
-        <div className="w-full max-w-md space-y-8 rounded-2xl bg-white p-8 shadow-xl shadow-black/5 ring-1 ring-[#E5E7EB] flex items-center justify-center min-h-[400px]">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#111827] border-t-transparent" />
+        <div className="w-full max-w-md space-y-8 rounded-2xl bg-white p-8 shadow-xl shadow-black/5 ring-1 ring-[#E5E7EB] flex items-center justify-center min-h-100">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         </div>
       }>
         <SetupPasswordForm />

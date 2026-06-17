@@ -48,14 +48,14 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: 20 }}
-        className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white shadow-2xl flex flex-col border-l border-[#E5E7EB]"
+        className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white shadow-2xl flex flex-col border-l border-border"
       >
-        <div className="flex items-center justify-between px-6 py-5 border-b border-[#E5E7EB]">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-border">
           <div>
-            <h2 className="text-lg font-semibold text-[#111827]">Edit Lead Details</h2>
-            <p className="text-sm text-[#6B7280]">Update information for {lead.client.name}</p>
+            <h2 className="text-lg font-semibold text-primary">Edit Lead Details</h2>
+            <p className="text-sm text-secondary">Update information for {lead.client.name}</p>
           </div>
-          <button onClick={onClose} className="p-2 text-[#9CA3AF] hover:text-[#111827] rounded-lg hover:bg-[#F3F4F6] transition-colors">
+          <button onClick={onClose} className="p-2 text-[#9CA3AF] hover:text-primary rounded-lg hover:bg-[#F3F4F6] transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -100,7 +100,7 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
                   type="number"
                   value={form.dealValue}
                   onChange={(e) => setForm({ ...form, dealValue: e.target.value })}
-                  className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all"
+                  className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
                   placeholder="e.g. 50000"
                 />
               </div>
@@ -111,22 +111,22 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
                   type="date"
                   value={form.expectedCloseDate}
                   onChange={(e) => setForm({ ...form, expectedCloseDate: e.target.value })}
-                  className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all"
+                  className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
                 />
               </div>
             </div>
           </form>
         </div>
 
-        <div className="p-6 border-t border-[#E5E7EB] bg-[#F9FAFB] shrink-0 flex items-center justify-end gap-3">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-[#374151] hover:bg-[#E5E7EB] rounded-xl transition-all">
+        <div className="p-6 border-t border-border bg-[#F9FAFB] shrink-0 flex items-center justify-end gap-3">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-[#374151] hover:bg-border rounded-xl transition-all">
             Cancel
           </button>
           <button
             type="submit"
             form="editLeadForm"
             disabled={submitting}
-            className="flex items-center gap-2 px-6 py-2 bg-[#111827] text-white text-sm font-medium rounded-xl hover:bg-[#1F2937] transition-all disabled:opacity-50"
+            className="flex items-center gap-2 px-6 py-2 bg-primary text-white text-sm font-medium rounded-xl hover:bg-[#1F2937] transition-all disabled:opacity-50"
           >
             {submitting ? (
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />

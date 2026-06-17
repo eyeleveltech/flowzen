@@ -22,7 +22,7 @@ The AI is given functional access to assist with day-to-day operations:
 ### Blocked Actions (What the AI CANNOT do)
 The AI is strictly blocked from structural, destructive, or administrative actions:
 - **Destructive Deletion**: The API will reject all `DELETE` HTTP requests for Organizations, Users, Projects, and Clients. Data cannot be wiped via the API.
-- **Billing & Subscription**: The API will have zero access to billing endpoints, credit card details, or subscription tiers.
+
 - **User & Admin Management**: The API cannot create new user accounts, invite team members, alter existing user roles (e.g., promoting someone to Admin), or change passwords.
 
 ## 3. Implementation Blueprint

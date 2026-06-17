@@ -79,28 +79,28 @@ export function CalendarView({ projects }: CalendarViewProps) {
   const getEventsForDay = (date: Date) => events.filter(e => isSameDay(e.date, date));
 
   return (
-    <div className="rounded-2xl border border-[#E5E7EB] bg-white overflow-hidden flex flex-col h-[800px]">
+    <div className="rounded-2xl border border-border bg-white overflow-hidden flex flex-col h-[800px]">
       <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] bg-white">
-        <h2 className="text-lg font-bold text-[#111827]">{format(currentDate, 'MMMM yyyy')}</h2>
+        <h2 className="text-lg font-bold text-primary">{format(currentDate, 'MMMM yyyy')}</h2>
         <div className="flex items-center gap-2">
-          <button onClick={() => setCurrentDate(new Date())} className="px-3 py-1.5 text-xs font-medium text-[#374151] border border-[#E5E7EB] rounded-lg hover:bg-[#F9FAFB] transition-colors">
+          <button onClick={() => setCurrentDate(new Date())} className="px-3 py-1.5 text-xs font-medium text-[#374151] border border-border rounded-lg hover:bg-[#F9FAFB] transition-colors">
             Today
           </button>
-          <div className="flex items-center rounded-lg border border-[#E5E7EB] p-0.5">
+          <div className="flex items-center rounded-lg border border-border p-0.5">
             <button onClick={() => setCurrentDate(subMonths(currentDate, 1))} className="p-1.5 hover:bg-[#F3F4F6] rounded-md transition-colors">
-              <ChevronLeft className="h-4 w-4 text-[#6B7280]" />
+              <ChevronLeft className="h-4 w-4 text-secondary" />
             </button>
             <button onClick={() => setCurrentDate(addMonths(currentDate, 1))} className="p-1.5 hover:bg-[#F3F4F6] rounded-md transition-colors">
-              <ChevronRight className="h-4 w-4 text-[#6B7280]" />
+              <ChevronRight className="h-4 w-4 text-secondary" />
             </button>
           </div>
         </div>
       </div>
 
       {/* Desktop Day Headers */}
-      <div className="hidden md:grid grid-cols-7 border-b border-[#F3F4F6] bg-[#FAFAFA]">
+      <div className="hidden md:grid grid-cols-7 border-b border-[#F3F4F6] bg-surface">
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-          <div key={day} className="px-2 py-3 text-center text-xs font-medium text-[#6B7280] uppercase">
+          <div key={day} className="px-2 py-3 text-center text-xs font-medium text-secondary uppercase">
             {day}
           </div>
         ))}
@@ -115,9 +115,9 @@ export function CalendarView({ projects }: CalendarViewProps) {
             const today = isToday(date);
 
             return (
-              <div key={date.toISOString()} className={`min-h-[120px] border-b border-r border-[#F3F4F6] p-2 transition-colors ${!isCurrentMonth ? 'bg-[#FAFAFA]/50 opacity-50' : 'bg-white hover:bg-[#F9FAFB]'}`}>
+              <div key={date.toISOString()} className={`min-h-30 border-b border-r border-[#F3F4F6] p-2 transition-colors ${!isCurrentMonth ? 'bg-surface/50 opacity-50' : 'bg-white hover:bg-[#F9FAFB]'}`}>
                 <div className="flex justify-between items-center mb-1.5">
-                  <span className={`text-xs font-medium h-6 w-6 flex items-center justify-center rounded-full ${today ? 'bg-[#111827] text-white' : 'text-[#374151]'}`}>
+                  <span className={`text-xs font-medium h-6 w-6 flex items-center justify-center rounded-full ${today ? 'bg-primary text-white' : 'text-[#374151]'}`}>
                     {format(date, 'd')}
                   </span>
                   {dayEvents.length > 0 && (
@@ -164,11 +164,11 @@ export function CalendarView({ projects }: CalendarViewProps) {
               return (
                 <div key={date.toISOString()} className="flex flex-col gap-3">
                   <div className="flex items-center gap-3">
-                    <div className={`flex flex-col items-center justify-center h-12 w-12 rounded-xl shrink-0 ${today ? 'bg-[#111827] text-white shadow-sm' : 'bg-[#FAFAFA] border border-[#E5E7EB] text-[#111827]'}`}>
+                    <div className={`flex flex-col items-center justify-center h-12 w-12 rounded-xl shrink-0 ${today ? 'bg-primary text-white shadow-sm' : 'bg-surface border border-border text-primary'}`}>
                       <span className="text-[10px] font-bold uppercase tracking-wider opacity-80 leading-none mb-1">{format(date, 'EEE')}</span>
                       <span className="text-lg font-bold leading-none">{format(date, 'd')}</span>
                     </div>
-                    <div className="h-px bg-[#E5E7EB] flex-1" />
+                    <div className="h-px bg-border flex-1" />
                   </div>
                   <div className="flex flex-col gap-2 pl-[3.25rem]">
                     {dayEvents.map(event => {

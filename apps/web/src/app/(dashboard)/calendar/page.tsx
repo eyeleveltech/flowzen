@@ -138,7 +138,7 @@ export default function CalendarPage() {
           <span className="font-semibold truncate" style={{ color: pColor }}>{t.title}</span>
           <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${priorityDots[t.priority] || 'bg-gray-300'}`} />
         </div>
-        <div className="flex items-center justify-between text-[#6B7280]">
+        <div className="flex items-center justify-between text-secondary">
            <span className="truncate max-w-[80%]">{t.project.name}</span>
         </div>
       </div>
@@ -150,26 +150,26 @@ export default function CalendarPage() {
       <div className="flex flex-col gap-4 mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-[#111827] tracking-tight">Calendar</h1>
-            <p className="text-sm text-[#6B7280] mt-1">Tasks and deadlines overview</p>
+            <h1 className="text-2xl font-semibold text-primary tracking-tight">Calendar</h1>
+            <p className="text-sm text-secondary mt-1">Tasks and deadlines overview</p>
           </div>
-          <div className="flex items-center gap-2 p-1 bg-[#F3F4F6] rounded-xl border border-[#E5E7EB]">
+          <div className="flex items-center gap-2 p-1 bg-[#F3F4F6] rounded-xl border border-border">
             <button 
               onClick={() => setView('month')} 
-              className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${view === 'month' ? 'bg-white text-[#111827] shadow-sm' : 'text-[#6B7280] hover:text-[#111827]'}`}
+              className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${view === 'month' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
             >Month</button>
             <button 
               onClick={() => setView('week')} 
-              className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${view === 'week' ? 'bg-white text-[#111827] shadow-sm' : 'text-[#6B7280] hover:text-[#111827]'}`}
+              className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${view === 'week' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
             >Week</button>
           </div>
         </div>
         
         {/* Filters Header */}
-        <div className="flex flex-wrap items-center gap-3 p-4 bg-white border border-[#E5E7EB] rounded-2xl">
+        <div className="flex flex-wrap items-center gap-3 p-4 bg-white border border-border rounded-2xl">
           <button
             onClick={() => setAssigneeFilter(assigneeFilter === user?.id ? '' : (user?.id || ''))}
-            className={`px-4 py-2 text-xs font-medium rounded-xl transition-all ${assigneeFilter === user?.id ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-[#FAFAFA] border border-[#E5E7EB] text-[#374151] hover:bg-[#F3F4F6]'}`}
+            className={`px-4 py-2 text-xs font-medium rounded-xl transition-all ${assigneeFilter === user?.id ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-surface border border-border text-[#374151] hover:bg-[#F3F4F6]'}`}
           >
             My Tasks
           </button>
@@ -216,9 +216,9 @@ export default function CalendarPage() {
           <button
             type="button"
             onClick={() => setHideDone(!hideDone)}
-            className="flex items-center gap-2 text-xs font-medium text-[#374151] ml-auto cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-[#111827]/10 rounded-md"
+            className="flex items-center gap-2 text-xs font-medium text-[#374151] ml-auto cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-primary/10 rounded-md"
           >
-            <div className={`flex items-center justify-center w-4 h-4 rounded-[4px] border transition-colors ${hideDone ? 'bg-[#111827] border-[#111827]' : 'border-[#D1D5DB] bg-white'}`}>
+            <div className={`flex items-center justify-center w-4 h-4 rounded-[4px] border transition-colors ${hideDone ? 'bg-primary border-primary' : 'border-[#D1D5DB] bg-white'}`}>
               {hideDone && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
             </div>
             Hide Done Tasks
@@ -226,22 +226,22 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-[#E5E7EB] bg-white overflow-hidden">
+      <div className="rounded-2xl border border-border bg-white overflow-hidden">
         <div className="overflow-x-auto md:overflow-x-visible">
           <div className="min-w-full md:min-w-[700px]">
             {/* Navigation */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
               <button onClick={prevPeriod} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
-                <ChevronLeft className="h-4 w-4 text-[#6B7280]" />
+                <ChevronLeft className="h-4 w-4 text-secondary" />
               </button>
-              <h2 className="text-sm font-semibold text-[#111827]">
+              <h2 className="text-sm font-semibold text-primary">
                 {view === 'month' 
                   ? date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
                   : `Week of ${startOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
                 }
               </h2>
               <button onClick={nextPeriod} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
-                <ChevronRight className="h-4 w-4 text-[#6B7280]" />
+                <ChevronRight className="h-4 w-4 text-secondary" />
               </button>
             </div>
 
@@ -258,7 +258,7 @@ export default function CalendarPage() {
             {view === 'month' && (
               <div className="hidden md:grid grid-cols-7">
                 {days.map((day, i) => {
-                  if (day === null) return <div key={i} className="min-h-[110px] border-b border-r border-[#F3F4F6] bg-[#FAFAFA]" />;
+                  if (day === null) return <div key={i} className="min-h-[110px] border-b border-r border-[#F3F4F6] bg-surface" />;
 
                   const dObj = new Date(year, month, day);
                   const isToday = today.toDateString() === dObj.toDateString();
@@ -266,7 +266,7 @@ export default function CalendarPage() {
 
                   return (
                     <div key={i} className="min-h-[110px] border-b border-r border-[#F3F4F6] p-2 hover:bg-[#F9FAFB] transition-colors">
-                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium mb-1.5 ${isToday ? 'bg-[#111827] text-white' : 'text-[#374151]'}`}>
+                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium mb-1.5 ${isToday ? 'bg-primary text-white' : 'text-[#374151]'}`}>
                         {day}
                       </span>
                       <div className="space-y-1">
@@ -288,8 +288,8 @@ export default function CalendarPage() {
                   const dayTasks = getTasksForDate(dObj);
 
                   return (
-                    <div key={i} className="min-h-[400px] border-b border-r border-[#F3F4F6] p-2 hover:bg-[#F9FAFB] transition-colors flex flex-col gap-2">
-                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium self-center mb-2 ${isToday ? 'bg-[#111827] text-white' : 'text-[#374151]'}`}>
+                    <div key={i} className="min-h-100 border-b border-r border-[#F3F4F6] p-2 hover:bg-[#F9FAFB] transition-colors flex flex-col gap-2">
+                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium self-center mb-2 ${isToday ? 'bg-primary text-white' : 'text-[#374151]'}`}>
                         {dObj.getDate()}
                       </span>
                       {dayTasks.map((t) => renderTaskPill(t, false))}
@@ -300,7 +300,7 @@ export default function CalendarPage() {
             )}
 
             {/* Mobile View (Agenda) */}
-            <div className="md:hidden flex flex-col p-4 gap-6 bg-[#FAFAFA] min-h-[400px]">
+            <div className="md:hidden flex flex-col p-4 gap-6 bg-surface min-h-100">
               {(() => {
                 const daysToRender = view === 'month' 
                   ? days.filter(d => d !== null).map(d => new Date(year, month, d as number))
@@ -312,12 +312,12 @@ export default function CalendarPage() {
                 })).filter(day => day.tasks.length > 0);
 
                 if (agendaDays.length === 0) {
-                  return <div className="text-center text-sm text-[#9CA3AF] py-8 bg-white rounded-xl border border-[#E5E7EB]">No tasks scheduled for this period.</div>;
+                  return <div className="text-center text-sm text-[#9CA3AF] py-8 bg-white rounded-xl border border-border">No tasks scheduled for this period.</div>;
                 }
 
                 return agendaDays.map((day, i) => (
-                  <div key={i} className="flex flex-col gap-3 bg-white p-4 rounded-xl border border-[#E5E7EB]">
-                    <h3 className="text-sm font-semibold text-[#111827] border-b border-[#F3F4F6] pb-2">
+                  <div key={i} className="flex flex-col gap-3 bg-white p-4 rounded-xl border border-border">
+                    <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">
                       {day.date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
                     </h3>
                     <div className="flex flex-col gap-2">
@@ -331,7 +331,7 @@ export default function CalendarPage() {
                             <span className="font-medium truncate" style={{ color: t.project.color || '#3B82F6' }}>{t.title}</span>
                             <div className={`h-2 w-2 rounded-full shrink-0 ${priorityDots[t.priority] || 'bg-gray-300'}`} />
                           </div>
-                          <span className="text-[#6B7280] truncate">{t.project.name}</span>
+                          <span className="text-secondary truncate">{t.project.name}</span>
                         </div>
                       ))}
                     </div>

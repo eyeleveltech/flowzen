@@ -135,9 +135,9 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
             setIsOpen(false);
           }
         }}
-        className="flex w-full items-center justify-between rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#374151] outline-none focus:border-[#111827] focus:ring-1 focus:ring-[#111827] disabled:opacity-50 transition-all text-left"
+        className="flex w-full items-center justify-between rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-[#374151] outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50 transition-all text-left"
       >
-        <span className={selectedOption && selectedOption.value !== '' ? 'text-[#111827]' : 'text-[#374151]'}>
+        <span className={selectedOption && selectedOption.value !== '' ? 'text-primary' : 'text-[#374151]'}>
           {selectedOption ? selectedOption.label : placeholder}
         </span>
         <ChevronDown className={`h-4 w-4 text-[#9CA3AF] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
@@ -168,7 +168,7 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
                 }}
                 className={`w-full text-left px-4 py-3.5 rounded-xl text-base transition-colors ${
                   value === option.value
-                    ? 'bg-[#F3F4F6] text-[#111827] font-semibold'
+                    ? 'bg-[#F3F4F6] text-primary font-semibold'
                     : 'text-[#374151] active:bg-[#F9FAFB]'
                 }`}
               >
@@ -189,7 +189,7 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 4 }}
                   transition={{ duration: 0.15 }}
-                  className="fixed z-[9999] mt-2 max-h-60 overflow-y-auto rounded-xl border border-[#E5E7EB] bg-white p-1.5 shadow-lg shadow-black/5"
+                  className="fixed z-[9999] mt-2 max-h-60 overflow-y-auto rounded-xl border border-border bg-white p-1.5 shadow-lg shadow-black/5"
                   style={{ 
                     width: rect ? Math.max(rect.width, 160) : 'auto',
                     top: rect ? rect.bottom : 0,
@@ -242,9 +242,9 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
                       containerRef.current?.querySelector('button')?.focus();
                     }
                   }}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-[#111827]/10 focus:bg-[#F9FAFB] ${
+                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/10 focus:bg-[#F9FAFB] ${
                     value === option.value
-                      ? 'bg-[#F3F4F6] text-[#111827] font-medium'
+                      ? 'bg-[#F3F4F6] text-primary font-medium'
                       : 'text-[#374151] hover:bg-[#F9FAFB]'
                   }`}
                 >

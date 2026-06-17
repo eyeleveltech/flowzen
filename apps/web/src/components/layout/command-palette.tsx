@@ -90,7 +90,7 @@ export function CommandPalette() {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: -20 }}
             transition={{ duration: 0.15 }}
-            className="fixed left-1/2 top-[20%] z-50 w-full max-w-xl -translate-x-1/2 rounded-2xl border border-[#E5E7EB] bg-white shadow-2xl shadow-black/10"
+            className="fixed left-1/2 top-[20%] z-50 w-full max-w-xl -translate-x-1/2 rounded-2xl border border-border bg-white shadow-2xl shadow-black/10"
           >
             {/* Search input */}
             <div className="flex items-center gap-3 px-5 py-4 border-b border-[#F3F4F6]">
@@ -100,7 +100,7 @@ export function CommandPalette() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search clients, projects, tasks, team..."
-                className="flex-1 text-sm text-[#111827] placeholder:text-[#9CA3AF] outline-none bg-transparent"
+                className="flex-1 text-sm text-primary placeholder:text-[#9CA3AF] outline-none bg-transparent"
               />
               {query && (
                 <button onClick={() => { setQuery(''); setResults(null); }} className="p-1 rounded-lg hover:bg-[#F3F4F6]">
@@ -217,7 +217,7 @@ function ResultSection({
           onClick={() => onNavigate(item.href)}
           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm hover:bg-[#F9FAFB] transition-colors group"
         >
-          <span className="text-[#111827] font-medium">{item.label}</span>
+          <span className="text-primary font-medium">{item.label}</span>
           <span className="text-[#9CA3AF] text-xs">{item.sub}</span>
           <ArrowRight className="h-3.5 w-3.5 ml-auto text-[#D1D5DB] opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>

@@ -75,7 +75,7 @@ export function LeadListView() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search leads..."
-              className="w-full rounded-xl border border-[#E5E7EB] bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all"
+              className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
             />
           </div>
           <div className="w-full sm:w-[180px]">
@@ -102,23 +102,23 @@ export function LeadListView() {
 
         <button
           onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all w-full sm:w-auto justify-center"
+          className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all w-full sm:w-auto justify-center"
         >
           <Plus className="h-4 w-4" /> Add Lead
         </button>
       </div>
 
       {/* Data Table */}
-      <div className="rounded-2xl border border-[#E5E7EB] bg-white overflow-hidden">
+      <div className="rounded-2xl border border-border bg-white overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px]">
             <thead>
               <tr className="border-b border-[#F3F4F6] bg-[#F9FAFB]">
-                <th className="px-6 py-3.5 text-left text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Client</th>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Stage</th>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Deal Value</th>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Close Date</th>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Owner</th>
+                <th className="px-6 py-3.5 text-left text-xs font-semibold text-secondary uppercase tracking-wider">Client</th>
+                <th className="px-6 py-3.5 text-left text-xs font-semibold text-secondary uppercase tracking-wider">Stage</th>
+                <th className="px-6 py-3.5 text-left text-xs font-semibold text-secondary uppercase tracking-wider">Deal Value</th>
+                <th className="px-6 py-3.5 text-left text-xs font-semibold text-secondary uppercase tracking-wider">Close Date</th>
+                <th className="px-6 py-3.5 text-left text-xs font-semibold text-secondary uppercase tracking-wider">Owner</th>
                 <th className="px-6 py-3.5"></th>
               </tr>
             </thead>
@@ -135,8 +135,8 @@ export function LeadListView() {
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center">
                     <TrendingUp className="h-12 w-12 text-[#D1D5DB] mx-auto mb-4" />
-                    <h3 className="text-sm font-medium text-[#111827]">No leads found</h3>
-                    <p className="text-sm text-[#6B7280] mt-1">Get started by creating a new lead.</p>
+                    <h3 className="text-sm font-medium text-primary">No leads found</h3>
+                    <p className="text-sm text-secondary mt-1">Get started by creating a new lead.</p>
                   </td>
                 </tr>
               ) : (
@@ -145,32 +145,32 @@ export function LeadListView() {
                     key={lead.id}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="hover:bg-[#FAFAFA] cursor-pointer transition-colors"
+                    className="hover:bg-surface cursor-pointer transition-colors"
                     onClick={() => router.push(`/pipeline/${lead.id}`)}
                   >
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
-                        <span className="text-sm font-medium text-[#111827]">{getClientDisplayName(lead.client)}</span>
+                        <span className="text-sm font-medium text-primary">{getClientDisplayName(lead.client)}</span>
                         {lead.client?.company && lead.client?.name && lead.client.name !== 'Internal' && (
-                          <span className="text-xs text-[#6B7280]">{lead.client.name}</span>
+                          <span className="text-xs text-secondary">{lead.client.name}</span>
                         )}
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="inline-flex items-center text-xs font-medium text-[#111827] bg-[#F3F4F6] border border-[#E5E7EB] px-2 py-0.5 rounded-md">
+                      <span className="inline-flex items-center text-xs font-medium text-primary bg-[#F3F4F6] border border-border px-2 py-0.5 rounded-md">
                         {lead.stage.replace('_', ' ')}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-[#374151] font-medium">
                       {lead.dealValue ? formatCurrency(lead.dealValue) : '—'}
                     </td>
-                    <td className="px-6 py-4 text-sm text-[#6B7280]">
+                    <td className="px-6 py-4 text-sm text-secondary">
                       {lead.expectedCloseDate ? new Date(lead.expectedCloseDate).toLocaleDateString() : '—'}
                     </td>
                     <td className="px-6 py-4">
                       {lead.assignedTo ? (
                         <div className="flex items-center gap-2">
-                          <div className="h-6 w-6 rounded-full bg-[#F3F4F6] text-[#111827] text-[9px] font-bold flex items-center justify-center shrink-0 border border-[#E5E7EB]">
+                          <div className="h-6 w-6 rounded-full bg-[#F3F4F6] text-primary text-[9px] font-bold flex items-center justify-center shrink-0 border border-border">
                             {getInitials(lead.assignedTo.name)}
                           </div>
                           <span className="text-sm text-[#374151]">{lead.assignedTo.name}</span>

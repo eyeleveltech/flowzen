@@ -41,19 +41,19 @@ function PipelineContent() {
       {/* Header & Tabs */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-[#111827] tracking-tight">Pipeline</h1>
-          <p className="text-sm text-[#6B7280] mt-1">{totalLeads} total leads</p>
+          <h1 className="text-2xl font-semibold text-primary tracking-tight">Pipeline</h1>
+          <p className="text-sm text-secondary mt-1">{totalLeads} total leads</p>
         </div>
         <div className="flex items-center gap-2 p-1 bg-[#F3F4F6] rounded-xl self-start sm:self-auto">
           <button
             onClick={() => setActiveTab('LIST')}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'LIST' ? 'bg-white text-[#111827] shadow-sm' : 'text-[#6B7280] hover:text-[#374151]'}`}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'LIST' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-[#374151]'}`}
           >
             List View
           </button>
           <button
             onClick={() => setActiveTab('DASHBOARD')}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'DASHBOARD' ? 'bg-white text-[#111827] shadow-sm' : 'text-[#6B7280] hover:text-[#374151]'}`}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'DASHBOARD' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-[#374151]'}`}
           >
             Dashboard
           </button>
@@ -77,8 +77,8 @@ function PipelineContent() {
 export default function PipelinePage() {
   return (
     <Suspense fallback={
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#111827] border-t-transparent" />
+      <div className="flex items-center justify-center min-h-100">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
       </div>
     }>
       <PipelineContent />

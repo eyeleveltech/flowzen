@@ -153,7 +153,7 @@ function TasksContent() {
   const selectedProjectId = watch('projectId');
 
   const availableAssignees = useMemo(() => {
-    let users = new Map<string, { id: string; name: string }>();
+    const users = new Map<string, { id: string; name: string }>();
     if (selectedProjectId) {
       const proj = projects.find(p => p.id === selectedProjectId);
       if (proj) {
@@ -319,8 +319,8 @@ function TasksContent() {
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="h-full flex flex-col space-y-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-[#111827] tracking-tight">Tasks</h1>
-          <p className="text-sm text-[#6B7280] mt-1">{tasks.length} tasks</p>
+          <h1 className="text-2xl font-semibold text-primary tracking-tight">Tasks</h1>
+          <p className="text-sm text-secondary mt-1">{tasks.length} tasks</p>
         </div>
         <div className="flex items-center gap-3">
           {searchParams.get('filter') === 'overdue' && (
@@ -347,7 +347,7 @@ function TasksContent() {
               Showing Pending Approvals <X className="h-3.5 w-3.5" />
             </button>
           )}
-          <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all">
+          <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all">
             <Plus className="h-4 w-4" /> New Task
           </button>
         </div>
@@ -356,7 +356,7 @@ function TasksContent() {
       <div className="flex items-center gap-3 mb-6 flex-wrap">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tasks..." className="w-full rounded-xl border border-[#E5E7EB] bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tasks..." className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
         </div>
         <Select
           value={projectFilter}
@@ -403,9 +403,9 @@ function TasksContent() {
             className="w-48"
           />
         )}
-        <div className="flex rounded-xl border border-[#E5E7EB] p-1">
-          <button onClick={() => setView('board')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${view === 'board' ? 'bg-[#111827] text-white' : 'text-[#6B7280]'}`}>Board</button>
-          <button onClick={() => setView('list')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${view === 'list' ? 'bg-[#111827] text-white' : 'text-[#6B7280]'}`}>List</button>
+        <div className="flex rounded-xl border border-border p-1">
+          <button onClick={() => setView('board')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${view === 'board' ? 'bg-primary text-white' : 'text-secondary'}`}>Board</button>
+          <button onClick={() => setView('list')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${view === 'list' ? 'bg-primary text-white' : 'text-secondary'}`}>List</button>
         </div>
       </div>
 
@@ -419,7 +419,7 @@ function TasksContent() {
               </div>
               <div className="flex-1 space-y-3">
                 {[1, 2, 3].map(i => (
-                  <div key={i} className="rounded-xl border border-[#E5E7EB] bg-white p-3.5">
+                  <div key={i} className="rounded-xl border border-border bg-white p-3.5">
                     <div className="flex items-start gap-2 mb-3">
                       <Skeleton className="h-4 w-32" />
                     </div>
@@ -464,12 +464,12 @@ function TasksContent() {
                                     {...provided.draggableProps}
                                     {...provided.dragHandleProps}
                                     style={{ ...provided.draggableProps.style }}
-                                    className={`rounded-xl border border-[#E5E7EB] bg-white p-3.5 hover:shadow-sm cursor-pointer transition-shadow group ${snapshot.isDragging ? 'shadow-lg rotate-2' : ''}`}
+                                    className={`rounded-xl border border-border bg-white p-3.5 hover:shadow-sm cursor-pointer transition-shadow group ${snapshot.isDragging ? 'shadow-lg rotate-2' : ''}`}
                                     onClick={() => setSelectedTask(t)}
                                   >
                                     <div className="flex items-start gap-2 mb-2">
                                       <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${priorityDots[t.priority]}`} />
-                                      <p className="text-sm font-medium text-[#111827] leading-snug">{t.title}</p>
+                                      <p className="text-sm font-medium text-primary leading-snug">{t.title}</p>
                                     </div>
                                     <div className="flex items-center justify-between">
                                       <span className="text-[11px] text-[#9CA3AF]">{t.project?.name}</span>
@@ -485,7 +485,7 @@ function TasksContent() {
                                           </div>
                                         )}
                                         {(t.loggedHours ?? 0) > 0 && (
-                                          <span className="text-[10px] text-[#6B7280] bg-[#F3F4F6] px-1.5 py-0.5 rounded-md font-medium tabular-nums border border-[#E5E7EB]">
+                                          <span className="text-[10px] text-secondary bg-[#F3F4F6] px-1.5 py-0.5 rounded-md font-medium tabular-nums border border-border">
                                             ⏱ {t.loggedHours}h
                                           </span>
                                         )}
@@ -513,29 +513,29 @@ function TasksContent() {
           {view === 'list' && (
             <>
               {/* Desktop Table View */}
-              <div className="hidden md:block rounded-2xl border border-[#E5E7EB] bg-white overflow-hidden">
+              <div className="hidden md:block rounded-2xl border border-border bg-white overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[800px]">
                     <thead>
                       <tr className="border-b border-[#F3F4F6]">
-                        <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Task</th>
-                        <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Project</th>
-                        <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Assignee</th>
-                        <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Priority</th>
-                        <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Status</th>
-                        <th className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wide">Due Date</th>
+                        <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Task</th>
+                        <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Project</th>
+                        <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Assignee</th>
+                        <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Priority</th>
+                        <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Status</th>
+                        <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Due Date</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#F3F4F6]">
                       {tasks.map((t) => (
-                        <tr key={t.id} className="hover:bg-[#FAFAFA] cursor-pointer transition-colors" onClick={() => setSelectedTask(t)}>
+                        <tr key={t.id} className="hover:bg-surface cursor-pointer transition-colors" onClick={() => setSelectedTask(t)}>
                           <td className="px-6 py-3.5">
                             <div className="flex items-center gap-2">
                               <div className={`h-2 w-2 rounded-full shrink-0 ${priorityDots[t.priority]}`} />
-                              <span className="text-sm font-medium text-[#111827]">{t.title}</span>
+                              <span className="text-sm font-medium text-primary">{t.title}</span>
                             </div>
                           </td>
-                          <td className="px-6 py-3.5 text-sm text-[#6B7280]">{t.project?.name}</td>
+                          <td className="px-6 py-3.5 text-sm text-secondary">{t.project?.name}</td>
                           <td className="px-6 py-3.5">
                             {t.assignee ? (
                               <div className="flex items-center gap-2">
@@ -552,7 +552,7 @@ function TasksContent() {
                               {t.status.replace('_', ' ')}
                             </span>
                           </td>
-                          <td className="px-6 py-3.5 text-sm text-[#6B7280]">{formatDate(t.dueDate)}</td>
+                          <td className="px-6 py-3.5 text-sm text-secondary">{formatDate(t.dueDate)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -577,7 +577,7 @@ function TasksContent() {
                     >
                       <div className="flex items-start gap-2 mb-2">
                         <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${priorityDots[t.priority]}`} />
-                        <p className="text-sm font-medium text-[#111827] leading-snug">{t.title}</p>
+                        <p className="text-sm font-medium text-primary leading-snug">{t.title}</p>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className={`inline-flex items-center rounded-lg px-2 py-0.5 text-[10px] font-medium ${statusColors[t.status]}`}>
@@ -604,7 +604,7 @@ function TasksContent() {
               <button
                 onClick={() => fetchNextPage()}
                 disabled={isFetchingNextPage}
-                className="rounded-xl border border-[#E5E7EB] bg-white px-6 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50 transition-all"
+                className="rounded-xl border border-border bg-white px-6 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50 transition-all"
               >
                 {isFetchingNextPage ? 'Loading...' : 'Load More Tasks'}
               </button>
@@ -623,12 +623,12 @@ function TasksContent() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
-              className="fixed right-0 top-0 bottom-0 z-[101] w-full max-w-2xl bg-white border-l border-[#E5E7EB] shadow-2xl shadow-black/10 overflow-y-auto"
+              className="fixed right-0 top-0 bottom-0 z-[101] w-full max-w-2xl bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto"
             >
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] sticky top-0 bg-white z-10">
-                <h2 className="text-lg font-semibold text-[#111827]">Task Details</h2>
+                <h2 className="text-lg font-semibold text-primary">Task Details</h2>
                 <button onClick={() => { setSelectedTask(null); setIsEditing(false); }} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
-                  <X className="h-4 w-4 text-[#6B7280]" />
+                  <X className="h-4 w-4 text-secondary" />
                 </button>
               </div>
               <div className="p-6">
@@ -642,12 +642,12 @@ function TasksContent() {
                     <span className={`h-2 w-2 rounded-full ${priorityDots[selectedTask.priority]}`} />
                   </>
                 )}
-                {isEditing && <h2 className="text-lg font-semibold text-[#111827]">Edit Task</h2>}
+                {isEditing && <h2 className="text-lg font-semibold text-primary">Edit Task</h2>}
               </div>
               <div className="flex items-center gap-2">
                 {!isEditing && (user?.role !== 'TEAM_MEMBER' || selectedTask.assignee?.id === user?.id) && (
                   <>
-                    <button onClick={startEditing} className="rounded-xl border border-[#E5E7EB] px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
+                    <button onClick={startEditing} className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
                       Edit
                     </button>
                     <button onClick={deleteTask} className="rounded-xl border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 hover:border-red-300 transition-all flex items-center gap-1.5">
@@ -661,7 +661,7 @@ function TasksContent() {
               <form onSubmit={handleSubmit(handleEdit)} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Title *</label>
-                  <input {...register('title')} className={`w-full rounded-xl border ${errors.title ? 'border-red-500' : 'border-[#E5E7EB]'} bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all`} />
+                  <input {...register('title')} className={`w-full rounded-xl border ${errors.title ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
                   {errors.title && <p className="mt-1 text-xs text-red-500">{errors.title.message}</p>}
                 </div>
                 <div>
@@ -732,74 +732,74 @@ function TasksContent() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Assigned Date</label>
-                    <input type="date" {...register('assignedDate')} className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
+                    <input type="date" {...register('assignedDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
-                    <input type="date" {...register('dueDate')} className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
+                    <input type="date" {...register('dueDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Time Spent (hours)</label>
-                    <input type="number" step="0.5" min="0" {...register('loggedHours', { valueAsNumber: true })} className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
+                    <input type="number" step="0.5" min="0" {...register('loggedHours', { valueAsNumber: true })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                   </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Drive Link (Uploads, Drafts)</label>
-                  <input type="url" {...register('driveLink')} placeholder="https://drive.google.com/..." className={`w-full rounded-xl border ${errors.driveLink ? 'border-red-500' : 'border-[#E5E7EB]'} bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all`} />
+                  <input type="url" {...register('driveLink')} placeholder="https://drive.google.com/..." className={`w-full rounded-xl border ${errors.driveLink ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
                   {errors.driveLink && <p className="mt-1 text-xs text-red-500">{errors.driveLink.message}</p>}
                 </div>
                 <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setIsEditing(false)} className="flex-1 rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
-                  <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submitting ? 'Saving...' : 'Save Changes'}</button>
+                  <button type="button" onClick={() => setIsEditing(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
+                  <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submitting ? 'Saving...' : 'Save Changes'}</button>
                 </div>
               </form>
             ) : (
               <div>
-                <h2 className="text-xl font-semibold text-[#111827] mb-2">{selectedTask.title}</h2>
-                {selectedTask.description && <div className="text-sm text-[#6B7280] mb-4 prose prose-sm prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: selectedTask.description }} />}
+                <h2 className="text-xl font-semibold text-primary mb-2">{selectedTask.title}</h2>
+                {selectedTask.description && <div className="text-sm text-secondary mb-4 prose prose-sm prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: selectedTask.description }} />}
                 <div className="space-y-4">
                   <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                    <span className="text-sm text-[#6B7280]">Project</span>
-                    <span className="text-sm font-medium text-[#111827]">{selectedTask.project?.name}</span>
+                    <span className="text-sm text-secondary">Project</span>
+                    <span className="text-sm font-medium text-primary">{selectedTask.project?.name}</span>
                   </div>
                   <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                    <span className="text-sm text-[#6B7280]">Assignee</span>
-                    <span className="text-sm font-medium text-[#111827]">{selectedTask.assignee?.name || 'Unassigned'}</span>
+                    <span className="text-sm text-secondary">Assignee</span>
+                    <span className="text-sm font-medium text-primary">{selectedTask.assignee?.name || 'Unassigned'}</span>
                   </div>
                   <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                    <span className="text-sm text-[#6B7280]">Created</span>
-                    <span className="text-sm font-medium text-[#111827]">{formatDate(selectedTask.createdAt)}</span>
+                    <span className="text-sm text-secondary">Created</span>
+                    <span className="text-sm font-medium text-primary">{formatDate(selectedTask.createdAt)}</span>
                   </div>
                   <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                    <span className="text-sm text-[#6B7280]">Due Date</span>
-                    <span className="text-sm font-medium text-[#111827]">{formatDate(selectedTask.dueDate)}</span>
+                    <span className="text-sm text-secondary">Due Date</span>
+                    <span className="text-sm font-medium text-primary">{formatDate(selectedTask.dueDate)}</span>
                   </div>
                   {selectedTask.reviewer && (
                     <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                      <span className="text-sm text-[#6B7280]">Reviewer</span>
-                      <span className="text-sm font-medium text-[#111827]">{selectedTask.reviewer.name}</span>
+                      <span className="text-sm text-secondary">Reviewer</span>
+                      <span className="text-sm font-medium text-primary">{selectedTask.reviewer.name}</span>
                     </div>
                   )}
                   {selectedTask.driveLink && (
                     <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                      <span className="text-sm text-[#6B7280]">Drive Link</span>
+                      <span className="text-sm text-secondary">Drive Link</span>
                       <a href={selectedTask.driveLink} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 hover:underline max-w-[200px] truncate">{selectedTask.driveLink}</a>
                     </div>
                   )}
                   {selectedTask.completedAt && (
                     <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                      <span className="text-sm text-[#6B7280]">Completed On</span>
-                      <span className="text-sm font-medium text-[#111827]">{formatDate(selectedTask.completedAt)}</span>
+                      <span className="text-sm text-secondary">Completed On</span>
+                      <span className="text-sm font-medium text-primary">{formatDate(selectedTask.completedAt)}</span>
                     </div>
                   )}
                   <div className="flex items-center justify-between py-2">
-                    <span className="text-sm text-[#6B7280]">Priority</span>
-                    <span className="text-sm font-medium text-[#111827] capitalize">{selectedTask.priority.toLowerCase()}</span>
+                    <span className="text-sm text-secondary">Priority</span>
+                    <span className="text-sm font-medium text-primary capitalize">{selectedTask.priority.toLowerCase()}</span>
                   </div>
                   {(selectedTask.loggedHours ?? 0) > 0 && (
                     <div className="flex items-center justify-between py-2 border-t border-[#F3F4F6]">
-                      <span className="text-sm text-[#6B7280]">Time Spent</span>
-                      <span className="text-sm font-medium text-[#111827]">⏱ {selectedTask.loggedHours}h</span>
+                      <span className="text-sm text-secondary">Time Spent</span>
+                      <span className="text-sm font-medium text-primary">⏱ {selectedTask.loggedHours}h</span>
                     </div>
                   )}
                 </div>
@@ -811,7 +811,7 @@ function TasksContent() {
                         <button
                           key={s}
                           onClick={() => { updateTaskStatus(selectedTask.id, s); setSelectedTask({ ...selectedTask, status: s }); }}
-                          className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${selectedTask.status === s ? 'bg-[#111827] text-white' : 'border border-[#E5E7EB] text-[#6B7280] hover:bg-[#F9FAFB]'}`}
+                          className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${selectedTask.status === s ? 'bg-primary text-white' : 'border border-border text-secondary hover:bg-[#F9FAFB]'}`}
                         >
                           {kanbanLabels[s]}
                         </button>
@@ -821,7 +821,7 @@ function TasksContent() {
                 )}
                 {/* Comments Section */}
                 <div className="mt-8 border-t border-[#F3F4F6] pt-6">
-                  <h3 className="text-sm font-semibold text-[#111827] mb-4">Comments</h3>
+                  <h3 className="text-sm font-semibold text-primary mb-4">Comments</h3>
                   
                   {/* Add Comment */}
                   <div className="mb-6 flex gap-3">
@@ -830,13 +830,13 @@ function TasksContent() {
                         value={commentContent}
                         onChange={(e) => setCommentContent(e.target.value)}
                         placeholder="Ask a question or post an update..."
-                        className="w-full min-h-[80px] rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#111827] transition-all resize-none"
+                        className="w-full min-h-[80px] rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus:border-primary transition-all resize-none"
                       />
                       <div className="mt-2 flex justify-end">
                         <button
                           onClick={handleAddComment}
                           disabled={submittingComment || !commentContent.trim()}
-                          className="bg-[#111827] text-white px-4 py-1.5 rounded-lg text-xs font-medium hover:bg-black transition-colors disabled:opacity-50"
+                          className="bg-primary text-white px-4 py-1.5 rounded-lg text-xs font-medium hover:bg-black transition-colors disabled:opacity-50"
                         >
                           {submittingComment ? 'Posting...' : 'Post Comment'}
                         </button>
@@ -847,16 +847,16 @@ function TasksContent() {
                   {/* Comments List */}
                   <div className="space-y-4">
                     {!selectedTask.comments || selectedTask.comments.length === 0 ? (
-                      <p className="text-sm text-[#6B7280] italic text-center py-4">No comments yet. Be the first to start the discussion!</p>
+                      <p className="text-sm text-secondary italic text-center py-4">No comments yet. Be the first to start the discussion!</p>
                     ) : (
                       selectedTask.comments.map((comment) => (
                         <div key={comment.id} className="flex gap-3">
-                          <div className="h-8 w-8 rounded-full bg-[#F3F4F6] text-[#111827] text-xs font-medium flex items-center justify-center shrink-0 border border-[#E5E7EB]">
+                          <div className="h-8 w-8 rounded-full bg-[#F3F4F6] text-primary text-xs font-medium flex items-center justify-center shrink-0 border border-border">
                             {comment.author.name.charAt(0).toUpperCase()}
                           </div>
-                          <div className="flex-1 bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl p-3">
+                          <div className="flex-1 bg-surface border border-border rounded-xl p-3">
                             <div className="flex items-center justify-between mb-1">
-                              <span className="font-semibold text-xs text-[#111827]">{comment.author.name}</span>
+                              <span className="font-semibold text-xs text-primary">{comment.author.name}</span>
                               <span className="text-[10px] text-[#9CA3AF]">{new Date(comment.createdAt).toLocaleDateString()}</span>
                             </div>
                             <p className="text-sm text-[#374151] whitespace-pre-wrap">{comment.content}</p>
@@ -887,19 +887,19 @@ function TasksContent() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
-              className="fixed right-0 top-0 bottom-0 z-[101] w-full max-w-lg bg-white border-l border-[#E5E7EB] shadow-2xl shadow-black/10 overflow-y-auto"
+              className="fixed right-0 top-0 bottom-0 z-[101] w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto"
             >
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] sticky top-0 bg-white z-10">
-                <h2 className="text-lg font-semibold text-[#111827]">New Task</h2>
+                <h2 className="text-lg font-semibold text-primary">New Task</h2>
                 <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
-                  <X className="h-4 w-4 text-[#6B7280]" />
+                  <X className="h-4 w-4 text-secondary" />
                 </button>
               </div>
               <div className="p-6">
                 <form onSubmit={handleSubmit(handleCreate)} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-[#374151] mb-1.5">Title *</label>
-            <input {...register('title')} className={`w-full rounded-xl border ${errors.title ? 'border-red-500' : 'border-[#E5E7EB]'} bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all`} />
+            <input {...register('title')} className={`w-full rounded-xl border ${errors.title ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
             {errors.title && <p className="mt-1 text-xs text-red-500">{errors.title.message}</p>}
           </div>
           <div>
@@ -970,25 +970,25 @@ function TasksContent() {
             </div>
             <div>
               <label className="block text-sm font-medium text-[#374151] mb-1.5">Assigned Date</label>
-              <input type="date" {...register('assignedDate')} className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
+              <input type="date" {...register('assignedDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
             </div>
             <div>
               <label className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
-              <input type="date" {...register('dueDate')} className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
+              <input type="date" {...register('dueDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
             </div>
             <div>
               <label className="block text-sm font-medium text-[#374151] mb-1.5">Time Spent (hours)</label>
-              <input type="number" step="0.5" min="0" {...register('loggedHours', { valueAsNumber: true })} className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
+              <input type="number" step="0.5" min="0" {...register('loggedHours', { valueAsNumber: true })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-[#374151] mb-1.5">Drive Link (Uploads, Drafts)</label>
-            <input type="url" {...register('driveLink')} placeholder="https://drive.google.com/..." className={`w-full rounded-xl border ${errors.driveLink ? 'border-red-500' : 'border-[#E5E7EB]'} bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all`} />
+            <input type="url" {...register('driveLink')} placeholder="https://drive.google.com/..." className={`w-full rounded-xl border ${errors.driveLink ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
             {errors.driveLink && <p className="mt-1 text-xs text-red-500">{errors.driveLink.message}</p>}
           </div>
           <div className="pt-4 flex gap-3">
-            <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
-            <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submitting ? 'Creating...' : 'Create Task'}</button>
+            <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
+            <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submitting ? 'Creating...' : 'Create Task'}</button>
           </div>
                 </form>
               </div>
@@ -1003,8 +1003,8 @@ function TasksContent() {
 export default function TasksPage() {
   return (
     <Suspense fallback={
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#111827] border-t-transparent" />
+      <div className="flex items-center justify-center min-h-100">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
       </div>
     }>
       <TasksContent />

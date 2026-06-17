@@ -102,17 +102,17 @@ export function StageTransitionModal({ currentStage, targetStage, onClose, onSub
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg bg-white rounded-2xl shadow-xl border border-[#E5E7EB] flex flex-col max-h-[90vh]"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg bg-white rounded-2xl shadow-xl border border-border flex flex-col max-h-[90vh]"
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div>
-            <h2 className="text-lg font-semibold text-[#111827]">Move to {targetStage.replace('_', ' ')}</h2>
-            <p className="text-xs text-[#6B7280] flex items-center gap-2 mt-1">
+            <h2 className="text-lg font-semibold text-primary">Move to {targetStage.replace('_', ' ')}</h2>
+            <p className="text-xs text-secondary flex items-center gap-2 mt-1">
               {currentStage.replace('_', ' ')} <ArrowRight className="w-3 h-3" /> {targetStage.replace('_', ' ')}
             </p>
           </div>
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
-            <X className="h-4 w-4 text-[#6B7280]" />
+            <X className="h-4 w-4 text-secondary" />
           </button>
         </div>
 
@@ -120,14 +120,14 @@ export function StageTransitionModal({ currentStage, targetStage, onClose, onSub
           <form id="stage-form" onSubmit={handleSubmit} className="space-y-5">
             
             {requiresDealValue && (
-              <div className="grid grid-cols-2 gap-4 pb-4 border-b border-[#E5E7EB]">
+              <div className="grid grid-cols-2 gap-4 pb-4 border-b border-border">
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Deal Value (₹)</label>
-                  <input type="number" value={dealValue} onChange={e => setDealValue(e.target.value)} required className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2 text-sm outline-none focus:border-[#111827]" />
+                  <input type="number" value={dealValue} onChange={e => setDealValue(e.target.value)} required className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Expected Close Date</label>
-                  <input type="date" value={expectedCloseDate} onChange={e => setExpectedCloseDate(e.target.value)} required className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2 text-sm outline-none focus:border-[#111827]" />
+                  <input type="date" value={expectedCloseDate} onChange={e => setExpectedCloseDate(e.target.value)} required className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary" />
                 </div>
               </div>
             )}
@@ -156,14 +156,14 @@ export function StageTransitionModal({ currentStage, targetStage, onClose, onSub
                     required={field.required}
                     value={formData[field.key] || ''}
                     onChange={(e) => handleFieldChange(field.key, e.target.value)}
-                    className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2 text-sm outline-none focus:border-[#111827]"
+                    className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary"
                   />
                 ) : field.type === 'textarea' ? (
                   <textarea
                     required={field.required}
                     value={formData[field.key] || ''}
                     onChange={(e) => handleFieldChange(field.key, e.target.value)}
-                    className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2 text-sm outline-none focus:border-[#111827] min-h-[80px]"
+                    className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary min-h-[80px]"
                   />
                 ) : field.type === 'select' ? (
                   <Select
@@ -179,7 +179,7 @@ export function StageTransitionModal({ currentStage, targetStage, onClose, onSub
                           type="checkbox"
                           checked={(formData[field.key] || []).includes(opt)}
                           onChange={(e) => handleChecklistChange(field.key, opt, e.target.checked)}
-                          className="rounded border-[#D1D5DB] text-[#111827] focus:ring-[#111827]"
+                          className="rounded border-[#D1D5DB] text-primary focus:ring-primary"
                         />
                         <span className="text-sm text-[#374151]">{opt}</span>
                       </label>
@@ -194,7 +194,7 @@ export function StageTransitionModal({ currentStage, targetStage, onClose, onSub
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2 text-sm outline-none focus:border-[#111827] min-h-[60px]"
+                className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary min-h-[60px]"
                 placeholder="Log any context for this stage change..."
               />
             </div>
@@ -202,11 +202,11 @@ export function StageTransitionModal({ currentStage, targetStage, onClose, onSub
           </form>
         </div>
 
-        <div className="p-4 border-t border-[#E5E7EB] bg-gray-50 flex gap-3 rounded-b-2xl">
+        <div className="p-4 border-t border-border bg-gray-50 flex gap-3 rounded-b-2xl">
           <button type="button" onClick={onClose} className="flex-1 px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#D1D5DB] rounded-xl hover:bg-gray-50 transition-colors">
             Cancel
           </button>
-          <button type="submit" form="stage-form" disabled={isLoading} className="flex-1 px-4 py-2 text-sm font-medium text-white bg-[#111827] rounded-xl hover:bg-[#1F2937] transition-colors disabled:opacity-50">
+          <button type="submit" form="stage-form" disabled={isLoading} className="flex-1 px-4 py-2 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] transition-colors disabled:opacity-50">
             {isLoading ? 'Saving...' : 'Confirm Stage Change'}
           </button>
         </div>

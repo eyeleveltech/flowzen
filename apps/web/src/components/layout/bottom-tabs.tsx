@@ -78,10 +78,10 @@ export function BottomTabs() {
 
               {/* Header */}
               <div className="flex items-center justify-between px-5 py-3">
-                <h3 className="text-base font-semibold text-[#111827]">More</h3>
+                <h3 className="text-base font-semibold text-primary">More</h3>
                 <button
                   onClick={() => setShowMore(false)}
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F3F4F6] text-[#6B7280] hover:bg-[#E5E7EB] transition-colors"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F3F4F6] text-secondary hover:bg-border transition-colors"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -100,7 +100,7 @@ export function BottomTabs() {
                       <div
                         className={`flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-medium transition-all duration-150 ${
                           isActive
-                            ? 'bg-[#111827] text-white'
+                            ? 'bg-primary text-white'
                             : 'text-[#374151] hover:bg-[#F9FAFB]'
                         }`}
                       >
@@ -138,7 +138,7 @@ export function BottomTabs() {
       </AnimatePresence>
 
       {/* Tab Bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-[#E5E7EB] bg-white/95 backdrop-blur-xl safe-area-bottom">
+      <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-white/95 backdrop-blur-xl safe-area-bottom">
         <nav className="flex items-stretch justify-around px-2 pt-1.5 pb-1.5">
           {primaryTabs.map((tab) => {
             const isActive = pathname === tab.href || pathname.startsWith(tab.href + '/');
@@ -151,18 +151,18 @@ export function BottomTabs() {
                 {isActive && (
                   <motion.div
                     layoutId="bottom-tab-indicator"
-                    className="absolute -top-1.5 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-[#111827]"
+                    className="absolute -top-1.5 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-primary"
                     transition={{ type: 'spring', stiffness: 500, damping: 35 }}
                   />
                 )}
                 <tab.icon
                   className={`h-5 w-5 transition-colors duration-150 ${
-                    isActive ? 'text-[#111827]' : 'text-[#9CA3AF]'
+                    isActive ? 'text-primary' : 'text-[#9CA3AF]'
                   }`}
                 />
                 <span
                   className={`text-[10px] font-medium transition-colors duration-150 ${
-                    isActive ? 'text-[#111827]' : 'text-[#9CA3AF]'
+                    isActive ? 'text-primary' : 'text-[#9CA3AF]'
                   }`}
                 >
                   {tab.label}
@@ -179,18 +179,18 @@ export function BottomTabs() {
             {isMoreActive && (
               <motion.div
                 layoutId="bottom-tab-indicator"
-                className="absolute -top-1.5 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-[#111827]"
+                className="absolute -top-1.5 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-primary"
                 transition={{ type: 'spring', stiffness: 500, damping: 35 }}
               />
             )}
             <MoreHorizontal
               className={`h-5 w-5 transition-colors duration-150 ${
-                isMoreActive ? 'text-[#111827]' : 'text-[#9CA3AF]'
+                isMoreActive ? 'text-primary' : 'text-[#9CA3AF]'
               }`}
             />
             <span
               className={`text-[10px] font-medium transition-colors duration-150 ${
-                isMoreActive ? 'text-[#111827]' : 'text-[#9CA3AF]'
+                isMoreActive ? 'text-primary' : 'text-[#9CA3AF]'
               }`}
             >
               More

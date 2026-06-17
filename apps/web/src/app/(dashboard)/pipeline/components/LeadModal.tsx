@@ -156,25 +156,25 @@ export function LeadModal({ onClose, onSuccess }: { onClose: () => void; onSucce
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: 20 }}
-        className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md bg-white border-l border-[#E5E7EB] shadow-2xl flex flex-col"
+        className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md bg-white border-l border-border shadow-2xl flex flex-col"
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB]">
-          <h2 className="text-lg font-semibold text-[#111827]">Add New Lead</h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <h2 className="text-lg font-semibold text-primary">Add New Lead</h2>
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
-            <X className="h-4 w-4 text-[#6B7280]" />
+            <X className="h-4 w-4 text-secondary" />
           </button>
         </div>
 
-        <div className="flex gap-4 px-6 border-b border-[#E5E7EB]">
+        <div className="flex gap-4 px-6 border-b border-border">
             <button
               onClick={() => setCreationMode('MANUAL')}
-              className={`pb-2 mt-4 text-sm font-medium border-b-2 transition-colors ${creationMode === 'MANUAL' ? 'border-[#111827] text-[#111827]' : 'border-transparent text-[#6B7280] hover:text-[#374151]'}`}
+              className={`pb-2 mt-4 text-sm font-medium border-b-2 transition-colors ${creationMode === 'MANUAL' ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-[#374151]'}`}
             >
               Manual Entry
             </button>
             <button
               onClick={() => setCreationMode('BULK')}
-              className={`pb-2 mt-4 text-sm font-medium border-b-2 transition-colors ${creationMode === 'BULK' ? 'border-[#111827] text-[#111827]' : 'border-transparent text-[#6B7280] hover:text-[#374151]'}`}
+              className={`pb-2 mt-4 text-sm font-medium border-b-2 transition-colors ${creationMode === 'BULK' ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-[#374151]'}`}
             >
               Bulk Import
             </button>
@@ -232,7 +232,7 @@ export function LeadModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                   <textarea
                     value={form.notes}
                     onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                    className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#111827] outline-none focus:border-[#111827] focus:ring-1 focus:ring-[#111827] transition-all min-h-[100px]"
+                    className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all min-h-[100px]"
                     placeholder="Enter any initial notes about this lead..."
                   />
                 </div>
@@ -242,12 +242,12 @@ export function LeadModal({ onClose, onSuccess }: { onClose: () => void; onSucce
           </form>
           ) : (
             <div className="space-y-6">
-              <div className="flex items-center justify-between p-4 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB]">
+              <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-[#F9FAFB]">
                 <div>
-                  <h3 className="text-sm font-semibold text-[#111827]">Need a template?</h3>
-                  <p className="text-xs text-[#6B7280] mt-1">Download our CSV template to see the required format.</p>
+                  <h3 className="text-sm font-semibold text-primary">Need a template?</h3>
+                  <p className="text-xs text-secondary mt-1">Download our CSV template to see the required format.</p>
                 </div>
-                <button onClick={downloadTemplate} className="flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-gray-50 transition-all">
+                <button onClick={downloadTemplate} className="flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-gray-50 transition-all">
                   <FileText className="h-3.5 w-3.5" /> Template
                 </button>
               </div>
@@ -257,7 +257,7 @@ export function LeadModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
-                  className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed transition-colors rounded-xl cursor-pointer ${isDragging ? 'border-[#111827] bg-gray-50' : 'border-[#D1D5DB] hover:border-[#111827] hover:bg-gray-50'}`}
+                  className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed transition-colors rounded-xl cursor-pointer ${isDragging ? 'border-primary bg-gray-50' : 'border-[#D1D5DB] hover:border-primary hover:bg-gray-50'}`}
                 >
                   <div className="flex flex-col items-center justify-center pt-5 pb-6">
                     <Upload className="w-8 h-8 mb-3 text-[#9CA3AF]" />
@@ -269,7 +269,7 @@ export function LeadModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                   <input type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
                 </label>
                 {importFile && (
-                  <p className="text-xs text-[#111827] mt-2 font-medium flex items-center gap-1.5">
+                  <p className="text-xs text-primary mt-2 font-medium flex items-center gap-1.5">
                     <FileText className="h-3 w-3 text-[#10B981]" /> {importFile.name}
                   </p>
                 )}
@@ -285,17 +285,17 @@ export function LeadModal({ onClose, onSuccess }: { onClose: () => void; onSucce
           )}
         </div>
 
-        <div className="p-6 border-t border-[#E5E7EB] bg-gray-50 flex gap-3">
+        <div className="p-6 border-t border-border bg-gray-50 flex gap-3">
           <button type="button" onClick={onClose} className="flex-1 px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#D1D5DB] rounded-xl hover:bg-gray-50 transition-colors">
             Cancel
           </button>
           {creationMode === 'MANUAL' ? (
-            <button type="submit" form="lead-form" disabled={submitting} className="flex-1 px-4 py-2 text-sm font-medium text-white bg-[#111827] rounded-xl hover:bg-[#1F2937] transition-colors disabled:opacity-50 flex justify-center items-center gap-2">
+            <button type="submit" form="lead-form" disabled={submitting} className="flex-1 px-4 py-2 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] transition-colors disabled:opacity-50 flex justify-center items-center gap-2">
               <Save className="h-4 w-4" />
               {submitting ? 'Saving...' : 'Save Lead'}
             </button>
           ) : (
-            <button onClick={handleBulkImport} disabled={importing || importPreview.length === 0} className="flex-1 px-4 py-2 text-sm font-medium text-white bg-[#111827] rounded-xl hover:bg-[#1F2937] transition-colors disabled:opacity-50 flex justify-center items-center gap-2">
+            <button onClick={handleBulkImport} disabled={importing || importPreview.length === 0} className="flex-1 px-4 py-2 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] transition-colors disabled:opacity-50 flex justify-center items-center gap-2">
               <Upload className="h-4 w-4" />
               {importing ? 'Importing...' : 'Import Leads'}
             </button>
@@ -317,7 +317,7 @@ function Field({ label, value, onChange, type = 'text', required = false }: {
         value={value}
         onChange={(e) => onChange(e.target.value)}
         required={required}
-        className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#111827] outline-none focus:border-[#111827] focus:ring-1 focus:ring-[#111827] transition-all"
+        className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
       />
     </div>
   );

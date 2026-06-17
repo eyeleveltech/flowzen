@@ -52,7 +52,7 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
   return (
     <div className="relative" ref={containerRef}>
       <div 
-        className="min-h-[42px] w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#111827] cursor-pointer flex flex-wrap gap-2 items-center transition-all focus-within:border-[#111827] focus-within:ring-1 focus-within:ring-[#111827]"
+        className="min-h-[42px] w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary cursor-pointer flex flex-wrap gap-2 items-center transition-all focus-within:border-primary focus-within:ring-1 focus-within:ring-primary"
         onClick={() => setIsOpen(true)}
       >
         {selectedOptions.length === 0 && (
@@ -64,12 +64,12 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
             key={opt.value} 
             className="flex items-center gap-1 bg-[#F3F4F6] text-[#374151] px-2 py-1 rounded-lg text-xs font-medium"
           >
-            {opt.image && <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-semibold ${opt.colorClass || 'bg-[#111827] text-white'}`}>{opt.image}</div>}
+            {opt.image && <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-semibold ${opt.colorClass || 'bg-primary text-white'}`}>{opt.image}</div>}
             {opt.label}
             <button 
               type="button" 
               onClick={(e) => handleRemove(e, opt.value)}
-              className="hover:bg-[#E5E7EB] rounded-full p-0.5"
+              className="hover:bg-border rounded-full p-0.5"
             >
               <X className="h-3 w-3" />
             </button>
@@ -107,7 +107,7 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
         <Drawer isOpen={isOpen} onClose={() => setIsOpen(false)} title={placeholder}>
           <div className="flex flex-col space-y-1 mb-4">
             {filteredOptions.length === 0 ? (
-              <div className="px-4 py-2.5 text-sm text-[#6B7280]">No results found.</div>
+              <div className="px-4 py-2.5 text-sm text-secondary">No results found.</div>
             ) : (
               filteredOptions.map((opt) => {
                 const isSelected = value.includes(opt.value);
@@ -118,14 +118,14 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
                     onClick={(e) => { e.stopPropagation(); handleSelect(opt.value); }}
                     className={`flex w-full items-center text-left gap-3 px-4 py-3.5 rounded-xl text-base transition-colors ${
                       isSelected
-                        ? 'bg-[#F3F4F6] text-[#111827] font-semibold'
+                        ? 'bg-[#F3F4F6] text-primary font-semibold'
                         : 'text-[#374151] active:bg-[#F9FAFB]'
                     }`}
                   >
-                    <div className={`flex items-center justify-center w-5 h-5 rounded border shrink-0 ${isSelected ? 'bg-[#111827] border-[#111827]' : 'border-[#D1D5DB]'}`}>
+                    <div className={`flex items-center justify-center w-5 h-5 rounded border shrink-0 ${isSelected ? 'bg-primary border-primary' : 'border-[#D1D5DB]'}`}>
                       {isSelected && <Check className="h-3.5 w-3.5 text-white" />}
                     </div>
-                    {opt.image && <div className={`w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-[#111827] text-white'}`}>{opt.image}</div>}
+                    {opt.image && <div className={`w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-primary text-white'}`}>{opt.image}</div>}
                     <span className="truncate">{opt.label}</span>
                   </button>
                 );
@@ -137,10 +137,10 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
         <div 
           role="listbox"
           aria-multiselectable="true"
-          className="absolute top-full mt-1.5 w-full rounded-xl border border-[#E5E7EB] bg-white py-1.5 shadow-lg z-50 max-h-60 overflow-auto"
+          className="absolute top-full mt-1.5 w-full rounded-xl border border-border bg-white py-1.5 shadow-lg z-50 max-h-60 overflow-auto"
         >
           {filteredOptions.length === 0 ? (
-            <div className="px-4 py-2.5 text-sm text-[#6B7280]">No results found.</div>
+            <div className="px-4 py-2.5 text-sm text-secondary">No results found.</div>
           ) : (
             filteredOptions.map(opt => {
               const isSelected = value.includes(opt.value);
@@ -150,7 +150,7 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
                   role="option"
                   tabIndex={isOpen ? 0 : -1}
                   aria-selected={isSelected}
-                  className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-[#F9FAFB] focus:bg-[#F9FAFB] focus:ring-2 focus:ring-inset focus:ring-[#111827]/10 outline-none transition-colors"
+                  className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-[#F9FAFB] focus:bg-[#F9FAFB] focus:ring-2 focus:ring-inset focus:ring-primary/10 outline-none transition-colors"
                   onClick={(e) => { e.stopPropagation(); handleSelect(opt.value); }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
@@ -177,10 +177,10 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
                     }
                   }}
                 >
-                  <div className={`flex items-center justify-center w-4 h-4 rounded border ${isSelected ? 'bg-[#111827] border-[#111827]' : 'border-[#D1D5DB]'}`}>
+                  <div className={`flex items-center justify-center w-4 h-4 rounded border ${isSelected ? 'bg-primary border-primary' : 'border-[#D1D5DB]'}`}>
                     {isSelected && <Check className="h-3 w-3 text-white" />}
                   </div>
-                  {opt.image && <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-[#111827] text-white'}`}>{opt.image}</div>}
+                  {opt.image && <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-primary text-white'}`}>{opt.image}</div>}
                   <span className="text-[#374151]">{opt.label}</span>
                 </div>
               );

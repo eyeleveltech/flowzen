@@ -24,7 +24,7 @@ import {
 
 const navItems = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Pipeline', href: '/pipeline', icon: TrendingUp, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'] },
+  { label: 'Pipeline', href: '/pipeline', icon: TrendingUp, roles: ['SUPER_ADMIN', 'ADMIN'] },
   { label: 'Clients', href: '/clients', icon: Building2, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'] },
   { label: 'Projects', href: '/projects', icon: FolderKanban },
   { label: 'Tasks', href: '/tasks', icon: CheckSquare },
@@ -53,12 +53,12 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
       }
       transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
       className={cn(
-        "fixed left-0 top-0 bottom-0 flex flex-col border-r border-[#E5E7EB] bg-white",
+        "fixed left-0 top-0 bottom-0 flex flex-col border-r border-border bg-white",
         isMobile ? "z-50 shadow-2xl" : "z-40"
       )}
     >
       {/* Logo */}
-      <div className={cn("flex h-16 items-center px-5 border-b border-[#E5E7EB]", sidebarCollapsed ? "justify-center px-0" : "justify-start")}>
+      <div className={cn("flex h-16 items-center px-5 border-b border-border", sidebarCollapsed ? "justify-center px-0" : "justify-start")}>
         <img 
           src="/logo_flowzen.png" 
           alt="Flowzen" 
@@ -76,11 +76,11 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
                 className={cn(
                   'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150',
                   isActive
-                    ? 'bg-[#111827] text-white'
-                    : 'text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#111827]'
+                    ? 'bg-primary text-white'
+                    : 'text-secondary hover:bg-[#F9FAFB] hover:text-primary'
                 )}
               >
-                <item.icon className={cn('h-[18px] w-[18px] shrink-0', isActive ? 'text-white' : 'text-[#9CA3AF] group-hover:text-[#111827]')} />
+                <item.icon className={cn('h-[18px] w-[18px] shrink-0', isActive ? 'text-white' : 'text-[#9CA3AF] group-hover:text-primary')} />
                 <AnimatePresence>
                   {!sidebarCollapsed && (
                     <motion.span
@@ -97,7 +97,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
                 {isActive && (
                   <motion.div
                     layoutId="sidebar-indicator"
-                    className="absolute inset-0 rounded-xl bg-[#111827] -z-10"
+                    className="absolute inset-0 rounded-xl bg-primary -z-10"
                     transition={{ type: 'spring', stiffness: 500, damping: 35 }}
                   />
                 )}
@@ -108,7 +108,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
       </nav>
 
       {/* Bottom */}
-      <div className="px-3 py-3 space-y-1 border-t border-[#E5E7EB]">
+      <div className="px-3 py-3 space-y-1 border-t border-border">
         {bottomItems.filter(item => !item.roles || item.roles.includes(user?.role || '')).map((item) => {
           const isActive = pathname.startsWith(item.href);
           return (
@@ -117,11 +117,11 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
                 className={cn(
                   'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150',
                   isActive
-                    ? 'bg-[#F9FAFB] text-[#111827]'
-                    : 'text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#111827]'
+                    ? 'bg-[#F9FAFB] text-primary'
+                    : 'text-secondary hover:bg-[#F9FAFB] hover:text-primary'
                 )}
               >
-                <item.icon className="h-[18px] w-[18px] shrink-0 text-[#9CA3AF] group-hover:text-[#111827]" />
+                <item.icon className="h-[18px] w-[18px] shrink-0 text-[#9CA3AF] group-hover:text-primary" />
                 <AnimatePresence>
                   {!sidebarCollapsed && (
                     <motion.span
@@ -143,7 +143,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
         {!isMobile && (
           <button
             onClick={toggleCollapse}
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#111827] transition-all duration-150"
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-secondary hover:bg-[#F9FAFB] hover:text-primary transition-all duration-150"
           >
             <motion.div animate={{ rotate: sidebarCollapsed ? 180 : 0 }} transition={{ duration: 0.2 }}>
               <ChevronLeft className="h-[18px] w-[18px] text-[#9CA3AF]" />
@@ -160,7 +160,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
 
         {/* User */}
         <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 mt-2">
-          <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${user ? getAvatarColor(user.name) : 'bg-[#111827] text-white'}`}>
+          <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${user ? getAvatarColor(user.name) : 'bg-primary text-white'}`}>
             {user ? getInitials(user.name) : '??'}
           </div>
           <AnimatePresence>
@@ -171,7 +171,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
                 exit={{ opacity: 0 }}
                 className="flex-1 min-w-0"
               >
-                <p className="text-sm font-medium text-[#111827] truncate">{user?.name}</p>
+                <p className="text-sm font-medium text-primary truncate">{user?.name}</p>
                 <p className="text-xs text-[#9CA3AF] truncate">{user?.email}</p>
               </motion.div>
             )}

@@ -117,12 +117,12 @@ export function TemplatesTab({ templates, fetchTemplates }: { templates: any[], 
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-[#111827]">Project Templates</h2>
-          <p className="text-sm text-[#6B7280]">Create reusable project structures with predefined tasks.</p>
+          <h2 className="text-lg font-semibold text-primary">Project Templates</h2>
+          <p className="text-sm text-secondary">Create reusable project structures with predefined tasks.</p>
         </div>
         <button
           onClick={() => openModal()}
-          className="bg-[#111827] text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-black transition-colors flex items-center gap-2"
+          className="bg-primary text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-black transition-colors flex items-center gap-2"
         >
           <Plus className="h-4 w-4" /> Create Template
         </button>
@@ -130,22 +130,22 @@ export function TemplatesTab({ templates, fetchTemplates }: { templates: any[], 
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {templates.map((t) => (
-          <div key={t.id} className="bg-white border border-[#E5E7EB] rounded-2xl p-5 hover:border-[#D1D5DB] transition-colors group">
+          <div key={t.id} className="bg-white border border-border rounded-2xl p-5 hover:border-[#D1D5DB] transition-colors group">
             <div className="flex justify-between items-start mb-4">
               <div className="h-10 w-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center border border-purple-100">
                 <FileText className="h-5 w-5" />
               </div>
               <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => openModal(t)} className="p-1.5 text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6] rounded-md"><Edit2 className="h-4 w-4" /></button>
-                <button onClick={() => handleDelete(t.id)} className="p-1.5 text-[#6B7280] hover:text-red-600 hover:bg-red-50 rounded-md"><Trash2 className="h-4 w-4" /></button>
+                <button onClick={() => openModal(t)} className="p-1.5 text-secondary hover:text-primary hover:bg-[#F3F4F6] rounded-md"><Edit2 className="h-4 w-4" /></button>
+                <button onClick={() => handleDelete(t.id)} className="p-1.5 text-secondary hover:text-red-600 hover:bg-red-50 rounded-md"><Trash2 className="h-4 w-4" /></button>
               </div>
             </div>
-            <h3 className="font-medium text-[#111827] text-base mb-1">{t.name}</h3>
-            <p className="text-sm text-[#6B7280] line-clamp-2 mb-4 h-10">{t.description || 'No description provided.'}</p>
+            <h3 className="font-medium text-primary text-base mb-1">{t.name}</h3>
+            <p className="text-sm text-secondary line-clamp-2 mb-4 h-10">{t.description || 'No description provided.'}</p>
             
             <div className="flex items-center justify-between pt-4 border-t border-[#F3F4F6]">
-              <span className="text-xs font-semibold text-[#111827] bg-[#F3F4F6] px-2.5 py-1 rounded-md">{t.type}</span>
-              <span className="text-xs text-[#6B7280] font-medium">{t.structure?.tasks?.length || 0} tasks</span>
+              <span className="text-xs font-semibold text-primary bg-[#F3F4F6] px-2.5 py-1 rounded-md">{t.type}</span>
+              <span className="text-xs text-secondary font-medium">{t.structure?.tasks?.length || 0} tasks</span>
             </div>
           </div>
         ))}
@@ -155,59 +155,59 @@ export function TemplatesTab({ templates, fetchTemplates }: { templates: any[], 
         {showModal && (
           <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-2xl shadow-2xl shadow-black/10 w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] bg-[#FAFAFA] shrink-0">
-                <h3 className="text-base font-semibold text-[#111827]">{editingTemplate ? 'Edit Template' : 'Create Template'}</h3>
-                <button onClick={() => setShowModal(false)} className="text-[#6B7280] hover:text-[#111827]"><X className="h-5 w-5" /></button>
+              <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface shrink-0">
+                <h3 className="text-base font-semibold text-primary">{editingTemplate ? 'Edit Template' : 'Create Template'}</h3>
+                <button onClick={() => setShowModal(false)} className="text-secondary hover:text-primary"><X className="h-5 w-5" /></button>
               </div>
               <div className="p-6 overflow-y-auto">
                 <form id="template-form" onSubmit={handleSave} className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">Template Name</label>
-                      <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full bg-white border border-[#E5E7EB] rounded-xl px-4 py-2.5 text-sm font-medium text-[#111827] focus:border-[#111827] focus:ring-1 focus:ring-[#111827] outline-none transition-all" />
+                      <label className="text-xs font-medium text-secondary uppercase tracking-wide">Template Name</label>
+                      <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
                     </div>
                     <div className="space-y-1.5 z-40">
-                      <label className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">Project Type</label>
+                      <label className="text-xs font-medium text-secondary uppercase tracking-wide">Project Type</label>
                       <Select value={form.type} onChange={(val) => setForm({ ...form, type: val })} options={typeOptions} />
                     </div>
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">Description</label>
-                    <textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full bg-white border border-[#E5E7EB] rounded-xl px-4 py-2.5 text-sm font-medium text-[#111827] focus:border-[#111827] focus:ring-1 focus:ring-[#111827] outline-none transition-all resize-none" />
+                    <label className="text-xs font-medium text-secondary uppercase tracking-wide">Description</label>
+                    <textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all resize-none" />
                   </div>
 
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-2">
-                      <h4 className="text-sm font-medium text-[#111827]">Default Tasks</h4>
+                    <div className="flex items-center justify-between border-b border-border pb-2">
+                      <h4 className="text-sm font-medium text-primary">Default Tasks</h4>
                       <button type="button" onClick={addTask} className="text-xs font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1">
                         <Plus className="h-3 w-3" /> Add Task
                       </button>
                     </div>
                     
                     {form.structure.tasks.map((task, index) => (
-                      <div key={index} className="bg-[#FAFAFA] p-4 rounded-xl border border-[#E5E7EB] space-y-4 relative">
+                      <div key={index} className="bg-surface p-4 rounded-xl border border-border space-y-4 relative">
                         <button type="button" onClick={() => removeTask(index)} className="absolute top-4 right-4 text-[#9CA3AF] hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                         <div className="space-y-1.5 w-[90%]">
-                          <label className="text-[10px] font-medium text-[#6B7280] uppercase tracking-wide">Task Title</label>
-                          <input required value={task.title} onChange={(e) => updateTask(index, 'title', e.target.value)} className="w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 text-sm font-medium text-[#111827] focus:border-[#111827] focus:ring-1 focus:ring-[#111827] outline-none" />
+                          <label className="text-[10px] font-medium text-secondary uppercase tracking-wide">Task Title</label>
+                          <input required value={task.title} onChange={(e) => updateTask(index, 'title', e.target.value)} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none" />
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                           <div className="space-y-1.5 relative z-30">
-                            <label className="text-[10px] font-medium text-[#6B7280] uppercase tracking-wide">Task Type</label>
+                            <label className="text-[10px] font-medium text-secondary uppercase tracking-wide">Task Type</label>
                             <Select value={task.type} onChange={(val) => updateTask(index, 'type', val)} options={taskTypeOptions} />
                           </div>
                           <div className="space-y-1.5 relative z-20">
-                            <label className="text-[10px] font-medium text-[#6B7280] uppercase tracking-wide">Assignee Role</label>
+                            <label className="text-[10px] font-medium text-secondary uppercase tracking-wide">Assignee Role</label>
                             <Select value={task.assigneeRole} onChange={(val) => updateTask(index, 'assigneeRole', val)} options={roleOptions} />
                           </div>
                           <div className="space-y-1.5 relative z-10">
-                            <label className="text-[10px] font-medium text-[#6B7280] uppercase tracking-wide">Priority</label>
+                            <label className="text-[10px] font-medium text-secondary uppercase tracking-wide">Priority</label>
                             <Select value={task.priority} onChange={(val) => updateTask(index, 'priority', val)} options={priorityOptions} />
                           </div>
                           <div className="space-y-1.5">
-                            <label className="text-[10px] font-medium text-[#6B7280] uppercase tracking-wide">Due Date Offset (Days)</label>
-                            <input type="number" min="0" value={task.offsetDays} onChange={(e) => updateTask(index, 'offsetDays', parseInt(e.target.value))} className="w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 text-sm font-medium text-[#111827] focus:border-[#111827] focus:ring-1 focus:ring-[#111827] outline-none" />
+                            <label className="text-[10px] font-medium text-secondary uppercase tracking-wide">Due Date Offset (Days)</label>
+                            <input type="number" min="0" value={task.offsetDays} onChange={(e) => updateTask(index, 'offsetDays', parseInt(e.target.value))} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none" />
                           </div>
                         </div>
                       </div>
@@ -215,9 +215,9 @@ export function TemplatesTab({ templates, fetchTemplates }: { templates: any[], 
                   </div>
                 </form>
               </div>
-              <div className="p-6 pt-4 border-t border-[#E5E7EB] bg-[#FAFAFA] shrink-0 flex gap-3">
-                <button type="button" onClick={() => setShowModal(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E5E7EB] text-[#374151] font-medium hover:bg-[#FAFAFA] transition-colors">Cancel</button>
-                <button type="submit" form="template-form" disabled={saving} className="flex-1 bg-[#111827] text-white px-4 py-2.5 rounded-xl font-medium hover:bg-black transition-colors disabled:opacity-50">
+              <div className="p-6 pt-4 border-t border-border bg-surface shrink-0 flex gap-3">
+                <button type="button" onClick={() => setShowModal(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-border text-[#374151] font-medium hover:bg-surface transition-colors">Cancel</button>
+                <button type="submit" form="template-form" disabled={saving} className="flex-1 bg-primary text-white px-4 py-2.5 rounded-xl font-medium hover:bg-black transition-colors disabled:opacity-50">
                   {saving ? 'Saving...' : 'Save Template'}
                 </button>
               </div>

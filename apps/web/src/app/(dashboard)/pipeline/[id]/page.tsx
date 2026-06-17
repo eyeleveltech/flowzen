@@ -65,7 +65,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   });
 
   if (isLoading) {
-    return <div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#111827]"></div></div>;
+    return <div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>;
   }
 
   if (!lead) {
@@ -84,18 +84,18 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   };
 
   return (
-    <div className="flex-1 flex flex-col h-[calc(100vh-theme(spacing.16))] bg-gray-50/50 overflow-hidden">
+    <div className="flex-1 flex flex-col h-[calc(100vh-(--spacing(16)))] bg-gray-50/50 overflow-hidden">
       
       {/* Header */}
-      <div className="bg-white border-b border-[#E5E7EB] px-8 py-6 z-10 flex-shrink-0">
+      <div className="bg-white border-b border-border px-8 py-6 z-10 shrink-0">
         <div className="flex justify-between items-center mb-4">
-          <button onClick={() => router.push('/pipeline')} className="flex items-center gap-2 text-sm text-[#6B7280] hover:text-[#111827] transition-colors">
+          <button onClick={() => router.push('/pipeline')} className="flex items-center gap-2 text-sm text-secondary hover:text-primary transition-colors">
             <ArrowLeft className="w-4 h-4" /> Back to Pipeline
           </button>
           <div className="flex items-center gap-3">
             <button
               onClick={() => setIsEditModalOpen(true)}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-[#4B5563] bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F9FAFB] transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-[#4B5563] bg-white border border-border rounded-lg hover:bg-[#F9FAFB] transition-colors"
             >
               <Pencil className="w-4 h-4" /> Edit
             </button>
@@ -115,9 +115,9 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
         
         <div className="flex justify-between items-start">
           <div>
-            <h1 className="text-2xl font-bold text-[#111827] flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-primary flex items-center gap-3">
               {lead.client.company || lead.client.name}
-              <span className="px-2.5 py-0.5 rounded-md bg-[#F3F4F6] text-[#111827] text-xs font-medium border border-[#E5E7EB]">
+              <span className="px-2.5 py-0.5 rounded-md bg-[#F3F4F6] text-primary text-xs font-medium border border-border">
                 {lead.stage.replace('_', ' ')}
               </span>
             </h1>
@@ -130,11 +130,11 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           </div>
           <div className="flex flex-col items-end gap-3">
             <div className="text-right">
-              <p className="text-sm font-medium text-[#6B7280]">Deal Value</p>
-              <p className="text-2xl font-bold text-[#111827]">₹{lead.dealValue?.toLocaleString() || '0'}</p>
+              <p className="text-sm font-medium text-secondary">Deal Value</p>
+              <p className="text-2xl font-bold text-primary">₹{lead.dealValue?.toLocaleString() || '0'}</p>
             </div>
             
-            <div className="flex gap-2 w-[220px]">
+            <div className="flex gap-2 w-55">
               <Select
                 value=""
                 onChange={(val) => {
@@ -160,15 +160,15 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
             const isCompleted = PIPELINE_STAGES.indexOf(lead.stage) >= idx;
             const isCurrent = lead.stage === stage;
             return (
-              <div key={stage} className="flex flex-col items-center gap-2 relative min-w-[100px]">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold z-10 transition-colors border ${isCurrent ? 'bg-[#111827] text-white border-[#111827]' : isCompleted ? 'bg-[#F3F4F6] text-[#111827] border-[#E5E7EB]' : 'bg-white text-[#9CA3AF] border-[#E5E7EB]'}`}>
+              <div key={stage} className="flex flex-col items-center gap-2 relative min-w-25">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold z-10 transition-colors border ${isCurrent ? 'bg-primary text-white border-primary' : isCompleted ? 'bg-[#F3F4F6] text-primary border-border' : 'bg-white text-[#9CA3AF] border-border'}`}>
                   {idx + 1}
                 </div>
-                <span className={`text-xs font-medium text-center ${isCurrent ? 'text-[#111827]' : isCompleted ? 'text-[#4B5563]' : 'text-[#9CA3AF]'}`}>
+                <span className={`text-xs font-medium text-center ${isCurrent ? 'text-primary' : isCompleted ? 'text-[#4B5563]' : 'text-[#9CA3AF]'}`}>
                   {stage.replace('_', ' ')}
                 </span>
                 {idx < 10 && (
-                  <div className={`absolute top-4 left-1/2 w-full h-[2px] -z-0 ${isCompleted && !isCurrent ? 'bg-[#111827]' : 'bg-[#E5E7EB]'}`} />
+                  <div className={`absolute top-4 left-1/2 w-full h-0.5 z-0 ${isCompleted && !isCurrent ? 'bg-primary' : 'bg-border'}`} />
                 )}
               </div>
             );
@@ -181,35 +181,35 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           
           {/* Left Column: Details & Deal Fields */}
           <div className="col-span-2 space-y-6">
-            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6">
-              <h2 className="text-lg font-semibold text-[#111827] mb-4 flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-[#6B7280]" /> Lead Intelligence
+            <div className="bg-white rounded-2xl border border-border p-6">
+              <h2 className="text-lg font-semibold text-primary mb-4 flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-secondary" /> Lead Intelligence
               </h2>
               <div className="grid grid-cols-2 gap-x-8 gap-y-6">
                 <div>
-                  <p className="text-xs font-medium text-[#6B7280] uppercase tracking-wider mb-1">Industry</p>
-                  <p className="text-sm text-[#111827]">{lead.client.industry || '-'}</p>
+                  <p className="text-xs font-medium text-secondary uppercase tracking-wider mb-1">Industry</p>
+                  <p className="text-sm text-primary">{lead.client.industry || '-'}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-[#6B7280] uppercase tracking-wider mb-1">Source</p>
-                  <p className="text-sm text-[#111827]">{lead.source}</p>
+                  <p className="text-xs font-medium text-secondary uppercase tracking-wider mb-1">Source</p>
+                  <p className="text-sm text-primary">{lead.source}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-[#6B7280] uppercase tracking-wider mb-1">Assigned To</p>
+                  <p className="text-xs font-medium text-secondary uppercase tracking-wider mb-1">Assigned To</p>
                   <div className="flex items-center gap-2 mt-1">
                     {lead.assignedTo?.avatar ? (
                       <img src={lead.assignedTo.avatar} alt="" className="w-5 h-5 rounded-full" />
                     ) : (
-                      <div className="w-5 h-5 rounded-full bg-[#F3F4F6] border border-[#E5E7EB] flex items-center justify-center text-[#111827] text-[10px] font-bold">
+                      <div className="w-5 h-5 rounded-full bg-[#F3F4F6] border border-border flex items-center justify-center text-primary text-[10px] font-bold">
                         {lead.assignedTo?.name.charAt(0) || '?'}
                       </div>
                     )}
-                    <span className="text-sm font-medium text-[#111827]">{lead.assignedTo?.name || 'Unassigned'}</span>
+                    <span className="text-sm font-medium text-primary">{lead.assignedTo?.name || 'Unassigned'}</span>
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-[#6B7280] uppercase tracking-wider mb-1">Expected Close</p>
-                  <p className="text-sm text-[#111827] flex items-center gap-1.5">
+                  <p className="text-xs font-medium text-secondary uppercase tracking-wider mb-1">Expected Close</p>
+                  <p className="text-sm text-primary flex items-center gap-1.5">
                     <Calendar className="w-3.5 h-3.5 text-[#9CA3AF]" /> 
                     {lead.expectedCloseDate ? format(new Date(lead.expectedCloseDate), 'PP') : '-'}
                   </p>
@@ -219,15 +219,15 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
 
             {/* Dynamic Deal Fields Rendering */}
             {lead.dealFields && lead.dealFields.length > 0 && (
-              <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6">
-                <h2 className="text-lg font-semibold text-[#111827] mb-4 flex items-center gap-2">
-                  <Tag className="w-5 h-5 text-[#6B7280]" /> Stage Data Attributes
+              <div className="bg-white rounded-2xl border border-border p-6">
+                <h2 className="text-lg font-semibold text-primary mb-4 flex items-center gap-2">
+                  <Tag className="w-5 h-5 text-secondary" /> Stage Data Attributes
                 </h2>
                 <div className="grid grid-cols-2 gap-x-8 gap-y-6">
                   {lead.dealFields.map((field: any) => (
                     <div key={field.id} className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-                      <p className="text-xs font-semibold text-[#6B7280] mb-1.5">{getFieldLabel(field.fieldKey)}</p>
-                      <p className="text-sm text-[#111827] font-medium break-words">{field.fieldValue || '-'}</p>
+                      <p className="text-xs font-semibold text-secondary mb-1.5">{getFieldLabel(field.fieldKey)}</p>
+                      <p className="text-sm text-primary font-medium wrap-break-word">{field.fieldValue || '-'}</p>
                     </div>
                   ))}
                 </div>
@@ -237,9 +237,9 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
 
           {/* Right Column: Activity Timeline */}
           <div className="col-span-1">
-            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6 h-full">
-              <h2 className="text-lg font-semibold text-[#111827] mb-6 flex items-center gap-2">
-                <ActivityIcon className="w-5 h-5 text-[#6B7280]" /> Activity Timeline
+            <div className="bg-white rounded-2xl border border-border p-6 h-full">
+              <h2 className="text-lg font-semibold text-primary mb-6 flex items-center gap-2">
+                <ActivityIcon className="w-5 h-5 text-secondary" /> Activity Timeline
               </h2>
               
               <div className="mb-6 flex gap-2">
@@ -253,12 +253,12 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                       addNoteMutation.mutate(noteText);
                     }
                   }}
-                  className="flex-1 rounded-xl border border-[#E5E7EB] bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-[#111827] focus:bg-white transition-all"
+                  className="flex-1 rounded-xl border border-border bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-primary focus:bg-white transition-all"
                 />
                 <button
                   onClick={() => addNoteMutation.mutate(noteText)}
                   disabled={!noteText.trim() || addNoteMutation.isPending}
-                  className="flex items-center justify-center p-2.5 bg-[#111827] text-white rounded-xl hover:bg-[#1F2937] transition-colors disabled:opacity-50"
+                  className="flex items-center justify-center p-2.5 bg-primary text-white rounded-xl hover:bg-[#1F2937] transition-colors disabled:opacity-50"
                 >
                   <Send className="w-4 h-4" />
                 </button>
@@ -268,12 +268,12 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 {/* Stage History */}
                 {lead.stageHistory.map((history: any) => (
                   <div key={history.id} className="relative pl-6">
-                    <div className="absolute w-3 h-3 bg-[#111827] rounded-full -left-[7px] top-1.5 ring-4 ring-white" />
-                    <p className="text-xs text-[#6B7280] mb-1 font-medium">{format(new Date(history.changedAt), 'PPp')}</p>
-                    <p className="text-sm text-[#111827]">
-                      Moved to <span className="font-semibold text-[#111827]">{history.toStage.replace('_', ' ')}</span>
+                    <div className="absolute w-3 h-3 bg-primary rounded-full -left-[7px] top-1.5 ring-4 ring-white" />
+                    <p className="text-xs text-secondary mb-1 font-medium">{format(new Date(history.changedAt), 'PPp')}</p>
+                    <p className="text-sm text-primary">
+                      Moved to <span className="font-semibold text-primary">{history.toStage.replace('_', ' ')}</span>
                     </p>
-                    <p className="text-xs text-[#6B7280] mt-0.5">by {history.changedBy.name}</p>
+                    <p className="text-xs text-secondary mt-0.5">by {history.changedBy.name}</p>
                     {history.notes && (
                       <div className="mt-2 p-3 bg-gray-50 rounded-xl text-sm text-[#4B5563] border border-gray-100 italic">
                         "{history.notes}"
@@ -288,8 +288,8 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   return (
                   <div key={activity.id} className="relative pl-6">
                     <div className="absolute w-2.5 h-2.5 bg-gray-300 rounded-full -left-[6px] top-1.5 ring-4 ring-white" />
-                    <p className="text-xs text-[#6B7280] mb-1">{format(new Date(activity.createdAt), 'PPp')}</p>
-                    <p className="text-sm text-[#111827]">{activity.user.name} <span className="text-[#4B5563]">{activity.message}</span></p>
+                    <p className="text-xs text-secondary mb-1">{format(new Date(activity.createdAt), 'PPp')}</p>
+                    <p className="text-sm text-primary">{activity.user.name} <span className="text-[#4B5563]">{activity.message}</span></p>
                     {notes && (
                       <div className="mt-2 p-3 bg-gray-50 rounded-xl text-sm text-[#4B5563] border border-gray-100 whitespace-pre-wrap">
                         {notes}

@@ -49,8 +49,8 @@ export default function RegisterPage() {
             <img src="/logo_flowzen.png" alt="Flowzen" className="h-10 w-auto object-contain" />
           </div>
 
-          <h1 className="text-2xl font-bold text-[#111827] mb-1">Create your workspace</h1>
-          <p className="text-sm text-[#6B7280] mb-8">Start managing projects like a pro</p>
+          <h1 className="text-2xl font-bold text-primary mb-1">Create your workspace</h1>
+          <p className="text-sm text-secondary mb-8">Start managing projects like a pro</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
@@ -70,7 +70,7 @@ export default function RegisterPage() {
                 onChange={(e) => setOrganizationName(e.target.value)}
                 placeholder="Your company name"
                 required
-                className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] outline-none focus:border-[#111827] focus:ring-1 focus:ring-[#111827] transition-all"
+                className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary placeholder:text-[#9CA3AF] outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
               />
             </div>
 
@@ -81,7 +81,7 @@ export default function RegisterPage() {
                 onChange={(e) => setName(e.target.value)}
                 placeholder="John Doe"
                 required
-                className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] outline-none focus:border-[#111827] focus:ring-1 focus:ring-[#111827] transition-all"
+                className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary placeholder:text-[#9CA3AF] outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
               />
             </div>
 
@@ -93,7 +93,7 @@ export default function RegisterPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com"
                 required
-                className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] outline-none focus:border-[#111827] focus:ring-1 focus:ring-[#111827] transition-all"
+                className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary placeholder:text-[#9CA3AF] outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
               />
             </div>
 
@@ -107,12 +107,12 @@ export default function RegisterPage() {
                   placeholder="Min. 8 characters"
                   required
                   minLength={8}
-                  className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 pr-10 text-sm text-[#111827] placeholder:text-[#9CA3AF] outline-none focus:border-[#111827] focus:ring-1 focus:ring-[#111827] transition-all"
+                  className="w-full rounded-xl border border-border bg-white px-4 py-2.5 pr-10 text-sm text-primary placeholder:text-[#9CA3AF] outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] hover:text-[#6B7280]"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] hover:text-secondary"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -122,7 +122,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all duration-150"
+              className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all duration-150"
             >
               {loading ? 'Creating workspace...' : 'Create workspace'}
             </button>
@@ -130,14 +130,14 @@ export default function RegisterPage() {
 
           <p className="mt-6 text-center text-sm text-[#9CA3AF]">
             Already have an account?{' '}
-            <a href="/login" className="text-[#111827] font-medium hover:underline">
+            <a href="/login" className="text-primary font-medium hover:underline">
               Sign in
             </a>
           </p>
         </motion.div>
       </div>
 
-      <div className="hidden lg:flex flex-1 items-center justify-center bg-[#111827] relative overflow-hidden">
+      <div className="hidden lg:flex flex-1 items-center justify-center bg-primary relative overflow-hidden">
         <div className="absolute inset-0">
           <div className="absolute top-1/3 right-1/4 w-96 h-96 rounded-full bg-white/5 blur-3xl" />
           <div className="absolute bottom-1/3 left-1/4 w-80 h-80 rounded-full bg-white/3 blur-3xl" />

@@ -151,7 +151,7 @@ export default function ClientDetailPage() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-      <button onClick={() => router.push('/clients')} className="flex items-center gap-1.5 text-sm text-[#6B7280] hover:text-[#111827] mb-6 transition-colors">
+      <button onClick={() => router.push('/clients')} className="flex items-center gap-1.5 text-sm text-secondary hover:text-primary mb-6 transition-colors">
         <ArrowLeft className="h-4 w-4" /> Back to Clients
       </button>
 
@@ -162,19 +162,19 @@ export default function ClientDetailPage() {
             {getInitials(getClientDisplayName(client))}
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-[#111827]">
+            <h1 className="text-2xl font-bold text-primary">
               {getClientDisplayName(client)}
             </h1>
             <div className="flex items-center gap-3 mt-1">
-              {client.name !== 'Internal' && client.company && <span className="text-sm text-[#6B7280]">{client.name}</span>}
-              {client.name === 'Internal' && <span className="text-sm font-medium text-[#6B7280]">(Internal)</span>}
+              {client.name !== 'Internal' && client.company && <span className="text-sm text-secondary">{client.name}</span>}
+              {client.name === 'Internal' && <span className="text-sm font-medium text-secondary">(Internal)</span>}
               <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[client.status]}`}>{client.status}</span>
             </div>
           </div>
         </div>
         {client.name !== 'Internal' && (
           <div className="flex items-center gap-2">
-            <button onClick={openEdit} className="px-4 py-2 bg-white border border-[#E5E7EB] rounded-xl text-sm font-medium text-[#374151] hover:bg-gray-50 transition-colors shadow-sm">
+            <button onClick={openEdit} className="px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-[#374151] hover:bg-gray-50 transition-colors shadow-sm">
               Edit Client
             </button>
             <button onClick={handleDelete} className="px-4 py-2 bg-white border border-red-200 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors shadow-sm flex items-center gap-1.5">
@@ -186,9 +186,9 @@ export default function ClientDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-[#E5E7EB] mb-6">
+      <div className="flex gap-1 border-b border-border mb-6">
         {tabs.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-all ${tab === t.id ? 'border-[#111827] text-[#111827]' : 'border-transparent text-[#6B7280] hover:text-[#111827]'}`}>
+          <button key={t.id} onClick={() => setTab(t.id)} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-all ${tab === t.id ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-primary'}`}>
             {t.label}
           </button>
         ))}
@@ -197,8 +197,8 @@ export default function ClientDetailPage() {
       {/* Tab Content */}
       {tab === 'overview' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6 space-y-4">
-            <h3 className="text-sm font-semibold text-[#111827]">
+          <div className="rounded-2xl border border-border bg-white p-6 space-y-4">
+            <h3 className="text-sm font-semibold text-primary">
               {client.name === 'Internal' ? 'Organization Profile' : 'Company Details'}
             </h3>
             
@@ -224,7 +224,7 @@ export default function ClientDetailPage() {
                 
                 {client.scope && (
                   <div className="mt-4 pt-4 border-t border-[#F3F4F6]">
-                    <span className="block text-xs font-semibold text-[#6B7280] uppercase tracking-wider mb-3">Scope</span>
+                    <span className="block text-xs font-semibold text-secondary uppercase tracking-wider mb-3">Scope</span>
                     <div 
                       className="text-sm text-[#374151] line-clamp-2 prose prose-sm max-w-none"
                       dangerouslySetInnerHTML={{ __html: client.scope }}
@@ -242,12 +242,12 @@ export default function ClientDetailPage() {
 
             {client.contacts && client.contacts.length > 0 && (
               <div className="pt-4 border-t border-[#F3F4F6]">
-                <h4 className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider mb-3">Contacts</h4>
+                <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3">Contacts</h4>
                 <div className="space-y-3">
                   {client.contacts.map((c) => (
-                    <div key={c.id} className="p-3 bg-[#FAFAFA] rounded-xl border border-[#E5E7EB]">
-                      <p className="text-sm font-semibold text-[#111827]">{c.name}</p>
-                      {c.designation && <p className="text-xs text-[#6B7280] mb-2">{c.designation}</p>}
+                    <div key={c.id} className="p-3 bg-surface rounded-xl border border-border">
+                      <p className="text-sm font-semibold text-primary">{c.name}</p>
+                      {c.designation && <p className="text-xs text-secondary mb-2">{c.designation}</p>}
                       <div className="space-y-1 mt-2">
                         {c.email && <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5 text-[#9CA3AF]" /><span className="text-xs text-[#374151]">{c.email}</span></div>}
                         {c.phone && <div className="flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-[#9CA3AF]" /><span className="text-xs text-[#374151]">{c.phone}</span></div>}
@@ -258,16 +258,16 @@ export default function ClientDetailPage() {
               </div>
             )}
           </div>
-          <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6">
-            <h3 className="text-sm font-semibold text-[#111827] mb-4">Project Summary</h3>
+          <div className="rounded-2xl border border-border bg-white p-6">
+            <h3 className="text-sm font-semibold text-primary mb-4">Project Summary</h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="text-center p-3 rounded-xl bg-[#F9FAFB]">
-                <p className="text-2xl font-bold text-[#111827]">{client.projects.length}</p>
-                <p className="text-xs text-[#6B7280]">Total Projects</p>
+                <p className="text-2xl font-bold text-primary">{client.projects.length}</p>
+                <p className="text-xs text-secondary">Total Projects</p>
               </div>
               <div className="text-center p-3 rounded-xl bg-[#F9FAFB]">
-                <p className="text-2xl font-bold text-[#111827]">{client.projects.filter((p) => p.status === 'COMPLETED').length}</p>
-                <p className="text-xs text-[#6B7280]">Completed</p>
+                <p className="text-2xl font-bold text-primary">{client.projects.filter((p) => p.status === 'COMPLETED').length}</p>
+                <p className="text-xs text-secondary">Completed</p>
               </div>
             </div>
           </div>
@@ -277,18 +277,18 @@ export default function ClientDetailPage() {
       {tab === 'projects' && (
         <div className="space-y-3">
           {client.projects.map((p) => (
-            <div key={p.id} onClick={() => router.push(`/projects/${p.id}`)} className="rounded-2xl border border-[#E5E7EB] bg-white p-5 hover:shadow-sm cursor-pointer transition-all">
+            <div key={p.id} onClick={() => router.push(`/projects/${p.id}`)} className="rounded-2xl border border-border bg-white p-5 hover:shadow-sm cursor-pointer transition-all">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-semibold text-[#111827]">{p.name}</h3>
+                  <h3 className="text-sm font-semibold text-primary">{p.name}</h3>
                   <p className="text-xs text-[#9CA3AF] mt-0.5">{p._count?.tasks ?? 0} tasks · Due {formatDate(p.endDate)}</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-2">
                     <div className="h-1.5 w-16 rounded-full bg-[#F3F4F6] overflow-hidden">
-                      <div className="h-full rounded-full bg-[#111827]" style={{ width: `${p.progress}%` }} />
+                      <div className="h-full rounded-full bg-primary" style={{ width: `${p.progress}%` }} />
                     </div>
-                    <span className="text-xs text-[#6B7280] tabular-nums">{p.progress}%</span>
+                    <span className="text-xs text-secondary tabular-nums">{p.progress}%</span>
                   </div>
                 </div>
               </div>
@@ -314,12 +314,12 @@ export default function ClientDetailPage() {
       {tab === 'notes' && (
         <div>
           <div className="flex gap-3 mb-6">
-            <input value={noteContent} onChange={(e) => setNoteContent(e.target.value)} placeholder="Add a note..." className="flex-1 rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
-            <button onClick={addNote} className="rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all">Add Note</button>
+            <input value={noteContent} onChange={(e) => setNoteContent(e.target.value)} placeholder="Add a note..." className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+            <button onClick={addNote} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all">Add Note</button>
           </div>
           <div className="space-y-3">
             {client.notes.map((n) => (
-              <div key={n.id} className="rounded-2xl border border-[#E5E7EB] bg-white p-4">
+              <div key={n.id} className="rounded-2xl border border-border bg-white p-4">
                 <p className="text-sm text-[#374151]">{n.content}</p>
                 <p className="text-xs text-[#9CA3AF] mt-2">{n.author.name} · {formatRelativeDate(n.createdAt)}</p>
               </div>
@@ -337,12 +337,12 @@ export default function ClientDetailPage() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
-              className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-[#E5E7EB] shadow-2xl shadow-black/10 overflow-y-auto"
+              className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto"
             >
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
-                <h2 className="text-lg font-semibold text-[#111827]">Edit Client</h2>
+                <h2 className="text-lg font-semibold text-primary">Edit Client</h2>
                 <button onClick={() => setShowEdit(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
-                  <X className="h-4 w-4 text-[#6B7280]" />
+                  <X className="h-4 w-4 text-secondary" />
                 </button>
               </div>
               <form onSubmit={handleEdit} className="relative p-6 space-y-4">
@@ -399,13 +399,13 @@ export default function ClientDetailPage() {
                   <div className="flex items-center justify-between">
                     <label className="block text-sm font-medium text-[#374151]">Contacts</label>
                     {editForm.contacts.length < 5 && (
-                      <button type="button" onClick={() => setEditForm({ ...editForm, contacts: [...editForm.contacts, { id: '', name: '', designation: '', email: '', phone: '' }] })} className="text-xs font-medium text-[#111827] flex items-center gap-1 hover:bg-[#F3F4F6] px-2 py-1 rounded transition-colors">
+                      <button type="button" onClick={() => setEditForm({ ...editForm, contacts: [...editForm.contacts, { id: '', name: '', designation: '', email: '', phone: '' }] })} className="text-xs font-medium text-primary flex items-center gap-1 hover:bg-[#F3F4F6] px-2 py-1 rounded transition-colors">
                         <Plus className="h-3 w-3" /> Add Contact
                       </button>
                     )}
                   </div>
                   {editForm.contacts.map((contact, i) => (
-                    <div key={i} className="p-4 border border-[#E5E7EB] rounded-xl bg-[#FAFAFA] relative">
+                    <div key={i} className="p-4 border border-border rounded-xl bg-surface relative">
                       {editForm.contacts.length > 1 && (
                         <button type="button" onClick={() => setEditForm({ ...editForm, contacts: editForm.contacts.filter((_, idx) => idx !== i) })} className="absolute top-2 right-2 p-1.5 text-[#9CA3AF] hover:text-red-500 rounded-lg hover:bg-white transition-colors border border-transparent hover:border-red-100 shadow-sm hover:shadow">
                           <X className="h-3.5 w-3.5" />
@@ -435,10 +435,10 @@ export default function ClientDetailPage() {
                   />
                 </div>
                 <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setShowEdit(false)} className="flex-1 rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
+                  <button type="button" onClick={() => setShowEdit(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
                     Cancel
                   </button>
-                  <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">
+                  <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">
                     {submitting ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
@@ -452,10 +452,10 @@ export default function ClientDetailPage() {
         {viewModalContent && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] bg-black/20 backdrop-blur-sm" onClick={() => setViewModalContent(null)} />
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-[60] w-full max-w-lg bg-white border-l border-[#E5E7EB] shadow-2xl shadow-black/10 flex flex-col">
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-[60] w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 flex flex-col">
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] shrink-0">
-                <h2 className="text-lg font-semibold text-[#111827]">{viewModalContent.title}</h2>
-                <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-[#6B7280]" /></button>
+                <h2 className="text-lg font-semibold text-primary">{viewModalContent.title}</h2>
+                <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
               </div>
               <div className="p-6 overflow-y-auto flex-1">
                 <div 
@@ -494,7 +494,7 @@ function Field({ label, value, onChange, type = 'text', required = false }: {
         value={value}
         onChange={(e) => onChange(e.target.value)}
         required={required}
-        className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#111827] outline-none focus:border-[#111827] focus:ring-1 focus:ring-[#111827] transition-all"
+        className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
       />
     </div>
   );

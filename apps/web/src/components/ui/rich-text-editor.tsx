@@ -15,12 +15,12 @@ const MenuBar = ({ editor }: { editor: any }) => {
   if (!editor) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-1 border-b border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2 rounded-t-xl">
+    <div className="flex flex-wrap items-center gap-1 border-b border-border bg-[#F9FAFB] px-3 py-2 rounded-t-xl">
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleBold().run()}
         disabled={!editor.can().chain().focus().toggleBold().run()}
-        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('bold') ? 'bg-[#E5E7EB] text-[#111827]' : 'text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#111827]'}`}
+        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('bold') ? 'bg-border text-primary' : 'text-secondary hover:bg-[#F3F4F6] hover:text-primary'}`}
       >
         <Bold className="h-4 w-4" />
       </button>
@@ -28,7 +28,7 @@ const MenuBar = ({ editor }: { editor: any }) => {
         type="button"
         onClick={() => editor.chain().focus().toggleItalic().run()}
         disabled={!editor.can().chain().focus().toggleItalic().run()}
-        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('italic') ? 'bg-[#E5E7EB] text-[#111827]' : 'text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#111827]'}`}
+        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('italic') ? 'bg-border text-primary' : 'text-secondary hover:bg-[#F3F4F6] hover:text-primary'}`}
       >
         <Italic className="h-4 w-4" />
       </button>
@@ -36,31 +36,31 @@ const MenuBar = ({ editor }: { editor: any }) => {
         type="button"
         onClick={() => editor.chain().focus().toggleStrike().run()}
         disabled={!editor.can().chain().focus().toggleStrike().run()}
-        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('strike') ? 'bg-[#E5E7EB] text-[#111827]' : 'text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#111827]'}`}
+        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('strike') ? 'bg-border text-primary' : 'text-secondary hover:bg-[#F3F4F6] hover:text-primary'}`}
       >
         <Strikethrough className="h-4 w-4" />
       </button>
       
-      <div className="w-px h-4 bg-[#E5E7EB] mx-1" />
+      <div className="w-px h-4 bg-border mx-1" />
 
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('heading', { level: 2 }) ? 'bg-[#E5E7EB] text-[#111827]' : 'text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#111827]'}`}
+        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('heading', { level: 2 }) ? 'bg-border text-primary' : 'text-secondary hover:bg-[#F3F4F6] hover:text-primary'}`}
       >
         <Heading2 className="h-4 w-4" />
       </button>
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleBulletList().run()}
-        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('bulletList') ? 'bg-[#E5E7EB] text-[#111827]' : 'text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#111827]'}`}
+        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('bulletList') ? 'bg-border text-primary' : 'text-secondary hover:bg-[#F3F4F6] hover:text-primary'}`}
       >
         <List className="h-4 w-4" />
       </button>
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('orderedList') ? 'bg-[#E5E7EB] text-[#111827]' : 'text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#111827]'}`}
+        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('orderedList') ? 'bg-border text-primary' : 'text-secondary hover:bg-[#F3F4F6] hover:text-primary'}`}
       >
         <ListOrdered className="h-4 w-4" />
       </button>
@@ -80,7 +80,7 @@ export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorP
     content: value,
     editorProps: {
       attributes: {
-        class: 'prose prose-sm prose-slate max-w-none focus:outline-none min-h-[120px] px-4 py-3',
+        class: 'prose prose-sm prose-slate max-w-none focus:outline-none min-h-30 px-4 py-3',
       },
     },
     onUpdate: ({ editor }) => {
@@ -99,7 +99,7 @@ export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorP
   }, [value, editor]);
 
   return (
-    <div className="w-full rounded-xl border border-[#E5E7EB] bg-white overflow-hidden focus-within:border-[#111827] transition-all">
+    <div className="w-full rounded-xl border border-border bg-white overflow-hidden focus-within:border-primary transition-all">
       <MenuBar editor={editor} />
       <EditorContent editor={editor} />
       

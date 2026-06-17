@@ -85,7 +85,7 @@ export function SwipeableCard({
         dragElastic={0.6}
         onDragEnd={handleDragEnd}
         style={{ x }}
-        className="relative z-10 w-full rounded-xl bg-white border border-[#E5E7EB] shadow-sm touch-pan-y"
+        className="relative z-10 w-full rounded-xl bg-white border border-border shadow-sm touch-pan-y"
       >
         {children}
       </motion.div>

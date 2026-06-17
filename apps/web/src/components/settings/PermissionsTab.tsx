@@ -19,24 +19,24 @@ export function PermissionsTab() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-[#111827]">Role Permissions</h2>
-        <p className="text-sm text-[#6B7280]">Review what each role can access and do within the platform.</p>
+        <h2 className="text-lg font-semibold text-primary">Role Permissions</h2>
+        <p className="text-sm text-secondary">Review what each role can access and do within the platform.</p>
       </div>
 
-      <div className="bg-white border border-[#E5E7EB] rounded-2xl overflow-hidden overflow-x-auto">
+      <div className="bg-white border border-border rounded-2xl overflow-hidden overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="bg-[#FAFAFA] border-b border-[#E5E7EB]">
+          <thead className="bg-surface border-b border-border">
             <tr>
-              <th className="px-6 py-4 font-semibold text-[#6B7280] uppercase tracking-wide text-xs">Permission</th>
+              <th className="px-6 py-4 font-semibold text-secondary uppercase tracking-wide text-xs">Permission</th>
               {roles.map(r => (
-                <th key={r} className="px-6 py-4 font-semibold text-[#6B7280] uppercase tracking-wide text-xs text-center">{r}</th>
+                <th key={r} className="px-6 py-4 font-semibold text-secondary uppercase tracking-wide text-xs text-center">{r}</th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#E5E7EB]">
+          <tbody className="divide-y divide-border">
             {permissions.map((p, i) => (
-              <tr key={i} className="hover:bg-[#FAFAFA] transition-colors">
-                <td className="px-6 py-4 font-medium text-[#111827]">{p.name}</td>
+              <tr key={i} className="hover:bg-surface transition-colors">
+                <td className="px-6 py-4 font-medium text-primary">{p.name}</td>
                 {p.values.map((v, j) => (
                   <td key={j} className="px-6 py-4 text-center">
                     {v ? (

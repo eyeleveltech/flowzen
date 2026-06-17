@@ -98,19 +98,19 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
   ];
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 md:h-16 items-center justify-between border-b border-[#E5E7EB] bg-white/80 backdrop-blur-xl px-4 sm:px-6">
+    <header className="sticky top-0 z-30 flex h-14 md:h-16 items-center justify-between border-b border-border bg-white/80 backdrop-blur-xl px-4 sm:px-6">
       <div className="flex items-center">
 
 
         {/* Search */}
         <button
           onClick={() => setCommandPaletteOpen(true)}
-          className="flex items-center gap-2.5 rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] px-3 sm:px-4 py-2 text-sm text-[#9CA3AF] hover:bg-white hover:border-[#D1D5DB] transition-all duration-150 w-auto sm:w-80"
+          className="flex items-center gap-2.5 rounded-xl border border-border bg-surface px-3 sm:px-4 py-2 text-sm text-[#9CA3AF] hover:bg-white hover:border-[#D1D5DB] transition-all duration-150 w-auto sm:w-80"
         >
           <Search className="h-4 w-4 shrink-0" />
           <span className="hidden sm:inline">Search everything...</span>
           <span className="sm:hidden">Search...</span>
-          <kbd className="ml-auto hidden sm:inline-flex items-center gap-0.5 rounded-md border border-[#E5E7EB] bg-white px-1.5 py-0.5 text-[10px] font-medium text-[#9CA3AF]">
+          <kbd className="ml-auto hidden sm:inline-flex items-center gap-0.5 rounded-md border border-border bg-white px-1.5 py-0.5 text-[10px] font-medium text-[#9CA3AF]">
             ⌘K
           </kbd>
         </button>
@@ -122,7 +122,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
         <div className="relative">
           <button
             onClick={() => { setShowQuickCreate(!showQuickCreate); setShowNotifications(false); setShowUserMenu(false); }}
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#E5E7EB] text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#111827] transition-all duration-150"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-border text-secondary hover:bg-[#F9FAFB] hover:text-primary transition-all duration-150"
           >
             <Plus className="h-4 w-4" />
           </button>
@@ -137,7 +137,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                     className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-[#374151] hover:bg-[#F9FAFB] active:bg-[#F3F4F6] transition-colors"
                   >
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#F3F4F6]">
-                      <item.icon className="h-5 w-5 text-[#6B7280]" />
+                      <item.icon className="h-5 w-5 text-secondary" />
                     </div>
                     {item.label}
                   </button>
@@ -152,7 +152,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.96 }}
                   transition={{ duration: 0.15 }}
-                  className="absolute right-0 mt-2 w-48 rounded-2xl border border-[#E5E7EB] bg-white p-1.5 shadow-lg shadow-black/5"
+                  className="absolute right-0 mt-2 w-48 rounded-2xl border border-border bg-white p-1.5 shadow-lg shadow-black/5"
                 >
                   {quickCreateItems.map((item) => (
                     <button
@@ -174,7 +174,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
         <div className="relative">
           <button
             onClick={() => { setShowNotifications(!showNotifications); setShowQuickCreate(false); setShowUserMenu(false); }}
-            className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-[#E5E7EB] text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#111827] transition-all duration-150"
+            className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-border text-secondary hover:bg-[#F9FAFB] hover:text-primary transition-all duration-150"
           >
             <Bell className="h-4 w-4" />
             {unreadCount > 0 && (
@@ -192,7 +192,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
             <Drawer isOpen={showNotifications} onClose={() => setShowNotifications(false)} title="Notifications">
               {unreadCount > 0 && (
                 <div className="flex justify-end mb-2">
-                  <button onClick={markAllAsRead} className="text-xs font-medium text-[#6B7280] hover:text-[#111827] transition-colors bg-[#F9FAFB] px-3 py-1.5 rounded-lg">
+                  <button onClick={markAllAsRead} className="text-xs font-medium text-secondary hover:text-primary transition-colors bg-[#F9FAFB] px-3 py-1.5 rounded-lg">
                     Mark all read
                   </button>
                 </div>
@@ -218,7 +218,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                         className={`flex gap-3 px-6 py-4 cursor-pointer hover:bg-[#F9FAFB] transition-colors ${!n.read ? 'bg-blue-50/50' : ''}`}
                       >
                         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F3F4F6]">
-                          <Icon className="h-4 w-4 text-[#6B7280]" />
+                          <Icon className="h-4 w-4 text-secondary" />
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-[15px] text-[#374151] leading-snug">{n.message}</p>
@@ -239,12 +239,12 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.96 }}
                   transition={{ duration: 0.15 }}
-                  className="absolute right-0 mt-2 w-96 rounded-2xl border border-[#E5E7EB] bg-white shadow-lg shadow-black/5"
+                  className="absolute right-0 mt-2 w-96 rounded-2xl border border-border bg-white shadow-lg shadow-black/5"
                 >
                   <div className="flex items-center justify-between px-4 py-3 border-b border-[#F3F4F6]">
-                    <h3 className="text-sm font-semibold text-[#111827]">Notifications</h3>
+                    <h3 className="text-sm font-semibold text-primary">Notifications</h3>
                     {unreadCount > 0 && (
-                      <button onClick={markAllAsRead} className="text-xs text-[#6B7280] hover:text-[#111827] transition-colors">
+                      <button onClick={markAllAsRead} className="text-xs text-secondary hover:text-primary transition-colors">
                         Mark all read
                       </button>
                     )}
@@ -270,7 +270,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                             className={`flex gap-3 px-4 py-3 cursor-pointer hover:bg-[#F9FAFB] transition-colors ${!n.read ? 'bg-blue-50/50' : ''}`}
                           >
                             <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#F3F4F6]">
-                              <Icon className="h-3.5 w-3.5 text-[#6B7280]" />
+                              <Icon className="h-3.5 w-3.5 text-secondary" />
                             </div>
                             <div className="min-w-0 flex-1">
                               <p className="text-sm text-[#374151] leading-snug">{n.message}</p>
@@ -294,7 +294,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
             onClick={() => { setShowUserMenu(!showUserMenu); setShowNotifications(false); setShowQuickCreate(false); }}
             className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-[#F9FAFB] transition-all duration-150"
           >
-            <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${user ? getAvatarColor(user.name) : 'bg-[#111827] text-white'}`}>
+            <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${user ? getAvatarColor(user.name) : 'bg-primary text-white'}`}>
               {user ? getInitials(user.name) : '??'}
             </div>
             <ChevronDown className="h-3.5 w-3.5 text-[#9CA3AF]" />
@@ -302,13 +302,13 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
 
           {isMobile ? (
             <Drawer isOpen={showUserMenu} onClose={() => setShowUserMenu(false)} title="Account">
-              <div className="px-4 py-3.5 mb-3 bg-[#F9FAFB] rounded-xl border border-[#E5E7EB] flex items-center gap-3">
-                <div className={`flex h-12 w-12 items-center justify-center rounded-full text-sm font-semibold ${user ? getAvatarColor(user.name) : 'bg-[#111827] text-white'}`}>
+              <div className="px-4 py-3.5 mb-3 bg-[#F9FAFB] rounded-xl border border-border flex items-center gap-3">
+                <div className={`flex h-12 w-12 items-center justify-center rounded-full text-sm font-semibold ${user ? getAvatarColor(user.name) : 'bg-primary text-white'}`}>
                   {user ? getInitials(user.name) : '??'}
                 </div>
                 <div>
-                  <p className="text-base font-semibold text-[#111827] leading-snug">{user?.name}</p>
-                  <p className="text-sm text-[#6B7280]">{user?.email}</p>
+                  <p className="text-base font-semibold text-primary leading-snug">{user?.name}</p>
+                  <p className="text-sm text-secondary">{user?.email}</p>
                 </div>
               </div>
               <div className="flex flex-col gap-1 pb-4">
@@ -317,7 +317,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                   className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-[#374151] hover:bg-[#F9FAFB] active:bg-[#F3F4F6] transition-colors"
                 >
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#F3F4F6]">
-                    <UserIcon className="h-5 w-5 text-[#6B7280]" />
+                    <UserIcon className="h-5 w-5 text-secondary" />
                   </div>
                   My Profile
                 </button>
@@ -327,7 +327,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                     className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-[#374151] hover:bg-[#F9FAFB] active:bg-[#F3F4F6] transition-colors"
                   >
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#F3F4F6]">
-                      <Settings className="h-5 w-5 text-[#6B7280]" />
+                      <Settings className="h-5 w-5 text-secondary" />
                     </div>
                     Settings
                   </button>
@@ -351,10 +351,10 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.96 }}
                   transition={{ duration: 0.15 }}
-                  className="absolute right-0 mt-2 w-56 rounded-2xl border border-[#E5E7EB] bg-white p-1.5 shadow-lg shadow-black/5"
+                  className="absolute right-0 mt-2 w-56 rounded-2xl border border-border bg-white p-1.5 shadow-lg shadow-black/5"
                 >
                   <div className="px-3 py-2 mb-1">
-                    <p className="text-sm font-medium text-[#111827]">{user?.name}</p>
+                    <p className="text-sm font-medium text-primary">{user?.name}</p>
                     <p className="text-xs text-[#9CA3AF]">{user?.email}</p>
                   </div>
                   <div className="border-t border-[#F3F4F6] pt-1">

@@ -89,22 +89,22 @@ export default function ProfilePage() {
   return (
     <div className="mx-auto max-w-3xl space-y-8 p-4 sm:p-6 lg:p-8">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-[#111827]">My Profile</h1>
-        <p className="mt-2 text-sm text-[#6B7280]">
+        <h1 className="text-2xl font-bold tracking-tight text-primary">My Profile</h1>
+        <p className="mt-2 text-sm text-secondary">
           Manage your personal information and security settings.
         </p>
       </div>
 
       <div className="space-y-6">
         {/* Personal Information Section */}
-        <section className="rounded-2xl border border-[#E5E7EB] bg-white shadow-sm">
-          <div className="border-b border-[#E5E7EB] px-6 py-5 flex items-center gap-3">
+        <section className="rounded-2xl border border-border bg-white shadow-sm">
+          <div className="border-b border-border px-6 py-5 flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F3F4F6]">
-              <User className="h-5 w-5 text-[#6B7280]" />
+              <User className="h-5 w-5 text-secondary" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-[#111827]">Personal Information</h2>
-              <p className="text-sm text-[#6B7280]">Update your name and department details.</p>
+              <h2 className="text-base font-semibold text-primary">Personal Information</h2>
+              <p className="text-sm text-secondary">Update your name and department details.</p>
             </div>
           </div>
           <div className="p-6">
@@ -117,7 +117,7 @@ export default function ProfilePage() {
                     required
                     value={profileForm.name}
                     onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
-                    className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm outline-none focus:border-[#111827] focus:ring-1 focus:ring-[#111827] transition-all"
+                    className="w-full rounded-xl border border-border px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -126,7 +126,7 @@ export default function ProfilePage() {
                     type="email"
                     disabled
                     value={user.email}
-                    className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-2.5 text-sm text-[#9CA3AF] cursor-not-allowed"
+                    className="w-full rounded-xl border border-border bg-[#F9FAFB] px-4 py-2.5 text-sm text-[#9CA3AF] cursor-not-allowed"
                     title="Email cannot be changed"
                   />
                 </div>
@@ -136,7 +136,7 @@ export default function ProfilePage() {
                     type="text"
                     value={profileForm.designation}
                     onChange={(e) => setProfileForm({ ...profileForm, designation: e.target.value })}
-                    className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm outline-none focus:border-[#111827] focus:ring-1 focus:ring-[#111827] transition-all"
+                    className="w-full rounded-xl border border-border px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                   />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
@@ -155,7 +155,7 @@ export default function ProfilePage() {
                 <button
                   type="submit"
                   disabled={savingProfile}
-                  className="flex items-center gap-2 rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all"
+                  className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all"
                 >
                   <Save className="h-4 w-4" />
                   {savingProfile ? 'Saving...' : 'Save Changes'}
@@ -166,14 +166,14 @@ export default function ProfilePage() {
         </section>
 
         {/* Security Section */}
-        <section className="rounded-2xl border border-[#E5E7EB] bg-white shadow-sm overflow-hidden">
-          <div className="border-b border-[#E5E7EB] px-6 py-5 flex items-center gap-3">
+        <section className="rounded-2xl border border-border bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-border px-6 py-5 flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F3F4F6]">
-              <KeyRound className="h-5 w-5 text-[#6B7280]" />
+              <KeyRound className="h-5 w-5 text-secondary" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-[#111827]">Security & Password</h2>
-              <p className="text-sm text-[#6B7280]">Update your password to keep your account secure.</p>
+              <h2 className="text-base font-semibold text-primary">Security & Password</h2>
+              <p className="text-sm text-secondary">Update your password to keep your account secure.</p>
             </div>
           </div>
           <div className="p-6">
@@ -186,12 +186,12 @@ export default function ProfilePage() {
                     required
                     value={passwordForm.currentPassword}
                     onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                    className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 pr-10 text-sm outline-none focus:border-[#111827] focus:ring-1 focus:ring-[#111827] transition-all"
+                    className="w-full rounded-xl border border-border px-4 py-2.5 pr-10 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] hover:text-[#6B7280]"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] hover:text-secondary"
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -205,7 +205,7 @@ export default function ProfilePage() {
                     required
                     value={passwordForm.newPassword}
                     onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                    className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 pr-10 text-sm outline-none focus:border-[#111827] focus:ring-1 focus:ring-[#111827] transition-all"
+                    className="w-full rounded-xl border border-border px-4 py-2.5 pr-10 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                   />
                 </div>
               </div>
@@ -217,7 +217,7 @@ export default function ProfilePage() {
                     required
                     value={passwordForm.confirmNewPassword}
                     onChange={(e) => setPasswordForm({ ...passwordForm, confirmNewPassword: e.target.value })}
-                    className="w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 pr-10 text-sm outline-none focus:border-[#111827] focus:ring-1 focus:ring-[#111827] transition-all"
+                    className="w-full rounded-xl border border-border px-4 py-2.5 pr-10 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                   />
                 </div>
               </div>
@@ -225,7 +225,7 @@ export default function ProfilePage() {
                 <button
                   type="submit"
                   disabled={savingPassword}
-                  className="flex items-center gap-2 rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all"
+                  className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all"
                 >
                   <Save className="h-4 w-4" />
                   {savingPassword ? 'Updating...' : 'Update Password'}

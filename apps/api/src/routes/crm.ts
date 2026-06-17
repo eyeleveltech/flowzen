@@ -90,7 +90,7 @@ crmRouter.get('/leads/:id', async (req: AuthRequest, res: Response, next) => {
 });
 
 // POST /api/crm/leads
-crmRouter.post('/leads', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), validate(leadSchema), async (req: AuthRequest, res: Response, next) => {
+crmRouter.post('/leads', authorize('SUPER_ADMIN', 'ADMIN'), validate(leadSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
     const { contactName, companyName, email, phone, source, assignedToId, dealValue, expectedCloseDate, industry, city, notes } = req.body;
@@ -150,7 +150,7 @@ crmRouter.post('/leads', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), v
 });
 
 // POST /api/crm/leads/bulk
-crmRouter.post('/leads/bulk', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), async (req: AuthRequest, res: Response, next) => {
+crmRouter.post('/leads/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
     const { leads } = req.body;
@@ -244,7 +244,7 @@ const stageUpdateSchema = z.object({
 });
 
 // POST /api/crm/leads/:id/stage
-crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), validate(stageUpdateSchema), async (req: AuthRequest, res: Response, next) => {
+crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(stageUpdateSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
     const leadId = req.params.id as string;
@@ -330,7 +330,7 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MA
 });
 
 // PATCH /api/crm/leads/:id
-crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), async (req: AuthRequest, res: Response, next) => {
+crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
     const leadId = req.params.id as string;
@@ -373,7 +373,7 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER
 });
 
 // POST /api/crm/leads/:id/fields
-crmRouter.post('/leads/:id/fields', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), async (req: AuthRequest, res: Response, next) => {
+crmRouter.post('/leads/:id/fields', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
     const leadId = req.params.id as string;
@@ -460,7 +460,7 @@ crmRouter.post('/leads/:id/notes', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MA
 });
 
 // DELETE /api/crm/leads/:id
-crmRouter.delete('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), async (req: AuthRequest, res: Response, next) => {
+crmRouter.delete('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
     const leadId = req.params.id as string;
@@ -474,6 +474,8 @@ crmRouter.delete('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGE
       return;
     }
 
+    const client = existingLead.clientId ? await prisma.client.findUnique({ where: { id: existingLead.clientId } }) : null;
+
     // Delete associated records first
     await prisma.stageHistory.deleteMany({ where: { leadId } });
     await prisma.dealField.deleteMany({ where: { leadId } });
@@ -483,6 +485,13 @@ crmRouter.delete('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGE
     await prisma.lead.delete({
       where: { id: leadId }
     });
+
+    // Clean up orphaned PROSPECT clients so they don't pollute the Reports page
+    if (client && client.status === 'PROSPECT') {
+      await prisma.activity.deleteMany({ where: { clientId: client.id } });
+      await prisma.clientContact.deleteMany({ where: { clientId: client.id } });
+      await prisma.client.delete({ where: { id: client.id } });
+    }
 
     // Emit real-time event
     const io = req.app.get('io');

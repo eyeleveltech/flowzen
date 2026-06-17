@@ -45,22 +45,6 @@ clientRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     const where: Record<string, unknown> = { organizationId: orgId };
     if (status) {
       where.status = status as string;
-    } else {
-      where.AND = [
-        {
-          OR: [
-            { status: { not: 'PROSPECT' } },
-            {
-              status: 'PROSPECT',
-              lead: {
-                stage: {
-                  in: ['SQL', 'REACH_OUT', 'DISCOVERY', 'AUDIT', 'PRESENTATION', 'PROPOSAL', 'NEGOTIATION', 'FINALIZATION', 'CONTRACT']
-                }
-              }
-            }
-          ]
-        }
-      ];
     }
     if (city) where.city = { contains: city as string, mode: 'insensitive' };
     if (accountManagerId) where.accountManagerId = accountManagerId as string;
@@ -138,7 +122,7 @@ clientRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
 clientRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), validate(clientSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const { contacts, startDate, ...data } = req.body;
-    
+
     const client = await prisma.client.create({
       data: {
         ...data,
@@ -190,12 +174,12 @@ clientRouter.post('/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRe
     }
 
     let createdCount = 0;
-    
+
     // Process sequentially or use a transaction depending on complexity. 
     // Sequential allows us to skip invalid rows easily or handle constraints.
     for (const data of clientsData) {
       if (!data.name) continue;
-      
+
       await prisma.client.create({
         data: {
           name: data.name,
@@ -243,8 +227,8 @@ clientRouter.post('/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRe
     res.status(201).json({ message: `Successfully imported ${createdCount} clients`, count: createdCount });
   } catch (error) {
     console.error('[Bulk Import Error (Clients)]:', error);
-    res.status(400).json({ 
-      error: 'Failed to process bulk import. Please check your CSV data format, ensure no required fields are missing, and try again.' 
+    res.status(400).json({
+      error: 'Failed to process bulk import. Please check your CSV data format, ensure no required fields are missing, and try again.'
     });
   }
 });

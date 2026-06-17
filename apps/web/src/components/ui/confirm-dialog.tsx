@@ -63,7 +63,7 @@ export function ConfirmDialog() {
         return `${baseClass} bg-[#F59E0B] text-white hover:bg-[#D97706] hover:shadow-amber-100`;
       case 'info':
       default:
-        return `${baseClass} bg-[#111827] text-white hover:bg-[#1F2937]`;
+        return `${baseClass} bg-primary text-white hover:bg-[#1F2937]`;
     }
   };
 
@@ -86,7 +86,7 @@ export function ConfirmDialog() {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className="relative w-full max-w-md overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white p-6 shadow-2xl z-10"
+            className="relative w-full max-w-md overflow-hidden rounded-2xl border border-border bg-white p-6 shadow-2xl z-10"
           >
             {/* Close Button */}
             <button
@@ -102,10 +102,10 @@ export function ConfirmDialog() {
                 {getIcon()}
               </div>
               <div className="flex-1 pt-1 min-w-0">
-                <h3 className="text-base font-semibold text-[#111827] leading-6 truncate">
+                <h3 className="text-base font-semibold text-primary leading-6 truncate">
                   {title}
                 </h3>
-                <p className="mt-2 text-sm text-[#6B7280] leading-relaxed">
+                <p className="mt-2 text-sm text-secondary leading-relaxed">
                   {message}
                 </p>
               </div>
@@ -116,7 +116,7 @@ export function ConfirmDialog() {
               <button
                 type="button"
                 onClick={onCancel}
-                className="px-4 py-2 text-sm font-semibold text-[#4B5563] bg-white border border-[#E5E7EB] rounded-xl hover:bg-[#F9FAFB] transition-all duration-200 active:scale-95"
+                className="px-4 py-2 text-sm font-semibold text-[#4B5563] bg-white border border-border rounded-xl hover:bg-[#F9FAFB] transition-all duration-200 active:scale-95"
               >
                 {cancelText}
               </button>

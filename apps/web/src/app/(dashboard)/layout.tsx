@@ -48,7 +48,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <motion.main
         animate={{ marginLeft: isMobile ? 0 : (sidebarCollapsed ? 72 : 260) }}
         transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
-        className="flex-1 flex flex-col min-w-0 bg-[#FAFAFA] w-full"
+        className="flex-1 flex flex-col min-w-0 bg-surface w-full"
       >
         <TopNav isMobile={isMobile} />
         <div className={`px-4 sm:px-6 lg:px-8 py-8 w-full max-w-[1600px] mx-auto overflow-x-hidden ${isMobile ? 'pb-24' : ''}`}>
@@ -67,18 +67,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           initial={{ opacity: 0, y: 50, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 20, scale: 0.95 }}
-          className={`fixed ${isMobile ? 'bottom-20 left-4 right-4' : 'bottom-6 right-6 w-80'} z-50 flex items-start gap-3 rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-xl shadow-black/5`}
+          className={`fixed ${isMobile ? 'bottom-20 left-4 right-4' : 'bottom-6 right-6 w-80'} z-50 flex items-start gap-3 rounded-2xl border border-border bg-white p-4 shadow-xl shadow-black/5`}
         >
           <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
             <Bell className="h-4 w-4" />
           </div>
           <div className="flex-1">
-            <p className="text-sm font-medium text-[#111827]">New Notification</p>
-            <p className="mt-1 text-xs text-[#6B7280] leading-snug">{activeToast.message}</p>
+            <p className="text-sm font-medium text-primary">New Notification</p>
+            <p className="mt-1 text-xs text-secondary leading-snug">{activeToast.message}</p>
           </div>
           <button
             onClick={clearToast}
-            className="flex shrink-0 items-center justify-center rounded-lg p-1 text-[#9CA3AF] hover:bg-[#F3F4F6] hover:text-[#111827] transition-colors"
+            className="flex shrink-0 items-center justify-center rounded-lg p-1 text-[#9CA3AF] hover:bg-[#F3F4F6] hover:text-primary transition-colors"
           >
             <X className="h-4 w-4" />
           </button>

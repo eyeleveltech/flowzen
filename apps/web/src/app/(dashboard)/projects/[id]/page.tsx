@@ -322,10 +322,10 @@ export default function ProjectDetailPage() {
   if (!project) return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header Skeleton */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-[#E5E7EB]">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-border">
         <div className="space-y-3">
           <div className="h-4 w-24 bg-[#F3F4F6] rounded-md animate-pulse" />
-          <div className="h-8 w-64 bg-[#E5E7EB] rounded-lg animate-pulse" />
+          <div className="h-8 w-64 bg-border rounded-lg animate-pulse" />
           <div className="h-4 w-48 bg-[#F3F4F6] rounded-md animate-pulse" />
         </div>
         <div className="flex gap-2">
@@ -337,10 +337,10 @@ export default function ProjectDetailPage() {
       {/* Grid Cards Skeleton */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="bg-white rounded-2xl border border-[#E5E7EB] p-5 h-32 flex flex-col justify-between">
+          <div key={i} className="bg-white rounded-2xl border border-border p-5 h-32 flex flex-col justify-between">
             <div className="h-4 w-1/3 bg-[#F3F4F6] rounded-md animate-pulse mb-4" />
             <div className="space-y-3">
-              <div className="h-4 w-full bg-[#E5E7EB] rounded-md animate-pulse" />
+              <div className="h-4 w-full bg-border rounded-md animate-pulse" />
               <div className="h-4 w-2/3 bg-[#F3F4F6] rounded-md animate-pulse" />
             </div>
           </div>
@@ -348,9 +348,9 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Main Content Skeleton */}
-      <div className="bg-white rounded-2xl border border-[#E5E7EB] h-96 flex flex-col p-6">
+      <div className="bg-white rounded-2xl border border-border h-96 flex flex-col p-6">
         <div className="flex gap-6 mb-6 border-b border-[#F3F4F6] pb-4">
-          <div className="h-6 w-20 bg-[#E5E7EB] rounded-md animate-pulse" />
+          <div className="h-6 w-20 bg-border rounded-md animate-pulse" />
           <div className="h-6 w-24 bg-[#F3F4F6] rounded-md animate-pulse" />
           <div className="h-6 w-20 bg-[#F3F4F6] rounded-md animate-pulse" />
         </div>
@@ -397,7 +397,7 @@ export default function ProjectDetailPage() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-      <button onClick={() => router.push('/projects')} className="flex items-center gap-1.5 text-sm text-[#6B7280] hover:text-[#111827] mb-6 transition-colors">
+      <button onClick={() => router.push('/projects')} className="flex items-center gap-1.5 text-sm text-secondary hover:text-primary mb-6 transition-colors">
         <ArrowLeft className="h-4 w-4" /> Back to Projects
       </button>
 
@@ -405,7 +405,7 @@ export default function ProjectDetailPage() {
       <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6 mb-8">
         <div>
           <div className="flex flex-wrap items-center gap-3 mb-2">
-            <h1 className="text-3xl font-semibold text-[#111827] tracking-tight">{project.name}</h1>
+            <h1 className="text-3xl font-semibold text-primary tracking-tight">{project.name}</h1>
             <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium border ${healthConfig[projectHealth].color}`}>
               <div className={`h-1.5 w-1.5 rounded-full mr-1.5 ${projectHealth === 'GREEN' ? 'bg-emerald-500' : projectHealth === 'AMBER' ? 'bg-amber-500' : 'bg-red-500'}`} />
               {healthConfig[projectHealth].label}
@@ -417,17 +417,17 @@ export default function ProjectDetailPage() {
               {project.status.replace('_', ' ')}
             </span>
           </div>
-          <p className="text-base font-medium text-[#6B7280]">{project.client ? getClientDisplayName(project.client) : 'Internal Project'}</p>
+          <p className="text-base font-medium text-secondary">{project.client ? getClientDisplayName(project.client) : 'Internal Project'}</p>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           {project.folderLink && (
-            <a href={project.folderLink} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-[#E5E7EB] px-4 py-2 text-sm font-medium text-[#2563EB] bg-white hover:bg-blue-50 transition-all flex items-center gap-1.5">
+            <a href={project.folderLink} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-[#2563EB] bg-white hover:bg-blue-50 transition-all flex items-center gap-1.5">
               Drive Folder
             </a>
           )}
           {user?.role !== 'TEAM_MEMBER' && (
             <div className="flex items-center gap-2">
-              <button onClick={startEditingProject} className="rounded-xl border border-[#E5E7EB] px-4 py-2 text-sm font-medium text-[#374151] bg-white hover:bg-[#F9FAFB] transition-all">
+              <button onClick={startEditingProject} className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-[#374151] bg-white hover:bg-[#F9FAFB] transition-all">
                 Edit Project
               </button>
               <button onClick={handleDeleteProject} className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 hover:border-red-300 transition-all flex items-center gap-1.5">
@@ -441,85 +441,85 @@ export default function ProjectDetailPage() {
       {/* Info Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         {/* Key Dates Card */}
-        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
+        <div className="bg-white rounded-2xl border border-border p-5">
           <div className="flex items-center gap-2 mb-4">
             <Clock className="h-4 w-4 text-[#9CA3AF]" />
-            <span className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">Key Dates</span>
+            <span className="text-xs font-medium text-secondary uppercase tracking-wide">Key Dates</span>
           </div>
           <div className="space-y-3">
             <div className="flex justify-between text-sm">
-              <span className="text-[#6B7280]">Start</span>
-              <span className="font-medium text-[#111827]">{formatDate(project.startDate) || '—'}</span>
+              <span className="text-secondary">Start</span>
+              <span className="font-medium text-primary">{formatDate(project.startDate) || '—'}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-[#6B7280]">End</span>
-              <span className="font-medium text-[#111827]">{formatDate(project.endDate) || '—'}</span>
+              <span className="text-secondary">End</span>
+              <span className="font-medium text-primary">{formatDate(project.endDate) || '—'}</span>
             </div>
           </div>
         </div>
 
         {/* Budget Card */}
         {project.budget !== undefined && project.budget !== null && (
-          <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
+          <div className="bg-white rounded-2xl border border-border p-5">
             <div className="flex items-center gap-2 mb-4">
               <DollarSign className="h-4 w-4 text-[#9CA3AF]" />
-              <span className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">Budget Tracking</span>
+              <span className="text-xs font-medium text-secondary uppercase tracking-wide">Budget Tracking</span>
             </div>
             <div className="space-y-3">
               <div className="flex justify-between text-sm">
-                <span className="text-[#6B7280]">Total</span>
-                <span className="font-semibold text-[#111827]">${project.budget.toLocaleString()}</span>
+                <span className="text-secondary">Total</span>
+                <span className="font-semibold text-primary">${project.budget.toLocaleString()}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-[#6B7280]">Spent</span>
-                <span className="font-medium text-[#111827]">$0</span>
+                <span className="text-secondary">Spent</span>
+                <span className="font-medium text-primary">$0</span>
               </div>
             </div>
           </div>
         )}
 
         {/* Client Details Card */}
-        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
+        <div className="bg-white rounded-2xl border border-border p-5">
           <div className="flex items-center gap-2 mb-4">
             <Briefcase className="h-4 w-4 text-[#9CA3AF]" />
-            <span className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">Client Details</span>
+            <span className="text-xs font-medium text-secondary uppercase tracking-wide">Client Details</span>
           </div>
           <div className="space-y-3">
             <div className="flex justify-between text-sm">
-              <span className="text-[#6B7280]">Client</span>
-              <span className="font-medium text-[#111827]">{project.client ? getClientDisplayName(project.client) : 'Internal'}</span>
+              <span className="text-secondary">Client</span>
+              <span className="font-medium text-primary">{project.client ? getClientDisplayName(project.client) : 'Internal'}</span>
             </div>
             {project.client?.name !== 'Internal' && project.client?.company && (
               <div className="flex justify-between text-sm">
-                <span className="text-[#6B7280]">Contact</span>
-                <span className="font-medium text-[#111827]">{project.client.name}</span>
+                <span className="text-secondary">Contact</span>
+                <span className="font-medium text-primary">{project.client.name}</span>
               </div>
             )}
           </div>
         </div>
 
         {/* Progress Card */}
-        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
+        <div className="bg-white rounded-2xl border border-border p-5">
           <div className="flex items-center gap-2 mb-4">
             <CheckCircle2 className="h-4 w-4 text-[#9CA3AF]" />
-            <span className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">Progress</span>
+            <span className="text-xs font-medium text-secondary uppercase tracking-wide">Progress</span>
           </div>
           <div className="mt-1">
             <div className="flex justify-between items-end mb-2">
-              <span className="text-2xl font-semibold text-[#111827] leading-none">{project.progress}%</span>
-              <span className="text-xs text-[#6B7280]">{completedTasks}/{totalTasks} tasks</span>
+              <span className="text-2xl font-semibold text-primary leading-none">{project.progress}%</span>
+              <span className="text-xs text-secondary">{completedTasks}/{totalTasks} tasks</span>
             </div>
             <div className="h-2 w-full rounded-full bg-[#F3F4F6] overflow-hidden">
-              <div className="h-full rounded-full bg-[#111827]" style={{ width: `${project.progress}%` }} />
+              <div className="h-full rounded-full bg-primary" style={{ width: `${project.progress}%` }} />
             </div>
           </div>
         </div>
 
         {/* Assigned Team Card */}
-        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
+        <div className="bg-white rounded-2xl border border-border p-5">
           <div className="flex items-center gap-2 mb-4">
             <Users className="h-4 w-4 text-[#9CA3AF]" />
-            <span className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">Assigned Team</span>
+            <span className="text-xs font-medium text-secondary uppercase tracking-wide">Assigned Team</span>
           </div>
           <div className="flex items-center gap-1 -space-x-2 mt-2">
             {allProjectMembers.slice(0, 5).map((m, i) => (
@@ -528,7 +528,7 @@ export default function ProjectDetailPage() {
               </div>
             ))}
             {allProjectMembers.length > 5 && (
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#F3F4F6] text-[#6B7280] text-xs font-semibold border-2 border-white" style={{ zIndex: 0 }}>
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#F3F4F6] text-secondary text-xs font-semibold border-2 border-white" style={{ zIndex: 0 }}>
                 +{allProjectMembers.length - 5}
               </div>
             )}
@@ -540,8 +540,8 @@ export default function ProjectDetailPage() {
       {(project.scope || project.projectNotes) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
           {project.scope && (
-            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6 relative">
-              <span className="block text-xs font-medium text-[#6B7280] uppercase tracking-wide mb-3">Scope of Work</span>
+            <div className="bg-white rounded-2xl border border-border p-6 relative">
+              <span className="block text-xs font-medium text-secondary uppercase tracking-wide mb-3">Scope of Work</span>
               <div 
                 className="text-sm text-[#374151] line-clamp-2 prose prose-sm max-w-none"
                 dangerouslySetInnerHTML={{ __html: project.scope }}
@@ -555,8 +555,8 @@ export default function ProjectDetailPage() {
             </div>
           )}
           {project.projectNotes && (
-            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6 relative">
-              <span className="block text-xs font-medium text-[#6B7280] uppercase tracking-wide mb-3">Internal Notes</span>
+            <div className="bg-white rounded-2xl border border-border p-6 relative">
+              <span className="block text-xs font-medium text-secondary uppercase tracking-wide mb-3">Internal Notes</span>
               <div 
                 className="text-sm text-[#374151] line-clamp-2 prose prose-sm max-w-none"
                 dangerouslySetInnerHTML={{ __html: project.projectNotes }}
@@ -573,9 +573,9 @@ export default function ProjectDetailPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-[#E5E7EB] mb-6">
+      <div className="flex gap-1 border-b border-border mb-6">
         {tabs.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-all ${tab === t.id ? 'border-[#111827] text-[#111827]' : 'border-transparent text-[#6B7280] hover:text-[#111827]'}`}>
+          <button key={t.id} onClick={() => setTab(t.id)} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-all ${tab === t.id ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-primary'}`}>
             {t.label}
           </button>
         ))}
@@ -584,19 +584,19 @@ export default function ProjectDetailPage() {
       {tab === 'tasks' && (
         <div className="space-y-4">
           <div className="flex justify-end">
-            <button onClick={openCreateTask} className="flex items-center gap-1.5 rounded-lg bg-[#111827] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1F2937] transition-all">
+            <button onClick={openCreateTask} className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1F2937] transition-all">
               <Plus className="h-3.5 w-3.5" /> Add Task
             </button>
           </div>
           {/* Desktop Table View */}
-          <div className="hidden md:block rounded-2xl border border-[#E5E7EB] bg-white overflow-hidden">
+          <div className="hidden md:block rounded-2xl border border-border bg-white overflow-hidden">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-[#F3F4F6]">
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[#6B7280] uppercase">Task</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[#6B7280] uppercase">Assignee</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[#6B7280] uppercase">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[#6B7280] uppercase">Due Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase">Task</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase">Assignee</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase">Due Date</th>
                   <th className="px-6 py-3"></th>
                 </tr>
               </thead>
@@ -605,14 +605,14 @@ export default function ProjectDetailPage() {
                   <tr><td colSpan={4} className="px-6 py-8 text-center text-sm text-[#9CA3AF]">No tasks yet</td></tr>
                 ) : (
                   project.tasks?.map((t) => (
-                    <tr key={t.id} className="hover:bg-[#FAFAFA] transition-colors cursor-pointer" onClick={() => router.push('/tasks')}>
+                    <tr key={t.id} className="hover:bg-surface transition-colors cursor-pointer" onClick={() => router.push('/tasks')}>
                       <td className="px-6 py-3">
                         <div className="flex items-center gap-2">
                           <div className={`h-2 w-2 rounded-full shrink-0 ${priorityDots[t.priority]}`} />
-                          <span className="text-sm font-medium text-[#111827]">{t.title}</span>
+                          <span className="text-sm font-medium text-primary">{t.title}</span>
                           {(t.loggedHours ?? 0) > 0 && (
                             <div className="flex flex-col gap-1 ml-2">
-                              <span className="text-[10px] text-[#6B7280] bg-[#F3F4F6] px-1.5 py-0.5 rounded-md font-medium tabular-nums border border-[#E5E7EB] leading-none whitespace-nowrap">⏱ {t.loggedHours || 0}h</span>
+                              <span className="text-[10px] text-secondary bg-[#F3F4F6] px-1.5 py-0.5 rounded-md font-medium tabular-nums border border-border leading-none whitespace-nowrap">⏱ {t.loggedHours || 0}h</span>
                             </div>
                           )}
                           {(t._count?.comments ?? 0) > 0 && (
@@ -629,14 +629,14 @@ export default function ProjectDetailPage() {
                         ) : <span className="text-sm text-[#9CA3AF]">—</span>}
                       </td>
                       <td className="px-6 py-3"><span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[t.status]}`}>{t.status.replace('_', ' ')}</span></td>
-                      <td className="px-6 py-3 text-sm text-[#6B7280]">{formatDate(t.dueDate)}</td>
+                      <td className="px-6 py-3 text-sm text-secondary">{formatDate(t.dueDate)}</td>
                       <td className="px-6 py-3 text-right">
                         {(user?.role !== 'TEAM_MEMBER' || t.assignee?.id === user?.id) && (
                           <div className="flex items-center justify-end gap-2">
-                            <button onClick={(e) => startEditingTask(t, e)} className="text-xs font-medium text-[#6B7280] hover:text-[#111827] transition-colors bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1">
+                            <button onClick={(e) => startEditingTask(t, e)} className="text-xs font-medium text-secondary hover:text-primary transition-colors bg-white border border-border rounded-lg px-2.5 py-1">
                               Edit
                             </button>
-                            <button onClick={(e) => handleDeleteTask(t.id, e)} className="text-[#6B7280] hover:text-red-600 transition-colors bg-white border border-[#E5E7EB] rounded-lg p-1.5 hover:bg-red-50 hover:border-red-100">
+                            <button onClick={(e) => handleDeleteTask(t.id, e)} className="text-secondary hover:text-red-600 transition-colors bg-white border border-border rounded-lg p-1.5 hover:bg-red-50 hover:border-red-100">
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           </div>
@@ -652,7 +652,7 @@ export default function ProjectDetailPage() {
           {/* Mobile Card View */}
           <div className="md:hidden flex flex-col gap-3">
             {project.tasks?.length === 0 ? (
-              <div className="p-8 text-center text-sm text-[#9CA3AF] bg-white rounded-xl border border-[#E5E7EB]">
+              <div className="p-8 text-center text-sm text-[#9CA3AF] bg-white rounded-xl border border-border">
                 No tasks yet
               </div>
             ) : (
@@ -662,17 +662,17 @@ export default function ProjectDetailPage() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   onClick={() => router.push('/tasks')}
-                  className="p-4 rounded-xl border border-[#E5E7EB] bg-white hover:border-[#111827] cursor-pointer transition-colors"
+                  className="p-4 rounded-xl border border-border bg-white hover:border-primary cursor-pointer transition-colors"
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-start gap-2 flex-1 pr-3">
                       <div className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${priorityDots[t.priority]}`} />
                       <div>
-                        <p className="text-sm font-medium text-[#111827] leading-tight">{t.title}</p>
+                        <p className="text-sm font-medium text-primary leading-tight">{t.title}</p>
                         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                          <span className="text-xs font-medium text-[#6B7280]">{formatDate(t.dueDate)}</span>
+                          <span className="text-xs font-medium text-secondary">{formatDate(t.dueDate)}</span>
                           {(t.loggedHours ?? 0) > 0 && (
-                            <span className="text-[10px] text-[#6B7280] bg-[#F3F4F6] px-1.5 py-0.5 rounded-md font-medium tabular-nums border border-[#E5E7EB]">
+                            <span className="text-[10px] text-secondary bg-[#F3F4F6] px-1.5 py-0.5 rounded-md font-medium tabular-nums border border-border">
                               ⏱ {t.loggedHours || 0}h
                             </span>
                           )}
@@ -706,10 +706,10 @@ export default function ProjectDetailPage() {
                     
                     {(user?.role !== 'TEAM_MEMBER' || t.assignee?.id === user?.id) && (
                       <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                        <button onClick={(e) => startEditingTask(t, e)} className="text-xs font-medium text-[#6B7280] hover:text-[#111827] transition-colors bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1">
+                        <button onClick={(e) => startEditingTask(t, e)} className="text-xs font-medium text-secondary hover:text-primary transition-colors bg-white border border-border rounded-lg px-2.5 py-1">
                           Edit
                         </button>
-                        <button onClick={(e) => handleDeleteTask(t.id, e)} className="text-[#6B7280] hover:text-red-600 transition-colors bg-white border border-[#E5E7EB] rounded-lg p-1.5 hover:bg-red-50 hover:border-red-100">
+                        <button onClick={(e) => handleDeleteTask(t.id, e)} className="text-secondary hover:text-red-600 transition-colors bg-white border border-border rounded-lg p-1.5 hover:bg-red-50 hover:border-red-100">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
@@ -726,30 +726,30 @@ export default function ProjectDetailPage() {
         <div className="space-y-4">
           <div className="flex justify-end">
             {user?.role !== 'TEAM_MEMBER' && (
-              <button onClick={openCreateMilestone} className="flex items-center gap-1.5 rounded-lg bg-[#111827] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1F2937] transition-all">
+              <button onClick={openCreateMilestone} className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1F2937] transition-all">
                 <Plus className="h-3.5 w-3.5" /> Add Milestone
               </button>
             )}
           </div>
           <div className="space-y-3">
             {project.milestones?.length === 0 ? (
-              <div className="py-8 text-center text-sm text-[#9CA3AF] border border-dashed border-[#E5E7EB] rounded-2xl bg-white">No milestones defined</div>
+              <div className="py-8 text-center text-sm text-[#9CA3AF] border border-dashed border-border rounded-2xl bg-white">No milestones defined</div>
             ) : (
               project.milestones?.map((m) => (
-                <div key={m.id} className={`flex items-center gap-4 rounded-2xl border border-[#E5E7EB] bg-white p-4 transition-colors hover:border-gray-300 group ${m.completed ? 'opacity-60 bg-gray-50' : ''}`}>
+                <div key={m.id} className={`flex items-center gap-4 rounded-2xl border border-border bg-white p-4 transition-colors hover:border-gray-300 group ${m.completed ? 'opacity-60 bg-gray-50' : ''}`}>
                   <button onClick={(e) => toggleMilestoneCompletion(m.id, m.completed, e)} className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${m.completed ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-[#D1D5DB] hover:border-emerald-500'}`}>
                     {m.completed && <CheckCircle2 className="h-3.5 w-3.5" />}
                   </button>
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-semibold truncate ${m.completed ? 'text-[#9CA3AF] line-through' : 'text-[#111827]'}`}>{m.name}</p>
-                    {m.dueDate && <span className="text-[11px] font-medium text-[#6B7280] flex items-center gap-1 mt-0.5"><Clock className="h-3 w-3" /> {formatDate(m.dueDate)}</span>}
+                    <p className={`text-sm font-semibold truncate ${m.completed ? 'text-[#9CA3AF] line-through' : 'text-primary'}`}>{m.name}</p>
+                    {m.dueDate && <span className="text-[11px] font-medium text-secondary flex items-center gap-1 mt-0.5"><Clock className="h-3 w-3" /> {formatDate(m.dueDate)}</span>}
                   </div>
                   {user?.role !== 'TEAM_MEMBER' && (
                     <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={(e) => startEditingMilestone(m, e)} className="text-[#6B7280] hover:text-[#111827] p-1.5 rounded-lg bg-white border border-[#E5E7EB] hover:bg-gray-50">
+                      <button onClick={(e) => startEditingMilestone(m, e)} className="text-secondary hover:text-primary p-1.5 rounded-lg bg-white border border-border hover:bg-gray-50">
                         Edit
                       </button>
-                      <button onClick={(e) => handleDeleteMilestone(m.id, e)} className="text-[#6B7280] hover:text-red-600 p-1.5 rounded-lg bg-white border border-[#E5E7EB] hover:bg-red-50 hover:border-red-100">
+                      <button onClick={(e) => handleDeleteMilestone(m.id, e)} className="text-secondary hover:text-red-600 p-1.5 rounded-lg bg-white border border-border hover:bg-red-50 hover:border-red-100">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
@@ -764,10 +764,10 @@ export default function ProjectDetailPage() {
       {tab === 'team' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {allProjectMembers.map((m) => (
-            <div key={m.id} className="flex items-center gap-3 rounded-2xl border border-[#E5E7EB] bg-white p-4">
+            <div key={m.id} className="flex items-center gap-3 rounded-2xl border border-border bg-white p-4">
  <div className={`h-10 w-10 rounded-xl text-sm font-semibold flex items-center justify-center ${getAvatarColor(m.name)}`}>{getInitials(m.name)}</div>
               <div>
-                <p className="text-sm font-medium text-[#111827]">{m.name}</p>
+                <p className="text-sm font-medium text-primary">{m.name}</p>
                 <p className="text-xs text-[#9CA3AF]">{m.role?.replace('_', ' ')}</p>
               </div>
             </div>
@@ -777,19 +777,19 @@ export default function ProjectDetailPage() {
 
       {tab === 'comments' && (
         <div className="space-y-6 max-w-3xl">
-          <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4">
+          <div className="bg-white rounded-2xl border border-border p-4">
             <form onSubmit={handleAddComment}>
               <textarea
                 value={commentContent}
                 onChange={(e) => setCommentContent(e.target.value)}
                 placeholder="Write a project comment or update..."
-                className="w-full min-h-[100px] text-sm text-[#111827] outline-none resize-y"
+                className="w-full min-h-[100px] text-sm text-primary outline-none resize-y"
               />
               <div className="mt-4 flex justify-end">
                 <button
                   type="submit"
                   disabled={submittingComment || !commentContent.trim()}
-                  className="rounded-xl bg-[#111827] px-4 py-2 text-xs font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all flex items-center gap-1.5"
+                  className="rounded-xl bg-primary px-4 py-2 text-xs font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all flex items-center gap-1.5"
                 >
                   <MessageSquare className="h-3.5 w-3.5" />
                   {submittingComment ? 'Posting...' : 'Post Comment'}
@@ -800,7 +800,7 @@ export default function ProjectDetailPage() {
 
           <div className="space-y-4">
             {project.comments?.length === 0 ? (
-              <div className="py-8 text-center text-sm text-[#9CA3AF] bg-white rounded-2xl border border-dashed border-[#E5E7EB]">
+              <div className="py-8 text-center text-sm text-[#9CA3AF] bg-white rounded-2xl border border-dashed border-border">
                 No comments yet. Be the first to start the discussion!
               </div>
             ) : (
@@ -809,9 +809,9 @@ export default function ProjectDetailPage() {
  <div className={`h-8 w-8 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 mt-1 ${getAvatarColor(comment.author.name)}`}>
                     {getInitials(comment.author.name)}
                   </div>
-                  <div className="flex-1 bg-white rounded-2xl border border-[#E5E7EB] p-4">
+                  <div className="flex-1 bg-white rounded-2xl border border-border p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-semibold text-sm text-[#111827]">{comment.author.name}</span>
+                      <span className="font-semibold text-sm text-primary">{comment.author.name}</span>
                       <span className="text-xs text-[#9CA3AF]">{formatRelativeDate(comment.createdAt)}</span>
                     </div>
                     <p className="text-sm text-[#374151] whitespace-pre-wrap">{comment.content}</p>
@@ -842,15 +842,15 @@ export default function ProjectDetailPage() {
         {showCreateTask && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setShowCreateTask(false)} />
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-[#E5E7EB] shadow-2xl shadow-black/10 overflow-y-auto">
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto">
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
-                <h2 className="text-lg font-semibold text-[#111827]">{isEditingTask ? 'Edit Task' : 'New Task'}</h2>
-                <button onClick={() => setShowCreateTask(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-[#6B7280]" /></button>
+                <h2 className="text-lg font-semibold text-primary">{isEditingTask ? 'Edit Task' : 'New Task'}</h2>
+                <button onClick={() => setShowCreateTask(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
               </div>
               <form onSubmit={handleSaveTask} className="p-6 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Title *</label>
-                  <input value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} required className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
+                  <input value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
@@ -904,20 +904,20 @@ export default function ProjectDetailPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Assigned Date</label>
-                    <input type="date" value={taskForm.assignedDate} onChange={(e) => setTaskForm({ ...taskForm, assignedDate: e.target.value })} className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
+                    <input type="date" value={taskForm.assignedDate} onChange={(e) => setTaskForm({ ...taskForm, assignedDate: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
-                    <input type="date" value={taskForm.dueDate} onChange={(e) => setTaskForm({ ...taskForm, dueDate: e.target.value })} className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
+                    <input type="date" value={taskForm.dueDate} onChange={(e) => setTaskForm({ ...taskForm, dueDate: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Time Spent (hours)</label>
-                    <input type="number" step="0.5" min="0" value={taskForm.loggedHours} onChange={(e) => setTaskForm({ ...taskForm, loggedHours: parseFloat(e.target.value) || 0 })} className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
+                    <input type="number" step="0.5" min="0" value={taskForm.loggedHours} onChange={(e) => setTaskForm({ ...taskForm, loggedHours: parseFloat(e.target.value) || 0 })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                   </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Drive Link (Uploads, Drafts)</label>
-                  <input type="url" value={taskForm.driveLink} onChange={(e) => setTaskForm({ ...taskForm, driveLink: e.target.value })} placeholder="https://drive.google.com/..." className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
+                  <input type="url" value={taskForm.driveLink} onChange={(e) => setTaskForm({ ...taskForm, driveLink: e.target.value })} placeholder="https://drive.google.com/..." className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                 </div>
                 {isEditingTask && (
                   <div>
@@ -936,8 +936,8 @@ export default function ProjectDetailPage() {
                   </div>
                 )}
                 <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setShowCreateTask(false)} className="flex-1 rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
-                  <button type="submit" disabled={submittingTask} className="flex-1 rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submittingTask ? 'Saving...' : isEditingTask ? 'Save Changes' : 'Create Task'}</button>
+                  <button type="button" onClick={() => setShowCreateTask(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
+                  <button type="submit" disabled={submittingTask} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submittingTask ? 'Saving...' : isEditingTask ? 'Save Changes' : 'Create Task'}</button>
                 </div>
               </form>
             </motion.div>
@@ -950,18 +950,18 @@ export default function ProjectDetailPage() {
         {showEditProject && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setShowEditProject(false)} />
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-[#E5E7EB] shadow-2xl shadow-black/10 overflow-y-auto">
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto">
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
-                <h2 className="text-lg font-semibold text-[#111827]">Edit Project</h2>
-                <button onClick={() => setShowEditProject(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-[#6B7280]" /></button>
+                <h2 className="text-lg font-semibold text-primary">Edit Project</h2>
+                <button onClick={() => setShowEditProject(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
               </div>
               <form onSubmit={handleEditProject} className="p-6 space-y-8">
                 {/* Basic Info */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-[#111827] border-b border-[#F3F4F6] pb-2">Basic Info</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Basic Info</h3>
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Project Name *</label>
-                    <input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
+                    <input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
@@ -1014,7 +1014,7 @@ export default function ProjectDetailPage() {
 
                 {/* Client & Ownership */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-[#111827] border-b border-[#F3F4F6] pb-2">Client & Ownership</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Client & Ownership</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Client</label>
@@ -1046,22 +1046,22 @@ export default function ProjectDetailPage() {
 
                 {/* Timeline */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-[#111827] border-b border-[#F3F4F6] pb-2">Timeline</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Timeline</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Start Date</label>
-                      <input type="date" value={editForm.startDate} onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })} className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
+                      <input type="date" value={editForm.startDate} onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">End Date {(editForm.type === 'ONE_TIME' || editForm.type === 'EVENT') && '*'}</label>
-                      <input type="date" value={editForm.endDate} onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} required={editForm.type === 'ONE_TIME' || editForm.type === 'EVENT'} className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
+                      <input type="date" value={editForm.endDate} onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} required={editForm.type === 'ONE_TIME' || editForm.type === 'EVENT'} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                     </div>
                   </div>
                 </div>
 
                 {/* Scope */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-[#111827] border-b border-[#F3F4F6] pb-2">Scope</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Scope</h3>
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Scope of Work</label>
                     <RichTextEditor 
@@ -1072,13 +1072,13 @@ export default function ProjectDetailPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Budget</label>
-                    <input type="number" value={editForm.budget} onChange={(e) => setEditForm({ ...editForm, budget: e.target.value })} className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
+                    <input type="number" value={editForm.budget} onChange={(e) => setEditForm({ ...editForm, budget: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                   </div>
                 </div>
 
                 {/* Workflow */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-[#111827] border-b border-[#F3F4F6] pb-2">Workflow</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Workflow</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Reporting Cadence</label>
@@ -1101,7 +1101,7 @@ export default function ProjectDetailPage() {
                           checked={editForm.clientApprovalRequired} 
                           onChange={(e) => setEditForm({ ...editForm, clientApprovalRequired: e.target.checked })} 
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#111827]"></div>
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                         <span className="ml-3 text-sm font-medium text-[#374151]">Client approval required</span>
                       </label>
                     </div>
@@ -1110,7 +1110,7 @@ export default function ProjectDetailPage() {
 
                 {/* Reference */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-[#111827] border-b border-[#F3F4F6] pb-2">Reference</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Reference</h3>
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Tags</label>
                     <TagsInput 
@@ -1124,19 +1124,19 @@ export default function ProjectDetailPage() {
                     <textarea
                       value={editForm.projectNotes}
                       onChange={(e) => setEditForm({ ...editForm, projectNotes: e.target.value })}
-                      className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all min-h-[80px]"
+                      className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all min-h-[80px]"
                       placeholder="Internal project notes..."
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Folder Link (URL)</label>
-                    <input type="url" value={editForm.folderLink} onChange={(e) => setEditForm({ ...editForm, folderLink: e.target.value })} className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
+                    <input type="url" value={editForm.folderLink} onChange={(e) => setEditForm({ ...editForm, folderLink: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                   </div>
                 </div>
 
                 <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setShowEditProject(false)} className="flex-1 rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
-                  <button type="submit" disabled={submittingEdit} className="flex-1 rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submittingEdit ? 'Saving...' : 'Save Changes'}</button>
+                  <button type="button" onClick={() => setShowEditProject(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
+                  <button type="submit" disabled={submittingEdit} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submittingEdit ? 'Saving...' : 'Save Changes'}</button>
                 </div>
               </form>
             </motion.div>
@@ -1150,10 +1150,10 @@ export default function ProjectDetailPage() {
         {viewModalContent && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setViewModalContent(null)} />
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-[#E5E7EB] shadow-2xl shadow-black/10 flex flex-col">
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 flex flex-col">
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] shrink-0">
-                <h2 className="text-lg font-semibold text-[#111827]">{viewModalContent.title}</h2>
-                <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-[#6B7280]" /></button>
+                <h2 className="text-lg font-semibold text-primary">{viewModalContent.title}</h2>
+                <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
               </div>
               <div className="p-6 overflow-y-auto flex-1">
                 <div 
@@ -1169,23 +1169,23 @@ export default function ProjectDetailPage() {
         {showMilestoneModal && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setShowMilestoneModal(false)} />
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md bg-white border-l border-[#E5E7EB] shadow-2xl shadow-black/10 overflow-y-auto">
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto">
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
-                <h2 className="text-lg font-semibold text-[#111827]">{isEditingMilestone ? 'Edit Milestone' : 'New Milestone'}</h2>
-                <button onClick={() => setShowMilestoneModal(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-[#6B7280]" /></button>
+                <h2 className="text-lg font-semibold text-primary">{isEditingMilestone ? 'Edit Milestone' : 'New Milestone'}</h2>
+                <button onClick={() => setShowMilestoneModal(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
               </div>
               <form onSubmit={handleSaveMilestone} className="p-6 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Milestone Name *</label>
-                  <input value={milestoneForm.name} onChange={(e) => setMilestoneForm({ ...milestoneForm, name: e.target.value })} required className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
+                  <input value={milestoneForm.name} onChange={(e) => setMilestoneForm({ ...milestoneForm, name: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
-                  <input type="date" value={milestoneForm.dueDate} onChange={(e) => setMilestoneForm({ ...milestoneForm, dueDate: e.target.value })} className="w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#111827] transition-all" />
+                  <input type="date" value={milestoneForm.dueDate} onChange={(e) => setMilestoneForm({ ...milestoneForm, dueDate: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                 </div>
                 <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setShowMilestoneModal(false)} className="flex-1 rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
-                  <button type="submit" disabled={submittingMilestone} className="flex-1 rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submittingMilestone ? 'Saving...' : 'Save Milestone'}</button>
+                  <button type="button" onClick={() => setShowMilestoneModal(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
+                  <button type="submit" disabled={submittingMilestone} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submittingMilestone ? 'Saving...' : 'Save Milestone'}</button>
                 </div>
               </form>
             </motion.div>

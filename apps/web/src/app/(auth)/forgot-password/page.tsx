@@ -27,15 +27,15 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#FAFAFA] p-4">
+    <div className="flex min-h-screen items-center justify-center bg-surface p-4">
       <div className="w-full max-w-md space-y-8 rounded-2xl bg-white p-8 shadow-xl shadow-black/5 ring-1 ring-[#E5E7EB]">
         
         <div className="text-center">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#F3F4F6] mb-4">
-            <Mail className="h-6 w-6 text-[#111827]" />
+            <Mail className="h-6 w-6 text-primary" />
           </div>
-          <h2 className="text-2xl font-bold tracking-tight text-[#111827]">Reset password</h2>
-          <p className="mt-2 text-sm text-[#6B7280]">
+          <h2 className="text-2xl font-bold tracking-tight text-primary">Reset password</h2>
+          <p className="mt-2 text-sm text-secondary">
             Enter your email address and we'll send you a link to reset your password.
           </p>
         </div>
@@ -68,7 +68,7 @@ export default function ForgotPasswordPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full appearance-none rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-3 text-[#111827] placeholder-[#9CA3AF] focus:border-[#111827] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#111827] transition-all sm:text-sm"
+                  className="block w-full appearance-none rounded-xl border border-border bg-[#F9FAFB] px-4 py-3 text-primary placeholder-[#9CA3AF] focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-all sm:text-sm"
                   placeholder="you@company.com"
                 />
               </div>
@@ -77,7 +77,7 @@ export default function ForgotPasswordPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all duration-150 h-11"
+              className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all duration-150 h-11"
             >
               {loading ? 'Sending link...' : 'Send reset link'}
             </button>
@@ -85,7 +85,7 @@ export default function ForgotPasswordPage() {
         )}
 
         <div className="mt-6 text-center">
-          <Link href="/login" className="inline-flex items-center text-sm font-medium text-[#6B7280] hover:text-[#111827] transition-colors">
+          <Link href="/login" className="inline-flex items-center text-sm font-medium text-secondary hover:text-primary transition-colors">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to login
           </Link>
