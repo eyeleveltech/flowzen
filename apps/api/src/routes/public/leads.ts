@@ -261,6 +261,25 @@ leadRouter.post('/', async (req: Request, res: Response) => {
       }
     });
 
+    await prisma.activity.create({
+      data: {
+        type: 'LEAD_CREATED',
+        message: `added lead "${client.name}" to the pipeline via EyeLevel AI`,
+        entityType: 'LEAD',
+        entityId: lead.id,
+        userId: (req as any).user.userId,
+        leadId: lead.id,
+        metadata: notes ? { notes } : {},
+      },
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      // Import emitToOrganization dynamically to avoid circular dependencies if needed, or assume it's loaded
+      // The CRM router uses it to update the UI real-time
+      io.to(`org_${orgId}`).emit('lead:updated', lead);
+    }
+
     res.status(201).json(formatLeadResponse(lead));
   } catch (error) {
     console.error(error);

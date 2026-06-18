@@ -156,6 +156,23 @@ taskRouter.post('/', async (req: Request, res: Response) => {
         data,
         include: { assignee: true, project: true, lead: { include: { client: true } } }
       });
+      
+      await prisma.activity.create({
+        data: {
+          type: 'TASK_CREATED',
+          message: `created task "${newTask.title}" via EyeLevel AI`,
+          entityType: 'TASK',
+          entityId: newTask.id,
+          userId: (req as any).user.userId,
+          projectId: newTask.projectId,
+          leadId: newTask.leadId,
+        },
+      });
+
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`org_${(req as any).user.organizationId}`).emit('task:created', newTask);
+      }
       createdTasks.push(formatTaskResponse(newTask));
     }
 
