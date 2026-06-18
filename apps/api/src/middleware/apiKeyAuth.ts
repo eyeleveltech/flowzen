@@ -6,12 +6,18 @@ const prisma = new PrismaClient();
 export const apiKeyAuth = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    let token = '';
+
+    if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+      token = authHeader.substring(7).trim(); // Extract token, case-insensitive 'Bearer '
+    } else if (req.query.apiKey) {
+      token = req.query.apiKey as string;
+    }
+
+    if (!token) {
       res.status(401).json({ error: 'Missing or invalid API key' });
       return;
     }
-
-    const token = authHeader.split(' ')[1];
 
     const apiKey = await prisma.apiKey.findUnique({
       where: { key: token },

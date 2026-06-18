@@ -15,11 +15,10 @@ async function testApi() {
   try {
     // 1. Create Lead
     console.log("--- 1. Creating a Lead ---");
-    const leadRes = await fetch(`${baseUrl}/leads`, {
+    const leadRes = await fetch(`${baseUrl}/leads?apiKey=${apiKey}`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         company_name: "Env File Test Corp",
@@ -37,11 +36,10 @@ async function testApi() {
     
     // 2. Add Task linked to Lead
     console.log("\n--- 2. Creating a Linked Task ---");
-    const taskRes = await fetch(`${baseUrl}/tasks`, {
+    const taskRes = await fetch(`${baseUrl}/tasks?apiKey=${apiKey}`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         tasks: [
