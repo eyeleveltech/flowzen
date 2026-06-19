@@ -112,6 +112,17 @@ enum LeadSource {
   INSTAGRAM
   WHATSAPP
   OTHER
+  OUTBOUND
+  SOCIAL_MEDIA
+  EVENT
+  COLD_CALL
+  EXISTING_CLIENT
+}
+
+enum LeadPriority {
+  HIGH
+  MEDIUM
+  LOW
 }
 
 enum LeadStage {
@@ -204,6 +215,7 @@ model User {
   status           UserStatus @default(PENDING)
   resetToken       String?  @unique
   resetTokenExpiry DateTime?
+  lastActivityReadAt DateTime?
   organizationId   String
   teamId           String?
   createdAt        DateTime @default(now())
@@ -492,13 +504,15 @@ model Note {
   id        String   @id @default(cuid())
   content   String
   type      NoteType @default(INTERNAL)
-  clientId  String
+  clientId  String?
+  leadId    String?
   authorId  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  author User   @relation(fields: [authorId], references: [id])
+  client Client? @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  author User    @relation(fields: [authorId], references: [id])
 
   @@map("notes")
 }
@@ -542,9 +556,12 @@ model Lead {
   organizationId    String
   source            LeadSource   @default(MANUAL)
   stage             LeadStage    @default(LEAD)
+  priority          LeadPriority @default(MEDIUM)
   assignedToId      String?
   dealValue         Float?
   expectedCloseDate DateTime?
+  expectedRevenue   Float?
+  followUpDate      DateTime?
   contractType      ContractType?
   healthStatus      HealthStatus?
   lostReason        LostReason?
@@ -558,6 +575,7 @@ model Lead {
   dealFields        DealField[]
   activities        Activity[]   @relation("LeadActivities")
   tasks             Task[]       @relation("LeadTasks")
+  notes             Note[]
 
   @@index([organizationId])
   @@index([organizationId, stage])

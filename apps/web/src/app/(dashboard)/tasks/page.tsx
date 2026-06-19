@@ -122,29 +122,38 @@ function TasksContent() {
   useEffect(() => {
     if (taskIdParam && tasks.length > 0) {
       const t = tasks.find((x) => x.id === taskIdParam);
-      if (t && t.id !== selectedTask?.id) setSelectedTaskState(t);
+      if (t && t.id !== selectedTask?.id) {
+        setSelectedTaskState(t);
+        // Fetch full task details (including comments)
+        api.get<Task>(`/tasks/${t.id}`).then((fullTask) => {
+          setSelectedTaskState(prev => prev?.id === fullTask.id ? fullTask : prev);
+        }).catch(() => {});
+      }
     } else if (!taskIdParam && selectedTask) {
       setSelectedTaskState(null);
     }
-  }, [taskIdParam, tasks, selectedTask]);
+  }, [taskIdParam, tasks, selectedTask?.id]);
 
   const setSelectedTask = async (task: Task | null) => {
     const params = new URLSearchParams(searchParams.toString());
     if (task) params.set('taskId', task.id);
     else params.delete('taskId');
     router.replace(`?${params.toString()}`, { scroll: false });
-    setSelectedTaskState(task);
-    if (task) {
-      try {
-        const fullTask = await api.get<Task>(`/tasks/${task.id}`);
-        setSelectedTaskState(fullTask);
-      } catch (err) {}
+    
+    // Immediate UI update
+    if (task && task.id !== selectedTask?.id) {
+      setSelectedTaskState(task);
+      api.get<Task>(`/tasks/${task.id}`).then((fullTask) => {
+        setSelectedTaskState(prev => prev?.id === fullTask.id ? fullTask : prev);
+      }).catch(() => {});
+    } else if (!task) {
+      setSelectedTaskState(null);
     }
   };
 
   const { register, handleSubmit, control, reset, watch, formState: { errors } } = useForm<TaskFormValues>({
     resolver: zodResolver(taskSchema),
-    defaultValues: { title: '', description: '', type: 'OTHER', projectId: '', assigneeId: '', reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: '', assignedDate: '', loggedHours: 0, driveLink: '' },
+    defaultValues: { title: '', description: '', type: 'OTHER', projectId: '', assigneeId: '', reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: '', assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '' },
   });
   const [submitting, setSubmitting] = useState(false);
   const [commentContent, setCommentContent] = useState('');
@@ -323,28 +332,19 @@ function TasksContent() {
           <p className="text-sm text-secondary mt-1">{tasks.length} tasks</p>
         </div>
         <div className="flex items-center gap-3">
-          {searchParams.get('filter') === 'overdue' && (
-            <button 
+          {(search || projectFilter || statusFilter || priorityFilter || (user?.role !== 'TEAM_MEMBER' && assigneeFilter !== user?.id) || searchParams.get('filter')) && (
+            <button
               onClick={() => {
-                const params = new URLSearchParams(searchParams.toString());
-                params.delete('filter');
-                router.replace(`?${params.toString()}`);
+                setSearch('');
+                setProjectFilter('');
+                setStatusFilter('');
+                setPriorityFilter('');
+                if (user?.role !== 'TEAM_MEMBER') setAssigneeFilter(user?.id || '');
+                router.replace('/tasks', { scroll: false });
               }}
-              className="flex items-center gap-1.5 rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-100 transition-colors border border-red-100"
+              className="flex items-center gap-1.5 rounded-xl bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors border border-red-100"
             >
-              Showing Overdue <X className="h-3.5 w-3.5" />
-            </button>
-          )}
-          {searchParams.get('filter') === 'approval' && (
-            <button 
-              onClick={() => {
-                const params = new URLSearchParams(searchParams.toString());
-                params.delete('filter');
-                router.replace(`?${params.toString()}`);
-              }}
-              className="flex items-center gap-1.5 rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 hover:bg-amber-100 transition-colors border border-amber-100"
-            >
-              Showing Pending Approvals <X className="h-3.5 w-3.5" />
+              <X className="h-4 w-4" /> Clear Filters
             </button>
           )}
           <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all">
@@ -372,10 +372,12 @@ function TasksContent() {
           onChange={(val) => setStatusFilter(val)}
           options={[
             { label: 'All Statuses', value: '' },
+            { label: 'Backlog', value: 'BACKLOG' },
             { label: 'To Do', value: 'TODO' },
             { label: 'In Progress', value: 'IN_PROGRESS' },
             { label: 'In Review', value: 'REVIEW' },
             { label: 'Approved', value: 'APPROVED' },
+            { label: 'Blocked', value: 'BLOCKED' },
             { label: 'Done', value: 'COMPLETED' },
           ]}
           className="w-40"

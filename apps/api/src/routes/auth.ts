@@ -169,6 +169,9 @@ authRouter.get('/me', authenticate, async (req: AuthRequest, res: Response, next
       return;
     }
 
+    const rawUser: any = await prisma.$queryRawUnsafe('SELECT "lastActivityReadAt" FROM "users" WHERE id = $1', req.user!.userId);
+    const lastActivityReadAt = rawUser?.[0]?.lastActivityReadAt || null;
+
     res.json({
       id: user.id,
       name: user.name,
@@ -183,6 +186,7 @@ authRouter.get('/me', authenticate, async (req: AuthRequest, res: Response, next
         name: user.organization.name,
         logo: user.organization.logo,
       },
+      lastActivityReadAt: lastActivityReadAt,
     });
   } catch (error) {
     next(error);

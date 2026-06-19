@@ -100,6 +100,17 @@ export default function TeamPage() {
     fetchTeam();
   }, [fetchTeam]);
 
+  // Read memberId from URL on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const mId = params.get('memberId');
+      if (mId) {
+        setSelectedId(mId);
+      }
+    }
+  }, []);
+
   // Fetch Member Details on Selection
   useEffect(() => {
     if (!selectedId) {
@@ -426,7 +437,7 @@ export default function TeamPage() {
           {loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {[...Array(8)].map((_, i) => (
-                <Skeleton key={i} className="h-56 w-full rounded-[1.5rem]" />
+                <Skeleton key={i} className="h-56 w-full rounded-3xl" />
               ))}
             </div>
           ) : (
@@ -438,7 +449,7 @@ export default function TeamPage() {
                   <div
                     key={m.id}
                     onClick={() => setSelectedId(m.id)}
-                    className={`group relative flex flex-col p-6 rounded-[1.5rem] bg-white cursor-pointer transition-all duration-300 border ${
+                    className={`group relative flex flex-col p-6 rounded-3xl bg-white cursor-pointer transition-all duration-300 border ${
                       isSelected 
                         ? 'border-primary ring-1 ring-primary' 
                         : 'border-border hover:shadow-sm'
@@ -446,7 +457,7 @@ export default function TeamPage() {
                   >
                     <div className="flex items-center gap-4 mb-5">
                       {/* Avatar */}
- <div className={`h-12 w-12 rounded-[1rem] flex items-center justify-center font-medium text-lg shrink-0 ${getAvatarColor(m.name)}`}>
+ <div className={`h-12 w-12 rounded-2xl flex items-center justify-center font-medium text-lg shrink-0 ${getAvatarColor(m.name)}`}>
                         {getInitials(m.name)}
                       </div>
                       <div className="flex-1 min-w-0">

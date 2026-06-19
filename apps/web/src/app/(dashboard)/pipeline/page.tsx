@@ -8,11 +8,12 @@ import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { LeadListView } from './components/LeadListView';
 import { PipelineDashboard } from './components/PipelineDashboard';
+import { PipelineBoardView } from './components/PipelineBoardView';
 
 function PipelineContent() {
   const router = useRouter();
   const { user } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<'LIST' | 'DASHBOARD'>('LIST');
+  const [activeTab, setActiveTab] = useState<'BOARD' | 'LIST' | 'DASHBOARD'>('BOARD');
   const [totalLeads, setTotalLeads] = useState(0);
 
   useEffect(() => {
@@ -46,16 +47,22 @@ function PipelineContent() {
         </div>
         <div className="flex items-center gap-2 p-1 bg-[#F3F4F6] rounded-xl self-start sm:self-auto">
           <button
+            onClick={() => setActiveTab('BOARD')}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'BOARD' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-[#374151]'}`}
+          >
+            Board
+          </button>
+          <button
             onClick={() => setActiveTab('LIST')}
             className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'LIST' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-[#374151]'}`}
           >
-            List View
+            List
           </button>
           <button
             onClick={() => setActiveTab('DASHBOARD')}
             className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'DASHBOARD' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-[#374151]'}`}
           >
-            Dashboard
+            Analytics
           </button>
         </div>
       </div>
@@ -68,7 +75,7 @@ function PipelineContent() {
         transition={{ duration: 0.2 }}
         className="flex-1"
       >
-        {activeTab === 'LIST' ? <LeadListView /> : <PipelineDashboard />}
+        {activeTab === 'BOARD' ? <PipelineBoardView /> : activeTab === 'LIST' ? <LeadListView /> : <PipelineDashboard />}
       </motion.div>
     </div>
   );

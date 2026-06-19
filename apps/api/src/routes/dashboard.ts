@@ -19,13 +19,25 @@ dashboardRouter.get('/stats', async (req: AuthRequest, res: Response, next) => {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
+    const { startDate, endDate } = req.query;
+    let dateFilter = {};
+    if (startDate && endDate) {
+      dateFilter = {
+        createdAt: {
+          gte: new Date(startDate as string),
+          lte: new Date(endDate as string)
+        }
+      };
+    }
+
     const [activeClients, activeProjects, openTasks, completedTasks, delayedProjects, totalMembers, overdueTasks] =
       await Promise.all([
-        prisma.client.count({ where: { organizationId: orgId, status: 'ACTIVE' } }),
+        prisma.client.count({ where: { organizationId: orgId, status: 'ACTIVE', ...dateFilter } }),
         prisma.project.count({
           where: { 
             client: { organizationId: orgId }, 
             status: { in: ['PLANNING', 'IN_PROGRESS', 'REVIEW'] },
+            ...dateFilter,
             ...(role === 'PROJECT_MANAGER' ? { ownerId: userId } : {}),
             ...(role === 'TEAM_MEMBER' ? { members: { some: { userId } } } : {})
           },
@@ -34,6 +46,7 @@ dashboardRouter.get('/stats', async (req: AuthRequest, res: Response, next) => {
           where: {
             project: { client: { organizationId: orgId } },
             status: { in: ['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'BLOCKED'] },
+            ...dateFilter,
             ...(role === 'TEAM_MEMBER' ? { assigneeId: userId } : {})
           },
         }),
@@ -41,6 +54,12 @@ dashboardRouter.get('/stats', async (req: AuthRequest, res: Response, next) => {
           where: { 
             project: { client: { organizationId: orgId } }, 
             status: 'COMPLETED',
+            ...(startDate && endDate ? {
+              completedAt: {
+                gte: new Date(startDate as string),
+                lte: new Date(endDate as string)
+              }
+            } : {}),
             ...(role === 'TEAM_MEMBER' ? { assigneeId: userId } : {})
           },
         }),
@@ -49,16 +68,18 @@ dashboardRouter.get('/stats', async (req: AuthRequest, res: Response, next) => {
             client: { organizationId: orgId },
             endDate: { lt: todayStart },
             status: { notIn: ['COMPLETED', 'CANCELLED'] },
+            ...dateFilter,
             ...(role === 'PROJECT_MANAGER' ? { ownerId: userId } : {}),
             ...(role === 'TEAM_MEMBER' ? { members: { some: { userId } } } : {})
           },
         }),
-        prisma.user.count({ where: { organizationId: orgId, status: 'ACTIVE' } }),
+        prisma.user.count({ where: { organizationId: orgId, status: 'ACTIVE', ...dateFilter } }),
         prisma.task.count({
           where: {
             project: { client: { organizationId: orgId } },
             dueDate: { lt: todayStart },
             status: { notIn: ['COMPLETED'] },
+            ...dateFilter,
             ...(role === 'TEAM_MEMBER' ? { assigneeId: userId } : {})
           }
         }),
@@ -128,15 +149,47 @@ dashboardRouter.get('/project-health', async (req: AuthRequest, res: Response, n
 dashboardRouter.get('/activity', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
+    const filter = (req.query.filter as string) || 'ALL';
+    const limit = parseInt(req.query.limit as string) || 20;
+    const skip = parseInt(req.query.skip as string) || 0;
+
+    let whereClause: any = { user: { organizationId: orgId } };
+
+    if (filter === 'TASKS') {
+      whereClause.entityType = 'TASK';
+    } else if (filter === 'PROJECTS') {
+      whereClause.entityType = 'PROJECT';
+    } else if (filter === 'ME') {
+      whereClause.userId = req.user!.userId;
+    }
 
     const activities = await prisma.activity.findMany({
-      where: { user: { organizationId: orgId } },
-      include: { user: { select: { id: true, name: true, avatar: true } } },
+      where: whereClause,
+      include: { 
+        user: { select: { id: true, name: true, avatar: true } },
+        task: { select: { id: true, title: true, projectId: true } },
+        project: { select: { id: true, name: true } },
+        client: { select: { id: true, name: true } }
+      },
       orderBy: { createdAt: 'desc' },
-      take: 20,
+      take: limit,
+      skip: skip,
     });
 
     res.json(activities);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/dashboard/activity/read
+dashboardRouter.post('/activity/read', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const userId = req.user!.userId;
+    const now = new Date();
+    // Use raw query to avoid Prisma Client out-of-date issues
+    await prisma.$executeRawUnsafe('UPDATE "users" SET "lastActivityReadAt" = $1 WHERE id = $2', now, userId);
+    res.json({ success: true, lastActivityReadAt: now });
   } catch (error) {
     next(error);
   }
@@ -178,34 +231,46 @@ dashboardRouter.get('/deadlines', async (req: AuthRequest, res: Response, next) 
 dashboardRouter.get('/team-workload', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
+    const { startDate, endDate } = req.query;
+    let dateFilter = {};
+    if (startDate && endDate) {
+      dateFilter = {
+        createdAt: {
+          gte: new Date(startDate as string),
+          lte: new Date(endDate as string)
+        }
+      };
+    }
 
     const members = await prisma.user.findMany({
-      where: { organizationId: orgId, status: 'ACTIVE' },
+      where: { organizationId: orgId, status: 'ACTIVE', ...dateFilter },
       select: {
         id: true,
         name: true,
         avatar: true,
         role: true,
         department: true,
-        _count: {
-          select: {
-            assignedTasks: {
-              where: { status: { notIn: ['COMPLETED'] } },
-            },
-          },
-        },
+        assignedTasks: { select: { status: true } },
       },
     });
 
-    const workload = members.map((m) => ({
-      id: m.id,
-      name: m.name,
-      avatar: m.avatar,
-      role: m.role,
-      department: m.department,
-      activeTasks: m._count.assignedTasks,
-      capacity: Math.min(100, Math.round((m._count.assignedTasks / 10) * 100)),
-    }));
+    const workload = members.map((m) => {
+      const activeTasks = m.assignedTasks.filter(t => t.status !== 'COMPLETED').length;
+      const completedTasks = m.assignedTasks.filter(t => t.status === 'COMPLETED').length;
+      const totalTasks = m.assignedTasks.length;
+      const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+      
+      return {
+        id: m.id,
+        name: m.name,
+        avatar: m.avatar,
+        role: m.role,
+        department: m.department,
+        activeTasks,
+        capacity: Math.min(100, Math.round((activeTasks / 10) * 100)),
+        completionRate
+      };
+    });
 
     res.json(workload);
   } catch (error) {
@@ -220,29 +285,41 @@ dashboardRouter.get('/velocity', async (req: AuthRequest, res: Response, next) =
     const role = req.user!.role;
     const userId = req.user!.userId;
     
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29); // include today
-    thirtyDaysAgo.setHours(0, 0, 0, 0);
+    const { startDate, endDate } = req.query;
+
+    let start = new Date();
+    start.setDate(start.getDate() - 29);
+    start.setHours(0, 0, 0, 0);
+    
+    let end = new Date();
+    end.setHours(23, 59, 59, 999);
+
+    if (startDate && endDate) {
+      start = new Date(startDate as string);
+      end = new Date(endDate as string);
+    }
 
     const tasks = await prisma.task.findMany({
       where: {
         project: { client: { organizationId: orgId } },
         status: 'COMPLETED',
-        completedAt: { gte: thirtyDaysAgo },
+        completedAt: { gte: start, lte: end },
         ...(role === 'TEAM_MEMBER' ? { assigneeId: userId } : {})
       },
       select: { completedAt: true }
     });
 
     const dataMap = new Map();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
     
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(today.getTime());
+    const diffDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    
+    // Always restrict to max 60 data points to prevent cluttered UI
+    const totalDays = Math.min(diffDays, 60);
+    
+    for (let i = totalDays - 1; i >= 0; i--) {
+      const d = new Date(end.getTime());
       d.setDate(d.getDate() - i);
       const dateStr = d.toISOString().split('T')[0];
-      // Format as "Mon DD"
       const formattedStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       dataMap.set(dateStr, { name: formattedStr, tasks: 0 });
     }
@@ -269,31 +346,60 @@ dashboardRouter.get('/status-distribution', async (req: AuthRequest, res: Respon
     const orgId = req.user!.organizationId;
     const role = req.user!.role;
     const userId = req.user!.userId;
+    const { startDate, endDate } = req.query;
 
-    const baseProjectWhere = role === 'TEAM_MEMBER' ? { members: { some: { userId } } } : role === 'PROJECT_MANAGER' ? { ownerId: userId } : {};
+    let dateFilter = {};
+    if (startDate && endDate) {
+      dateFilter = {
+        createdAt: {
+          gte: new Date(startDate as string),
+          lte: new Date(endDate as string)
+        }
+      };
+    }
 
-    const projects = await prisma.project.groupBy({
-      by: ['status'],
+    const tasks = await prisma.task.findMany({
       where: {
-        client: { organizationId: orgId },
-        ...baseProjectWhere
+        project: { client: { organizationId: orgId } },
+        ...(role === 'TEAM_MEMBER' ? { assigneeId: userId } : {}),
+        ...dateFilter
       },
-      _count: { id: true }
+      select: { status: true, dueDate: true }
     });
 
-    const labelMap: Record<string, string> = {
-      PLANNING: 'Planning',
-      IN_PROGRESS: 'In Progress',
-      REVIEW: 'Review',
-      COMPLETED: 'Completed',
-      ON_HOLD: 'On Hold',
-      CANCELLED: 'Cancelled'
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    let buckets = {
+      TODO: 0,
+      IN_PROGRESS: 0,
+      REVIEW: 0,
+      APPROVED: 0,
+      COMPLETED: 0,
+      OVERDUE: 0
     };
 
-    const data = projects.map(p => ({
-      name: labelMap[p.status] || p.status,
-      value: p._count.id
-    }));
+    tasks.forEach(t => {
+      // Overdue takes precedence
+      if (t.dueDate && new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED') {
+        buckets.OVERDUE++;
+      } else {
+        if (t.status === 'TODO' || t.status === 'BACKLOG' || t.status === 'BLOCKED') buckets.TODO++;
+        else if (t.status === 'IN_PROGRESS') buckets.IN_PROGRESS++;
+        else if (t.status === 'REVIEW') buckets.REVIEW++;
+        else if (t.status === 'APPROVED') buckets.APPROVED++;
+        else if (t.status === 'COMPLETED') buckets.COMPLETED++;
+      }
+    });
+
+    const data = [
+      { name: 'To Do', value: buckets.TODO, color: '#F3F4F6' },
+      { name: 'In Progress', value: buckets.IN_PROGRESS, color: '#111827' },
+      { name: 'In Review', value: buckets.REVIEW, color: '#4B5563' },
+      { name: 'Approved', value: buckets.APPROVED, color: '#9CA3AF' },
+      { name: 'Completed', value: buckets.COMPLETED, color: '#D1D5DB' },
+      { name: 'Overdue', value: buckets.OVERDUE, color: '#EF4444' }
+    ].filter(item => item.value > 0); // Only return segments with data
     
     res.json(data);
   } catch (error) {
@@ -353,11 +459,22 @@ dashboardRouter.get('/pending-approvals', async (req: AuthRequest, res: Response
 dashboardRouter.get('/client-health', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
+    const { startDate, endDate } = req.query;
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
+
+    let dateFilter = {};
+    if (startDate && endDate) {
+      dateFilter = {
+        createdAt: {
+          gte: new Date(startDate as string),
+          lte: new Date(endDate as string)
+        }
+      };
+    }
     
     const clients = await prisma.client.findMany({
-      where: { organizationId: orgId, status: 'ACTIVE' },
+      where: { organizationId: orgId, status: 'ACTIVE', ...dateFilter },
       select: {
         id: true,
         name: true,

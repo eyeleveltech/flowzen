@@ -55,7 +55,13 @@ function ProjectsContent() {
   const { user } = useAuthStore();
   const [search, setSearch] = useState('');
   const [view, setView] = useState<ViewMode>('list');
-  const [statusFilter, setStatusFilter] = useState('');
+  const urlStatus = searchParams.get('status');
+  const [statusFilter, setStatusFilter] = useState(urlStatus || '');
+  
+  useEffect(() => {
+    if (urlStatus) setStatusFilter(urlStatus);
+  }, [urlStatus]);
+  
   const [clientFilter, setClientFilter] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('');
   const showCreate = searchParams.get('create') === 'true';
@@ -146,11 +152,27 @@ function ProjectsContent() {
           <h1 className="text-2xl font-semibold text-primary tracking-tight">Projects</h1>
           <p className="text-sm text-secondary mt-1">{projects.length} projects</p>
         </div>
-        {user?.role !== 'TEAM_MEMBER' && (
-          <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all">
-            <Plus className="h-4 w-4" /> New Project
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {(search || statusFilter || clientFilter || ownerFilter) && (
+            <button
+              onClick={() => {
+                setSearch('');
+                setStatusFilter('');
+                setClientFilter('');
+                setOwnerFilter('');
+                router.replace('/projects', { scroll: false });
+              }}
+              className="flex items-center gap-1.5 rounded-xl bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors border border-red-100"
+            >
+              <X className="h-4 w-4" /> Clear Filters
+            </button>
+          )}
+          {user?.role !== 'TEAM_MEMBER' && (
+            <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all">
+              <Plus className="h-4 w-4" /> New Project
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Toolbar */}
@@ -169,6 +191,8 @@ function ProjectsContent() {
                 onChange={setStatusFilter}
                 options={[
                   { label: 'All Statuses', value: '' },
+                  { label: 'Active', value: 'ACTIVE' },
+                  { label: 'Delayed', value: 'DELAYED' },
                   { label: 'Planning', value: 'PLANNING' },
                   { label: 'In Progress', value: 'IN_PROGRESS' },
                   { label: 'In Review', value: 'REVIEW' },

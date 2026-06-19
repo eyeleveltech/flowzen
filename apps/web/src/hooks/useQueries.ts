@@ -83,16 +83,21 @@ export function useTemplates() {
 }
 
 // --- Dashboard ---
-export function useDashboardData(role?: string) {
+export function useDashboardData(role?: string, dateRange?: { startDate?: string, endDate?: string }) {
   return useQuery({
-    queryKey: ['dashboard', role],
+    queryKey: ['dashboard', role, dateRange],
     queryFn: async () => {
+      const params = new URLSearchParams();
+      if (dateRange?.startDate) params.append('startDate', dateRange.startDate);
+      if (dateRange?.endDate) params.append('endDate', dateRange.endDate);
+      const queryStr = params.toString() ? `?${params.toString()}` : '';
+
       const [stats, activity, deadlines, velocity, myTasks] = await Promise.all([
-        api.get<any>('/dashboard/stats'),
-        api.get<any[]>('/dashboard/activity'),
-        api.get<any[]>('/dashboard/deadlines'),
-        api.get<any[]>('/dashboard/velocity'),
-        api.get<any[]>('/dashboard/my-tasks')
+        api.get<any>(`/dashboard/stats${queryStr}`),
+        api.get<any[]>(`/dashboard/activity${queryStr}`),
+        api.get<any[]>(`/dashboard/deadlines${queryStr}`),
+        api.get<any[]>(`/dashboard/velocity${queryStr}`),
+        api.get<any[]>(`/dashboard/my-tasks${queryStr}`)
       ]);
       
       let statusDist: any[] = [];
@@ -101,12 +106,17 @@ export function useDashboardData(role?: string) {
       let clientHealth: any[] = [];
       
       if (role && role !== 'TEAM_MEMBER') {
-        statusDist = await api.get<any[]>('/dashboard/status-distribution');
-        pendingApprovals = await api.get<any[]>('/dashboard/pending-approvals');
-        clientHealth = await api.get<any[]>('/dashboard/client-health');
+        const [dist, pending, health] = await Promise.all([
+          api.get<any[]>(`/dashboard/status-distribution${queryStr}`),
+          api.get<any[]>(`/dashboard/pending-approvals${queryStr}`),
+          api.get<any[]>(`/dashboard/client-health${queryStr}`)
+        ]);
+        statusDist = dist;
+        pendingApprovals = pending;
+        clientHealth = health;
       }
       if (role === 'PROJECT_MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN') {
-        workload = await api.get<any[]>('/dashboard/team-workload');
+        workload = await api.get<any[]>(`/dashboard/team-workload${queryStr}`);
       }
       
       return { stats, activity, deadlines, velocity, statusDist, workload, myTasks, pendingApprovals, clientHealth };
@@ -123,5 +133,16 @@ export function useNotifications() {
     queryFn: async () => {
       return api.get<{ notifications: any[], unreadCount: number }>('/notifications');
     },
+  });
+}
+
+// --- CRM Leads ---
+export function useLead(leadId: string) {
+  return useQuery({
+    queryKey: ['lead', leadId],
+    queryFn: async () => {
+      return api.get<any>(`/crm/leads/${leadId}`);
+    },
+    enabled: !!leadId,
   });
 }

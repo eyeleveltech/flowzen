@@ -9,31 +9,68 @@ export const crmRouter = Router();
 crmRouter.use(authenticate);
 
 const leadSchema = z.object({
+  clientId: z.string().optional(),
   contactName: z.string().min(1, "Contact or Company Name is required").optional(),
   companyName: z.string().min(1).optional(),
   email: z.string().email().optional().or(z.literal('')),
   phone: z.string().optional(),
-  source: z.enum(['EXCEL', 'MANUAL', 'API', 'REFERRAL', 'INBOUND', 'LINKEDIN', 'INSTAGRAM', 'WHATSAPP', 'OTHER']).optional(),
+  jobTitle: z.string().optional(),
+  source: z.enum(['EXCEL', 'MANUAL', 'API', 'REFERRAL', 'INBOUND', 'LINKEDIN', 'INSTAGRAM', 'WHATSAPP', 'OTHER', 'OUTBOUND', 'SOCIAL_MEDIA', 'EVENT', 'COLD_CALL', 'EXISTING_CLIENT']).optional(),
   assignedToId: z.string().optional(),
   dealValue: z.number().optional(),
+  expectedRevenue: z.number().optional(),
   expectedCloseDate: z.string().optional(),
+  followUpDate: z.string().optional(),
   industry: z.string().optional(),
   city: z.string().optional(),
   notes: z.string().optional(),
-}).refine(data => data.contactName || data.companyName, {
-  message: "Either Contact Name or Company Name must be provided",
-  path: ["contactName"]
+  priority: z.enum(['HIGH', 'MEDIUM', 'LOW']).optional(),
+}).refine(data => data.clientId || data.contactName || data.companyName, {
+  message: "Either Client ID, Contact Name or Company Name must be provided",
+  path: ["contactName"],
 });
 
 // GET /api/crm/leads
 crmRouter.get('/leads', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const { stage, assignedToId } = req.query;
+    const { 
+      stage, 
+      assignedToId,
+      minDealValue,
+      maxDealValue,
+      leadSource,
+      priority,
+      closeDateFrom,
+      closeDateTo,
+      dateAddedFrom,
+      dateAddedTo
+    } = req.query;
 
     const where: Record<string, unknown> = { organizationId: orgId };
+    
     if (stage) where.stage = stage as string;
     if (assignedToId) where.assignedToId = assignedToId as string;
+    if (leadSource) where.source = leadSource as string;
+    if (priority) where.priority = priority as string;
+
+    if (minDealValue || maxDealValue) {
+      where.dealValue = {};
+      if (minDealValue) (where.dealValue as any).gte = parseFloat(minDealValue as string);
+      if (maxDealValue) (where.dealValue as any).lte = parseFloat(maxDealValue as string);
+    }
+
+    if (closeDateFrom || closeDateTo) {
+      where.expectedCloseDate = {};
+      if (closeDateFrom) (where.expectedCloseDate as any).gte = new Date(closeDateFrom as string);
+      if (closeDateTo) (where.expectedCloseDate as any).lte = new Date(closeDateTo as string);
+    }
+
+    if (dateAddedFrom || dateAddedTo) {
+      where.createdAt = {};
+      if (dateAddedFrom) (where.createdAt as any).gte = new Date(dateAddedFrom as string);
+      if (dateAddedTo) (where.createdAt as any).lte = new Date(dateAddedTo as string);
+    }
 
     const leads = await prisma.lead.findMany({
       where: where as any,
@@ -74,6 +111,10 @@ crmRouter.get('/leads/:id', async (req: AuthRequest, res: Response, next) => {
         activities: {
           include: { user: { select: { name: true, avatar: true } } },
           orderBy: { createdAt: 'desc' }
+        },
+        notes: {
+          include: { author: { select: { name: true, avatar: true } } },
+          orderBy: { createdAt: 'desc' }
         }
       }
     });
@@ -93,21 +134,40 @@ crmRouter.get('/leads/:id', async (req: AuthRequest, res: Response, next) => {
 crmRouter.post('/leads', authorize('SUPER_ADMIN', 'ADMIN'), validate(leadSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const { contactName, companyName, email, phone, source, assignedToId, dealValue, expectedCloseDate, industry, city, notes } = req.body;
+    const { clientId, contactName, companyName, email, phone, jobTitle, source, assignedToId, dealValue, expectedRevenue, expectedCloseDate, followUpDate, industry, city, notes, priority } = req.body;
 
-    // 1. Create the Client (Status: PROSPECT)
-    const client = await prisma.client.create({
-      data: {
-        name: contactName || companyName || 'Unknown',
-        company: companyName || null,
-        email: email || null,
-        phone: phone || null,
-        industry: industry || null,
-        city: city || null,
-        status: 'PROSPECT',
-        organizationId: orgId,
+    let client;
+    if (clientId) {
+      client = await prisma.client.findUnique({ where: { id: clientId, organizationId: orgId } });
+      if (!client) {
+        res.status(404).json({ error: 'Client not found' });
+        return;
       }
-    });
+    } else {
+      // 1. Create the Client (Status: PROSPECT)
+      client = await prisma.client.create({
+        data: {
+          name: contactName || companyName || 'Unknown',
+          company: companyName || null,
+          email: email || null,
+          phone: phone || null,
+          industry: industry || null,
+          city: city || null,
+          status: 'PROSPECT',
+          organizationId: orgId,
+          ...(jobTitle && contactName ? {
+            contacts: {
+              create: {
+                name: contactName,
+                designation: jobTitle,
+                email: email || null,
+                phone: phone || null,
+              }
+            }
+          } : {})
+        }
+      });
+    }
 
     // 2. Create the Lead linked to the Client
     const lead = await prisma.lead.create({
@@ -118,7 +178,10 @@ crmRouter.post('/leads', authorize('SUPER_ADMIN', 'ADMIN'), validate(leadSchema)
         stage: 'LEAD',
         assignedToId: assignedToId || null,
         dealValue: dealValue || null,
+        expectedRevenue: expectedRevenue || null,
         expectedCloseDate: expectedCloseDate ? new Date(expectedCloseDate) : null,
+        followUpDate: followUpDate ? new Date(followUpDate) : null,
+        priority: priority || 'MEDIUM',
       },
       include: {
         client: true,
@@ -334,10 +397,11 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
   try {
     const orgId = req.user!.organizationId;
     const leadId = req.params.id as string;
-    const { source, assignedToId, dealValue, expectedCloseDate, contractType, healthStatus, lostReason } = req.body;
+    const { source, assignedToId, dealValue, expectedRevenue, expectedCloseDate, followUpDate, contractType, healthStatus, lostReason, priority, stage } = req.body;
 
     const existingLead = await prisma.lead.findFirst({
-      where: { id: leadId, organizationId: orgId }
+      where: { id: leadId, organizationId: orgId },
+      include: { client: true }
     });
 
     if (!existingLead) {
@@ -346,13 +410,50 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
     }
 
     const updateData: any = {};
-    if (source !== undefined) updateData.source = source;
-    if (assignedToId !== undefined) updateData.assignedToId = assignedToId;
-    if (dealValue !== undefined) updateData.dealValue = dealValue;
-    if (expectedCloseDate !== undefined) updateData.expectedCloseDate = expectedCloseDate ? new Date(expectedCloseDate) : null;
-    if (contractType !== undefined) updateData.contractType = contractType;
-    if (healthStatus !== undefined) updateData.healthStatus = healthStatus;
-    if (lostReason !== undefined) updateData.lostReason = lostReason;
+    const changes: string[] = [];
+
+    if (source !== undefined && existingLead.source !== source) { updateData.source = source; changes.push(`changed Source to ${source}`); }
+    if (assignedToId !== undefined && existingLead.assignedToId !== assignedToId) { updateData.assignedToId = assignedToId; changes.push(`reassigned lead`); }
+    if (dealValue !== undefined && existingLead.dealValue !== dealValue) { updateData.dealValue = dealValue; changes.push(`changed Deal Value to ${dealValue}`); }
+    if (expectedRevenue !== undefined && existingLead.expectedRevenue !== expectedRevenue) { updateData.expectedRevenue = expectedRevenue; changes.push(`changed Expected Revenue to ${expectedRevenue}`); }
+    if (expectedCloseDate !== undefined) {
+      const newDate = expectedCloseDate ? new Date(expectedCloseDate) : null;
+      if (existingLead.expectedCloseDate?.getTime() !== newDate?.getTime()) {
+        updateData.expectedCloseDate = newDate;
+        changes.push(`changed Close Date`);
+      }
+    }
+    if (followUpDate !== undefined) {
+      const newDate = followUpDate ? new Date(followUpDate) : null;
+      if (existingLead.followUpDate?.getTime() !== newDate?.getTime()) {
+        updateData.followUpDate = newDate;
+        changes.push(`changed Follow-up Date`);
+      }
+    }
+    if (contractType !== undefined && existingLead.contractType !== contractType) { updateData.contractType = contractType; changes.push(`changed Contract Type to ${contractType}`); }
+    if (healthStatus !== undefined && existingLead.healthStatus !== healthStatus) { updateData.healthStatus = healthStatus; changes.push(`changed Health Status to ${healthStatus}`); }
+    if (lostReason !== undefined && existingLead.lostReason !== lostReason) { updateData.lostReason = lostReason; changes.push(`changed Lost Reason`); }
+    if (priority !== undefined && existingLead.priority !== priority) { updateData.priority = priority; changes.push(`changed Priority to ${priority}`); }
+    if (stage !== undefined && existingLead.stage !== stage) { 
+      updateData.stage = stage; 
+      changes.push(`changed Stage from ${existingLead.stage} to ${stage}`); 
+      // Auto-update Client Status
+      const activeStages = ['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT'];
+      if (activeStages.includes(stage) && existingLead.client.status === 'PROSPECT') {
+        await prisma.client.update({ where: { id: existingLead.clientId }, data: { status: 'ACTIVE' } });
+        const io = req.app.get('io');
+        emitToOrganization(io, orgId, 'client:updated', { id: existingLead.clientId });
+      } else if (stage === 'LOST_CLOSED' && existingLead.client.status !== 'CHURNED') {
+        await prisma.client.update({ where: { id: existingLead.clientId }, data: { status: 'CHURNED' } });
+        const io = req.app.get('io');
+        emitToOrganization(io, orgId, 'client:updated', { id: existingLead.clientId });
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      res.json(existingLead);
+      return;
+    }
 
     const updatedLead = await prisma.lead.update({
       where: { id: leadId },
@@ -363,10 +464,76 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
       }
     });
 
+    // Log Activity for all changes combined
+    if (changes.length > 0) {
+      await prisma.activity.create({
+        data: {
+          type: 'LEAD_UPDATED',
+          message: changes.join(', '),
+          entityType: 'LEAD',
+          entityId: leadId,
+          userId: req.user!.userId,
+          leadId: leadId,
+        }
+      });
+    }
+
     const io = req.app.get('io');
     emitToOrganization(io, orgId, 'lead:updated', updatedLead);
 
     res.json(updatedLead);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/crm/leads/:id/notes
+crmRouter.post('/leads/:id/notes', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const leadId = req.params.id as string;
+    const { content } = req.body;
+
+    if (!content) {
+      res.status(400).json({ error: 'Content is required' });
+      return;
+    }
+
+    const lead = await prisma.lead.findFirst({
+      where: { id: leadId, organizationId: orgId }
+    });
+
+    if (!lead) {
+      res.status(404).json({ error: 'Lead not found' });
+      return;
+    }
+
+    const note = await prisma.note.create({
+      data: {
+        content,
+        leadId,
+        authorId: req.user!.userId,
+      },
+      include: { author: { select: { name: true, avatar: true } } }
+    });
+
+    // Log Activity
+    await prisma.activity.create({
+      data: {
+        type: 'NOTE_ADDED',
+        message: 'added a note',
+        entityType: 'LEAD',
+        entityId: leadId,
+        userId: req.user!.userId,
+        leadId,
+        metadata: { notes: content }
+      }
+    });
+
+    const io = req.app.get('io');
+    emitToOrganization(io, orgId, 'lead:updated', lead);
+
+    res.status(201).json(note);
   } catch (error) {
     next(error);
   }

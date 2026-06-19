@@ -58,7 +58,12 @@ function ClientsContent() {
   const [clients, setClients] = useState<Client[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const urlStatus = searchParams.get('status');
+  const [statusFilter, setStatusFilter] = useState(urlStatus || '');
+  
+  useEffect(() => {
+    if (urlStatus) setStatusFilter(urlStatus);
+  }, [urlStatus]);
   const [cityFilter, setCityFilter] = useState('');
   const [accountManagerFilter, setAccountManagerFilter] = useState('');
   const [engagementTypeFilter, setEngagementTypeFilter] = useState('');
@@ -297,6 +302,22 @@ function ClientsContent() {
           <p className="text-sm text-secondary mt-1">{total} total clients</p>
         </div>
         <div className="flex items-center gap-3">
+          {(search || statusFilter || cityFilter || industryFilter || engagementTypeFilter || accountManagerFilter) && (
+            <button
+              onClick={() => {
+                setSearch('');
+                setStatusFilter('');
+                setCityFilter('');
+                setIndustryFilter('');
+                setEngagementTypeFilter('');
+                setAccountManagerFilter('');
+                router.replace('/clients', { scroll: false });
+              }}
+              className="flex items-center gap-1.5 rounded-xl bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors border border-red-100"
+            >
+              <X className="h-4 w-4" /> Clear Filters
+            </button>
+          )}
           <button
             onClick={handleExport}
             disabled={isExporting}

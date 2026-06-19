@@ -20,9 +20,10 @@ export interface SelectProps {
   className?: string;
   disabled?: boolean;
   required?: boolean;
+  rounded?: string;
 }
 
-export function Select({ value, onChange, options, placeholder = 'Select...', className = '', disabled = false, required = false }: SelectProps) {
+export function Select({ value, onChange, options, placeholder = 'Select...', className = '', disabled = false, required = false, rounded = 'rounded-xl' }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -135,7 +136,7 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
             setIsOpen(false);
           }
         }}
-        className="flex w-full items-center justify-between rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-[#374151] outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50 transition-all text-left"
+        className={`flex w-full items-center justify-between ${rounded} border border-border bg-white px-4 py-2.5 text-sm text-[#374151] outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50 transition-all text-left`}
       >
         <span className={selectedOption && selectedOption.value !== '' ? 'text-primary' : 'text-[#374151]'}>
           {selectedOption ? selectedOption.label : placeholder}
@@ -189,7 +190,7 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 4 }}
                   transition={{ duration: 0.15 }}
-                  className="fixed z-[9999] mt-2 max-h-60 overflow-y-auto rounded-xl border border-border bg-white p-1.5 shadow-lg shadow-black/5"
+                  className="fixed z-9999 mt-2 max-h-60 overflow-y-auto rounded-xl border border-border bg-white p-1.5 shadow-lg shadow-black/5"
                   style={{ 
                     width: rect ? Math.max(rect.width, 160) : 'auto',
                     top: rect ? rect.bottom : 0,

@@ -23,7 +23,16 @@ RUN npm run build
 # Production image
 FROM node:20-slim AS runner
 
-RUN apt-get update -y && apt-get install -y openssl
+# Install OpenSSL (Prisma) and the PostgreSQL 16 client so the entrypoint can
+# take a pre-migration pg_dump that matches the Postgres 16 server.
+RUN apt-get update -y \
+  && apt-get install -y openssl curl ca-certificates gnupg \
+  && install -d /usr/share/postgresql-common/pgdg \
+  && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+  && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+  && apt-get update -y \
+  && apt-get install -y postgresql-client-16 \
+  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -37,9 +46,12 @@ COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
 COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
+COPY --from=builder /app/apps/api/docker-entrypoint.sh ./apps/api/docker-entrypoint.sh
+RUN chmod +x ./apps/api/docker-entrypoint.sh
 
 WORKDIR /app/apps/api
 
 EXPOSE 4000
 
-CMD ["npm", "run", "start"]
+# Safe default boot: pre-migration backup -> prisma migrate deploy -> start.
+CMD ["sh", "./docker-entrypoint.sh"]

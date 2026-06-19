@@ -15,6 +15,7 @@ interface User {
     name: string;
     logo?: string | null;
   };
+  lastActivityReadAt?: string | null;
 }
 
 interface AuthStore {

@@ -25,6 +25,7 @@ import {
   Clock,
   AlertCircle,
   Menu,
+  Target,
 } from 'lucide-react';
 import { Drawer } from '@/components/ui/drawer';
 import toast from 'react-hot-toast';
@@ -95,6 +96,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
     { label: 'New Client', href: '/clients?create=true', icon: Users },
     { label: 'New Project', href: '/projects?create=true', icon: FolderKanban },
     { label: 'New Task', href: '/tasks?create=true', icon: CheckSquare },
+    { label: 'New Lead', href: '/pipeline?create=true', icon: Target },
   ];
 
   return (
@@ -181,7 +183,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
               <motion.span
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                className="absolute -right-1 -top-1 flex h-4.5 min-w-[18px] items-center justify-center rounded-full bg-[#EF4444] px-1 text-[10px] font-semibold text-white"
+                className="absolute -right-1 -top-1 flex h-4.5 min-w-[18px] items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-white"
               >
                 {unreadCount > 9 ? '9+' : unreadCount}
               </motion.span>
@@ -334,9 +336,9 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                 )}
                 <button
                   onClick={() => { logout(); window.location.href = '/login'; }}
-                  className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-[#EF4444] hover:bg-red-50 active:bg-red-100 transition-colors"
+                  className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-danger hover:bg-red-50 active:bg-red-100 transition-colors"
                 >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-50 text-[#EF4444]">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-50 text-danger">
                     <LogOut className="h-5 w-5" />
                   </div>
                   Sign out
@@ -376,7 +378,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                     )}
                     <button
                       onClick={() => { logout(); window.location.href = '/login'; }}
-                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-[#EF4444] hover:bg-red-50 transition-colors"
+                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-danger hover:bg-red-50 transition-colors"
                     >
                       <LogOut className="h-4 w-4" />
                       Sign out

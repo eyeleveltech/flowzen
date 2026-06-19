@@ -23,6 +23,12 @@ All dashboard pages rely heavily on `@tanstack/react-query` for data fetching an
     *   **Features:** Advanced Kanban/List views. Supports sub-tasks, `Reviewer` assignments, and `DriveLink` URLs instead of native file attachments.
 *   **`/calendar`:**
     *   **Features:** Advanced Monthly and Weekly timeline views with powerful frontend filtering (by Client, Assignee, Status) driven by the Project's hex color.
+*   **`/pipeline`:**
+    *   **Features:** A comprehensive CRM pipeline view with List View and Dashboard modes (with an upcoming Kanban Board View). 
+        *   **Lead Detail Page (`/pipeline/[id]`):** Features a header with a visual stage progression bar, one-click "Mark as Won/Lost" actions, a detailed left column for lead information, and a right column for activities and notes (with `metadata` support for rich activity logs). File attachments are explicitly disabled.
+        *   **List View:** Displays leads in a table with a dedicated "Import" button for bulk CSV uploads.
+        *   **Pipeline Dashboard:** Dynamic analytics view featuring instant client-side reactive rendering (`useMemo`). Includes comprehensive filters for Date Range (with Created/Close date toggles), Owner, and a multi-select dropdown for Stages, showing a sleek loading spinner overlay during re-renders.
+    *   **Real-time:** Listens to `lead:updated` SSE to trigger data re-fetching for accurate pipeline totals and stage distributions.
 *   **`/clients`:**
     *   **Features:** Client CRUD, advanced filtering (City, Engagement Type), and a robust Bulk Import/Export feature using `papaparse` for CSVs.
 *   **`/settings` & `/team`:**

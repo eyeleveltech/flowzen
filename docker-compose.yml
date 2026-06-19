@@ -51,12 +51,20 @@ services:
       - SMTP_PASS=${SMTP_PASS}
       - SMTP_FROM=${SMTP_FROM}
       - PORT=4000
+      # Set to "true" ONLY to bypass the automatic pre-migration backup (not recommended).
+      - SKIP_PREMIGRATION_BACKUP=${SKIP_PREMIGRATION_BACKUP:-false}
     ports:
       - "4000:4000"
     depends_on:
       postgres:
         condition: service_healthy
-    command: sh -c "npx prisma db push --accept-data-loss && npm run start"
+    volumes:
+      # Shared with db-backup so pre-migration dumps land in the same backups volume.
+      - postgres_backups:/backups
+    # Safe boot: take a pre-migration backup, apply reviewed migrations, then start.
+    # NOTE: on the FIRST deploy after switching from `db push`, the production DB must
+    # already be baselined (see MIGRATIONS.md) or `migrate deploy` will fail on existing tables.
+    command: sh ./docker-entrypoint.sh
 
   web:
     build:

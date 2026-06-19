@@ -44,7 +44,16 @@ projectRouter.get('/', async (req: AuthRequest, res: Response, next) => {
         { teams: { some: { team: { members: { some: { id: req.user!.userId } } } } } },
       ];
     }
-    if (status) where.status = status as string;
+    if (status) {
+      if (status === 'ACTIVE') {
+        where.status = { in: ['PLANNING', 'IN_PROGRESS', 'REVIEW'] };
+      } else if (status === 'DELAYED') {
+        where.status = { in: ['IN_PROGRESS', 'REVIEW'] };
+        where.endDate = { lt: new Date() };
+      } else {
+        where.status = status as string;
+      }
+    }
     if (priority) where.priority = priority as string;
     if (clientId) where.clientId = clientId;
     if (ownerId) where.ownerId = ownerId;

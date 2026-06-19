@@ -926,10 +926,12 @@ export default function ProjectDetailPage() {
                       value={taskForm.status}
                       onChange={(val) => setTaskForm({ ...taskForm, status: val })}
                       options={[
+                        { label: 'Backlog', value: 'BACKLOG' },
                         { label: 'To Do', value: 'TODO' },
                         { label: 'In Progress', value: 'IN_PROGRESS' },
                         { label: 'In Review', value: 'REVIEW' },
                         { label: 'Approved', value: 'APPROVED' },
+                        { label: 'Blocked', value: 'BLOCKED' },
                         { label: 'Done', value: 'COMPLETED' },
                       ]}
                     />

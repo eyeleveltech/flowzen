@@ -10,9 +10,10 @@ import { useRouter } from 'next/navigation';
 import { useDashboardData } from '@/hooks/useQueries';
 import toast from 'react-hot-toast';
 import { Select } from '@/components/ui/select';
+import { ActivityFeedWidget } from '@/components/dashboard/activity-feed';
 import {
   Users, FolderKanban, CheckSquare, CheckCircle2, Building2, Activity, Zap,
-  AlertTriangle, UsersRound, Clock, PieChart as PieIcon, BarChart as BarIcon, BellDot
+  AlertTriangle, UsersRound, Clock, PieChart as PieIcon, BarChart as BarIcon, BellDot, ChevronRight
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -46,6 +47,128 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
+const PendingApprovalItem = ({ task, onRefresh }: { task: any; onRefresh: () => void }) => {
+  const router = useRouter();
+  const [isRequestingChanges, setIsRequestingChanges] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleApprove = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      setSubmitting(true);
+      await api.put(`/tasks/${task.id}`, { status: 'APPROVED' });
+      toast.success('Task approved!');
+      onRefresh();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to approve task');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRequestChangesClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsRequestingChanges(!isRequestingChanges);
+  };
+
+  const handleSubmitChanges = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!commentText.trim()) {
+      toast.error('Please enter your feedback');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      // Move task to IN PROGRESS
+      await api.put(`/tasks/${task.id}`, { status: 'IN_PROGRESS' });
+      // Leave comment
+      await api.post(`/tasks/${task.id}/comments`, { content: commentText.trim() });
+      toast.success('Changes requested');
+      setIsRequestingChanges(false);
+      setCommentText('');
+      onRefresh();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to request changes');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col border border-transparent hover:border-border rounded-xl transition-all hover:bg-surface mb-1">
+      <div 
+        onClick={() => router.push(`/tasks?taskId=${task.id}`)}
+        className="flex flex-col p-3 cursor-pointer"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0">
+            {task.assignee && (
+              <div className="h-8 w-8 rounded-full bg-[#F3F4F6] text-primary text-[10px] font-bold flex items-center justify-center shrink-0 border border-border mt-0.5">
+                {getInitials(task.assignee.name)}
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-primary truncate" title={task.title}>{task.title}</p>
+              <div className="flex items-center gap-2 text-xs text-secondary mt-0.5">
+                <span className="truncate max-w-[120px]" title={task.project?.name}>{task.project?.name}</span>
+                <span>•</span>
+                <span className="whitespace-nowrap">{formatRelativeDate(task.updatedAt)}</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button 
+              disabled={submitting}
+              onClick={handleApprove}
+              className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+              title="Approve"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+            </button>
+            <button 
+              disabled={submitting}
+              onClick={handleRequestChangesClick}
+              className={`flex items-center justify-center h-8 w-8 rounded-lg transition-colors ${isRequestingChanges ? 'bg-amber-100 text-amber-700' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}
+              title="Request Changes"
+            >
+              <AlertTriangle className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      {isRequestingChanges && (
+        <div className="px-3 pb-3 pt-1" onClick={(e) => e.stopPropagation()}>
+          <textarea
+            autoFocus
+            value={commentText}
+            onChange={(e) => setCommentText(e.target.value)}
+            placeholder="What needs to be changed?"
+            className="w-full text-sm border border-border rounded-lg p-2.5 outline-none focus:border-primary resize-none h-20 bg-white"
+          />
+          <div className="flex justify-end gap-2 mt-2">
+            <button 
+              disabled={submitting}
+              onClick={() => setIsRequestingChanges(false)}
+              className="px-3 py-1.5 text-xs font-medium text-secondary hover:text-primary transition-colors"
+            >
+              Cancel
+            </button>
+            <button 
+              disabled={submitting || !commentText.trim()}
+              onClick={handleSubmitChanges}
+              className="px-3 py-1.5 text-xs font-medium text-white bg-primary rounded-lg hover:bg-[#1F2937] transition-colors disabled:opacity-50"
+            >
+              {submitting ? 'Submitting...' : 'Submit Feedback'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function DashboardPage() {
   const { user } = useAuthStore();
   const router = useRouter();
@@ -53,7 +176,55 @@ export default function DashboardPage() {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
-  const { data, refetch: fetchAll } = useDashboardData(user?.role);
+  const [datePreset, setDatePreset] = useState('all_time');
+  const [customRange, setCustomRange] = useState({ start: '', end: '' });
+
+  // Calculate actual startDate and endDate based on preset
+  const getDateRange = () => {
+    if (datePreset === 'all_time') {
+      return { startDate: undefined, endDate: undefined };
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    if (datePreset === 'today') {
+      return { startDate: today.toISOString(), endDate: endOfToday.toISOString() };
+    }
+    if (datePreset === 'this_week') {
+      const start = new Date(today);
+      start.setDate(today.getDate() - today.getDay());
+      return { startDate: start.toISOString(), endDate: endOfToday.toISOString() };
+    }
+    if (datePreset === 'this_month') {
+      const start = new Date(today.getFullYear(), today.getMonth(), 1);
+      return { startDate: start.toISOString(), endDate: endOfToday.toISOString() };
+    }
+    if (datePreset === 'last_30') {
+      const start = new Date(today);
+      start.setDate(today.getDate() - 29);
+      return { startDate: start.toISOString(), endDate: endOfToday.toISOString() };
+    }
+    if (datePreset === 'last_quarter') {
+      const start = new Date(today);
+      start.setMonth(today.getMonth() - 3);
+      return { startDate: start.toISOString(), endDate: endOfToday.toISOString() };
+    }
+    if (datePreset === 'custom' && customRange.start && customRange.end) {
+      const start = new Date(customRange.start);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(customRange.end);
+      end.setHours(23, 59, 59, 999);
+      return { startDate: start.toISOString(), endDate: end.toISOString() };
+    }
+    
+    // Default fallback
+    return { startDate: undefined, endDate: undefined };
+  };
+
+  const { data, refetch: fetchAll } = useDashboardData(user?.role, getDateRange());
   const { 
     stats, activity = [], deadlines = [], velocity = [], 
     statusDist = [], workload = [], myTasks = [], 
@@ -117,35 +288,74 @@ export default function DashboardPage() {
     { label: 'To Do', value: 'TODO' },
     { label: 'In Progress', value: 'IN_PROGRESS' },
     { label: 'In Review', value: 'REVIEW' },
+    { label: 'Approved', value: 'APPROVED' },
+    { label: 'Blocked', value: 'BLOCKED' },
     { label: 'Done', value: 'COMPLETED' },
   ];
 
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="pb-8 max-w-350 mx-auto p-4 md:p-8 space-y-8">
+    <motion.div variants={container} initial="hidden" animate="show" className="px-4 pt-4 md:px-8 md:pt-8 w-full max-w-7xl mx-auto space-y-8 pb-10">
       
       {/* HEADER */}
-      <motion.div variants={item} className="flex items-baseline gap-3">
-        <h1 className="text-2xl font-semibold text-primary tracking-tight">Overview</h1>
-        <p className="text-sm font-medium text-secondary">{user.role.replace('_', ' ').toLowerCase()}</p>
+      <motion.div variants={item} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-baseline gap-3">
+          <h1 className="text-2xl font-semibold text-primary tracking-tight">Overview</h1>
+          <p className="text-sm font-medium text-secondary">{user.role.replace('_', ' ').toLowerCase()}</p>
+        </div>
+        
+        {/* DATE RANGE FILTER */}
+        <div className="flex items-center gap-3">
+          {datePreset === 'custom' && (
+            <div className="flex items-center gap-2">
+              <input 
+                type="date" 
+                value={customRange.start} 
+                onChange={(e) => setCustomRange(prev => ({ ...prev, start: e.target.value }))}
+                className="text-sm px-3 py-2 border border-border rounded-lg bg-white outline-none focus:border-primary"
+              />
+              <span className="text-secondary">-</span>
+              <input 
+                type="date" 
+                value={customRange.end} 
+                onChange={(e) => setCustomRange(prev => ({ ...prev, end: e.target.value }))}
+                className="text-sm px-3 py-2 border border-border rounded-lg bg-white outline-none focus:border-primary"
+              />
+            </div>
+          )}
+          <Select 
+            value={datePreset} 
+            onChange={setDatePreset} 
+            options={[
+              { label: 'All Time', value: 'all_time' },
+              { label: 'Today', value: 'today' },
+              { label: 'This Week', value: 'this_week' },
+              { label: 'This Month', value: 'this_month' },
+              { label: 'Last 30 Days', value: 'last_30' },
+              { label: 'Last Quarter', value: 'last_quarter' },
+              { label: 'Custom Range', value: 'custom' },
+            ]}
+            className="w-44"
+          />
+        </div>
       </motion.div>
 
       {/* KPI GRID */}
       {isManager && (
         <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
-          <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Active Clients</p><Building2 className="w-4 h-4 shrink-0 text-[#9CA3AF]"/></div>
+          <div onClick={() => router.push('/clients?status=ACTIVE')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Active Clients</p><Building2 className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors"/></div>
             <p className="text-3xl font-semibold text-primary">{stats.activeClients}</p>
           </div>
-          <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Active Projects</p><FolderKanban className="w-4 h-4 shrink-0 text-[#9CA3AF]"/></div>
+          <div onClick={() => router.push('/projects?status=ACTIVE')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Active Projects</p><FolderKanban className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors"/></div>
             <p className="text-3xl font-semibold text-primary">{stats.activeProjects}</p>
           </div>
-          <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Delayed Projects</p><AlertTriangle className="w-4 h-4 shrink-0 text-[#9CA3AF]"/></div>
+          <div onClick={() => router.push('/projects?status=DELAYED')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Delayed Projects</p><AlertTriangle className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors"/></div>
             <p className="text-3xl font-semibold text-primary">{stats.delayedProjects}</p>
           </div>
-          <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Team Members</p><UsersRound className="w-4 h-4 shrink-0 text-[#9CA3AF]"/></div>
+          <div onClick={() => router.push('/team')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Team Members</p><UsersRound className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors"/></div>
             <p className="text-3xl font-semibold text-primary">{stats.totalMembers}</p>
           </div>
           <div onClick={() => router.push('/tasks?filter=overdue')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow cursor-pointer hover:bg-surface group h-full">
@@ -244,23 +454,7 @@ export default function DashboardPage() {
                 ) : (
                   <div className="space-y-1">
                     {pendingApprovals.map((t: any) => (
-                      <div 
-                        key={t.id} 
-                        onClick={() => router.push(`/tasks?taskId=${t.id}`)}
-                        className="flex items-center justify-between p-3 hover:bg-surface rounded-xl transition-all cursor-pointer border border-transparent hover:border-border"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          {t.assignee && (
-                            <div className="h-6 w-6 rounded-full bg-[#F3F4F6] text-primary text-[9px] font-bold flex items-center justify-center shrink-0 border border-border">
-                              {getInitials(t.assignee.name)}
-                            </div>
-                          )}
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-primary truncate">{t.title}</p>
-                            <p className="text-xs text-secondary truncate">{t.project.name}</p>
-                          </div>
-                        </div>
-                      </div>
+                      <PendingApprovalItem key={t.id} task={t} onRefresh={fetchAll} />
                     ))}
                   </div>
                 )}
@@ -316,31 +510,101 @@ export default function DashboardPage() {
             </motion.div>
           )}
 
+          {/* VELOCITY TREND CHART */}
+          {isManager && velocity.length > 0 && (
+            <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Activity className="w-4 h-4 text-secondary"/> Task Completion Velocity</h2>
+                <span className="text-xs font-medium text-secondary">Last 30 Days</span>
+              </div>
+              <div className="w-full relative" style={{ height: 256 }}>
+                <ResponsiveContainer width="100%" height={256}>
+                  <AreaChart data={velocity} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorTasks" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#111827" stopOpacity={0.1}/>
+                        <stop offset="95%" stopColor="#111827" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
+                    <XAxis 
+                      dataKey="name" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fontSize: 10, fill: '#9CA3AF' }} 
+                      dy={10} 
+                      minTickGap={20}
+                    />
+                    <YAxis 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fontSize: 10, fill: '#9CA3AF' }} 
+                      allowDecimals={false}
+                    />
+                    <RechartsTooltip content={<CustomTooltip />} cursor={{ stroke: '#D1D5DB', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                    <Area 
+                      type="monotone" 
+                      dataKey="tasks" 
+                      name="Completed Tasks" 
+                      stroke="#111827" 
+                      strokeWidth={2}
+                      fillOpacity={1} 
+                      fill="url(#colorTasks)" 
+                      activeDot={{ r: 4, strokeWidth: 0, fill: '#111827' }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </motion.div>
+          )}
+
         </div>
 
         {/* RIGHT COLUMN */}
         <div className="space-y-6">
           
           {/* UPCOMING DEADLINES */}
-          <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5">
+          <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4"><Clock className="w-4 h-4 text-secondary"/> Upcoming Deadlines</h2>
-            <div className="space-y-3 max-h-62.5 overflow-y-auto custom-scrollbar pr-1">
+            <div className="space-y-3 max-h-62.5 overflow-y-auto custom-scrollbar pr-1 flex-1">
               {deadlines.length === 0 ? (
                 <p className="text-sm text-secondary py-4">No deadlines in next 7 days.</p>
               ) : (
-                deadlines.map((d: any) => (
-                  <div key={d.id} onClick={() => router.push(`/projects/${d.project.id}`)} className="flex justify-between items-start p-2.5 hover:bg-surface rounded-xl cursor-pointer border border-border">
-                    <div className="min-w-0 pr-3">
-                      <p className="text-sm font-semibold text-primary truncate">{d.title}</p>
-                      <p className="text-xs text-secondary truncate">{d.project.name}</p>
+                deadlines.map((d: any) => {
+                  const daysRemaining = Math.ceil((new Date(d.dueDate).getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
+                  let dotColor = 'bg-[#9CA3AF]'; // Grey for 4+ days
+                  if (daysRemaining <= 1) dotColor = 'bg-[#EF4444] animate-pulse'; // Red for <= 1 day
+                  else if (daysRemaining <= 3) dotColor = 'bg-[#F59E0B]'; // Orange for <= 3 days
+
+                  return (
+                    <div 
+                      key={d.id} 
+                      onClick={() => handleOpenTask(d.id, null)} 
+                      title={`${d.title} (${d.project.name})`}
+                      className="flex justify-between items-start p-2.5 hover:bg-surface rounded-xl cursor-pointer border border-border group transition-all"
+                    >
+                      <div className="min-w-0 pr-3 flex gap-2.5 items-start">
+                        <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${dotColor}`} />
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-primary truncate group-hover:text-black transition-colors">{d.title}</p>
+                          <p className="text-xs text-secondary truncate">{d.project.name}</p>
+                        </div>
+                      </div>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 border rounded-sm shrink-0 ${new Date(d.dueDate) < todayStart ? 'bg-red-50 text-red-600 border-red-200' : 'bg-[#F3F4F6] text-primary border-border'}`}>
+                        {new Date(d.dueDate) < todayStart ? `OVERDUE: ${formatDate(d.dueDate)}` : formatDate(d.dueDate)}
+                      </span>
                     </div>
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 border rounded-sm shrink-0 ${new Date(d.dueDate) < todayStart ? 'bg-red-50 text-red-600 border-red-200' : 'bg-[#F3F4F6] text-primary border-border'}`}>
-                      {new Date(d.dueDate) < todayStart ? `OVERDUE: ${formatDate(d.dueDate)}` : formatDate(d.dueDate)}
-                    </span>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
+            {deadlines.length > 0 && (
+              <div className="mt-4 pt-3 border-t border-border flex justify-center">
+                <button onClick={() => router.push('/calendar')} className="text-xs font-semibold text-secondary hover:text-primary transition-colors flex items-center gap-1">
+                  View All in Calendar <ChevronRight className="w-3 h-3" />
+                </button>
+              </div>
+            )}
           </motion.div>
 
           {/* TEAM WORKLOAD CHART */}
@@ -349,12 +613,52 @@ export default function DashboardPage() {
               <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-6"><BarIcon className="w-4 h-4 text-secondary"/> Team Workload</h2>
               <div className="h-50 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={workload} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
+                  <BarChart data={workload} margin={{ top: 10, right: 10, left: 25, bottom: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} dy={10} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} />
-                    <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: '#FAFAFA' }} />
-                    <Bar dataKey="activeTasks" name="Active Tasks" radius={[2, 2, 0, 0]}>
+                    <XAxis 
+                      dataKey="name" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fontSize: 10, fill: '#6B7280' }} 
+                      dy={10} 
+                      tickFormatter={(name) => typeof name === 'string' ? name.split(' ')[0] : name} 
+                    />
+                    <YAxis 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fontSize: 10, fill: '#6B7280' }} 
+                      label={{ value: 'Active Tasks', angle: -90, position: 'insideLeft', offset: -10, style: { fontSize: 10, fill: '#6B7280' } }}
+                    />
+                    <RechartsTooltip 
+                      cursor={{ fill: '#FAFAFA' }} 
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-white/95 backdrop-blur-xl border border-border shadow-md rounded-xl p-3 min-w-30">
+                              <p className="text-[10px] font-bold text-secondary mb-1.5 uppercase tracking-wider">{data.name}</p>
+                              <div className="flex justify-between gap-4 text-sm items-center mb-1">
+                                <span className="font-medium text-primary">Active Tasks</span>
+                                <span className="font-semibold text-accent">{data.activeTasks}</span>
+                              </div>
+                              <div className="flex justify-between gap-4 text-sm items-center">
+                                <span className="font-medium text-primary">Completion Rate</span>
+                                <span className="font-semibold text-accent">{data.completionRate}%</span>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Bar 
+                      dataKey="activeTasks" 
+                      name="Active Tasks" 
+                      radius={[2, 2, 0, 0]}
+                      maxBarSize={50}
+                      onClick={(data) => router.push(`/team?memberId=${data.id}`)}
+                      className="cursor-pointer"
+                    >
                       {workload.map((entry: any, index: number) => (
                         <Cell key={`cell-${index}`} fill={entry.activeTasks > 8 ? '#6B7280' : '#111827'} />
                       ))}
@@ -365,15 +669,15 @@ export default function DashboardPage() {
             </motion.div>
           )}
 
-          {/* PROJECT STATUS CHART */}
+          {/* TASK STATUS CHART */}
           {isManager && statusDist.length > 0 && (
             <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5">
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-2"><PieIcon className="w-4 h-4 text-secondary"/> Project Status</h2>
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-2"><PieIcon className="w-4 h-4 text-secondary"/> Task Status Distribution</h2>
               <div className="h-50 w-full flex items-center justify-center">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={statusDist} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value">
-                      {statusDist.map((entry: any, index: number) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                      {statusDist.map((entry: any, index: number) => <Cell key={`cell-${index}`} fill={entry.color || COLORS[index % COLORS.length]} />)}
                     </Pie>
                     <RechartsTooltip content={<CustomTooltip />} />
                   </PieChart>
@@ -382,8 +686,8 @@ export default function DashboardPage() {
               <div className="flex flex-wrap justify-center gap-3 mt-2">
                 {statusDist.map((entry: any, index: number) => (
                   <div key={entry.name} className="flex items-center gap-1.5 text-xs font-medium text-secondary">
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
-                    {entry.name}
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color || COLORS[index % COLORS.length] }} />
+                    {entry.name} — {entry.value}
                   </div>
                 ))}
               </div>
@@ -392,39 +696,14 @@ export default function DashboardPage() {
 
           {/* RECENT ACTIVITY */}
           {isManager && (
-            <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Zap className="w-4 h-4 text-secondary"/> Activity Feed</h2>
-                <span className="flex h-1.5 w-1.5">
-                  <span className="animate-ping absolute inline-flex h-1.5 w-1.5 rounded-full bg-primary opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary"></span>
-                </span>
-              </div>
-              <div className="space-y-4 max-h-75 overflow-y-auto custom-scrollbar pr-2 relative">
-                {activity.length === 0 ? (
-                   <p className="text-sm text-secondary">No recent activity.</p>
-                ) : (
-                  <div className="absolute left-2.5 top-2 bottom-2 w-px bg-border -z-10" />
-                )}
-                {activity.map((item: any) => (
-                  <div key={item.id} className="flex gap-3 relative z-0">
-                    <div className="h-5 w-5 rounded-full bg-surface border border-border text-primary text-[8px] font-bold flex items-center justify-center shrink-0">
-                      {getInitials(item.user.name)}
-                    </div>
-                    <div className="pt-0.5">
-                      <p className="text-xs text-[#374151] leading-tight">
-                        <span className="font-semibold text-primary">{item.user.name}</span> {item.message}
-                      </p>
-                      <p className="text-[10px] text-[#9CA3AF] mt-0.5">{formatRelativeDate(item.createdAt)}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
+            <ActivityFeedWidget itemVariants={item} />
           )}
 
         </div>
       </div>
+      
+      {/* EXPLICIT BOTTOM SPACER */}
+      <div className="h-24 md:h-32 w-full shrink-0" aria-hidden="true" />
     </motion.div>
   );
 }

@@ -1,10 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
-import { TrendingUp, DollarSign, Target, Briefcase, Clock, ChevronRight } from 'lucide-react';
+import { TrendingUp, DollarSign, Target, Briefcase, Clock, ChevronRight, Filter, Calendar, CheckSquare, Square, ChevronDown } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { Select } from '@/components/ui/select';
+import { useMembers } from '@/hooks/useQueries';
+import { startOfMonth, startOfQuarter, startOfYear, subMonths, subQuarters, endOfMonth, endOfQuarter, endOfYear } from 'date-fns';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // Strict Monochromatic Palette matching design system
 const COLORS = ['#111827', '#4B5563', '#9CA3AF', '#D1D5DB', '#F3F4F6'];
@@ -16,52 +20,152 @@ const STAGE_LABELS: Record<string, string> = {
   WON_CLOSED: 'Won Closed', LOST_CLOSED: 'Lost Closed'
 };
 
+const ALL_STAGES = Object.keys(STAGE_LABELS);
+
 export function PipelineDashboard() {
-  const [metrics, setMetrics] = useState<any>(null);
-  const [recentLeads, setRecentLeads] = useState<any[]>([]);
+  const { data: members = [] } = useMembers();
+
+  const [allLeads, setAllLeads] = useState<any[]>([]);
+  const [loadingInitial, setLoadingInitial] = useState(true);
+  const [isFiltering, setIsFiltering] = useState(false);
+  
+  // Filters State
+  const [dateRange, setDateRange] = useState('ALL'); 
+  const [dateFilterType, setDateFilterType] = useState<'CREATED'|'CLOSE'>('CREATED');
+  const [customDateFrom, setCustomDateFrom] = useState('');
+  const [customDateTo, setCustomDateTo] = useState('');
+  
+  const [ownerFilter, setOwnerFilter] = useState('');
+  
+  const [selectedStages, setSelectedStages] = useState<string[]>(ALL_STAGES);
+  const [showStageDropdown, setShowStageDropdown] = useState(false);
+  const stageDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     api.get<any[]>('/crm/leads').then(data => {
-      const activeLeads = data.filter(l => !['WON_CLOSED', 'LOST_CLOSED'].includes(l.stage));
-      const totalPipelineValue = activeLeads.reduce((sum, l) => sum + (l.dealValue || 0), 0);
-      const wonValue = data.filter(l => ['WON_CLOSED', 'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(l.stage)).reduce((sum, l) => sum + (l.dealValue || 0), 0);
-      
-      // Stage Distribution for Bar Chart
-      const stageCounts: Record<string, number> = {};
-      activeLeads.forEach(l => {
-        stageCounts[l.stage] = (stageCounts[l.stage] || 0) + 1;
-      });
-      const barData = Object.entries(stageCounts)
-        .map(([stage, count]) => ({ name: STAGE_LABELS[stage] || stage, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 7);
-
-      // Value Distribution for Pie Chart
-      const stageValues: Record<string, number> = {};
-      activeLeads.forEach(l => {
-        if (l.dealValue) {
-          stageValues[l.stage] = (stageValues[l.stage] || 0) + l.dealValue;
-        }
-      });
-      const pieData = Object.entries(stageValues)
-        .map(([stage, value]) => ({ name: STAGE_LABELS[stage] || stage, value }))
-        .sort((a, b) => b.value - a.value)
-        .slice(0, 5);
-
-      setRecentLeads(data.slice(0, 6)); // 6 most recent
-      setMetrics({
-        totalLeads: data.length,
-        activeLeads: activeLeads.length,
-        pipelineValue: totalPipelineValue,
-        wonValue: wonValue,
-        barData,
-        pieData
-      });
+      setAllLeads(data);
+      setLoadingInitial(false);
     }).catch(console.error);
   }, []);
 
-  if (!metrics) {
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (stageDropdownRef.current && !stageDropdownRef.current.contains(event.target as Node)) {
+        setShowStageDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Trigger loading state briefly when filters change to show reactivity
+  useEffect(() => {
+    if (!loadingInitial) {
+      setIsFiltering(true);
+      const t = setTimeout(() => setIsFiltering(false), 300);
+      return () => clearTimeout(t);
+    }
+  }, [dateRange, dateFilterType, customDateFrom, customDateTo, ownerFilter, selectedStages, loadingInitial]);
+
+  const filteredLeads = useMemo(() => {
+    return allLeads.filter(lead => {
+      // 1. Stage Filter
+      if (!selectedStages.includes(lead.stage)) return false;
+
+      // 2. Owner Filter
+      if (ownerFilter && lead.assignedToId !== ownerFilter) return false;
+
+      // 3. Date Filter
+      if (dateRange !== 'ALL') {
+        const targetDateStr = dateFilterType === 'CREATED' ? lead.createdAt : lead.expectedCloseDate;
+        if (!targetDateStr) return false;
+        
+        const targetDate = new Date(targetDateStr);
+        const now = new Date();
+        
+        let start = new Date(0);
+        let end = new Date('2100-01-01');
+        
+        switch (dateRange) {
+          case 'THIS_MONTH':
+            start = startOfMonth(now);
+            end = endOfMonth(now);
+            break;
+          case 'LAST_MONTH':
+            start = startOfMonth(subMonths(now, 1));
+            end = endOfMonth(subMonths(now, 1));
+            break;
+          case 'THIS_QUARTER':
+            start = startOfQuarter(now);
+            end = endOfQuarter(now);
+            break;
+          case 'LAST_QUARTER':
+            start = startOfQuarter(subQuarters(now, 1));
+            end = endOfQuarter(subQuarters(now, 1));
+            break;
+          case 'THIS_YEAR':
+            start = startOfYear(now);
+            end = endOfYear(now);
+            break;
+          case 'CUSTOM':
+            if (customDateFrom) start = new Date(customDateFrom);
+            if (customDateTo) end = new Date(customDateTo);
+            break;
+        }
+
+        if (targetDate < start || targetDate > end) return false;
+      }
+
+      return true;
+    });
+  }, [allLeads, selectedStages, ownerFilter, dateRange, dateFilterType, customDateFrom, customDateTo]);
+
+  const metrics = useMemo(() => {
+    const activeLeads = filteredLeads.filter(l => !['WON_CLOSED', 'LOST_CLOSED'].includes(l.stage));
+    const totalPipelineValue = activeLeads.reduce((sum, l) => sum + (l.dealValue || 0), 0);
+    const wonValue = filteredLeads.filter(l => ['WON_CLOSED', 'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(l.stage)).reduce((sum, l) => sum + (l.dealValue || 0), 0);
+    
+    // Stage Distribution for Bar Chart
+    const stageCounts: Record<string, number> = {};
+    activeLeads.forEach(l => {
+      stageCounts[l.stage] = (stageCounts[l.stage] || 0) + 1;
+    });
+    const barData = Object.entries(stageCounts)
+      .map(([stage, count]) => ({ name: STAGE_LABELS[stage] || stage, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 7);
+
+    // Value Distribution for Pie Chart
+    const stageValues: Record<string, number> = {};
+    activeLeads.forEach(l => {
+      if (l.dealValue) {
+        stageValues[l.stage] = (stageValues[l.stage] || 0) + l.dealValue;
+      }
+    });
+    const pieData = Object.entries(stageValues)
+      .map(([stage, value]) => ({ name: STAGE_LABELS[stage] || stage, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+
+    return {
+      totalLeads: filteredLeads.length,
+      activeLeads: activeLeads.length,
+      pipelineValue: totalPipelineValue,
+      wonValue: wonValue,
+      barData,
+      pieData
+    };
+  }, [filteredLeads]);
+
+  const recentLeads = useMemo(() => {
+    return [...filteredLeads].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 6);
+  }, [filteredLeads]);
+
+
+  if (loadingInitial) {
     return <div className="animate-pulse space-y-6">
+      <div className="h-20 bg-gray-200/50 rounded-2xl mb-6"></div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[1,2,3,4].map(i => <div key={i} className="h-32 bg-gray-200/50 rounded-2xl"></div>)}
       </div>
@@ -94,12 +198,113 @@ export function PipelineDashboard() {
     return null;
   };
 
+  const toggleStage = (stage: string) => {
+    setSelectedStages(prev => prev.includes(stage) ? prev.filter(s => s !== stage) : [...prev, stage]);
+  };
+
   return (
     <div className="space-y-6 pb-8">
-      {/* Metrics Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      
+      {/* Filter Bar */}
+      <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-2xl border border-border shadow-sm">
         
-        <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full">
+        {/* Date Range */}
+        <div className="flex items-center gap-2">
+          <Select
+            value={dateRange}
+            onChange={setDateRange}
+            options={[
+              { label: 'All Time', value: 'ALL' },
+              { label: 'This Month', value: 'THIS_MONTH' },
+              { label: 'Last Month', value: 'LAST_MONTH' },
+              { label: 'This Quarter', value: 'THIS_QUARTER' },
+              { label: 'Last Quarter', value: 'LAST_QUARTER' },
+              { label: 'This Year', value: 'THIS_YEAR' },
+              { label: 'Custom Range', value: 'CUSTOM' }
+            ]}
+          />
+          {dateRange !== 'ALL' && (
+            <button
+              onClick={() => setDateFilterType(prev => prev === 'CREATED' ? 'CLOSE' : 'CREATED')}
+              className="px-3 py-2 text-xs font-medium rounded-lg border border-border bg-gray-50 text-secondary hover:text-primary transition-colors whitespace-nowrap"
+            >
+              By {dateFilterType === 'CREATED' ? 'Created Date' : 'Close Date'}
+            </button>
+          )}
+        </div>
+
+        {dateRange === 'CUSTOM' && (
+          <div className="flex items-center gap-2">
+            <input type="date" value={customDateFrom} onChange={(e) => setCustomDateFrom(e.target.value)} className="rounded-lg border border-border p-2 text-sm outline-none focus:border-primary text-secondary" />
+            <span className="text-secondary">-</span>
+            <input type="date" value={customDateTo} onChange={(e) => setCustomDateTo(e.target.value)} className="rounded-lg border border-border p-2 text-sm outline-none focus:border-primary text-secondary" />
+          </div>
+        )}
+
+        {/* Owner Filter */}
+        <div className="w-48">
+          <Select
+            value={ownerFilter}
+            onChange={setOwnerFilter}
+            options={[
+              { label: 'All Owners', value: '' },
+              ...members.map((m: any) => ({ label: m.name, value: m.id }))
+            ]}
+          />
+        </div>
+
+        {/* Stage Multi-Select */}
+        <div className="relative" ref={stageDropdownRef}>
+          <button
+            onClick={() => setShowStageDropdown(!showStageDropdown)}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-secondary hover:text-primary transition-colors min-w-40 justify-between"
+          >
+            <span>Stages ({selectedStages.length === ALL_STAGES.length ? 'All' : selectedStages.length})</span>
+            <ChevronDown className="w-4 h-4" />
+          </button>
+          
+          <AnimatePresence>
+            {showStageDropdown && (
+              <motion.div
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 5 }}
+                className="absolute top-full left-0 mt-2 w-64 bg-white border border-border rounded-xl shadow-lg z-50 max-h-80 overflow-y-auto"
+              >
+                <div className="p-2 space-y-1">
+                  <button
+                    onClick={() => setSelectedStages(selectedStages.length === ALL_STAGES.length ? [] : ALL_STAGES)}
+                    className="w-full text-left px-3 py-2 text-xs font-semibold text-primary hover:bg-gray-50 rounded-lg flex justify-between items-center"
+                  >
+                    {selectedStages.length === ALL_STAGES.length ? 'Deselect All' : 'Select All'}
+                  </button>
+                  <div className="h-px bg-border my-1" />
+                  {ALL_STAGES.map(stage => (
+                    <button
+                      key={stage}
+                      onClick={() => toggleStage(stage)}
+                      className="w-full text-left px-3 py-2 text-sm text-secondary hover:bg-gray-50 rounded-lg flex items-center gap-3 transition-colors"
+                    >
+                      {selectedStages.includes(stage) ? (
+                        <CheckSquare className="w-4 h-4 text-primary" />
+                      ) : (
+                        <Square className="w-4 h-4 text-gray-300" />
+                      )}
+                      {STAGE_LABELS[stage] || stage}
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      {/* Metrics Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 relative">
+        {isFiltering && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-2xl"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}
+        
+        <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full relative overflow-hidden">
           <div className="flex items-start justify-between gap-2 mb-3">
             <p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Total Pipeline Value</p>
             <DollarSign className="w-4 h-4 shrink-0 text-[#9CA3AF]" />
@@ -134,7 +339,8 @@ export function PipelineDashboard() {
       </div>
       
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative">
+        {isFiltering && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-2xl"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}
         
         <div className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-6">Leads by Stage</h2>
@@ -158,39 +364,47 @@ export function PipelineDashboard() {
         <div className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-6">Value Distribution</h2>
           <div className="h-[280px] w-full flex flex-col justify-center">
-            <ResponsiveContainer width="100%" height="80%">
-              <PieChart>
-                <Pie
-                  data={metrics.pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={90}
-                  paddingAngle={2}
-                  dataKey="value"
-                >
+            {metrics.pieData.length > 0 ? (
+              <>
+                <ResponsiveContainer width="100%" height="80%">
+                  <PieChart>
+                    <Pie
+                      data={metrics.pieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={90}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {metrics.pieData.map((entry: any, index: number) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<CustomTooltip />} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex flex-wrap justify-center gap-4 mt-2">
                   {metrics.pieData.map((entry: any, index: number) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    <div key={index} className="flex items-center gap-1.5 text-xs font-medium text-secondary">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></span>
+                      {entry.name}
+                    </div>
                   ))}
-                </Pie>
-                <Tooltip content={<CustomTooltip />} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="flex flex-wrap justify-center gap-4 mt-2">
-              {metrics.pieData.map((entry: any, index: number) => (
-                <div key={index} className="flex items-center gap-1.5 text-xs font-medium text-secondary">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></span>
-                  {entry.name}
                 </div>
-              ))}
-            </div>
+              </>
+            ) : (
+               <div className="flex-1 flex items-center justify-center text-sm text-secondary">No data for selected filters</div>
+            )}
           </div>
         </div>
 
       </div>
 
       {/* Recent Activity Table */}
-      <div className="rounded-2xl bg-white border border-border overflow-hidden">
+      <div className="rounded-2xl bg-white border border-border overflow-hidden relative">
+        {isFiltering && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}
+        
         <div className="p-5 border-b border-border flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Clock className="w-4 h-4 text-secondary"/> Recent Leads</h2>
         </div>
@@ -233,7 +447,7 @@ export function PipelineDashboard() {
               {recentLeads.length === 0 && (
                 <tr>
                   <td colSpan={4} className="px-5 py-6 text-center text-sm text-secondary">
-                    No leads found in your pipeline yet.
+                    No leads found matching your filters.
                   </td>
                 </tr>
               )}
