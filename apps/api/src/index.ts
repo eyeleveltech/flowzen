@@ -30,6 +30,7 @@ dotenv.config();
 dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
 
 const app = express();
+app.set('trust proxy', 1);
 
 import cookieParser from 'cookie-parser';
 

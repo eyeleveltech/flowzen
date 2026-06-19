@@ -34,7 +34,6 @@ npm-debug.log*
 .turbo/
 
 # Prisma
-apps/api/prisma/migrations/
 
 # Uploads
 uploads/
@@ -43,3 +42,4 @@ uploads/
 coverage/
 test-results/
 playwright-report/
+.env.save
