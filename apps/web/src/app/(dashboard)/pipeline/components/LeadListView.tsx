@@ -45,6 +45,7 @@ export function LeadListView() {
   const [dateAddedTo, setDateAddedTo] = useState(searchParams.get('dateAddedTo') || '');
 
   const [showMoreFilters, setShowMoreFilters] = useState(false);
+  const [showWonLost, setShowWonLost] = useState(false);
 
   const { data: members = [] } = useMembers();
 
@@ -126,6 +127,10 @@ export function LeadListView() {
     const clientName = lead.client?.name?.toLowerCase() || '';
     const company = lead.client?.company?.toLowerCase() || '';
     return clientName.includes(term) || company.includes(term);
+  }).filter(lead => {
+    // Hide Won/Lost by default unless the toggle is on or the user filtered to that stage.
+    if (showWonLost || stageFilter === 'WON_CLOSED' || stageFilter === 'LOST_CLOSED') return true;
+    return lead.stage !== 'WON_CLOSED' && lead.stage !== 'LOST_CLOSED';
   });
 
   return (
@@ -175,6 +180,16 @@ export function LeadListView() {
               <Filter className="h-4 w-4" />
               More Filters {activeFilterCount > 0 && `(${activeFilterCount})`}
             </button>
+
+            <label className="flex items-center gap-2 text-sm font-medium text-secondary cursor-pointer select-none whitespace-nowrap px-1">
+              <input
+                type="checkbox"
+                checked={showWonLost}
+                onChange={(e) => setShowWonLost(e.target.checked)}
+                className="rounded border-gray-300 text-primary focus:ring-primary"
+              />
+              Show Won/Lost
+            </label>
 
             {hasAnyFilter && (
               <button onClick={clearAllFilters} className="text-sm text-secondary hover:text-primary underline px-2 py-2 whitespace-nowrap">
@@ -338,7 +353,11 @@ export function LeadListView() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="inline-flex items-center text-xs font-medium text-primary bg-[#F3F4F6] border border-border px-2 py-0.5 rounded-md">
+                      <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md border ${
+                        lead.stage === 'WON_CLOSED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                        lead.stage === 'LOST_CLOSED' ? 'bg-red-50 text-red-700 border-red-200' :
+                        'text-primary bg-[#F3F4F6] border-border'
+                      }`}>
                         {lead.stage.replace(/_/g, ' ')}
                       </span>
                     </td>

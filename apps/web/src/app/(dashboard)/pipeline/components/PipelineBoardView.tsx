@@ -10,6 +10,7 @@ import { AnimatePresence } from 'framer-motion';
 import { ChevronDown, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { StageTransitionModal } from './StageTransitionModal';
+import { WonCelebrationModal } from './WonCelebrationModal';
 
 // All 15 pipeline stages in chronological order (used by the per-card stage menu)
 const PIPELINE_STAGES = [
@@ -56,6 +57,9 @@ export function PipelineBoardView() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Per-card stage menu: anchored dropdown to pick an exact stage (e.g. LEAD -> MQL within a group).
   const [stageMenu, setStageMenu] = useState<{ lead: any; x: number; y: number; up: boolean } | null>(null);
+  // Won celebration modal + Won/Lost column visibility.
+  const [wonModalLead, setWonModalLead] = useState<any>(null);
+  const [showWonLost, setShowWonLost] = useState(false);
 
   const openStageMenu = (e: React.MouseEvent, lead: any) => {
     e.stopPropagation();
@@ -133,11 +137,13 @@ export function PipelineBoardView() {
 
   async function submitStageTransition(payload: any) {
     if (!pendingTransition) return;
+    const lead = pendingTransition.lead;
     setIsSubmitting(true);
     try {
-      await api.post(`/crm/leads/${pendingTransition.lead.id}/stage`, payload);
+      await api.post(`/crm/leads/${lead.id}/stage`, payload);
       toast.success('Stage updated successfully');
       setPendingTransition(null);
+      if (payload?.stage === 'WON_CLOSED') setWonModalLead(lead);
       fetchLeads();
     } catch (err: any) {
       // Re-throw so the modal can surface the error and stay open.
@@ -146,6 +152,9 @@ export function PipelineBoardView() {
       setIsSubmitting(false);
     }
   }
+
+  // Hide Won/Lost columns by default; the "Show Won/Lost" toggle reveals them.
+  const visibleGroups = showWonLost ? GROUPS : GROUPS.filter(g => g.id !== 'Won' && g.id !== 'Lost');
 
   if (!isMounted || loading) {
     return (
@@ -156,11 +165,23 @@ export function PipelineBoardView() {
   }
 
   return (
-    <div className="flex-1 w-full overflow-hidden">
-      
-      <div className="flex h-full w-full overflow-x-auto overflow-y-hidden gap-4 pb-4 px-1 custom-scrollbar">
+    <div className="flex-1 w-full overflow-hidden flex flex-col">
+
+      <div className="flex items-center justify-end px-1 pb-2 shrink-0">
+        <label className="flex items-center gap-2 text-xs font-medium text-secondary cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={showWonLost}
+            onChange={(e) => setShowWonLost(e.target.checked)}
+            className="rounded border-gray-300 text-primary focus:ring-primary"
+          />
+          Show Won/Lost
+        </label>
+      </div>
+
+      <div className="flex flex-1 w-full overflow-x-auto overflow-y-hidden gap-4 pb-4 px-1 custom-scrollbar">
         <DragDropContext onDragEnd={handleDragEnd}>
-          {GROUPS.map((group) => {
+          {visibleGroups.map((group) => {
             const columnLeads = columns[group.id] || [];
             
             return (
@@ -302,6 +323,13 @@ export function PipelineBoardView() {
             onSubmit={submitStageTransition}
             isLoading={isSubmitting}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Won celebration after a lead is moved to WON_CLOSED */}
+      <AnimatePresence>
+        {wonModalLead && (
+          <WonCelebrationModal lead={wonModalLead} onClose={() => setWonModalLead(null)} />
         )}
       </AnimatePresence>
 

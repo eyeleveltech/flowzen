@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
@@ -81,6 +81,28 @@ function ProjectsContent() {
     }
   });
   const formValues = watch();
+
+  // Pre-fill the create form when opened from the pipeline "Won" flow
+  // (e.g. /projects?create=true&prefillName=…&prefillClientId=…&prefillBudget=…&prefillOwnerId=…)
+  const prefillApplied = useRef(false);
+  useEffect(() => {
+    if (prefillApplied.current) return;
+    const pName = searchParams.get('prefillName');
+    const pClientId = searchParams.get('prefillClientId');
+    const pBudget = searchParams.get('prefillBudget');
+    const pOwnerId = searchParams.get('prefillOwnerId');
+    if (pName || pClientId || pBudget || pOwnerId) {
+      prefillApplied.current = true;
+      if (pName) setValue('name', pName);
+      if (pClientId) setValue('clientId', pClientId);
+      if (pBudget) setValue('budget', pBudget);
+      if (pOwnerId) setValue('ownerId', pOwnerId);
+      // Strip the prefill params from the URL (keep create=true so the modal stays open)
+      const params = new URLSearchParams(searchParams.toString());
+      ['prefillName', 'prefillClientId', 'prefillBudget', 'prefillOwnerId'].forEach((k) => params.delete(k));
+      router.replace(`?${params.toString()}`, { scroll: false });
+    }
+  }, [searchParams, setValue, router]);
 
   const {
     data,

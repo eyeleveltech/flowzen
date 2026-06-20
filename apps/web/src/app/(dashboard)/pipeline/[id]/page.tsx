@@ -10,6 +10,7 @@ import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { STAGE_FIELDS } from '../lib/stage-config';
 import { StageTransitionModal } from '../components/StageTransitionModal';
+import { WonCelebrationModal } from '../components/WonCelebrationModal';
 import { EditLeadModal } from '../components/EditLeadModal';
 import { Pencil, Trash2, Send } from 'lucide-react';
 import { Select } from '@/components/ui/select';
@@ -27,6 +28,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const [targetStage, setTargetStage] = useState('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
+  const [wonModalLead, setWonModalLead] = useState<any>(null);
   
   // Safe unwrapping for Next.js 15 async params
   const { id: leadId } = use(params);
@@ -38,11 +40,14 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
 
   const stageMutation = useMutation({
     mutationFn: (payload: any) => api.post(`/crm/leads/${leadId}/stage`, payload),
-    onSuccess: () => {
+    onSuccess: (data: any, variables: any) => {
       queryClient.invalidateQueries({ queryKey: ['lead', leadId] });
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       setIsModalOpen(false);
       toast.success('Stage updated successfully');
+      if (variables?.stage === 'WON_CLOSED') {
+        setWonModalLead(data || lead);
+      }
     }
   });
 
@@ -317,6 +322,12 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
             }}
             isLoading={stageMutation.isPending}
           />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {wonModalLead && (
+          <WonCelebrationModal lead={wonModalLead} onClose={() => setWonModalLead(null)} />
         )}
       </AnimatePresence>
 

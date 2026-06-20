@@ -18,6 +18,7 @@ import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import toast from 'react-hot-toast';
 import { useAuthStore, useConfirmStore } from '@/stores';
 import { useTasks, useProjects, useMembers } from '@/hooks/useQueries';
+import { useQueryClient } from '@tanstack/react-query';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
 interface Task {
@@ -72,6 +73,7 @@ function TasksContent() {
   const searchParams = useSearchParams();
   const { user } = useAuthStore();
   const { confirm } = useConfirmStore();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
@@ -273,11 +275,27 @@ function TasksContent() {
   }
 
   async function updateTaskStatus(taskId: string, status: string) {
+    // Optimistic update so the UI reflects the change immediately (list, board, and panel).
+    queryClient.setQueriesData({ queryKey: ['tasks'] }, (old: any) => {
+      if (!old?.pages) return old;
+      return {
+        ...old,
+        pages: old.pages.map((page: any) => ({
+          ...page,
+          tasks: page.tasks.map((t: any) => (t.id === taskId ? { ...t, status } : t)),
+        })),
+      };
+    });
+    setBoardTasks(prev => prev.map(t => (t.id === taskId ? { ...t, status } : t)));
+    setSelectedTaskState(prev => (prev?.id === taskId ? { ...prev, status } : prev));
     try {
       await api.put(`/tasks/${taskId}`, { status });
       toast.success('Task status updated');
       refetchTasks();
-    } catch (err: any) { toast.error(err.message || 'Failed to update status'); }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update status');
+      refetchTasks(); // revert optimistic change on failure
+    }
   }
 
   async function deleteTask() {
@@ -812,7 +830,7 @@ function TasksContent() {
                       {kanbanCols.map((s) => (
                         <button
                           key={s}
-                          onClick={() => { updateTaskStatus(selectedTask.id, s); setSelectedTask({ ...selectedTask, status: s }); }}
+                          onClick={() => updateTaskStatus(selectedTask.id, s)}
                           className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${selectedTask.status === s ? 'bg-primary text-white' : 'border border-border text-secondary hover:bg-[#F9FAFB]'}`}
                         >
                           {kanbanLabels[s]}

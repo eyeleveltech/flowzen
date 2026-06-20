@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { X, Save, Upload, FileText, User, Briefcase, Mail, Phone, Building2, Calendar, DollarSign, Search, ChevronDown, Check, AlignLeft } from 'lucide-react';
+import { X, Save, Upload, FileText, User, Briefcase, Mail, Phone, Building2, Calendar, IndianRupee, Search, ChevronDown, Check, AlignLeft } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Select } from '@/components/ui/select';
 import { useMembers, useClients } from '@/hooks/useQueries';
@@ -325,8 +325,8 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
-                    <Field label="Deal Value" type="number" icon={<DollarSign className="h-4 w-4 text-secondary" />} value={form.dealValue} onChange={(v) => setForm({ ...form, dealValue: v })} placeholder="0.00" />
-                    <Field label="Expected Revenue (Monthly)" type="number" icon={<DollarSign className="h-4 w-4 text-secondary" />} value={form.expectedRevenue} onChange={(v) => setForm({ ...form, expectedRevenue: v })} placeholder="0.00" />
+                    <Field label="Deal Value (₹)" type="number" icon={<IndianRupee className="h-4 w-4 text-secondary" />} value={form.dealValue} onChange={(v) => setForm({ ...form, dealValue: v })} placeholder="0.00" />
+                    <Field label="Expected Revenue (Monthly, ₹)" type="number" icon={<IndianRupee className="h-4 w-4 text-secondary" />} value={form.expectedRevenue} onChange={(v) => setForm({ ...form, expectedRevenue: v })} placeholder="0.00" />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">

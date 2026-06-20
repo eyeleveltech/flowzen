@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
-import { TrendingUp, DollarSign, Target, Briefcase, Clock, ChevronRight, Filter, Calendar, CheckSquare, Square, ChevronDown } from 'lucide-react';
+import { TrendingUp, IndianRupee, Target, Briefcase, Clock, ChevronRight, Filter, Calendar, CheckSquare, Square, ChevronDown } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Select } from '@/components/ui/select';
 import { useMembers } from '@/hooks/useQueries';
@@ -148,13 +148,35 @@ export function PipelineDashboard() {
       .sort((a, b) => b.value - a.value)
       .slice(0, 5);
 
+    // Won & Lost closed deals + lost-reason breakdown
+    const wonClosed = filteredLeads.filter(l => l.stage === 'WON_CLOSED');
+    const lostClosed = filteredLeads.filter(l => l.stage === 'LOST_CLOSED');
+    const lostReasonLabels: Record<string, string> = {
+      BUDGET: 'Price too high', COMPETITOR: 'Competitor', NO_BUDGET: 'No budget',
+      UNRESPONSIVE: 'No decision', TIMING: 'Timing', SCOPE_MISMATCH: 'Requirements',
+      INTERNAL_CHANGE: 'Internal change', OTHER: 'Other',
+    };
+    const reasonCounts: Record<string, number> = {};
+    lostClosed.forEach(l => {
+      const key = l.lostReason || 'OTHER';
+      reasonCounts[key] = (reasonCounts[key] || 0) + 1;
+    });
+    const lostReasonData = Object.entries(reasonCounts)
+      .map(([reason, count]) => ({ name: lostReasonLabels[reason] || reason, count }))
+      .sort((a, b) => b.count - a.count);
+
     return {
       totalLeads: filteredLeads.length,
       activeLeads: activeLeads.length,
       pipelineValue: totalPipelineValue,
       wonValue: wonValue,
       barData,
-      pieData
+      pieData,
+      wonCount: wonClosed.length,
+      wonClosedValue: wonClosed.reduce((sum, l) => sum + (l.dealValue || 0), 0),
+      lostCount: lostClosed.length,
+      lostValue: lostClosed.reduce((sum, l) => sum + (l.dealValue || 0), 0),
+      lostReasonData,
     };
   }, [filteredLeads]);
 
@@ -307,7 +329,7 @@ export function PipelineDashboard() {
         <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full relative overflow-hidden">
           <div className="flex items-start justify-between gap-2 mb-3">
             <p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Total Pipeline Value</p>
-            <DollarSign className="w-4 h-4 shrink-0 text-[#9CA3AF]" />
+            <IndianRupee className="w-4 h-4 shrink-0 text-[#9CA3AF]" />
           </div>
           <p className="text-3xl font-semibold text-primary">{formatCurrency(metrics.pipelineValue)}</p>
         </div>
@@ -401,6 +423,60 @@ export function PipelineDashboard() {
 
       </div>
 
+      {/* Won & Lost Deals */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative">
+        {isFiltering && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-2xl"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}
+
+        {/* Won Deals */}
+        <div className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4">
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" /> Won Deals
+          </h2>
+          <div className="flex items-end gap-8">
+            <div>
+              <p className="text-3xl font-semibold text-emerald-600">{metrics.wonCount}</p>
+              <p className="text-xs text-secondary mt-1">deals won</p>
+            </div>
+            <div>
+              <p className="text-2xl font-semibold text-primary">{formatCurrency(metrics.wonClosedValue)}</p>
+              <p className="text-xs text-secondary mt-1">total won value</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Lost Deals + Reason for Loss breakdown */}
+        <div className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4">
+            <span className="inline-block w-2 h-2 rounded-full bg-red-500" /> Lost Deals
+          </h2>
+          <div className="flex items-end gap-8 mb-4">
+            <div>
+              <p className="text-3xl font-semibold text-red-600">{metrics.lostCount}</p>
+              <p className="text-xs text-secondary mt-1">deals lost</p>
+            </div>
+            <div>
+              <p className="text-2xl font-semibold text-primary">{formatCurrency(metrics.lostValue)}</p>
+              <p className="text-xs text-secondary mt-1">value lost</p>
+            </div>
+          </div>
+          <p className="text-xs font-semibold text-secondary uppercase tracking-wider mb-2">Reason for Loss</p>
+          {metrics.lostReasonData.length > 0 ? (
+            <div className="h-[160px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={metrics.lostReasonData} layout="vertical" margin={{ top: 0, right: 12, left: 10, bottom: 0 }}>
+                  <XAxis type="number" hide />
+                  <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} width={90} tick={{ fontSize: 10, fill: '#6B7280' }} />
+                  <Tooltip cursor={{ fill: '#FAFAFA' }} />
+                  <Bar dataKey="count" name="Lost" radius={[0, 4, 4, 0]} fill="#dc2626" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-[160px] flex items-center justify-center text-sm text-secondary">No lost deals in range</div>
+          )}
+        </div>
+      </div>
+
       {/* Recent Activity Table */}
       <div className="rounded-2xl bg-white border border-border overflow-hidden relative">
         {isFiltering && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}
@@ -428,7 +504,11 @@ export function PipelineDashboard() {
                     </div>
                   </td>
                   <td className="px-5 py-3">
-                    <span className="inline-flex items-center text-xs font-medium text-primary bg-[#F3F4F6] border border-border px-2 py-0.5 rounded-md">
+                    <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md border ${
+                      lead.stage === 'WON_CLOSED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                      lead.stage === 'LOST_CLOSED' ? 'bg-red-50 text-red-700 border-red-200' :
+                      'text-primary bg-[#F3F4F6] border-border'
+                    }`}>
                       {STAGE_LABELS[lead.stage] || lead.stage}
                     </span>
                   </td>

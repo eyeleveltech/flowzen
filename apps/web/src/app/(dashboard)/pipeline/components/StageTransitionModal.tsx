@@ -51,6 +51,7 @@ export function StageTransitionModal({ currentStage, targetStage, onClose, onSub
   const [expectedCloseDate, setExpectedCloseDate] = useState('');
   const [contractType, setContractType] = useState('RETAINER');
   const [lostReason, setLostReason] = useState('BUDGET');
+  const [lostReasonOther, setLostReasonOther] = useState('');
   const [notes, setNotes] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -71,6 +72,9 @@ export function StageTransitionModal({ currentStage, targetStage, onClose, onSub
     
     if (targetStage === 'LOST_CLOSED') {
       payload.lostReason = lostReason;
+      if (lostReason === 'OTHER' && lostReasonOther.trim()) {
+        payload.notes = [notes.trim(), lostReasonOther.trim()].filter(Boolean).join(' — ') || undefined;
+      }
     }
 
     try {
@@ -140,9 +144,34 @@ export function StageTransitionModal({ currentStage, targetStage, onClose, onSub
             )}
 
             {targetStage === 'LOST_CLOSED' && (
-              <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">Lost Reason</label>
-                <Select value={lostReason} onChange={setLostReason} options={['BUDGET', 'COMPETITOR', 'NO_BUDGET', 'TIMING', 'UNRESPONSIVE', 'SCOPE_MISMATCH', 'INTERNAL_CHANGE', 'OTHER'].map(r => ({ label: r.replace('_', ' '), value: r }))} />
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Reason for Loss <span className="text-red-500">*</span></label>
+                  <Select
+                    value={lostReason}
+                    onChange={setLostReason}
+                    options={[
+                      { label: 'Price too high', value: 'BUDGET' },
+                      { label: 'Went with competitor', value: 'COMPETITOR' },
+                      { label: 'No budget', value: 'NO_BUDGET' },
+                      { label: 'No decision made', value: 'UNRESPONSIVE' },
+                      { label: 'Timing not right', value: 'TIMING' },
+                      { label: 'Requirements not met', value: 'SCOPE_MISMATCH' },
+                      { label: 'Other', value: 'OTHER' },
+                    ]}
+                  />
+                </div>
+                {lostReason === 'OTHER' && (
+                  <div>
+                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Please specify</label>
+                    <textarea
+                      value={lostReasonOther}
+                      onChange={(e) => setLostReasonOther(e.target.value)}
+                      placeholder="Describe the reason this deal was lost..."
+                      className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary min-h-[70px]"
+                    />
+                  </div>
+                )}
               </div>
             )}
 

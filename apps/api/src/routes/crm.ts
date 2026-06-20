@@ -366,9 +366,9 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
       }
     }
 
-    // Auto-update Client Status if moving to Contract or beyond
-    const activeStages = ['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT'];
-    if (activeStages.includes(stage) && existingLead.client.status === 'PROSPECT') {
+    // Auto-update Client Status (lifecycle: Prospect -> Active on won/contract, Churned on lost)
+    const activeStages = ['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'WON_CLOSED'];
+    if (activeStages.includes(stage) && existingLead.client.status !== 'ACTIVE') {
       await prisma.client.update({
         where: { id: existingLead.clientId },
         data: { status: 'ACTIVE' }
@@ -377,6 +377,24 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
       await prisma.client.update({
         where: { id: existingLead.clientId },
         data: { status: 'CHURNED' }
+      });
+    }
+
+    // Log a Won/Lost activity so it shows in the lead's Activity tab
+    if (stage === 'WON_CLOSED' || stage === 'LOST_CLOSED') {
+      const reasonLabel = lostReason ? String(lostReason).replace(/_/g, ' ') : null;
+      await prisma.activity.create({
+        data: {
+          type: 'STAGE_CHANGED',
+          message: stage === 'WON_CLOSED' ? 'marked this deal as Won 🎉' : 'marked this deal as Lost',
+          entityType: 'LEAD',
+          entityId: leadId,
+          userId: req.user!.userId,
+          leadId,
+          metadata: stage === 'LOST_CLOSED'
+            ? { notes: [reasonLabel ? `Reason: ${reasonLabel}` : null, notes || null].filter(Boolean).join(' — ') || null }
+            : undefined,
+        }
       });
     }
 
