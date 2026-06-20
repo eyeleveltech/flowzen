@@ -121,9 +121,12 @@ projectRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
         members: { include: { user: { select: { id: true, name: true, avatar: true, role: true } } } },
         teams: { include: { team: { include: { members: { select: { id: true, name: true, avatar: true, role: true } } } } } },
         tasks: {
-          where: req.user!.role === 'TEAM_MEMBER' ? { assigneeId: req.user!.userId } : undefined,
+          where: req.user!.role === 'TEAM_MEMBER'
+            ? { OR: [{ assigneeId: req.user!.userId }, { assignees: { some: { id: req.user!.userId } } }] }
+            : undefined,
           include: {
             assignee: { select: { id: true, name: true, avatar: true } },
+            assignees: { select: { id: true, name: true, avatar: true } },
             _count: { select: { subtasks: true, comments: true } },
           },
           orderBy: [{ status: 'asc' }, { order: 'asc' }],
@@ -277,9 +280,12 @@ projectRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), 
         members: { include: { user: { select: { id: true, name: true, avatar: true, role: true } } } },
         teams: { include: { team: { include: { members: { select: { id: true, name: true, avatar: true, role: true } } } } } },
         tasks: {
-          where: req.user!.role === 'TEAM_MEMBER' ? { assigneeId: req.user!.userId } : undefined,
+          where: req.user!.role === 'TEAM_MEMBER'
+            ? { OR: [{ assigneeId: req.user!.userId }, { assignees: { some: { id: req.user!.userId } } }] }
+            : undefined,
           include: {
             assignee: { select: { id: true, name: true, avatar: true } },
+            assignees: { select: { id: true, name: true, avatar: true } },
             _count: { select: { subtasks: true, comments: true } },
           },
           orderBy: [{ status: 'asc' }, { order: 'asc' }],

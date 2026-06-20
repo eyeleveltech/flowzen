@@ -227,6 +227,7 @@ model User {
   team           Team?           @relation("TeamMembers", fields: [teamId], references: [id])
   ownedProjects  Project[]       @relation("ProjectOwner")
   assignedTasks  Task[]          @relation("TaskAssignee")
+  assignedTasksMulti Task[]      @relation("TaskAssignees")
   reviewedTasks  Task[]          @relation("TaskReviewer")
   apiKeys        ApiKey[]
   comments       Comment[]
@@ -407,6 +408,7 @@ model Task {
   lead       Lead?           @relation("LeadTasks", fields: [leadId], references: [id], onDelete: Cascade)
   client     Client?         @relation("ClientTasks", fields: [clientId], references: [id], onDelete: Cascade)
   assignee   User?           @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  assignees  User[]          @relation("TaskAssignees")
   reviewer   User?           @relation("TaskReviewer", fields: [reviewerId], references: [id])
   parent     Task?           @relation("SubTasks", fields: [parentId], references: [id])
   subtasks   Task[]          @relation("SubTasks")

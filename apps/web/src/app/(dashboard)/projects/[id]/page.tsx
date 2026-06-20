@@ -28,6 +28,7 @@ interface ProjectDetail {
     id: string; title: string; status: string; priority: string; dueDate?: string | null; order: number;
     loggedHours?: number | null;
     assignee?: { id: string; name: string; avatar?: string | null } | null;
+    assignees?: { id: string; name: string; avatar?: string | null }[];
     _count?: { subtasks: number; comments: number };
   }[];
   milestones?: { id: string; name: string; dueDate?: string | null; completed: boolean }[];
@@ -59,7 +60,7 @@ export default function ProjectDetailPage() {
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [isEditingTask, setIsEditingTask] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState('');
-  const [taskForm, setTaskForm] = useState({ title: '', description: '', type: 'OTHER', assigneeId: '', reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: '', assignedDate: '', loggedHours: 0, driveLink: '' });
+  const [taskForm, setTaskForm] = useState({ title: '', description: '', type: 'OTHER', assigneeIds: [] as string[], reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: '', assignedDate: '', loggedHours: 0, driveLink: '' });
   const [submittingTask, setSubmittingTask] = useState(false);
   // Task filters within this project's Tasks tab
   const [taskSearch, setTaskSearch] = useState('');
@@ -110,7 +111,7 @@ export default function ProjectDetailPage() {
         await api.put(`/tasks/${editingTaskId}`, {
           ...taskForm,
           projectId: project?.id,
-          assigneeId: taskForm.assigneeId || undefined,
+          assigneeIds: taskForm.assigneeIds,
           reviewerId: taskForm.reviewerId || undefined,
           dueDate: taskForm.dueDate || undefined,
           driveLink: taskForm.driveLink || undefined,
@@ -119,7 +120,7 @@ export default function ProjectDetailPage() {
         await api.post('/tasks', {
           ...taskForm,
           projectId: project?.id,
-          assigneeId: taskForm.assigneeId || undefined,
+          assigneeIds: taskForm.assigneeIds,
           reviewerId: taskForm.reviewerId || undefined,
           dueDate: taskForm.dueDate || undefined,
           assignedDate: taskForm.assignedDate || undefined,
@@ -130,7 +131,7 @@ export default function ProjectDetailPage() {
       setShowCreateTask(false);
       setIsEditingTask(false);
       setEditingTaskId('');
-      setTaskForm({ title: '', description: '', type: 'OTHER', assigneeId: '', reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: new Date().toISOString().split('T')[0], assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '' });
+      setTaskForm({ title: '', description: '', type: 'OTHER', assigneeIds: [], reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: new Date().toISOString().split('T')[0], assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '' });
       const updated = await api.get<ProjectDetail>(`/projects/${id}`);
       setProject(updated);
       // The global Tasks list + dashboard read cached data — refresh them.
@@ -147,7 +148,7 @@ export default function ProjectDetailPage() {
       title: t.title,
       description: t.description || '',
       type: t.type || 'OTHER',
-      assigneeId: t.assignee?.id || '',
+      assigneeIds: t.assignees?.length ? t.assignees.map((a: any) => a.id) : (t.assignee ? [t.assignee.id] : []),
       reviewerId: t.reviewer?.id || '',
       priority: t.priority,
       status: t.status,
@@ -162,7 +163,7 @@ export default function ProjectDetailPage() {
   }
 
   function openCreateTask() {
-    setTaskForm({ title: '', description: '', type: 'OTHER', assigneeId: '', reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: new Date().toISOString().split('T')[0], assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '' });
+    setTaskForm({ title: '', description: '', type: 'OTHER', assigneeIds: [], reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: new Date().toISOString().split('T')[0], assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '' });
     setIsEditingTask(false);
     setEditingTaskId('');
     setShowCreateTask(true);
@@ -704,7 +705,7 @@ export default function ProjectDetailPage() {
                         {t.assignee ? (
                           <div className="flex items-center gap-1.5">
  <div className={`h-5 w-5 rounded-full text-[8px] font-semibold flex items-center justify-center ${getAvatarColor(t.assignee.name)}`}>{getInitials(t.assignee.name)}</div>
-                            <span className="text-sm text-[#374151]">{t.assignee.name}</span>
+                            <span className="text-sm text-[#374151]">{t.assignee.name}{(t.assignees?.length || 0) > 1 ? ` +${t.assignees!.length - 1}` : ''}</span>
                           </div>
                         ) : <span className="text-sm text-[#9CA3AF]">—</span>}
                       </td>
@@ -777,7 +778,7 @@ export default function ProjectDetailPage() {
  <div className={`h-6 w-6 rounded-full text-[10px] font-semibold flex items-center justify-center ${getAvatarColor(t.assignee.name)}`}>
                             {getInitials(t.assignee.name)}
                           </div>
-                          <span className="text-xs font-medium text-[#374151]">{t.assignee.name}</span>
+                          <span className="text-xs font-medium text-[#374151]">{t.assignee.name}{(t.assignees?.length || 0) > 1 ? ` +${t.assignees!.length - 1}` : ''}</span>
                         </>
                       ) : (
                         <span className="text-xs text-[#9CA3AF]">Unassigned</span>
@@ -963,11 +964,12 @@ export default function ProjectDetailPage() {
                     />
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignee</label>
-                    <Select
-                      value={taskForm.assigneeId}
-                      onChange={(val) => setTaskForm({ ...taskForm, assigneeId: val })}
-                      options={[{ label: 'Unassigned', value: '' }, ...allProjectMembers.map((m) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
+                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignees</label>
+                    <MultiSelect
+                      value={taskForm.assigneeIds}
+                      onChange={(vals) => setTaskForm({ ...taskForm, assigneeIds: vals })}
+                      placeholder="Add assignees..."
+                      options={allProjectMembers.map((m) => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name) }))}
                     />
                   </div>
                   <div>

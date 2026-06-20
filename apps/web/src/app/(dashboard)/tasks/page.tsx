@@ -11,6 +11,7 @@ import { getSSE } from '@/lib/sse';
 import { formatDate, formatShortDate, getInitials, getAvatarColor, triggerHaptic } from '@/lib/utils';
 import { Plus, Search, X, MessageSquare, CheckCircle2, ListChecks, Trash2 } from 'lucide-react';
 import { Select } from '@/components/ui/select';
+import { MultiSelect } from '@/components/ui/multi-select';
 import { Drawer } from '@/components/ui/drawer';
 import { SwipeableCard } from '@/components/ui/swipeable-card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -29,6 +30,7 @@ interface Task {
   type: string; driveLink?: string | null; reviewerId?: string | null;
   project?: { id: string; name: string };
   assignee?: { id: string; name: string; avatar?: string | null } | null;
+  assignees?: { id: string; name: string; avatar?: string | null }[];
   reviewer?: { id: string; name: string; avatar?: string | null } | null;
   _count?: { subtasks: number; comments: number };
   comments?: { id: string; content: string; createdAt: string; author: { id: string; name: string; avatar?: string | null } }[];
@@ -48,12 +50,41 @@ const priorityDots: Record<string, string> = {
   LOW: 'bg-gray-300', MEDIUM: 'bg-blue-400', HIGH: 'bg-orange-500', URGENT: 'bg-red-500',
 };
 
+type AssigneePerson = { id: string; name: string; avatar?: string | null };
+function taskAssignees(task: { assignees?: AssigneePerson[]; assignee?: AssigneePerson | null }): AssigneePerson[] {
+  return task.assignees && task.assignees.length ? task.assignees : (task.assignee ? [task.assignee] : []);
+}
+function assigneeLabel(task: { assignees?: AssigneePerson[]; assignee?: AssigneePerson | null }): string {
+  const people = taskAssignees(task);
+  if (!people.length) return 'Unassigned';
+  return people.length === 1 ? people[0].name : `${people[0].name} +${people.length - 1}`;
+}
+function AssigneeAvatars({ task, size = 26 }: { task: { assignees?: AssigneePerson[]; assignee?: AssigneePerson | null }; size?: number }) {
+  const people = taskAssignees(task);
+  if (!people.length) return null;
+  const shown = people.slice(0, 3);
+  const extra = people.length - shown.length;
+  return (
+    <div className="flex -space-x-1.5">
+      {shown.map((p) => (
+        <div key={p.id} title={p.name} style={{ height: size, width: size }} className={`flex items-center justify-center rounded-full text-[10px] font-medium ring-2 ring-white ${getAvatarColor(p.name)}`}>
+          {getInitials(p.name)}
+        </div>
+      ))}
+      {extra > 0 && (
+        <div style={{ height: size, width: size }} className="flex items-center justify-center rounded-full text-[10px] font-medium ring-2 ring-white bg-[#F3F4F6] text-[#6B7280]">+{extra}</div>
+      )}
+    </div>
+  );
+}
+
 const taskSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   description: z.string().optional(),
   type: z.string().optional(),
   projectId: z.string().min(1, 'Project is required'),
   assigneeId: z.string().optional(),
+  assigneeIds: z.array(z.string()).optional(),
   reviewerId: z.string().optional(),
   priority: z.string(),
   status: z.string(),
@@ -156,7 +187,7 @@ function TasksContent() {
 
   const { register, handleSubmit, control, reset, watch, formState: { errors } } = useForm<TaskFormValues>({
     resolver: zodResolver(taskSchema),
-    defaultValues: { title: '', description: '', type: 'OTHER', projectId: '', assigneeId: '', reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: '', assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '' },
+    defaultValues: { title: '', description: '', type: 'OTHER', projectId: '', assigneeId: '', assigneeIds: [], reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: '', assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '' },
   });
   const [submitting, setSubmitting] = useState(false);
   const [commentContent, setCommentContent] = useState('');
@@ -223,7 +254,7 @@ function TasksContent() {
     try {
       await api.post('/tasks', {
         ...data,
-        assigneeId: data.assigneeId || undefined,
+        assigneeIds: data.assigneeIds || [],
         reviewerId: data.reviewerId || undefined,
         dueDate: data.dueDate || undefined,
         assignedDate: data.assignedDate || undefined,
@@ -242,7 +273,7 @@ function TasksContent() {
     try {
       await api.put(`/tasks/${selectedTask.id}`, {
         ...data,
-        assigneeId: data.assigneeId || undefined,
+        assigneeIds: data.assigneeIds || [],
         reviewerId: data.reviewerId || undefined,
         dueDate: data.dueDate || undefined,
         assignedDate: data.assignedDate || undefined,
@@ -264,7 +295,7 @@ function TasksContent() {
       description: t.description || '',
       type: t.type || 'OTHER',
       projectId: t.project?.id || t.projectId || '',
-      assigneeId: t.assignee?.id || '',
+      assigneeIds: t.assignees?.length ? t.assignees.map((a) => a.id) : (t.assignee ? [t.assignee.id] : []),
       reviewerId: t.reviewer?.id || '',
       priority: t.priority,
       status: t.status,
@@ -501,11 +532,7 @@ function TasksContent() {
                                             <MessageSquare className="h-3 w-3" /> {t._count?.comments}
                                           </span>
                                         )}
-                                        {t.assignee && (
- <div className={`flex h-[26px] w-[26px] items-center justify-center rounded-full text-[10px] font-medium ${getAvatarColor(t.assignee.name)}`}>
-                                            {getInitials(t.assignee.name)}
-                                          </div>
-                                        )}
+                                        <AssigneeAvatars task={t} size={26} />
                                         {(t.loggedHours ?? 0) > 0 && (
                                           <span className="text-[10px] text-secondary bg-[#F3F4F6] px-1.5 py-0.5 rounded-md font-medium tabular-nums border border-border">
                                             ⏱ {t.loggedHours}h
@@ -559,10 +586,10 @@ function TasksContent() {
                           </td>
                           <td className="px-6 py-3.5 text-sm text-secondary">{t.project?.name}</td>
                           <td className="px-6 py-3.5">
-                            {t.assignee ? (
+                            {taskAssignees(t).length ? (
                               <div className="flex items-center gap-2">
- <div className={`h-6 w-6 rounded-full text-[10px] font-semibold flex items-center justify-center ${getAvatarColor(t.assignee.name)}`}>{getInitials(t.assignee.name)}</div>
-                                <span className="text-sm text-[#374151]">{t.assignee.name}</span>
+                                <AssigneeAvatars task={t} size={24} />
+                                <span className="text-sm text-[#374151]">{assigneeLabel(t)}</span>
                               </div>
                             ) : <span className="text-sm text-[#9CA3AF]">Unassigned</span>}
                           </td>
@@ -606,11 +633,7 @@ function TasksContent() {
                           {t.status.replace('_', ' ')}
                         </span>
                         <div className="flex items-center gap-2">
-                          {t.assignee && (
- <div className={`flex h-[24px] w-[24px] items-center justify-center rounded-full text-[9px] font-medium ${getAvatarColor(t.assignee.name)}`}>
-                              {getInitials(t.assignee.name)}
-                            </div>
-                          )}
+                          <AssigneeAvatars task={t} size={24} />
                         </div>
                       </div>
                     </div>
@@ -747,12 +770,13 @@ function TasksContent() {
                     )} />
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignee</label>
-                    <Controller name="assigneeId" control={control} render={({ field }) => (
-                      <Select
-                        value={field.value || ''}
+                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignees</label>
+                    <Controller name="assigneeIds" control={control} render={({ field }) => (
+                      <MultiSelect
+                        value={field.value || []}
                         onChange={field.onChange}
-                        options={[{ label: 'Unassigned', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
+                        placeholder="Add assignees..."
+                        options={availableAssignees.map((m: any) => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name) }))}
                       />
                     )} />
                   </div>
@@ -798,9 +822,11 @@ function TasksContent() {
                     <span className="text-sm text-secondary">Project</span>
                     <span className="text-sm font-medium text-primary">{selectedTask.project?.name}</span>
                   </div>
-                  <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                    <span className="text-sm text-secondary">Assignee</span>
-                    <span className="text-sm font-medium text-primary">{selectedTask.assignee?.name || 'Unassigned'}</span>
+                  <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6] gap-3">
+                    <span className="text-sm text-secondary shrink-0">Assignees</span>
+                    <span className="text-sm font-medium text-primary text-right">
+                      {taskAssignees(selectedTask).length ? taskAssignees(selectedTask).map((a) => a.name).join(', ') : 'Unassigned'}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
                     <span className="text-sm text-secondary">Created</span>
@@ -986,12 +1012,13 @@ function TasksContent() {
               )} />
             </div>
             <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignee</label>
-              <Controller name="assigneeId" control={control} render={({ field }) => (
-                <Select
-                  value={field.value || ''}
+              <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignees</label>
+              <Controller name="assigneeIds" control={control} render={({ field }) => (
+                <MultiSelect
+                  value={field.value || []}
                   onChange={field.onChange}
-                  options={[{ label: 'Unassigned', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
+                  placeholder="Add assignees..."
+                  options={availableAssignees.map((m: any) => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name) }))}
                 />
               )} />
             </div>

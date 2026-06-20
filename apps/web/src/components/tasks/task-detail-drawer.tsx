@@ -53,8 +53,11 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
   const [posting, setPosting] = useState(false);
   const { confirm } = useConfirmStore();
 
-  // Managers can always manage; assignees can manage their own task.
-  const manage = canManage || (!!currentUserId && task?.assignee?.id === currentUserId);
+  // Managers can always manage; any assignee can manage their own task.
+  const manage = canManage || (!!currentUserId && (
+    task?.assignee?.id === currentUserId ||
+    (task?.assignees || []).some((a: any) => a.id === currentUserId)
+  ));
   const dueOverdue = !!(task?.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'COMPLETED');
 
   async function deleteTask() {
@@ -160,7 +163,7 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
             <div className="space-y-1">
               <Row label="Project" value={task.project?.name} />
               <Row label="Task Type" value={titleCase(task.type)} />
-              <Row label="Assignee" value={task.assignee?.name || 'Unassigned'} highlight />
+              <Row label="Assignees" value={(task.assignees?.length ? task.assignees.map((a: any) => a.name) : (task.assignee ? [task.assignee.name] : [])).join(', ') || 'Unassigned'} highlight />
               {task.reviewer && <Row label="Reviewer" value={task.reviewer.name} />}
               <Row label="Priority" value={titleCase(task.priority)} />
               <Row label="Assigned Date" value={formatDate(task.assignedDate)} />

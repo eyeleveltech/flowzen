@@ -18,6 +18,7 @@ const taskSchema = z.object({
   type: z.enum(['DESIGN', 'CONTENT', 'VIDEO', 'DIGITAL_MARKETING', 'SOCIAL_MEDIA', 'DEVELOPMENT', 'STRATEGY', 'OTHER']).optional(),
   projectId: z.string(),
   assigneeId: z.string().optional().nullable(),
+  assigneeIds: z.array(z.string()).optional(),
   reviewerId: z.string().optional().nullable(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
   status: z.enum(['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'APPROVED', 'BLOCKED', 'COMPLETED']).optional(),
@@ -55,17 +56,23 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
       where.status = 'REVIEW';
     }
     
+    // Match either the primary assignee or any of the multi-assignees.
+    const andConditions: any[] = [];
+    const assigneeMatch = (uid: string) => ({ OR: [{ assigneeId: uid }, { assignees: { some: { id: uid } } }] });
     if (req.user!.role === 'TEAM_MEMBER') {
-      where.assigneeId = req.user!.userId;
+      andConditions.push(assigneeMatch(req.user!.userId));
     } else if (assigneeId) {
-      where.assigneeId = assigneeId;
+      andConditions.push(assigneeMatch(assigneeId as string));
     }
     if (search) {
-      where.OR = [
-        { title: { contains: search as string, mode: 'insensitive' } },
-        { description: { contains: search as string, mode: 'insensitive' } },
-      ];
+      andConditions.push({
+        OR: [
+          { title: { contains: search as string, mode: 'insensitive' } },
+          { description: { contains: search as string, mode: 'insensitive' } },
+        ],
+      });
     }
+    if (andConditions.length) where.AND = andConditions;
 
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
     const [tasks, total] = await Promise.all([
@@ -74,6 +81,7 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
         include: {
           project: { select: { id: true, name: true, color: true } },
           assignee: { select: { id: true, name: true, avatar: true } },
+          assignees: { select: { id: true, name: true, avatar: true } },
           reviewer: { select: { id: true, name: true, avatar: true } },
           _count: { select: { subtasks: true, comments: true, checklist: true } },
         },
@@ -98,6 +106,7 @@ taskRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
       include: {
         project: { select: { id: true, name: true, color: true } },
         assignee: { select: { id: true, name: true, avatar: true, email: true } },
+        assignees: { select: { id: true, name: true, avatar: true, email: true } },
         reviewer: { select: { id: true, name: true, avatar: true, email: true } },
         subtasks: {
           include: { assignee: { select: { id: true, name: true, avatar: true } } },
@@ -121,7 +130,8 @@ taskRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
       return;
     }
 
-    if (req.user!.role === 'TEAM_MEMBER' && task.assigneeId !== req.user!.userId) {
+    const isAssignee = task.assigneeId === req.user!.userId || task.assignees.some((a) => a.id === req.user!.userId);
+    if (req.user!.role === 'TEAM_MEMBER' && !isAssignee) {
       res.status(403).json({ error: 'You do not have permission to view this task' });
       return;
     }
@@ -155,7 +165,12 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
       }
     }
 
-    const { title, description, type, projectId, assigneeId, reviewerId, priority, status, dueDate, assignedDate, parentId, estimatedHours, driveLink } = req.body;
+    const { title, description, type, projectId, assigneeId, assigneeIds, reviewerId, priority, status, dueDate, assignedDate, parentId, estimatedHours, driveLink } = req.body;
+
+    // Multi-assignee: the first of the list is the "primary" assignee (kept in
+    // assigneeId for back-compat); the full set lives in the assignees relation.
+    const ids: string[] = Array.from(new Set(((assigneeIds?.length ? assigneeIds : (assigneeId ? [assigneeId] : [])) as string[]).filter(Boolean)));
+    const primaryAssigneeId = ids[0] || null;
 
     const task = await prisma.task.create({
       data: {
@@ -163,7 +178,8 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
         description,
         type: type || 'OTHER',
         projectId,
-        assigneeId,
+        assigneeId: primaryAssigneeId,
+        ...(ids.length ? { assignees: { connect: ids.map((id) => ({ id })) } } : {}),
         reviewerId,
         priority: priority || 'MEDIUM',
         status: status || 'TODO',
@@ -177,6 +193,7 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
       include: {
         project: { select: { id: true, name: true } },
         assignee: { select: { id: true, name: true, avatar: true } },
+        assignees: { select: { id: true, name: true, avatar: true } },
         reviewer: { select: { id: true, name: true, avatar: true } },
       },
     });
@@ -193,15 +210,12 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
       },
     });
 
-    // Notify assignee
-    if (task.assigneeId && task.assigneeId !== req.user!.userId) {
-      await NotificationService.send({
-        type: 'TASK_ASSIGNED',
-        message: `You were assigned to "${task.title}"`,
-        userId: task.assigneeId,
-        metadata: { taskId: task.id, projectId: task.projectId },
-      });
-    }
+    // Notify every assignee (except the creator).
+    await NotificationService.sendMany(
+      ids,
+      { type: 'TASK_ASSIGNED', message: `You were assigned to "${task.title}"`, metadata: { taskId: task.id, projectId: task.projectId } },
+      req.user!.userId,
+    );
 
     const io = req.app.get('io');
     emitToOrganization(io, req.user!.organizationId, 'task:created', task);
@@ -218,6 +232,7 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
   try {
     const existing = await prisma.task.findFirst({
       where: { id: (req.params.id as string), project: { client: { organizationId: req.user!.organizationId } } },
+      include: { assignees: { select: { id: true } } },
     });
 
     if (!existing) {
@@ -225,19 +240,36 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
       return;
     }
 
-    if (req.user!.role === 'TEAM_MEMBER' && existing.assigneeId !== req.user!.userId) {
+    const canEdit = existing.assigneeId === req.user!.userId || existing.assignees.some((a) => a.id === req.user!.userId);
+    if (req.user!.role === 'TEAM_MEMBER' && !canEdit) {
       res.status(403).json({ error: 'You do not have permission to edit this task' });
       return;
+    }
+
+    // Keep assigneeIds out of the Prisma spread, and translate any assignee change
+    // into both the primary field (assigneeId) and the assignees relation.
+    const { assigneeIds: bodyAssigneeIds, ...rest } = req.body;
+    let assigneeUpdate: any = {};
+    let newAssigneeIds: string[] | null = null;
+    if (Array.isArray(bodyAssigneeIds)) {
+      newAssigneeIds = Array.from(new Set((bodyAssigneeIds as string[]).filter(Boolean)));
+    } else if ('assigneeId' in rest) {
+      newAssigneeIds = rest.assigneeId ? [rest.assigneeId as string] : [];
+    }
+    if (newAssigneeIds) {
+      assigneeUpdate = { assigneeId: newAssigneeIds[0] || null, assignees: { set: newAssigneeIds.map((id) => ({ id })) } };
+      delete rest.assigneeId;
     }
 
     const task = await prisma.task.update({
       where: { id: (req.params.id as string) },
       data: {
-        ...req.body,
+        ...rest,
+        ...assigneeUpdate,
         dueDate: req.body.dueDate ? new Date(req.body.dueDate) : req.body.dueDate === null ? null : undefined,
         assignedDate: req.body.assignedDate ? new Date(req.body.assignedDate) : req.body.assignedDate === null ? null : undefined,
-        ...(req.body.status === 'COMPLETED' && existing.status !== 'COMPLETED' 
-             ? { completedAt: new Date() } 
+        ...(req.body.status === 'COMPLETED' && existing.status !== 'COMPLETED'
+             ? { completedAt: new Date() }
              : req.body.status && req.body.status !== 'COMPLETED' && existing.status === 'COMPLETED'
                ? { completedAt: null }
                : {}),
@@ -245,6 +277,7 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
       include: {
         project: { select: { id: true, name: true } },
         assignee: { select: { id: true, name: true, avatar: true } },
+        assignees: { select: { id: true, name: true, avatar: true } },
         reviewer: { select: { id: true, name: true, avatar: true } },
       },
     });
@@ -298,20 +331,19 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
       }
     }
 
-    // Notify if assignee changed
-    if (req.body.assigneeId && req.body.assigneeId !== existing.assigneeId && req.body.assigneeId !== req.user!.userId) {
-      await NotificationService.send({
-        type: 'TASK_ASSIGNED',
-        message: `You were assigned to "${task.title}"`,
-        userId: req.body.assigneeId,
-        metadata: { taskId: task.id, projectId: task.projectId },
-      });
-
-      // Execute workflow automation rules for assignment
-      await executeWorkflowRules('TASK_ASSIGNED', {
-        task,
-        orgId: req.user!.organizationId,
-      });
+    // Notify newly-added assignees (anyone not previously on the task), then run
+    // the assignment workflow if at least one person was added.
+    if (newAssigneeIds) {
+      const previous = new Set([existing.assigneeId, ...existing.assignees.map((a) => a.id)].filter(Boolean) as string[]);
+      const added = newAssigneeIds.filter((id) => !previous.has(id));
+      await NotificationService.sendMany(
+        added,
+        { type: 'TASK_ASSIGNED', message: `You were assigned to "${task.title}"`, metadata: { taskId: task.id, projectId: task.projectId } },
+        req.user!.userId,
+      );
+      if (added.length) {
+        await executeWorkflowRules('TASK_ASSIGNED', { task, orgId: req.user!.organizationId });
+      }
     }
 
     const io = req.app.get('io');
@@ -329,6 +361,7 @@ taskRouter.put('/:id/status', idempotency, async (req: AuthRequest, res: Respons
   try {
     const existing = await prisma.task.findFirst({
       where: { id: (req.params.id as string), project: { client: { organizationId: req.user!.organizationId } } },
+      include: { assignees: { select: { id: true } } },
     });
 
     if (!existing) {
@@ -336,7 +369,8 @@ taskRouter.put('/:id/status', idempotency, async (req: AuthRequest, res: Respons
       return;
     }
 
-    if (req.user!.role === 'TEAM_MEMBER' && existing.assigneeId !== req.user!.userId) {
+    const canEdit = existing.assigneeId === req.user!.userId || existing.assignees.some((a) => a.id === req.user!.userId);
+    if (req.user!.role === 'TEAM_MEMBER' && !canEdit) {
       res.status(403).json({ error: 'You do not have permission to edit this task' });
       return;
     }
@@ -391,6 +425,7 @@ taskRouter.delete('/:id', async (req: AuthRequest, res: Response, next) => {
   try {
     const task = await prisma.task.findFirst({
       where: { id: (req.params.id as string), project: { client: { organizationId: req.user!.organizationId } } },
+      include: { assignees: { select: { id: true } } },
     });
 
     if (!task) {
@@ -398,7 +433,8 @@ taskRouter.delete('/:id', async (req: AuthRequest, res: Response, next) => {
       return;
     }
 
-    if (req.user!.role === 'TEAM_MEMBER' && task.assigneeId !== req.user!.userId) {
+    const canDelete = task.assigneeId === req.user!.userId || task.assignees.some((a) => a.id === req.user!.userId);
+    if (req.user!.role === 'TEAM_MEMBER' && !canDelete) {
       res.status(403).json({ error: 'You do not have permission to delete this task' });
       return;
     }
@@ -489,6 +525,7 @@ taskRouter.put('/:id/checklist', async (req: AuthRequest, res: Response, next) =
   try {
     const existing = await prisma.task.findFirst({
       where: { id: (req.params.id as string), project: { client: { organizationId: req.user!.organizationId } } },
+      include: { assignees: { select: { id: true } } },
     });
 
     if (!existing) {
@@ -496,7 +533,8 @@ taskRouter.put('/:id/checklist', async (req: AuthRequest, res: Response, next) =
       return;
     }
 
-    if (req.user!.role === 'TEAM_MEMBER' && existing.assigneeId !== req.user!.userId) {
+    const canEdit = existing.assigneeId === req.user!.userId || existing.assignees.some((a) => a.id === req.user!.userId);
+    if (req.user!.role === 'TEAM_MEMBER' && !canEdit) {
       res.status(403).json({ error: 'You do not have permission to edit this checklist' });
       return;
     }
