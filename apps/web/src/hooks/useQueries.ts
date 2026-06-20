@@ -123,6 +123,26 @@ export function useDashboardData(role?: string, dateRange?: { startDate?: string
     },
     enabled: !!role,
     refetchInterval: 60000,
+    // Always refetch when the dashboard is (re)opened, so changes made on other
+    // pages (e.g. a task moved to REVIEW) show up without a hard refresh.
+    refetchOnMount: 'always',
+    staleTime: 0,
+  });
+}
+
+// --- Executive report (boss view) ---
+export function useExecutiveReport(dateRange?: { startDate?: string, endDate?: string }) {
+  return useQuery({
+    queryKey: ['executive', dateRange],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (dateRange?.startDate) params.append('startDate', dateRange.startDate);
+      if (dateRange?.endDate) params.append('endDate', dateRange.endDate);
+      const qs = params.toString() ? `?${params.toString()}` : '';
+      return api.get<any>(`/reports/executive${qs}`);
+    },
+    refetchOnMount: 'always',
+    staleTime: 0,
   });
 }
 

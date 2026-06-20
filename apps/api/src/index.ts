@@ -21,6 +21,7 @@ import { crmRouter } from './routes/crm.js';
 import publicApiRouter from './routes/public/index.js';
 import { sseRouter } from './sse.js';
 import './workers/emailWorker.js'; // Initialize BullMQ email worker
+import { startScheduler } from './services/scheduler.js';
 import { morganMiddleware } from './middleware/logger.js';
 import { logger } from './utils/logger.js';
 
@@ -89,6 +90,7 @@ if (process.env.NODE_ENV !== 'test') {
   app.listen(Number(PORT), '0.0.0.0', () => {
     logger.info(`🚀 Flowzen API running on http://localhost:${PORT}`);
     logger.info(`📡 SSE ready on /api/stream`);
+    startScheduler();
   });
 }
 

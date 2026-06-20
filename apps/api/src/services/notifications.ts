@@ -61,8 +61,24 @@ export class NotificationService {
 
       return notification;
     } catch (error) {
-      console.error('[NotificationService] Error sending notification:', error);
+      // Swallow so a notification failure never breaks the parent request,
+      // but surface it loudly enough to be caught in logs/telemetry.
+      console.error(`[NotificationService] Failed to send ${payload.type} to ${payload.userId}:`, error);
+      return null;
     }
+  }
+
+  /**
+   * Fan a single notification out to multiple recipients, de-duplicated and
+   * with the actor excluded (so people aren't notified about their own actions).
+   */
+  static async sendMany(
+    userIds: (string | null | undefined)[],
+    payload: { type: NotificationType; message: string; metadata?: any },
+    excludeUserId?: string,
+  ) {
+    const recipients = [...new Set(userIds.filter((id): id is string => !!id && id !== excludeUserId))];
+    await Promise.all(recipients.map((userId) => this.send({ ...payload, userId })));
   }
 
   static async sendEmail(data: { to: string; subject: string; html: string }) {

@@ -406,7 +406,7 @@ export default function DashboardPage() {
                             {!t.readAt && <span className="text-[10px] font-bold text-primary border border-primary px-1 rounded-sm uppercase">New</span>}
                           </div>
                           <div className="flex items-center gap-3 mt-1 text-xs text-secondary">
-                            <span>{t.project.name}</span>
+                            <span>{t.project?.name || 'No project'}</span>
                             {t.dueDate && (
                               <span className="flex items-center gap-1">
                                 {new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED' ? (
@@ -440,7 +440,7 @@ export default function DashboardPage() {
 
           {/* PENDING APPROVALS */}
           {isManager && (
-            <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow overflow-hidden flex flex-col h-full">
+            <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow overflow-hidden flex flex-col">
               <div 
                 onClick={() => router.push('/tasks?filter=approval')} 
                 className="p-5 border-b border-border flex justify-between items-center cursor-pointer hover:bg-surface transition-colors"
@@ -580,14 +580,14 @@ export default function DashboardPage() {
                     <div 
                       key={d.id} 
                       onClick={() => handleOpenTask(d.id, null)} 
-                      title={`${d.title} (${d.project.name})`}
+                      title={`${d.title} (${d.project?.name || 'No project'})`}
                       className="flex justify-between items-start p-2.5 hover:bg-surface rounded-xl cursor-pointer border border-border group transition-all"
                     >
                       <div className="min-w-0 pr-3 flex gap-2.5 items-start">
                         <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${dotColor}`} />
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-primary truncate group-hover:text-black transition-colors">{d.title}</p>
-                          <p className="text-xs text-secondary truncate">{d.project.name}</p>
+                          <p className="text-xs text-secondary truncate">{d.project?.name || 'No project'}</p>
                         </div>
                       </div>
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 border rounded-sm shrink-0 ${new Date(d.dueDate) < todayStart ? 'bg-red-50 text-red-600 border-red-200' : 'bg-[#F3F4F6] text-primary border-border'}`}>

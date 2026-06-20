@@ -106,3 +106,21 @@
     height: env(safe-area-inset-bottom, 0px);
   }
 }
+
+/* ── Print: Executive report export (only #exec-report prints) ── */
+@media print {
+  .no-print { display: none !important; }
+  body * { visibility: hidden !important; }
+  #exec-report, #exec-report * { visibility: visible !important; }
+  #exec-report {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0;
+    background: #fff;
+  }
+  /* keep each section from splitting awkwardly across pages */
+  #exec-report > div > div { break-inside: avoid; }
+  @page { margin: 14mm; }
+}

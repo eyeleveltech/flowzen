@@ -562,9 +562,10 @@ function ProjectsContent() {
                         onChange={(val) => setValue('clientId', val, { shouldValidate: true })}
                         options={[
                           { label: 'Select a client...', value: '' },
-                          // Don't offer inactive/churned clients when creating a project
+                          // Don't offer inactive/churned clients when creating a project,
+                          // but keep a pre-filled client visible even if it's inactive.
                           ...clients
-                            .filter((c: any) => !['INACTIVE', 'CHURNED'].includes(c.status))
+                            .filter((c: any) => !['INACTIVE', 'CHURNED'].includes(c.status) || c.id === formValues.clientId)
                             .map((c) => ({ label: getClientDisplayName(c), value: c.id }))
                         ]}
                       />

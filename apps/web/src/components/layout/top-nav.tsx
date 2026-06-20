@@ -58,18 +58,42 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
   const unreadCount = notifData?.unreadCount || 0;
 
   const markAsRead = async (id: string) => {
+    // Optimistically flip read + decrement the badge so the UI responds instantly.
+    const previous = queryClient.getQueryData(['notifications']);
+    queryClient.setQueryData(['notifications'], (old: any) => {
+      if (!old) return old;
+      const target = old.notifications?.find((n: any) => n.id === id);
+      if (!target || target.read) return old;
+      return {
+        ...old,
+        notifications: old.notifications.map((n: any) => (n.id === id ? { ...n, read: true } : n)),
+        unreadCount: Math.max(0, (old.unreadCount || 0) - 1),
+      };
+    });
     try {
       await api.patch(`/notifications/${id}/read`);
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
-    } catch (err: any) { toast.error('Failed to mark read'); }
+    } catch (err: any) {
+      queryClient.setQueryData(['notifications'], previous); // rollback
+      toast.error('Failed to mark read');
+    }
   };
 
   const markAllAsRead = async () => {
+    const previous = queryClient.getQueryData(['notifications']);
+    queryClient.setQueryData(['notifications'], (old: any) => old ? ({
+      ...old,
+      notifications: old.notifications?.map((n: any) => ({ ...n, read: true })) || [],
+      unreadCount: 0,
+    }) : old);
     try {
       await api.patch('/notifications/read-all');
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       toast.success('All marked as read');
-    } catch (err: any) { toast.error('Failed to mark all read'); }
+    } catch (err: any) {
+      queryClient.setQueryData(['notifications'], previous); // rollback
+      toast.error('Failed to mark all read');
+    }
   };
 
   const [showNotifications, setShowNotifications] = useState(false);

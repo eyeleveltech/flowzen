@@ -493,6 +493,23 @@ projectRouter.post('/:id/comments', async (req: AuthRequest, res: Response, next
     const io = req.app.get('io');
     emitToOrganization(io, req.user!.organizationId, 'project_comment:created', { ...comment, projectId: (req.params.id as string) });
 
+    // Notify the project owner + anyone mentioned (excluding the commenter).
+    const authorId = req.user!.userId;
+    const meta = { projectId: existing.id };
+    const mentioned = (comment.mentions || []).filter((id) => id && id !== authorId);
+    const mentionedSet = new Set(mentioned);
+
+    await NotificationService.sendMany(
+      mentioned,
+      { type: 'MENTION', message: `${comment.author.name} mentioned you on "${existing.name}"`, metadata: meta },
+      authorId,
+    );
+    await NotificationService.sendMany(
+      [existing.ownerId].filter((id) => !mentionedSet.has(id as string)),
+      { type: 'COMMENT_ADDED', message: `${comment.author.name} commented on "${existing.name}"`, metadata: meta },
+      authorId,
+    );
+
     res.status(201).json(comment);
   } catch (error) {
     next(error);

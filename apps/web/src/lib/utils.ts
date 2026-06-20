@@ -86,12 +86,6 @@ export function triggerHaptic(type: 'light' | 'medium' | 'heavy' = 'medium') {
   }
 }
 
-// Dropdown label for a user/member: "Full Name — Designation" (falls back to just the name).
-export function memberLabel(m: { name?: string | null; designation?: string | null } | null | undefined): string {
-  const name = m?.name || '';
-  return m?.designation ? `${name} — ${m.designation}` : name;
-}
-
 export function getClientDisplayName(client: { name: string, company?: string | null } | null | undefined): string {
   if (!client) return '—';
   if (client.name === 'Internal') return client.company || 'Internal';

@@ -27,10 +27,15 @@ notificationRouter.get('/', async (req: AuthRequest, res: Response, next) => {
 // PATCH /api/notifications/:id/read
 notificationRouter.patch('/:id/read', async (req: AuthRequest, res: Response, next) => {
   try {
-    await prisma.notification.update({
-      where: { id: (req.params.id as string) },
+    // Scope to the owner so a user can't flip another user's notification (IDOR).
+    const result = await prisma.notification.updateMany({
+      where: { id: (req.params.id as string), userId: req.user!.userId },
       data: { read: true },
     });
+
+    if (result.count === 0) {
+      return res.status(404).json({ message: 'Notification not found' });
+    }
 
     res.json({ message: 'Notification marked as read' });
   } catch (error) {

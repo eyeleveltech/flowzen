@@ -284,6 +284,18 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
         newStatus: task.status,
         orgId: req.user!.organizationId,
       });
+
+      // Notify the project owner + reviewer when work is completed (not the completer).
+      if (task.status === 'COMPLETED' && existing.status !== 'COMPLETED') {
+        const ownerId = task.projectId
+          ? (await prisma.project.findUnique({ where: { id: task.projectId }, select: { ownerId: true } }))?.ownerId
+          : null;
+        await NotificationService.sendMany(
+          [ownerId, task.reviewerId],
+          { type: 'TASK_COMPLETED', message: `"${task.title}" was completed`, metadata: { taskId: task.id, projectId: task.projectId } },
+          req.user!.userId,
+        );
+      }
     }
 
     // Notify if assignee changed
@@ -350,6 +362,18 @@ taskRouter.put('/:id/status', idempotency, async (req: AuthRequest, res: Respons
         where: { id: task.projectId },
         data: { progress },
       });
+    }
+
+    // Notify the project owner + reviewer when work is completed (not the completer).
+    if (task.status === 'COMPLETED' && existing.status !== 'COMPLETED') {
+      const ownerId = task.projectId
+        ? (await prisma.project.findUnique({ where: { id: task.projectId }, select: { ownerId: true } }))?.ownerId
+        : null;
+      await NotificationService.sendMany(
+        [ownerId, task.reviewerId],
+        { type: 'TASK_COMPLETED', message: `"${task.title}" was completed`, metadata: { taskId: task.id, projectId: task.projectId } },
+        req.user!.userId,
+      );
     }
 
     const io = req.app.get('io');
@@ -433,6 +457,26 @@ taskRouter.post('/:id/comments', async (req: AuthRequest, res: Response, next) =
 
     const io = req.app.get('io');
     emitToOrganization(io, req.user!.organizationId, 'comment:created', { ...comment, taskId: (req.params.id as string) });
+
+    // Notify the people involved in this task (excluding the commenter).
+    const authorId = req.user!.userId;
+    const meta = { taskId: existing.id, projectId: existing.projectId };
+    const ownerId = existing.projectId
+      ? (await prisma.project.findUnique({ where: { id: existing.projectId }, select: { ownerId: true } }))?.ownerId
+      : null;
+    const mentioned = (comment.mentions || []).filter((id) => id && id !== authorId);
+    const mentionedSet = new Set(mentioned);
+
+    await NotificationService.sendMany(
+      mentioned,
+      { type: 'MENTION', message: `${comment.author.name} mentioned you on "${existing.title}"`, metadata: meta },
+      authorId,
+    );
+    await NotificationService.sendMany(
+      [existing.assigneeId, existing.reviewerId, ownerId].filter((id) => !mentionedSet.has(id as string)),
+      { type: 'COMMENT_ADDED', message: `${comment.author.name} commented on "${existing.title}"`, metadata: meta },
+      authorId,
+    );
 
     res.status(201).json(comment);
   } catch (error) {

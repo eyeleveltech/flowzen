@@ -256,21 +256,22 @@ function TasksContent() {
     } catch (err: any) { toast.error(err.message || 'Failed to update task'); } finally { setSubmitting(false); }
   }
 
-  function startEditing() {
-    if (!selectedTask) return;
+  function startEditing(taskArg?: Task) {
+    const t = taskArg || selectedTask;
+    if (!t) return;
     reset({
-      title: selectedTask.title,
-      description: selectedTask.description || '',
-      type: selectedTask.type || 'OTHER',
-      projectId: selectedTask.project?.id || selectedTask.projectId || '',
-      assigneeId: selectedTask.assignee?.id || '',
-      reviewerId: selectedTask.reviewer?.id || '',
-      priority: selectedTask.priority,
-      status: selectedTask.status,
-      dueDate: selectedTask.dueDate ? new Date(selectedTask.dueDate).toISOString().split('T')[0] : '',
-      assignedDate: selectedTask.assignedDate ? new Date(selectedTask.assignedDate).toISOString().split('T')[0] : '',
-      loggedHours: selectedTask.loggedHours || 0,
-      driveLink: selectedTask.driveLink || '',
+      title: t.title,
+      description: t.description || '',
+      type: t.type || 'OTHER',
+      projectId: t.project?.id || t.projectId || '',
+      assigneeId: t.assignee?.id || '',
+      reviewerId: t.reviewer?.id || '',
+      priority: t.priority,
+      status: t.status,
+      dueDate: t.dueDate ? new Date(t.dueDate).toISOString().split('T')[0] : '',
+      assignedDate: t.assignedDate ? new Date(t.assignedDate).toISOString().split('T')[0] : '',
+      loggedHours: t.loggedHours || 0,
+      driveLink: t.driveLink || '',
     });
     setIsEditing(true);
   }
@@ -641,7 +642,7 @@ function TasksContent() {
             taskId={selectedTask.id}
             onClose={() => setSelectedTask(null)}
             onChanged={refetchTasks}
-            onEdit={() => startEditing()}
+            onEdit={(t) => startEditing(t)}
             canManage={user?.role !== 'TEAM_MEMBER'}
             currentUserId={user?.id}
           />
@@ -681,7 +682,7 @@ function TasksContent() {
               <div className="flex items-center gap-2">
                 {!isEditing && (user?.role !== 'TEAM_MEMBER' || selectedTask.assignee?.id === user?.id) && (
                   <>
-                    <button onClick={startEditing} className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
+                    <button onClick={() => startEditing()} className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
                       Edit
                     </button>
                     <button onClick={deleteTask} className="rounded-xl border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 hover:border-red-300 transition-all flex items-center gap-1.5">

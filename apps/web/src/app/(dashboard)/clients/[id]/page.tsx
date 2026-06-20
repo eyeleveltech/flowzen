@@ -544,7 +544,7 @@ export default function ClientDetailPage() {
             onSuccess={() => {
               setShowCreateProject(false);
               setTab('projects');
-              api.get<ClientDetail>(`/clients/${id}`).then(setClient).catch(() => {});
+              api.get<ClientDetail>(`/clients/${id}`).then(setClient).catch(() => toast.error('Project created — reload to see it in the list.'));
             }}
           />
         )}
