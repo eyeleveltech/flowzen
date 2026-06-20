@@ -8,7 +8,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
-import { formatDate, getInitials, getAvatarColor, triggerHaptic } from '@/lib/utils';
+import { formatDate, formatShortDate, getInitials, getAvatarColor, triggerHaptic } from '@/lib/utils';
 import { Plus, Search, X, MessageSquare, CheckCircle2, ListChecks, Trash2 } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { Drawer } from '@/components/ui/drawer';
@@ -20,6 +20,7 @@ import { useAuthStore, useConfirmStore } from '@/stores';
 import { useTasks, useProjects, useMembers } from '@/hooks/useQueries';
 import { useQueryClient } from '@tanstack/react-query';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
+import { TaskDetailDrawer } from '@/components/tasks/task-detail-drawer';
 
 interface Task {
   id: string; title: string; description?: string | null; priority: string; status: string;
@@ -418,7 +419,7 @@ function TasksContent() {
             onChange={(val) => setAssigneeFilter(val)}
             options={[
               { label: 'All Assignees', value: '' },
-              ...members.map((m: any) => ({ label: m.name, value: m.id }))
+              ...members.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
             ]}
             className="w-48"
           />
@@ -512,7 +513,7 @@ function TasksContent() {
                                       </div>
                                     </div>
                                     {t.dueDate && (
-                                      <p className="text-[10px] text-[#9CA3AF] mt-2">{formatDate(t.dueDate)}</p>
+                                      <p className="text-[10px] text-[#9CA3AF] mt-2">{formatShortDate(t.dueDate)}</p>
                                     )}
                                   </div>
                                 )}
@@ -572,7 +573,7 @@ function TasksContent() {
                               {t.status.replace('_', ' ')}
                             </span>
                           </td>
-                          <td className="px-6 py-3.5 text-sm text-secondary">{formatDate(t.dueDate)}</td>
+                          <td className="px-6 py-3.5 text-sm text-secondary">{formatShortDate(t.dueDate)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -633,10 +634,23 @@ function TasksContent() {
         </>
       )}
 
-      {/* Detail / Edit Modal */}
+      {/* Task detail preview (shared component) */}
+      <AnimatePresence>
+        {selectedTask && !isEditing && (
+          <TaskDetailDrawer
+            taskId={selectedTask.id}
+            onClose={() => setSelectedTask(null)}
+            onChanged={refetchTasks}
+            onEdit={() => startEditing()}
+            canManage={user?.role !== 'TEAM_MEMBER'}
+            currentUserId={user?.id}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Edit Task Modal */}
       <AnimatePresence>
-        {!!selectedTask && (
+        {selectedTask && isEditing && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-100 bg-black/20 backdrop-blur-sm" onClick={() => { setSelectedTask(null); setIsEditing(false); }} />
             <motion.div
@@ -713,20 +727,11 @@ function TasksContent() {
                           { label: 'Content', value: 'CONTENT' },
                           { label: 'Video', value: 'VIDEO' },
                           { label: 'Digital Marketing', value: 'DIGITAL_MARKETING' },
+                          { label: 'Social Media', value: 'SOCIAL_MEDIA' },
                           { label: 'Development', value: 'DEVELOPMENT' },
                           { label: 'Strategy', value: 'STRATEGY' },
                           { label: 'Other', value: 'OTHER' },
                         ]}
-                      />
-                    )} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignee</label>
-                    <Controller name="assigneeId" control={control} render={({ field }) => (
-                      <Select
-                        value={field.value || ''}
-                        onChange={field.onChange}
-                        options={[{ label: 'Unassigned', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id }))]}
                       />
                     )} />
                   </div>
@@ -736,7 +741,17 @@ function TasksContent() {
                       <Select
                         value={field.value || ''}
                         onChange={field.onChange}
-                        options={[{ label: 'No Reviewer', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id }))]}
+                        options={[{ label: 'No Reviewer', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
+                      />
+                    )} />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignee</label>
+                    <Controller name="assigneeId" control={control} render={({ field }) => (
+                      <Select
+                        value={field.value || ''}
+                        onChange={field.onChange}
+                        options={[{ label: 'Unassigned', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
                       />
                     )} />
                   </div>
@@ -951,20 +966,11 @@ function TasksContent() {
                     { label: 'Content', value: 'CONTENT' },
                     { label: 'Video', value: 'VIDEO' },
                     { label: 'Digital Marketing', value: 'DIGITAL_MARKETING' },
+                    { label: 'Social Media', value: 'SOCIAL_MEDIA' },
                     { label: 'Development', value: 'DEVELOPMENT' },
                     { label: 'Strategy', value: 'STRATEGY' },
                     { label: 'Other', value: 'OTHER' },
                   ]}
-                />
-              )} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignee</label>
-              <Controller name="assigneeId" control={control} render={({ field }) => (
-                <Select
-                  value={field.value || ''}
-                  onChange={field.onChange}
-                  options={[{ label: 'Unassigned', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id }))]}
                 />
               )} />
             </div>
@@ -974,7 +980,17 @@ function TasksContent() {
                 <Select
                   value={field.value || ''}
                   onChange={field.onChange}
-                  options={[{ label: 'No Reviewer', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id }))]}
+                  options={[{ label: 'No Reviewer', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
+                />
+              )} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignee</label>
+              <Controller name="assigneeId" control={control} render={({ field }) => (
+                <Select
+                  value={field.value || ''}
+                  onChange={field.onChange}
+                  options={[{ label: 'Unassigned', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
                 />
               )} />
             </div>

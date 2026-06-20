@@ -22,9 +22,13 @@ class SSEClient {
       }
     };
 
-    this.eventSource.onerror = (err) => {
-      console.error('SSE connection error:', err);
-      // EventSource reconnects automatically
+    this.eventSource.onerror = () => {
+      // EventSource fires onerror on every transient hiccup (network blips, server
+      // restarts, dev HMR) and reconnects automatically — those are expected and noisy,
+      // so we stay quiet. Only warn if the connection is permanently CLOSED (won't retry).
+      if (this.eventSource?.readyState === EventSource.CLOSED) {
+        console.warn('SSE connection closed; real-time updates paused until reconnect.');
+      }
     };
   }
 

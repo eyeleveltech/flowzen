@@ -14,6 +14,15 @@ export function formatDate(date: string | Date | null | undefined): string {
   }).format(new Date(date));
 }
 
+// Short date with no year, e.g. "20 Jun" (day + short month name). Used for compact due-date display.
+export function formatShortDate(date: string | Date | null | undefined): string {
+  if (!date) return '—';
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'short',
+  }).format(new Date(date));
+}
+
 export function formatRelativeDate(date: string | Date): string {
   const now = new Date();
   const d = new Date(date);
@@ -75,6 +84,12 @@ export function triggerHaptic(type: 'light' | 'medium' | 'heavy' = 'medium') {
       navigator.vibrate([40, 50, 40]);
       break;
   }
+}
+
+// Dropdown label for a user/member: "Full Name — Designation" (falls back to just the name).
+export function memberLabel(m: { name?: string | null; designation?: string | null } | null | undefined): string {
+  const name = m?.name || '';
+  return m?.designation ? `${name} — ${m.designation}` : name;
 }
 
 export function getClientDisplayName(client: { name: string, company?: string | null } | null | undefined): string {

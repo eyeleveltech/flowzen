@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { Select } from '@/components/ui/select';
-import { getClientDisplayName } from '@/lib/utils';
+import { getClientDisplayName, getInitials } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
 
 interface CalendarTask {
@@ -198,6 +198,7 @@ export default function CalendarPage() {
                 { label: 'Content', value: 'CONTENT' },
                 { label: 'Video', value: 'VIDEO' },
                 { label: 'Digital Marketing', value: 'DIGITAL_MARKETING' },
+                { label: 'Social Media', value: 'SOCIAL_MEDIA' },
                 { label: 'Development', value: 'DEVELOPMENT' },
                 { label: 'Strategy', value: 'STRATEGY' },
                 { label: 'Other', value: 'OTHER' },
@@ -209,7 +210,7 @@ export default function CalendarPage() {
               <Select
                 value={assigneeFilter === user?.id ? '' : assigneeFilter}
                 onChange={(val) => setAssigneeFilter(val)}
-                options={[{ label: 'All Assignees', value: '' }, ...members.map(m => ({ label: m.name, value: m.id }))]}
+                options={[{ label: 'All Assignees', value: '' }, ...members.map(m => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
               />
             </div>
           )}

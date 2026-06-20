@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { X, Save, Upload, FileText, User, Briefcase, Mail, Phone, Building2, Calendar, IndianRupee, Search, ChevronDown, Check, AlignLeft } from 'lucide-react';
 import { api } from '@/lib/api';
+import { getInitials } from '@/lib/utils';
 import { Select } from '@/components/ui/select';
 import { useMembers, useClients } from '@/hooks/useQueries';
 import Papa from 'papaparse';
@@ -370,7 +371,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                       onChange={(v) => setForm({ ...form, assignedToId: v })}
                       options={[
                         { label: 'Unassigned', value: '' },
-                        ...members.map((m: any) => ({ label: m.name, value: m.id }))
+                        ...members.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
                       ]}
                     />
                   </div>

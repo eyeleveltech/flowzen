@@ -26,7 +26,7 @@ const clientSchema = z.object({
   scope: z.string().optional(),
   assetLinks: z.string().optional(),
   accountManagerId: z.string().optional(),
-  status: z.enum(['PROSPECT', 'ACTIVE', 'ONHOLD', 'CHURNED']).optional(),
+  status: z.enum(['PROSPECT', 'ACTIVE', 'ONHOLD', 'CHURNED', 'INACTIVE']).optional(),
   contacts: z.array(z.object({
     id: z.string().optional(),
     name: z.string().min(1),
@@ -186,7 +186,7 @@ clientRouter.post('/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRe
           company: data.company || null,
           industry: data.industry || null,
           engagementType: data.engagementType || null,
-          status: ['PROSPECT', 'ACTIVE', 'ONHOLD', 'CHURNED'].includes(data.status?.toUpperCase()) ? data.status.toUpperCase() : 'PROSPECT',
+          status: ['PROSPECT', 'ACTIVE', 'ONHOLD', 'CHURNED', 'INACTIVE'].includes(data.status?.toUpperCase()) ? data.status.toUpperCase() : 'PROSPECT',
           website: data.website || null,
           city: data.city || null,
           address: data.address || null,

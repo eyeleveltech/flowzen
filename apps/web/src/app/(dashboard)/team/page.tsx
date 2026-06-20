@@ -273,7 +273,7 @@ export default function TeamPage() {
                       <div className="flex justify-between items-center text-[10px] text-[#9CA3AF]">
                         <span className="truncate max-w-[170px] font-semibold text-secondary flex items-center gap-1.5">
                           <Folder className="h-3 w-3" />
-                          {t.project.name}
+                          {t.project?.name || 'No project'}
                         </span>
                         {t.dueDate && (
                           <span className="tabular-nums font-medium text-[#86868B] flex items-center gap-1.5">

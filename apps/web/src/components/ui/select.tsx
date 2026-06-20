@@ -10,6 +10,8 @@ import { Drawer } from '@/components/ui/drawer';
 export interface Option {
   label: string;
   value: string;
+  sublabel?: string; // optional secondary line shown under the label (e.g. designation)
+  avatar?: string;   // optional initials shown in a circular badge (e.g. for users)
 }
 
 export interface SelectProps {
@@ -94,9 +96,21 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
     }
   }, [isOpen]);
 
+  // Flip the dropdown upward when there isn't enough room below the trigger
+  // (e.g. a Status field at the bottom of a slide-in form), and clamp its
+  // height to the available space so it never runs off-screen.
+  const DROPDOWN_MAX = 240;
+  const viewportH = typeof window !== 'undefined' ? window.innerHeight : 0;
+  const spaceBelow = rect ? viewportH - rect.bottom : 0;
+  const spaceAbove = rect ? rect.top : 0;
+  const openUp = rect ? spaceBelow < Math.min(DROPDOWN_MAX, 220) && spaceAbove > spaceBelow : false;
+  const dropdownMaxHeight = rect
+    ? Math.max(120, Math.min(DROPDOWN_MAX, (openUp ? spaceAbove : spaceBelow) - 16))
+    : DROPDOWN_MAX;
+
   return (
-    <div 
-      className={`relative ${className}`} 
+    <div
+      className={`relative ${className}`}
       ref={containerRef}
       onKeyDown={(e) => {
         if (!isOpen) return;
@@ -138,10 +152,15 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
         }}
         className={`flex w-full items-center justify-between ${rounded} border border-border bg-white px-4 py-2.5 text-sm text-[#374151] outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50 transition-all text-left`}
       >
-        <span className={selectedOption && selectedOption.value !== '' ? 'text-primary' : 'text-[#374151]'}>
-          {selectedOption ? selectedOption.label : placeholder}
+        <span className="flex items-center gap-2 min-w-0">
+          {selectedOption?.avatar && (
+            <span className="h-5 w-5 shrink-0 rounded-full bg-[#F3F4F6] border border-[#E5E7EB] text-[#111827] text-[9px] font-semibold flex items-center justify-center">{selectedOption.avatar}</span>
+          )}
+          <span className={`min-w-0 truncate ${selectedOption && selectedOption.value !== '' ? 'text-primary' : 'text-[#374151]'}`}>
+            {selectedOption ? selectedOption.label : placeholder}
+          </span>
         </span>
-        <ChevronDown className={`h-4 w-4 text-[#9CA3AF] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+        <ChevronDown className={`h-4 w-4 shrink-0 text-[#9CA3AF] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
       </button>
       
       {required && (
@@ -173,7 +192,15 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
                     : 'text-[#374151] active:bg-[#F9FAFB]'
                 }`}
               >
-                {option.label}
+                <span className="flex items-center gap-3">
+                  {option.avatar && (
+                    <span className="h-8 w-8 shrink-0 rounded-full bg-[#F3F4F6] border border-border text-primary text-xs font-semibold flex items-center justify-center">{option.avatar}</span>
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{option.label}</span>
+                    {option.sublabel && <span className="block text-xs text-[#9CA3AF] truncate">{option.sublabel}</span>}
+                  </span>
+                </span>
               </button>
             ))}
           </div>
@@ -190,11 +217,14 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 4 }}
                   transition={{ duration: 0.15 }}
-                  className="fixed z-9999 mt-2 max-h-60 overflow-y-auto rounded-xl border border-border bg-white p-1.5 shadow-lg shadow-black/5"
-                  style={{ 
+                  className="fixed z-9999 overflow-y-auto rounded-xl border border-border bg-white p-1.5 shadow-lg shadow-black/5"
+                  style={{
                     width: rect ? Math.max(rect.width, 160) : 'auto',
-                    top: rect ? rect.bottom : 0,
-                    left: rect ? rect.left : 0
+                    left: rect ? rect.left : 0,
+                    maxHeight: dropdownMaxHeight,
+                    ...(openUp
+                      ? { bottom: rect ? viewportH - rect.top + 8 : 0 }
+                      : { top: rect ? rect.bottom + 8 : 0 }),
                   }}
                 >
               {searchQuery && (
@@ -249,7 +279,15 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
                       : 'text-[#374151] hover:bg-[#F9FAFB]'
                   }`}
                 >
-                  {option.label}
+                  <span className="flex items-center gap-2.5">
+                    {option.avatar && (
+                      <span className="h-7 w-7 shrink-0 rounded-full bg-[#F3F4F6] border border-border text-primary text-[10px] font-semibold flex items-center justify-center">{option.avatar}</span>
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate">{option.label}</span>
+                      {option.sublabel && <span className="block text-[11px] text-[#9CA3AF] truncate">{option.sublabel}</span>}
+                    </span>
+                  </span>
                 </button>
               ))}
                 </motion.div>

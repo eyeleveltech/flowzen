@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { api } from '@/lib/api';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, getInitials } from '@/lib/utils';
 import { TrendingUp, IndianRupee, Target, Briefcase, Clock, ChevronRight, Filter, Calendar, CheckSquare, Square, ChevronDown } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Select } from '@/components/ui/select';
@@ -270,7 +270,7 @@ export function PipelineDashboard() {
             onChange={setOwnerFilter}
             options={[
               { label: 'All Owners', value: '' },
-              ...members.map((m: any) => ({ label: m.name, value: m.id }))
+              ...members.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
             ]}
           />
         </div>

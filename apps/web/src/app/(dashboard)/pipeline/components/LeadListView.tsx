@@ -166,7 +166,7 @@ export function LeadListView() {
                 onChange={setOwnerFilter}
                 options={[
                   { label: 'All Owners', value: '' },
-                  ...members.map((m: any) => ({ label: m.name, value: m.id }))
+                  ...members.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
                 ]}
               />
             </div>

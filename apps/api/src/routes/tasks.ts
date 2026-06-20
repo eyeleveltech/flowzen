@@ -15,7 +15,7 @@ taskRouter.use(authenticate);
 const taskSchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
-  type: z.enum(['DESIGN', 'CONTENT', 'VIDEO', 'DIGITAL_MARKETING', 'DEVELOPMENT', 'STRATEGY', 'OTHER']).optional(),
+  type: z.enum(['DESIGN', 'CONTENT', 'VIDEO', 'DIGITAL_MARKETING', 'SOCIAL_MEDIA', 'DEVELOPMENT', 'STRATEGY', 'OTHER']).optional(),
   projectId: z.string(),
   assigneeId: z.string().optional().nullable(),
   reviewerId: z.string().optional().nullable(),

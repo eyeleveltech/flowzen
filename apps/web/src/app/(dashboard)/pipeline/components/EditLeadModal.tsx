@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { X, Save } from 'lucide-react';
 import { api } from '@/lib/api';
+import { getInitials } from '@/lib/utils';
 import { Select } from '@/components/ui/select';
 import { useMembers } from '@/hooks/useQueries';
 
@@ -88,7 +89,7 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
                   onChange={(v) => setForm({ ...form, assignedToId: v })}
                   options={[
                     { label: 'Unassigned', value: '' },
-                    ...members.map((m: any) => ({ label: m.name, value: m.id }))
+                    ...members.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
                   ]}
                   className="w-full"
                 />

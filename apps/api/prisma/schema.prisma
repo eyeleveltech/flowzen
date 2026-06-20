@@ -29,6 +29,7 @@ enum ClientStatus {
   ACTIVE
   ONHOLD
   CHURNED
+  INACTIVE
 }
 
 enum ProjectType {
@@ -83,6 +84,7 @@ enum TaskType {
   CONTENT
   VIDEO
   DIGITAL_MARKETING
+  SOCIAL_MEDIA
   DEVELOPMENT
   STRATEGY
   OTHER

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
-import { formatRelativeDate, formatDate, getInitials } from '@/lib/utils';
+import { formatRelativeDate, formatDate, formatShortDate, getInitials } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
 import { useRouter } from 'next/navigation';
 import { useDashboardData } from '@/hooks/useQueries';
@@ -410,9 +410,9 @@ export default function DashboardPage() {
                             {t.dueDate && (
                               <span className="flex items-center gap-1">
                                 {new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED' ? (
-                                  <span className="text-red-500 font-semibold">&middot; Overdue ({formatDate(t.dueDate)})</span>
+                                  <span className="text-red-500 font-semibold">&middot; Overdue ({formatShortDate(t.dueDate)})</span>
                                 ) : (
-                                  <span>&middot; {formatDate(t.dueDate)}</span>
+                                  <span>&middot; {formatShortDate(t.dueDate)}</span>
                                 )}
                               </span>
                             )}
@@ -591,7 +591,7 @@ export default function DashboardPage() {
                         </div>
                       </div>
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 border rounded-sm shrink-0 ${new Date(d.dueDate) < todayStart ? 'bg-red-50 text-red-600 border-red-200' : 'bg-[#F3F4F6] text-primary border-border'}`}>
-                        {new Date(d.dueDate) < todayStart ? `OVERDUE: ${formatDate(d.dueDate)}` : formatDate(d.dueDate)}
+                        {new Date(d.dueDate) < todayStart ? `OVERDUE: ${formatShortDate(d.dueDate)}` : formatShortDate(d.dueDate)}
                       </span>
                     </div>
                   );

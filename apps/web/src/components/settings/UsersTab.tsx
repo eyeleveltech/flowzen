@@ -100,8 +100,13 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
     SUPER_ADMIN: 'Super Admin', ADMIN: 'Admin', PROJECT_MANAGER: 'Project Manager', TEAM_MEMBER: 'Team Member',
   };
 
+  const designationOptions = Array.from(new Set((users || []).map((u: any) => u.designation).filter(Boolean))) as string[];
+
   return (
     <div className="space-y-6">
+      <datalist id="designation-options">
+        {designationOptions.map((d) => <option key={d} value={d} />)}
+      </datalist>
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-primary">Team Directory</h2>
@@ -208,7 +213,7 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
                 </div>
                 <div className="space-y-1.5 relative">
                   <label className="text-xs font-medium text-secondary uppercase tracking-wide">Designation (Optional)</label>
-                  <input value={inviteForm.designation || ''} onChange={(e) => setInviteForm({ ...inviteForm, designation: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
+                  <input list="designation-options" placeholder="Select or type a designation…" value={inviteForm.designation || ''} onChange={(e) => setInviteForm({ ...inviteForm, designation: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
                 </div>
                 <div className="pt-8 flex gap-3">
                   <button type="button" onClick={() => setShowInvite(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-border text-[#374151] font-medium hover:bg-surface transition-colors">Cancel</button>
@@ -250,7 +255,7 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
                 </div>
                 <div className="space-y-1.5 relative">
                   <label className="text-xs font-medium text-secondary uppercase tracking-wide">Designation (Optional)</label>
-                  <input value={editingUser.designation || ''} onChange={(e) => setEditingUser({ ...editingUser, designation: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
+                  <input list="designation-options" placeholder="Select or type a designation…" value={editingUser.designation || ''} onChange={(e) => setEditingUser({ ...editingUser, designation: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
                 </div>
                 <div className="space-y-1.5 relative">
                   <label className="text-xs font-medium text-secondary uppercase tracking-wide">Status</label>

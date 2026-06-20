@@ -49,6 +49,7 @@ const statusColors: Record<string, string> = {
   ACTIVE: 'bg-emerald-50 text-emerald-700',
   ONHOLD: 'bg-amber-50 text-amber-700',
   CHURNED: 'bg-gray-50 text-gray-400',
+  INACTIVE: 'bg-slate-100 text-slate-500',
 };
 
 function ClientsContent() {
@@ -359,6 +360,7 @@ function ClientsContent() {
               { label: 'Active', value: 'ACTIVE' },
               { label: 'On Hold', value: 'ONHOLD' },
               { label: 'Churned', value: 'CHURNED' },
+              { label: 'Inactive', value: 'INACTIVE' },
             ]}
           />
         </div>
@@ -381,7 +383,7 @@ function ClientsContent() {
             onChange={(val) => setAccountManagerFilter(val)}
             options={[
               { label: 'All Account Managers', value: '' },
-              ...members.map((m: any) => ({ label: m.name, value: m.id }))
+              ...members.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
             ]}
           />
         </div>
@@ -647,7 +649,7 @@ function ClientsContent() {
                       onChange={(v) => setForm({ ...form, accountManagerId: v })}
                       options={[
                         { label: 'Unassigned', value: '' },
-                        ...members.map((m: any) => ({ label: m.name, value: m.id }))
+                        ...members.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
                       ]}
                     />
                   </div>
@@ -690,6 +692,7 @@ function ClientsContent() {
                         { label: 'Active', value: 'ACTIVE' },
                         { label: 'On Hold', value: 'ONHOLD' },
                         { label: 'Churned', value: 'CHURNED' },
+                        { label: 'Inactive', value: 'INACTIVE' },
                       ]}
                     />
                   </div>

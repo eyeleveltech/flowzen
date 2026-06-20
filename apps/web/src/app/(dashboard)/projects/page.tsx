@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
-import { formatDate, getInitials, getAvatarColor, getClientDisplayName } from '@/lib/utils';
+import { formatDate, formatShortDate, getInitials, getAvatarColor, getClientDisplayName } from '@/lib/utils';
 import { Plus, LayoutList, GanttChartSquare, Calendar, ChevronRight, BarChart3, Clock, LayoutGrid, Search, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '@/stores';
@@ -241,7 +241,7 @@ function ProjectsContent() {
                   onChange={setOwnerFilter}
                   options={[
                     { label: 'All Owners', value: '' },
-                    ...members.filter(m => m.totalProjects > 0).map(m => ({ label: m.name, value: m.id }))
+                    ...members.filter(m => m.totalProjects > 0).map(m => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
                   ]}
                 />
               </div>
@@ -325,7 +325,7 @@ function ProjectsContent() {
                             </div>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-sm text-secondary">{formatDate(p.endDate)}</td>
+                        <td className="px-6 py-4 text-sm text-secondary">{formatShortDate(p.endDate)}</td>
                         <td className="px-6 py-4"><ChevronRight className="h-4 w-4 text-[#D1D5DB]" /></td>
                       </motion.tr>
                     ))}
@@ -388,7 +388,7 @@ function ProjectsContent() {
                         </span>
                         {p.endDate && (
                           <span className="bg-[#F3F4F6] px-1.5 py-0.5 rounded">
-                            {formatDate(p.endDate)}
+                            {formatShortDate(p.endDate)}
                           </span>
                         )}
                       </div>
@@ -429,7 +429,7 @@ function ProjectsContent() {
                     </div>
                     <div className="flex justify-between mt-1.5">
                       <span className="text-[10px] text-[#9CA3AF]">{formatDate(p.startDate)}</span>
-                      <span className="text-[10px] text-[#9CA3AF]">{formatDate(p.endDate)}</span>
+                      <span className="text-[10px] text-[#9CA3AF]">{formatShortDate(p.endDate)}</span>
                     </div>
                   </div>
                 </div>
@@ -554,7 +554,7 @@ function ProjectsContent() {
                 {/* Client & Ownership */}
                 <div className="space-y-4">
                   <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Client & Ownership</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-4">
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Client</label>
                       <Select
@@ -562,7 +562,10 @@ function ProjectsContent() {
                         onChange={(val) => setValue('clientId', val, { shouldValidate: true })}
                         options={[
                           { label: 'Select a client...', value: '' },
-                          ...clients.map((c) => ({ label: getClientDisplayName(c), value: c.id }))
+                          // Don't offer inactive/churned clients when creating a project
+                          ...clients
+                            .filter((c: any) => !['INACTIVE', 'CHURNED'].includes(c.status))
+                            .map((c) => ({ label: getClientDisplayName(c), value: c.id }))
                         ]}
                       />
                     </div>
@@ -574,7 +577,7 @@ function ProjectsContent() {
                         onChange={(val) => setValue('ownerId', val, { shouldValidate: true })}
                         options={[
                           { label: 'Select owner', value: '' },
-                          ...members.map((m) => ({ label: m.name, value: m.id }))
+                          ...members.map((m) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
                         ]}
                       />
                       {errors.ownerId && <p className="mt-1 text-xs text-red-500">{errors.ownerId.message}</p>}

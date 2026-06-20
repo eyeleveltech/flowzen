@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
-import { formatDate, getInitials, formatRelativeDate, getAvatarColor, getClientDisplayName } from '@/lib/utils';
+import { formatDate, formatShortDate, getInitials, formatRelativeDate, getAvatarColor, getClientDisplayName } from '@/lib/utils';
 import { ArrowLeft, Clock, MessageSquare, MoreHorizontal, CheckCircle2, ChevronRight, Plus, X, Trash2, Users, DollarSign, Briefcase } from 'lucide-react';
 import { Select } from '@/components/ui/select';
+import { TaskDetailDrawer } from '@/components/tasks/task-detail-drawer';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { TagsInput } from '@/components/ui/tags-input';
@@ -58,6 +59,12 @@ export default function ProjectDetailPage() {
   const [editingTaskId, setEditingTaskId] = useState('');
   const [taskForm, setTaskForm] = useState({ title: '', description: '', type: 'OTHER', assigneeId: '', reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: '', assignedDate: '', loggedHours: 0, driveLink: '' });
   const [submittingTask, setSubmittingTask] = useState(false);
+  // Task filters within this project's Tasks tab
+  const [taskSearch, setTaskSearch] = useState('');
+  const [taskStatusFilter, setTaskStatusFilter] = useState('');
+  const [taskAssigneeFilter, setTaskAssigneeFilter] = useState('');
+  const [taskPriorityFilter, setTaskPriorityFilter] = useState('');
+  const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
 
   // Edit Project States
   const [showEditProject, setShowEditProject] = useState(false);
@@ -129,8 +136,8 @@ export default function ProjectDetailPage() {
     } finally { setSubmittingTask(false); }
   }
 
-  function startEditingTask(t: any, e: React.MouseEvent) {
-    e.stopPropagation();
+  function startEditingTask(t: any, e?: React.MouseEvent) {
+    e?.stopPropagation();
     setTaskForm({
       title: t.title,
       description: t.description || '',
@@ -382,6 +389,18 @@ export default function ProjectDetailPage() {
   const totalTasks = project.tasks?.length ?? 0;
   const overdueTasksCount = project.tasks?.filter(t => t.dueDate && new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED').length || 0;
 
+  // Tasks tab: filtering
+  const projectTasks = (project.tasks || []) as any[];
+  const taskAssignees = Array.from(new Map(projectTasks.filter((t) => t.assignee).map((t) => [t.assignee.id, t.assignee])).values());
+  const filteredTasks = projectTasks.filter((t) => {
+    if (taskSearch && !t.title.toLowerCase().includes(taskSearch.toLowerCase())) return false;
+    if (taskStatusFilter && t.status !== taskStatusFilter) return false;
+    if (taskAssigneeFilter && (t.assignee?.id || '') !== taskAssigneeFilter) return false;
+    if (taskPriorityFilter && t.priority !== taskPriorityFilter) return false;
+    return true;
+  });
+  const hasTaskFilters = !!(taskSearch || taskStatusFilter || taskAssigneeFilter || taskPriorityFilter);
+
   let projectHealth: 'GREEN' | 'AMBER' | 'RED' = 'GREEN';
   if (overdueTasksCount >= 3 || (project.endDate && new Date(project.endDate) < todayStart && project.status !== 'COMPLETED')) {
     projectHealth = 'RED';
@@ -583,8 +602,45 @@ export default function ProjectDetailPage() {
 
       {tab === 'tasks' && (
         <div className="space-y-4">
-          <div className="flex justify-end">
-            <button onClick={openCreateTask} className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1F2937] transition-all">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2 flex-1">
+              <input
+                value={taskSearch}
+                onChange={(e) => setTaskSearch(e.target.value)}
+                placeholder="Search tasks..."
+                className="flex-1 min-w-[150px] max-w-[220px] rounded-lg border border-border bg-white px-3 py-1.5 text-sm outline-none focus:border-primary transition-all"
+              />
+              <Select value={taskStatusFilter} onChange={setTaskStatusFilter} className="w-36" options={[
+                { label: 'All Statuses', value: '' },
+                { label: 'Backlog', value: 'BACKLOG' },
+                { label: 'To Do', value: 'TODO' },
+                { label: 'In Progress', value: 'IN_PROGRESS' },
+                { label: 'In Review', value: 'REVIEW' },
+                { label: 'Approved', value: 'APPROVED' },
+                { label: 'Blocked', value: 'BLOCKED' },
+                { label: 'Done', value: 'COMPLETED' },
+              ]} />
+              <Select value={taskPriorityFilter} onChange={setTaskPriorityFilter} className="w-40" options={[
+                { label: 'All Priorities', value: '' },
+                { label: 'Low', value: 'LOW' },
+                { label: 'Medium', value: 'MEDIUM' },
+                { label: 'High', value: 'HIGH' },
+                { label: 'Urgent', value: 'URGENT' },
+              ]} />
+              <Select value={taskAssigneeFilter} onChange={setTaskAssigneeFilter} className="w-40" options={[
+                { label: 'All Assignees', value: '' },
+                ...taskAssignees.map((a: any) => ({ label: a.name, value: a.id, sublabel: a.designation, avatar: getInitials(a.name) })),
+              ]} />
+              {hasTaskFilters && (
+                <button
+                  onClick={() => { setTaskSearch(''); setTaskStatusFilter(''); setTaskAssigneeFilter(''); setTaskPriorityFilter(''); }}
+                  className="text-xs text-secondary hover:text-primary underline px-1"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <button onClick={openCreateTask} className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1F2937] transition-all shrink-0">
               <Plus className="h-3.5 w-3.5" /> Add Task
             </button>
           </div>
@@ -594,6 +650,7 @@ export default function ProjectDetailPage() {
               <thead>
                 <tr className="border-b border-[#F3F4F6]">
                   <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase">Task</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase">Type</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase">Assignee</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase">Due Date</th>
@@ -601,11 +658,11 @@ export default function ProjectDetailPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F3F4F6]">
-                {project.tasks?.length === 0 ? (
-                  <tr><td colSpan={4} className="px-6 py-8 text-center text-sm text-[#9CA3AF]">No tasks yet</td></tr>
+                {filteredTasks.length === 0 ? (
+                  <tr><td colSpan={6} className="px-6 py-8 text-center text-sm text-[#9CA3AF]">{hasTaskFilters ? 'No tasks match your filters' : 'No tasks yet'}</td></tr>
                 ) : (
-                  project.tasks?.map((t) => (
-                    <tr key={t.id} className="hover:bg-surface transition-colors cursor-pointer" onClick={() => router.push('/tasks')}>
+                  filteredTasks.map((t) => (
+                    <tr key={t.id} className="hover:bg-surface transition-colors cursor-pointer" onClick={() => setDetailTaskId(t.id)}>
                       <td className="px-6 py-3">
                         <div className="flex items-center gap-2">
                           <div className={`h-2 w-2 rounded-full shrink-0 ${priorityDots[t.priority]}`} />
@@ -621,6 +678,9 @@ export default function ProjectDetailPage() {
                         </div>
                       </td>
                       <td className="px-6 py-3">
+                        <span className="text-xs text-secondary capitalize">{(t.type || 'other').toLowerCase().replace(/_/g, ' ')}</span>
+                      </td>
+                      <td className="px-6 py-3">
                         {t.assignee ? (
                           <div className="flex items-center gap-1.5">
  <div className={`h-5 w-5 rounded-full text-[8px] font-semibold flex items-center justify-center ${getAvatarColor(t.assignee.name)}`}>{getInitials(t.assignee.name)}</div>
@@ -629,7 +689,7 @@ export default function ProjectDetailPage() {
                         ) : <span className="text-sm text-[#9CA3AF]">—</span>}
                       </td>
                       <td className="px-6 py-3"><span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[t.status]}`}>{t.status.replace('_', ' ')}</span></td>
-                      <td className="px-6 py-3 text-sm text-secondary">{formatDate(t.dueDate)}</td>
+                      <td className="px-6 py-3 text-sm text-secondary">{formatShortDate(t.dueDate)}</td>
                       <td className="px-6 py-3 text-right">
                         {(user?.role !== 'TEAM_MEMBER' || t.assignee?.id === user?.id) && (
                           <div className="flex items-center justify-end gap-2">
@@ -651,17 +711,17 @@ export default function ProjectDetailPage() {
 
           {/* Mobile Card View */}
           <div className="md:hidden flex flex-col gap-3">
-            {project.tasks?.length === 0 ? (
+            {filteredTasks.length === 0 ? (
               <div className="p-8 text-center text-sm text-[#9CA3AF] bg-white rounded-xl border border-border">
-                No tasks yet
+                {hasTaskFilters ? 'No tasks match your filters' : 'No tasks yet'}
               </div>
             ) : (
-              project.tasks?.map((t) => (
+              filteredTasks.map((t) => (
                 <motion.div
                   key={t.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  onClick={() => router.push('/tasks')}
+                  onClick={() => setDetailTaskId(t.id)}
                   className="p-4 rounded-xl border border-border bg-white hover:border-primary cursor-pointer transition-colors"
                 >
                   <div className="flex items-start justify-between mb-3">
@@ -670,7 +730,7 @@ export default function ProjectDetailPage() {
                       <div>
                         <p className="text-sm font-medium text-primary leading-tight">{t.title}</p>
                         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                          <span className="text-xs font-medium text-secondary">{formatDate(t.dueDate)}</span>
+                          <span className="text-xs font-medium text-secondary">{formatShortDate(t.dueDate)}</span>
                           {(t.loggedHours ?? 0) > 0 && (
                             <span className="text-[10px] text-secondary bg-[#F3F4F6] px-1.5 py-0.5 rounded-md font-medium tabular-nums border border-border">
                               ⏱ {t.loggedHours || 0}h
@@ -867,6 +927,7 @@ export default function ProjectDetailPage() {
                         { label: 'Content', value: 'CONTENT' },
                         { label: 'Video', value: 'VIDEO' },
                         { label: 'Digital Marketing', value: 'DIGITAL_MARKETING' },
+                        { label: 'Social Media', value: 'SOCIAL_MEDIA' },
                         { label: 'Development', value: 'DEVELOPMENT' },
                         { label: 'Strategy', value: 'STRATEGY' },
                         { label: 'Other', value: 'OTHER' },
@@ -874,19 +935,19 @@ export default function ProjectDetailPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignee</label>
-                    <Select
-                      value={taskForm.assigneeId}
-                      onChange={(val) => setTaskForm({ ...taskForm, assigneeId: val })}
-                      options={[{ label: 'Unassigned', value: '' }, ...allProjectMembers.map((m) => ({ label: m.name, value: m.id }))]}
-                    />
-                  </div>
-                  <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Reviewer</label>
                     <Select
                       value={taskForm.reviewerId}
                       onChange={(val) => setTaskForm({ ...taskForm, reviewerId: val })}
-                      options={[{ label: 'No Reviewer', value: '' }, ...allProjectMembers.map((m) => ({ label: m.name, value: m.id }))]}
+                      options={[{ label: 'No Reviewer', value: '' }, ...allProjectMembers.map((m) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignee</label>
+                    <Select
+                      value={taskForm.assigneeId}
+                      onChange={(val) => setTaskForm({ ...taskForm, assigneeId: val })}
+                      options={[{ label: 'Unassigned', value: '' }, ...allProjectMembers.map((m) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
                     />
                   </div>
                   <div>
@@ -1023,7 +1084,7 @@ export default function ProjectDetailPage() {
                       <Select
                         value={editForm.clientId}
                         onChange={(val) => setEditForm({ ...editForm, clientId: val })}
-                        options={[{ label: 'Select a client...', value: '' }, ...clients.map(c => ({ label: getClientDisplayName(c), value: c.id }))]}
+                        options={[{ label: 'Select a client...', value: '' }, ...clients.filter((c: any) => !['INACTIVE', 'CHURNED'].includes(c.status) || c.id === editForm.clientId).map(c => ({ label: getClientDisplayName(c), value: c.id }))]}
                       />
                     </div>
                     <div>
@@ -1031,7 +1092,7 @@ export default function ProjectDetailPage() {
                       <Select
                         value={editForm.ownerId}
                         onChange={(val) => setEditForm({ ...editForm, ownerId: val })}
-                        options={[{ label: 'Select owner', value: '' }, ...members.map(m => ({ label: m.name, value: m.id }))]}
+                        options={[{ label: 'Select owner', value: '' }, ...members.map(m => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
                       />
                     </div>
                   </div>
@@ -1192,6 +1253,25 @@ export default function ProjectDetailPage() {
               </form>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* Task detail (read view + status + comments), opened by clicking a task */}
+      <AnimatePresence>
+        {detailTaskId && (
+          <TaskDetailDrawer
+            taskId={detailTaskId}
+            onClose={() => setDetailTaskId(null)}
+            onChanged={async () => {
+              try {
+                const updated = await api.get<ProjectDetail>(`/projects/${id}`);
+                setProject(updated);
+              } catch { /* ignore */ }
+            }}
+            onEdit={(t) => { setDetailTaskId(null); startEditingTask(t); }}
+            canManage={user?.role !== 'TEAM_MEMBER'}
+            currentUserId={user?.id}
+          />
         )}
       </AnimatePresence>
     </motion.div>

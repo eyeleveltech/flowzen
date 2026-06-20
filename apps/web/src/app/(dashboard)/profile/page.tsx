@@ -6,12 +6,14 @@ import { api } from '@/lib/api';
 import { User, KeyRound, Save, Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Select } from '@/components/ui/select';
-import { useTeams } from '@/hooks/useQueries';
+import { useTeams, useMembers } from '@/hooks/useQueries';
 
 export default function ProfilePage() {
   const { user, setAuth } = useAuthStore();
   const { data: teams = [] } = useTeams();
-  
+  const { data: members = [] } = useMembers();
+  const designationOptions = Array.from(new Set((members as any[]).map((m) => m.designation).filter(Boolean))) as string[];
+
   const [profileForm, setProfileForm] = useState({
     name: '',
     department: '',
@@ -134,10 +136,15 @@ export default function ProfilePage() {
                   <label className="text-sm font-medium text-[#374151]">Designation (Job Title)</label>
                   <input
                     type="text"
+                    list="designation-options"
+                    placeholder="Select or type a designation…"
                     value={profileForm.designation}
                     onChange={(e) => setProfileForm({ ...profileForm, designation: e.target.value })}
                     className="w-full rounded-xl border border-border px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                   />
+                  <datalist id="designation-options">
+                    {designationOptions.map((d) => <option key={d} value={d} />)}
+                  </datalist>
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
                   <label className="text-sm font-medium text-[#374151]">Department (Optional)</label>
