@@ -78,6 +78,7 @@ teamRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN'), validate(teamSchema), as
       },
     });
 
+    emitToOrganization(req.app.get('io'), req.user!.organizationId, 'team:changed', { id: team.id });
     res.status(201).json(team);
   } catch (error) {
     next(error);
@@ -117,6 +118,7 @@ teamRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN'), validate(teamSchema), 
       },
     });
 
+    emitToOrganization(req.app.get('io'), req.user!.organizationId, 'team:changed', { id: team.id });
     res.json(team);
   } catch (error) {
     next(error);
@@ -139,6 +141,7 @@ teamRouter.delete('/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthReq
       where: { id: req.params.id as string },
     });
 
+    emitToOrganization(req.app.get('io'), req.user!.organizationId, 'team:changed', { id: req.params.id });
     res.status(204).send();
   } catch (error) {
     next(error);

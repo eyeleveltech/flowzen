@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { useAuthStore, useConfirmStore } from '@/stores';
 import { api } from '@/lib/api';
+import { getSSE } from '@/lib/sse';
 import { getInitials, getAvatarColor } from '@/lib/utils';
 import { Plus, X, Users, Edit2, Trash2 } from 'lucide-react';
 import { MultiSelect } from '@/components/ui/multi-select';
@@ -29,6 +31,7 @@ interface Team {
 
 export default function TeamsPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const confirm = useConfirmStore((s) => s.confirm);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -50,6 +53,15 @@ export default function TeamsPage() {
     fetchTeams();
     fetchUsers();
   }, [user, router]);
+
+  // Live-update the page when teams/members change anywhere (other users too).
+  useEffect(() => {
+    const sse = getSSE();
+    if (!sse) return;
+    sse.on('team:changed', fetchTeams);
+    sse.on('member:changed', fetchUsers);
+    return () => { sse.off('team:changed', fetchTeams); sse.off('member:changed', fetchUsers); };
+  }, []);
 
   async function fetchTeams() {
     try {
@@ -96,6 +108,7 @@ export default function TeamsPage() {
       await api.delete(`/teams/${id}`);
       toast.success('Department deleted successfully');
       fetchTeams();
+      queryClient.invalidateQueries({ queryKey: ['teams'] });
     } catch (err: any) {
       toast.error(err.message || 'Failed to delete department');
     }
@@ -115,6 +128,7 @@ export default function TeamsPage() {
       }
       setShowCreate(false);
       fetchTeams();
+      queryClient.invalidateQueries({ queryKey: ['teams'] });
     } catch (err: any) {
       setFormError(err.message || 'An error occurred');
       toast.error(err.message || 'Failed to save department');

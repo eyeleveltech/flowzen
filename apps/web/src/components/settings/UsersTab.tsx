@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { Plus, X, Edit2, Shield, Trash2, Mail, Building2, UserCircle, UserX } from 'lucide-react';
@@ -12,6 +13,14 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
   const [editingUser, setEditingUser] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
   const confirm = useConfirmStore(state => state.confirm);
+  const queryClient = useQueryClient();
+
+  // Refresh the Settings table + the shared ['members'] cache that feeds assignee
+  // dropdowns across Tasks/Projects/Pipeline/Clients.
+  const refreshMembers = () => {
+    fetchUsers();
+    queryClient.invalidateQueries({ queryKey: ['members'] });
+  };
 
   const [inviteForm, setInviteForm] = useState({
     name: '', email: '', role: 'TEAM_MEMBER', department: '', designation: ''
@@ -32,7 +41,7 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
       toast.success('Invitation sent');
       setShowInvite(false);
       setInviteForm({ name: '', email: '', role: 'TEAM_MEMBER', department: '', designation: '' });
-      fetchUsers();
+      refreshMembers();
     } catch (err: any) {
       toast.error(err.message || 'Failed to send invite');
     } finally {
@@ -54,7 +63,7 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
       });
       toast.success('User updated');
       setEditingUser(null);
-      fetchUsers();
+      refreshMembers();
     } catch (err: any) {
       toast.error(err.message || 'Failed to update user');
     } finally {
@@ -73,7 +82,7 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
     try {
       await api.put(`/settings/users/${userId}`, { status: 'INACTIVE' });
       toast.success('User deactivated');
-      fetchUsers();
+      refreshMembers();
     } catch (err: any) {
       toast.error(err.message || 'Failed to deactivate user');
     }
@@ -90,7 +99,7 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
     try {
       await api.delete(`/settings/users/${userId}`);
       toast.success('User permanently deleted');
-      fetchUsers();
+      refreshMembers();
     } catch (err: any) {
       toast.error(err.message || 'Failed to delete user');
     }

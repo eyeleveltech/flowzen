@@ -8,6 +8,14 @@ export interface ConfirmOptions {
   confirmText?: string;
   cancelText?: string;
   variant?: 'danger' | 'warning' | 'info';
+  /**
+   * When set, the user must type this exact string into a text field before the
+   * confirm button is enabled (GitHub-style "type the name to confirm" guard for
+   * permanent deletes).
+   */
+  requireText?: string;
+  /** Optional label shown above the input; defaults to a sensible prompt. */
+  requireTextLabel?: string;
 }
 
 interface ConfirmStore {

@@ -3,8 +3,10 @@ import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { Building2, Globe, Briefcase, Users, Phone, MapPin } from 'lucide-react';
 import { Select } from '@/components/ui/select';
+import { useAuthStore } from '@/stores';
 
-export function OrganizationTab({ initialData }: { initialData: any }) {
+export function OrganizationTab({ initialData, onSaved }: { initialData: any, onSaved?: () => void }) {
+  const { user, setAuth } = useAuthStore();
   const [data, setData] = useState({
     name: initialData?.name || '',
     website: initialData?.website || '',
@@ -21,6 +23,12 @@ export function OrganizationTab({ initialData }: { initialData: any }) {
     try {
       await api.put('/settings/organization', data);
       toast.success('Organization settings saved');
+      // Refresh the parent's cached org data (so switching tabs doesn't revert),
+      // and keep the auth store's org name in sync for anywhere it's shown.
+      onSaved?.();
+      if (user?.organization) {
+        setAuth({ ...user, organization: { ...user.organization, name: data.name } });
+      }
     } catch (err: any) {
       toast.error(err.message || 'Failed to save');
     } finally {

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Search } from 'lucide-react';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { Drawer } from '@/components/ui/drawer';
 
@@ -31,8 +31,11 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
   const isMobile = useMediaQuery('(max-width: 768px)');
   
   const [searchQuery, setSearchQuery] = useState('');
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [rect, setRect] = useState<DOMRect | null>(null);
+
+  // Only surface the search box once the list is long enough to need it.
+  const showSearch = options.length > 7;
 
   // Update bounds
   useEffect(() => {
@@ -54,15 +57,16 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen) {
-      setSearchQuery('');
-      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    }
+    if (!isOpen) setSearchQuery('');
   }, [isOpen]);
 
-  const filteredOptions = options.filter(opt => 
-    opt.label.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const q = searchQuery.trim().toLowerCase();
+  const filteredOptions = q
+    ? options.filter(opt =>
+        opt.label.toLowerCase().includes(q) ||
+        (opt.sublabel ? opt.sublabel.toLowerCase().includes(q) : false)
+      )
+    : options;
 
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -83,9 +87,15 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
 
   const selectedOption = options.find(opt => opt.value === value);
 
-  // Handle focusing the selected item or first item when opened
+  // When opened: focus the search box (so the user can type immediately) when it
+  // exists, otherwise focus the selected/first option for keyboard navigation.
   useEffect(() => {
-    if (isOpen && dropdownRef.current) {
+    if (!isOpen) return;
+    if (showSearch && !isMobile) {
+      searchInputRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    if (dropdownRef.current) {
       const selected = dropdownRef.current.querySelector('[aria-selected="true"]') as HTMLElement;
       if (selected) {
         selected.focus({ preventScroll: true });
@@ -112,27 +122,6 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
     <div
       className={`relative ${className}`}
       ref={containerRef}
-      onKeyDown={(e) => {
-        if (!isOpen) return;
-        // Ignore navigation/selection keys
-        if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === 'Escape') return;
-        
-        if (e.key === 'Backspace') {
-          e.preventDefault();
-          setSearchQuery(prev => prev.slice(0, -1));
-        } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-          // If space is pressed while typing a search, add it to search instead of selecting
-          if (e.key === ' ' && searchQuery.length > 0) {
-            e.preventDefault();
-          } else if (e.key === ' ' && searchQuery.length === 0) {
-            return; // let space select the item if we aren't searching
-          }
-          setSearchQuery(prev => prev + e.key);
-        }
-
-        if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-        searchTimeoutRef.current = setTimeout(() => setSearchQuery(''), 2000);
-      }}
     >
       <button
         type="button"
@@ -176,6 +165,18 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
       {isMobile ? (
         <Drawer isOpen={isOpen} onClose={() => setIsOpen(false)} title={placeholder}>
           <div className="flex flex-col space-y-1">
+            {showSearch && (
+              <div className="relative mb-2">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" aria-hidden="true" />
+                <input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search..."
+                  autoComplete="off"
+                  className="w-full rounded-xl border border-border bg-white py-2.5 pl-10 pr-3 text-base text-primary outline-none focus:border-primary"
+                />
+              </div>
+            )}
             {filteredOptions.length === 0 && (
               <div className="px-4 py-3.5 text-sm text-[#9CA3AF]">No options found</div>
             )}
@@ -227,9 +228,36 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
                       : { top: rect ? rect.bottom + 8 : 0 }),
                   }}
                 >
-              {searchQuery && (
-                <div className="px-3 py-1.5 text-[10px] font-medium text-[#9CA3AF] uppercase tracking-wide border-b border-[#F3F4F6] mb-1">
-                  Filtering: "{searchQuery}"
+              {showSearch && (
+                <div className="sticky top-0 z-10 -mx-1.5 -mt-1.5 mb-1 border-b border-[#F3F4F6] bg-white px-1.5 pt-1.5 pb-1.5">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#9CA3AF]" aria-hidden="true" />
+                    <input
+                      ref={searchInputRef}
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search..."
+                      autoComplete="off"
+                      className="w-full rounded-lg border border-border bg-white py-1.5 pl-8 pr-2 text-sm text-primary outline-none focus:border-primary"
+                      onKeyDown={(e) => {
+                        if (e.key === 'ArrowDown') {
+                          e.preventDefault();
+                          (dropdownRef.current?.querySelector('[role="option"]') as HTMLElement)?.focus();
+                        } else if (e.key === 'Enter') {
+                          e.preventDefault();
+                          if (filteredOptions[0]) {
+                            onChange(filteredOptions[0].value);
+                            setIsOpen(false);
+                            containerRef.current?.querySelector('button')?.focus();
+                          }
+                        } else if (e.key === 'Escape') {
+                          e.preventDefault();
+                          setIsOpen(false);
+                          containerRef.current?.querySelector('button')?.focus();
+                        }
+                      }}
+                    />
+                  </div>
                 </div>
               )}
               {filteredOptions.length === 0 && (
@@ -262,8 +290,10 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
                     if (e.key === 'ArrowUp') {
                       e.preventDefault();
                       const prev = e.currentTarget.previousElementSibling as HTMLElement;
-                      if (prev) {
+                      if (prev && prev.getAttribute('role') === 'option') {
                         prev.focus();
+                      } else if (showSearch) {
+                        searchInputRef.current?.focus();
                       } else {
                         containerRef.current?.querySelector('button')?.focus();
                       }

@@ -3,10 +3,16 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useConfirmStore } from '@/stores';
 import { AlertTriangle, Info, HelpCircle, X } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export function ConfirmDialog() {
   const { isOpen, options, onConfirm, onCancel } = useConfirmStore();
+  const [typed, setTyped] = useState('');
+
+  // Reset the typed value each time the dialog opens.
+  useEffect(() => {
+    if (isOpen) setTyped('');
+  }, [isOpen]);
 
   // Escape key close handler
   useEffect(() => {
@@ -25,8 +31,13 @@ export function ConfirmDialog() {
     message,
     confirmText = 'Confirm',
     cancelText = 'Cancel',
-    variant = 'info'
+    variant = 'info',
+    requireText,
+    requireTextLabel,
   } = options;
+
+  // Gate the confirm button on an exact text match when requireText is set.
+  const matched = !requireText || typed.trim() === requireText.trim();
 
   // Icon depending on the variant
   const getIcon = () => {
@@ -108,6 +119,27 @@ export function ConfirmDialog() {
                 <p className="mt-2 text-sm text-secondary leading-relaxed">
                   {message}
                 </p>
+
+                {requireText && (
+                  <div className="mt-4">
+                    <label className="block text-xs font-medium text-secondary mb-1.5">
+                      {requireTextLabel || (
+                        <>Type <span className="font-semibold text-primary break-all">{requireText}</span> to confirm</>
+                      )}
+                    </label>
+                    <input
+                      type="text"
+                      autoFocus
+                      value={typed}
+                      onChange={(e) => setTyped(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && matched) onConfirm(); }}
+                      placeholder={requireText}
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="w-full rounded-xl border border-border px-3 py-2 text-sm text-primary outline-none transition-colors focus:border-red-400 focus:ring-2 focus:ring-red-100 placeholder:text-[#9CA3AF]"
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -123,7 +155,8 @@ export function ConfirmDialog() {
               <button
                 type="button"
                 onClick={onConfirm}
-                className={getConfirmButtonClass()}
+                disabled={!matched}
+                className={`${getConfirmButtonClass()} disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100`}
               >
                 {confirmText}
               </button>

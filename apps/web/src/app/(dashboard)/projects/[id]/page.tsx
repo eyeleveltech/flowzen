@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
@@ -50,6 +51,7 @@ const priorityDots: Record<string, string> = {
 export default function ProjectDetailPage() {
   const { id } = useParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const confirm = useConfirmStore((s) => s.confirm);
   const [project, setProject] = useState<ProjectDetail | null>(null);
@@ -131,6 +133,9 @@ export default function ProjectDetailPage() {
       setTaskForm({ title: '', description: '', type: 'OTHER', assigneeId: '', reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: new Date().toISOString().split('T')[0], assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '' });
       const updated = await api.get<ProjectDetail>(`/projects/${id}`);
       setProject(updated);
+      // The global Tasks list + dashboard read cached data — refresh them.
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     } catch (err: any) {
       toast.error(err.message || 'Failed to save task');
     } finally { setSubmittingTask(false); }
@@ -200,6 +205,9 @@ export default function ProjectDetailPage() {
       });
       toast.success('Project updated successfully');
       setProject(updated);
+      // Keep the projects list + dashboard in sync (they read cached React Query data).
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       setShowEditProject(false);
     } catch (err: any) {
       toast.error(err.message || 'Failed to update project');
@@ -209,14 +217,24 @@ export default function ProjectDetailPage() {
   async function handleDeleteProject() {
     const confirmed = await confirm({
       title: 'Delete Project',
-      message: 'Are you sure you want to delete this project? This action cannot be undone.',
-      confirmText: 'Delete',
+      message: 'This permanently deletes the project, including its tasks and milestones. This action cannot be undone.',
+      confirmText: 'Delete Project',
       cancelText: 'Cancel',
       variant: 'danger',
+      requireText: project?.name,
     });
     if (!confirmed) return;
     try {
       await api.delete(`/projects/${id}`);
+      // Drop the project from every cached projects list immediately so the list
+      // page reflects the deletion without a stale flash, then reconcile in the
+      // background (counts, dashboard).
+      queryClient.setQueriesData({ queryKey: ['projects'] }, (old: any) => {
+        if (!old?.pages) return old;
+        return { ...old, pages: old.pages.map((p: any) => ({ ...p, projects: (p.projects || []).filter((pr: any) => pr.id !== id) })) };
+      });
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success('Project deleted successfully');
       router.push('/projects');
     } catch (err: any) {
@@ -239,6 +257,8 @@ export default function ProjectDetailPage() {
       await api.delete(`/tasks/${taskId}`);
       toast.success('Task deleted');
       fetchProject(); // refresh data
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     } catch (err: any) {
       toast.error(err.message || 'Failed to delete task');
       console.error(err);

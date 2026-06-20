@@ -94,10 +94,11 @@ export default function ClientDetailPage() {
   async function handleDelete() {
     const isConfirmed = await confirm({
       title: 'Delete Client',
-      message: 'Are you sure you want to delete this client? All associated projects will also be removed. This action cannot be undone.',
+      message: 'This permanently deletes the client and all associated projects. This action cannot be undone.',
       confirmText: 'Delete Client',
       cancelText: 'Cancel',
       variant: 'danger',
+      requireText: getClientDisplayName(client),
     });
     if (!isConfirmed) return;
     try {

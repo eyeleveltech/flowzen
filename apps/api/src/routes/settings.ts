@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
 import { hashPassword } from '../utils/password.js';
 import { EmailService } from '../services/email.js';
+import { emitToOrganization } from '../sse.js';
 import rateLimit from 'express-rate-limit';
 
 const settingsLimiter = rateLimit({
@@ -146,6 +147,7 @@ settingsRouter.post('/users', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimiter
 
     await EmailService.sendSetupPasswordEmail(email, resetToken);
 
+    emitToOrganization(req.app.get('io'), req.user!.organizationId, 'member:changed', { id: user.id });
     res.status(201).json(user);
   } catch (error) {
     next(error);
@@ -199,6 +201,7 @@ settingsRouter.put('/users/:id', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimi
       },
     });
 
+    emitToOrganization(req.app.get('io'), req.user!.organizationId, 'member:changed', { id: user.id });
     res.json(user);
   } catch (error) {
     next(error);
@@ -235,6 +238,7 @@ settingsRouter.delete('/users/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (re
       where: { id: targetUserId },
     });
 
+    emitToOrganization(req.app.get('io'), req.user!.organizationId, 'member:changed', { id: targetUserId });
     res.json({ success: true, message: 'User deleted successfully' });
   } catch (error: any) {
     if (error.code === 'P2003') {

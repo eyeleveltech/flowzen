@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
+import { getSSE } from '@/lib/sse';
 import { useAuthStore } from '@/stores';
 import { useRouter } from 'next/navigation';
 import { Building2, Users, FileText, Shield, Zap } from 'lucide-react';
@@ -31,6 +32,8 @@ export default function SettingsPage() {
   const fetchUsers = () => api.get<any[]>('/settings/users').then(setUsers).catch(() => {});
   const fetchWorkflows = () => api.get<any[]>('/settings/workflows').then(setWorkflows).catch(() => {});
   const fetchTemplates = () => api.get<any[]>('/settings/templates').then(setTemplates).catch(() => {});
+  const fetchOrg = () => api.get<any>('/settings/organization').then(setOrgData).catch(() => {});
+  const fetchTeams = () => api.get<{ teams: any[] }>('/teams').then((res) => setTeams(res.teams || [])).catch(() => {});
 
   useEffect(() => {
     if (user && (user.role === 'TEAM_MEMBER' || user.role === 'PROJECT_MANAGER')) {
@@ -38,13 +41,22 @@ export default function SettingsPage() {
       return;
     }
     Promise.all([
-      api.get<any>('/settings/organization').then(setOrgData).catch(() => {}),
+      fetchOrg(),
       fetchUsers(),
       fetchWorkflows(),
       fetchTemplates(),
-      api.get<{ teams: any[] }>('/teams').then((res) => setTeams(res.teams || [])).catch(() => {})
+      fetchTeams()
     ]).finally(() => setLoading(false));
   }, [user, router]);
+
+  // Live-update the users table + department list when members/teams change (other users too).
+  useEffect(() => {
+    const sse = getSSE();
+    if (!sse) return;
+    sse.on('member:changed', fetchUsers);
+    sse.on('team:changed', fetchTeams);
+    return () => { sse.off('member:changed', fetchUsers); sse.off('team:changed', fetchTeams); };
+  }, []);
 
   if (loading) {
     return (
@@ -97,7 +109,7 @@ export default function SettingsPage() {
         transition={{ duration: 0.2 }}
         className="bg-white p-6 rounded-2xl border border-border"
       >
-        {tab === 'organization' && <OrganizationTab initialData={orgData} />}
+        {tab === 'organization' && <OrganizationTab initialData={orgData} onSaved={fetchOrg} />}
         {tab === 'users' && <UsersTab users={users} fetchUsers={fetchUsers} teams={teams} />}
         {tab === 'workflows' && <WorkflowsTab workflows={workflows} fetchWorkflows={fetchWorkflows} users={users} />}
         {tab === 'templates' && <TemplatesTab templates={templates} fetchTemplates={fetchTemplates} />}
