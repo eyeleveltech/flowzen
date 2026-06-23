@@ -14,10 +14,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 const COLORS = ['#111827', '#4B5563', '#9CA3AF', '#D1D5DB', '#F3F4F6'];
 
 const STAGE_LABELS: Record<string, string> = {
-  LEAD: 'Lead', MQL: 'MQL', SQL: 'SQL', REACH_OUT: 'Reach Out', DISCOVERY: 'Discovery',
-  AUDIT: 'Audit', PRESENTATION: 'Presentation', PROPOSAL: 'Proposal', NEGOTIATION: 'Negotiation',
-  FINALIZATION: 'Finalization', CONTRACT: 'Contract', ACTIVE_RETAINER: 'Active Retainer', ACTIVE_PROJECT: 'Active Project',
-  WON_CLOSED: 'Won Closed', LOST_CLOSED: 'Lost Closed'
+  NEW_LEAD: 'New Lead', OUTREACH: 'Outreach', MEETING: 'Meeting', PROPOSAL: 'Proposal', NEGOTIATION: 'Negotiation',
+  CONTRACT: 'Contract', ACTIVE_RETAINER: 'Active Retainer', ACTIVE_PROJECT: 'Active Project',
+  PROJECT_COMPLETED: 'Project Completed', CHURNED: 'Churned'
 };
 
 const ALL_STAGES = Object.keys(STAGE_LABELS);
@@ -122,9 +121,9 @@ export function PipelineDashboard() {
   }, [allLeads, selectedStages, ownerFilter, dateRange, dateFilterType, customDateFrom, customDateTo]);
 
   const metrics = useMemo(() => {
-    const activeLeads = filteredLeads.filter(l => !['WON_CLOSED', 'LOST_CLOSED'].includes(l.stage));
+    const activeLeads = filteredLeads.filter(l => !['PROJECT_COMPLETED', 'CHURNED'].includes(l.stage));
     const totalPipelineValue = activeLeads.reduce((sum, l) => sum + (l.dealValue || 0), 0);
-    const wonValue = filteredLeads.filter(l => ['WON_CLOSED', 'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(l.stage)).reduce((sum, l) => sum + (l.dealValue || 0), 0);
+    const wonValue = filteredLeads.filter(l => ['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED'].includes(l.stage)).reduce((sum, l) => sum + (l.dealValue || 0), 0);
     
     // Stage Distribution for Bar Chart
     const stageCounts: Record<string, number> = {};
@@ -149,8 +148,8 @@ export function PipelineDashboard() {
       .slice(0, 5);
 
     // Won & Lost closed deals + lost-reason breakdown
-    const wonClosed = filteredLeads.filter(l => l.stage === 'WON_CLOSED');
-    const lostClosed = filteredLeads.filter(l => l.stage === 'LOST_CLOSED');
+    const wonClosed = filteredLeads.filter(l => ['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED'].includes(l.stage));
+    const lostClosed = filteredLeads.filter(l => l.stage === 'CHURNED');
     const lostReasonLabels: Record<string, string> = {
       BUDGET: 'Price too high', COMPETITOR: 'Competitor', NO_BUDGET: 'No budget',
       UNRESPONSIVE: 'No decision', TIMING: 'Timing', SCOPE_MISMATCH: 'Requirements',
@@ -505,8 +504,8 @@ export function PipelineDashboard() {
                   </td>
                   <td className="px-5 py-3">
                     <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md border ${
-                      lead.stage === 'WON_CLOSED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                      lead.stage === 'LOST_CLOSED' ? 'bg-red-50 text-red-700 border-red-200' :
+                      lead.stage === 'PROJECT_COMPLETED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                      lead.stage === 'CHURNED' ? 'bg-red-50 text-red-700 border-red-200' :
                       'text-primary bg-[#F3F4F6] border-border'
                     }`}>
                       {STAGE_LABELS[lead.stage] || lead.stage}

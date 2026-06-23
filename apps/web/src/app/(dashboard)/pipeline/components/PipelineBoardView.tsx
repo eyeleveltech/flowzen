@@ -14,37 +14,32 @@ import { WonCelebrationModal } from './WonCelebrationModal';
 
 // All 15 pipeline stages in chronological order (used by the per-card stage menu)
 const PIPELINE_STAGES = [
-  'LEAD', 'MQL', 'SQL', 'REACH_OUT', 'DISCOVERY', 'AUDIT', 'PRESENTATION',
-  'PROPOSAL', 'NEGOTIATION', 'FINALIZATION', 'CONTRACT', 'ACTIVE_RETAINER',
-  'ACTIVE_PROJECT', 'WON_CLOSED', 'LOST_CLOSED',
+  'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
+  'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED', 'CHURNED',
 ];
 
 const GROUPS = [
-  { id: 'Qualify', title: 'Qualify', color: '#7c3aed', stages: ['LEAD', 'MQL', 'SQL'] },
-  { id: 'Engage', title: 'Engage', color: '#0891b2', stages: ['REACH_OUT', 'DISCOVERY', 'AUDIT'] },
-  { id: 'Close', title: 'Close', color: '#d97706', stages: ['PRESENTATION', 'PROPOSAL', 'NEGOTIATION'] },
-  { id: 'Finalise', title: 'Finalise', color: '#15803d', stages: ['FINALIZATION', 'CONTRACT'] },
+  { id: 'New', title: 'New', color: '#7c3aed', stages: ['NEW_LEAD'] },
+  { id: 'Outreach', title: 'Outreach', color: '#0891b2', stages: ['OUTREACH'] },
+  { id: 'Meeting', title: 'Meeting', color: '#d97706', stages: ['MEETING'] },
+  { id: 'Proposal', title: 'Proposal', color: '#2563eb', stages: ['PROPOSAL'] },
+  { id: 'Negotiation', title: 'Negotiation', color: '#0369a1', stages: ['NEGOTIATION'] },
+  { id: 'Closing', title: 'Closing', color: '#15803d', stages: ['CONTRACT'] },
   { id: 'Active', title: 'Active', color: '#0f766e', stages: ['ACTIVE_RETAINER', 'ACTIVE_PROJECT'] },
-  { id: 'Won', title: 'Won', color: '#166534', stages: ['WON_CLOSED'] },
-  { id: 'Lost', title: 'Lost', color: '#dc2626', stages: ['LOST_CLOSED'] },
+  { id: 'Closed', title: 'Closed', color: '#475569', stages: ['PROJECT_COMPLETED', 'CHURNED'] },
 ];
 
 const STAGE_BADGES: Record<string, { label: string, bg: string, text: string }> = {
-  'LEAD': { label: 'LEAD', bg: '#7c3aed', text: '#ffffff' },
-  'MQL': { label: 'MQL', bg: '#2563eb', text: '#ffffff' },
-  'SQL': { label: 'SQL', bg: '#0891b2', text: '#ffffff' },
-  'REACH_OUT': { label: 'REACH OUT', bg: '#ea580c', text: '#ffffff' },
-  'DISCOVERY': { label: 'DISCOVERY', bg: '#d97706', text: '#ffffff' },
-  'AUDIT': { label: 'AUDIT', bg: '#65a30d', text: '#ffffff' },
-  'PRESENTATION': { label: 'PRESENT', bg: '#16a34a', text: '#ffffff' },
-  'PROPOSAL': { label: 'PROPOSAL', bg: '#0d9488', text: '#ffffff' },
+  'NEW_LEAD': { label: 'NEW', bg: '#7c3aed', text: '#ffffff' },
+  'OUTREACH': { label: 'OUTREACH', bg: '#0891b2', text: '#ffffff' },
+  'MEETING': { label: 'MEETING', bg: '#d97706', text: '#ffffff' },
+  'PROPOSAL': { label: 'PROPOSAL', bg: '#2563eb', text: '#ffffff' },
   'NEGOTIATION': { label: 'NEGOTIATION', bg: '#0369a1', text: '#ffffff' },
-  'FINALIZATION': { label: 'FINAL', bg: '#4f46e5', text: '#ffffff' },
   'CONTRACT': { label: 'CONTRACT', bg: '#15803d', text: '#ffffff' },
   'ACTIVE_RETAINER': { label: 'RETAINER', bg: '#0f766e', text: '#ffffff' },
   'ACTIVE_PROJECT': { label: 'PROJECT', bg: '#1d4ed8', text: '#ffffff' },
-  'WON_CLOSED': { label: 'WON', bg: '#166534', text: '#ffffff' },
-  'LOST_CLOSED': { label: 'LOST', bg: '#dc2626', text: '#ffffff' },
+  'PROJECT_COMPLETED': { label: 'COMPLETED', bg: '#166534', text: '#ffffff' },
+  'CHURNED': { label: 'CHURNED', bg: '#dc2626', text: '#ffffff' },
 };
 
 export function PipelineBoardView() {
@@ -143,7 +138,7 @@ export function PipelineBoardView() {
       await api.post(`/crm/leads/${lead.id}/stage`, payload);
       toast.success('Stage updated successfully');
       setPendingTransition(null);
-      if (payload?.stage === 'WON_CLOSED') setWonModalLead(lead);
+      if (payload?.stage === 'CONTRACT') setWonModalLead(lead);
       fetchLeads();
     } catch (err: any) {
       // Re-throw so the modal can surface the error and stay open.
@@ -233,16 +228,16 @@ export function PipelineBoardView() {
                                 {/* Content */}
                                 <div className="pr-16">
                                   <h4 className="text-[15px] font-bold text-primary truncate">
-                                    {lead.client.name || 'Unknown'}
+                                    {lead.contactName || lead.companyName || lead.client?.name || 'Unknown'}
                                   </h4>
                                 </div>
                                 <div className="mt-1">
                                   <p className="text-sm font-medium text-secondary truncate">
-                                    {lead.contactName || lead.client.name}
+                                    {lead.companyName || lead.client?.company || lead.contactEmail || ''}
                                   </p>
-                                  {(lead.jobTitle || lead.client.company) && (
+                                  {(lead.jobTitle || lead.client?.company) && (
                                     <p className="text-[11px] text-gray-400 truncate mt-0.5">
-                                      {lead.jobTitle || lead.client.company}
+                                      {lead.jobTitle || lead.client?.company}
                                     </p>
                                   )}
                                 </div>
@@ -326,7 +321,7 @@ export function PipelineBoardView() {
         )}
       </AnimatePresence>
 
-      {/* Won celebration after a lead is moved to WON_CLOSED */}
+      {/* Won celebration after a lead is moved to CONTRACT (deal signed) */}
       <AnimatePresence>
         {wonModalLead && (
           <WonCelebrationModal lead={wonModalLead} onClose={() => setWonModalLead(null)} />

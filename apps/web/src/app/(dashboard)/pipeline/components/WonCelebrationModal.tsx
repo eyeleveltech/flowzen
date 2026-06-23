@@ -10,7 +10,7 @@ interface WonCelebrationModalProps {
   onClose: () => void;
 }
 
-// Shown after a lead is moved to WON_CLOSED. The client is already auto-activated
+// Shown after a lead is moved to CONTRACT (deal signed). The client is already auto-activated
 // server-side; here we offer to spin up a project pre-filled from the won lead.
 export function WonCelebrationModal({ lead, onClose }: WonCelebrationModalProps) {
   const router = useRouter();

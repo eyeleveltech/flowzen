@@ -15,6 +15,7 @@ interface User {
     name: string;
     logo?: string | null;
   };
+  enabledModules?: string[];
   lastActivityReadAt?: string | null;
 }
 
@@ -82,6 +83,29 @@ export const useUIStore = create<UIStore>((set) => ({
   toggleCollapse: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
   setMobileSidebarOpen: (open) => set({ mobileSidebarOpen: open }),
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
+}));
+
+// ─── Active Module Store ──────────────────────
+// Which module the user is currently working in (drives the sidebar). The route
+// is the primary signal; this persists the last module for shared/core pages.
+
+interface ModuleStore {
+  activeModule: 'CRM' | 'PM';
+  setActiveModule: (m: 'CRM' | 'PM') => void;
+  hydrate: () => void;
+}
+
+export const useModuleStore = create<ModuleStore>((set) => ({
+  activeModule: 'PM',
+  setActiveModule: (m) => {
+    if (typeof window !== 'undefined') localStorage.setItem('flowzen-active-module', m);
+    set({ activeModule: m });
+  },
+  hydrate: () => {
+    if (typeof window === 'undefined') return;
+    const saved = localStorage.getItem('flowzen-active-module');
+    if (saved === 'CRM' || saved === 'PM') set({ activeModule: saved });
+  },
 }));
 
 export * from './confirm';

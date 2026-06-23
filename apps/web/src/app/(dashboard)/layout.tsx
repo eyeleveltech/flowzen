@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
-import { useAuthStore, useUIStore } from '@/stores';
+import { useAuthStore, useUIStore, useModuleStore } from '@/stores';
+import { moduleForPath, canAccessModule } from '@/lib/modules';
 import { Sidebar } from '@/components/layout/sidebar';
 import { TopNav } from '@/components/layout/top-nav';
 import { BottomTabs } from '@/components/layout/bottom-tabs';
@@ -14,14 +15,18 @@ import { X, Bell } from 'lucide-react';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { user, isAuthenticated, loadFromStorage } = useAuthStore();
+  const { user, isAuthenticated, loadFromStorage, setAuth } = useAuthStore();
   const { sidebarCollapsed, mobileSidebarOpen, setMobileSidebarOpen } = useUIStore();
   const { activeToast, clearToast } = useNotificationStore();
+  const hydrateModule = useModuleStore((s) => s.hydrate);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     loadFromStorage();
-    
+    hydrateModule();
+    // Refresh the session (incl. enabledModules) so module gating reflects the server.
+    api.get('/auth/me').then((fresh: any) => setAuth(fresh)).catch(() => {});
+
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
     window.addEventListener('resize', checkMobile);
@@ -34,6 +39,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       router.push('/login');
     }
   }, [isAuthenticated, router]);
+
+  // Module guard: if the current route belongs to a module the user can't access
+  // (org disabled it, or role not allowed), bounce to the picker.
+  const pathname = usePathname();
+  useEffect(() => {
+    if (!user || user.enabledModules == null) return; // wait for modules to load
+    const mod = moduleForPath(pathname);
+    if (mod && !canAccessModule(user, mod)) router.replace('/modules');
+  }, [pathname, user, router]);
 
   // Close mobile sidebar when route changes
   useEffect(() => {

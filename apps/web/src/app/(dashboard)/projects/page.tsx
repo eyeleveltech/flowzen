@@ -9,6 +9,7 @@ import { formatDate, formatShortDate, getInitials, getAvatarColor, getClientDisp
 import { Plus, LayoutList, GanttChartSquare, Calendar, ChevronRight, BarChart3, Clock, LayoutGrid, Search, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '@/stores';
+import { useProjectFilters } from '@/stores/projectFilters';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
@@ -53,17 +54,15 @@ function ProjectsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuthStore();
-  const [search, setSearch] = useState('');
   const [view, setView] = useState<ViewMode>('list');
   const urlStatus = searchParams.get('status');
-  const [statusFilter, setStatusFilter] = useState(urlStatus || '');
-  
+  // Filters live in an in-memory store so they persist while navigating into a
+  // project and back, but reset on a full page refresh.
+  const { search, setSearch, statusFilter, setStatusFilter, clientFilter, setClientFilter, ownerFilter, setOwnerFilter } = useProjectFilters();
+
   useEffect(() => {
     if (urlStatus) setStatusFilter(urlStatus);
   }, [urlStatus]);
-  
-  const [clientFilter, setClientFilter] = useState('');
-  const [ownerFilter, setOwnerFilter] = useState('');
   const showCreate = searchParams.get('create') === 'true';
   const setShowCreate = (open: boolean) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -565,7 +564,7 @@ function ProjectsContent() {
                           // Don't offer inactive/churned clients when creating a project,
                           // but keep a pre-filled client visible even if it's inactive.
                           ...clients
-                            .filter((c: any) => !['INACTIVE', 'CHURNED'].includes(c.status) || c.id === formValues.clientId)
+                            .filter((c: any) => !['PROJECT_COMPLETED', 'CHURNED'].includes(c.status) || c.id === formValues.clientId)
                             .map((c) => ({ label: getClientDisplayName(c), value: c.id }))
                         ]}
                       />

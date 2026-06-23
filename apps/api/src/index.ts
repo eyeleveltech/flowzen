@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import { errorHandler } from './middleware/errorHandler.js';
+import { authenticate, authorize, requireModule } from './middleware/auth.js';
 import { authRouter } from './routes/auth.js';
 import { dashboardRouter } from './routes/dashboard.js';
 import { clientRouter } from './routes/clients.js';
@@ -64,22 +65,31 @@ app.get('/api/health', (_req, res) => {
 });
 
 // API Routes
+// Core (always available):
 app.use('/api/auth', authRouter);
-app.use('/api/dashboard', dashboardRouter);
-app.use('/api/clients', clientRouter);
-app.use('/api/projects', projectRouter);
-app.use('/api/tasks', taskRouter);
-app.use('/api/team', teamRouter);
-app.use('/api/teams', teamsRouter);
-app.use('/api/reports', reportRouter);
 app.use('/api/notifications', notificationRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/profile', profileRouter);
-app.use('/api/workflows', workflowRouter);
-app.use('/api/crm', crmRouter);
-app.use('/api/v1', publicApiRouter);
 app.use('/api/stream', sseRouter);
+
+// CRM module (Admins only):
+app.use('/api/crm', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), requireModule('CRM'), crmRouter);
+
+// Shared infrastructure — available whenever CRM or PM is on (both use clients + the members list):
+app.use('/api/clients', authenticate, requireModule('CRM', 'PM'), clientRouter);
+app.use('/api/team', authenticate, requireModule('CRM', 'PM'), teamRouter);
+
+// PM module:
+app.use('/api/dashboard', authenticate, requireModule('PM'), dashboardRouter);
+app.use('/api/projects', authenticate, requireModule('PM'), projectRouter);
+app.use('/api/tasks', authenticate, requireModule('PM'), taskRouter);
+app.use('/api/teams', authenticate, requireModule('PM'), teamsRouter);
+app.use('/api/reports', authenticate, requireModule('PM'), reportRouter);
+app.use('/api/workflows', authenticate, requireModule('PM'), workflowRouter);
+
+// Public API (external keys):
+app.use('/api/v1', publicApiRouter);
 
 // Error handler
 app.use(errorHandler);

@@ -8,9 +8,8 @@ import { STAGE_FIELDS, StageField } from '../lib/stage-config';
 import toast from 'react-hot-toast';
 
 const PIPELINE_STAGES = [
-  'LEAD', 'MQL', 'SQL', 'REACH_OUT', 'DISCOVERY', 'AUDIT', 'PRESENTATION', 
-  'PROPOSAL', 'NEGOTIATION', 'FINALIZATION', 'CONTRACT', 'ACTIVE_RETAINER', 
-  'ACTIVE_PROJECT', 'WON_CLOSED', 'LOST_CLOSED'
+  'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
+  'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED', 'CHURNED'
 ];
 
 interface StageTransitionModalProps {
@@ -43,9 +42,10 @@ export function StageTransitionModal({ currentStage, targetStage, onClose, onSub
   const fields = combinedFields;
   const [formData, setFormData] = useState<Record<string, any>>({});
   
-  // Also collect deal value and expected close date if it's SQL or later
-  const requiresDealValue = ['SQL', 'REACH_OUT', 'DISCOVERY', 'AUDIT', 'PRESENTATION', 'PROPOSAL', 'NEGOTIATION', 'FINALIZATION'].includes(targetStage);
-  
+  // Deal value + expected close date are confirmed when entering NEGOTIATION / CONTRACT.
+  const requiresDealValue = ['NEGOTIATION', 'CONTRACT'].includes(targetStage);
+  const showsContractType = ['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(targetStage);
+
   // Specific required fields based on the brief
   const [dealValue, setDealValue] = useState('');
   const [expectedCloseDate, setExpectedCloseDate] = useState('');
@@ -56,7 +56,13 @@ export function StageTransitionModal({ currentStage, targetStage, onClose, onSub
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    // Conditional gate: if "Audit Required = Yes", findings + report link are mandatory.
+    if (formData['auditRequired'] === 'Yes' && (!formData['auditFindings']?.trim() || !formData['auditReportLink']?.trim())) {
+      toast.error('Audit is marked Yes — add the audit findings and report link.');
+      return;
+    }
+
     const payload: any = {
       stage: targetStage,
       fields: formData,
@@ -65,12 +71,12 @@ export function StageTransitionModal({ currentStage, targetStage, onClose, onSub
 
     if (requiresDealValue && dealValue) payload.dealValue = parseFloat(dealValue);
     if (requiresDealValue && expectedCloseDate) payload.expectedCloseDate = expectedCloseDate;
-    
-    if (targetStage === 'CONTRACT' || targetStage === 'ACTIVE_RETAINER' || targetStage === 'ACTIVE_PROJECT') {
+
+    if (showsContractType) {
       payload.contractType = contractType;
     }
-    
-    if (targetStage === 'LOST_CLOSED') {
+
+    if (targetStage === 'CHURNED') {
       payload.lostReason = lostReason;
       if (lostReason === 'OTHER' && lostReasonOther.trim()) {
         payload.notes = [notes.trim(), lostReasonOther.trim()].filter(Boolean).join(' — ') || undefined;
@@ -136,14 +142,14 @@ export function StageTransitionModal({ currentStage, targetStage, onClose, onSub
               </div>
             )}
 
-            {targetStage === 'CONTRACT' && (
+            {showsContractType && (
               <div>
                 <label className="block text-sm font-medium text-[#374151] mb-1.5">Contract Type</label>
                 <Select value={contractType} onChange={setContractType} options={[{ label: 'Retainer', value: 'RETAINER' }, { label: 'One-Time Project', value: 'ONE_TIME' }]} />
               </div>
             )}
 
-            {targetStage === 'LOST_CLOSED' && (
+            {targetStage === 'CHURNED' && (
               <div className="space-y-3">
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Reason for Loss <span className="text-red-500">*</span></label>
@@ -154,9 +160,10 @@ export function StageTransitionModal({ currentStage, targetStage, onClose, onSub
                       { label: 'Price too high', value: 'BUDGET' },
                       { label: 'Went with competitor', value: 'COMPETITOR' },
                       { label: 'No budget', value: 'NO_BUDGET' },
-                      { label: 'No decision made', value: 'UNRESPONSIVE' },
-                      { label: 'Timing not right', value: 'TIMING' },
-                      { label: 'Requirements not met', value: 'SCOPE_MISMATCH' },
+                      { label: 'No decision', value: 'UNRESPONSIVE' },
+                      { label: 'Timing', value: 'TIMING' },
+                      { label: 'Not a fit', value: 'SCOPE_MISMATCH' },
+                      { label: 'Went cold', value: 'INTERNAL_CHANGE' },
                       { label: 'Other', value: 'OTHER' },
                     ]}
                   />

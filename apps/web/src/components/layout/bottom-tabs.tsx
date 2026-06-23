@@ -2,9 +2,10 @@
 
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAuthStore } from '@/stores';
+import { useAuthStore, useModuleStore } from '@/stores';
+import { moduleForPath, accessibleModules, ModuleKey } from '@/lib/modules';
 import {
   LayoutDashboard,
   FolderKanban,
@@ -16,23 +17,28 @@ import {
   Network,
   BarChart3,
   Settings,
+  TrendingUp,
+  ArrowLeftRight,
   User as UserIcon,
   LogOut,
   X,
 } from 'lucide-react';
 
-const primaryTabs = [
-  { label: 'Home', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Projects', href: '/projects', icon: FolderKanban },
-  { label: 'Tasks', href: '/tasks', icon: CheckSquare },
-  { label: 'Clients', href: '/clients', icon: Building2 },
+type Tab = { label: string; href: string; icon: any; roles?: string[]; module?: ModuleKey | ModuleKey[] };
+
+const primaryTabs: Tab[] = [
+  { label: 'Home', href: '/dashboard', icon: LayoutDashboard, module: 'PM' },
+  { label: 'Pipeline', href: '/pipeline', icon: TrendingUp, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
+  { label: 'Projects', href: '/projects', icon: FolderKanban, module: 'PM' },
+  { label: 'Tasks', href: '/tasks', icon: CheckSquare, module: 'PM' },
+  { label: 'Clients', href: '/clients', icon: Building2, module: ['CRM', 'PM'] },
 ];
 
-const moreItems = [
-  { label: 'Calendar', href: '/calendar', icon: CalendarDays },
-  { label: 'Members', href: '/team', icon: UsersRound },
-  { label: 'Departments', href: '/teams', icon: Network, roles: ['SUPER_ADMIN', 'ADMIN'] },
-  { label: 'Reports', href: '/reports', icon: BarChart3, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'] },
+const moreItems: Tab[] = [
+  { label: 'Calendar', href: '/calendar', icon: CalendarDays, module: 'PM' },
+  { label: 'Members', href: '/team', icon: UsersRound, module: 'PM' },
+  { label: 'Departments', href: '/teams', icon: Network, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'PM' },
+  { label: 'Reports', href: '/reports', icon: BarChart3, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'], module: 'PM' },
   { label: 'Settings', href: '/settings', icon: Settings, roles: ['SUPER_ADMIN', 'ADMIN'] },
   { label: 'Profile', href: '/profile', icon: UserIcon },
 ];
@@ -40,15 +46,28 @@ const moreItems = [
 export function BottomTabs() {
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
+  const { activeModule: storeModule, setActiveModule } = useModuleStore();
   const [showMore, setShowMore] = useState(false);
+
+  const routeModule = moduleForPath(pathname);
+  useEffect(() => { if (routeModule) setActiveModule(routeModule); }, [routeModule, setActiveModule]);
+  const activeModule: ModuleKey = routeModule ?? storeModule;
+  const canSwitch = accessibleModules(user).length > 1;
+
+  const inModule = (item: Tab) => {
+    if (!item.module) return true; // core (Settings, Profile)
+    const mods = Array.isArray(item.module) ? item.module : [item.module];
+    return mods.includes(activeModule);
+  };
+  const allowed = (item: Tab) => (!item.roles || item.roles.includes(user?.role || '')) && inModule(item);
+
+  const visiblePrimary = primaryTabs.filter(allowed);
 
   const isMoreActive = moreItems.some(
     (item) => pathname === item.href || pathname.startsWith(item.href + '/')
   );
 
-  const filteredMoreItems = moreItems.filter(
-    (item) => !item.roles || item.roles.includes(user?.role || '')
-  );
+  const filteredMoreItems = moreItems.filter(allowed);
 
   return (
     <>
@@ -89,6 +108,14 @@ export function BottomTabs() {
 
               {/* Menu Items */}
               <nav className="px-3 pb-2">
+                {canSwitch && (
+                  <Link href="/modules" onClick={() => setShowMore(false)}>
+                    <div className="flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all border border-border mb-1">
+                      <ArrowLeftRight className="h-5 w-5 text-[#9CA3AF]" />
+                      Switch module
+                    </div>
+                  </Link>
+                )}
                 {filteredMoreItems.map((item) => {
                   const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
                   return (
@@ -140,7 +167,7 @@ export function BottomTabs() {
       {/* Tab Bar */}
       <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-white/95 backdrop-blur-xl safe-area-bottom">
         <nav className="flex items-stretch justify-around px-2 pt-1.5 pb-1.5">
-          {primaryTabs.map((tab) => {
+          {visiblePrimary.map((tab) => {
             const isActive = pathname === tab.href || pathname.startsWith(tab.href + '/');
             return (
               <Link

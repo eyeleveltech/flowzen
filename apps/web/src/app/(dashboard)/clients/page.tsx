@@ -49,7 +49,7 @@ const statusColors: Record<string, string> = {
   ACTIVE: 'bg-emerald-50 text-emerald-700',
   ONHOLD: 'bg-amber-50 text-amber-700',
   CHURNED: 'bg-gray-50 text-gray-400',
-  INACTIVE: 'bg-slate-100 text-slate-500',
+  PROJECT_COMPLETED: 'bg-slate-100 text-slate-500',
 };
 
 function ClientsContent() {
@@ -69,6 +69,35 @@ function ClientsContent() {
   const [accountManagerFilter, setAccountManagerFilter] = useState('');
   const [engagementTypeFilter, setEngagementTypeFilter] = useState('');
   const [industryFilter, setIndustryFilter] = useState('');
+  const [filtersHydrated, setFiltersHydrated] = useState(false);
+
+  // Restore the filters saved last time (so they survive opening a client and
+  // coming back). Runs once on mount; a status passed via the URL wins.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('flowzen:clients:filters');
+      if (raw) {
+        const f = JSON.parse(raw);
+        if (f.search) setSearch(f.search);
+        if (!urlStatus && f.statusFilter) setStatusFilter(f.statusFilter);
+        if (f.cityFilter) setCityFilter(f.cityFilter);
+        if (f.accountManagerFilter) setAccountManagerFilter(f.accountManagerFilter);
+        if (f.engagementTypeFilter) setEngagementTypeFilter(f.engagementTypeFilter);
+        if (f.industryFilter) setIndustryFilter(f.industryFilter);
+      }
+    } catch { /* ignore */ }
+    setFiltersHydrated(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist the filters whenever they change (after the initial restore).
+  useEffect(() => {
+    if (!filtersHydrated) return;
+    try {
+      sessionStorage.setItem('flowzen:clients:filters', JSON.stringify({ search, statusFilter, cityFilter, accountManagerFilter, engagementTypeFilter, industryFilter }));
+    } catch { /* ignore */ }
+  }, [filtersHydrated, search, statusFilter, cityFilter, accountManagerFilter, engagementTypeFilter, industryFilter]);
+
   const [showCreate, setShowCreate] = useState(searchParams.get('create') === 'true');
   const [loading, setLoading] = useState(true);
   const [orgProfile, setOrgProfile] = useState<any>(null);
@@ -98,6 +127,7 @@ function ClientsContent() {
       router.push('/dashboard');
       return;
     }
+    if (!filtersHydrated) return; // wait until saved filters are restored
     fetchClients();
     api.get('/settings/organization').then(setOrgProfile).catch(() => {});
     const sse = getSSE();
@@ -111,7 +141,7 @@ function ClientsContent() {
         sse.off('client:deleted');
       };
     }
-  }, [search, statusFilter, cityFilter, accountManagerFilter, engagementTypeFilter, industryFilter]);
+  }, [filtersHydrated, search, statusFilter, cityFilter, accountManagerFilter, engagementTypeFilter, industryFilter]);
 
   async function fetchClients() {
     try {
@@ -133,6 +163,11 @@ function ClientsContent() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setFormError('');
+    // Require at least one contact phone number before hitting the server.
+    if (!form.contacts.some((c) => c.phone && c.phone.trim())) {
+      setFormError('A contact phone number is required.');
+      return;
+    }
     setSubmitting(true);
     try {
       await api.post('/clients', {
@@ -360,7 +395,7 @@ function ClientsContent() {
               { label: 'Active', value: 'ACTIVE' },
               { label: 'On Hold', value: 'ONHOLD' },
               { label: 'Churned', value: 'CHURNED' },
-              { label: 'Inactive', value: 'INACTIVE' },
+              { label: 'Project Completed', value: 'PROJECT_COMPLETED' },
             ]}
           />
         </div>
@@ -676,7 +711,7 @@ function ClientsContent() {
                           <Field label="Name *" value={contact.name} onChange={(v) => { const c = [...form.contacts]; c[i].name = v; setForm({ ...form, contacts: c }); }} required />
                           <Field label="Designation" value={contact.designation} onChange={(v) => { const c = [...form.contacts]; c[i].designation = v; setForm({ ...form, contacts: c }); }} />
                           <Field label="Email" type="email" value={contact.email} onChange={(v) => { const c = [...form.contacts]; c[i].email = v; setForm({ ...form, contacts: c }); }} />
-                          <Field label="Phone" value={contact.phone} onChange={(v) => { const c = [...form.contacts]; c[i].phone = v; setForm({ ...form, contacts: c }); }} />
+                          <Field label={i === 0 ? "Phone *" : "Phone"} value={contact.phone} onChange={(v) => { const c = [...form.contacts]; c[i].phone = v; setForm({ ...form, contacts: c }); }} required={i === 0} />
                         </div>
                       </div>
                     ))}
@@ -692,7 +727,7 @@ function ClientsContent() {
                         { label: 'Active', value: 'ACTIVE' },
                         { label: 'On Hold', value: 'ONHOLD' },
                         { label: 'Churned', value: 'CHURNED' },
-                        { label: 'Inactive', value: 'INACTIVE' },
+                        { label: 'Project Completed', value: 'PROJECT_COMPLETED' },
                       ]}
                     />
                   </div>

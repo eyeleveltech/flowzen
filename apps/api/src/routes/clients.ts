@@ -26,7 +26,7 @@ const clientSchema = z.object({
   scope: z.string().optional(),
   assetLinks: z.string().optional(),
   accountManagerId: z.string().optional(),
-  status: z.enum(['PROSPECT', 'ACTIVE', 'ONHOLD', 'CHURNED', 'INACTIVE']).optional(),
+  status: z.enum(['PROSPECT', 'ACTIVE', 'ONHOLD', 'CHURNED', 'PROJECT_COMPLETED']).optional(),
   contacts: z.array(z.object({
     id: z.string().optional(),
     name: z.string().min(1),
@@ -123,9 +123,28 @@ clientRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), val
   try {
     const { contacts, startDate, ...data } = req.body;
 
+    // Rule: a client must have at least one contact phone number.
+    const hasContactPhone = Array.isArray(contacts) && contacts.some((c: any) => c.phone && String(c.phone).trim());
+    if (!hasContactPhone) {
+      res.status(400).json({ error: 'A contact phone number is required to create a client.' });
+      return;
+    }
+
+    // Rule: client names are unique within the organization (case-insensitive).
+    const clientName = String(data.name || '').trim();
+    const duplicate = await prisma.client.findFirst({
+      where: { organizationId: req.user!.organizationId, name: { equals: clientName, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (duplicate) {
+      res.status(409).json({ error: `A client named "${clientName}" already exists.` });
+      return;
+    }
+
     const client = await prisma.client.create({
       data: {
         ...data,
+        name: clientName,
         accountManagerId: data.accountManagerId || null,
         startDate: startDate ? new Date(startDate) : undefined,
         organizationId: req.user!.organizationId,
@@ -186,7 +205,7 @@ clientRouter.post('/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRe
           company: data.company || null,
           industry: data.industry || null,
           engagementType: data.engagementType || null,
-          status: ['PROSPECT', 'ACTIVE', 'ONHOLD', 'CHURNED', 'INACTIVE'].includes(data.status?.toUpperCase()) ? data.status.toUpperCase() : 'PROSPECT',
+          status: ['PROSPECT', 'ACTIVE', 'ONHOLD', 'CHURNED', 'PROJECT_COMPLETED'].includes(data.status?.toUpperCase()) ? data.status.toUpperCase() : 'PROSPECT',
           website: data.website || null,
           city: data.city || null,
           address: data.address || null,
@@ -252,10 +271,24 @@ clientRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), v
 
     const { contacts, startDate, ...data } = req.body;
 
+    // Enforce unique client name when renaming (case-insensitive, excluding self).
+    const newName = String(data.name || '').trim();
+    if (newName && newName.toLowerCase() !== existing.name.toLowerCase()) {
+      const duplicate = await prisma.client.findFirst({
+        where: { organizationId: req.user!.organizationId, name: { equals: newName, mode: 'insensitive' }, id: { not: existing.id } },
+        select: { id: true },
+      });
+      if (duplicate) {
+        res.status(409).json({ error: `A client named "${newName}" already exists.` });
+        return;
+      }
+    }
+
     const updated = await prisma.client.update({
       where: { id: existing.id },
       data: {
         ...data,
+        name: newName || existing.name,
         accountManagerId: data.accountManagerId || null,
         startDate: startDate ? new Date(startDate) : undefined,
         contacts: {

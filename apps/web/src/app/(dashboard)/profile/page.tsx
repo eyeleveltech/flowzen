@@ -7,9 +7,11 @@ import { User, KeyRound, Save, Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Select } from '@/components/ui/select';
 import { useTeams, useMembers } from '@/hooks/useQueries';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function ProfilePage() {
   const { user, setAuth } = useAuthStore();
+  const queryClient = useQueryClient();
   const { data: teams = [] } = useTeams();
   const { data: members = [] } = useMembers();
   const designationOptions = Array.from(new Set((members as any[]).map((m) => m.designation).filter(Boolean))) as string[];
@@ -40,6 +42,21 @@ export default function ProfilePage() {
     }
   }, [user]);
 
+  // The cached session can be stale (e.g. designation changed later via
+  // Settings → Users), so pull the latest profile from the server on open and
+  // sync it back into the auth store.
+  useEffect(() => {
+    api.get('/profile').then((fresh: any) => {
+      setProfileForm({
+        name: fresh.name || '',
+        department: fresh.department || '',
+        designation: fresh.designation || '',
+      });
+      setAuth(fresh);
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingProfile(true);
@@ -47,6 +64,10 @@ export default function ProfilePage() {
       const updatedUser = await api.put('/profile', profileForm);
       // Update local store with new data
       setAuth(updatedUser as any);
+      // Refresh the shared member/team caches so the new designation/department
+      // shows in assignee dropdowns and member lists everywhere.
+      queryClient.invalidateQueries({ queryKey: ['members'] });
+      queryClient.invalidateQueries({ queryKey: ['teams'] });
       toast.success('Profile updated successfully');
     } catch (error: any) {
       toast.error(error.message || 'Failed to update profile');

@@ -28,7 +28,7 @@ export default function RegisterPage() {
         name, email, password, organizationName,
       });
       setAuth(data.user);
-      router.push('/dashboard');
+      router.push('/modules');
     } catch (err: any) {
       setError(err.message || 'Registration failed');
     } finally {

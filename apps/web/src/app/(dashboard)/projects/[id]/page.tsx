@@ -951,6 +951,7 @@ export default function ProjectDetailPage() {
                         { label: 'Social Media', value: 'SOCIAL_MEDIA' },
                         { label: 'Development', value: 'DEVELOPMENT' },
                         { label: 'Strategy', value: 'STRATEGY' },
+                    { label: 'Business', value: 'BUSINESS' },
                         { label: 'Other', value: 'OTHER' },
                       ]}
                     />
@@ -1106,7 +1107,7 @@ export default function ProjectDetailPage() {
                       <Select
                         value={editForm.clientId}
                         onChange={(val) => setEditForm({ ...editForm, clientId: val })}
-                        options={[{ label: 'Select a client...', value: '' }, ...clients.filter((c: any) => !['INACTIVE', 'CHURNED'].includes(c.status) || c.id === editForm.clientId).map(c => ({ label: getClientDisplayName(c), value: c.id }))]}
+                        options={[{ label: 'Select a client...', value: '' }, ...clients.filter((c: any) => !['PROJECT_COMPLETED', 'CHURNED'].includes(c.status) || c.id === editForm.clientId).map(c => ({ label: getClientDisplayName(c), value: c.id }))]}
                       />
                     </div>
                     <div>

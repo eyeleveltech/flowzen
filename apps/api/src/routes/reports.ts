@@ -328,11 +328,12 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
 
     // ── Revenue & Sales ──
     const activeRevenue = clients.filter(c => c.status === 'ACTIVE').reduce((s, c) => s + (c.contractValue || 0), 0);
+    const WON_STAGES = ['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED'];
     const pipelineValue = leads
-      .filter(l => l.stage !== 'WON_CLOSED' && l.stage !== 'LOST_CLOSED')
+      .filter(l => l.stage !== 'CHURNED' && l.stage !== 'PROJECT_COMPLETED')
       .reduce((s, l) => s + (l.dealValue || 0), 0);
-    const won = leads.filter(l => l.stage === 'WON_CLOSED' && inPeriod(l.updatedAt));
-    const lost = leads.filter(l => l.stage === 'LOST_CLOSED' && inPeriod(l.updatedAt));
+    const won = leads.filter(l => WON_STAGES.includes(l.stage) && inPeriod(l.updatedAt));
+    const lost = leads.filter(l => l.stage === 'CHURNED' && inPeriod(l.updatedAt));
     const wonValue = won.reduce((s, l) => s + (l.dealValue || 0), 0);
     const lostValue = lost.reduce((s, l) => s + (l.dealValue || 0), 0);
     const winRate = (won.length + lost.length) > 0 ? Math.round((won.length / (won.length + lost.length)) * 100) : 0;
@@ -427,7 +428,7 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
         totalClients: clients.length,
         active: clients.filter(c => c.status === 'ACTIVE').length,
         churned: clients.filter(c => c.status === 'CHURNED').length,
-        inactive: clients.filter(c => c.status === 'INACTIVE').length,
+        inactive: clients.filter(c => c.status === 'PROJECT_COMPLETED').length,
         churnedInPeriod: clients.filter(c => c.status === 'CHURNED' && inPeriod(c.updatedAt)).length,
         topClients,
         atRisk: atRiskClients,

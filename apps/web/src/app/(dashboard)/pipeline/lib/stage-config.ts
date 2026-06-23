@@ -8,91 +8,73 @@ export interface StageField {
   required?: boolean;
 }
 
+// Fields shown when MOVING INTO a stage — i.e. the "(previous) → stage" gate (brief §4).
+// `required: true` = HARD gate (blocks the transition). Others are SOFT (stored if filled).
 export const STAGE_FIELDS: Record<string, StageField[]> = {
-  LEAD: [], // Covered by creation form
-  MQL: [
-    { key: 'mqlScore', label: 'MQL Score (1-10)', type: 'number' },
-    { key: 'marketingTouchpoints', label: 'Marketing Touchpoints', type: 'textarea' },
-    { key: 'qualificationCriteria', label: 'Qualification Criteria Met', type: 'checklist', options: ['Fits ICP', 'Budget Signals', 'Decision-Maker Contact', 'Timing Signals'] }
+  NEW_LEAD: [], // captured by the lead creation form
+
+  // NEW_LEAD → OUTREACH
+  OUTREACH: [
+    { key: 'sourceOfLead', label: 'Source of Lead', type: 'select', options: ['LinkedIn', 'Referral', 'Form', 'Event', 'Inbound', 'Manual'], required: true },
+    { key: 'linkedinStatus', label: 'LinkedIn Profile', type: 'select', options: ['Found', 'Not found'], required: true },
   ],
-  SQL: [
-    { key: 'budgetConfirmed', label: 'Budget Confirmed', type: 'select', options: ['Yes', 'Estimated', 'Unknown'] },
-    { key: 'decisionMakerIdentified', label: 'Decision Maker Identified', type: 'select', options: ['Yes', 'No'] },
-    { key: 'sqlCriteriaNotes', label: 'SQL Criteria Notes', type: 'textarea' }
+
+  // OUTREACH → MEETING
+  MEETING: [
+    { key: 'channelUsed', label: 'Outreach Channel Used', type: 'select', options: ['WhatsApp', 'Email', 'LinkedIn', 'Call'], required: true },
+    { key: 'responseStatus', label: 'Response Status', type: 'select', options: ['Responded Positive', 'No Response', 'Responded Negative', 'Requested Callback'], required: true },
+    { key: 'meetingDate', label: 'Meeting Date Confirmed', type: 'date', required: true },
+    { key: 'outreachMessageUsed', label: 'Outreach Message Used', type: 'text' },
   ],
-  REACH_OUT: [
-    { key: 'channelUsed', label: 'Channel Used', type: 'select', options: ['Call', 'Email', 'WhatsApp', 'LinkedIn DM', 'In-Person', 'Other'] },
-    { key: 'messageScript', label: 'Message / Script', type: 'textarea' },
-    { key: 'responseStatus', label: 'Response Status', type: 'select', options: ['No Response', 'Responded Positive', 'Responded Negative', 'Requested Callback'] },
-    { key: 'followUpDate', label: 'Follow-up Date', type: 'date' }
-  ],
-  DISCOVERY: [
-    { key: 'meetingFormat', label: 'Meeting Format', type: 'select', options: ['In-Person', 'Video Call', 'Phone Call'] },
-    { key: 'attendees', label: 'Attendees', type: 'text' },
-    { key: 'requirementsSummary', label: 'Requirements Summary', type: 'textarea' },
-    { key: 'painPoints', label: 'Pain Points Identified', type: 'textarea' },
-    { key: 'budgetRange', label: 'Budget Range Mentioned (₹)', type: 'text' },
-    { key: 'timelineMentioned', label: 'Timeline Mentioned', type: 'text' },
-    { key: 'nextStepAgreed', label: 'Next Step Agreed', type: 'text' },
-    { key: 'meetingNotes', label: 'Meeting Notes / Recording Link', type: 'text' }
-  ],
-  AUDIT: [
-    { key: 'auditType', label: 'Audit Type', type: 'checklist', options: ['SEO Audit', 'Social Media Audit', 'Ad Account Audit', 'GMB Audit', 'Competitor Analysis', 'Brand Audit'] },
-    { key: 'keyFindings', label: 'Key Findings', type: 'textarea' },
-    { key: 'gapsIdentified', label: 'Gaps Identified', type: 'textarea' },
-    { key: 'auditDocumentLink', label: 'Audit Document / Report Link', type: 'text' }
-  ],
-  PRESENTATION: [
-    { key: 'presentationFormat', label: 'Presentation Format', type: 'select', options: ['In-Person', 'Video Call'] },
-    { key: 'attendees', label: 'Attendees', type: 'text' },
-    { key: 'presentationDeckLink', label: 'Presentation Deck Link', type: 'text' },
-    { key: 'ideasPresented', label: 'Ideas Presented (Summary)', type: 'textarea' },
-    { key: 'clientVerbalFeedback', label: 'Client Verbal Feedback', type: 'textarea' },
-    { key: 'clientOutcome', label: 'Client Outcome', type: 'select', options: ['Interested - Proceed to Proposal', 'Needs More Time', 'Requested Changes', 'Not Interested'] }
-  ],
+
+  // MEETING → PROPOSAL
   PROPOSAL: [
-    { key: 'engagementType', label: 'Engagement Type', type: 'select', options: ['Retainer', 'One-Time Project', 'Hybrid'] },
-    { key: 'proposalDocumentLink', label: 'Proposal Document Link', type: 'text' },
-    { key: 'proposalValidUntil', label: 'Proposal Valid Until Date', type: 'date' },
-    { key: 'keyDeliverables', label: 'Key Deliverables in Scope', type: 'textarea' }
+    { key: 'meetingNotes', label: 'Meeting Notes', type: 'textarea', required: true },
+    { key: 'auditRequired', label: 'Audit Required?', type: 'select', options: ['No', 'Yes'], required: true },
+    { key: 'auditFindings', label: 'Audit Findings (required if audit done)', type: 'textarea' },
+    { key: 'auditReportLink', label: 'Audit Report Link (required if audit done)', type: 'text' },
+    { key: 'servicesInScope', label: 'Services Agreed in Scope', type: 'checklist', options: ['SEO', 'Social Media', 'Paid Ads', 'Content', 'GMB', 'Email', 'PR', 'Events', 'Website'], required: true },
+    { key: 'nextStepAgreed', label: 'Next Step Agreed', type: 'text' },
   ],
+
+  // PROPOSAL → NEGOTIATION
   NEGOTIATION: [
-    { key: 'counterOfferLog', label: 'Counter Offer Log', type: 'textarea' },
-    { key: 'currentProposedValue', label: 'Current Proposed Value (₹)', type: 'number' },
-    { key: 'keyObjections', label: 'Key Objections', type: 'textarea' },
-    { key: 'concessionsMade', label: 'Concessions Made', type: 'textarea' },
-    { key: 'lastContactedDate', label: 'Last Contacted Date', type: 'date' }
+    { key: 'proposalDocumentLink', label: 'Proposal Document Link', type: 'text', required: true },
+    { key: 'proposalSentDate', label: 'Proposal Sent Date', type: 'date', required: true },
+    { key: 'engagementType', label: 'Engagement Type', type: 'select', options: ['Retainer', 'Project', 'Hybrid'], required: true },
+    { key: 'proposalValidUntil', label: 'Proposal Valid Until', type: 'date' },
   ],
-  FINALIZATION: [
-    { key: 'finalScopeAgreed', label: 'Final Scope Agreed', type: 'textarea' },
-    { key: 'startDateConfirmed', label: 'Start Date Confirmed', type: 'date' },
-    { key: 'specialConditions', label: 'Any Special Conditions', type: 'textarea' }
-  ],
+
+  // NEGOTIATION → CONTRACT (also combined on a PROPOSAL → CONTRACT skip)
   CONTRACT: [
-    { key: 'contractDuration', label: 'Contract Duration (Months / Timeline)', type: 'text' },
-    { key: 'signedContractLink', label: 'Signed Contract Document Link', type: 'text' },
-    { key: 'paymentTerms', label: 'Payment Terms', type: 'select', options: ['100% Advance', '50/50', 'Monthly', 'Milestone-based'] },
-    { key: 'billingFrequency', label: 'Billing Frequency', type: 'select', options: ['Monthly', 'Quarterly', 'One-Time'] }
+    { key: 'agreedFinalValue', label: 'Agreed Final Value (₹)', type: 'number', required: true },
+    { key: 'lastContactedDate', label: 'Last Contacted Date', type: 'date', required: true },
+    { key: 'counterOfferLog', label: 'Counter Offer Log / Key Objections', type: 'textarea' },
   ],
+
+  // CONTRACT → ACTIVE_RETAINER / ACTIVE_PROJECT
   ACTIVE_RETAINER: [
-    { key: 'servicesInScope', label: 'Services in Scope', type: 'checklist', options: ['SEO', 'Social Media', 'Paid Ads', 'Content', 'GMB', 'Email', 'PR', 'Events', 'Website'] },
-    { key: 'reportingCycle', label: 'Reporting Cycle', type: 'select', options: ['Weekly', 'Bi-Weekly', 'Monthly'] },
-    { key: 'nextRenewalDate', label: 'Next Renewal Date', type: 'date' },
-    { key: 'kpiTargets', label: 'KPI Targets', type: 'textarea' }
+    { key: 'signedContractLink', label: 'Signed Contract Document Link', type: 'text', required: true },
+    { key: 'paymentTerms', label: 'Payment Terms', type: 'select', options: ['100% Advance', '50-50', 'Monthly', 'Milestone-based'], required: true },
+    { key: 'billingFrequency', label: 'Billing Frequency', type: 'select', options: ['Monthly', 'Quarterly', 'One-Time'], required: true },
+    { key: 'startDate', label: 'Start Date Confirmed', type: 'date', required: true },
   ],
   ACTIVE_PROJECT: [
-    { key: 'paymentSchedule', label: 'Payment Schedule', type: 'textarea' },
-    { key: 'deliverablesList', label: 'Deliverables List', type: 'textarea' },
-    { key: 'completionPercentage', label: 'Completion Percentage (0-100)', type: 'number' },
-    { key: 'finalDeliveryDate', label: 'Final Delivery Date', type: 'date' }
+    { key: 'signedContractLink', label: 'Signed Contract Document Link', type: 'text', required: true },
+    { key: 'paymentTerms', label: 'Payment Terms', type: 'select', options: ['100% Advance', '50-50', 'Monthly', 'Milestone-based'], required: true },
+    { key: 'billingFrequency', label: 'Billing Frequency', type: 'select', options: ['Monthly', 'Quarterly', 'One-Time'], required: true },
+    { key: 'startDate', label: 'Start Date Confirmed', type: 'date', required: true },
   ],
-  WON_CLOSED: [
-    { key: 'closureDate', label: 'Closure Date', type: 'date' },
-    { key: 'finalValueCollected', label: 'Final Value Collected (₹)', type: 'number' },
-    { key: 'testimonial', label: 'Testimonial / Case Study', type: 'textarea' }
+
+  // ACTIVE_PROJECT → PROJECT_COMPLETED
+  PROJECT_COMPLETED: [
+    { key: 'completionDate', label: 'Completion Date', type: 'date', required: true },
+    { key: 'deliverablesSignOff', label: 'Final Deliverables Sign-off Note', type: 'textarea', required: true },
   ],
-  LOST_CLOSED: [
+
+  // ANY → CHURNED (the reason is required via the modal's dedicated dropdown)
+  CHURNED: [
     { key: 'competitorChosen', label: 'Competitor Chosen (if known)', type: 'text' },
-    { key: 'reactivationPotential', label: 'Reactivation Potential', type: 'select', options: ['Yes - 3 months', 'Yes - 6 months', 'No'] }
-  ]
+    { key: 'reactivationPotential', label: 'Reactivation Potential', type: 'select', options: ['Yes - 3 months', 'Yes - 6 months', 'No'] },
+  ],
 };

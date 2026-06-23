@@ -7,37 +7,32 @@ const leadRouter = Router();
 // --- Translators ---
 
 const stageMapToEnum: Record<string, LeadStage> = {
-  '1. New Lead': 'LEAD',
-  '2. First Contact Made': 'REACH_OUT',
-  '3. Discovery Scheduled': 'MQL',
-  '4. Discovery Done': 'DISCOVERY',
-  '5. Proposal Building': 'PRESENTATION',
+  '1. New Lead': 'NEW_LEAD',
+  '2. First Contact Made': 'OUTREACH',
+  '3. Discovery Scheduled': 'OUTREACH',
+  '4. Discovery Done': 'MEETING',
+  '5. Proposal Building': 'MEETING',
   '6. Proposal Sent': 'PROPOSAL',
   '7. Negotiation': 'NEGOTIATION',
-  '8. Closed Won': 'WON_CLOSED',
-  '9. Closed Lost': 'LOST_CLOSED',
-  '10. Dead / No Response': 'LOST_CLOSED',
+  '8. Closed Won': 'CONTRACT',
+  '9. Closed Lost': 'CHURNED',
+  '10. Dead / No Response': 'CHURNED',
 };
 
 const stageEnumToMap: Record<LeadStage, string> = {
-  LEAD: '1. New Lead',
-  MQL: '3. Discovery Scheduled',
-  SQL: '3. Discovery Scheduled',
-  REACH_OUT: '2. First Contact Made',
-  DISCOVERY: '4. Discovery Done',
-  AUDIT: '4. Discovery Done',
-  PRESENTATION: '5. Proposal Building',
+  NEW_LEAD: '1. New Lead',
+  OUTREACH: '2. First Contact Made',
+  MEETING: '4. Discovery Done',
   PROPOSAL: '6. Proposal Sent',
   NEGOTIATION: '7. Negotiation',
-  FINALIZATION: '7. Negotiation',
-  CONTRACT: '7. Negotiation',
+  CONTRACT: '8. Closed Won',
   ACTIVE_RETAINER: '8. Closed Won',
   ACTIVE_PROJECT: '8. Closed Won',
-  WON_CLOSED: '8. Closed Won',
-  LOST_CLOSED: '9. Closed Lost',
+  PROJECT_COMPLETED: '8. Closed Won',
+  CHURNED: '9. Closed Lost',
 };
 
-const mapStageToEnum = (aiStage: string): LeadStage => stageMapToEnum[aiStage] || 'LEAD';
+const mapStageToEnum = (aiStage: string): LeadStage => stageMapToEnum[aiStage] || 'NEW_LEAD';
 const mapEnumToStage = (dbStage: LeadStage): string => stageEnumToMap[dbStage] || '1. New Lead';
 
 const mapSourceToEnum = (aiSource: string): LeadSource => {
@@ -372,6 +367,7 @@ leadRouter.post('/:id/convert', async (req: Request, res: Response) => {
 
     const lead = await prisma.lead.findFirst({ where: { id: req.params.id as string, organizationId: (req as any).user.organizationId }, include: { client: true } });
     if (!lead) return res.status(404).json({ error: 'Lead not found' });
+    if (!lead.clientId) return res.status(400).json({ error: 'Lead has no client yet — move it to the MEETING stage first.' });
 
     // Update Client record to Active
     const client = await prisma.client.update({

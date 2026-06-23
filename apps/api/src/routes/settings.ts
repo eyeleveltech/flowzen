@@ -4,6 +4,7 @@ import { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
 import { hashPassword } from '../utils/password.js';
 import { EmailService } from '../services/email.js';
 import { emitToOrganization } from '../sse.js';
+import { seedDefaultModules } from '../lib/modules.js';
 import rateLimit from 'express-rate-limit';
 
 const settingsLimiter = rateLimit({
@@ -72,6 +73,44 @@ settingsRouter.put('/organization', authorize('SUPER_ADMIN', 'ADMIN'), async (re
     }
 
     res.json(org);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/settings/modules — list this org's modules (ensures CRM + PM rows exist)
+settingsRouter.get('/modules', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    await seedDefaultModules(orgId); // idempotent — covers any org missing rows
+    const modules = await prisma.organizationModule.findMany({
+      where: { organizationId: orgId },
+      select: { key: true, enabled: true },
+      orderBy: { key: 'asc' },
+    });
+    res.json(modules);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PUT /api/settings/modules/:key — enable/disable a module (Admins only)
+settingsRouter.put('/modules/:key', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const key = String(req.params.key).toUpperCase();
+    if (!['CRM', 'PM'].includes(key)) {
+      res.status(400).json({ error: 'Unknown module' });
+      return;
+    }
+    const enabled = !!req.body.enabled;
+    const module = await prisma.organizationModule.upsert({
+      where: { organizationId_key: { organizationId: orgId, key } },
+      update: { enabled },
+      create: { organizationId: orgId, key, enabled },
+      select: { key: true, enabled: true },
+    });
+    res.json(module);
   } catch (error) {
     next(error);
   }

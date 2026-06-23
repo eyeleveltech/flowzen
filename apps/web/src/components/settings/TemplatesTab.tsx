@@ -32,6 +32,7 @@ export function TemplatesTab({ templates, fetchTemplates }: { templates: any[], 
     { label: 'Social Media', value: 'SOCIAL_MEDIA' },
     { label: 'Development', value: 'DEVELOPMENT' },
     { label: 'Strategy', value: 'STRATEGY' },
+                    { label: 'Business', value: 'BUSINESS' },
     { label: 'Other', value: 'OTHER' },
   ];
 

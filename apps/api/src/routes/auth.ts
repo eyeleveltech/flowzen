@@ -5,6 +5,7 @@ import { generateToken } from '../utils/jwt.js';
 import { hashPassword, comparePassword } from '../utils/password.js';
 import { validate } from '../middleware/validate.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { getEnabledModuleKeys, seedDefaultModules, DEFAULT_MODULES } from '../lib/modules.js';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 import { EmailService } from '../services/email.js';
@@ -68,6 +69,9 @@ authRouter.post('/register', authLimiter, validate(registerSchema), async (req, 
       include: { users: true },
     });
 
+    // Every new org starts with both modules enabled.
+    await seedDefaultModules(organization.id);
+
     const user = organization.users[0];
     const token = generateToken({
       userId: user.id,
@@ -94,6 +98,7 @@ authRouter.post('/register', authLimiter, validate(registerSchema), async (req, 
           id: organization.id,
           name: organization.name,
         },
+        enabledModules: [...DEFAULT_MODULES],
       },
     });
   } catch (error) {
@@ -136,6 +141,8 @@ authRouter.post('/login', authLimiter, validate(loginSchema), async (req, res: R
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
+    const enabledModules = await getEnabledModuleKeys(user.organizationId);
+
     res.json({
       user: {
         id: user.id,
@@ -149,6 +156,7 @@ authRouter.post('/login', authLimiter, validate(loginSchema), async (req, res: R
           name: user.organization.name,
           logo: user.organization.logo,
         },
+        enabledModules,
       },
     });
   } catch (error) {
@@ -171,6 +179,7 @@ authRouter.get('/me', authenticate, async (req: AuthRequest, res: Response, next
 
     const rawUser: any = await prisma.$queryRawUnsafe('SELECT "lastActivityReadAt" FROM "users" WHERE id = $1', req.user!.userId);
     const lastActivityReadAt = rawUser?.[0]?.lastActivityReadAt || null;
+    const enabledModules = await getEnabledModuleKeys(user.organizationId);
 
     res.json({
       id: user.id,
@@ -179,6 +188,7 @@ authRouter.get('/me', authenticate, async (req: AuthRequest, res: Response, next
       role: user.role,
       avatar: user.avatar,
       department: user.department,
+      designation: user.designation,
       phone: user.phone,
       joiningDate: user.joiningDate,
       organization: {
@@ -186,6 +196,7 @@ authRouter.get('/me', authenticate, async (req: AuthRequest, res: Response, next
         name: user.organization.name,
         logo: user.organization.logo,
       },
+      enabledModules,
       lastActivityReadAt: lastActivityReadAt,
     });
   } catch (error) {

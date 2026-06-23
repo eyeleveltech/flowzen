@@ -22,18 +22,19 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
     email: '',
     phone: '',
     source: 'MANUAL',
+    linkedinUrl: '',
     assignedToId: '',
     dealValue: '',
     expectedRevenue: '',
     expectedCloseDate: '',
     followUpDate: '',
-    stage: 'LEAD',
     industry: '',
     city: '',
     notes: '',
     priority: 'MEDIUM',
   });
-  
+
+  const [errors, setErrors] = useState<{ contactName?: string; email?: string; phone?: string }>({});
   const [submitting, setSubmitting] = useState(false);
   const [creationMode, setCreationMode] = useState<'MANUAL' | 'BULK'>(initialMode);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -85,11 +86,14 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    
-    if (!form.clientId && !form.contactName && !form.companyName) {
-      toast.error('Please provide either a Client, Contact Name, or Company Name');
-      return;
-    }
+
+    // Lead Entry Gateway — name, email and phone are required.
+    const newErrors: { contactName?: string; email?: string; phone?: string } = {};
+    if (!form.contactName || form.contactName.trim().length < 2) newErrors.contactName = 'Full name is required.';
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email)) newErrors.email = 'A valid email is required.';
+    if (form.phone.replace(/\D/g, '').length < 10) newErrors.phone = 'Phone must be at least 10 digits.';
+    setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) return;
 
     setSubmitting(true);
     try {
@@ -137,7 +141,8 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
         email: row.Email || row.email,
         phone: row.Phone || row.phone,
         source: row.Source || row.source || 'EXCEL',
-        stage: row.Stage || row.stage || 'LEAD',
+        stage: row.Stage || row.stage || 'NEW_LEAD',
+        linkedinUrl: row.LinkedinUrl || row.linkedinUrl,
         dealValue: row.DealValue || row.dealValue,
         expectedCloseDate: row.ExpectedCloseDate || row.expectedCloseDate,
         industry: row.Industry || row.industry,
@@ -153,7 +158,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
   }
 
   function downloadTemplate() {
-    const csv = Papa.unparse([{ ContactName: 'John Doe', CompanyName: 'Example LLC', Email: 'john@example.com', Phone: '+1-555-0100', Source: 'EXCEL', Stage: 'LEAD', DealValue: '50000', ExpectedCloseDate: '2026-06-01', Industry: 'Real Estate', City: 'New York', Notes: 'Needs immediate follow up' }]);
+    const csv = Papa.unparse([{ ContactName: 'John Doe', CompanyName: 'Example LLC', Email: 'john@example.com', Phone: '+1-555-0100', Source: 'EXCEL', Stage: 'NEW_LEAD', DealValue: '50000', ExpectedCloseDate: '2026-06-01', Notes: 'Needs immediate follow up' }]);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'lead_import_template.csv'; link.click();
   }
@@ -253,21 +258,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                   )}
 
                   <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Stage <span className="text-red-500">*</span></label>
-                      <Select
-                        value={form.stage}
-                        onChange={(v) => setForm({ ...form, stage: v })}
-                        options={[
-                          { label: 'Lead', value: 'LEAD' },
-                          { label: 'Qualified', value: 'QUALIFIED' },
-                          { label: 'Proposal Sent', value: 'PROPOSAL_SENT' },
-                          { label: 'Negotiation', value: 'NEGOTIATION' },
-                          { label: 'Won', value: 'WON' },
-                          { label: 'Lost', value: 'LOST' }
-                        ]}
-                      />
-                    </div>
+                    <Field label="LinkedIn URL" value={form.linkedinUrl} onChange={(v) => setForm({ ...form, linkedinUrl: v })} placeholder="linkedin.com/in/username" />
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority <span className="text-red-500">*</span></label>
                       <div className="relative">
@@ -296,13 +287,11 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                         value={form.source}
                         onChange={(v) => setForm({ ...form, source: v })}
                         options={[
+                          { label: 'LinkedIn', value: 'LINKEDIN' },
                           { label: 'Referral', value: 'REFERRAL' },
-                          { label: 'Inbound', value: 'INBOUND' },
-                          { label: 'Outbound', value: 'OUTBOUND' },
-                          { label: 'Social Media', value: 'SOCIAL_MEDIA' },
+                          { label: 'Inbound Form', value: 'INBOUND' },
                           { label: 'Event', value: 'EVENT' },
-                          { label: 'Cold Call', value: 'COLD_CALL' },
-                          { label: 'Existing Client', value: 'EXISTING_CLIENT' },
+                          { label: 'Manual', value: 'MANUAL' },
                           { label: 'Other', value: 'OTHER' }
                         ]}
                       />
@@ -344,7 +333,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                   </div>
                   
                   <div className="grid grid-cols-2 gap-4">
-                    <Field label="Contact Name" value={form.contactName} onChange={(v) => {
+                    <Field label="Contact Name" required error={errors.contactName} value={form.contactName} onChange={(v) => {
                       setForm({ ...form, contactName: v });
                       if(!form.clientId) setClientSearch(v);
                     }} placeholder="Full Name" />
@@ -352,8 +341,8 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
-                    <Field label="Email Address" type="email" icon={<Mail className="h-4 w-4 text-secondary" />} value={form.email} onChange={(v) => setForm({ ...form, email: v })} placeholder="john@example.com" />
-                    <Field label="Phone Number" icon={<Phone className="h-4 w-4 text-secondary" />} value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="+1 (555) 000-0000" />
+                    <Field label="Email Address" required error={errors.email} type="email" icon={<Mail className="h-4 w-4 text-secondary" />} value={form.email} onChange={(v) => setForm({ ...form, email: v })} placeholder="john@example.com" />
+                    <Field label="Phone Number" required error={errors.phone} icon={<Phone className="h-4 w-4 text-secondary" />} value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="+1 (555) 000-0000" />
                   </div>
                 </div>
 
@@ -455,8 +444,8 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
   );
 }
 
-function Field({ label, value, onChange, type = 'text', required = false, placeholder, icon }: {
-  label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean; placeholder?: string; icon?: React.ReactNode;
+function Field({ label, value, onChange, type = 'text', required = false, placeholder, icon, error }: {
+  label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean; placeholder?: string; icon?: React.ReactNode; error?: string;
 }) {
   return (
     <div>
@@ -475,9 +464,10 @@ function Field({ label, value, onChange, type = 'text', required = false, placeh
           onChange={(e) => onChange(e.target.value)}
           required={required}
           placeholder={placeholder}
-          className={`w-full rounded-xl border border-border bg-white ${icon ? 'pl-9' : 'px-4'} pr-4 py-2.5 text-sm text-[#374151] outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all`}
+          className={`w-full rounded-xl border bg-white ${icon ? 'pl-9' : 'px-4'} pr-4 py-2.5 text-sm text-[#374151] outline-none focus:ring-1 transition-all ${error ? 'border-red-400 focus:border-red-400 focus:ring-red-100' : 'border-border focus:border-primary focus:ring-primary'}`}
         />
       </div>
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
     </div>
   );
 }

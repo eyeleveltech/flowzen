@@ -6,15 +6,16 @@ import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { useAuthStore } from '@/stores';
 import { useRouter } from 'next/navigation';
-import { Building2, Users, FileText, Shield, Zap } from 'lucide-react';
+import { Building2, Users, FileText, Shield, Zap, Boxes } from 'lucide-react';
 import { OrganizationTab } from '@/components/settings/OrganizationTab';
 import { UsersTab } from '@/components/settings/UsersTab';
 import { WorkflowsTab } from '@/components/settings/WorkflowsTab';
 import { TemplatesTab } from '@/components/settings/TemplatesTab';
 import { PermissionsTab } from '@/components/settings/PermissionsTab';
+import { ModulesTab } from '@/components/settings/ModulesTab';
 import { Skeleton } from '@/components/ui/skeleton';
 
-type Tab = 'organization' | 'users' | 'templates' | 'permissions' | 'workflows';
+type Tab = 'organization' | 'modules' | 'users' | 'templates' | 'permissions' | 'workflows';
 
 export default function SettingsPage() {
   const { user } = useAuthStore();
@@ -28,12 +29,14 @@ export default function SettingsPage() {
   const [templates, setTemplates] = useState<any[]>([]);
   const [workflows, setWorkflows] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
+  const [modules, setModules] = useState<any[]>([]);
 
   const fetchUsers = () => api.get<any[]>('/settings/users').then(setUsers).catch(() => {});
   const fetchWorkflows = () => api.get<any[]>('/settings/workflows').then(setWorkflows).catch(() => {});
   const fetchTemplates = () => api.get<any[]>('/settings/templates').then(setTemplates).catch(() => {});
   const fetchOrg = () => api.get<any>('/settings/organization').then(setOrgData).catch(() => {});
   const fetchTeams = () => api.get<{ teams: any[] }>('/teams').then((res) => setTeams(res.teams || [])).catch(() => {});
+  const fetchModules = () => api.get<any[]>('/settings/modules').then(setModules).catch(() => {});
 
   useEffect(() => {
     if (user && (user.role === 'TEAM_MEMBER' || user.role === 'PROJECT_MANAGER')) {
@@ -45,7 +48,8 @@ export default function SettingsPage() {
       fetchUsers(),
       fetchWorkflows(),
       fetchTemplates(),
-      fetchTeams()
+      fetchTeams(),
+      fetchModules()
     ]).finally(() => setLoading(false));
   }, [user, router]);
 
@@ -72,6 +76,7 @@ export default function SettingsPage() {
 
   const tabs = [
     { id: 'organization', label: 'Organization', icon: Building2 },
+    { id: 'modules', label: 'Modules', icon: Boxes },
     { id: 'users', label: 'Users', icon: Users },
     { id: 'workflows', label: 'Workflows', icon: Zap },
     { id: 'templates', label: 'Templates', icon: FileText },
@@ -110,6 +115,7 @@ export default function SettingsPage() {
         className="bg-white p-6 rounded-2xl border border-border"
       >
         {tab === 'organization' && <OrganizationTab initialData={orgData} onSaved={fetchOrg} />}
+        {tab === 'modules' && <ModulesTab modules={modules} fetchModules={fetchModules} />}
         {tab === 'users' && <UsersTab users={users} fetchUsers={fetchUsers} teams={teams} />}
         {tab === 'workflows' && <WorkflowsTab workflows={workflows} fetchWorkflows={fetchWorkflows} users={users} />}
         {tab === 'templates' && <TemplatesTab templates={templates} fetchTemplates={fetchTemplates} />}

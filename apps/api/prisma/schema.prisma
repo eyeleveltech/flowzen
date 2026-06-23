@@ -29,7 +29,7 @@ enum ClientStatus {
   ACTIVE
   ONHOLD
   CHURNED
-  INACTIVE
+  PROJECT_COMPLETED
 }
 
 enum ProjectType {
@@ -87,6 +87,7 @@ enum TaskType {
   SOCIAL_MEDIA
   DEVELOPMENT
   STRATEGY
+  BUSINESS
   OTHER
 }
 
@@ -128,21 +129,16 @@ enum LeadPriority {
 }
 
 enum LeadStage {
-  LEAD
-  MQL
-  SQL
-  REACH_OUT
-  DISCOVERY
-  AUDIT
-  PRESENTATION
+  NEW_LEAD
+  OUTREACH
+  MEETING
   PROPOSAL
   NEGOTIATION
-  FINALIZATION
   CONTRACT
   ACTIVE_RETAINER
   ACTIVE_PROJECT
-  WON_CLOSED
-  LOST_CLOSED
+  PROJECT_COMPLETED
+  CHURNED
 }
 
 enum ContractType {
@@ -199,8 +195,25 @@ model Organization {
   apiKeys ApiKey[]
   clients Client[]
   leads   Lead[]
+  modules OrganizationModule[]
 
   @@map("organizations")
+}
+
+// Which feature modules (e.g. CRM, PM) an organization has enabled.
+model OrganizationModule {
+  id             String   @id @default(cuid())
+  organizationId String
+  key            String   // 'CRM' | 'PM' (plain string so new modules need no enum change)
+  enabled        Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, key])
+  @@index([organizationId])
+  @@map("organization_modules")
 }
 
 model User {
@@ -556,10 +569,10 @@ model ClientContact {
 
 model Lead {
   id                String       @id @default(cuid())
-  clientId          String       @unique
+  clientId          String?      @unique
   organizationId    String
   source            LeadSource   @default(MANUAL)
-  stage             LeadStage    @default(LEAD)
+  stage             LeadStage    @default(NEW_LEAD)
   priority          LeadPriority @default(MEDIUM)
   assignedToId      String?
   dealValue         Float?
@@ -569,10 +582,19 @@ model Lead {
   contractType      ContractType?
   healthStatus      HealthStatus?
   lostReason        LostReason?
+  // Lead-owned contact identity (a lead can exist before a Client is created at MEETING)
+  contactName       String?
+  companyName       String?
+  contactEmail      String?
+  contactPhone      String?
+  jobTitle          String?
+  linkedinUrl       String?
+  linkedinChecked   Boolean      @default(false)
+  linkedinFound     Boolean?
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
-  client            Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client            Client?      @relation(fields: [clientId], references: [id], onDelete: Cascade)
   organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignedTo        User?        @relation("LeadAssignee", fields: [assignedToId], references: [id])
   stageHistory      StageHistory[]

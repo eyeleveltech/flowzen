@@ -36,7 +36,7 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
     const opts = new Map<string, { label: string; value: string }>();
     opts.set(clientId, { label: clientName, value: clientId });
     clients
-      .filter((c: any) => !['INACTIVE', 'CHURNED'].includes(c.status))
+      .filter((c: any) => !['PROJECT_COMPLETED', 'CHURNED'].includes(c.status))
       .forEach((c: any) => { if (!opts.has(c.id)) opts.set(c.id, { label: getClientDisplayName(c), value: c.id }); });
     return Array.from(opts.values());
   })();

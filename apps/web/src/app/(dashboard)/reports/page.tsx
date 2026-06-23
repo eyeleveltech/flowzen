@@ -616,7 +616,7 @@ function ExecutiveTab({ data, periodLabel }: { data: any; periodLabel: string })
 
       {/* CLIENT PORTFOLIO */}
       <motion.div variants={item}>
-        <SectionTitle icon={PieChart} title="Client Portfolio" subtitle={`${clients.active} active · ${clients.churned} churned · ${clients.inactive} inactive`} />
+        <SectionTitle icon={PieChart} title="Client Portfolio" subtitle={`${clients.active} active · ${clients.churned} churned · ${clients.inactive} completed`} />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="rounded-2xl border border-border bg-white p-5">
             <h3 className="text-sm font-semibold text-primary mb-4 flex items-center gap-2"><Trophy className="h-4 w-4 text-secondary" /> Top Clients by Value</h3>

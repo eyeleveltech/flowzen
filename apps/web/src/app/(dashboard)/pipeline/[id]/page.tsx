@@ -16,9 +16,8 @@ import { Pencil, Trash2, Send } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 
 const PIPELINE_STAGES = [
-  'LEAD', 'MQL', 'SQL', 'REACH_OUT', 'DISCOVERY', 'AUDIT', 'PRESENTATION', 
-  'PROPOSAL', 'NEGOTIATION', 'FINALIZATION', 'CONTRACT', 'ACTIVE_RETAINER', 
-  'ACTIVE_PROJECT', 'WON_CLOSED', 'LOST_CLOSED'
+  'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
+  'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED', 'CHURNED'
 ];
 
 export default function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -45,7 +44,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       setIsModalOpen(false);
       toast.success('Stage updated successfully');
-      if (variables?.stage === 'WON_CLOSED') {
+      if (variables?.stage === 'CONTRACT') {
         setWonModalLead(data || lead);
       }
     }
@@ -121,16 +120,16 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
         <div className="flex justify-between items-start">
           <div>
             <h1 className="text-2xl font-bold text-primary flex items-center gap-3">
-              {lead.client.company || lead.client.name}
+              {lead.companyName || lead.contactName || lead.client?.company || lead.client?.name || 'Lead'}
               <span className="px-2.5 py-0.5 rounded-md bg-[#F3F4F6] text-primary text-xs font-medium border border-border">
-                {lead.stage.replace('_', ' ')}
+                {lead.stage.replace(/_/g, ' ')}
               </span>
             </h1>
             <div className="flex items-center gap-6 mt-3 text-sm text-[#4B5563]">
-              <span className="flex items-center gap-1.5"><User className="w-4 h-4 text-[#9CA3AF]" /> {lead.client.name}</span>
-              {lead.client.email && <span className="flex items-center gap-1.5"><Mail className="w-4 h-4 text-[#9CA3AF]" /> {lead.client.email}</span>}
-              {lead.client.phone && <span className="flex items-center gap-1.5"><Phone className="w-4 h-4 text-[#9CA3AF]" /> {lead.client.phone}</span>}
-              {lead.client.city && <span className="flex items-center gap-1.5"><MapPin className="w-4 h-4 text-[#9CA3AF]" /> {lead.client.city}</span>}
+              <span className="flex items-center gap-1.5"><User className="w-4 h-4 text-[#9CA3AF]" /> {lead.contactName || lead.client?.name || '—'}</span>
+              {(lead.contactEmail || lead.client?.email) && <span className="flex items-center gap-1.5"><Mail className="w-4 h-4 text-[#9CA3AF]" /> {lead.contactEmail || lead.client?.email}</span>}
+              {(lead.contactPhone || lead.client?.phone) && <span className="flex items-center gap-1.5"><Phone className="w-4 h-4 text-[#9CA3AF]" /> {lead.contactPhone || lead.client?.phone}</span>}
+              {lead.client?.city && <span className="flex items-center gap-1.5"><MapPin className="w-4 h-4 text-[#9CA3AF]" /> {lead.client.city}</span>}
             </div>
           </div>
           <div className="flex flex-col items-end gap-3">
@@ -161,7 +160,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
 
         {/* Stepper Component */}
         <div className="mt-8 flex items-center justify-between overflow-x-auto pb-4 scrollbar-hide">
-          {PIPELINE_STAGES.slice(0, 11).map((stage, idx) => {
+          {PIPELINE_STAGES.slice(0, 8).map((stage, idx) => {
             const isCompleted = PIPELINE_STAGES.indexOf(lead.stage) >= idx;
             const isCurrent = lead.stage === stage;
             return (
@@ -170,9 +169,9 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   {idx + 1}
                 </div>
                 <span className={`text-xs font-medium text-center ${isCurrent ? 'text-primary' : isCompleted ? 'text-[#4B5563]' : 'text-[#9CA3AF]'}`}>
-                  {stage.replace('_', ' ')}
+                  {stage.replace(/_/g, ' ')}
                 </span>
-                {idx < 10 && (
+                {idx < 7 && (
                   <div className={`absolute top-4 left-1/2 w-full h-0.5 z-0 ${isCompleted && !isCurrent ? 'bg-primary' : 'bg-border'}`} />
                 )}
               </div>
@@ -193,7 +192,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
               <div className="grid grid-cols-2 gap-x-8 gap-y-6">
                 <div>
                   <p className="text-xs font-medium text-secondary uppercase tracking-wider mb-1">Industry</p>
-                  <p className="text-sm text-primary">{lead.client.industry || '-'}</p>
+                  <p className="text-sm text-primary">{lead.client?.industry || '-'}</p>
                 </div>
                 <div>
                   <p className="text-xs font-medium text-secondary uppercase tracking-wider mb-1">Source</p>

@@ -12,10 +12,8 @@ import { useMembers } from '@/hooks/useQueries';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 const STAGES = [
-  'LEAD', 'MQL', 'SQL', 'REACH_OUT', 'DISCOVERY',
-  'AUDIT', 'PRESENTATION', 'PROPOSAL', 'NEGOTIATION',
-  'FINALIZATION', 'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT',
-  'WON_CLOSED', 'LOST_CLOSED'
+  'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
+  'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED', 'CHURNED'
 ];
 
 const LEAD_SOURCES = [
@@ -124,13 +122,13 @@ export function LeadListView() {
   const filteredLeads = leads.filter(lead => {
     if (!search) return true;
     const term = search.toLowerCase();
-    const clientName = lead.client?.name?.toLowerCase() || '';
-    const company = lead.client?.company?.toLowerCase() || '';
-    return clientName.includes(term) || company.includes(term);
+    const haystack = [lead.contactName, lead.companyName, lead.client?.name, lead.client?.company]
+      .filter(Boolean).join(' ').toLowerCase();
+    return haystack.includes(term);
   }).filter(lead => {
-    // Hide Won/Lost by default unless the toggle is on or the user filtered to that stage.
-    if (showWonLost || stageFilter === 'WON_CLOSED' || stageFilter === 'LOST_CLOSED') return true;
-    return lead.stage !== 'WON_CLOSED' && lead.stage !== 'LOST_CLOSED';
+    // Hide closed leads by default unless the toggle is on or the user filtered to a closed stage.
+    if (showWonLost || stageFilter === 'PROJECT_COMPLETED' || stageFilter === 'CHURNED') return true;
+    return lead.stage !== 'PROJECT_COMPLETED' && lead.stage !== 'CHURNED';
   });
 
   return (
@@ -345,17 +343,17 @@ export function LeadListView() {
                            <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${lead.priority === 'HIGH' ? 'bg-red-500' : lead.priority === 'MEDIUM' ? 'bg-yellow-500' : 'bg-gray-300'}`} title={`Priority: ${lead.priority}`} />
                         )}
                         <div className="flex flex-col">
-                          <span className="text-sm font-medium text-primary">{getClientDisplayName(lead.client)}</span>
-                          {lead.client?.company && lead.client?.name && lead.client.name !== 'Internal' && (
-                            <span className="text-xs text-secondary">{lead.client.name}</span>
+                          <span className="text-sm font-medium text-primary">{lead.contactName || lead.companyName || getClientDisplayName(lead.client)}</span>
+                          {(lead.companyName || lead.jobTitle) && (
+                            <span className="text-xs text-secondary">{lead.companyName || lead.jobTitle}</span>
                           )}
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md border ${
-                        lead.stage === 'WON_CLOSED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                        lead.stage === 'LOST_CLOSED' ? 'bg-red-50 text-red-700 border-red-200' :
+                        lead.stage === 'PROJECT_COMPLETED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                        lead.stage === 'CHURNED' ? 'bg-red-50 text-red-700 border-red-200' :
                         'text-primary bg-[#F3F4F6] border-border'
                       }`}>
                         {lead.stage.replace(/_/g, ' ')}
@@ -366,7 +364,7 @@ export function LeadListView() {
                     </td>
                     <td className="px-6 py-4 text-sm text-secondary">
                       {lead.expectedCloseDate ? (
-                        <span className={new Date(lead.expectedCloseDate) < new Date() && !['WON_CLOSED', 'LOST_CLOSED'].includes(lead.stage) ? 'text-red-600 font-medium' : ''}>
+                        <span className={new Date(lead.expectedCloseDate) < new Date() && !['PROJECT_COMPLETED', 'CHURNED'].includes(lead.stage) ? 'text-red-600 font-medium' : ''}>
                           {new Date(lead.expectedCloseDate).toLocaleDateString()}
                         </span>
                       ) : '—'}

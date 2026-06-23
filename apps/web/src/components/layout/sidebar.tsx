@@ -1,9 +1,11 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useUIStore, useAuthStore } from '@/stores';
+import { useUIStore, useAuthStore, useModuleStore } from '@/stores';
+import { moduleForPath, accessibleModules, ModuleKey, MODULES } from '@/lib/modules';
 import { cn, getInitials, getAvatarColor } from '@/lib/utils';
 import {
   LayoutDashboard,
@@ -19,19 +21,22 @@ import {
   Zap,
   Building2,
   Network,
-  TrendingUp
+  TrendingUp,
+  ArrowLeftRight
 } from 'lucide-react';
 
-const navItems = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Pipeline', href: '/pipeline', icon: TrendingUp, roles: ['SUPER_ADMIN', 'ADMIN'] },
-  { label: 'Clients', href: '/clients', icon: Building2, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'] },
-  { label: 'Projects', href: '/projects', icon: FolderKanban },
-  { label: 'Tasks', href: '/tasks', icon: CheckSquare },
-  { label: 'Calendar', href: '/calendar', icon: CalendarDays },
-  { label: 'Members', href: '/team', icon: UsersRound },
-  { label: 'Departments', href: '/teams', icon: Network, roles: ['SUPER_ADMIN', 'ADMIN'] },
-  { label: 'Reports', href: '/reports', icon: BarChart3, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'] },
+type NavItem = { label: string; href: string; icon: any; roles?: string[]; module: ModuleKey | ModuleKey[] };
+
+const navItems: NavItem[] = [
+  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, module: 'PM' },
+  { label: 'Pipeline', href: '/pipeline', icon: TrendingUp, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
+  { label: 'Clients', href: '/clients', icon: Building2, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'], module: ['CRM', 'PM'] },
+  { label: 'Projects', href: '/projects', icon: FolderKanban, module: 'PM' },
+  { label: 'Tasks', href: '/tasks', icon: CheckSquare, module: 'PM' },
+  { label: 'Calendar', href: '/calendar', icon: CalendarDays, module: 'PM' },
+  { label: 'Members', href: '/team', icon: UsersRound, module: 'PM' },
+  { label: 'Departments', href: '/teams', icon: Network, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'PM' },
+  { label: 'Reports', href: '/reports', icon: BarChart3, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'], module: 'PM' },
 ];
 
 const bottomItems = [
@@ -42,6 +47,23 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
   const pathname = usePathname();
   const { sidebarCollapsed, toggleCollapse, mobileSidebarOpen } = useUIStore();
   const { user, logout } = useAuthStore();
+  const { activeModule: storeModule, setActiveModule } = useModuleStore();
+
+  // The route is the primary signal for the current module; fall back to the
+  // last-used module on shared/core pages (Clients, Settings, Profile).
+  const routeModule = moduleForPath(pathname);
+  useEffect(() => { if (routeModule) setActiveModule(routeModule); }, [routeModule, setActiveModule]);
+  const activeModule: ModuleKey = routeModule ?? storeModule;
+
+  const canSwitch = accessibleModules(user).length > 1;
+  const inActiveModule = (item: NavItem) => {
+    const mods = Array.isArray(item.module) ? item.module : [item.module];
+    return mods.includes(activeModule);
+  };
+  const visibleNav = navItems.filter(
+    (item) => (!item.roles || item.roles.includes(user?.role || '')) && inActiveModule(item),
+  );
+  const activeLabel = MODULES.find((m) => m.key === activeModule)?.label ?? '';
 
   return (
     <motion.aside
@@ -68,7 +90,23 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-        {navItems.filter(item => !item.roles || item.roles.includes(user?.role || '')).map((item) => {
+        {/* Module switcher — only when the user can access more than one module */}
+        {canSwitch && (
+          <Link href="/modules">
+            <div className={cn('group flex items-center gap-3 rounded-xl px-3 py-2.5 mb-2 text-sm font-medium border border-border bg-[#F9FAFB] text-secondary hover:text-primary hover:border-[#D1D5DB] transition-all', sidebarCollapsed && 'justify-center px-0')}>
+              <ArrowLeftRight className="h-[18px] w-[18px] shrink-0 text-[#9CA3AF] group-hover:text-primary" />
+              <AnimatePresence>
+                {!sidebarCollapsed && (
+                  <motion.span initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: 'auto' }} exit={{ opacity: 0, width: 0 }} className="whitespace-nowrap overflow-hidden flex-1">
+                    {activeLabel}
+                  </motion.span>
+                )}
+              </AnimatePresence>
+              {!sidebarCollapsed && <span className="text-[10px] font-semibold uppercase tracking-wide text-[#9CA3AF] group-hover:text-primary">Switch</span>}
+            </div>
+          </Link>
+        )}
+        {visibleNav.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
           return (
             <Link key={item.href} href={item.href}>

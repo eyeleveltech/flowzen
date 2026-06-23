@@ -95,6 +95,13 @@ const taskSchema = z.object({
 });
 type TaskFormValues = z.infer<typeof taskSchema>;
 
+// Fresh blank task form values (function so assignedDate is always "today").
+const blankTaskValues = (): TaskFormValues => ({
+  title: '', description: '', type: 'OTHER', projectId: '', assigneeId: '', assigneeIds: [],
+  reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: '',
+  assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '',
+});
+
 const kanbanCols = ['TODO', 'IN_PROGRESS', 'REVIEW', 'APPROVED', 'COMPLETED'];
 const kanbanLabels: Record<string, string> = {
   TODO: 'To Do', IN_PROGRESS: 'In Progress', REVIEW: 'In Review', APPROVED: 'Approved', COMPLETED: 'Done',
@@ -187,11 +194,18 @@ function TasksContent() {
 
   const { register, handleSubmit, control, reset, watch, formState: { errors } } = useForm<TaskFormValues>({
     resolver: zodResolver(taskSchema),
-    defaultValues: { title: '', description: '', type: 'OTHER', projectId: '', assigneeId: '', assigneeIds: [], reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: '', assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '' },
+    defaultValues: blankTaskValues(),
   });
   const [submitting, setSubmitting] = useState(false);
   const [commentContent, setCommentContent] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
+
+  // The create + edit screens share one form. Clear it whenever the create modal
+  // opens so leftover data from a previous edit doesn't show in "New Task".
+  useEffect(() => {
+    if (showCreate && !isEditing) reset(blankTaskValues());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCreate]);
 
   const selectedProjectId = watch('projectId');
 
@@ -754,6 +768,7 @@ function TasksContent() {
                           { label: 'Social Media', value: 'SOCIAL_MEDIA' },
                           { label: 'Development', value: 'DEVELOPMENT' },
                           { label: 'Strategy', value: 'STRATEGY' },
+                    { label: 'Business', value: 'BUSINESS' },
                           { label: 'Other', value: 'OTHER' },
                         ]}
                       />
@@ -996,6 +1011,7 @@ function TasksContent() {
                     { label: 'Social Media', value: 'SOCIAL_MEDIA' },
                     { label: 'Development', value: 'DEVELOPMENT' },
                     { label: 'Strategy', value: 'STRATEGY' },
+                    { label: 'Business', value: 'BUSINESS' },
                     { label: 'Other', value: 'OTHER' },
                   ]}
                 />

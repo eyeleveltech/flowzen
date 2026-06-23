@@ -34,7 +34,7 @@ type Tab = 'overview' | 'projects' | 'activity' | 'notes';
 const statusColors: Record<string, string> = {
   PROSPECT: 'bg-blue-50 text-blue-700', ACTIVE: 'bg-emerald-50 text-emerald-700',
   ONHOLD: 'bg-amber-50 text-amber-700', CHURNED: 'bg-gray-50 text-gray-400',
-  INACTIVE: 'bg-slate-100 text-slate-500',
+  PROJECT_COMPLETED: 'bg-slate-100 text-slate-500',
 };
 
 const projectStatusColors: Record<string, string> = {
@@ -187,7 +187,7 @@ export default function ClientDetailPage() {
         </div>
         {client.name !== 'Internal' && (
           <div className="flex items-center gap-2">
-            {!['INACTIVE', 'CHURNED'].includes(client.status) && (
+            {!['PROJECT_COMPLETED', 'CHURNED'].includes(client.status) && (
               <button
                 onClick={() => setShowCreateProject(true)}
                 className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-medium hover:bg-[#1F2937] transition-colors shadow-sm flex items-center gap-1.5"
@@ -498,7 +498,7 @@ export default function ClientDetailPage() {
                       { label: 'Active', value: 'ACTIVE' },
                       { label: 'On Hold', value: 'ONHOLD' },
                       { label: 'Churned', value: 'CHURNED' },
-                      { label: 'Inactive', value: 'INACTIVE' },
+                      { label: 'Project Completed', value: 'PROJECT_COMPLETED' },
                     ]}
                   />
                 </div>

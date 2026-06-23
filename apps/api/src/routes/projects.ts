@@ -118,8 +118,8 @@ projectRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
       include: {
         client: { select: { id: true, name: true, company: true } },
         owner: { select: { id: true, name: true, avatar: true, email: true } },
-        members: { include: { user: { select: { id: true, name: true, avatar: true, role: true } } } },
-        teams: { include: { team: { include: { members: { select: { id: true, name: true, avatar: true, role: true } } } } } },
+        members: { include: { user: { select: { id: true, name: true, avatar: true, role: true, designation: true } } } },
+        teams: { include: { team: { include: { members: { select: { id: true, name: true, avatar: true, role: true, designation: true } } } } } },
         tasks: {
           where: req.user!.role === 'TEAM_MEMBER'
             ? { OR: [{ assigneeId: req.user!.userId }, { assignees: { some: { id: req.user!.userId } } }] }
@@ -277,8 +277,8 @@ projectRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), 
       include: {
         client: { select: { id: true, name: true, company: true } },
         owner: { select: { id: true, name: true, avatar: true } },
-        members: { include: { user: { select: { id: true, name: true, avatar: true, role: true } } } },
-        teams: { include: { team: { include: { members: { select: { id: true, name: true, avatar: true, role: true } } } } } },
+        members: { include: { user: { select: { id: true, name: true, avatar: true, role: true, designation: true } } } },
+        teams: { include: { team: { include: { members: { select: { id: true, name: true, avatar: true, role: true, designation: true } } } } } },
         tasks: {
           where: req.user!.role === 'TEAM_MEMBER'
             ? { OR: [{ assigneeId: req.user!.userId }, { assignees: { some: { id: req.user!.userId } } }] }

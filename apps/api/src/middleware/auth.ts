@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken, JwtPayload } from '../utils/jwt.js';
+import { prisma } from '../lib/prisma.js';
 
 export interface AuthRequest extends Request {
   user?: JwtPayload;
@@ -39,5 +40,29 @@ export function authorize(...roles: string[]) {
     }
 
     next();
+  };
+}
+
+// Gate a router/route to organizations that have at least one of the given
+// modules enabled (e.g. requireModule('CRM') or requireModule('CRM','PM')).
+export function requireModule(...keys: string[]) {
+  return async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    try {
+      const found = await prisma.organizationModule.findFirst({
+        where: { organizationId: req.user.organizationId, key: { in: keys }, enabled: true },
+        select: { id: true },
+      });
+      if (!found) {
+        res.status(403).json({ error: 'This module is not enabled for your organization' });
+        return;
+      }
+      next();
+    } catch (error) {
+      next(error);
+    }
   };
 }

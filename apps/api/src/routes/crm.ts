@@ -8,26 +8,23 @@ import { emitToOrganization } from '../sse.js';
 export const crmRouter = Router();
 crmRouter.use(authenticate);
 
+// Lead Entry Gateway: name, email and phone are required.
 const leadSchema = z.object({
   clientId: z.string().optional(),
-  contactName: z.string().min(1, "Contact or Company Name is required").optional(),
-  companyName: z.string().min(1).optional(),
-  email: z.string().email().optional().or(z.literal('')),
-  phone: z.string().optional(),
+  contactName: z.string().min(2, 'Full name is required (min 2 characters)'),
+  companyName: z.string().optional(),
+  email: z.string().email('A valid email is required'),
+  phone: z.string().refine((v) => v.replace(/\D/g, '').length >= 10, { message: 'Phone number must be at least 10 digits' }),
   jobTitle: z.string().optional(),
+  linkedinUrl: z.string().optional(),
   source: z.enum(['EXCEL', 'MANUAL', 'API', 'REFERRAL', 'INBOUND', 'LINKEDIN', 'INSTAGRAM', 'WHATSAPP', 'OTHER', 'OUTBOUND', 'SOCIAL_MEDIA', 'EVENT', 'COLD_CALL', 'EXISTING_CLIENT']).optional(),
   assignedToId: z.string().optional(),
   dealValue: z.number().optional(),
   expectedRevenue: z.number().optional(),
   expectedCloseDate: z.string().optional(),
   followUpDate: z.string().optional(),
-  industry: z.string().optional(),
-  city: z.string().optional(),
   notes: z.string().optional(),
   priority: z.enum(['HIGH', 'MEDIUM', 'LOW']).optional(),
-}).refine(data => data.clientId || data.contactName || data.companyName, {
-  message: "Either Client ID, Contact Name or Company Name must be provided",
-  path: ["contactName"],
 });
 
 // GET /api/crm/leads
@@ -134,54 +131,38 @@ crmRouter.get('/leads/:id', async (req: AuthRequest, res: Response, next) => {
 crmRouter.post('/leads', authorize('SUPER_ADMIN', 'ADMIN'), validate(leadSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const { clientId, contactName, companyName, email, phone, jobTitle, source, assignedToId, dealValue, expectedRevenue, expectedCloseDate, followUpDate, industry, city, notes, priority } = req.body;
+    const { clientId, contactName, companyName, email, phone, jobTitle, linkedinUrl, source, assignedToId, dealValue, expectedRevenue, expectedCloseDate, followUpDate, notes, priority } = req.body;
 
-    let client;
+    // A client is only linked at the MEETING stage. If an existing client is
+    // explicitly chosen, validate it; otherwise the lead starts with no client.
+    let client = null as { id: string } | null;
     if (clientId) {
-      client = await prisma.client.findUnique({ where: { id: clientId, organizationId: orgId } });
+      client = await prisma.client.findUnique({ where: { id: clientId, organizationId: orgId }, select: { id: true } });
       if (!client) {
         res.status(404).json({ error: 'Client not found' });
         return;
       }
-    } else {
-      // 1. Create the Client (Status: PROSPECT)
-      client = await prisma.client.create({
-        data: {
-          name: contactName || companyName || 'Unknown',
-          company: companyName || null,
-          email: email || null,
-          phone: phone || null,
-          industry: industry || null,
-          city: city || null,
-          status: 'PROSPECT',
-          organizationId: orgId,
-          ...(jobTitle && contactName ? {
-            contacts: {
-              create: {
-                name: contactName,
-                designation: jobTitle,
-                email: email || null,
-                phone: phone || null,
-              }
-            }
-          } : {})
-        }
-      });
     }
 
-    // 2. Create the Lead linked to the Client
+    // Create the lead with its own contact identity (no client yet).
     const lead = await prisma.lead.create({
       data: {
-        clientId: client.id,
+        clientId: client ? client.id : null,
         organizationId: orgId,
         source: source || 'MANUAL',
-        stage: 'LEAD',
+        stage: 'NEW_LEAD',
         assignedToId: assignedToId || null,
         dealValue: dealValue || null,
         expectedRevenue: expectedRevenue || null,
         expectedCloseDate: expectedCloseDate ? new Date(expectedCloseDate) : null,
         followUpDate: followUpDate ? new Date(followUpDate) : null,
         priority: priority || 'MEDIUM',
+        contactName,
+        companyName: companyName || null,
+        contactEmail: email,
+        contactPhone: phone,
+        jobTitle: jobTitle || null,
+        linkedinUrl: linkedinUrl || null,
       },
       include: {
         client: true,
@@ -189,11 +170,11 @@ crmRouter.post('/leads', authorize('SUPER_ADMIN', 'ADMIN'), validate(leadSchema)
       }
     });
 
-    // 3. Log Activity
+    // Log Activity
     await prisma.activity.create({
       data: {
         type: 'LEAD_CREATED',
-        message: `added lead "${client.name}" to the pipeline`,
+        message: `added lead "${contactName || companyName}" to the pipeline`,
         entityType: 'LEAD',
         entityId: lead.id,
         userId: req.user!.userId,
@@ -230,49 +211,38 @@ crmRouter.post('/leads/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
 
     const createdLeads = [];
 
+    const validStages = [
+      'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
+      'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED', 'CHURNED'
+    ];
+
     for (const data of leads) {
       if (!data.contactName && !data.companyName) continue;
 
-      // 1. Create or find Client
-      const client = await prisma.client.create({
-        data: {
-          name: data.contactName || data.companyName || 'Unknown',
-          company: data.companyName || null,
-          email: data.email || null,
-          phone: data.phone || null,
-          industry: data.industry || null,
-          city: data.city || null,
-          status: 'PROSPECT',
-          organizationId: orgId,
-        }
-      });
+      // No client is created at import — contact identity lives on the lead until MEETING.
+      const validStage = validStages.includes(data.stage) ? data.stage : 'NEW_LEAD';
 
-      // Ensure stage is a valid LeadStage
-      const validStages = [
-        'LEAD', 'MQL', 'SQL', 'REACH_OUT', 'DISCOVERY', 'AUDIT', 'PRESENTATION',
-        'PROPOSAL', 'NEGOTIATION', 'FINALIZATION', 'CONTRACT', 'ACTIVE_RETAINER',
-        'ACTIVE_PROJECT', 'WON_CLOSED', 'LOST_CLOSED'
-      ];
-      const validStage = validStages.includes(data.stage) ? data.stage : 'LEAD';
-
-      // 2. Create Lead
       const lead = await prisma.lead.create({
         data: {
-          clientId: client.id,
           organizationId: orgId,
           source: data.source || 'EXCEL',
           stage: validStage,
           assignedToId: data.assignedToId || null,
           dealValue: data.dealValue ? parseFloat(data.dealValue) : null,
           expectedCloseDate: data.expectedCloseDate ? new Date(data.expectedCloseDate) : null,
+          contactName: data.contactName || data.companyName || 'Unknown',
+          companyName: data.companyName || null,
+          contactEmail: data.email || null,
+          contactPhone: data.phone || null,
+          jobTitle: data.jobTitle || null,
+          linkedinUrl: data.linkedinUrl || null,
         }
       });
 
-      // 3. Log Activity
       await prisma.activity.create({
         data: {
           type: 'LEAD_CREATED',
-          message: `bulk imported lead "${client.name}"`,
+          message: `bulk imported lead "${data.contactName || data.companyName}"`,
           entityType: 'LEAD',
           entityId: lead.id,
           userId: req.user!.userId,
@@ -297,7 +267,7 @@ crmRouter.post('/leads/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
 });
 
 const stageUpdateSchema = z.object({
-  stage: z.enum(['LEAD', 'MQL', 'SQL', 'REACH_OUT', 'DISCOVERY', 'AUDIT', 'PRESENTATION', 'PROPOSAL', 'NEGOTIATION', 'FINALIZATION', 'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'WON_CLOSED', 'LOST_CLOSED']),
+  stage: z.enum(['NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION', 'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED', 'CHURNED']),
   notes: z.string().optional(),
   dealValue: z.number().optional(),
   expectedCloseDate: z.string().optional(),
@@ -366,43 +336,60 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
       }
     }
 
-    // Auto-update Client Status (lifecycle: Prospect -> Active on won/contract, Churned on lost)
-    const activeStages = ['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'WON_CLOSED'];
-    if (activeStages.includes(stage) && existingLead.client.status !== 'ACTIVE') {
-      await prisma.client.update({
-        where: { id: existingLead.clientId },
-        data: { status: 'ACTIVE' }
+    // Client lifecycle. A client is created at MEETING (from the lead's own contact
+    // identity) and its status then tracks the pipeline.
+    let clientId = existingLead.clientId;
+
+    if (stage === 'MEETING' && !clientId) {
+      const newClient = await prisma.client.create({
+        data: {
+          name: existingLead.contactName || existingLead.companyName || 'Unknown',
+          company: existingLead.companyName || null,
+          email: existingLead.contactEmail || null,
+          phone: existingLead.contactPhone || null,
+          status: 'PROSPECT',
+          organizationId: orgId,
+          ...(existingLead.jobTitle && existingLead.contactName ? {
+            contacts: { create: { name: existingLead.contactName, designation: existingLead.jobTitle, email: existingLead.contactEmail || null, phone: existingLead.contactPhone || null } }
+          } : {})
+        }
       });
-    } else if (stage === 'LOST_CLOSED' && existingLead.client.status !== 'CHURNED') {
-      await prisma.client.update({
-        where: { id: existingLead.clientId },
-        data: { status: 'CHURNED' }
-      });
+      clientId = newClient.id;
+      await prisma.lead.update({ where: { id: leadId }, data: { clientId } });
     }
 
-    // Log a Won/Lost activity so it shows in the lead's Activity tab
-    if (stage === 'WON_CLOSED' || stage === 'LOST_CLOSED') {
+    if (clientId) {
+      let newStatus: 'ACTIVE' | 'PROJECT_COMPLETED' | 'CHURNED' | null = null;
+      if (['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(stage)) newStatus = 'ACTIVE';
+      else if (stage === 'PROJECT_COMPLETED') newStatus = 'PROJECT_COMPLETED';
+      else if (stage === 'CHURNED') newStatus = 'CHURNED';
+      if (newStatus) {
+        await prisma.client.update({ where: { id: clientId }, data: { status: newStatus } });
+      }
+    }
+
+    // Log a Won/Churned activity so it shows in the lead's Activity tab
+    if (stage === 'CONTRACT' || stage === 'CHURNED') {
       const reasonLabel = lostReason ? String(lostReason).replace(/_/g, ' ') : null;
       await prisma.activity.create({
         data: {
           type: 'STAGE_CHANGED',
-          message: stage === 'WON_CLOSED' ? 'marked this deal as Won 🎉' : 'marked this deal as Lost',
+          message: stage === 'CONTRACT' ? 'signed the contract 🎉' : 'marked this deal as Churned',
           entityType: 'LEAD',
           entityId: leadId,
           userId: req.user!.userId,
           leadId,
-          metadata: stage === 'LOST_CLOSED'
+          metadata: stage === 'CHURNED'
             ? { notes: [reasonLabel ? `Reason: ${reasonLabel}` : null, notes || null].filter(Boolean).join(' — ') || null }
             : undefined,
         }
       });
     }
 
-    // Emit real-time event
+    // Emit real-time events
     const io = req.app.get('io');
     emitToOrganization(io, orgId, 'lead:updated', updatedLead);
-    // Emit client updated because we may have changed client status
-    emitToOrganization(io, orgId, 'client:updated', { id: existingLead.clientId });
+    if (clientId) emitToOrganization(io, orgId, 'client:updated', { id: clientId });
 
     res.json(updatedLead);
   } catch (error) {
@@ -452,19 +439,35 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
     if (healthStatus !== undefined && existingLead.healthStatus !== healthStatus) { updateData.healthStatus = healthStatus; changes.push(`changed Health Status to ${healthStatus}`); }
     if (lostReason !== undefined && existingLead.lostReason !== lostReason) { updateData.lostReason = lostReason; changes.push(`changed Lost Reason`); }
     if (priority !== undefined && existingLead.priority !== priority) { updateData.priority = priority; changes.push(`changed Priority to ${priority}`); }
-    if (stage !== undefined && existingLead.stage !== stage) { 
-      updateData.stage = stage; 
-      changes.push(`changed Stage from ${existingLead.stage} to ${stage}`); 
-      // Auto-update Client Status
-      const activeStages = ['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT'];
-      if (activeStages.includes(stage) && existingLead.client.status === 'PROSPECT') {
-        await prisma.client.update({ where: { id: existingLead.clientId }, data: { status: 'ACTIVE' } });
-        const io = req.app.get('io');
-        emitToOrganization(io, orgId, 'client:updated', { id: existingLead.clientId });
-      } else if (stage === 'LOST_CLOSED' && existingLead.client.status !== 'CHURNED') {
-        await prisma.client.update({ where: { id: existingLead.clientId }, data: { status: 'CHURNED' } });
-        const io = req.app.get('io');
-        emitToOrganization(io, orgId, 'client:updated', { id: existingLead.clientId });
+    if (stage !== undefined && existingLead.stage !== stage) {
+      updateData.stage = stage;
+      changes.push(`changed Stage from ${existingLead.stage} to ${stage}`);
+      // Client lifecycle (mirrors the /stage endpoint): create at MEETING, then track status.
+      let clientId = existingLead.clientId;
+      if (stage === 'MEETING' && !clientId) {
+        const newClient = await prisma.client.create({
+          data: {
+            name: existingLead.contactName || existingLead.companyName || 'Unknown',
+            company: existingLead.companyName || null,
+            email: existingLead.contactEmail || null,
+            phone: existingLead.contactPhone || null,
+            status: 'PROSPECT',
+            organizationId: orgId,
+          }
+        });
+        clientId = newClient.id;
+        updateData.clientId = clientId;
+      }
+      if (clientId) {
+        let newStatus: 'ACTIVE' | 'PROJECT_COMPLETED' | 'CHURNED' | null = null;
+        if (['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(stage)) newStatus = 'ACTIVE';
+        else if (stage === 'PROJECT_COMPLETED') newStatus = 'PROJECT_COMPLETED';
+        else if (stage === 'CHURNED') newStatus = 'CHURNED';
+        if (newStatus) {
+          await prisma.client.update({ where: { id: clientId }, data: { status: newStatus } });
+          const io = req.app.get('io');
+          emitToOrganization(io, orgId, 'client:updated', { id: clientId });
+        }
       }
     }
 

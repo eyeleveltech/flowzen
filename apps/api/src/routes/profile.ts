@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
 import { hashPassword, comparePassword } from '../utils/password.js';
+import { emitToOrganization } from '../sse.js';
 
 export const profileRouter = Router();
 
@@ -77,6 +78,9 @@ profileRouter.put('/', async (req: AuthRequest, res: Response, next) => {
       },
     });
 
+    // Propagate name/department/designation changes so member lists + assignee
+    // dropdowns refresh everywhere (and for other users).
+    emitToOrganization(req.app.get('io'), req.user!.organizationId, 'member:changed', { id: user.id });
     res.json(user);
   } catch (error) {
     next(error);
