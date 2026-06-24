@@ -114,15 +114,15 @@ function TasksContent() {
   const { confirm } = useConfirmStore();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [projectFilter, setProjectFilter] = useState('');
-  const [assigneeFilter, setAssigneeFilter] = useState(user?.id || '');
-  const [priorityFilter, setPriorityFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [projectFilter, setProjectFilter] = useState<string[]>([]);
+  const [assigneeFilter, setAssigneeFilter] = useState<string[]>(user?.id ? [user.id] : []);
+  const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
   const filterHydrated = useRef(false);
 
   useEffect(() => {
     if (user?.id && !filterHydrated.current) {
-      setAssigneeFilter(user.id);
+      setAssigneeFilter([user.id]);
       filterHydrated.current = true;
     }
   }, [user?.id]);
@@ -147,7 +147,7 @@ function TasksContent() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage
-  } = useTasks(search, statusFilter, projectFilter, assigneeFilter, priorityFilter, searchParams.get('filter'));
+  } = useTasks(search, statusFilter.join(','), projectFilter.join(','), assigneeFilter.join(','), priorityFilter.join(','), searchParams.get('filter'));
 
   const tasks = useMemo(() => data?.pages.flatMap((page) => page.tasks) || [], [data]);
   const { data: projectsData } = useProjects();
@@ -397,14 +397,14 @@ function TasksContent() {
           <p className="text-sm text-secondary mt-1">{tasks.length} tasks</p>
         </div>
         <div className="flex items-center gap-3">
-          {(search || projectFilter || statusFilter || priorityFilter || (user?.role !== 'TEAM_MEMBER' && assigneeFilter !== user?.id) || searchParams.get('filter')) && (
+          {(search || projectFilter.length || statusFilter.length || priorityFilter.length || (user?.role !== 'TEAM_MEMBER' && !(assigneeFilter.length === 1 && assigneeFilter[0] === user?.id)) || searchParams.get('filter')) && (
             <button
               onClick={() => {
                 setSearch('');
-                setProjectFilter('');
-                setStatusFilter('');
-                setPriorityFilter('');
-                if (user?.role !== 'TEAM_MEMBER') setAssigneeFilter(user?.id || '');
+                setProjectFilter([]);
+                setStatusFilter([]);
+                setPriorityFilter([]);
+                if (user?.role !== 'TEAM_MEMBER') setAssigneeFilter(user?.id ? [user.id] : []);
                 router.replace('/tasks', { scroll: false });
               }}
               className="flex items-center gap-1.5 rounded-xl bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors border border-red-100"
@@ -423,52 +423,52 @@ function TasksContent() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tasks..." className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
         </div>
-        <Select
-          value={projectFilter}
-          onChange={(val) => setProjectFilter(val)}
-          options={[
-            { label: 'All Projects', value: '' },
-            ...projects.map((p) => ({ label: p.name, value: p.id }))
-          ]}
-          className="w-48"
-        />
-        <Select
-          value={statusFilter}
-          onChange={(val) => setStatusFilter(val)}
-          options={[
-            { label: 'All Statuses', value: '' },
-            { label: 'Backlog', value: 'BACKLOG' },
-            { label: 'To Do', value: 'TODO' },
-            { label: 'In Progress', value: 'IN_PROGRESS' },
-            { label: 'In Review', value: 'REVIEW' },
-            { label: 'Approved', value: 'APPROVED' },
-            { label: 'Blocked', value: 'BLOCKED' },
-            { label: 'Done', value: 'COMPLETED' },
-          ]}
-          className="w-40"
-        />
-        <Select
-          value={priorityFilter}
-          onChange={(val) => setPriorityFilter(val)}
-          options={[
-            { label: 'All Priorities', value: '' },
-            { label: 'Low', value: 'LOW' },
-            { label: 'Medium', value: 'MEDIUM' },
-            { label: 'High', value: 'HIGH' },
-            { label: 'Urgent', value: 'URGENT' },
-          ]}
-          className="w-40"
-        />
-        {user?.role !== 'TEAM_MEMBER' && (
-          <Select
-            value={assigneeFilter}
-            onChange={(val) => setAssigneeFilter(val)}
-            options={[
-              { label: 'All Assignees', value: '' },
-              ...members.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
-            ]}
-            className="w-48"
+        <div className="w-48">
+          <MultiSelect
+            value={projectFilter}
+            onChange={setProjectFilter}
+            placeholder="All Projects"
+            options={projects.map((p) => ({ label: p.name, value: p.id }))}
           />
+        </div>
+        <div className="w-44">
+          <MultiSelect
+            value={statusFilter}
+            onChange={setStatusFilter}
+            placeholder="All Statuses"
+            options={[
+              { label: 'Backlog', value: 'BACKLOG' },
+              { label: 'To Do', value: 'TODO' },
+              { label: 'In Progress', value: 'IN_PROGRESS' },
+              { label: 'In Review', value: 'REVIEW' },
+              { label: 'Approved', value: 'APPROVED' },
+              { label: 'Blocked', value: 'BLOCKED' },
+              { label: 'Done', value: 'COMPLETED' },
+            ]}
+          />
+        </div>
+        <div className="w-44">
+          <MultiSelect
+            value={priorityFilter}
+            onChange={setPriorityFilter}
+            placeholder="All Priorities"
+            options={[
+              { label: 'Low', value: 'LOW' },
+              { label: 'Medium', value: 'MEDIUM' },
+              { label: 'High', value: 'HIGH' },
+              { label: 'Urgent', value: 'URGENT' },
+            ]}
+          />
+        </div>
+        {user?.role !== 'TEAM_MEMBER' && (
+          <div className="w-48">
+            <MultiSelect
+              value={assigneeFilter}
+              onChange={setAssigneeFilter}
+              placeholder="All Assignees"
+              options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
+            />
+          </div>
         )}
         <div className="flex rounded-xl border border-border p-1">
           <button onClick={() => setView('board')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${view === 'board' ? 'bg-primary text-white' : 'text-secondary'}`}>Board</button>
@@ -732,9 +732,9 @@ function TasksContent() {
             {isEditing ? (
               <form onSubmit={handleSubmit(handleEdit)} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Title *</label>
-                  <input {...register('title')} className={`w-full rounded-xl border ${errors.title ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
-                  {errors.title && <p className="mt-1 text-xs text-red-500">{errors.title.message}</p>}
+                  <label htmlFor="te-title" className="block text-sm font-medium text-[#374151] mb-1.5">Title *</label>
+                  <input id="te-title" {...register('title')} aria-invalid={!!errors.title} aria-describedby={errors.title ? 'te-title-error' : undefined} className={`w-full rounded-xl border ${errors.title ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
+                  {errors.title && <p id="te-title-error" aria-live="polite" className="mt-1 text-xs text-red-500">{errors.title.message}</p>}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
@@ -746,18 +746,20 @@ function TasksContent() {
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Project *</label>
                   <Controller name="projectId" control={control} render={({ field }) => (
                     <Select
+                      ariaLabel="Project"
                       value={field.value}
                       onChange={field.onChange}
                       options={[{ label: 'Select project', value: '' }, ...projects.map((p) => ({ label: p.name, value: p.id }))]}
                     />
                   )} />
-                  {errors.projectId && <p className="mt-1 text-xs text-red-500">{errors.projectId.message}</p>}
+                  {errors.projectId && <p aria-live="polite" className="mt-1 text-xs text-red-500">{errors.projectId.message}</p>}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Task Type</label>
                     <Controller name="type" control={control} render={({ field }) => (
                       <Select
+                        ariaLabel="Task Type"
                         value={field.value || 'OTHER'}
                         onChange={field.onChange}
                         options={[
@@ -778,6 +780,7 @@ function TasksContent() {
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Reviewer</label>
                     <Controller name="reviewerId" control={control} render={({ field }) => (
                       <Select
+                        ariaLabel="Reviewer"
                         value={field.value || ''}
                         onChange={field.onChange}
                         options={[{ label: 'No Reviewer', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
@@ -788,6 +791,7 @@ function TasksContent() {
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignees</label>
                     <Controller name="assigneeIds" control={control} render={({ field }) => (
                       <MultiSelect
+                        compact={false}
                         value={field.value || []}
                         onChange={field.onChange}
                         placeholder="Add assignees..."
@@ -799,6 +803,7 @@ function TasksContent() {
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority</label>
                     <Controller name="priority" control={control} render={({ field }) => (
                       <Select
+                        ariaLabel="Priority"
                         value={field.value}
                         onChange={field.onChange}
                         options={[{ label: 'Low', value: 'LOW' }, { label: 'Medium', value: 'MEDIUM' }, { label: 'High', value: 'HIGH' }, { label: 'Urgent', value: 'URGENT' }]}
@@ -806,22 +811,22 @@ function TasksContent() {
                     )} />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Assigned Date</label>
-                    <input type="date" {...register('assignedDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                    <label htmlFor="te-assignedDate" className="block text-sm font-medium text-[#374151] mb-1.5">Assigned Date</label>
+                    <input id="te-assignedDate" type="date" {...register('assignedDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
-                    <input type="date" {...register('dueDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                    <label htmlFor="te-dueDate" className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
+                    <input id="te-dueDate" type="date" {...register('dueDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Time Spent (hours)</label>
-                    <input type="number" step="0.5" min="0" {...register('loggedHours', { valueAsNumber: true })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                    <label htmlFor="te-loggedHours" className="block text-sm font-medium text-[#374151] mb-1.5">Time Spent (hours)</label>
+                    <input id="te-loggedHours" type="number" step="0.5" min="0" {...register('loggedHours', { valueAsNumber: true })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Drive Link (Uploads, Drafts)</label>
-                  <input type="url" {...register('driveLink')} placeholder="https://drive.google.com/..." className={`w-full rounded-xl border ${errors.driveLink ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
-                  {errors.driveLink && <p className="mt-1 text-xs text-red-500">{errors.driveLink.message}</p>}
+                  <label htmlFor="te-driveLink" className="block text-sm font-medium text-[#374151] mb-1.5">Drive Link (Uploads, Drafts)</label>
+                  <input id="te-driveLink" type="url" {...register('driveLink')} placeholder="https://drive.google.com/..." aria-invalid={!!errors.driveLink} aria-describedby={errors.driveLink ? 'te-driveLink-error' : undefined} className={`w-full rounded-xl border ${errors.driveLink ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
+                  {errors.driveLink && <p id="te-driveLink-error" aria-live="polite" className="mt-1 text-xs text-red-500">{errors.driveLink.message}</p>}
                 </div>
                 <div className="pt-4 flex gap-3">
                   <button type="button" onClick={() => setIsEditing(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
@@ -975,9 +980,9 @@ function TasksContent() {
               <div className="p-6">
                 <form onSubmit={handleSubmit(handleCreate)} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-[#374151] mb-1.5">Title *</label>
-            <input {...register('title')} className={`w-full rounded-xl border ${errors.title ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
-            {errors.title && <p className="mt-1 text-xs text-red-500">{errors.title.message}</p>}
+            <label htmlFor="tn-title" className="block text-sm font-medium text-[#374151] mb-1.5">Title *</label>
+            <input id="tn-title" {...register('title')} aria-invalid={!!errors.title} aria-describedby={errors.title ? 'tn-title-error' : undefined} className={`w-full rounded-xl border ${errors.title ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
+            {errors.title && <p id="tn-title-error" aria-live="polite" className="mt-1 text-xs text-red-500">{errors.title.message}</p>}
           </div>
           <div>
             <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
@@ -989,18 +994,20 @@ function TasksContent() {
             <label className="block text-sm font-medium text-[#374151] mb-1.5">Project *</label>
             <Controller name="projectId" control={control} render={({ field }) => (
               <Select
+                ariaLabel="Project"
                 value={field.value}
                 onChange={field.onChange}
                 options={[{ label: 'Select project', value: '' }, ...projects.map((p) => ({ label: p.name, value: p.id }))]}
               />
             )} />
-            {errors.projectId && <p className="mt-1 text-xs text-red-500">{errors.projectId.message}</p>}
+            {errors.projectId && <p aria-live="polite" className="mt-1 text-xs text-red-500">{errors.projectId.message}</p>}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-[#374151] mb-1.5">Task Type</label>
               <Controller name="type" control={control} render={({ field }) => (
                 <Select
+                  ariaLabel="Task Type"
                   value={field.value || 'OTHER'}
                   onChange={field.onChange}
                   options={[
@@ -1021,6 +1028,7 @@ function TasksContent() {
               <label className="block text-sm font-medium text-[#374151] mb-1.5">Reviewer</label>
               <Controller name="reviewerId" control={control} render={({ field }) => (
                 <Select
+                  ariaLabel="Reviewer"
                   value={field.value || ''}
                   onChange={field.onChange}
                   options={[{ label: 'No Reviewer', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
@@ -1031,6 +1039,7 @@ function TasksContent() {
               <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignees</label>
               <Controller name="assigneeIds" control={control} render={({ field }) => (
                 <MultiSelect
+                  compact={false}
                   value={field.value || []}
                   onChange={field.onChange}
                   placeholder="Add assignees..."
@@ -1042,6 +1051,7 @@ function TasksContent() {
               <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority</label>
               <Controller name="priority" control={control} render={({ field }) => (
                 <Select
+                  ariaLabel="Priority"
                   value={field.value}
                   onChange={field.onChange}
                   options={[{ label: 'Low', value: 'LOW' }, { label: 'Medium', value: 'MEDIUM' }, { label: 'High', value: 'HIGH' }, { label: 'Urgent', value: 'URGENT' }]}
@@ -1049,22 +1059,22 @@ function TasksContent() {
               )} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Assigned Date</label>
-              <input type="date" {...register('assignedDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+              <label htmlFor="tn-assignedDate" className="block text-sm font-medium text-[#374151] mb-1.5">Assigned Date</label>
+              <input id="tn-assignedDate" type="date" {...register('assignedDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
-              <input type="date" {...register('dueDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+              <label htmlFor="tn-dueDate" className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
+              <input id="tn-dueDate" type="date" {...register('dueDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Time Spent (hours)</label>
-              <input type="number" step="0.5" min="0" {...register('loggedHours', { valueAsNumber: true })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+              <label htmlFor="tn-loggedHours" className="block text-sm font-medium text-[#374151] mb-1.5">Time Spent (hours)</label>
+              <input id="tn-loggedHours" type="number" step="0.5" min="0" {...register('loggedHours', { valueAsNumber: true })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-[#374151] mb-1.5">Drive Link (Uploads, Drafts)</label>
-            <input type="url" {...register('driveLink')} placeholder="https://drive.google.com/..." className={`w-full rounded-xl border ${errors.driveLink ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
-            {errors.driveLink && <p className="mt-1 text-xs text-red-500">{errors.driveLink.message}</p>}
+            <label htmlFor="tn-driveLink" className="block text-sm font-medium text-[#374151] mb-1.5">Drive Link (Uploads, Drafts)</label>
+            <input id="tn-driveLink" type="url" {...register('driveLink')} placeholder="https://drive.google.com/..." aria-invalid={!!errors.driveLink} aria-describedby={errors.driveLink ? 'tn-driveLink-error' : undefined} className={`w-full rounded-xl border ${errors.driveLink ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
+            {errors.driveLink && <p id="tn-driveLink-error" aria-live="polite" className="mt-1 text-xs text-red-500">{errors.driveLink.message}</p>}
           </div>
           <div className="pt-4 flex gap-3">
             <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>

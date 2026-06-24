@@ -128,6 +128,22 @@ enum LeadPriority {
   LOW
 }
 
+enum ContactRole {
+  DECISION_MAKER
+  INFLUENCER
+  GATEKEEPER
+  CHAMPION
+  CC_ONLY
+}
+
+enum RenewalStatus {
+  UPCOMING
+  IN_DISCUSSION
+  RENEWED
+  AT_RISK
+  CHURNED
+}
+
 enum LeadStage {
   NEW_LEAD
   OUTREACH
@@ -171,6 +187,14 @@ enum NotificationType {
   PROJECT_STATUS_CHANGED
   CLIENT_ADDED
   MENTION
+  FOLLOW_UP_DUE
+  FOLLOW_UP_OVERDUE
+  STALE_LEAD
+  PAYMENT_DUE
+  PAYMENT_OVERDUE
+  RENEWAL_DUE
+  REACTIVATION_DUE
+  DAILY_DIGEST
 }
 
 // ──────────────────────────────────────────────
@@ -196,6 +220,7 @@ model Organization {
   clients Client[]
   leads   Lead[]
   modules OrganizationModule[]
+  quotes  QuoteDocument[]
 
   @@map("organizations")
 }
@@ -231,6 +256,7 @@ model User {
   resetToken       String?  @unique
   resetTokenExpiry DateTime?
   lastActivityReadAt DateTime?
+  settings         Json     @default("{}") // per-user prefs (e.g. notifications)
   organizationId   String
   teamId           String?
   createdAt        DateTime @default(now())
@@ -253,6 +279,7 @@ model User {
   createdWorkflows WorkflowRule[] @relation("WorkflowCreator")
   assignedLeads  Lead[]          @relation("LeadAssignee")
   stageChanges   StageHistory[]  @relation("StageChanger")
+  quotesAsSalesperson QuoteDocument[] @relation("QuoteSalesperson")
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -290,10 +317,14 @@ model Client {
   engagementType String?
   website        String?
   city           String?
+  state          String?
   scope          String?
   assetLinks     String?
   accountManagerId String?
   organizationId String
+  // Billing details used to auto-fill quotations / proforma invoices
+  billingAddress String?      @db.Text
+  gstNumber      String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -305,6 +336,7 @@ model Client {
   accountManager User?       @relation("ClientAccountManager", fields: [accountManagerId], references: [id])
   lead         Lead?
   tasks        Task[]        @relation("ClientTasks")
+  quotes       QuoteDocument[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -569,6 +601,7 @@ model ClientContact {
 
 model Lead {
   id                String       @id @default(cuid())
+  leadId            String?      @unique // FL-YYYYMM-XXXXXX, auto-generated on creation, never editable
   clientId          String?      @unique
   organizationId    String
   source            LeadSource   @default(MANUAL)
@@ -582,15 +615,44 @@ model Lead {
   contractType      ContractType?
   healthStatus      HealthStatus?
   lostReason        LostReason?
-  // Lead-owned contact identity (a lead can exist before a Client is created at MEETING)
+  // Module K — retainer renewal tracking
+  contractStartDate DateTime?
+  contractEndDate   DateTime?
+  nextRenewalDate   DateTime?
+  autoRenewal       Boolean        @default(false)
+  renewalStatus     RenewalStatus?
+  renewalNotes      String?        @db.Text
+  // Lead-owned contact identity (a lead can exist before a Client is created at OUTREACH)
   contactName       String?
   companyName       String?
-  contactEmail      String?
-  contactPhone      String?
-  jobTitle          String?
+  companySize       String?      // '1-10' | '11-100' | '101-500' | '501-1000' | '1000+'
+  contactEmail      String?      // brief: email
+  contactPhone      String?      // brief: mobile (unique per organization, enforced in app)
+  landlinePhone     String?
+  jobTitle          String?      // brief: designation
   linkedinUrl       String?
   linkedinChecked   Boolean      @default(false)
   linkedinFound     Boolean?
+  // Address
+  address           String?
+  city              String?
+  state             String?
+  zip               String?
+  country           String?      @default("India")
+  // Billing (used to auto-fill quotations / proforma invoices)
+  billingAddress    String?      @db.Text
+  gstNumber         String?
+  // Company digital presence
+  website           String?
+  instagramHandle   String?
+  facebookPage      String?
+  industry          String?
+  // Engagement tracking
+  lastContactedDate DateTime?
+  // LinkedIn Intelligence dossier (Module A)
+  dossierJson        Json?
+  dossierStatus      String?     // 'pending' | 'complete' | 'failed'
+  dossierGeneratedAt DateTime?
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
@@ -602,10 +664,142 @@ model Lead {
   activities        Activity[]   @relation("LeadActivities")
   tasks             Task[]       @relation("LeadTasks")
   notes             Note[]
+  contacts          LeadContact[]
 
   @@index([organizationId])
   @@index([organizationId, stage])
+  @@index([organizationId, contactPhone])
   @@map("leads")
+}
+
+// Module G — secondary stakeholders on a lead (not separate leads). Each can carry its
+// own LinkedIn Intelligence dossier independent of the lead-level one.
+model LeadContact {
+  id                 String      @id @default(cuid())
+  leadId             String
+  name               String
+  designation        String?
+  email              String?
+  phone              String?
+  linkedinUrl        String?
+  role               ContactRole
+  notes              String?     @db.Text
+  dossierJson        Json?
+  dossierStatus      String?     // 'pending' | 'complete' | 'failed'
+  dossierGeneratedAt DateTime?
+  createdAt          DateTime    @default(now())
+
+  lead               Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@map("lead_contacts")
+}
+
+// Monotonic counter for human-readable Lead IDs (FL-YYYYMM-XXXXXX), per org per month.
+model LeadIdCounter {
+  id             String @id @default(cuid())
+  organizationId String
+  yearMonth      String // 'YYYYMM'
+  counter        Int    @default(0)
+
+  @@unique([organizationId, yearMonth])
+  @@map("lead_id_counters")
+}
+
+// Generic sequential counter for document numbers (QT / PI / INV), per org, per scope, per period (year).
+model DocCounter {
+  id             String @id @default(cuid())
+  organizationId String
+  scope          String // 'QT' | 'PI' | 'INV'
+  period         String // 'YYYY'
+  counter        Int    @default(0)
+
+  @@unique([organizationId, scope, period])
+  @@map("doc_counters")
+}
+
+// ── Module C: Quotation / Proforma Invoice ─────────────────────────────────────
+enum DocumentType {
+  QUOTATION
+  PROFORMA_INVOICE
+}
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  EXPIRED
+  CANCELLED
+}
+
+model QuoteDocument {
+  id               String       @id @default(cuid())
+  organizationId   String
+  documentType     DocumentType
+  documentNumber   String       @unique // EL/QT/YYYY/NNN or EL/PI/YYYY/NNN
+  documentDate     DateTime     @default(now())
+  expirationDate   DateTime
+  clientId         String       // FK -> Client.id (quotes are raised for clients-page clients)
+  clientName       String       // denormalized for display
+  contactPerson    String
+  clientEmail      String?
+  clientPhone      String?
+  billingAddress   String?
+  clientState      String?      // drives CGST/SGST vs IGST at generation time
+  paymentTerms     String
+  customerRef      String?
+  salespersonId    String?
+  salesTeam        String?
+  onlineSignature  Boolean      @default(false)
+  onlinePayment    Boolean      @default(false)
+  tags             String[]     @default([])
+  paymentMethod    String?
+  clientGst        String?
+  projectStartDate DateTime?
+  deliveryDate     DateTime?
+  projectNotes     String?      @db.Text
+  termsConditions  String       @db.Text
+  status           QuoteStatus  @default(DRAFT)
+  // Snapshot of computed totals at save time (server-authoritative).
+  untaxedAmount    Decimal      @default(0)
+  totalDiscount    Decimal      @default(0)
+  cgst             Decimal      @default(0)
+  sgst             Decimal      @default(0)
+  igst             Decimal      @default(0)
+  totalTax         Decimal      @default(0)
+  grandTotal       Decimal      @default(0)
+  amountInWords    String?
+  pdfUrl           String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  lineItems        QuoteLineItem[]
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client           Client       @relation(fields: [clientId], references: [id])
+  salesperson      User?        @relation("QuoteSalesperson", fields: [salespersonId], references: [id])
+
+  @@index([organizationId, status])
+  @@index([clientId])
+  @@map("quote_documents")
+}
+
+model QuoteLineItem {
+  id          String        @id @default(cuid())
+  quoteId     String
+  sortOrder   Int
+  description String
+  unit        String        // Hours | Days | Months | Units | Lump Sum
+  quantity    Decimal
+  unitPrice   Decimal
+  discountPct Decimal       @default(0)
+  taxType     String        @default("IGST_S") // tax type code (drives the GST split)
+  taxPct      Decimal       @default(18)         // editable rate %
+  amount      Decimal       // (qty * price) * (1 - disc%)
+
+  quote       QuoteDocument @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId])
+  @@map("quote_line_items")
 }
 
 model StageHistory {

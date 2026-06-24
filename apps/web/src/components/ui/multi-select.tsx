@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Check, ChevronsUpDown } from 'lucide-react';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { Drawer } from '@/components/ui/drawer';
@@ -15,23 +16,62 @@ interface MultiSelectProps {
   value: string[];
   onChange: (value: string[]) => void;
   placeholder?: string;
+  // compact = fixed-height trigger with a "N selected" summary (good for filter bars).
+  // false = the chip trigger that grows as you add items (good for tall forms).
+  compact?: boolean;
 }
 
-export function MultiSelect({ options, value, onChange, placeholder = 'Select...' }: MultiSelectProps) {
+export function MultiSelect({ options, value, onChange, placeholder = 'Select...', compact = true }: MultiSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [rect, setRect] = useState<DOMRect | null>(null);
   const isMobile = useMediaQuery('(max-width: 768px)');
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const t = event.target as Node;
+      // The dropdown is portaled to <body>, so check it too (not just the trigger).
+      if (
+        containerRef.current && !containerRef.current.contains(t) &&
+        (!dropdownRef.current || !dropdownRef.current.contains(t))
+      ) {
         setIsOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Reset the search box each time the dropdown closes.
+  useEffect(() => {
+    if (!isOpen) setSearch('');
+  }, [isOpen]);
+
+  // Capture the trigger position when opening, so the portaled dropdown can anchor to it.
+  useEffect(() => {
+    if (isOpen && containerRef.current) setRect(containerRef.current.getBoundingClientRect());
+  }, [isOpen]);
+
+  // Close on outside scroll (but not when scrolling within the dropdown list).
+  useEffect(() => {
+    if (!isOpen) return;
+    const onScroll = (e: Event) => {
+      if ((e.target as HTMLElement)?.closest?.('[data-multiselect-dropdown]')) return;
+      setIsOpen(false);
+    };
+    window.addEventListener('scroll', onScroll, true);
+    return () => window.removeEventListener('scroll', onScroll, true);
+  }, [isOpen]);
+
+  // Flip the dropdown upward when there isn't room below, and clamp its height to the viewport.
+  const DROPDOWN_MAX = 260;
+  const viewportH = typeof window !== 'undefined' ? window.innerHeight : 0;
+  const spaceBelow = rect ? viewportH - rect.bottom : 0;
+  const spaceAbove = rect ? rect.top : 0;
+  const openUp = rect ? spaceBelow < Math.min(DROPDOWN_MAX, 220) && spaceAbove > spaceBelow : false;
+  const dropdownMaxHeight = rect ? Math.max(140, Math.min(DROPDOWN_MAX, (openUp ? spaceAbove : spaceBelow) - 16)) : DROPDOWN_MAX;
 
   const selectedOptions = options.filter(opt => value.includes(opt.value));
   const filteredOptions = options.filter(opt => opt.label.toLowerCase().includes(search.toLowerCase()));
@@ -51,23 +91,47 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
 
   return (
     <div className="relative" ref={containerRef}>
-      <div 
+      {compact ? (
+        // Fixed-height summary trigger — keeps filter bars aligned regardless of selection.
+        <button
+          type="button"
+          aria-haspopup="listbox"
+          aria-expanded={isOpen}
+          aria-label={placeholder}
+          onClick={() => setIsOpen((o) => !o)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') { e.preventDefault(); setIsOpen(true); }
+            if (e.key === 'Escape') setIsOpen(false);
+          }}
+          className="flex h-[42px] w-full items-center justify-between rounded-xl border border-border bg-white px-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all text-left"
+        >
+          <span className={`min-w-0 truncate ${selectedOptions.length === 0 ? 'text-[#9CA3AF]' : 'text-primary'}`}>
+            {selectedOptions.length === 0
+              ? placeholder
+              : selectedOptions.length === 1
+                ? selectedOptions[0].label
+                : `${selectedOptions.length} selected`}
+          </span>
+          <ChevronsUpDown className="h-4 w-4 shrink-0 text-[#9CA3AF] ml-2" />
+        </button>
+      ) : (
+      <div
         className="min-h-[42px] w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary cursor-pointer flex flex-wrap gap-2 items-center transition-all focus-within:border-primary focus-within:ring-1 focus-within:ring-primary"
         onClick={() => setIsOpen(true)}
       >
         {selectedOptions.length === 0 && (
           <span className="text-[#9CA3AF] px-1">{placeholder}</span>
         )}
-        
+
         {selectedOptions.map(opt => (
-          <span 
-            key={opt.value} 
+          <span
+            key={opt.value}
             className="flex items-center gap-1 bg-[#F3F4F6] text-[#374151] px-2 py-1 rounded-lg text-xs font-medium"
           >
             {opt.image && <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-semibold ${opt.colorClass || 'bg-primary text-white'}`}>{opt.image}</div>}
             {opt.label}
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={(e) => handleRemove(e, opt.value)}
               className="hover:bg-border rounded-full p-0.5"
             >
@@ -75,7 +139,7 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
             </button>
           </span>
         ))}
-        
+
         <input
           type="text"
           role="combobox"
@@ -97,15 +161,24 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
             }
           }}
         />
-        
+
         <div className="ml-auto flex items-center shrink-0">
           <ChevronsUpDown className="h-4 w-4 text-[#9CA3AF]" />
         </div>
       </div>
+      )}
 
       {isOpen && isMobile ? (
         <Drawer isOpen={isOpen} onClose={() => setIsOpen(false)} title={placeholder}>
           <div className="flex flex-col space-y-1 mb-4">
+            {compact && options.length > 7 && (
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search..."
+                className="w-full rounded-xl border border-border bg-white py-2.5 px-3 text-base text-primary outline-none focus:border-primary mb-2"
+              />
+            )}
             {filteredOptions.length === 0 ? (
               <div className="px-4 py-2.5 text-sm text-secondary">No results found.</div>
             ) : (
@@ -133,12 +206,34 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
             )}
           </div>
         </Drawer>
-      ) : isOpen && (
-        <div 
+      ) : (
+        typeof document !== 'undefined' && isOpen && createPortal(
+        <div
+          ref={dropdownRef}
+          data-multiselect-dropdown
           role="listbox"
           aria-multiselectable="true"
-          className="absolute top-full mt-1.5 w-full rounded-xl border border-border bg-white py-1.5 shadow-lg z-50 max-h-60 overflow-auto"
+          className="fixed z-9999 overflow-y-auto rounded-xl border border-border bg-white py-1.5 shadow-lg shadow-black/5"
+          style={{
+            width: rect ? Math.max(rect.width, 160) : 'auto',
+            left: rect ? rect.left : 0,
+            maxHeight: dropdownMaxHeight,
+            ...(openUp
+              ? { bottom: rect ? viewportH - rect.top + 8 : 0 }
+              : { top: rect ? rect.bottom + 8 : 0 }),
+          }}
         >
+          {compact && options.length > 7 && (
+            <div className="sticky top-0 z-10 -mt-1.5 mb-1 bg-white px-1.5 pt-1.5 pb-1.5 border-b border-[#F3F4F6]">
+              <input
+                autoFocus
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search..."
+                className="w-full rounded-lg border border-border bg-white py-1.5 px-2.5 text-sm text-primary outline-none focus:border-primary"
+              />
+            </div>
+          )}
           {filteredOptions.length === 0 ? (
             <div className="px-4 py-2.5 text-sm text-secondary">No results found.</div>
           ) : (
@@ -150,7 +245,7 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
                   role="option"
                   tabIndex={isOpen ? 0 : -1}
                   aria-selected={isSelected}
-                  className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-[#F9FAFB] focus:bg-[#F9FAFB] focus:ring-2 focus:ring-inset focus:ring-primary/10 outline-none transition-colors"
+                  className="flex items-center gap-2 mx-1.5 px-3 py-2 rounded-lg text-sm cursor-pointer hover:bg-[#F9FAFB] focus:bg-[#F9FAFB] focus:ring-2 focus:ring-inset focus:ring-primary/10 outline-none transition-colors"
                   onClick={(e) => { e.stopPropagation(); handleSelect(opt.value); }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
@@ -165,28 +260,29 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
                     if (e.key === 'ArrowUp') {
                       e.preventDefault();
                       const prev = e.currentTarget.previousElementSibling as HTMLElement;
-                      if (prev) {
+                      if (prev && prev.getAttribute('role') === 'option') {
                         prev.focus();
                       } else {
-                        containerRef.current?.querySelector('input')?.focus();
+                        dropdownRef.current?.querySelector('input')?.focus();
                       }
                     }
                     if (e.key === 'Escape') {
                       setIsOpen(false);
-                      containerRef.current?.querySelector('input')?.focus();
                     }
                   }}
                 >
-                  <div className={`flex items-center justify-center w-4 h-4 rounded border ${isSelected ? 'bg-primary border-primary' : 'border-[#D1D5DB]'}`}>
+                  <div className={`flex items-center justify-center w-4 h-4 rounded border shrink-0 ${isSelected ? 'bg-primary border-primary' : 'border-[#D1D5DB]'}`}>
                     {isSelected && <Check className="h-3 w-3 text-white" />}
                   </div>
                   {opt.image && <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-primary text-white'}`}>{opt.image}</div>}
-                  <span className="text-[#374151]">{opt.label}</span>
+                  <span className="text-[#374151] truncate">{opt.label}</span>
                 </div>
               );
             })
           )}
-        </div>
+        </div>,
+        document.body
+        )
       )}
     </div>
   );

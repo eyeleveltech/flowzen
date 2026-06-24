@@ -26,6 +26,7 @@ import {
   AlertCircle,
   Menu,
   Target,
+  RefreshCw,
 } from 'lucide-react';
 import { Drawer } from '@/components/ui/drawer';
 import toast from 'react-hot-toast';
@@ -36,6 +37,7 @@ interface Notification {
   message: string;
   read: boolean;
   createdAt: string;
+  metadata?: { leadId?: string; taskId?: string; projectId?: string; milestone?: string };
 }
 
 const notificationIcons: Record<string, typeof CheckSquare> = {
@@ -45,6 +47,14 @@ const notificationIcons: Record<string, typeof CheckSquare> = {
   COMMENT_ADDED: MessageSquare,
   PROJECT_STATUS_CHANGED: FolderKanban,
   CLIENT_ADDED: Users,
+  FOLLOW_UP_DUE: Clock,
+  FOLLOW_UP_OVERDUE: Clock,
+  STALE_LEAD: AlertCircle,
+  PAYMENT_DUE: Clock,
+  PAYMENT_OVERDUE: AlertCircle,
+  RENEWAL_DUE: Clock,
+  REACTIVATION_DUE: RefreshCw,
+  DAILY_DIGEST: Bell,
 };
 
 export function TopNav({ isMobile }: { isMobile?: boolean }) {
@@ -234,7 +244,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                       if (!n.read) markAsRead(n.id);
                       setShowNotifications(false);
                       if (n.metadata?.taskId) router.push(`/tasks?taskId=${n.metadata.taskId}`);
-                      else if (n.metadata?.projectId) router.push(`/projects/${n.metadata.projectId}`);
+                      else if (n.metadata?.projectId) router.push(`/projects/${n.metadata.projectId}`); else if (n.metadata?.leadId) router.push(`/pipeline/${n.metadata.leadId}`);
                     };
 
                     return (
@@ -286,7 +296,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                           if (!n.read) markAsRead(n.id);
                           setShowNotifications(false);
                           if (n.metadata?.taskId) router.push(`/tasks?taskId=${n.metadata.taskId}`);
-                          else if (n.metadata?.projectId) router.push(`/projects/${n.metadata.projectId}`);
+                          else if (n.metadata?.projectId) router.push(`/projects/${n.metadata.projectId}`); else if (n.metadata?.leadId) router.push(`/pipeline/${n.metadata.leadId}`);
                         };
 
                         return (

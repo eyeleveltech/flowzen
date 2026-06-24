@@ -99,18 +99,18 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Basic Info</h3>
             <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Project Name *</label>
-              <input value={formValues.name} onChange={(e) => setValue('name', e.target.value, { shouldValidate: true })} className={`w-full rounded-xl border ${errors.name ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
-              {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>}
+              <label htmlFor="cp-name" className="block text-sm font-medium text-[#374151] mb-1.5">Project Name *</label>
+              <input id="cp-name" value={formValues.name} onChange={(e) => setValue('name', e.target.value, { shouldValidate: true })} aria-invalid={!!errors.name} aria-describedby={errors.name ? 'cp-name-error' : undefined} className={`w-full rounded-xl border ${errors.name ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
+              {errors.name && <p id="cp-name-error" aria-live="polite" className="mt-1 text-xs text-red-500">{errors.name.message}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
+              <label htmlFor="cp-description" className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
               <RichTextEditor value={formValues.description || ''} onChange={(val) => setValue('description', val)} placeholder="Project description..." />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-[#374151] mb-1.5">Project Type</label>
-                <Select value={formValues.type} onChange={(val) => setValue('type', val as any, { shouldValidate: true })} options={[
+                <Select ariaLabel="Project Type" value={formValues.type} onChange={(val) => setValue('type', val as any, { shouldValidate: true })} options={[
                   { label: 'Retainer', value: 'RETAINER' },
                   { label: 'One-Time Project', value: 'ONE_TIME' },
                   { label: 'Event', value: 'EVENT' },
@@ -119,7 +119,7 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
               </div>
               <div>
                 <label className="block text-sm font-medium text-[#374151] mb-1.5">Status</label>
-                <Select value={formValues.status} onChange={(val) => setValue('status', val as any)} options={[
+                <Select ariaLabel="Status" value={formValues.status} onChange={(val) => setValue('status', val as any)} options={[
                   { label: 'Planning', value: 'PLANNING' },
                   { label: 'In Progress', value: 'IN_PROGRESS' },
                   { label: 'In Review', value: 'REVIEW' },
@@ -130,7 +130,7 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
               </div>
               <div>
                 <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority</label>
-                <Select value={formValues.priority} onChange={(val) => setValue('priority', val as any)} options={[
+                <Select ariaLabel="Priority" value={formValues.priority} onChange={(val) => setValue('priority', val as any)} options={[
                   { label: 'Low', value: 'LOW' },
                   { label: 'Medium', value: 'MEDIUM' },
                   { label: 'High', value: 'HIGH' },
@@ -146,17 +146,18 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
             <div className="flex flex-col gap-4">
               <div>
                 <label className="block text-sm font-medium text-[#374151] mb-1.5">Client</label>
-                <Select value={formValues.clientId || ''} onChange={(val) => setValue('clientId', val, { shouldValidate: true })} options={clientOptions} />
+                <Select ariaLabel="Client" value={formValues.clientId || ''} onChange={(val) => setValue('clientId', val, { shouldValidate: true })} options={clientOptions} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-[#374151] mb-1.5">Project Owner *</label>
-                <Select required value={formValues.ownerId} onChange={(val) => setValue('ownerId', val, { shouldValidate: true })} options={[{ label: 'Select owner', value: '' }, ...members.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]} />
-                {errors.ownerId && <p className="mt-1 text-xs text-red-500">{errors.ownerId.message}</p>}
+                <Select ariaLabel="Project Owner" required value={formValues.ownerId} onChange={(val) => setValue('ownerId', val, { shouldValidate: true })} options={[{ label: 'Select owner', value: '' }, ...members.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]} />
+                {errors.ownerId && <p aria-live="polite" className="mt-1 text-xs text-red-500">{errors.ownerId.message}</p>}
               </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-[#374151] mb-1.5">Team Members</label>
               <MultiSelect
+                compact={false}
                 options={members.filter((m: any) => m.id !== formValues.ownerId).map((m: any) => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name) }))}
                 value={formValues.memberIds || []}
                 onChange={(val) => setValue('memberIds', val)}
@@ -170,13 +171,13 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
             <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Timeline</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">Start Date</label>
-                <input type="date" value={formValues.startDate || ''} onChange={(e) => setValue('startDate', e.target.value, { shouldValidate: true })} className={inputClass} />
+                <label htmlFor="cp-startDate" className="block text-sm font-medium text-[#374151] mb-1.5">Start Date</label>
+                <input id="cp-startDate" type="date" value={formValues.startDate || ''} onChange={(e) => setValue('startDate', e.target.value, { shouldValidate: true })} className={inputClass} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">End Date {(formValues.type === 'ONE_TIME' || formValues.type === 'EVENT') ? '*' : ''}</label>
-                <input type="date" value={formValues.endDate || ''} onChange={(e) => setValue('endDate', e.target.value, { shouldValidate: true })} className={inputClass} />
-                {errors.endDate && <p className="mt-1 text-xs text-red-500">{errors.endDate.message}</p>}
+                <label htmlFor="cp-endDate" className="block text-sm font-medium text-[#374151] mb-1.5">End Date {(formValues.type === 'ONE_TIME' || formValues.type === 'EVENT') ? '*' : ''}</label>
+                <input id="cp-endDate" type="date" value={formValues.endDate || ''} onChange={(e) => setValue('endDate', e.target.value, { shouldValidate: true })} aria-invalid={!!errors.endDate} aria-describedby={errors.endDate ? 'cp-endDate-error' : undefined} className={inputClass} />
+                {errors.endDate && <p id="cp-endDate-error" aria-live="polite" className="mt-1 text-xs text-red-500">{errors.endDate.message}</p>}
               </div>
             </div>
           </div>
@@ -189,8 +190,8 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
               <RichTextEditor value={formValues.scope || ''} onChange={(val) => setValue('scope', val)} placeholder="Enter the scope of work..." />
             </div>
             <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Budget (₹)</label>
-              <input type="number" value={formValues.budget || ''} onChange={(e) => setValue('budget', e.target.value)} className={inputClass} />
+              <label htmlFor="cp-budget" className="block text-sm font-medium text-[#374151] mb-1.5">Budget (₹)</label>
+              <input id="cp-budget" type="number" value={formValues.budget || ''} onChange={(e) => setValue('budget', e.target.value)} className={inputClass} />
             </div>
           </div>
 
@@ -200,7 +201,7 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-[#374151] mb-1.5">Reporting Cadence</label>
-                <Select value={formValues.reportingCadence} onChange={(val) => setValue('reportingCadence', val as any)} options={[
+                <Select ariaLabel="Reporting Cadence" value={formValues.reportingCadence} onChange={(val) => setValue('reportingCadence', val as any)} options={[
                   { label: 'None', value: 'NONE' },
                   { label: 'Weekly', value: 'WEEKLY' },
                   { label: 'Fortnightly', value: 'FORTNIGHTLY' },
@@ -225,8 +226,8 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
               <TagsInput value={formValues.tags || []} onChange={(val) => setValue('tags', val)} placeholder="Type and press Enter to add tags..." />
             </div>
             <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Notes</label>
-              <textarea value={formValues.projectNotes || ''} onChange={(e) => setValue('projectNotes', e.target.value)} className={`${inputClass} min-h-[80px]`} placeholder="Internal project notes..." />
+              <label htmlFor="cp-notes" className="block text-sm font-medium text-[#374151] mb-1.5">Notes</label>
+              <textarea id="cp-notes" value={formValues.projectNotes || ''} onChange={(e) => setValue('projectNotes', e.target.value)} className={`${inputClass} min-h-[80px]`} placeholder="Internal project notes..." />
             </div>
             <div>
               <label className="block text-sm font-medium text-[#374151] mb-1.5">Folder Link (URL)</label>

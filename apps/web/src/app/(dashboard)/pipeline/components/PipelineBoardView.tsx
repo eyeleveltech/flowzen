@@ -230,6 +230,9 @@ export function PipelineBoardView() {
                                   <h4 className="text-[15px] font-bold text-primary truncate">
                                     {lead.contactName || lead.companyName || lead.client?.name || 'Unknown'}
                                   </h4>
+                                  {lead.leadId && (
+                                    <span className="text-[10px] font-mono text-gray-400 tracking-wide">{lead.leadId}</span>
+                                  )}
                                 </div>
                                 <div className="mt-1">
                                   <p className="text-sm font-medium text-secondary truncate">

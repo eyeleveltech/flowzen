@@ -63,6 +63,12 @@ export function StageTransitionModal({ currentStage, targetStage, onClose, onSub
       return;
     }
 
+    // Gate: a meeting can only be booked once the prospect has responded positively.
+    if (targetStage === 'MEETING' && formData['responseStatus'] && formData['responseStatus'] !== 'Responded Positive') {
+      toast.error('Response status must be "Responded Positive" to advance to MEETING.');
+      return;
+    }
+
     const payload: any = {
       stage: targetStage,
       fields: formData,

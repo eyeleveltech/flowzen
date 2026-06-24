@@ -181,8 +181,8 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
 
             {manage && (
               <div className="mt-6">
-                <label className="block text-sm font-medium text-[#374151] mb-2">Update Status</label>
-                <div className="flex flex-wrap gap-2">
+                <p className="block text-sm font-medium text-[#374151] mb-2">Update Status</p>
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Update Status">
                   {kanbanCols.map((s) => (
                     <button key={s} onClick={() => updateStatus(s)} className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${task.status === s ? 'bg-primary text-white' : 'border border-border text-secondary hover:bg-[#F9FAFB]'}`}>
                       {kanbanLabels[s]}
@@ -200,6 +200,7 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                   placeholder="Post an update or question..."
+                  aria-label="Comment"
                   className="w-full min-h-[80px] rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus:border-primary transition-all resize-none"
                 />
                 <div className="mt-2 flex justify-end">

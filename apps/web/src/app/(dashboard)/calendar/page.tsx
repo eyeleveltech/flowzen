@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { Select } from '@/components/ui/select';
+import { MultiSelect } from '@/components/ui/multi-select';
 import { getClientDisplayName, getInitials } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
 
@@ -39,10 +40,10 @@ export default function CalendarPage() {
   const [clients, setClients] = useState<Client[]>([]);
   
   // Filters
-  const [assigneeFilter, setAssigneeFilter] = useState(isStaff ? (user?.id || '') : '');
-  const [projectIdFilter, setProjectIdFilter] = useState('');
-  const [clientIdFilter, setClientIdFilter] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
+  const [assigneeFilter, setAssigneeFilter] = useState<string[]>(isStaff && user?.id ? [user.id] : []);
+  const [projectIdFilter, setProjectIdFilter] = useState<string[]>([]);
+  const [clientIdFilter, setClientIdFilter] = useState<string[]>([]);
+  const [typeFilter, setTypeFilter] = useState<string[]>([]);
   const [hideDone, setHideDone] = useState(true);
 
   const year = date.getFullYear();
@@ -64,12 +65,12 @@ export default function CalendarPage() {
   function fetchTasks() {
     const params = new URLSearchParams();
     params.set('limit', '500');
-    if (assigneeFilter) params.set('assigneeId', assigneeFilter);
+    if (assigneeFilter.length) params.set('assigneeId', assigneeFilter.join(','));
     else if (isStaff && user?.id) params.set('assigneeId', user.id);
-    
-    if (projectIdFilter) params.set('projectId', projectIdFilter);
-    if (clientIdFilter) params.set('clientId', clientIdFilter);
-    if (typeFilter) params.set('type', typeFilter);
+
+    if (projectIdFilter.length) params.set('projectId', projectIdFilter.join(','));
+    if (clientIdFilter.length) params.set('clientId', clientIdFilter.join(','));
+    if (typeFilter.length) params.set('type', typeFilter.join(','));
 
     api.get<{ tasks: CalendarTask[] }>(`/tasks?${params}`)
       .then((d) => {
@@ -168,32 +169,34 @@ export default function CalendarPage() {
         {/* Filters Header */}
         <div className="flex flex-wrap items-center gap-3 p-4 bg-white border border-border rounded-2xl">
           <button
-            onClick={() => setAssigneeFilter(assigneeFilter === user?.id ? '' : (user?.id || ''))}
-            className={`px-4 py-2 text-xs font-medium rounded-xl transition-all ${assigneeFilter === user?.id ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-surface border border-border text-[#374151] hover:bg-[#F3F4F6]'}`}
+            onClick={() => setAssigneeFilter(assigneeFilter.length === 1 && assigneeFilter[0] === user?.id ? [] : (user?.id ? [user.id] : []))}
+            className={`px-4 py-2 text-xs font-medium rounded-xl transition-all ${assigneeFilter.length === 1 && assigneeFilter[0] === user?.id ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-surface border border-border text-[#374151] hover:bg-[#F3F4F6]'}`}
           >
             My Tasks
           </button>
-          
-          <div className="w-40">
-            <Select
+
+          <div className="w-44">
+            <MultiSelect
               value={projectIdFilter}
-              onChange={(val) => setProjectIdFilter(val)}
-              options={[{ label: 'All Projects', value: '' }, ...projects.map(p => ({ label: p.name, value: p.id }))]}
+              onChange={setProjectIdFilter}
+              placeholder="All Projects"
+              options={projects.map(p => ({ label: p.name, value: p.id }))}
             />
           </div>
-          <div className="w-40">
-            <Select
+          <div className="w-44">
+            <MultiSelect
               value={clientIdFilter}
-              onChange={(val) => setClientIdFilter(val)}
-              options={[{ label: 'All Clients', value: '' }, ...clients.map(c => ({ label: getClientDisplayName(c), value: c.id }))]}
+              onChange={setClientIdFilter}
+              placeholder="All Clients"
+              options={clients.map(c => ({ label: getClientDisplayName(c), value: c.id }))}
             />
           </div>
-          <div className="w-40">
-            <Select
+          <div className="w-44">
+            <MultiSelect
               value={typeFilter}
-              onChange={(val) => setTypeFilter(val)}
+              onChange={setTypeFilter}
+              placeholder="All Types"
               options={[
-                { label: 'All Types', value: '' },
                 { label: 'Design', value: 'DESIGN' },
                 { label: 'Content', value: 'CONTENT' },
                 { label: 'Video', value: 'VIDEO' },
@@ -201,17 +204,18 @@ export default function CalendarPage() {
                 { label: 'Social Media', value: 'SOCIAL_MEDIA' },
                 { label: 'Development', value: 'DEVELOPMENT' },
                 { label: 'Strategy', value: 'STRATEGY' },
-                    { label: 'Business', value: 'BUSINESS' },
+                { label: 'Business', value: 'BUSINESS' },
                 { label: 'Other', value: 'OTHER' },
               ]}
             />
           </div>
           {!isStaff && (
-            <div className="w-40">
-              <Select
-                value={assigneeFilter === user?.id ? '' : assigneeFilter}
-                onChange={(val) => setAssigneeFilter(val)}
-                options={[{ label: 'All Assignees', value: '' }, ...members.map(m => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
+            <div className="w-44">
+              <MultiSelect
+                value={assigneeFilter}
+                onChange={setAssigneeFilter}
+                placeholder="All Assignees"
+                options={members.map(m => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
               />
             </div>
           )}

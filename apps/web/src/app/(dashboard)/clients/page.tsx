@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useId, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
@@ -12,6 +12,7 @@ import {
   Plus, Search, Filter, Users, Building2, Mail, Phone, X, ChevronRight, FolderKanban, Download, Upload, FileText
 } from 'lucide-react';
 import { Select } from '@/components/ui/select';
+import { MultiSelect } from '@/components/ui/multi-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { useMembers } from '@/hooks/useQueries';
 import Papa from 'papaparse';
@@ -60,14 +61,14 @@ function ClientsContent() {
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
   const urlStatus = searchParams.get('status');
-  const [statusFilter, setStatusFilter] = useState(urlStatus || '');
-  
+  const [statusFilter, setStatusFilter] = useState<string[]>(urlStatus ? [urlStatus] : []);
+
   useEffect(() => {
-    if (urlStatus) setStatusFilter(urlStatus);
+    if (urlStatus) setStatusFilter([urlStatus]);
   }, [urlStatus]);
   const [cityFilter, setCityFilter] = useState('');
-  const [accountManagerFilter, setAccountManagerFilter] = useState('');
-  const [engagementTypeFilter, setEngagementTypeFilter] = useState('');
+  const [accountManagerFilter, setAccountManagerFilter] = useState<string[]>([]);
+  const [engagementTypeFilter, setEngagementTypeFilter] = useState<string[]>([]);
   const [industryFilter, setIndustryFilter] = useState('');
   const [filtersHydrated, setFiltersHydrated] = useState(false);
 
@@ -79,10 +80,10 @@ function ClientsContent() {
       if (raw) {
         const f = JSON.parse(raw);
         if (f.search) setSearch(f.search);
-        if (!urlStatus && f.statusFilter) setStatusFilter(f.statusFilter);
+        if (!urlStatus && f.statusFilter?.length) setStatusFilter(f.statusFilter);
         if (f.cityFilter) setCityFilter(f.cityFilter);
-        if (f.accountManagerFilter) setAccountManagerFilter(f.accountManagerFilter);
-        if (f.engagementTypeFilter) setEngagementTypeFilter(f.engagementTypeFilter);
+        if (f.accountManagerFilter?.length) setAccountManagerFilter(f.accountManagerFilter);
+        if (f.engagementTypeFilter?.length) setEngagementTypeFilter(f.engagementTypeFilter);
         if (f.industryFilter) setIndustryFilter(f.industryFilter);
       }
     } catch { /* ignore */ }
@@ -107,7 +108,7 @@ function ClientsContent() {
   // Form state
   const [form, setForm] = useState({
     name: '', company: '', industry: '', address: '', startDate: '',
-    engagementType: '', website: '', city: '', scope: '', assetLinks: '', accountManagerId: '',
+    engagementType: '', website: '', city: '', state: '', billingAddress: '', gstNumber: '', scope: '', assetLinks: '', accountManagerId: '',
     status: 'PROSPECT',
     contacts: [{ name: '', designation: '', email: '', phone: '' }]
   });
@@ -147,10 +148,10 @@ function ClientsContent() {
     try {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
-      if (statusFilter) params.set('status', statusFilter);
+      if (statusFilter.length) params.set('status', statusFilter.join(','));
       if (cityFilter) params.set('city', cityFilter);
-      if (accountManagerFilter) params.set('accountManagerId', accountManagerFilter);
-      if (engagementTypeFilter) params.set('engagementType', engagementTypeFilter);
+      if (accountManagerFilter.length) params.set('accountManagerId', accountManagerFilter.join(','));
+      if (engagementTypeFilter.length) params.set('engagementType', engagementTypeFilter.join(','));
       if (industryFilter) params.set('industry', industryFilter);
       const data = await api.get<{ clients: Client[]; total: number }>(`/clients?${params}`);
       setClients(data.clients);
@@ -177,7 +178,7 @@ function ClientsContent() {
       });
       toast.success('Client created successfully');
       setShowCreate(false);
-      setForm({ name: '', company: '', industry: '', address: '', startDate: '', engagementType: '', website: '', city: '', scope: '', assetLinks: '', accountManagerId: '', status: 'PROSPECT', contacts: [{ name: '', designation: '', email: '', phone: '' }] });
+      setForm({ name: '', company: '', industry: '', address: '', startDate: '', engagementType: '', website: '', city: '', state: '', billingAddress: '', gstNumber: '', scope: '', assetLinks: '', accountManagerId: '', status: 'PROSPECT', contacts: [{ name: '', designation: '', email: '', phone: '' }] });
       fetchClients();
     } catch (err: any) {
       toast.error(err.message || 'Failed to create client');
@@ -338,15 +339,15 @@ function ClientsContent() {
           <p className="text-sm text-secondary mt-1">{total} total clients</p>
         </div>
         <div className="flex items-center gap-3">
-          {(search || statusFilter || cityFilter || industryFilter || engagementTypeFilter || accountManagerFilter) && (
+          {(search || statusFilter.length || cityFilter || industryFilter || engagementTypeFilter.length || accountManagerFilter.length) && (
             <button
               onClick={() => {
                 setSearch('');
-                setStatusFilter('');
+                setStatusFilter([]);
                 setCityFilter('');
                 setIndustryFilter('');
-                setEngagementTypeFilter('');
-                setAccountManagerFilter('');
+                setEngagementTypeFilter([]);
+                setAccountManagerFilter([]);
                 router.replace('/clients', { scroll: false });
               }}
               className="flex items-center gap-1.5 rounded-xl bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors border border-red-100"
@@ -385,12 +386,12 @@ function ClientsContent() {
             className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
           />
         </div>
-        <div className="w-full sm:w-auto min-w-35">
-          <Select
+        <div className="w-full sm:w-auto sm:min-w-[170px]">
+          <MultiSelect
             value={statusFilter}
-            onChange={(val) => setStatusFilter(val)}
+            onChange={setStatusFilter}
+            placeholder="All Status"
             options={[
-              { label: 'All Status', value: '' },
               { label: 'Prospect', value: 'PROSPECT' },
               { label: 'Active', value: 'ACTIVE' },
               { label: 'On Hold', value: 'ONHOLD' },
@@ -399,12 +400,12 @@ function ClientsContent() {
             ]}
           />
         </div>
-        <div className="w-full sm:w-auto min-w-35">
-          <Select
+        <div className="w-full sm:w-auto sm:min-w-[170px]">
+          <MultiSelect
             value={engagementTypeFilter}
-            onChange={(val) => setEngagementTypeFilter(val)}
+            onChange={setEngagementTypeFilter}
+            placeholder="All Engagements"
             options={[
-              { label: 'All Engagements', value: '' },
               { label: 'Retainer', value: 'Retainer' },
               { label: 'Project', value: 'Project' },
               { label: 'Event', value: 'Event' },
@@ -412,14 +413,12 @@ function ClientsContent() {
             ]}
           />
         </div>
-        <div className="w-full sm:w-auto min-w-[180px]">
-          <Select
+        <div className="w-full sm:w-auto sm:min-w-[200px]">
+          <MultiSelect
             value={accountManagerFilter}
-            onChange={(val) => setAccountManagerFilter(val)}
-            options={[
-              { label: 'All Account Managers', value: '' },
-              ...members.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
-            ]}
+            onChange={setAccountManagerFilter}
+            placeholder="All Account Managers"
+            options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
           />
         </div>
         <div className="w-full sm:w-auto relative">
@@ -665,7 +664,13 @@ function ClientsContent() {
 
                   <Field label="Website" value={form.website} onChange={(v) => setForm({ ...form, website: v })} />
                   <Field label="City" value={form.city} onChange={(v) => setForm({ ...form, city: v })} />
+                  <Field label="State (for GST split)" value={form.state} onChange={(v) => setForm({ ...form, state: v })} />
+                  <Field label="GST Number" value={form.gstNumber} onChange={(v) => setForm({ ...form, gstNumber: v })} />
                   <Field label="Address" value={form.address} onChange={(v) => setForm({ ...form, address: v })} />
+                  <div>
+                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Billing Address</label>
+                    <textarea value={form.billingAddress} onChange={(e) => setForm({ ...form, billingAddress: e.target.value })} rows={2} placeholder="Used to auto-fill quotations" className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary resize-none" />
+                  </div>
                   <Field label="Start Date" type="date" value={form.startDate} onChange={(v) => setForm({ ...form, startDate: v })} />
                   
                   <div>
@@ -819,10 +824,12 @@ export default function ClientsPage() {
 function Field({ label, value, onChange, type = 'text', required = false }: {
   label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean;
 }) {
+  const id = useId();
   return (
     <div>
-      <label className="block text-sm font-medium text-[#374151] mb-1.5">{label}</label>
+      <label htmlFor={id} className="block text-sm font-medium text-[#374151] mb-1.5">{label}</label>
       <input
+        id={id}
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}

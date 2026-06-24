@@ -8,6 +8,7 @@ import { NotificationService } from '../services/notifications.js';
 import { executeWorkflowRules } from '../services/workflowEngine.js';
 import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
 import { idempotency } from '../middleware/idempotency.js';
+import { toList, whereIn } from '../utils/query.js';
 
 export const taskRouter = Router();
 taskRouter.use(authenticate);
@@ -37,13 +38,13 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     const { search, status, priority, projectId, assigneeId, type, clientId, filter, page = '1', limit = '50' } = req.query;
 
     const projectFilter: any = { client: { organizationId: orgId } };
-    if (clientId) projectFilter.clientId = clientId as string;
-    
+    if (clientId) projectFilter.clientId = whereIn(clientId);
+
     const where: Record<string, unknown> = { project: projectFilter };
-    if (status) where.status = status as string;
-    if (priority) where.priority = priority as string;
-    if (type) where.type = type as string;
-    if (projectId) where.projectId = projectId;
+    if (status) where.status = whereIn(status);
+    if (priority) where.priority = whereIn(priority);
+    if (type) where.type = whereIn(type);
+    if (projectId) where.projectId = whereIn(projectId);
     
     if (filter === 'overdue') {
       const todayStart = new Date();
@@ -61,8 +62,10 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     const assigneeMatch = (uid: string) => ({ OR: [{ assigneeId: uid }, { assignees: { some: { id: uid } } }] });
     if (req.user!.role === 'TEAM_MEMBER') {
       andConditions.push(assigneeMatch(req.user!.userId));
-    } else if (assigneeId) {
-      andConditions.push(assigneeMatch(assigneeId as string));
+    } else {
+      const assigneeIds = toList(assigneeId);
+      // Any of the selected assignees (primary or multi-assignee).
+      if (assigneeIds) andConditions.push({ OR: assigneeIds.flatMap((uid) => assigneeMatch(uid).OR) });
     }
     if (search) {
       andConditions.push({

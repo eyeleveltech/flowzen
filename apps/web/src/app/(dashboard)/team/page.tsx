@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { formatDate, getInitials, getAvatarColor, getClientDisplayName } from '@/lib/utils';
 import { Select } from '@/components/ui/select';
+import { MultiSelect } from '@/components/ui/multi-select';
 import { 
   Search, Mail, Phone, Calendar, Briefcase, 
   CheckCircle2, Clock, X, ChevronRight, Shield, 
@@ -78,8 +79,8 @@ export default function TeamPage() {
   
   // Search and Filters
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedRole, setSelectedRole] = useState('');
-  const [selectedDept, setSelectedDept] = useState('');
+  const [selectedRole, setSelectedRole] = useState<string[]>([]);
+  const [selectedDept, setSelectedDept] = useState<string[]>([]);
 
   // Selected Member Details
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -132,8 +133,8 @@ export default function TeamPage() {
     const matchesSearch = m.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           m.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           (m.department && m.department.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesRole = selectedRole ? m.role === selectedRole : true;
-    const matchesDept = selectedDept ? m.department === selectedDept : true;
+    const matchesRole = selectedRole.length === 0 || selectedRole.includes(m.role);
+    const matchesDept = selectedDept.length === 0 || (m.department ? selectedDept.includes(m.department) : false);
     return matchesSearch && matchesRole && matchesDept;
   });
 
@@ -409,28 +410,24 @@ export default function TeamPage() {
             </div>
 
             {/* Department Filter */}
-            <Select
-              value={selectedDept}
-              onChange={setSelectedDept}
-              placeholder="All Departments"
-              options={[
-                { label: 'All Departments', value: '' },
-                ...departments.map((d) => ({ label: d, value: d }))
-              ]}
-              className="w-full sm:w-48 font-semibold z-20"
-            />
+            <div className="w-full sm:w-56 z-20">
+              <MultiSelect
+                value={selectedDept}
+                onChange={setSelectedDept}
+                placeholder="All Departments"
+                options={departments.map((d) => ({ label: d, value: d }))}
+              />
+            </div>
 
             {/* Role Filter */}
-            <Select
-              value={selectedRole}
-              onChange={setSelectedRole}
-              placeholder="All Roles"
-              options={[
-                { label: 'All Roles', value: '' },
-                ...Object.entries(roleLabels).map(([val, label]) => ({ label, value: val }))
-              ]}
-              className="w-full sm:w-48 font-semibold z-10"
-            />
+            <div className="w-full sm:w-56 z-10">
+              <MultiSelect
+                value={selectedRole}
+                onChange={setSelectedRole}
+                placeholder="All Roles"
+                options={Object.entries(roleLabels).map(([val, label]) => ({ label, value: val }))}
+              />
+            </div>
           </div>
 
           {/* Grid Loading State */}

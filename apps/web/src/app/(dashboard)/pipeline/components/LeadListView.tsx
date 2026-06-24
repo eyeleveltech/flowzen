@@ -7,6 +7,7 @@ import { getSSE } from '@/lib/sse';
 import { formatCurrency, getAvatarColor, getInitials, getClientDisplayName } from '@/lib/utils';
 import { Plus, Search, Filter, ChevronRight, TrendingUp, Upload } from 'lucide-react';
 import { Select } from '@/components/ui/select';
+import { MultiSelect } from '@/components/ui/multi-select';
 import { LeadModal } from './LeadModal';
 import { useMembers } from '@/hooks/useQueries';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -31,12 +32,12 @@ export function LeadListView() {
   
   // Filters State
   const [search, setSearch] = useState(searchParams.get('search') || '');
-  const [stageFilter, setStageFilter] = useState(searchParams.get('stage') || '');
-  const [ownerFilter, setOwnerFilter] = useState(searchParams.get('assignedToId') || '');
+  const [stageFilter, setStageFilter] = useState<string[]>((searchParams.get('stage') || '').split(',').filter(Boolean));
+  const [ownerFilter, setOwnerFilter] = useState<string[]>((searchParams.get('assignedToId') || '').split(',').filter(Boolean));
   const [minDealValue, setMinDealValue] = useState(searchParams.get('minDealValue') || '');
   const [maxDealValue, setMaxDealValue] = useState(searchParams.get('maxDealValue') || '');
-  const [leadSource, setLeadSource] = useState(searchParams.get('leadSource') || '');
-  const [priority, setPriority] = useState(searchParams.get('priority') || '');
+  const [leadSource, setLeadSource] = useState<string[]>((searchParams.get('leadSource') || '').split(',').filter(Boolean));
+  const [priority, setPriority] = useState<string[]>((searchParams.get('priority') || '').split(',').filter(Boolean));
   const [closeDateFrom, setCloseDateFrom] = useState(searchParams.get('closeDateFrom') || '');
   const [closeDateTo, setCloseDateTo] = useState(searchParams.get('closeDateTo') || '');
   const [dateAddedFrom, setDateAddedFrom] = useState(searchParams.get('dateAddedFrom') || '');
@@ -64,12 +65,12 @@ export function LeadListView() {
   useEffect(() => {
     const params = new URLSearchParams();
     if (search) params.set('search', search);
-    if (stageFilter) params.set('stage', stageFilter);
-    if (ownerFilter) params.set('assignedToId', ownerFilter);
+    if (stageFilter.length) params.set('stage', stageFilter.join(','));
+    if (ownerFilter.length) params.set('assignedToId', ownerFilter.join(','));
     if (minDealValue) params.set('minDealValue', minDealValue);
     if (maxDealValue) params.set('maxDealValue', maxDealValue);
-    if (leadSource) params.set('leadSource', leadSource);
-    if (priority) params.set('priority', priority);
+    if (leadSource.length) params.set('leadSource', leadSource.join(','));
+    if (priority.length) params.set('priority', priority.join(','));
     if (closeDateFrom) params.set('closeDateFrom', closeDateFrom);
     if (closeDateTo) params.set('closeDateTo', closeDateTo);
     if (dateAddedFrom) params.set('dateAddedFrom', dateAddedFrom);
@@ -102,17 +103,18 @@ export function LeadListView() {
     }
   }
 
-  const activeFilterCount = [minDealValue, maxDealValue, leadSource, priority, closeDateFrom, closeDateTo, dateAddedFrom, dateAddedTo].filter(Boolean).length;
-  const hasAnyFilter = activeFilterCount > 0 || search || stageFilter || ownerFilter;
+  const activeFilterCount = [minDealValue, maxDealValue, closeDateFrom, closeDateTo, dateAddedFrom, dateAddedTo].filter(Boolean).length
+    + (leadSource.length ? 1 : 0) + (priority.length ? 1 : 0);
+  const hasAnyFilter = activeFilterCount > 0 || !!search || stageFilter.length > 0 || ownerFilter.length > 0;
 
   const clearAllFilters = () => {
     setSearch('');
-    setStageFilter('');
-    setOwnerFilter('');
+    setStageFilter([]);
+    setOwnerFilter([]);
     setMinDealValue('');
     setMaxDealValue('');
-    setLeadSource('');
-    setPriority('');
+    setLeadSource([]);
+    setPriority([]);
     setCloseDateFrom('');
     setCloseDateTo('');
     setDateAddedFrom('');
@@ -127,7 +129,7 @@ export function LeadListView() {
     return haystack.includes(term);
   }).filter(lead => {
     // Hide closed leads by default unless the toggle is on or the user filtered to a closed stage.
-    if (showWonLost || stageFilter === 'PROJECT_COMPLETED' || stageFilter === 'CHURNED') return true;
+    if (showWonLost || stageFilter.includes('PROJECT_COMPLETED') || stageFilter.includes('CHURNED')) return true;
     return lead.stage !== 'PROJECT_COMPLETED' && lead.stage !== 'CHURNED';
   });
 
@@ -147,25 +149,21 @@ export function LeadListView() {
               />
             </div>
             
-            <div className="w-full sm:w-[130px] md:w-[150px]">
-              <Select
+            <div className="w-full sm:w-[160px] md:w-[180px]">
+              <MultiSelect
                 value={stageFilter}
                 onChange={setStageFilter}
-                options={[
-                  { label: 'All Stages', value: '' },
-                  ...STAGES.map(s => ({ label: s.replace(/_/g, ' '), value: s }))
-                ]}
+                placeholder="All Stages"
+                options={STAGES.map(s => ({ label: s.replace(/_/g, ' '), value: s }))}
               />
             </div>
 
-            <div className="w-full sm:w-[130px] md:w-[150px]">
-              <Select
+            <div className="w-full sm:w-[160px] md:w-[180px]">
+              <MultiSelect
                 value={ownerFilter}
                 onChange={setOwnerFilter}
-                options={[
-                  { label: 'All Owners', value: '' },
-                  ...members.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
-                ]}
+                placeholder="All Owners"
+                options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
               />
             </div>
 
@@ -225,26 +223,22 @@ export function LeadListView() {
                 {/* Priority */}
                 <div className="space-y-1.5 w-full sm:w-[180px]">
                   <label className="text-xs font-semibold text-secondary uppercase tracking-wider">Priority</label>
-                  <Select
+                  <MultiSelect
                     value={priority}
                     onChange={setPriority}
-                    options={[
-                      { label: 'All Priorities', value: '' },
-                      ...PRIORITIES.map(p => ({ label: p, value: p }))
-                    ]}
+                    placeholder="All Priorities"
+                    options={PRIORITIES.map(p => ({ label: p, value: p }))}
                   />
                 </div>
 
                 {/* Lead Source */}
                 <div className="space-y-1.5 w-full sm:w-[180px]">
                   <label className="text-xs font-semibold text-secondary uppercase tracking-wider">Lead Source</label>
-                  <Select
+                  <MultiSelect
                     value={leadSource}
                     onChange={setLeadSource}
-                    options={[
-                      { label: 'All Sources', value: '' },
-                      ...LEAD_SOURCES.map(s => ({ label: s.replace(/_/g, ' '), value: s }))
-                    ]}
+                    placeholder="All Sources"
+                    options={LEAD_SOURCES.map(s => ({ label: s.replace(/_/g, ' '), value: s }))}
                   />
                 </div>
 

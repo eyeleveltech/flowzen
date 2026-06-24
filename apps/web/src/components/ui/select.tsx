@@ -23,9 +23,10 @@ export interface SelectProps {
   disabled?: boolean;
   required?: boolean;
   rounded?: string;
+  ariaLabel?: string; // accessible name for the control (use when there's a visible label nearby)
 }
 
-export function Select({ value, onChange, options, placeholder = 'Select...', className = '', disabled = false, required = false, rounded = 'rounded-xl' }: SelectProps) {
+export function Select({ value, onChange, options, placeholder = 'Select...', className = '', disabled = false, required = false, rounded = 'rounded-xl', ariaLabel }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -128,6 +129,7 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
         role="combobox"
         aria-haspopup="listbox"
         aria-expanded={isOpen}
+        aria-label={ariaLabel}
         disabled={disabled}
         onClick={() => setIsOpen(!isOpen)}
         onKeyDown={(e) => {

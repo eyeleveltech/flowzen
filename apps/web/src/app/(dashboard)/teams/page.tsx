@@ -370,9 +370,10 @@ export default function TeamsPage() {
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Department Members *</label>
                   <MultiSelect
-                    options={users.map(u => ({ 
-                      label: u.name, 
-                      value: u.id, 
+                    compact={false}
+                    options={users.map(u => ({
+                      label: u.name,
+                      value: u.id,
                       image: getInitials(u.name),
  colorClass: getAvatarColor(u.name)
                     }))}

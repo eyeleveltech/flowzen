@@ -1,9 +1,26 @@
 import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
-import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
+import { runDailyNotificationJobs } from '../services/notificationScanners.js';
 
 export const notificationRouter = Router();
 notificationRouter.use(authenticate);
+
+// GET /api/notifications/unread-count — badge count for the bell.
+notificationRouter.get('/unread-count', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const count = await prisma.notification.count({ where: { userId: req.user!.userId, read: false } });
+    res.json({ count });
+  } catch (error) { next(error); }
+});
+
+// POST /api/notifications/run-scan — manually trigger the daily scanners (admin; used in testing).
+notificationRouter.post('/run-scan', authorize('SUPER_ADMIN', 'ADMIN'), async (_req: AuthRequest, res: Response, next) => {
+  try {
+    const result = await runDailyNotificationJobs();
+    res.json({ ok: true, ...result });
+  } catch (error) { next(error); }
+});
 
 // GET /api/notifications
 notificationRouter.get('/', async (req: AuthRequest, res: Response, next) => {

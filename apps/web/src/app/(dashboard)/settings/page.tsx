@@ -6,16 +6,18 @@ import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { useAuthStore } from '@/stores';
 import { useRouter } from 'next/navigation';
-import { Building2, Users, FileText, Shield, Zap, Boxes } from 'lucide-react';
+import { Building2, Users, FileText, Shield, Zap, Boxes, Receipt, Bell } from 'lucide-react';
 import { OrganizationTab } from '@/components/settings/OrganizationTab';
+import { NotificationsTab } from '@/components/settings/NotificationsTab';
 import { UsersTab } from '@/components/settings/UsersTab';
 import { WorkflowsTab } from '@/components/settings/WorkflowsTab';
 import { TemplatesTab } from '@/components/settings/TemplatesTab';
 import { PermissionsTab } from '@/components/settings/PermissionsTab';
 import { ModulesTab } from '@/components/settings/ModulesTab';
+import { BillingTab } from '@/components/settings/BillingTab';
 import { Skeleton } from '@/components/ui/skeleton';
 
-type Tab = 'organization' | 'modules' | 'users' | 'templates' | 'permissions' | 'workflows';
+type Tab = 'organization' | 'modules' | 'billing' | 'users' | 'templates' | 'permissions' | 'workflows' | 'notifications';
 
 export default function SettingsPage() {
   const { user } = useAuthStore();
@@ -77,9 +79,11 @@ export default function SettingsPage() {
   const tabs = [
     { id: 'organization', label: 'Organization', icon: Building2 },
     { id: 'modules', label: 'Modules', icon: Boxes },
+    { id: 'billing', label: 'Billing', icon: Receipt },
     { id: 'users', label: 'Users', icon: Users },
     { id: 'workflows', label: 'Workflows', icon: Zap },
     { id: 'templates', label: 'Templates', icon: FileText },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'permissions', label: 'Permissions', icon: Shield },
   ];
 
@@ -116,9 +120,11 @@ export default function SettingsPage() {
       >
         {tab === 'organization' && <OrganizationTab initialData={orgData} onSaved={fetchOrg} />}
         {tab === 'modules' && <ModulesTab modules={modules} fetchModules={fetchModules} />}
+        {tab === 'billing' && <BillingTab />}
         {tab === 'users' && <UsersTab users={users} fetchUsers={fetchUsers} teams={teams} />}
         {tab === 'workflows' && <WorkflowsTab workflows={workflows} fetchWorkflows={fetchWorkflows} users={users} />}
         {tab === 'templates' && <TemplatesTab templates={templates} fetchTemplates={fetchTemplates} />}
+        {tab === 'notifications' && <NotificationsTab />}
         {tab === 'permissions' && <PermissionsTab />}
       </motion.div>
     </div>

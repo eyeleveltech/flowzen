@@ -202,6 +202,7 @@ export function WorkflowsTab({ workflows, fetchWorkflows, users }: { workflows: 
                   <div className="space-y-1.5 z-20 relative">
                     <label className="text-xs font-medium text-secondary uppercase tracking-wide">Who to notify (Targets)</label>
                     <MultiSelect
+                      compact={false}
                       options={userOptions}
                       value={form.targets}
                       onChange={(targets) => setForm({ ...form, targets })}

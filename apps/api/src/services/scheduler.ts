@@ -1,5 +1,7 @@
+import cron from 'node-cron';
 import { prisma } from '../lib/prisma.js';
 import { NotificationService } from './notifications.js';
+import { runDailyNotificationJobs } from './notificationScanners.js';
 import { logger } from '../utils/logger.js';
 
 const CHECK_INTERVAL_MS = 60 * 60 * 1000;      // run hourly
@@ -58,5 +60,9 @@ export function startScheduler() {
   // Run shortly after boot (let the app settle), then on a fixed interval.
   setTimeout(runDeadlineCheck, 30 * 1000);
   setInterval(runDeadlineCheck, CHECK_INTERVAL_MS);
-  logger.info('[Scheduler] Deadline notification scheduler started');
+
+  // Module F — daily CRM jobs (follow-up due, stale leads, digest) at 08:00 IST.
+  cron.schedule('0 8 * * *', () => { runDailyNotificationJobs().catch((e) => logger.error('[Scheduler] daily jobs failed', e)); }, { timezone: 'Asia/Kolkata' });
+
+  logger.info('[Scheduler] Deadline + daily notification schedulers started');
 }

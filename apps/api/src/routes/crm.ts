@@ -4,6 +4,10 @@ import { prisma } from '../lib/prisma.js';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { emitToOrganization } from '../sse.js';
+import { whereIn } from '../utils/query.js';
+import { generateLeadId, normalizePhone } from '../utils/leadId.js';
+import { runIntelligence } from '../services/intelligence.service.js';
+import { logActivity, ActivityType, ACTIVITY_CATEGORIES } from '../services/activity.service.js';
 
 export const crmRouter = Router();
 crmRouter.use(authenticate);
@@ -17,6 +21,19 @@ const leadSchema = z.object({
   phone: z.string().refine((v) => v.replace(/\D/g, '').length >= 10, { message: 'Phone number must be at least 10 digits' }),
   jobTitle: z.string().optional(),
   linkedinUrl: z.string().optional(),
+  companySize: z.string().optional(),
+  landlinePhone: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  zip: z.string().optional(),
+  country: z.string().optional(),
+  billingAddress: z.string().optional(),
+  gstNumber: z.string().optional(),
+  website: z.string().optional(),
+  instagramHandle: z.string().optional(),
+  facebookPage: z.string().optional(),
+  industry: z.string().optional(),
   source: z.enum(['EXCEL', 'MANUAL', 'API', 'REFERRAL', 'INBOUND', 'LINKEDIN', 'INSTAGRAM', 'WHATSAPP', 'OTHER', 'OUTBOUND', 'SOCIAL_MEDIA', 'EVENT', 'COLD_CALL', 'EXISTING_CLIENT']).optional(),
   assignedToId: z.string().optional(),
   dealValue: z.number().optional(),
@@ -46,10 +63,10 @@ crmRouter.get('/leads', async (req: AuthRequest, res: Response, next) => {
 
     const where: Record<string, unknown> = { organizationId: orgId };
     
-    if (stage) where.stage = stage as string;
-    if (assignedToId) where.assignedToId = assignedToId as string;
-    if (leadSource) where.source = leadSource as string;
-    if (priority) where.priority = priority as string;
+    if (stage) where.stage = whereIn(stage);
+    if (assignedToId) where.assignedToId = whereIn(assignedToId);
+    if (leadSource) where.source = whereIn(leadSource);
+    if (priority) where.priority = whereIn(priority);
 
     if (minDealValue || maxDealValue) {
       where.dealValue = {};
@@ -105,10 +122,7 @@ crmRouter.get('/leads/:id', async (req: AuthRequest, res: Response, next) => {
           include: { changedBy: { select: { name: true, avatar: true } } },
           orderBy: { changedAt: 'desc' }
         },
-        activities: {
-          include: { user: { select: { name: true, avatar: true } } },
-          orderBy: { createdAt: 'desc' }
-        },
+        // Timeline is loaded via the paginated GET /leads/:id/activity endpoint (not eagerly here).
         notes: {
           include: { author: { select: { name: true, avatar: true } } },
           orderBy: { createdAt: 'desc' }
@@ -127,13 +141,273 @@ crmRouter.get('/leads/:id', async (req: AuthRequest, res: Response, next) => {
   }
 });
 
+// GET /api/crm/leads/:id/activity — paginated, filterable lead timeline (Module E)
+crmRouter.get('/leads/:id/activity', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const leadId = req.params.id as string;
+    const lead = await prisma.lead.findFirst({ where: { id: leadId, organizationId: orgId }, select: { id: true } });
+    if (!lead) { res.status(404).json({ error: 'Lead not found' }); return; }
+
+    const take = Math.min(Number(req.query.take) || 20, 100);
+    const skip = Number(req.query.skip) || 0;
+    const category = String(req.query.category || 'all');
+    const where: any = { leadId };
+    if (category !== 'all' && ACTIVITY_CATEGORIES[category]) where.type = { in: ACTIVITY_CATEGORIES[category] };
+
+    const [activities, total] = await Promise.all([
+      prisma.activity.findMany({ where, include: { user: { select: { name: true, avatar: true } } }, orderBy: { createdAt: 'desc' }, take, skip }),
+      prisma.activity.count({ where }),
+    ]);
+    res.json({ activities, total, hasMore: skip + activities.length < total });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/crm/leads/:id/activity — manually log a call / meeting / note / email (Module E)
+const manualActivitySchema = z.object({
+  kind: z.enum(['call', 'meeting', 'note', 'email']),
+  body: z.string().optional(),
+  // call
+  callDate: z.string().optional(), duration: z.number().optional(), outcome: z.string().optional(),
+  followUpRequired: z.boolean().optional(), followUpDate: z.string().optional(),
+  // meeting
+  meetingDate: z.string().optional(), meetingFormat: z.string().optional(), attendees: z.string().optional(), nextStep: z.string().optional(),
+  // note
+  internal: z.boolean().optional(),
+  // email
+  subject: z.string().optional(), direction: z.string().optional(), emailDate: z.string().optional(),
+});
+
+crmRouter.post('/leads/:id/activity', validate(manualActivitySchema), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const leadId = req.params.id as string;
+    const b = req.body;
+    const lead = await prisma.lead.findFirst({ where: { id: leadId, organizationId: orgId }, select: { id: true } });
+    if (!lead) { res.status(404).json({ error: 'Lead not found' }); return; }
+
+    let type: string, message: string;
+    const metadata: Record<string, any> = {};
+    if (b.kind === 'call') {
+      type = ActivityType.CALL_LOGGED;
+      message = `logged a call${b.outcome ? ` (${b.outcome})` : ''}`;
+      Object.assign(metadata, { callDate: b.callDate, duration: b.duration, outcome: b.outcome });
+    } else if (b.kind === 'meeting') {
+      type = ActivityType.MEETING_LOGGED;
+      message = `logged a meeting${b.meetingFormat ? ` (${b.meetingFormat})` : ''}`;
+      Object.assign(metadata, { meetingDate: b.meetingDate, meetingFormat: b.meetingFormat, attendees: b.attendees, nextStep: b.nextStep });
+    } else if (b.kind === 'email') {
+      type = ActivityType.EMAIL_LOGGED;
+      message = `logged an email${b.direction ? ` (${b.direction})` : ''}`;
+      Object.assign(metadata, { subject: b.subject, direction: b.direction, emailDate: b.emailDate });
+    } else {
+      type = ActivityType.NOTE_ADDED;
+      message = 'added a note';
+      metadata.internal = b.internal !== false;
+    }
+
+    const io = req.app.get('io');
+    const activity = await logActivity({ leadId, type, message, userId: req.user!.userId, body: b.body || null, metadata, io, orgId });
+
+    // A call with a required follow-up sets the lead's followUpDate and logs it.
+    if (b.kind === 'call' && b.followUpRequired && b.followUpDate) {
+      await prisma.lead.update({ where: { id: leadId }, data: { followUpDate: new Date(b.followUpDate) } });
+      await logActivity({ leadId, type: ActivityType.FOLLOW_UP_SET, message: `set a follow-up for ${new Date(b.followUpDate).toLocaleDateString('en-IN')}`, userId: req.user!.userId, io, orgId });
+      emitToOrganization(io, orgId, 'lead:updated', { id: leadId });
+    }
+
+    res.status(201).json(activity);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── Module K: renewal & retainer expiry tracker ─────────────────────────────
+const renewalSelect = {
+  id: true, leadId: true, companyName: true, contactName: true, dealValue: true,
+  contractStartDate: true, contractEndDate: true, nextRenewalDate: true, autoRenewal: true,
+  renewalStatus: true, renewalNotes: true, clientId: true,
+  assignedTo: { select: { id: true, name: true, avatar: true } },
+} as const;
+
+// GET /api/crm/renewals — retainer leads with renewal data, most urgent first.
+crmRouter.get('/renewals', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const { status, salesperson, minValue, maxValue } = req.query as Record<string, string>;
+    const where: any = { organizationId: orgId, stage: 'ACTIVE_RETAINER' };
+    if (status) where.renewalStatus = status;
+    if (salesperson) where.assignedToId = salesperson;
+    if (minValue || maxValue) where.dealValue = { ...(minValue ? { gte: Number(minValue) } : {}), ...(maxValue ? { lte: Number(maxValue) } : {}) };
+    const leads = await prisma.lead.findMany({ where, select: renewalSelect });
+    leads.sort((a, b) => (a.contractEndDate ? +new Date(a.contractEndDate) : Infinity) - (b.contractEndDate ? +new Date(b.contractEndDate) : Infinity));
+    res.json(leads);
+  } catch (error) { next(error); }
+});
+
+// GET /api/crm/renewals/summary — top-strip totals.
+crmRouter.get('/renewals/summary', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const leads = await prisma.lead.findMany({ where: { organizationId: orgId, stage: 'ACTIVE_RETAINER' }, select: { dealValue: true, contractEndDate: true, renewalStatus: true } });
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const in30 = new Date(today.getTime() + 31 * 86400000); // exclusive: covers today .. today+30 inclusive
+    let totalMrr = 0, due30Count = 0, due30Value = 0, atRiskCount = 0, atRiskValue = 0;
+    for (const l of leads) {
+      if (l.renewalStatus === 'CHURNED') continue; // churned retainers don't count toward live MRR
+      const v = Number(l.dealValue) || 0; totalMrr += v;
+      if (l.contractEndDate) { const e = new Date(l.contractEndDate); if (e >= today && e < in30) { due30Count++; due30Value += v; } }
+      if (l.renewalStatus === 'AT_RISK') { atRiskCount++; atRiskValue += v; }
+    }
+    res.json({ totalMrr, due30: { count: due30Count, value: due30Value }, atRisk: { count: atRiskCount, value: atRiskValue } });
+  } catch (error) { next(error); }
+});
+
+// PATCH /api/crm/leads/:id/renewal — update renewal status / notes / dates.
+crmRouter.patch('/leads/:id/renewal', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const leadId = req.params.id as string;
+    const lead = await prisma.lead.findFirst({ where: { id: leadId, organizationId: orgId }, select: { id: true } });
+    if (!lead) { res.status(404).json({ error: 'Lead not found' }); return; }
+    const b = req.body || {};
+    const data: any = {};
+    if (b.renewalStatus !== undefined) data.renewalStatus = b.renewalStatus || null;
+    if (b.renewalNotes !== undefined) data.renewalNotes = b.renewalNotes || null;
+    if (b.contractStartDate !== undefined) data.contractStartDate = b.contractStartDate ? new Date(b.contractStartDate) : null;
+    if (b.contractEndDate !== undefined) data.contractEndDate = b.contractEndDate ? new Date(b.contractEndDate) : null;
+    if (b.nextRenewalDate !== undefined) data.nextRenewalDate = b.nextRenewalDate ? new Date(b.nextRenewalDate) : null;
+    if (b.autoRenewal !== undefined) data.autoRenewal = !!b.autoRenewal;
+    const updated = await prisma.lead.update({ where: { id: leadId }, data, select: renewalSelect });
+    emitToOrganization(req.app.get('io'), orgId, 'lead:updated', { id: leadId });
+    res.json(updated);
+  } catch (error) { next(error); }
+});
+
+// ── Module G: secondary contacts on a lead ──────────────────────────────────
+const contactSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  designation: z.string().optional(),
+  email: z.string().email('Invalid email').optional().or(z.literal('')),
+  phone: z.string().optional(),
+  linkedinUrl: z.string().optional(),
+  role: z.enum(['DECISION_MAKER', 'INFLUENCER', 'GATEKEEPER', 'CHAMPION', 'CC_ONLY']),
+  notes: z.string().optional(),
+});
+const contactData = (b: any) => ({
+  name: b.name, designation: b.designation || null, email: b.email || null, phone: b.phone || null,
+  linkedinUrl: b.linkedinUrl || null, role: b.role, notes: b.notes || null,
+});
+
+// GET /api/crm/leads/:id/contacts
+crmRouter.get('/leads/:id/contacts', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const leadId = req.params.id as string;
+    const lead = await prisma.lead.findFirst({ where: { id: leadId, organizationId: orgId }, select: { id: true } });
+    if (!lead) { res.status(404).json({ error: 'Lead not found' }); return; }
+    const contacts = await prisma.leadContact.findMany({ where: { leadId }, orderBy: { createdAt: 'asc' } });
+    res.json(contacts);
+  } catch (error) { next(error); }
+});
+
+// POST /api/crm/leads/:id/contacts
+crmRouter.post('/leads/:id/contacts', authorize('SUPER_ADMIN', 'ADMIN'), validate(contactSchema), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const leadId = req.params.id as string;
+    const lead = await prisma.lead.findFirst({ where: { id: leadId, organizationId: orgId }, select: { id: true } });
+    if (!lead) { res.status(404).json({ error: 'Lead not found' }); return; }
+    const contact = await prisma.leadContact.create({ data: { leadId, ...contactData(req.body) } });
+
+    const io = req.app.get('io');
+    await logActivity({ leadId, type: ActivityType.CONTACT_ADDED, message: `added ${contact.name} as a contact (${String(req.body.role).replace(/_/g, ' ').toLowerCase()})`, userId: req.user!.userId, io, orgId });
+    emitToOrganization(io, orgId, 'lead:updated', { id: leadId });
+    res.status(201).json(contact);
+  } catch (error) { next(error); }
+});
+
+// PATCH /api/crm/leads/:id/contacts/:contactId
+crmRouter.patch('/leads/:id/contacts/:contactId', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const { id: leadId, contactId } = req.params as { id: string; contactId: string };
+    const existing = await prisma.leadContact.findFirst({ where: { id: contactId, lead: { id: leadId, organizationId: orgId } }, select: { id: true } });
+    if (!existing) { res.status(404).json({ error: 'Contact not found' }); return; }
+    const b = req.body || {};
+    const data: any = {};
+    for (const k of ['name', 'designation', 'email', 'phone', 'linkedinUrl', 'role', 'notes']) {
+      if (b[k] !== undefined) data[k] = b[k] === '' ? null : b[k];
+    }
+    const updated = await prisma.leadContact.update({ where: { id: contactId }, data });
+    res.json(updated);
+  } catch (error) { next(error); }
+});
+
+// DELETE /api/crm/leads/:id/contacts/:contactId
+crmRouter.delete('/leads/:id/contacts/:contactId', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const { id: leadId, contactId } = req.params as { id: string; contactId: string };
+    const existing = await prisma.leadContact.findFirst({ where: { id: contactId, lead: { id: leadId, organizationId: orgId } }, select: { id: true } });
+    if (!existing) { res.status(404).json({ error: 'Contact not found' }); return; }
+    await prisma.leadContact.delete({ where: { id: contactId } });
+    res.json({ success: true });
+  } catch (error) { next(error); }
+});
+
+// POST /api/crm/leads/:id/contacts/:contactId/intelligence — run Intelligence on one contact
+crmRouter.post('/leads/:id/contacts/:contactId/intelligence', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const { id: leadId, contactId } = req.params as { id: string; contactId: string };
+    const contact = await prisma.leadContact.findFirst({ where: { id: contactId, lead: { id: leadId, organizationId: orgId } } });
+    if (!contact) { res.status(404).json({ error: 'Contact not found' }); return; }
+
+    const linkedinUrl = (req.body?.linkedinUrl as string) || contact.linkedinUrl || '';
+    if (!linkedinUrl) { res.status(400).json({ success: false, error: 'This contact has no LinkedIn URL.' }); return; }
+
+    await prisma.leadContact.update({ where: { id: contactId }, data: { dossierStatus: 'pending', ...(req.body?.linkedinUrl ? { linkedinUrl } : {}) } });
+    const result = await runIntelligence(linkedinUrl);
+    if (!result.success) {
+      await prisma.leadContact.update({ where: { id: contactId }, data: { dossierStatus: 'failed' } });
+      res.status(502).json({ success: false, error: result.error });
+      return;
+    }
+    const updated = await prisma.leadContact.update({ where: { id: contactId }, data: { dossierJson: result.dossier, dossierStatus: 'complete', dossierGeneratedAt: new Date() } });
+
+    const io = req.app.get('io');
+    await logActivity({ leadId, type: ActivityType.INTELLIGENCE_RUN, message: `ran LinkedIn Intelligence on ${contact.name}`, userId: req.user!.userId, io, orgId });
+    emitToOrganization(io, orgId, 'lead:updated', { id: leadId });
+    res.json({ success: true, dossier: result.dossier, contact: updated });
+  } catch (error) { next(error); }
+});
+
 // POST /api/crm/leads
 crmRouter.post('/leads', authorize('SUPER_ADMIN', 'ADMIN'), validate(leadSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const { clientId, contactName, companyName, email, phone, jobTitle, linkedinUrl, source, assignedToId, dealValue, expectedRevenue, expectedCloseDate, followUpDate, notes, priority } = req.body;
+    const { clientId, contactName, companyName, email, phone, jobTitle, linkedinUrl, source, assignedToId, dealValue, expectedRevenue, expectedCloseDate, followUpDate, notes, priority,
+      companySize, landlinePhone, address, city, state, zip, country, billingAddress, gstNumber, website, instagramHandle, facebookPage, industry } = req.body;
 
-    // A client is only linked at the MEETING stage. If an existing client is
+    // Phone uniqueness (per organization): reject duplicates with the existing Lead ID.
+    // Compared on normalized digits so formatting differences still match.
+    const digits = normalizePhone(phone);
+    if (digits) {
+      const orgLeads = await prisma.lead.findMany({
+        where: { organizationId: orgId, contactPhone: { not: null } },
+        select: { leadId: true, contactPhone: true },
+      });
+      const existing = orgLeads.find((l) => normalizePhone(l.contactPhone) === digits);
+      if (existing) {
+        res.status(409).json({ error: `A lead with this phone number already exists. Lead ID: ${existing.leadId}.` });
+        return;
+      }
+    }
+
+    // A client is only linked at the OUTREACH stage. If an existing client is
     // explicitly chosen, validate it; otherwise the lead starts with no client.
     let client = null as { id: string } | null;
     if (clientId) {
@@ -144,9 +418,12 @@ crmRouter.post('/leads', authorize('SUPER_ADMIN', 'ADMIN'), validate(leadSchema)
       }
     }
 
+    const newLeadId = await generateLeadId(orgId);
+
     // Create the lead with its own contact identity (no client yet).
     const lead = await prisma.lead.create({
       data: {
+        leadId: newLeadId,
         clientId: client ? client.id : null,
         organizationId: orgId,
         source: source || 'MANUAL',
@@ -163,6 +440,19 @@ crmRouter.post('/leads', authorize('SUPER_ADMIN', 'ADMIN'), validate(leadSchema)
         contactPhone: phone,
         jobTitle: jobTitle || null,
         linkedinUrl: linkedinUrl || null,
+        companySize: companySize || null,
+        landlinePhone: landlinePhone || null,
+        address: address || null,
+        city: city || null,
+        state: state || null,
+        zip: zip || null,
+        country: country || null,
+        website: website || null,
+        instagramHandle: instagramHandle || null,
+        facebookPage: facebookPage || null,
+        industry: industry || null,
+        billingAddress: billingAddress || null,
+        gstNumber: gstNumber || null,
       },
       include: {
         client: true,
@@ -194,6 +484,9 @@ crmRouter.post('/leads', authorize('SUPER_ADMIN', 'ADMIN'), validate(leadSchema)
 });
 
 // POST /api/crm/leads/bulk
+// Lead Entry Gateway for bulk upload: every row is validated; valid rows are imported,
+// invalid rows are returned with a rejection_reason so the client can build a report.
+// Bad rows never block the good ones.
 crmRouter.post('/leads/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
@@ -204,45 +497,69 @@ crmRouter.post('/leads/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
       return;
     }
 
-    if (leads.length > 50) {
-      res.status(400).json({ error: 'Bulk import limit exceeded. You can only import a maximum of 50 leads at a time.' });
+    if (leads.length > 500) {
+      res.status(400).json({ error: 'Bulk import limit exceeded. You can import a maximum of 500 leads at a time.' });
       return;
     }
-
-    const createdLeads = [];
 
     const validStages = [
       'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
       'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED', 'CHURNED'
     ];
+    const emailRe = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+    // Existing phone digits in the org, plus those seen earlier in this batch, for dedup.
+    const orgLeads = await prisma.lead.findMany({
+      where: { organizationId: orgId, contactPhone: { not: null } },
+      select: { contactPhone: true },
+    });
+    const seenPhones = new Set(orgLeads.map((l) => normalizePhone(l.contactPhone)).filter(Boolean));
+
+    let imported = 0;
+    const rejected: any[] = [];
 
     for (const data of leads) {
-      if (!data.contactName && !data.companyName) continue;
+      // Lead Entry Gateway: name, email and phone are required on every row.
+      const name = (data.contactName || '').toString().trim();
+      const email = (data.email || '').toString().trim();
+      const digits = normalizePhone(data.phone);
 
-      // No client is created at import — contact identity lives on the lead until MEETING.
+      if (name.length < 2) { rejected.push({ ...data, rejection_reason: 'Full name is required (min 2 characters).' }); continue; }
+      if (!emailRe.test(email)) { rejected.push({ ...data, rejection_reason: 'A valid email is required.' }); continue; }
+      if (digits.length < 10) { rejected.push({ ...data, rejection_reason: 'Phone number must be at least 10 digits.' }); continue; }
+      if (seenPhones.has(digits)) { rejected.push({ ...data, rejection_reason: 'Duplicate phone number (already exists).' }); continue; }
+      seenPhones.add(digits);
+
+      // No client is created at import — contact identity lives on the lead until OUTREACH.
       const validStage = validStages.includes(data.stage) ? data.stage : 'NEW_LEAD';
+      const newLeadId = await generateLeadId(orgId);
 
       const lead = await prisma.lead.create({
         data: {
+          leadId: newLeadId,
           organizationId: orgId,
-          source: data.source || 'EXCEL',
+          source: 'EXCEL', // bulk upload
           stage: validStage,
           assignedToId: data.assignedToId || null,
           dealValue: data.dealValue ? parseFloat(data.dealValue) : null,
           expectedCloseDate: data.expectedCloseDate ? new Date(data.expectedCloseDate) : null,
-          contactName: data.contactName || data.companyName || 'Unknown',
+          contactName: name,
           companyName: data.companyName || null,
-          contactEmail: data.email || null,
-          contactPhone: data.phone || null,
+          contactEmail: email,
+          contactPhone: (data.phone || '').toString(),
           jobTitle: data.jobTitle || null,
           linkedinUrl: data.linkedinUrl || null,
+          companySize: data.companySize || null,
+          website: data.website || null,
+          industry: data.industry || null,
+          city: data.city || null,
         }
       });
 
       await prisma.activity.create({
         data: {
           type: 'LEAD_CREATED',
-          message: `bulk imported lead "${data.contactName || data.companyName}"`,
+          message: `bulk imported lead "${name}"`,
           entityType: 'LEAD',
           entityId: lead.id,
           userId: req.user!.userId,
@@ -251,20 +568,24 @@ crmRouter.post('/leads/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
         },
       });
 
-      createdLeads.push(lead);
+      imported++;
     }
 
     const io = req.app.get('io');
     emitToOrganization(io, orgId, 'lead:updated', {});
 
-    res.status(201).json({ count: createdLeads.length });
+    res.status(201).json({ imported, rejectedCount: rejected.length, rejected });
   } catch (error) {
     console.error('[Bulk Import Error (Leads)]:', error);
-    res.status(400).json({ 
-      error: 'Failed to process bulk import. Please check your CSV data format, ensure no required fields are missing, and try again.' 
+    res.status(400).json({
+      error: 'Failed to process bulk import. Please check your file format and try again.'
     });
   }
 });
+
+// Stages at which the team has decided to pursue the lead — a PROSPECT client is
+// created on entering any of these (normally OUTREACH; later ones cover forward-skips).
+const PURSUED_STAGES = ['OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION', 'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED'];
 
 const stageUpdateSchema = z.object({
   stage: z.enum(['NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION', 'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED', 'CHURNED']),
@@ -272,6 +593,8 @@ const stageUpdateSchema = z.object({
   dealValue: z.number().optional(),
   expectedCloseDate: z.string().optional(),
   contractType: z.enum(['RETAINER', 'ONE_TIME']).optional(),
+  contractStartDate: z.string().optional(),
+  contractEndDate: z.string().optional(),
   lostReason: z.enum(['BUDGET', 'COMPETITOR', 'NO_BUDGET', 'TIMING', 'UNRESPONSIVE', 'SCOPE_MISMATCH', 'INTERNAL_CHANGE', 'OTHER']).optional(),
   fields: z.record(z.any()).optional(),
 });
@@ -281,7 +604,7 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
   try {
     const orgId = req.user!.organizationId;
     const leadId = req.params.id as string;
-    const { stage, notes, dealValue, expectedCloseDate, contractType, lostReason, fields } = req.body;
+    const { stage, notes, dealValue, expectedCloseDate, contractType, contractStartDate, contractEndDate, lostReason, fields } = req.body;
 
     const existingLead = await prisma.lead.findFirst({
       where: { id: leadId, organizationId: orgId },
@@ -300,6 +623,13 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
     if (dealValue !== undefined) updateData.dealValue = dealValue;
     if (expectedCloseDate !== undefined) updateData.expectedCloseDate = new Date(expectedCloseDate);
     if (contractType !== undefined) updateData.contractType = contractType;
+    if (contractStartDate !== undefined) updateData.contractStartDate = new Date(contractStartDate);
+    if (contractEndDate !== undefined) {
+      updateData.contractEndDate = new Date(contractEndDate);
+      // Only seed UPCOMING on first set — never clobber an admin's AT_RISK / IN_DISCUSSION.
+      if (!existingLead.renewalStatus) updateData.renewalStatus = 'UPCOMING';
+    }
+    if (stage === 'CHURNED') updateData.renewalStatus = 'CHURNED'; // keep renewal state coherent with churn
     if (lostReason !== undefined) updateData.lostReason = lostReason;
 
     const updatedLead = await prisma.lead.update({
@@ -336,11 +666,12 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
       }
     }
 
-    // Client lifecycle. A client is created at MEETING (from the lead's own contact
-    // identity) and its status then tracks the pipeline.
+    // Client lifecycle. A PROSPECT client is created when the team decides to pursue
+    // the lead — at OUTREACH (or any later pursued stage on a forward-skip) — from the
+    // lead's own contact identity. Its status then tracks the pipeline.
     let clientId = existingLead.clientId;
 
-    if (stage === 'MEETING' && !clientId) {
+    if (PURSUED_STAGES.includes(stage) && !clientId) {
       const newClient = await prisma.client.create({
         data: {
           name: existingLead.contactName || existingLead.companyName || 'Unknown',
@@ -368,28 +699,125 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
       }
     }
 
-    // Log a Won/Churned activity so it shows in the lead's Activity tab
-    if (stage === 'CONTRACT' || stage === 'CHURNED') {
-      const reasonLabel = lostReason ? String(lostReason).replace(/_/g, ' ') : null;
-      await prisma.activity.create({
-        data: {
-          type: 'STAGE_CHANGED',
-          message: stage === 'CONTRACT' ? 'signed the contract 🎉' : 'marked this deal as Churned',
-          entityType: 'LEAD',
-          entityId: leadId,
-          userId: req.user!.userId,
-          leadId,
-          metadata: stage === 'CHURNED'
-            ? { notes: [reasonLabel ? `Reason: ${reasonLabel}` : null, notes || null].filter(Boolean).join(' — ') || null }
-            : undefined,
-        }
-      });
-    }
+    // Log every stage transition to the lead timeline (Module E).
+    const io = req.app.get('io');
+    const reasonLabel = lostReason ? String(lostReason).replace(/_/g, ' ') : null;
+    const stageMsg = stage === 'CONTRACT' ? 'signed the contract 🎉'
+      : stage === 'CHURNED' ? 'marked this deal as Churned'
+      : `moved this lead to ${stage.replace(/_/g, ' ')}`;
+    await logActivity({
+      leadId, type: ActivityType.STAGE_CHANGED, message: stageMsg, userId: req.user!.userId,
+      body: [stage === 'CHURNED' && reasonLabel ? `Reason: ${reasonLabel}` : null, notes || null].filter(Boolean).join(' — ') || null,
+      metadata: { from: previousStage, to: stage },
+      io, orgId: orgId,
+    });
 
     // Emit real-time events
-    const io = req.app.get('io');
     emitToOrganization(io, orgId, 'lead:updated', updatedLead);
     if (clientId) emitToOrganization(io, orgId, 'client:updated', { id: clientId });
+
+    res.json(updatedLead);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/crm/leads/:id/intelligence — run the LinkedIn Intelligence Engine (Module A).
+crmRouter.post('/leads/:id/intelligence', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const leadId = req.params.id as string;
+    const lead = await prisma.lead.findFirst({ where: { id: leadId, organizationId: orgId } });
+    if (!lead) {
+      res.status(404).json({ error: 'Lead not found' });
+      return;
+    }
+
+    const linkedinUrl = (req.body?.linkedinUrl as string) || lead.linkedinUrl || '';
+    if (!linkedinUrl) {
+      res.status(400).json({ success: false, error: 'This lead has no LinkedIn URL.' });
+      return;
+    }
+
+    await prisma.lead.update({ where: { id: leadId }, data: { dossierStatus: 'pending', ...(req.body?.linkedinUrl ? { linkedinUrl } : {}) } });
+
+    const result = await runIntelligence(linkedinUrl);
+
+    if (!result.success) {
+      await prisma.lead.update({ where: { id: leadId }, data: { dossierStatus: 'failed' } });
+      res.status(502).json({ success: false, error: result.error });
+      return;
+    }
+
+    await prisma.lead.update({
+      where: { id: leadId },
+      data: { dossierJson: result.dossier, dossierStatus: 'complete', dossierGeneratedAt: new Date(), linkedinChecked: true, linkedinFound: true },
+    });
+
+    const io = req.app.get('io');
+    await logActivity({ leadId, type: ActivityType.INTELLIGENCE_RUN, message: 'ran LinkedIn Intelligence', userId: req.user!.userId, io, orgId });
+    emitToOrganization(io, orgId, 'lead:updated', { id: leadId });
+
+    res.json({ success: true, dossier: result.dossier });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/crm/leads/:id/hold — park a lead's client as ON_HOLD from any stage.
+crmRouter.post('/leads/:id/hold', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const leadId = req.params.id as string;
+    const { followUpDate } = req.body as { followUpDate?: string };
+
+    const existingLead = await prisma.lead.findFirst({ where: { id: leadId, organizationId: orgId } });
+    if (!existingLead) {
+      res.status(404).json({ error: 'Lead not found' });
+      return;
+    }
+
+    // Ensure a client record exists (create one from the lead's identity if needed), then park it.
+    let clientId = existingLead.clientId;
+    if (!clientId) {
+      const newClient = await prisma.client.create({
+        data: {
+          name: existingLead.contactName || existingLead.companyName || 'Unknown',
+          company: existingLead.companyName || null,
+          email: existingLead.contactEmail || null,
+          phone: existingLead.contactPhone || null,
+          status: 'ONHOLD',
+          organizationId: orgId,
+        },
+      });
+      clientId = newClient.id;
+    } else {
+      await prisma.client.update({ where: { id: clientId }, data: { status: 'ONHOLD' } });
+    }
+
+    const updatedLead = await prisma.lead.update({
+      where: { id: leadId },
+      data: {
+        clientId,
+        followUpDate: followUpDate ? new Date(followUpDate) : existingLead.followUpDate,
+      },
+      include: { client: true, assignedTo: { select: { id: true, name: true, avatar: true } } },
+    });
+
+    await prisma.activity.create({
+      data: {
+        type: 'LEAD_UPDATED',
+        message: `put lead "${existingLead.contactName || existingLead.companyName}" on hold`,
+        entityType: 'LEAD',
+        entityId: leadId,
+        userId: req.user!.userId,
+        leadId,
+      },
+    });
+
+    const io = req.app.get('io');
+    emitToOrganization(io, orgId, 'lead:updated', updatedLead);
+    emitToOrganization(io, orgId, 'client:updated', { id: clientId });
 
     res.json(updatedLead);
   } catch (error) {
@@ -403,6 +831,8 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
     const orgId = req.user!.organizationId;
     const leadId = req.params.id as string;
     const { source, assignedToId, dealValue, expectedRevenue, expectedCloseDate, followUpDate, contractType, healthStatus, lostReason, priority, stage } = req.body;
+    // Editable contact/company identity fields on the lead detail card.
+    const EDITABLE_TEXT_FIELDS = ['contactName', 'companyName', 'contactEmail', 'contactPhone', 'jobTitle', 'linkedinUrl', 'companySize', 'landlinePhone', 'address', 'city', 'state', 'zip', 'country', 'billingAddress', 'gstNumber', 'website', 'instagramHandle', 'facebookPage', 'industry'] as const;
 
     const existingLead = await prisma.lead.findFirst({
       where: { id: leadId, organizationId: orgId },
@@ -439,12 +869,18 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
     if (healthStatus !== undefined && existingLead.healthStatus !== healthStatus) { updateData.healthStatus = healthStatus; changes.push(`changed Health Status to ${healthStatus}`); }
     if (lostReason !== undefined && existingLead.lostReason !== lostReason) { updateData.lostReason = lostReason; changes.push(`changed Lost Reason`); }
     if (priority !== undefined && existingLead.priority !== priority) { updateData.priority = priority; changes.push(`changed Priority to ${priority}`); }
+    for (const f of EDITABLE_TEXT_FIELDS) {
+      if (req.body[f] !== undefined && (existingLead as any)[f] !== req.body[f]) {
+        updateData[f] = req.body[f] || null;
+        changes.push(`updated ${f}`);
+      }
+    }
     if (stage !== undefined && existingLead.stage !== stage) {
       updateData.stage = stage;
-      changes.push(`changed Stage from ${existingLead.stage} to ${stage}`);
-      // Client lifecycle (mirrors the /stage endpoint): create at MEETING, then track status.
+      // Stage gets its own StageHistory + STAGE_CHANGED activity below (not folded into LEAD_UPDATED).
+      // Client lifecycle (mirrors the /stage endpoint): create at OUTREACH, then track status.
       let clientId = existingLead.clientId;
-      if (stage === 'MEETING' && !clientId) {
+      if (PURSUED_STAGES.includes(stage) && !clientId) {
         const newClient = await prisma.client.create({
           data: {
             name: existingLead.contactName || existingLead.companyName || 'Unknown',
@@ -485,7 +921,7 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
       }
     });
 
-    // Log Activity for all changes combined
+    // Log Activity for all non-stage changes combined
     if (changes.length > 0) {
       await prisma.activity.create({
         data: {
@@ -497,6 +933,13 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
           leadId: leadId,
         }
       });
+    }
+
+    // A stage change here must record StageHistory + a STAGE_CHANGED activity, same as the
+    // dedicated /stage endpoint — reactivation + lost-deal analytics depend on StageHistory.
+    if (stage !== undefined && existingLead.stage !== stage) {
+      await prisma.stageHistory.create({ data: { leadId, fromStage: existingLead.stage, toStage: stage, notes: null, changedById: req.user!.userId } });
+      await logActivity({ leadId, type: ActivityType.STAGE_CHANGED, message: `moved this lead to ${stage.replace(/_/g, ' ')}`, userId: req.user!.userId, metadata: { from: existingLead.stage, to: stage }, io: req.app.get('io'), orgId });
     }
 
     const io = req.app.get('io');
@@ -600,52 +1043,8 @@ crmRouter.post('/leads/:id/fields', authorize('SUPER_ADMIN', 'ADMIN'), async (re
   }
 });
 
-// POST /api/crm/leads/:id/notes
-crmRouter.post('/leads/:id/notes', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER', 'TEAM_MEMBER'), async (req: AuthRequest, res: Response, next) => {
-  try {
-    const orgId = req.user!.organizationId;
-    const leadId = req.params.id as string;
-    const { note } = req.body;
-
-    if (!note || typeof note !== 'string') {
-      res.status(400).json({ error: 'Note text is required' });
-      return;
-    }
-
-    const existingLead = await prisma.lead.findFirst({
-      where: { id: leadId, organizationId: orgId }
-    });
-
-    if (!existingLead) {
-      res.status(404).json({ error: 'Lead not found' });
-      return;
-    }
-
-    // Log Activity
-    const activity = await prisma.activity.create({
-      data: {
-        type: 'NOTE_ADDED',
-        message: `added a note`,
-        entityType: 'LEAD',
-        entityId: leadId,
-        userId: req.user!.userId,
-        leadId: leadId,
-        metadata: { notes: note },
-      },
-      include: {
-        user: { select: { name: true, avatar: true } }
-      }
-    });
-
-    // Emit real-time event
-    const io = req.app.get('io');
-    emitToOrganization(io, orgId, 'lead:updated', existingLead);
-
-    res.status(201).json(activity);
-  } catch (error) {
-    next(error);
-  }
-});
+// (Removed a duplicate POST /leads/:id/notes registration — Express only ran the first one,
+//  so this second handler was dead code. Notes are handled by the earlier /leads/:id/notes route.)
 
 // DELETE /api/crm/leads/:id
 crmRouter.delete('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {

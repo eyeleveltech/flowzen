@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
@@ -21,7 +21,7 @@ interface ClientDetail {
   id: string; name: string; company?: string | null; industry?: string | null;
   contacts?: ClientContact[];
   address?: string | null; contractValue?: number | null;
-  engagementType?: string | null; website?: string | null; city?: string | null; scope?: string | null; assetLinks?: string | null; accountManagerId?: string | null;
+  engagementType?: string | null; website?: string | null; city?: string | null; state?: string | null; billingAddress?: string | null; gstNumber?: string | null; scope?: string | null; assetLinks?: string | null; accountManagerId?: string | null;
   accountManager?: { id: string; name: string; avatar?: string | null } | null;
   startDate?: string | null; status: string; createdAt: string;
   projects: { id: string; name: string; status: string; progress: number; endDate?: string | null; owner?: { id: string; name: string; avatar?: string | null }; _count?: { tasks: number } }[];
@@ -62,7 +62,7 @@ export default function ClientDetailPage() {
   const [showEdit, setShowEdit] = useState(false);
   const [editForm, setEditForm] = useState({
     name: '', company: '', industry: '', address: '', contractValue: '', status: 'PROSPECT',
-    engagementType: '', website: '', city: '', scope: '', assetLinks: '', accountManagerId: '', startDate: '',
+    engagementType: '', website: '', city: '', state: '', billingAddress: '', gstNumber: '', scope: '', assetLinks: '', accountManagerId: '', startDate: '',
     contacts: [{ id: '', name: '', designation: '', email: '', phone: '' }] as ClientContact[]
   });
   const [editError, setEditError] = useState('');
@@ -122,6 +122,9 @@ export default function ClientDetailPage() {
       engagementType: client!.engagementType || '',
       website: client!.website || '',
       city: client!.city || '',
+      state: client!.state || '',
+      billingAddress: client!.billingAddress || '',
+      gstNumber: client!.gstNumber || '',
       scope: client!.scope || '',
       assetLinks: client!.assetLinks || '',
       accountManagerId: client!.accountManagerId || '',
@@ -435,7 +438,13 @@ export default function ClientDetailPage() {
 
                 <Field label="Website" value={editForm.website} onChange={(v) => setEditForm({ ...editForm, website: v })} />
                 <Field label="City" value={editForm.city} onChange={(v) => setEditForm({ ...editForm, city: v })} />
+                <Field label="State (for GST split)" value={editForm.state} onChange={(v) => setEditForm({ ...editForm, state: v })} />
+                <Field label="GST Number" value={editForm.gstNumber} onChange={(v) => setEditForm({ ...editForm, gstNumber: v })} />
                 <Field label="Address" value={editForm.address} onChange={(v) => setEditForm({ ...editForm, address: v })} />
+                <div>
+                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Billing Address</label>
+                  <textarea value={editForm.billingAddress} onChange={(e) => setEditForm({ ...editForm, billingAddress: e.target.value })} rows={2} placeholder="Used to auto-fill quotations" className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary resize-none" />
+                </div>
                 <Field label="Start Date" type="date" value={editForm.startDate} onChange={(v) => setEditForm({ ...editForm, startDate: v })} />
 
                 <div>
@@ -569,10 +578,12 @@ function InfoRow({ icon: Icon, label, value }: { icon: typeof Mail; label: strin
 function Field({ label, value, onChange, type = 'text', required = false }: {
   label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean;
 }) {
+  const id = useId();
   return (
     <div>
-      <label className="block text-sm font-medium text-[#374151] mb-1.5">{label}</label>
+      <label htmlFor={id} className="block text-sm font-medium text-[#374151] mb-1.5">{label}</label>
       <input
+        id={id}
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}

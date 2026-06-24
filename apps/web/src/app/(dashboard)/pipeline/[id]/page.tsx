@@ -1,19 +1,24 @@
 'use client';
 
-import { useState, use } from 'react';
+import { useState, use, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Building2, User, Phone, Mail, Calendar, MapPin, IndianRupee, Tag, Activity as ActivityIcon } from 'lucide-react';
+import { ArrowLeft, Building2, User, Phone, Mail, Calendar, MapPin, Tag, Clock } from 'lucide-react';
 import { api } from '@/lib/api';
+import { getInitials, getAvatarColor, formatCurrency } from '@/lib/utils';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
+import { Globe } from 'lucide-react';
 import { STAGE_FIELDS } from '../lib/stage-config';
 import { StageTransitionModal } from '../components/StageTransitionModal';
 import { WonCelebrationModal } from '../components/WonCelebrationModal';
 import { EditLeadModal } from '../components/EditLeadModal';
-import { Pencil, Trash2, Send } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 import { Select } from '@/components/ui/select';
+import { IntelligenceTab } from '../components/IntelligenceTab';
+import { TimelineTab } from '../components/TimelineTab';
+import { ContactsTab } from '../components/ContactsTab';
 
 const PIPELINE_STAGES = [
   'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
@@ -26,7 +31,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [targetStage, setTargetStage] = useState('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [noteText, setNoteText] = useState('');
+  const [activeTab, setActiveTab] = useState<'details' | 'timeline' | 'contacts'>('details');
   const [wonModalLead, setWonModalLead] = useState<any>(null);
   
   // Safe unwrapping for Next.js 15 async params
@@ -59,13 +64,14 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
     }
   });
 
-  const addNoteMutation = useMutation({
-    mutationFn: (note: string) => api.post(`/crm/leads/${leadId}/notes`, { note }),
+  const holdMutation = useMutation({
+    mutationFn: () => api.post(`/crm/leads/${leadId}/hold`, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['lead', leadId] });
-      setNoteText('');
-      toast.success('Note added');
-    }
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      toast.success('Lead put on hold');
+    },
+    onError: (e: any) => toast.error(e.message || 'Failed to put on hold'),
   });
 
   if (isLoading) {
@@ -77,6 +83,9 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   }
 
   const currentStageIndex = PIPELINE_STAGES.indexOf(lead.stage);
+  const displayName = lead.companyName || lead.contactName || lead.client?.company || lead.client?.name || 'Lead';
+  const website = lead.website || lead.client?.website;
+  const location = [lead.city, lead.state, lead.country].filter(Boolean).join(', ') || lead.client?.city;
 
   // Helper to format field labels nicely
   const getFieldLabel = (key: string) => {
@@ -88,10 +97,10 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   };
 
   return (
-    <div className="flex-1 flex flex-col h-[calc(100vh-(--spacing(16)))] bg-gray-50/50 overflow-hidden">
-      
+    <div className="bg-gray-50/50 min-h-full">
+
       {/* Header */}
-      <div className="bg-white border-b border-border px-8 py-6 z-10 shrink-0">
+      <div className="bg-white border-b border-border px-8 py-6">
         <div className="flex justify-between items-center mb-4">
           <button onClick={() => router.push('/pipeline')} className="flex items-center gap-2 text-sm text-secondary hover:text-primary transition-colors">
             <ArrowLeft className="w-4 h-4" /> Back to Pipeline
@@ -117,28 +126,41 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           </div>
         </div>
         
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-2xl font-bold text-primary flex items-center gap-3">
-              {lead.companyName || lead.contactName || lead.client?.company || lead.client?.name || 'Lead'}
-              <span className="px-2.5 py-0.5 rounded-md bg-[#F3F4F6] text-primary text-xs font-medium border border-border">
-                {lead.stage.replace(/_/g, ' ')}
-              </span>
-            </h1>
-            <div className="flex items-center gap-6 mt-3 text-sm text-[#4B5563]">
-              <span className="flex items-center gap-1.5"><User className="w-4 h-4 text-[#9CA3AF]" /> {lead.contactName || lead.client?.name || '—'}</span>
-              {(lead.contactEmail || lead.client?.email) && <span className="flex items-center gap-1.5"><Mail className="w-4 h-4 text-[#9CA3AF]" /> {lead.contactEmail || lead.client?.email}</span>}
-              {(lead.contactPhone || lead.client?.phone) && <span className="flex items-center gap-1.5"><Phone className="w-4 h-4 text-[#9CA3AF]" /> {lead.contactPhone || lead.client?.phone}</span>}
-              {lead.client?.city && <span className="flex items-center gap-1.5"><MapPin className="w-4 h-4 text-[#9CA3AF]" /> {lead.client.city}</span>}
+        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-5">
+          {/* Identity */}
+          <div className="flex items-start gap-4 min-w-0">
+            <div className={`h-14 w-14 shrink-0 rounded-2xl flex items-center justify-center text-lg font-bold ${getAvatarColor(displayName)}`}>
+              {getInitials(displayName)}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h1 className="text-2xl font-bold text-primary truncate">{displayName}</h1>
+                <span className="px-2.5 py-0.5 rounded-md bg-[#F3F4F6] text-primary text-xs font-medium border border-border">
+                  {lead.stage.replace(/_/g, ' ')}
+                </span>
+                {lead.client?.status === 'ONHOLD' && (
+                  <span className="px-2.5 py-0.5 rounded-md bg-amber-50 text-amber-700 text-xs font-medium border border-amber-200">On Hold</span>
+                )}
+              </div>
+              {lead.leadId && (
+                <p className="mt-1 text-xs font-mono font-medium text-secondary tracking-wide">{lead.leadId}</p>
+              )}
+              <div className="flex items-center gap-x-5 gap-y-1.5 mt-3 text-sm text-[#4B5563] flex-wrap">
+                <span className="flex items-center gap-1.5"><User className="w-4 h-4 text-[#9CA3AF]" /> {lead.contactName || lead.client?.name || '—'}</span>
+                {(lead.contactEmail || lead.client?.email) && <a href={`mailto:${lead.contactEmail || lead.client?.email}`} className="flex items-center gap-1.5 hover:text-primary transition-colors"><Mail className="w-4 h-4 text-[#9CA3AF]" /> {lead.contactEmail || lead.client?.email}</a>}
+                {(lead.contactPhone || lead.client?.phone) && <a href={`tel:${lead.contactPhone || lead.client?.phone}`} className="flex items-center gap-1.5 hover:text-primary transition-colors"><Phone className="w-4 h-4 text-[#9CA3AF]" /> {lead.contactPhone || lead.client?.phone}</a>}
+                {location && <span className="flex items-center gap-1.5"><MapPin className="w-4 h-4 text-[#9CA3AF]" /> {location}</span>}
+              </div>
             </div>
           </div>
-          <div className="flex flex-col items-end gap-3">
-            <div className="text-right">
-              <p className="text-sm font-medium text-secondary">Deal Value</p>
-              <p className="text-2xl font-bold text-primary">₹{lead.dealValue?.toLocaleString() || '0'}</p>
+
+          {/* Deal value + actions */}
+          <div className="flex items-stretch gap-4 shrink-0">
+            <div className="text-right pr-4 border-r border-border flex flex-col justify-center">
+              <p className="text-xs font-medium text-secondary uppercase tracking-wider">Deal Value</p>
+              <p className="text-2xl font-bold text-primary">{lead.dealValue ? formatCurrency(lead.dealValue) : '—'}</p>
             </div>
-            
-            <div className="flex gap-2 w-55">
+            <div className="flex flex-col gap-2 w-52">
               <Select
                 value=""
                 onChange={(val) => {
@@ -154,6 +176,15 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 }))}
                 className="w-full"
               />
+              {lead.client?.status !== 'ONHOLD' && !['PROJECT_COMPLETED', 'CHURNED'].includes(lead.stage) && (
+                <button
+                  onClick={() => holdMutation.mutate()}
+                  disabled={holdMutation.isPending}
+                  className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 hover:bg-amber-100 transition-colors disabled:opacity-50"
+                >
+                  {holdMutation.isPending ? 'Putting on hold…' : 'Put on hold'}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -180,132 +211,106 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-8">
-        <div className="max-w-7xl mx-auto grid grid-cols-3 gap-8">
-          
-          {/* Left Column: Details & Deal Fields */}
-          <div className="col-span-2 space-y-6">
+      {/* Follow-up banner (Module F) — shows when followUpDate is today or past */}
+      {(() => {
+        if (!lead.followUpDate) return null;
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const fud = new Date(lead.followUpDate); fud.setHours(0, 0, 0, 0);
+        if (fud > today) return null;
+        const overdue = fud < today;
+        return (
+          <div className={`px-8 py-2.5 text-sm font-medium flex items-center gap-2 ${overdue ? 'bg-red-50 text-red-700 border-b border-red-100' : 'bg-amber-50 text-amber-800 border-b border-amber-100'}`}>
+            <Clock className="w-4 h-4 shrink-0" /> Follow-up {overdue ? 'overdue since' : 'due'} {format(new Date(lead.followUpDate), 'PP')}. Update the follow-up date to clear this.
+          </div>
+        );
+      })()}
+
+      {/* Tabs */}
+      <div className="bg-white border-b border-border px-8">
+        <div className="max-w-7xl mx-auto flex gap-1">
+          {([['details', 'Details'], ['timeline', 'Timeline'], ['contacts', 'Contacts']] as const).map(([k, label]) => (
+            <button key={k} onClick={() => setActiveTab(k)} className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${activeTab === k ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-primary'}`}>{label}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="p-8">
+        <div className="max-w-7xl mx-auto">
+          {activeTab === 'details' && (
+          <div className="space-y-6">
             <div className="bg-white rounded-2xl border border-border p-6">
-              <h2 className="text-lg font-semibold text-primary mb-4 flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-secondary" /> Lead Intelligence
+              <h2 className="text-base font-semibold text-primary mb-5 flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-secondary" /> Lead Details
               </h2>
-              <div className="grid grid-cols-2 gap-x-8 gap-y-6">
-                <div>
-                  <p className="text-xs font-medium text-secondary uppercase tracking-wider mb-1">Industry</p>
-                  <p className="text-sm text-primary">{lead.client?.industry || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-secondary uppercase tracking-wider mb-1">Source</p>
-                  <p className="text-sm text-primary">{lead.source}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-secondary uppercase tracking-wider mb-1">Assigned To</p>
-                  <div className="flex items-center gap-2 mt-1">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-5">
+                <Detail label="Company" value={lead.companyName || lead.client?.company} />
+                <Detail label="Company Size" value={lead.companySize} />
+                <Detail label="Industry" value={lead.industry || lead.client?.industry} />
+                <Detail label="Website">
+                  {website ? (
+                    <a href={website.startsWith('http') ? website : `https://${website}`} target="_blank" rel="noreferrer" className="text-sm text-blue-600 hover:underline flex items-center gap-1.5 truncate">
+                      <Globe className="w-3.5 h-3.5 shrink-0 text-[#9CA3AF]" /> <span className="truncate">{website}</span>
+                    </a>
+                  ) : <p className="text-sm text-[#9CA3AF]">—</p>}
+                </Detail>
+                <Detail label="Location" value={location} />
+                <Detail label="Source" value={lead.source?.replace(/_/g, ' ')} />
+                <Detail label="Assigned To">
+                  <div className="flex items-center gap-2">
                     {lead.assignedTo?.avatar ? (
-                      <img src={lead.assignedTo.avatar} alt="" className="w-5 h-5 rounded-full" />
+                      <img src={lead.assignedTo.avatar} alt="" className="w-6 h-6 rounded-full" />
                     ) : (
-                      <div className="w-5 h-5 rounded-full bg-[#F3F4F6] border border-border flex items-center justify-center text-primary text-[10px] font-bold">
-                        {lead.assignedTo?.name.charAt(0) || '?'}
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${lead.assignedTo ? getAvatarColor(lead.assignedTo.name) : 'bg-[#F3F4F6] text-[#9CA3AF] border border-border'}`}>
+                        {lead.assignedTo ? getInitials(lead.assignedTo.name) : '?'}
                       </div>
                     )}
-                    <span className="text-sm font-medium text-primary">{lead.assignedTo?.name || 'Unassigned'}</span>
+                    <span className="text-sm font-medium text-primary truncate">{lead.assignedTo?.name || 'Unassigned'}</span>
                   </div>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-secondary uppercase tracking-wider mb-1">Expected Close</p>
+                </Detail>
+                <Detail label="Expected Close">
                   <p className="text-sm text-primary flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-[#9CA3AF]" /> 
-                    {lead.expectedCloseDate ? format(new Date(lead.expectedCloseDate), 'PP') : '-'}
+                    <Calendar className="w-3.5 h-3.5 text-[#9CA3AF]" />
+                    {lead.expectedCloseDate ? format(new Date(lead.expectedCloseDate), 'PP') : '—'}
                   </p>
-                </div>
+                </Detail>
+                <Detail label="Created" value={lead.createdAt ? format(new Date(lead.createdAt), 'PP') : null} />
               </div>
             </div>
+
+            {/* LinkedIn Intelligence (Module A) — only renders when a LinkedIn URL is present */}
+            <IntelligenceTab
+              leadId={leadId}
+              linkedinUrl={lead.linkedinUrl}
+              dossier={lead.dossierJson}
+              onRefetch={() => queryClient.invalidateQueries({ queryKey: ['lead', leadId] })}
+            />
 
             {/* Dynamic Deal Fields Rendering */}
             {lead.dealFields && lead.dealFields.length > 0 && (
               <div className="bg-white rounded-2xl border border-border p-6">
-                <h2 className="text-lg font-semibold text-primary mb-4 flex items-center gap-2">
-                  <Tag className="w-5 h-5 text-secondary" /> Stage Data Attributes
+                <h2 className="text-base font-semibold text-primary mb-5 flex items-center gap-2">
+                  <Tag className="w-4 h-4 text-secondary" /> Stage Data
                 </h2>
-                <div className="grid grid-cols-2 gap-x-8 gap-y-6">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {lead.dealFields.map((field: any) => (
-                    <div key={field.id} className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-                      <p className="text-xs font-semibold text-secondary mb-1.5">{getFieldLabel(field.fieldKey)}</p>
-                      <p className="text-sm text-primary font-medium wrap-break-word">{field.fieldValue || '-'}</p>
+                    <div key={field.id} className="bg-gray-50/70 p-3 rounded-xl border border-gray-100">
+                      <p className="text-[11px] font-semibold text-secondary uppercase tracking-wider mb-1.5">{getFieldLabel(field.fieldKey)}</p>
+                      <p className="text-sm text-primary font-medium wrap-break-word">{field.fieldValue || '—'}</p>
                     </div>
                   ))}
                 </div>
               </div>
             )}
           </div>
+          )}
 
-          {/* Right Column: Activity Timeline */}
-          <div className="col-span-1">
-            <div className="bg-white rounded-2xl border border-border p-6 h-full">
-              <h2 className="text-lg font-semibold text-primary mb-6 flex items-center gap-2">
-                <ActivityIcon className="w-5 h-5 text-secondary" /> Activity Timeline
-              </h2>
-              
-              <div className="mb-6 flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Type a note..."
-                  value={noteText}
-                  onChange={(e) => setNoteText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && noteText.trim() && !addNoteMutation.isPending) {
-                      addNoteMutation.mutate(noteText);
-                    }
-                  }}
-                  className="flex-1 rounded-xl border border-border bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-primary focus:bg-white transition-all"
-                />
-                <button
-                  onClick={() => addNoteMutation.mutate(noteText)}
-                  disabled={!noteText.trim() || addNoteMutation.isPending}
-                  className="flex items-center justify-center p-2.5 bg-primary text-white rounded-xl hover:bg-[#1F2937] transition-colors disabled:opacity-50"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-              </div>
+          {activeTab === 'timeline' && (
+            <div className="max-w-4xl"><TimelineTab leadId={leadId} /></div>
+          )}
 
-              <div className="relative border-l-2 border-gray-100 ml-3 space-y-8 pb-4">
-                {/* Stage History */}
-                {lead.stageHistory.map((history: any) => (
-                  <div key={history.id} className="relative pl-6">
-                    <div className="absolute w-3 h-3 bg-primary rounded-full -left-1.75 top-1.5 ring-4 ring-white" />
-                    <p className="text-xs text-secondary mb-1 font-medium">{format(new Date(history.changedAt), 'PPp')}</p>
-                    <p className="text-sm text-primary">
-                      Moved to <span className="font-semibold text-primary">{history.toStage.replace('_', ' ')}</span>
-                    </p>
-                    <p className="text-xs text-secondary mt-0.5">by {history.changedBy.name}</p>
-                    {history.notes && (
-                      <div className="mt-2 p-3 bg-gray-50 rounded-xl text-sm text-[#4B5563] border border-gray-100 italic">
-                        "{history.notes}"
-                      </div>
-                    )}
-                  </div>
-                ))}
-
-                {/* Activities */}
-                {lead.activities.map((activity: any) => {
-                  const notes = activity.metadata?.notes;
-                  return (
-                  <div key={activity.id} className="relative pl-6">
-                    <div className="absolute w-2.5 h-2.5 bg-gray-300 rounded-full -left-1.5 top-1.5 ring-4 ring-white" />
-                    <p className="text-xs text-secondary mb-1">{format(new Date(activity.createdAt), 'PPp')}</p>
-                    <p className="text-sm text-primary">{activity.user.name} <span className="text-[#4B5563]">{activity.message}</span></p>
-                    {notes && (
-                      <div className="mt-2 p-3 bg-gray-50 rounded-xl text-sm text-[#4B5563] border border-gray-100 whitespace-pre-wrap">
-                        {notes}
-                      </div>
-                    )}
-                  </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
+          {activeTab === 'contacts' && (
+            <div className="max-w-4xl"><ContactsTab leadId={leadId} lead={lead} /></div>
+          )}
         </div>
       </div>
 
@@ -343,6 +348,16 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           />
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+// A compact label / value pair for the details grid.
+function Detail({ label, value, children }: { label: string; value?: string | null; children?: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[11px] font-semibold text-secondary uppercase tracking-wider mb-1">{label}</p>
+      {children ?? <p className="text-sm text-primary truncate">{value || '—'}</p>}
     </div>
   );
 }

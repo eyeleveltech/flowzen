@@ -50,6 +50,8 @@ services:
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASS=${SMTP_PASS}
       - SMTP_FROM=${SMTP_FROM}
+      - APIFY_TOKEN=${APIFY_TOKEN}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - PORT=4000
       # Set to "true" ONLY to bypass the automatic pre-migration backup (not recommended).
       - SKIP_PREMIGRATION_BACKUP=${SKIP_PREMIGRATION_BACKUP:-false}

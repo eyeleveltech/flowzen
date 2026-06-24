@@ -930,8 +930,8 @@ export default function ProjectDetailPage() {
               </div>
               <form onSubmit={handleSaveTask} className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Title *</label>
-                  <input value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                  <label htmlFor="pt-title" className="block text-sm font-medium text-[#374151] mb-1.5">Title *</label>
+                  <input id="pt-title" value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
@@ -941,6 +941,7 @@ export default function ProjectDetailPage() {
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Task Type</label>
                     <Select
+                      ariaLabel="Task Type"
                       value={taskForm.type as any}
                       onChange={(val) => setTaskForm({ ...taskForm, type: val })}
                       options={[
@@ -959,6 +960,7 @@ export default function ProjectDetailPage() {
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Reviewer</label>
                     <Select
+                      ariaLabel="Reviewer"
                       value={taskForm.reviewerId}
                       onChange={(val) => setTaskForm({ ...taskForm, reviewerId: val })}
                       options={[{ label: 'No Reviewer', value: '' }, ...allProjectMembers.map((m) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
@@ -967,6 +969,7 @@ export default function ProjectDetailPage() {
                   <div className="sm:col-span-2">
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignees</label>
                     <MultiSelect
+                      compact={false}
                       value={taskForm.assigneeIds}
                       onChange={(vals) => setTaskForm({ ...taskForm, assigneeIds: vals })}
                       placeholder="Add assignees..."
@@ -976,6 +979,7 @@ export default function ProjectDetailPage() {
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority</label>
                     <Select
+                      ariaLabel="Priority"
                       value={taskForm.priority}
                       onChange={(val) => setTaskForm({ ...taskForm, priority: val })}
                       options={[
@@ -987,26 +991,27 @@ export default function ProjectDetailPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Assigned Date</label>
-                    <input type="date" value={taskForm.assignedDate} onChange={(e) => setTaskForm({ ...taskForm, assignedDate: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                    <label htmlFor="pt-assignedDate" className="block text-sm font-medium text-[#374151] mb-1.5">Assigned Date</label>
+                    <input id="pt-assignedDate" type="date" value={taskForm.assignedDate} onChange={(e) => setTaskForm({ ...taskForm, assignedDate: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
-                    <input type="date" value={taskForm.dueDate} onChange={(e) => setTaskForm({ ...taskForm, dueDate: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                    <label htmlFor="pt-dueDate" className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
+                    <input id="pt-dueDate" type="date" value={taskForm.dueDate} onChange={(e) => setTaskForm({ ...taskForm, dueDate: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Time Spent (hours)</label>
-                    <input type="number" step="0.5" min="0" value={taskForm.loggedHours} onChange={(e) => setTaskForm({ ...taskForm, loggedHours: parseFloat(e.target.value) || 0 })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                    <label htmlFor="pt-loggedHours" className="block text-sm font-medium text-[#374151] mb-1.5">Time Spent (hours)</label>
+                    <input id="pt-loggedHours" type="number" step="0.5" min="0" value={taskForm.loggedHours} onChange={(e) => setTaskForm({ ...taskForm, loggedHours: parseFloat(e.target.value) || 0 })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Drive Link (Uploads, Drafts)</label>
-                  <input type="url" value={taskForm.driveLink} onChange={(e) => setTaskForm({ ...taskForm, driveLink: e.target.value })} placeholder="https://drive.google.com/..." className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                  <label htmlFor="pt-driveLink" className="block text-sm font-medium text-[#374151] mb-1.5">Drive Link (Uploads, Drafts)</label>
+                  <input id="pt-driveLink" type="url" value={taskForm.driveLink} onChange={(e) => setTaskForm({ ...taskForm, driveLink: e.target.value })} placeholder="https://drive.google.com/..." className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                 </div>
                 {isEditingTask && (
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Status</label>
                     <Select
+                      ariaLabel="Status"
                       value={taskForm.status}
                       onChange={(val) => setTaskForm({ ...taskForm, status: val })}
                       options={[
@@ -1046,8 +1051,8 @@ export default function ProjectDetailPage() {
                 <div className="space-y-4">
                   <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Basic Info</h3>
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Project Name *</label>
-                    <input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                    <label htmlFor="pe-name" className="block text-sm font-medium text-[#374151] mb-1.5">Project Name *</label>
+                    <input id="pe-name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
@@ -1057,6 +1062,7 @@ export default function ProjectDetailPage() {
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Project Type</label>
                       <Select
+                        ariaLabel="Project Type"
                         value={editForm.type}
                         onChange={(val) => setEditForm({ ...editForm, type: val })}
                         options={[
@@ -1070,6 +1076,7 @@ export default function ProjectDetailPage() {
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Status</label>
                       <Select
+                        ariaLabel="Status"
                         value={editForm.status}
                         onChange={(val) => setEditForm({ ...editForm, status: val })}
                         options={[
@@ -1085,6 +1092,7 @@ export default function ProjectDetailPage() {
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority</label>
                       <Select
+                        ariaLabel="Priority"
                         value={editForm.priority}
                         onChange={(val) => setEditForm({ ...editForm, priority: val })}
                         options={[
@@ -1105,6 +1113,7 @@ export default function ProjectDetailPage() {
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Client</label>
                       <Select
+                        ariaLabel="Client"
                         value={editForm.clientId}
                         onChange={(val) => setEditForm({ ...editForm, clientId: val })}
                         options={[{ label: 'Select a client...', value: '' }, ...clients.filter((c: any) => !['PROJECT_COMPLETED', 'CHURNED'].includes(c.status) || c.id === editForm.clientId).map(c => ({ label: getClientDisplayName(c), value: c.id }))]}
@@ -1113,6 +1122,7 @@ export default function ProjectDetailPage() {
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Project Owner *</label>
                       <Select
+                        ariaLabel="Project Owner"
                         value={editForm.ownerId}
                         onChange={(val) => setEditForm({ ...editForm, ownerId: val })}
                         options={[{ label: 'Select owner', value: '' }, ...members.map(m => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
@@ -1122,6 +1132,7 @@ export default function ProjectDetailPage() {
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Team Members</label>
                     <MultiSelect
+                      compact={false}
  options={members.filter(m => m.id !== editForm.ownerId).map(m => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name) }))}
                       value={editForm.memberIds}
                       onChange={(val) => setEditForm({ ...editForm, memberIds: val })}
@@ -1135,12 +1146,12 @@ export default function ProjectDetailPage() {
                   <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Timeline</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Start Date</label>
-                      <input type="date" value={editForm.startDate} onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                      <label htmlFor="pe-startDate" className="block text-sm font-medium text-[#374151] mb-1.5">Start Date</label>
+                      <input id="pe-startDate" type="date" value={editForm.startDate} onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">End Date {(editForm.type === 'ONE_TIME' || editForm.type === 'EVENT') && '*'}</label>
-                      <input type="date" value={editForm.endDate} onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} required={editForm.type === 'ONE_TIME' || editForm.type === 'EVENT'} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                      <label htmlFor="pe-endDate" className="block text-sm font-medium text-[#374151] mb-1.5">End Date {(editForm.type === 'ONE_TIME' || editForm.type === 'EVENT') && '*'}</label>
+                      <input id="pe-endDate" type="date" value={editForm.endDate} onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} required={editForm.type === 'ONE_TIME' || editForm.type === 'EVENT'} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                     </div>
                   </div>
                 </div>
@@ -1157,8 +1168,8 @@ export default function ProjectDetailPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Budget</label>
-                    <input type="number" value={editForm.budget} onChange={(e) => setEditForm({ ...editForm, budget: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                    <label htmlFor="pe-budget" className="block text-sm font-medium text-[#374151] mb-1.5">Budget</label>
+                    <input id="pe-budget" type="number" value={editForm.budget} onChange={(e) => setEditForm({ ...editForm, budget: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                   </div>
                 </div>
 
@@ -1169,6 +1180,7 @@ export default function ProjectDetailPage() {
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Reporting Cadence</label>
                       <Select
+                        ariaLabel="Reporting Cadence"
                         value={editForm.reportingCadence}
                         onChange={(val) => setEditForm({ ...editForm, reportingCadence: val })}
                         options={[
@@ -1206,8 +1218,9 @@ export default function ProjectDetailPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Notes</label>
+                    <label htmlFor="pe-notes" className="block text-sm font-medium text-[#374151] mb-1.5">Notes</label>
                     <textarea
+                      id="pe-notes"
                       value={editForm.projectNotes}
                       onChange={(e) => setEditForm({ ...editForm, projectNotes: e.target.value })}
                       className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all min-h-[80px]"
@@ -1215,8 +1228,8 @@ export default function ProjectDetailPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Folder Link (URL)</label>
-                    <input type="url" value={editForm.folderLink} onChange={(e) => setEditForm({ ...editForm, folderLink: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                    <label htmlFor="pe-folderLink" className="block text-sm font-medium text-[#374151] mb-1.5">Folder Link (URL)</label>
+                    <input id="pe-folderLink" type="url" value={editForm.folderLink} onChange={(e) => setEditForm({ ...editForm, folderLink: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                   </div>
                 </div>
 
@@ -1262,12 +1275,12 @@ export default function ProjectDetailPage() {
               </div>
               <form onSubmit={handleSaveMilestone} className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Milestone Name *</label>
-                  <input value={milestoneForm.name} onChange={(e) => setMilestoneForm({ ...milestoneForm, name: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                  <label htmlFor="ms-name" className="block text-sm font-medium text-[#374151] mb-1.5">Milestone Name *</label>
+                  <input id="ms-name" value={milestoneForm.name} onChange={(e) => setMilestoneForm({ ...milestoneForm, name: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
-                  <input type="date" value={milestoneForm.dueDate} onChange={(e) => setMilestoneForm({ ...milestoneForm, dueDate: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                  <label htmlFor="ms-dueDate" className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
+                  <input id="ms-dueDate" type="date" value={milestoneForm.dueDate} onChange={(e) => setMilestoneForm({ ...milestoneForm, dueDate: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                 </div>
                 <div className="pt-4 flex gap-3">
                   <button type="button" onClick={() => setShowMilestoneModal(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>

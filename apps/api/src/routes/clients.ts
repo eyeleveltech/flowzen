@@ -6,6 +6,7 @@ import { validate } from '../middleware/validate.js';
 import { emitToOrganization } from '../sse.js';
 import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
 import { NotificationService } from '../services/notifications.js';
+import { whereIn } from '../utils/query.js';
 
 export const clientRouter = Router();
 clientRouter.use(authenticate);
@@ -23,6 +24,9 @@ const clientSchema = z.object({
   engagementType: z.string().optional(),
   website: z.string().optional(),
   city: z.string().optional(),
+  state: z.string().optional(),
+  billingAddress: z.string().optional(),
+  gstNumber: z.string().optional(),
   scope: z.string().optional(),
   assetLinks: z.string().optional(),
   accountManagerId: z.string().optional(),
@@ -43,12 +47,10 @@ clientRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     const { search, status, city, accountManagerId, engagementType, industry, page = '1', limit = '20' } = req.query;
 
     const where: Record<string, unknown> = { organizationId: orgId };
-    if (status) {
-      where.status = status as string;
-    }
+    if (status) where.status = whereIn(status);
     if (city) where.city = { contains: city as string, mode: 'insensitive' };
-    if (accountManagerId) where.accountManagerId = accountManagerId as string;
-    if (engagementType) where.engagementType = engagementType as string;
+    if (accountManagerId) where.accountManagerId = whereIn(accountManagerId);
+    if (engagementType) where.engagementType = whereIn(engagementType);
     if (industry) where.industry = { contains: industry as string, mode: 'insensitive' };
     if (search) {
       where.OR = [

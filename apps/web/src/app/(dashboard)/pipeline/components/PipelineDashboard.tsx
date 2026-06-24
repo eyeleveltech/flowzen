@@ -6,6 +6,7 @@ import { formatCurrency, getInitials } from '@/lib/utils';
 import { TrendingUp, IndianRupee, Target, Briefcase, Clock, ChevronRight, Filter, Calendar, CheckSquare, Square, ChevronDown } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Select } from '@/components/ui/select';
+import { MultiSelect } from '@/components/ui/multi-select';
 import { useMembers } from '@/hooks/useQueries';
 import { startOfMonth, startOfQuarter, startOfYear, subMonths, subQuarters, endOfMonth, endOfQuarter, endOfYear } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -34,7 +35,7 @@ export function PipelineDashboard() {
   const [customDateFrom, setCustomDateFrom] = useState('');
   const [customDateTo, setCustomDateTo] = useState('');
   
-  const [ownerFilter, setOwnerFilter] = useState('');
+  const [ownerFilter, setOwnerFilter] = useState<string[]>([]);
   
   const [selectedStages, setSelectedStages] = useState<string[]>(ALL_STAGES);
   const [showStageDropdown, setShowStageDropdown] = useState(false);
@@ -73,7 +74,7 @@ export function PipelineDashboard() {
       if (!selectedStages.includes(lead.stage)) return false;
 
       // 2. Owner Filter
-      if (ownerFilter && lead.assignedToId !== ownerFilter) return false;
+      if (ownerFilter.length > 0 && !ownerFilter.includes(lead.assignedToId)) return false;
 
       // 3. Date Filter
       if (dateRange !== 'ALL') {
@@ -263,14 +264,12 @@ export function PipelineDashboard() {
         )}
 
         {/* Owner Filter */}
-        <div className="w-48">
-          <Select
+        <div className="w-56">
+          <MultiSelect
             value={ownerFilter}
             onChange={setOwnerFilter}
-            options={[
-              { label: 'All Owners', value: '' },
-              ...members.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
-            ]}
+            placeholder="All Owners"
+            options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
           />
         </div>
 
@@ -498,8 +497,8 @@ export function PipelineDashboard() {
                 <tr key={lead.id} className="hover:bg-surface transition-colors">
                   <td className="px-5 py-3">
                     <div className="flex flex-col">
-                      <span className="text-sm font-semibold text-primary">{lead.client.name}</span>
-                      <span className="text-xs text-secondary">{lead.client.company}</span>
+                      <span className="text-sm font-semibold text-primary">{lead.contactName || lead.companyName || lead.client?.name || 'Unknown'}</span>
+                      <span className="text-xs text-secondary">{lead.companyName || lead.client?.company || ''}</span>
                     </div>
                   </td>
                   <td className="px-5 py-3">

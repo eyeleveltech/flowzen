@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useId } from 'react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { X, Save, Upload, FileText, User, Briefcase, Mail, Phone, Building2, Calendar, IndianRupee, Search, ChevronDown, Check, AlignLeft } from 'lucide-react';
@@ -9,6 +9,7 @@ import { getInitials } from '@/lib/utils';
 import { Select } from '@/components/ui/select';
 import { useMembers, useClients } from '@/hooks/useQueries';
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 
 export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onClose: () => void; onSuccess: () => void; initialMode?: 'MANUAL' | 'BULK' }) {
   const { data: members = [] } = useMembers();
@@ -30,6 +31,11 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
     followUpDate: '',
     industry: '',
     city: '',
+    state: '',
+    companySize: '',
+    website: '',
+    billingAddress: '',
+    gstNumber: '',
     notes: '',
     priority: 'MEDIUM',
   });
@@ -41,6 +47,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
   const [importPreview, setImportPreview] = useState<any[]>([]);
   const [importing, setImporting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number; rejectedCount: number; rejected: any[] } | null>(null);
 
   // Client Combobox State
   const [clientSearch, setClientSearch] = useState('');
@@ -125,7 +132,22 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
   }
   function processFile(file: File) {
     setImportFile(file);
-    Papa.parse(file, { header: true, skipEmptyLines: true, complete: (res) => setImportPreview(res.data), error: () => toast.error('Failed to parse CSV file') });
+    setImportResult(null);
+    const name = file.name.toLowerCase();
+    if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const wb = XLSX.read(new Uint8Array(ev.target?.result as ArrayBuffer), { type: 'array' });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          setImportPreview(XLSX.utils.sheet_to_json(ws, { defval: '' }) as any[]);
+        } catch { toast.error('Failed to parse Excel file'); }
+      };
+      reader.onerror = () => toast.error('Failed to read file');
+      reader.readAsArrayBuffer(file);
+    } else {
+      Papa.parse(file, { header: true, skipEmptyLines: true, complete: (res) => setImportPreview(res.data as any[]), error: () => toast.error('Failed to parse CSV file') });
+    }
   }
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -135,30 +157,43 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
     if (!importPreview.length) return;
     setImporting(true);
     try {
+      // Send every row; the server validates each and returns the rejected ones with reasons.
       const payload = importPreview.map((row: any) => ({
-        contactName: row.ContactName || row.contactName,
-        companyName: row.CompanyName || row.companyName,
-        email: row.Email || row.email,
-        phone: row.Phone || row.phone,
-        source: row.Source || row.source || 'EXCEL',
-        stage: row.Stage || row.stage || 'NEW_LEAD',
-        linkedinUrl: row.LinkedinUrl || row.linkedinUrl,
-        dealValue: row.DealValue || row.dealValue,
-        expectedCloseDate: row.ExpectedCloseDate || row.expectedCloseDate,
-        industry: row.Industry || row.industry,
-        city: row.City || row.city,
-        notes: row.Notes || row.notes,
-      })).filter(l => l.contactName || l.companyName);
+        contactName: row.ContactName ?? row.contactName ?? row['Full Name'] ?? '',
+        companyName: row.CompanyName ?? row.companyName ?? row.Company ?? '',
+        email: row.Email ?? row.email ?? '',
+        phone: row.Phone ?? row.phone ?? row.Mobile ?? row.mobile ?? '',
+        stage: row.Stage ?? row.stage ?? 'NEW_LEAD',
+        linkedinUrl: row.LinkedinUrl ?? row.linkedinUrl ?? '',
+        dealValue: row.DealValue ?? row.dealValue ?? '',
+        expectedCloseDate: row.ExpectedCloseDate ?? row.expectedCloseDate ?? '',
+        industry: row.Industry ?? row.industry ?? '',
+        city: row.City ?? row.city ?? '',
+        companySize: row.CompanySize ?? row.companySize ?? '',
+        website: row.Website ?? row.website ?? '',
+        notes: row.Notes ?? row.notes ?? '',
+      }));
 
-      if (payload.length > 50) { toast.error(`Max 50 leads at a time.`); setImporting(false); return; }
-      await api.post('/crm/leads/bulk', { leads: payload });
-      toast.success(`Imported ${payload.length} leads`);
-      onSuccess();
+      if (payload.length > 500) { toast.error('Max 500 leads at a time.'); setImporting(false); return; }
+      const res = await api.post<{ imported: number; rejectedCount: number; rejected: any[] }>('/crm/leads/bulk', { leads: payload });
+      setImportResult(res);
+      if (res.imported > 0) toast.success(`Imported ${res.imported} lead${res.imported === 1 ? '' : 's'}`);
+      else toast.error('No leads imported — see the rejection report.');
     } catch (err: any) { toast.error(err.message || 'Failed to import leads'); } finally { setImporting(false); }
   }
 
+  function downloadRejectionReport() {
+    if (!importResult?.rejected?.length) return;
+    const csv = Papa.unparse(importResult.rejected);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `rejected_leads_${Date.now()}.csv`;
+    link.click();
+  }
+
   function downloadTemplate() {
-    const csv = Papa.unparse([{ ContactName: 'John Doe', CompanyName: 'Example LLC', Email: 'john@example.com', Phone: '+1-555-0100', Source: 'EXCEL', Stage: 'NEW_LEAD', DealValue: '50000', ExpectedCloseDate: '2026-06-01', Notes: 'Needs immediate follow up' }]);
+    const csv = Papa.unparse([{ ContactName: 'John Doe', CompanyName: 'Example LLC', Email: 'john@example.com', Phone: '+1-555-0100', Stage: 'NEW_LEAD', DealValue: '50000', ExpectedCloseDate: '2026-06-01', Industry: 'IT/SaaS', City: 'Chennai', Website: 'example.com', Notes: 'Needs immediate follow up' }]);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'lead_import_template.csv'; link.click();
   }
@@ -315,6 +350,26 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Company Size</label>
+                      <Select
+                        value={form.companySize}
+                        onChange={(v) => setForm({ ...form, companySize: v })}
+                        options={[
+                          { label: 'Select Size', value: '' },
+                          { label: '1–10', value: '1-10' },
+                          { label: '11–100', value: '11-100' },
+                          { label: '101–500', value: '101-500' },
+                          { label: '501–1,000', value: '501-1000' },
+                          { label: '1,000+', value: '1000+' },
+                        ]}
+                      />
+                    </div>
+                    <Field label="Website" value={form.website} onChange={(v) => setForm({ ...form, website: v })} placeholder="example.com" />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <Field label="State" value={form.state} onChange={(v) => setForm({ ...form, state: v })} placeholder="e.g. Tamil Nadu" />
                     <Field label="Deal Value (₹)" type="number" icon={<IndianRupee className="h-4 w-4 text-secondary" />} value={form.dealValue} onChange={(v) => setForm({ ...form, dealValue: v })} placeholder="0.00" />
                     <Field label="Expected Revenue (Monthly, ₹)" type="number" icon={<IndianRupee className="h-4 w-4 text-secondary" />} value={form.expectedRevenue} onChange={(v) => setForm({ ...form, expectedRevenue: v })} placeholder="0.00" />
                   </div>
@@ -383,7 +438,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
               <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-white shadow-sm">
                 <div>
                   <h3 className="text-sm font-semibold text-primary">Need a template?</h3>
-                  <p className="text-xs text-secondary mt-1">Download our CSV template to see the required format.</p>
+                  <p className="text-xs text-secondary mt-1">CSV or Excel (.xlsx). <span className="font-medium text-[#374151]">Name, Email and Phone are required</span> on every row.</p>
                 </div>
                 <button onClick={downloadTemplate} className="flex items-center gap-2 rounded-lg border border-border bg-gray-50 px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-gray-100 transition-all">
                   <FileText className="h-3.5 w-3.5" /> Template
@@ -402,9 +457,9 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                     <p className="mb-2 text-sm text-primary">
                       <span className="font-semibold">Click to upload</span> or drag and drop
                     </p>
-                    <p className="text-xs text-secondary">CSV files only</p>
+                    <p className="text-xs text-secondary">CSV or XLSX files</p>
                   </div>
-                  <input type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
+                  <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleFileChange} />
                 </label>
                 {importFile && (
                   <p className="text-sm text-primary mt-3 font-medium flex items-center gap-2 bg-white border border-border p-3 rounded-lg shadow-sm">
@@ -413,10 +468,23 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                 )}
               </div>
 
-              {importPreview.length > 0 && (
+              {importResult ? (
+                <div className={`p-4 rounded-xl border ${importResult.rejectedCount > 0 ? 'border-amber-200 bg-amber-50/60' : 'border-emerald-200 bg-emerald-50/60'}`}>
+                  <h4 className="text-sm font-semibold text-primary mb-1">Import complete</h4>
+                  <p className="text-sm text-[#374151]">
+                    <span className="font-semibold text-emerald-700">{importResult.imported} imported</span>
+                    {importResult.rejectedCount > 0 && <>, <span className="font-semibold text-amber-700">{importResult.rejectedCount} rejected</span></>}.
+                  </p>
+                  {importResult.rejectedCount > 0 && (
+                    <button onClick={downloadRejectionReport} className="mt-3 flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-50 transition-all">
+                      <FileText className="h-3.5 w-3.5" /> Download rejection report
+                    </button>
+                  )}
+                </div>
+              ) : importPreview.length > 0 && (
                 <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/50">
                   <h4 className="text-sm font-semibold text-blue-900 mb-1">Ready to Import</h4>
-                  <p className="text-sm text-blue-700">Found {importPreview.filter(r => r.ContactName || r.CompanyName).length} valid leads in the CSV file.</p>
+                  <p className="text-sm text-blue-700">Found {importPreview.length} row{importPreview.length === 1 ? '' : 's'}. Each will be validated on import.</p>
                 </div>
               )}
             </div>
@@ -431,6 +499,10 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
             <button type="submit" form="lead-form" disabled={submitting} className="px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] shadow-sm transition-all disabled:opacity-50 flex items-center gap-2">
               <Save className="h-4 w-4" />
               {submitting ? 'Saving...' : 'Save Lead'}
+            </button>
+          ) : importResult ? (
+            <button onClick={onSuccess} className="px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] shadow-sm transition-all flex items-center gap-2">
+              <Check className="h-4 w-4" /> Done
             </button>
           ) : (
             <button onClick={handleBulkImport} disabled={importing || importPreview.length === 0} className="px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] shadow-sm transition-all disabled:opacity-50 flex items-center gap-2">
@@ -447,9 +519,10 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
 function Field({ label, value, onChange, type = 'text', required = false, placeholder, icon, error }: {
   label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean; placeholder?: string; icon?: React.ReactNode; error?: string;
 }) {
+  const id = useId();
   return (
     <div>
-      <label className="block text-sm font-medium text-[#374151] mb-1.5">
+      <label htmlFor={id} className="block text-sm font-medium text-[#374151] mb-1.5">
         {label} {required && <span className="text-red-500">*</span>}
       </label>
       <div className="relative">
@@ -459,15 +532,18 @@ function Field({ label, value, onChange, type = 'text', required = false, placeh
           </div>
         )}
         <input
+          id={id}
           type={type}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           required={required}
           placeholder={placeholder}
+          aria-invalid={!!error}
+          aria-describedby={error ? `${id}-error` : undefined}
           className={`w-full rounded-xl border bg-white ${icon ? 'pl-9' : 'px-4'} pr-4 py-2.5 text-sm text-[#374151] outline-none focus:ring-1 transition-all ${error ? 'border-red-400 focus:border-red-400 focus:ring-red-100' : 'border-border focus:border-primary focus:ring-primary'}`}
         />
       </div>
-      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+      {error && <p id={`${id}-error`} aria-live="polite" className="mt-1 text-xs text-red-500">{error}</p>}
     </div>
   );
 }

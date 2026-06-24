@@ -8,20 +8,20 @@ import { create } from 'zustand';
 // refresh re-initializes the module, so the filters reset to empty.
 interface ProjectFiltersStore {
   search: string;
-  statusFilter: string;
-  clientFilter: string;
-  ownerFilter: string;
+  statusFilter: string[];
+  clientFilter: string[];
+  ownerFilter: string[];
   setSearch: (v: string) => void;
-  setStatusFilter: (v: string) => void;
-  setClientFilter: (v: string) => void;
-  setOwnerFilter: (v: string) => void;
+  setStatusFilter: (v: string[]) => void;
+  setClientFilter: (v: string[]) => void;
+  setOwnerFilter: (v: string[]) => void;
 }
 
 export const useProjectFilters = create<ProjectFiltersStore>((set) => ({
   search: '',
-  statusFilter: '',
-  clientFilter: '',
-  ownerFilter: '',
+  statusFilter: [],
+  clientFilter: [],
+  ownerFilter: [],
   setSearch: (v) => set({ search: v }),
   setStatusFilter: (v) => set({ statusFilter: v }),
   setClientFilter: (v) => set({ clientFilter: v }),

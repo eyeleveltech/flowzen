@@ -6,6 +6,7 @@ import { validate } from '../middleware/validate.js';
 import { emitToOrganization } from '../sse.js';
 import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
 import { NotificationService } from '../services/notifications.js';
+import { toList, whereIn } from '../utils/query.js';
 
 export const projectRouter = Router();
 projectRouter.use(authenticate);
@@ -44,19 +45,25 @@ projectRouter.get('/', async (req: AuthRequest, res: Response, next) => {
         { teams: { some: { team: { members: { some: { id: req.user!.userId } } } } } },
       ];
     }
-    if (status) {
-      if (status === 'ACTIVE') {
-        where.status = { in: ['PLANNING', 'IN_PROGRESS', 'REVIEW'] };
-      } else if (status === 'DELAYED') {
+    const statuses = toList(status);
+    if (statuses) {
+      // DELAYED carries an extra endDate constraint; keep that only when it's the sole filter.
+      if (statuses.length === 1 && statuses[0] === 'DELAYED') {
         where.status = { in: ['IN_PROGRESS', 'REVIEW'] };
         where.endDate = { lt: new Date() };
       } else {
-        where.status = status as string;
+        const real = new Set<string>();
+        for (const s of statuses) {
+          if (s === 'ACTIVE') ['PLANNING', 'IN_PROGRESS', 'REVIEW'].forEach((x) => real.add(x));
+          else if (s === 'DELAYED') ['IN_PROGRESS', 'REVIEW'].forEach((x) => real.add(x));
+          else real.add(s);
+        }
+        where.status = { in: [...real] };
       }
     }
-    if (priority) where.priority = priority as string;
-    if (clientId) where.clientId = clientId;
-    if (ownerId) where.ownerId = ownerId;
+    if (priority) where.priority = whereIn(priority);
+    if (clientId) where.clientId = whereIn(clientId);
+    if (ownerId) where.ownerId = whereIn(ownerId);
     if (search) {
       const searchCondition = {
         OR: [

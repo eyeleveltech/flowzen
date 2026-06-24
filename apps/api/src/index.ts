@@ -14,11 +14,13 @@ import { teamRouter } from './routes/team.js';
 import { teamRouter as teamsRouter } from './routes/teams.js';
 import { reportRouter } from './routes/reports.js';
 import { notificationRouter } from './routes/notifications.js';
+import { analyticsRouter } from './routes/analytics.js';
 import { searchRouter } from './routes/search.js';
 import { settingsRouter } from './routes/settings.js';
 import { profileRouter } from './routes/profile.js';
 import { workflowRouter } from './routes/workflows.js';
 import { crmRouter } from './routes/crm.js';
+import { quoteRouter } from './routes/quotes.js';
 import publicApiRouter from './routes/public/index.js';
 import { sseRouter } from './sse.js';
 import './workers/emailWorker.js'; // Initialize BullMQ email worker
@@ -30,6 +32,9 @@ import path from 'path';
 
 dotenv.config();
 dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
+
+// Startup diagnostic (masked) — confirms whether AI keys actually loaded into this process.
+console.log(`[env] cwd=${process.cwd()} | APIFY_TOKEN=${process.env.APIFY_TOKEN ? 'loaded' : 'MISSING'} | OPENAI_API_KEY=${process.env.OPENAI_API_KEY ? 'loaded' : 'MISSING'}`);
 
 const app = express();
 app.set('trust proxy', 1);
@@ -74,7 +79,9 @@ app.use('/api/profile', profileRouter);
 app.use('/api/stream', sseRouter);
 
 // CRM module (Admins only):
+app.use('/api/crm/quotes', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), requireModule('CRM'), quoteRouter);
 app.use('/api/crm', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), requireModule('CRM'), crmRouter);
+app.use('/api/analytics', analyticsRouter);
 
 // Shared infrastructure — available whenever CRM or PM is on (both use clients + the members list):
 app.use('/api/clients', authenticate, requireModule('CRM', 'PM'), clientRouter);

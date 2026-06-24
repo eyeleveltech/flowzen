@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, Suspense } from 'react';
+import { useState, useEffect, useRef, useId, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
@@ -61,7 +61,7 @@ function ProjectsContent() {
   const { search, setSearch, statusFilter, setStatusFilter, clientFilter, setClientFilter, ownerFilter, setOwnerFilter } = useProjectFilters();
 
   useEffect(() => {
-    if (urlStatus) setStatusFilter(urlStatus);
+    if (urlStatus) setStatusFilter([urlStatus]);
   }, [urlStatus]);
   const showCreate = searchParams.get('create') === 'true';
   const setShowCreate = (open: boolean) => {
@@ -110,7 +110,7 @@ function ProjectsContent() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage
-  } = useProjects(search, view === 'calendar', statusFilter, clientFilter, ownerFilter);
+  } = useProjects(search, view === 'calendar', statusFilter.join(','), clientFilter.join(','), ownerFilter.join(','));
 
   const projects = data?.pages.flatMap((page) => page.projects) || [];
   const { data: clients = [] } = useClients();
@@ -174,13 +174,13 @@ function ProjectsContent() {
           <p className="text-sm text-secondary mt-1">{projects.length} projects</p>
         </div>
         <div className="flex items-center gap-3">
-          {(search || statusFilter || clientFilter || ownerFilter) && (
+          {(search || statusFilter.length || clientFilter.length || ownerFilter.length) && (
             <button
               onClick={() => {
                 setSearch('');
-                setStatusFilter('');
-                setClientFilter('');
-                setOwnerFilter('');
+                setStatusFilter([]);
+                setClientFilter([]);
+                setOwnerFilter([]);
                 router.replace('/projects', { scroll: false });
               }}
               className="flex items-center gap-1.5 rounded-xl bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors border border-red-100"
@@ -206,12 +206,12 @@ function ProjectsContent() {
           
           {/* Filters */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="w-32">
-              <Select
+            <div className="w-44">
+              <MultiSelect
                 value={statusFilter}
                 onChange={setStatusFilter}
+                placeholder="All Statuses"
                 options={[
-                  { label: 'All Statuses', value: '' },
                   { label: 'Active', value: 'ACTIVE' },
                   { label: 'Delayed', value: 'DELAYED' },
                   { label: 'Planning', value: 'PLANNING' },
@@ -223,25 +223,21 @@ function ProjectsContent() {
                 ]}
               />
             </div>
-            <div className="w-40">
-              <Select
+            <div className="w-48">
+              <MultiSelect
                 value={clientFilter}
                 onChange={setClientFilter}
-                options={[
-                  { label: 'All Clients', value: '' },
-                  ...clients.filter(c => c._count?.projects > 0).map(c => ({ label: getClientDisplayName(c), value: c.id }))
-                ]}
+                placeholder="All Clients"
+                options={clients.filter(c => c._count?.projects > 0).map(c => ({ label: getClientDisplayName(c), value: c.id }))}
               />
             </div>
             {user?.role !== 'TEAM_MEMBER' && (
-              <div className="w-40">
-                <Select
+              <div className="w-48">
+                <MultiSelect
                   value={ownerFilter}
                   onChange={setOwnerFilter}
-                  options={[
-                    { label: 'All Owners', value: '' },
-                    ...members.filter(m => m.totalProjects > 0).map(m => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
-                  ]}
+                  placeholder="All Owners"
+                  options={members.filter(m => m.totalProjects > 0).map(m => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
                 />
               </div>
             )}
@@ -586,6 +582,7 @@ function ProjectsContent() {
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Team Members</label>
                     <MultiSelect
+                      compact={false}
  options={members.filter(m => m.id !== formValues.ownerId).map(m => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name) }))}
                       value={formValues.memberIds || []}
                       onChange={(val) => setValue('memberIds', val)}
@@ -715,10 +712,11 @@ export default function ProjectsPage() {
 function Field({ label, value, onChange, type = 'text', required = false }: {
   label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean;
 }) {
+  const id = useId();
   return (
     <div>
-      <label className="block text-sm font-medium text-[#374151] mb-1.5">{label}</label>
-      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} required={required} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" />
+      <label htmlFor={id} className="block text-sm font-medium text-[#374151] mb-1.5">{label}</label>
+      <input id={id} type={type} value={value} onChange={(e) => onChange(e.target.value)} required={required} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" />
     </div>
   );
 }

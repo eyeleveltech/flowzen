@@ -78,6 +78,83 @@ settingsRouter.put('/organization', authorize('SUPER_ADMIN', 'ADMIN'), async (re
   }
 });
 
+// GET /api/settings/company — company billing details (GST/PAN/bank/state/standard T&C) used by quotations.
+settingsRouter.get('/company', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const org = await prisma.organization.findUnique({ where: { id: req.user!.organizationId }, select: { name: true, address: true, phone: true, settings: true } });
+    const company = ((org?.settings as any)?.company) || {};
+    res.json({ name: org?.name, address: org?.address, phone: org?.phone, ...company });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PUT /api/settings/company — merge company billing details into settings.company.
+settingsRouter.put('/company', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const org = await prisma.organization.findUnique({ where: { id: req.user!.organizationId }, select: { settings: true } });
+    const settings = (org?.settings as any) || {};
+    const allowed = ['state', 'gst', 'pan', 'bankName', 'bankAccount', 'bankIfsc', 'email', 'standardTerms'];
+    const company = { ...(settings.company || {}) };
+    for (const k of allowed) if (req.body[k] !== undefined) company[k] = req.body[k];
+    const updated = await prisma.organization.update({
+      where: { id: req.user!.organizationId },
+      data: { settings: { ...settings, company } },
+      select: { settings: true },
+    });
+    res.json(((updated.settings as any)?.company) || {});
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/settings/notification-preferences — per-user alert toggles (Module F)
+settingsRouter.get('/notification-preferences', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { settings: true } });
+    const n = ((user?.settings as any)?.notifications) || {};
+    res.json({ followUpDue: n.followUpDue !== false, staleLead: n.staleLead !== false, dailyDigest: n.dailyDigest !== false, digestTime: n.digestTime || '08:00' });
+  } catch (error) { next(error); }
+});
+
+// PATCH /api/settings/notification-preferences
+settingsRouter.patch('/notification-preferences', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { settings: true } });
+    const settings = (user?.settings as any) || {};
+    const notifications = { ...(settings.notifications || {}) };
+    for (const k of ['followUpDue', 'staleLead', 'dailyDigest', 'digestTime']) if (req.body[k] !== undefined) notifications[k] = req.body[k];
+    const updated = await prisma.user.update({ where: { id: req.user!.userId }, data: { settings: { ...settings, notifications } }, select: { settings: true } });
+    res.json(((updated.settings as any)?.notifications) || {});
+  } catch (error) { next(error); }
+});
+
+// GET /api/settings/notification-thresholds — org stale-lead thresholds + the business CRM
+// notification email that receives the daily Sales & CRM summary (Admin).
+settingsRouter.get('/notification-thresholds', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const org = await prisma.organization.findUnique({ where: { id: req.user!.organizationId }, select: { settings: true } });
+    const defaults = { OUTREACH: 5, MEETING: 7, PROPOSAL: 7, NEGOTIATION: 5, CONTRACT: 3 };
+    const settings = (org?.settings as any) || {};
+    res.json({ thresholds: { ...defaults, ...(settings.staleThresholds || {}) }, crmNotificationEmail: settings.crmNotificationEmail || '' });
+  } catch (error) { next(error); }
+});
+
+// PATCH /api/settings/notification-thresholds (Admin) — body: { thresholds?, crmNotificationEmail? }
+settingsRouter.patch('/notification-thresholds', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const org = await prisma.organization.findUnique({ where: { id: req.user!.organizationId }, select: { settings: true } });
+    const settings = (org?.settings as any) || {};
+    const staleThresholds = { ...(settings.staleThresholds || {}) };
+    const incoming = req.body?.thresholds || {};
+    for (const k of ['OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION', 'CONTRACT']) if (incoming[k] !== undefined) staleThresholds[k] = Number(incoming[k]);
+    if (req.body?.crmNotificationEmail !== undefined) settings.crmNotificationEmail = String(req.body.crmNotificationEmail || '').trim();
+    const updated = await prisma.organization.update({ where: { id: req.user!.organizationId }, data: { settings: { ...settings, staleThresholds } }, select: { settings: true } });
+    const s = (updated.settings as any) || {};
+    res.json({ thresholds: s.staleThresholds || {}, crmNotificationEmail: s.crmNotificationEmail || '' });
+  } catch (error) { next(error); }
+});
+
 // GET /api/settings/modules — list this org's modules (ensures CRM + PM rows exist)
 settingsRouter.get('/modules', async (req: AuthRequest, res: Response, next) => {
   try {
