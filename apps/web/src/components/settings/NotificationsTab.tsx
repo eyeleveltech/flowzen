@@ -9,15 +9,22 @@ const STAGES = ['OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION', 'CONTRACT'];
 
 function Toggle({ checked, onChange, label, desc }: { checked: boolean; onChange: (v: boolean) => void; label: string; desc: string }) {
   return (
-    <label className="flex items-start justify-between gap-4 py-3 cursor-pointer">
+    <div className="flex items-start justify-between gap-4 py-3">
       <div>
         <p className="text-sm font-medium text-primary">{label}</p>
         <p className="text-xs text-secondary mt-0.5">{desc}</p>
       </div>
-      <button type="button" onClick={() => onChange(!checked)} className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${checked ? 'bg-primary' : 'bg-gray-300'}`}>
-        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${checked ? 'translate-x-5' : 'translate-x-0.5'}`} />
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={() => onChange(!checked)}
+        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors ${checked ? 'bg-primary border-primary' : 'bg-gray-200 border-gray-300'}`}
+      >
+        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
       </button>
-    </label>
+    </div>
   );
 }
 
