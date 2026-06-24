@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
@@ -56,6 +56,41 @@ export function PipelineBoardView() {
   const [wonModalLead, setWonModalLead] = useState<any>(null);
   const [showWonLost, setShowWonLost] = useState(false);
 
+  // Horizontal edge auto-scroll while dragging a card (the dnd lib's built-in auto-scroll
+  // doesn't reliably pan the board's horizontal container past nested vertical columns).
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const edgeScroll = useRef<{ dir: number; raf: number | null; cleanup: (() => void) | null }>({ dir: 0, raf: null, cleanup: null });
+
+  const startAutoScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const EDGE = 90, SPEED = 22; // px from edge that triggers scroll; px/frame
+    const onPointer = (clientX: number) => {
+      if (el.scrollWidth <= el.clientWidth) { edgeScroll.current.dir = 0; return; }
+      const r = el.getBoundingClientRect();
+      if (clientX < r.left + EDGE) edgeScroll.current.dir = -1;
+      else if (clientX > r.right - EDGE) edgeScroll.current.dir = 1;
+      else edgeScroll.current.dir = 0;
+    };
+    const pm = (e: PointerEvent) => onPointer(e.clientX);
+    const tm = (e: TouchEvent) => { if (e.touches[0]) onPointer(e.touches[0].clientX); };
+    window.addEventListener('pointermove', pm, { passive: true });
+    window.addEventListener('touchmove', tm, { passive: true });
+    const tick = () => {
+      if (edgeScroll.current.dir !== 0 && scrollRef.current) scrollRef.current.scrollLeft += edgeScroll.current.dir * SPEED;
+      edgeScroll.current.raf = requestAnimationFrame(tick);
+    };
+    edgeScroll.current.raf = requestAnimationFrame(tick);
+    edgeScroll.current.cleanup = () => {
+      window.removeEventListener('pointermove', pm);
+      window.removeEventListener('touchmove', tm);
+      if (edgeScroll.current.raf) cancelAnimationFrame(edgeScroll.current.raf);
+      edgeScroll.current = { dir: 0, raf: null, cleanup: null };
+    };
+  };
+  const stopAutoScroll = () => edgeScroll.current.cleanup?.();
+  useEffect(() => () => stopAutoScroll(), []);
+
   const openStageMenu = (e: React.MouseEvent, lead: any) => {
     e.stopPropagation();
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -110,6 +145,7 @@ export function PipelineBoardView() {
   }, [leads]);
 
   const handleDragEnd = (result: DropResult) => {
+    stopAutoScroll();
     if (!result.destination) return;
     const { source, destination, draggableId } = result;
 
@@ -174,8 +210,8 @@ export function PipelineBoardView() {
         </label>
       </div>
 
-      <div className="flex flex-1 w-full overflow-x-auto overflow-y-hidden gap-4 pb-4 px-1 custom-scrollbar">
-        <DragDropContext onDragEnd={handleDragEnd}>
+      <div ref={scrollRef} className="flex flex-1 w-full overflow-x-auto overflow-y-hidden gap-4 pb-4 px-1 custom-scrollbar">
+        <DragDropContext onDragStart={startAutoScroll} onDragEnd={handleDragEnd}>
           {visibleGroups.map((group) => {
             const columnLeads = columns[group.id] || [];
             
