@@ -174,7 +174,7 @@ function ProjectsContent() {
           <p className="text-sm text-secondary mt-1">{projects.length} projects</p>
         </div>
         <div className="flex items-center gap-3">
-          {(search || statusFilter.length || clientFilter.length || ownerFilter.length) && (
+          {(!!search || statusFilter.length > 0 || clientFilter.length > 0 || ownerFilter.length > 0) && (
             <button
               onClick={() => {
                 setSearch('');

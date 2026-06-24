@@ -339,7 +339,7 @@ function ClientsContent() {
           <p className="text-sm text-secondary mt-1">{total} total clients</p>
         </div>
         <div className="flex items-center gap-3">
-          {(search || statusFilter.length || cityFilter || industryFilter || engagementTypeFilter.length || accountManagerFilter.length) && (
+          {(!!search || statusFilter.length > 0 || !!cityFilter || !!industryFilter || engagementTypeFilter.length > 0 || accountManagerFilter.length > 0) && (
             <button
               onClick={() => {
                 setSearch('');
