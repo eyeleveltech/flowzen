@@ -12,7 +12,8 @@ import { TAX_TYPES, resolveTaxType, DEFAULT_TAX_TYPE } from '../lib/tax-catalog'
 import toast from 'react-hot-toast';
 
 const UNITS = ['Hours', 'Days', 'Months', 'Units', 'Lump Sum'];
-const PAYMENT_TERMS = ['100% Advance', '50-50', 'Monthly', 'Milestone-based', 'Custom'];
+const PRESET_TERMS = ['Immediate', '100% Advance', '50-50', 'Monthly', 'Milestone-based'];
+const PAYMENT_TERMS = [...PRESET_TERMS, 'Custom'];
 const SALES_TEAMS = ['BD', 'Digital Marketing', 'Founder'];
 const PAY_METHODS = ['Bank Transfer', 'UPI', 'Cheque', 'Online'];
 const DEFAULT_TERMS = '1. This quotation is valid until the expiration date stated above.\n2. 50% advance is required to commence work unless otherwise agreed.\n3. Taxes as applicable (GST).\n4. Timelines are indicative and subject to timely inputs and approvals.';
@@ -245,7 +246,27 @@ export function QuoteFormModal({ editId, duplicateOf, onClose, onSaved }: { edit
             <Input label="Expiration Date" type="date" required value={form.expirationDate} onChange={(v) => setForm({ ...form, expirationDate: v })} />
             <div>
               <label className="block text-sm font-medium text-[#374151] mb-1.5">Payment Terms <span className="text-red-500">*</span></label>
-              <Select ariaLabel="Payment Terms" value={form.paymentTerms} onChange={(v) => setForm({ ...form, paymentTerms: v })} options={PAYMENT_TERMS.map((t) => ({ label: t, value: t }))} />
+              {(() => {
+                const isCustom = !PRESET_TERMS.includes(form.paymentTerms);
+                return (
+                  <div className="space-y-2">
+                    <Select
+                      ariaLabel="Payment Terms"
+                      value={isCustom ? 'Custom' : form.paymentTerms}
+                      onChange={(v) => setForm({ ...form, paymentTerms: v === 'Custom' ? '' : v })}
+                      options={PAYMENT_TERMS.map((t) => ({ label: t, value: t }))}
+                    />
+                    {isCustom && (
+                      <input
+                        value={form.paymentTerms}
+                        onChange={(e) => setForm({ ...form, paymentTerms: e.target.value })}
+                        placeholder="Enter custom payment terms (e.g. Net 30)"
+                        className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary"
+                      />
+                    )}
+                  </div>
+                );
+              })()}
             </div>
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-[#374151] mb-1.5">Billing Address</label>
