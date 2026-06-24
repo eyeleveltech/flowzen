@@ -5,6 +5,9 @@ RUN apt-get update -y && apt-get install -y openssl
 
 WORKDIR /app
 
+# Don't let Puppeteer download Chromium during install — we use a system Chromium at runtime.
+ENV PUPPETEER_SKIP_DOWNLOAD=1
+
 # Copy root config and API package
 COPY package*.json ./
 COPY apps/api/package*.json ./apps/api/
@@ -31,12 +34,15 @@ RUN apt-get update -y \
   && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
   && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
   && apt-get update -y \
-  && apt-get install -y postgresql-client-16 \
+  && apt-get install -y postgresql-client-16 chromium fonts-liberation \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 ENV NODE_ENV=production
+# Puppeteer uses the system Chromium installed above (no bundled download).
+ENV PUPPETEER_SKIP_DOWNLOAD=1
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 # Copy node_modules from builder
 COPY --from=builder /app/node_modules ./node_modules
