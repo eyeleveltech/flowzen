@@ -301,7 +301,7 @@ export function QuoteFormModal({ editId, duplicateOf, onClose, onSaved }: { edit
                       <td className="px-2 py-1.5"><input type="number" value={li.discountPct} onChange={(e) => setLine(i, 'discountPct', e.target.value)} placeholder="0" className="w-full rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus:border-primary text-right" /></td>
                       <td className="px-2 py-1.5"><input type="number" value={li.taxPct} onChange={(e) => setLine(i, 'taxPct', e.target.value)} placeholder="18" className="w-full rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus:border-primary text-right" /></td>
                       <td className="px-2 py-1.5">
-                        <select value={li.taxType} onChange={(e) => setLine(i, 'taxType', e.target.value)} className="w-full rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus:border-primary bg-white">{TAX_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select>
+                        <Select ariaLabel="Tax Type" rounded="rounded-lg" buttonClassName="px-2.5 py-1.5" value={li.taxType} onChange={(v) => setLine(i, 'taxType', v)} options={TAX_TYPES.map((t) => ({ label: t.label, value: t.value }))} />
                       </td>
                       <td className="px-2 py-1.5 text-right font-medium text-primary tabular-nums">{formatCurrency(fin.amounts[i] || 0)}</td>
                       <td className="px-2 py-1.5 text-right">

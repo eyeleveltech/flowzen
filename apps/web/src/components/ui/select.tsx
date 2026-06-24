@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Search } from 'lucide-react';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { Drawer } from '@/components/ui/drawer';
+import { cn } from '@/lib/utils';
 
 export interface Option {
   label: string;
@@ -24,9 +25,10 @@ export interface SelectProps {
   required?: boolean;
   rounded?: string;
   ariaLabel?: string; // accessible name for the control (use when there's a visible label nearby)
+  buttonClassName?: string; // override trigger styling (e.g. compact padding in a dense table)
 }
 
-export function Select({ value, onChange, options, placeholder = 'Select...', className = '', disabled = false, required = false, rounded = 'rounded-xl', ariaLabel }: SelectProps) {
+export function Select({ value, onChange, options, placeholder = 'Select...', className = '', disabled = false, required = false, rounded = 'rounded-xl', ariaLabel, buttonClassName }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -141,7 +143,7 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
             setIsOpen(false);
           }
         }}
-        className={`flex w-full items-center justify-between ${rounded} border border-border bg-white px-4 py-2.5 text-sm text-[#374151] outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50 transition-all text-left`}
+        className={cn(`flex w-full items-center justify-between ${rounded} border border-border bg-white px-4 py-2.5 text-sm text-[#374151] outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50 transition-all text-left`, buttonClassName)}
       >
         <span className="flex items-center gap-2 min-w-0">
           {selectedOption?.avatar && (
