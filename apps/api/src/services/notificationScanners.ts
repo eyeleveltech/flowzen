@@ -40,7 +40,9 @@ async function orgThresholdsMap(orgIds: string[]): Promise<Map<string, Record<st
   const m = new Map<string, Record<string, number>>();
   for (const o of orgs) {
     const custom = ((o.settings as any)?.staleThresholds) || {};
-    m.set(o.id, { ...DEFAULT_STALE, ...custom });
+    const clean: Record<string, number> = { ...DEFAULT_STALE };
+    for (const [k, v] of Object.entries(custom)) { const n = Number(v); if (Number.isFinite(n) && n >= 1) clean[k] = n; }
+    m.set(o.id, clean);
   }
   return m;
 }
@@ -107,7 +109,9 @@ export async function runStaleLeadScan(): Promise<number> {
   for (const l of leads) {
     const ref = lastAct.get(l.id) || l.createdAt;
     const idle = daysBetween(today, ref);
-    const limit = (thresholds.get(l.organizationId) || DEFAULT_STALE)[l.stage] ?? 7;
+    const raw = (thresholds.get(l.organizationId) || DEFAULT_STALE)[l.stage];
+    // Defend against a bad stored threshold (0/NaN) — fall back to the stage default, never 0.
+    const limit = Number.isFinite(raw) && raw >= 1 ? raw : (DEFAULT_STALE[l.stage] ?? 7);
     if (idle <= limit) continue;
 
     const user = userMap.get(l.assignedToId!);
@@ -309,13 +313,14 @@ export async function sendOrgCrmDigest(): Promise<number> {
   return sent;
 }
 
-// Orchestrator — runs all daily jobs. Returns counts (handy for the manual trigger).
-export async function runDailyNotificationJobs() {
+// Orchestrator — runs all daily jobs. The daily cron passes sendEmails=true; the manual
+// /run-scan trigger passes false so repeated test runs never re-send digest emails.
+export async function runDailyNotificationJobs(sendEmails = true) {
   const followUps = await runFollowUpScan().catch((e) => { logger.error('[Scanner] follow-up scan failed', e); return 0; });
   const stale = await runStaleLeadScan().catch((e) => { logger.error('[Scanner] stale scan failed', e); return 0; });
   const renewals = await runRenewalScan().catch((e) => { logger.error('[Scanner] renewal scan failed', e); return 0; });
   const reactivations = await runReactivationScan().catch((e) => { logger.error('[Scanner] reactivation scan failed', e); return 0; });
-  const digests = await sendDailyDigests().catch((e) => { logger.error('[Scanner] digest failed', e); return 0; });
-  const orgDigests = await sendOrgCrmDigest().catch((e) => { logger.error('[Scanner] org CRM digest failed', e); return 0; });
-  return { followUps, stale, renewals, reactivations, digests, orgDigests };
+  const digests = sendEmails ? await sendDailyDigests().catch((e) => { logger.error('[Scanner] digest failed', e); return 0; }) : 0;
+  const orgDigests = sendEmails ? await sendOrgCrmDigest().catch((e) => { logger.error('[Scanner] org CRM digest failed', e); return 0; }) : 0;
+  return { followUps, stale, renewals, reactivations, digests, orgDigests, emailsSent: sendEmails };
 }

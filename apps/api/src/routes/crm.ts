@@ -252,8 +252,12 @@ crmRouter.get('/renewals/summary', async (req: AuthRequest, res: Response, next)
   try {
     const orgId = req.user!.organizationId;
     const leads = await prisma.lead.findMany({ where: { organizationId: orgId, stage: 'ACTIVE_RETAINER' }, select: { dealValue: true, contractEndDate: true, renewalStatus: true } });
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const in30 = new Date(today.getTime() + 31 * 86400000); // exclusive: covers today .. today+30 inclusive
+    // Day boundaries in IST (consistent with the notification scanners), not server-local —
+    // otherwise a UTC host shifts the 30-day window by ~5.5h and mis-buckets contracts ending today.
+    const IST_OFFSET = 330 * 60000;
+    const dayIdx = Math.floor((Date.now() + IST_OFFSET) / 86400000);
+    const today = new Date(dayIdx * 86400000 - IST_OFFSET);
+    const in30 = new Date((dayIdx + 31) * 86400000 - IST_OFFSET); // exclusive: covers today .. today+30 inclusive
     let totalMrr = 0, due30Count = 0, due30Value = 0, atRiskCount = 0, atRiskValue = 0;
     for (const l of leads) {
       if (l.renewalStatus === 'CHURNED') continue; // churned retainers don't count toward live MRR
@@ -877,6 +881,7 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
     }
     if (stage !== undefined && existingLead.stage !== stage) {
       updateData.stage = stage;
+      if (stage === 'CHURNED') updateData.renewalStatus = 'CHURNED'; // keep renewal state coherent with churn
       // Stage gets its own StageHistory + STAGE_CHANGED activity below (not folded into LEAD_UPDATED).
       // Client lifecycle (mirrors the /stage endpoint): create at OUTREACH, then track status.
       let clientId = existingLead.clientId;

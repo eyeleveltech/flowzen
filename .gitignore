@@ -43,3 +43,7 @@ coverage/
 test-results/
 playwright-report/
 .env.save
+
+# one-off scratch/test scripts
+_*.mjs
+apps/*/_*.mjs

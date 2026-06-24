@@ -15,9 +15,10 @@ notificationRouter.get('/unread-count', async (req: AuthRequest, res: Response, 
 });
 
 // POST /api/notifications/run-scan — manually trigger the daily scanners (admin; used in testing).
+// In-app notifications only — digest/business emails are skipped so repeated test runs don't spam.
 notificationRouter.post('/run-scan', authorize('SUPER_ADMIN', 'ADMIN'), async (_req: AuthRequest, res: Response, next) => {
   try {
-    const result = await runDailyNotificationJobs();
+    const result = await runDailyNotificationJobs(false);
     res.json({ ok: true, ...result });
   } catch (error) { next(error); }
 });

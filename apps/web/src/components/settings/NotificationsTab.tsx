@@ -45,7 +45,11 @@ export function NotificationsTab() {
     setSaving(true);
     try {
       await api.patch('/settings/notification-preferences', prefs);
-      if (isAdmin) await api.patch('/settings/notification-thresholds', { thresholds, crmNotificationEmail: crmEmail });
+      if (isAdmin) {
+        // Drop blank/invalid threshold fields so we never persist a 0-day threshold.
+        const cleanThresholds = Object.fromEntries(Object.entries(thresholds).filter(([, v]) => Number.isFinite(v) && (v as number) >= 1));
+        await api.patch('/settings/notification-thresholds', { thresholds: cleanThresholds, crmNotificationEmail: crmEmail });
+      }
       toast.success('Notification settings saved');
     } catch (e: any) {
       toast.error(e?.message || 'Failed to save');

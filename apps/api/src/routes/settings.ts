@@ -147,7 +147,13 @@ settingsRouter.patch('/notification-thresholds', authorize('SUPER_ADMIN', 'ADMIN
     const settings = (org?.settings as any) || {};
     const staleThresholds = { ...(settings.staleThresholds || {}) };
     const incoming = req.body?.thresholds || {};
-    for (const k of ['OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION', 'CONTRACT']) if (incoming[k] !== undefined) staleThresholds[k] = Number(incoming[k]);
+    // Only accept a real threshold (>= 1 day). A blank field arrives as 0/NaN — ignore it so we
+    // never persist a 0-day threshold that would flag every lead as stale.
+    for (const k of ['OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION', 'CONTRACT']) {
+      if (incoming[k] === undefined) continue;
+      const n = Number(incoming[k]);
+      if (Number.isFinite(n) && n >= 1) staleThresholds[k] = Math.round(n);
+    }
     if (req.body?.crmNotificationEmail !== undefined) settings.crmNotificationEmail = String(req.body.crmNotificationEmail || '').trim();
     const updated = await prisma.organization.update({ where: { id: req.user!.organizationId }, data: { settings: { ...settings, staleThresholds } }, select: { settings: true } });
     const s = (updated.settings as any) || {};
