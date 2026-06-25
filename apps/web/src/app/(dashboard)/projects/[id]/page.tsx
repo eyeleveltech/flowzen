@@ -64,9 +64,9 @@ export default function ProjectDetailPage() {
   const [submittingTask, setSubmittingTask] = useState(false);
   // Task filters within this project's Tasks tab
   const [taskSearch, setTaskSearch] = useState('');
-  const [taskStatusFilter, setTaskStatusFilter] = useState('');
-  const [taskAssigneeFilter, setTaskAssigneeFilter] = useState('');
-  const [taskPriorityFilter, setTaskPriorityFilter] = useState('');
+  const [taskStatusFilter, setTaskStatusFilter] = useState<string[]>([]);
+  const [taskAssigneeFilter, setTaskAssigneeFilter] = useState<string[]>([]);
+  const [taskPriorityFilter, setTaskPriorityFilter] = useState<string[]>([]);
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
 
   // Edit Project States
@@ -410,17 +410,22 @@ export default function ProjectDetailPage() {
   const totalTasks = project.tasks?.length ?? 0;
   const overdueTasksCount = project.tasks?.filter(t => t.dueDate && new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED').length || 0;
 
-  // Tasks tab: filtering
+  // Tasks tab: filtering (multi-select)
   const projectTasks = (project.tasks || []) as any[];
-  const taskAssignees = Array.from(new Map(projectTasks.filter((t) => t.assignee).map((t) => [t.assignee.id, t.assignee])).values());
+  const taskAssignees = Array.from(new Map(
+    projectTasks.flatMap((t) => (t.assignees?.length ? t.assignees : (t.assignee ? [t.assignee] : []))).map((a: any) => [a.id, a]),
+  ).values());
   const filteredTasks = projectTasks.filter((t) => {
     if (taskSearch && !t.title.toLowerCase().includes(taskSearch.toLowerCase())) return false;
-    if (taskStatusFilter && t.status !== taskStatusFilter) return false;
-    if (taskAssigneeFilter && (t.assignee?.id || '') !== taskAssigneeFilter) return false;
-    if (taskPriorityFilter && t.priority !== taskPriorityFilter) return false;
+    if (taskStatusFilter.length && !taskStatusFilter.includes(t.status)) return false;
+    if (taskPriorityFilter.length && !taskPriorityFilter.includes(t.priority)) return false;
+    if (taskAssigneeFilter.length) {
+      const ids = t.assignees?.length ? t.assignees.map((a: any) => a.id) : (t.assignee ? [t.assignee.id] : []);
+      if (!taskAssigneeFilter.some((id) => ids.includes(id))) return false;
+    }
     return true;
   });
-  const hasTaskFilters = !!(taskSearch || taskStatusFilter || taskAssigneeFilter || taskPriorityFilter);
+  const hasTaskFilters = !!(taskSearch || taskStatusFilter.length || taskAssigneeFilter.length || taskPriorityFilter.length);
 
   let projectHealth: 'GREEN' | 'AMBER' | 'RED' = 'GREEN';
   if (overdueTasksCount >= 3 || (project.endDate && new Date(project.endDate) < todayStart && project.status !== 'COMPLETED')) {
@@ -631,30 +636,31 @@ export default function ProjectDetailPage() {
                 placeholder="Search tasks..."
                 className="flex-1 min-w-[150px] max-w-[220px] rounded-lg border border-border bg-white px-3 py-1.5 text-sm outline-none focus:border-primary transition-all"
               />
-              <Select value={taskStatusFilter} onChange={setTaskStatusFilter} className="w-36" options={[
-                { label: 'All Statuses', value: '' },
-                { label: 'Backlog', value: 'BACKLOG' },
-                { label: 'To Do', value: 'TODO' },
-                { label: 'In Progress', value: 'IN_PROGRESS' },
-                { label: 'In Review', value: 'REVIEW' },
-                { label: 'Approved', value: 'APPROVED' },
-                { label: 'Blocked', value: 'BLOCKED' },
-                { label: 'Done', value: 'COMPLETED' },
-              ]} />
-              <Select value={taskPriorityFilter} onChange={setTaskPriorityFilter} className="w-40" options={[
-                { label: 'All Priorities', value: '' },
-                { label: 'Low', value: 'LOW' },
-                { label: 'Medium', value: 'MEDIUM' },
-                { label: 'High', value: 'HIGH' },
-                { label: 'Urgent', value: 'URGENT' },
-              ]} />
-              <Select value={taskAssigneeFilter} onChange={setTaskAssigneeFilter} className="w-40" options={[
-                { label: 'All Assignees', value: '' },
-                ...taskAssignees.map((a: any) => ({ label: a.name, value: a.id, sublabel: a.designation, avatar: getInitials(a.name) })),
-              ]} />
+              <div className="w-40">
+                <MultiSelect value={taskStatusFilter} onChange={setTaskStatusFilter} placeholder="All Statuses" options={[
+                  { label: 'Backlog', value: 'BACKLOG' },
+                  { label: 'To Do', value: 'TODO' },
+                  { label: 'In Progress', value: 'IN_PROGRESS' },
+                  { label: 'In Review', value: 'REVIEW' },
+                  { label: 'Approved', value: 'APPROVED' },
+                  { label: 'Blocked', value: 'BLOCKED' },
+                  { label: 'Done', value: 'COMPLETED' },
+                ]} />
+              </div>
+              <div className="w-40">
+                <MultiSelect value={taskPriorityFilter} onChange={setTaskPriorityFilter} placeholder="All Priorities" options={[
+                  { label: 'Low', value: 'LOW' },
+                  { label: 'Medium', value: 'MEDIUM' },
+                  { label: 'High', value: 'HIGH' },
+                  { label: 'Urgent', value: 'URGENT' },
+                ]} />
+              </div>
+              <div className="w-44">
+                <MultiSelect value={taskAssigneeFilter} onChange={setTaskAssigneeFilter} placeholder="All Assignees" options={taskAssignees.map((a: any) => ({ value: a.id, label: a.name, image: getInitials(a.name), colorClass: getAvatarColor(a.name) }))} />
+              </div>
               {hasTaskFilters && (
                 <button
-                  onClick={() => { setTaskSearch(''); setTaskStatusFilter(''); setTaskAssigneeFilter(''); setTaskPriorityFilter(''); }}
+                  onClick={() => { setTaskSearch(''); setTaskStatusFilter([]); setTaskAssigneeFilter([]); setTaskPriorityFilter([]); }}
                   className="text-xs text-secondary hover:text-primary underline px-1"
                 >
                   Clear
