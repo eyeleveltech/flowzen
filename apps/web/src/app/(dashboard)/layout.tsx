@@ -65,7 +65,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         className="flex-1 flex flex-col min-w-0 bg-surface w-full"
       >
         <TopNav isMobile={isMobile} />
-        <div className={`px-4 sm:px-6 lg:px-8 py-8 w-full max-w-[1600px] mx-auto overflow-x-hidden ${isMobile ? 'pb-24' : ''}`}>
+        <div className={`px-4 sm:px-6 lg:px-8 py-8 w-full max-w-[1600px] mx-auto ${isMobile ? 'pb-24' : ''}`}>
           {children}
         </div>
       </motion.main>

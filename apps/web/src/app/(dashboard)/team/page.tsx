@@ -65,11 +65,9 @@ const roleLabels: Record<string, string> = {
 };
 
 const statusColors: Record<string, string> = {
-  BACKLOG: 'bg-gray-100 text-gray-600',
   TODO: 'bg-slate-100 text-slate-700',
   IN_PROGRESS: 'bg-blue-50 text-blue-700 border-blue-100',
   REVIEW: 'bg-amber-50 text-amber-700 border-amber-100',
-  BLOCKED: 'bg-red-50 text-red-700 border-red-100',
   COMPLETED: 'bg-emerald-50 text-emerald-700 border-emerald-100',
 };
 

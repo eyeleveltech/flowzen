@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { formatDate, formatShortDate, getInitials, formatRelativeDate, getAvatarColor, getClientDisplayName } from '@/lib/utils';
-import { ArrowLeft, Clock, MessageSquare, MoreHorizontal, CheckCircle2, ChevronRight, Plus, X, Trash2, Users, DollarSign, Briefcase } from 'lucide-react';
+import { ArrowLeft, Clock, MessageSquare, MoreHorizontal, CheckCircle2, ChevronRight, Plus, X, Trash2, Users, DollarSign, Briefcase, Filter } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { TaskDetailDrawer } from '@/components/tasks/task-detail-drawer';
 import { MultiSelect } from '@/components/ui/multi-select';
@@ -43,7 +43,7 @@ const statusColors: Record<string, string> = {
   PLANNING: 'bg-violet-50 text-violet-700', IN_PROGRESS: 'bg-blue-50 text-blue-700',
   REVIEW: 'bg-amber-50 text-amber-700', COMPLETED: 'bg-emerald-50 text-emerald-700',
   ON_HOLD: 'bg-orange-50 text-orange-700', CANCELLED: 'bg-red-50 text-red-700',
-  BACKLOG: 'bg-gray-100 text-gray-500', TODO: 'bg-slate-100 text-slate-600', BLOCKED: 'bg-red-50 text-red-700',
+  TODO: 'bg-slate-100 text-slate-600',
 };
 
 const priorityDots: Record<string, string> = {
@@ -69,6 +69,7 @@ export default function ProjectDetailPage() {
   const [taskAssigneeFilter, setTaskAssigneeFilter] = useState<string[]>([]);
   const [taskPriorityFilter, setTaskPriorityFilter] = useState<string[]>([]);
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
+  const [showTaskFilters, setShowTaskFilters] = useState(false);
 
   // Edit Project States
   const [showEditProject, setShowEditProject] = useState(false);
@@ -633,26 +634,38 @@ export default function ProjectDetailPage() {
 
       {tab === 'tasks' && (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-2 flex-1">
-              <input
-                value={taskSearch}
-                onChange={(e) => setTaskSearch(e.target.value)}
-                placeholder="Search tasks..."
-                className="flex-1 min-w-[150px] max-w-[220px] rounded-lg border border-border bg-white px-3 py-1.5 text-sm outline-none focus:border-primary transition-all"
-              />
-              <div className="w-40">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 flex-1 min-w-[200px] max-w-sm">
+                <input
+                  value={taskSearch}
+                  onChange={(e) => setTaskSearch(e.target.value)}
+                  placeholder="Search tasks..."
+                  className="flex-1 w-full rounded-lg border border-border bg-white px-3 py-1.5 text-sm outline-none focus:border-primary transition-all"
+                />
+                <button 
+                  onClick={() => setShowTaskFilters(!showTaskFilters)} 
+                  className="md:hidden flex items-center justify-center p-1.5 rounded-lg border border-border bg-white text-secondary hover:bg-gray-50 transition-colors"
+                >
+                  <Filter className="h-4 w-4" />
+                </button>
+              </div>
+              <button onClick={openCreateTask} className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1F2937] transition-all shrink-0">
+                <Plus className="h-3.5 w-3.5" /> Add Task
+              </button>
+            </div>
+            
+            <div className={`flex flex-wrap items-center gap-2 ${showTaskFilters ? 'flex' : 'hidden md:flex'}`}>
+              <div className="w-full md:w-40">
                 <MultiSelect value={taskStatusFilter} onChange={setTaskStatusFilter} placeholder="All Statuses" options={[
-                  { label: 'Backlog', value: 'BACKLOG' },
                   { label: 'To Do', value: 'TODO' },
                   { label: 'In Progress', value: 'IN_PROGRESS' },
                   { label: 'In Review', value: 'REVIEW' },
                   { label: 'Approved', value: 'APPROVED' },
-                  { label: 'Blocked', value: 'BLOCKED' },
                   { label: 'Done', value: 'COMPLETED' },
                 ]} />
               </div>
-              <div className="w-40">
+              <div className="w-full md:w-40">
                 <MultiSelect value={taskPriorityFilter} onChange={setTaskPriorityFilter} placeholder="All Priorities" options={[
                   { label: 'Low', value: 'LOW' },
                   { label: 'Medium', value: 'MEDIUM' },
@@ -660,7 +673,7 @@ export default function ProjectDetailPage() {
                   { label: 'Urgent', value: 'URGENT' },
                 ]} />
               </div>
-              <div className="w-44">
+              <div className="w-full md:w-44">
                 <MultiSelect value={taskAssigneeFilter} onChange={setTaskAssigneeFilter} placeholder="All Assignees" options={taskAssignees.map((a: any) => ({ value: a.id, label: a.name, image: getInitials(a.name), colorClass: getAvatarColor(a.name) }))} />
               </div>
               {hasTaskFilters && (
@@ -672,10 +685,7 @@ export default function ProjectDetailPage() {
                 </button>
               )}
             </div>
-            <button onClick={openCreateTask} className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1F2937] transition-all shrink-0">
-              <Plus className="h-3.5 w-3.5" /> Add Task
-            </button>
-          </div>
+            </div>
           {/* Desktop Table View */}
           <div className="hidden md:block rounded-2xl border border-border bg-white overflow-hidden">
             <table className="w-full">

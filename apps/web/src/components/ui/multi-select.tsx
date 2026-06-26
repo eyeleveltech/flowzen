@@ -19,9 +19,10 @@ interface MultiSelectProps {
   // compact = fixed-height trigger with a "N selected" summary (good for filter bars).
   // false = the chip trigger that grows as you add items (good for tall forms).
   compact?: boolean;
+  showSelectAll?: boolean;
 }
 
-export function MultiSelect({ options, value, onChange, placeholder = 'Select...', compact = true }: MultiSelectProps) {
+export function MultiSelect({ options, value, onChange, placeholder = 'Select...', compact = true, showSelectAll = false }: MultiSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -182,8 +183,28 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
             {filteredOptions.length === 0 ? (
               <div className="px-4 py-2.5 text-sm text-secondary">No results found.</div>
             ) : (
-              filteredOptions.map((opt) => {
-                const isSelected = value.includes(opt.value);
+              <>
+                {showSelectAll && (
+                  <button
+                    type="button"
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      if (value.length === options.length) {
+                        onChange([]);
+                      } else {
+                        onChange(options.map(o => o.value));
+                      }
+                    }}
+                    className="flex w-full items-center text-left gap-3 px-4 py-3.5 rounded-xl text-base transition-colors text-primary active:bg-[#F9FAFB] font-semibold border-b border-border/50 mb-1"
+                  >
+                    <div className={`flex items-center justify-center w-5 h-5 rounded border shrink-0 ${value.length === options.length ? 'bg-primary border-primary' : 'border-[#D1D5DB]'}`}>
+                      {value.length === options.length && <Check className="h-3.5 w-3.5 text-white" />}
+                    </div>
+                    <span>Select All</span>
+                  </button>
+                )}
+                {filteredOptions.map((opt) => {
+                  const isSelected = value.includes(opt.value);
                 return (
                   <button
                     type="button"
@@ -202,7 +223,8 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
                     <span className="truncate">{opt.label}</span>
                   </button>
                 );
-              })
+              })}
+              </>
             )}
           </div>
         </Drawer>
@@ -237,8 +259,27 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
           {filteredOptions.length === 0 ? (
             <div className="px-4 py-2.5 text-sm text-secondary">No results found.</div>
           ) : (
-            filteredOptions.map(opt => {
-              const isSelected = value.includes(opt.value);
+            <>
+              {showSelectAll && (
+                <div
+                  className="flex items-center gap-2 mx-1.5 px-3 py-2 rounded-lg text-sm cursor-pointer hover:bg-[#F9FAFB] text-primary font-medium transition-colors border-b border-border/50 mb-1 pb-2"
+                  onClick={(e) => { 
+                    e.stopPropagation(); 
+                    if (value.length === options.length) {
+                      onChange([]);
+                    } else {
+                      onChange(options.map(o => o.value));
+                    }
+                  }}
+                >
+                  <div className={`flex items-center justify-center w-4 h-4 rounded border shrink-0 ${value.length === options.length ? 'bg-primary border-primary' : 'border-[#D1D5DB]'}`}>
+                    {value.length === options.length && <Check className="h-3 w-3 text-white" />}
+                  </div>
+                  <span>Select All</span>
+                </div>
+              )}
+              {filteredOptions.map(opt => {
+                const isSelected = value.includes(opt.value);
               return (
                 <div
                   key={opt.value}
@@ -278,7 +319,8 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
                   <span className="text-[#374151] truncate">{opt.label}</span>
                 </div>
               );
-            })
+            })}
+            </>
           )}
         </div>,
         document.body
