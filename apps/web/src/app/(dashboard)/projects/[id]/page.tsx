@@ -29,6 +29,7 @@ interface ProjectDetail {
     loggedHours?: number | null;
     assignee?: { id: string; name: string; avatar?: string | null } | null;
     assignees?: { id: string; name: string; avatar?: string | null }[];
+    assignedBy?: { id: string; name: string; avatar?: string | null } | null;
     _count?: { subtasks: number; comments: number };
   }[];
   milestones?: { id: string; name: string; dueDate?: string | null; completed: boolean }[];
@@ -60,7 +61,7 @@ export default function ProjectDetailPage() {
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [isEditingTask, setIsEditingTask] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState('');
-  const [taskForm, setTaskForm] = useState({ title: '', description: '', type: 'OTHER', assigneeIds: [] as string[], reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: '', assignedDate: '', loggedHours: 0, driveLink: '' });
+  const [taskForm, setTaskForm] = useState({ title: '', description: '', type: 'OTHER', assigneeIds: [] as string[], reviewerId: '', assignedById: '', priority: 'MEDIUM', status: 'TODO', dueDate: '', assignedDate: '', loggedHours: 0, driveLink: '' });
   const [submittingTask, setSubmittingTask] = useState(false);
   // Task filters within this project's Tasks tab
   const [taskSearch, setTaskSearch] = useState('');
@@ -73,9 +74,9 @@ export default function ProjectDetailPage() {
   const [showEditProject, setShowEditProject] = useState(false);
   const [editForm, setEditForm] = useState<{
     name: string; description: string; clientId: string; ownerId: string;
-    type: string; scope: string; reportingCadence: string; clientApprovalRequired: boolean; tags: string[]; projectNotes: string; folderLink: string;
+    type: string; platform: string; scope: string; reportingCadence: string; clientApprovalRequired: boolean; tags: string[]; projectNotes: string; folderLink: string;
     startDate: string; endDate: string; priority: string; budget: string; status: string; memberIds: string[]; teamIds: string[];
-  }>({ name: '', description: '', clientId: '', ownerId: '', type: 'ONE_TIME', scope: '', reportingCadence: 'NONE', clientApprovalRequired: false, tags: [], projectNotes: '', folderLink: '', startDate: '', endDate: '', priority: 'MEDIUM', budget: '', status: 'PLANNING', memberIds: [], teamIds: [] });
+  }>({ name: '', description: '', clientId: '', ownerId: '', type: 'ONE_TIME', platform: '', scope: '', reportingCadence: 'NONE', clientApprovalRequired: false, tags: [], projectNotes: '', folderLink: '', startDate: '', endDate: '', priority: 'MEDIUM', budget: '', status: 'PLANNING', memberIds: [], teamIds: [] });
   const [submittingEdit, setSubmittingEdit] = useState(false);
   const [clients, setClients] = useState<{id: string, name: string, company?: string | null}[]>([]);
   const [members, setMembers] = useState<{id: string, name: string}[]>([]);
@@ -113,6 +114,7 @@ export default function ProjectDetailPage() {
           projectId: project?.id,
           assigneeIds: taskForm.assigneeIds,
           reviewerId: taskForm.reviewerId || undefined,
+          assignedById: taskForm.assignedById || undefined,
           dueDate: taskForm.dueDate || undefined,
           driveLink: taskForm.driveLink || undefined,
         });
@@ -122,6 +124,7 @@ export default function ProjectDetailPage() {
           projectId: project?.id,
           assigneeIds: taskForm.assigneeIds,
           reviewerId: taskForm.reviewerId || undefined,
+          assignedById: taskForm.assignedById || undefined,
           dueDate: taskForm.dueDate || undefined,
           assignedDate: taskForm.assignedDate || undefined,
           driveLink: taskForm.driveLink || undefined,
@@ -131,7 +134,7 @@ export default function ProjectDetailPage() {
       setShowCreateTask(false);
       setIsEditingTask(false);
       setEditingTaskId('');
-      setTaskForm({ title: '', description: '', type: 'OTHER', assigneeIds: [], reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: new Date().toISOString().split('T')[0], assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '' });
+      setTaskForm({ title: '', description: '', type: 'OTHER', assigneeIds: [], reviewerId: '', assignedById: '', priority: 'MEDIUM', status: 'TODO', dueDate: new Date().toISOString().split('T')[0], assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '' });
       const updated = await api.get<ProjectDetail>(`/projects/${id}`);
       setProject(updated);
       // The global Tasks list + dashboard read cached data — refresh them.
@@ -154,6 +157,7 @@ export default function ProjectDetailPage() {
       status: t.status,
       dueDate: t.dueDate ? new Date(t.dueDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       assignedDate: t.assignedDate ? new Date(t.assignedDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      assignedById: t.assignedBy?.id || '',
       loggedHours: t.loggedHours || 0,
       driveLink: t.driveLink || '',
     });
@@ -163,7 +167,7 @@ export default function ProjectDetailPage() {
   }
 
   function openCreateTask() {
-    setTaskForm({ title: '', description: '', type: 'OTHER', assigneeIds: [], reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: new Date().toISOString().split('T')[0], assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '' });
+    setTaskForm({ title: '', description: '', type: 'OTHER', assigneeIds: [], reviewerId: '', assignedById: '', priority: 'MEDIUM', status: 'TODO', dueDate: new Date().toISOString().split('T')[0], assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '' });
     setIsEditingTask(false);
     setEditingTaskId('');
     setShowCreateTask(true);
@@ -177,6 +181,7 @@ export default function ProjectDetailPage() {
       clientId: project.client?.id || '',
       ownerId: project.owner?.id || '',
       type: project.type || 'ONE_TIME',
+      platform: (project as any).platform || '',
       scope: project.scope || '',
       reportingCadence: project.reportingCadence || 'NONE',
       clientApprovalRequired: project.clientApprovalRequired || false,
@@ -972,6 +977,15 @@ export default function ProjectDetailPage() {
                       options={[{ label: 'No Reviewer', value: '' }, ...allProjectMembers.map((m) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
                     />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Assigned By</label>
+                    <Select
+                      ariaLabel="Assigned By"
+                      value={taskForm.assignedById}
+                      onChange={(val) => setTaskForm({ ...taskForm, assignedById: val })}
+                      options={[{ label: 'Self (Default)', value: '' }, ...allProjectMembers.map((m) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
+                    />
+                  </div>
                   <div className="sm:col-span-2">
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignees</label>
                     <MultiSelect
@@ -1064,7 +1078,7 @@ export default function ProjectDetailPage() {
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
                     <RichTextEditor value={editForm.description} onChange={(val) => setEditForm({ ...editForm, description: val })} placeholder="Project description..." />
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Project Type</label>
                       <Select
@@ -1106,6 +1120,29 @@ export default function ProjectDetailPage() {
                           { label: 'Medium', value: 'MEDIUM' },
                           { label: 'High', value: 'HIGH' },
                           { label: 'Urgent', value: 'CRITICAL' },
+                        ]}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Platform</label>
+                      <Select
+                        ariaLabel="Platform"
+                        value={editForm.platform}
+                        onChange={(val) => setEditForm({ ...editForm, platform: val })}
+                        options={[
+                          { label: 'None', value: '' },
+                          { label: 'Instagram', value: 'INSTAGRAM' },
+                          { label: 'Facebook', value: 'FACEBOOK' },
+                          { label: 'LinkedIn', value: 'LINKEDIN' },
+                          { label: 'X (Twitter)', value: 'X_TWITTER' },
+                          { label: 'TikTok', value: 'TIKTOK' },
+                          { label: 'YouTube', value: 'YOUTUBE' },
+                          { label: 'Google Ads', value: 'GOOGLE_ADS' },
+                          { label: 'Website', value: 'WEBSITE' },
+                          { label: 'Mobile App', value: 'MOBILE_APP' },
+                          { label: 'E-Commerce', value: 'E_COMMERCE' },
+                          { label: 'Cross Platform', value: 'CROSS_PLATFORM' },
+                          { label: 'Other', value: 'OTHER' },
                         ]}
                       />
                     </div>

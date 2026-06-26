@@ -28,6 +28,7 @@ const projectSchema = z.object({
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
   status: z.enum(['PLANNING', 'IN_PROGRESS', 'REVIEW', 'COMPLETED', 'ON_HOLD', 'CANCELLED']).optional(),
   budget: z.number().optional(),
+  platform: z.enum(['INSTAGRAM', 'FACEBOOK', 'LINKEDIN', 'X_TWITTER', 'TIKTOK', 'YOUTUBE', 'GOOGLE_ADS', 'WEBSITE', 'MOBILE_APP', 'E_COMMERCE', 'CROSS_PLATFORM', 'OTHER']).optional(),
   memberIds: z.array(z.string()).optional(),
 });
 

@@ -2,11 +2,12 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, FileText, Download, Copy, Ban, Search, Eye } from 'lucide-react';
+import { Plus, FileText, Download, Copy, Ban, Search, Eye, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Select } from '@/components/ui/select';
 import toast from 'react-hot-toast';
+import { useConfirmStore } from '@/stores';
 import { QuoteFormModal } from './components/QuoteFormModal';
 
 const STATUS_STYLES: Record<string, string> = {
@@ -21,6 +22,7 @@ const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
 
 export default function QuotationsPage() {
   const queryClient = useQueryClient();
+  const confirm = useConfirmStore((s) => s.confirm);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -44,6 +46,12 @@ export default function QuotationsPage() {
     mutationFn: ({ id, status }: { id: string; status: string }) => api.patch(`/crm/quotes/${id}/status`, { status }),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['quotes'] }); toast.success('Status updated'); },
     onError: (e: any) => toast.error(e.message || 'Failed'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/crm/quotes/${id}`),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['quotes'] }); toast.success('Deleted successfully'); },
+    onError: (e: any) => toast.error(e.message || 'Failed to delete'),
   });
 
   async function generatePdf(id: string) {
@@ -135,8 +143,9 @@ export default function QuotationsPage() {
                       <button title="Generate / Download PDF" onClick={() => q.pdfUrl ? window.open(`${API_BASE}${q.pdfUrl}`, '_blank') : generatePdf(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Download className="h-4 w-4" /></button>
                       <button title="Duplicate" onClick={() => duplicate(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Copy className="h-4 w-4" /></button>
                       {q.status !== 'CANCELLED' && (
-                        <button title="Cancel" onClick={() => { if (confirm('Cancel this document?')) statusMutation.mutate({ id: q.id, status: 'CANCELLED' }); }} className="p-1.5 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors"><Ban className="h-4 w-4" /></button>
+                        <button title="Cancel" onClick={async () => { if (await confirm({ title: 'Cancel Document', message: 'Are you sure you want to cancel this document?', confirmText: 'Cancel Document', cancelText: 'Keep', variant: 'warning' })) statusMutation.mutate({ id: q.id, status: 'CANCELLED' }); }} className="p-1.5 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors"><Ban className="h-4 w-4" /></button>
                       )}
+                      <button title="Delete" onClick={async () => { if (await confirm({ title: 'Delete Document', message: 'Are you sure you want to delete this document? This cannot be undone.', confirmText: 'Delete', cancelText: 'Cancel', variant: 'danger' })) deleteMutation.mutate(q.id); }} className="p-1.5 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </td>
                 </tr>

@@ -25,6 +25,7 @@ const taskSchema = z.object({
   status: z.enum(['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'APPROVED', 'BLOCKED', 'COMPLETED']).optional(),
   dueDate: z.string().optional().nullable(),
   assignedDate: z.string().optional().nullable(),
+  assignedById: z.string().optional().nullable(),
   parentId: z.string().optional().nullable(),
   loggedHours: z.number().optional().nullable(),
   estimatedHours: z.number().optional().nullable(),
@@ -35,7 +36,7 @@ const taskSchema = z.object({
 taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const { search, status, priority, projectId, assigneeId, type, clientId, filter, page = '1', limit = '50' } = req.query;
+    const { search, status, priority, projectId, assigneeId, type, clientId, filter, teamId, sort, page = '1', limit = '50' } = req.query;
 
     const projectFilter: any = { client: { organizationId: orgId } };
     if (clientId) projectFilter.clientId = whereIn(clientId);
@@ -67,6 +68,17 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
       // Any of the selected assignees (primary or multi-assignee).
       if (assigneeIds) andConditions.push({ OR: assigneeIds.flatMap((uid) => assigneeMatch(uid).OR) });
     }
+    if (teamId) {
+      const teamIds = toList(teamId);
+      if (teamIds) {
+        andConditions.push({
+          OR: [
+            { assignee: { teamId: { in: teamIds } } },
+            { assignees: { some: { teamId: { in: teamIds } } } }
+          ]
+        });
+      }
+    }
     if (search) {
       andConditions.push({
         OR: [
@@ -85,10 +97,17 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
           project: { select: { id: true, name: true, color: true } },
           assignee: { select: { id: true, name: true, avatar: true } },
           assignees: { select: { id: true, name: true, avatar: true } },
+          assignedBy: { select: { id: true, name: true, avatar: true } },
           reviewer: { select: { id: true, name: true, avatar: true } },
           _count: { select: { subtasks: true, comments: true, checklist: true } },
         },
-        orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
+        orderBy: sort === 'dueDate_asc' ? [{ dueDate: 'asc' }]
+               : sort === 'dueDate_desc' ? [{ dueDate: 'desc' }]
+               : sort === 'createdAt_asc' ? [{ createdAt: 'asc' }]
+               : sort === 'createdAt_desc' ? [{ createdAt: 'desc' }]
+               : sort === 'updatedAt_asc' ? [{ updatedAt: 'asc' }]
+               : sort === 'updatedAt_desc' ? [{ updatedAt: 'desc' }]
+               : [{ order: 'asc' }, { createdAt: 'desc' }],
         skip,
         take: parseInt(limit as string),
       }),
@@ -107,9 +126,11 @@ taskRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
     const task = await prisma.task.findFirst({
       where: { id: (req.params.id as string), project: { client: { organizationId: req.user!.organizationId } } },
       include: {
-        project: { select: { id: true, name: true, color: true } },
+        project: { select: { id: true, name: true, color: true, client: { select: { id: true, name: true, company: true } } } },
+        client: { select: { id: true, name: true, company: true } },
         assignee: { select: { id: true, name: true, avatar: true, email: true } },
         assignees: { select: { id: true, name: true, avatar: true, email: true } },
+        assignedBy: { select: { id: true, name: true, avatar: true, email: true } },
         reviewer: { select: { id: true, name: true, avatar: true, email: true } },
         subtasks: {
           include: { assignee: { select: { id: true, name: true, avatar: true } } },
@@ -168,7 +189,7 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
       }
     }
 
-    const { title, description, type, projectId, assigneeId, assigneeIds, reviewerId, priority, status, dueDate, assignedDate, parentId, estimatedHours, driveLink } = req.body;
+    const { title, description, type, projectId, assigneeId, assigneeIds, reviewerId, assignedById, priority, status, dueDate, assignedDate, parentId, estimatedHours, driveLink } = req.body;
 
     // Multi-assignee: the first of the list is the "primary" assignee (kept in
     // assigneeId for back-compat); the full set lives in the assignees relation.
@@ -184,6 +205,7 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
         assigneeId: primaryAssigneeId,
         ...(ids.length ? { assignees: { connect: ids.map((id) => ({ id })) } } : {}),
         reviewerId,
+        assignedById: assignedById || req.user!.userId,
         priority: priority || 'MEDIUM',
         status: status || 'TODO',
         dueDate: dueDate ? new Date(dueDate) : null,
@@ -197,6 +219,7 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
         project: { select: { id: true, name: true } },
         assignee: { select: { id: true, name: true, avatar: true } },
         assignees: { select: { id: true, name: true, avatar: true } },
+        assignedBy: { select: { id: true, name: true } },
         reviewer: { select: { id: true, name: true, avatar: true } },
       },
     });
@@ -214,9 +237,10 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
     });
 
     // Notify every assignee (except the creator).
+    const assignerName = task.assignedBy?.name || 'Someone';
     await NotificationService.sendMany(
       ids,
-      { type: 'TASK_ASSIGNED', message: `You were assigned to "${task.title}"`, metadata: { taskId: task.id, projectId: task.projectId } },
+      { type: 'TASK_ASSIGNED', message: `${assignerName} assigned you to "${task.title}"`, metadata: { taskId: task.id, projectId: task.projectId } },
       req.user!.userId,
     );
 
@@ -329,6 +353,18 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
         await NotificationService.sendMany(
           [ownerId, task.reviewerId],
           { type: 'TASK_COMPLETED', message: `"${task.title}" was completed`, metadata: { taskId: task.id, projectId: task.projectId } },
+          req.user!.userId,
+        );
+      }
+
+      // Notify the project owner + reviewer when work is ready for review.
+      if (task.status === 'REVIEW' && existing.status !== 'REVIEW') {
+        const ownerId = task.projectId
+          ? (await prisma.project.findUnique({ where: { id: task.projectId }, select: { ownerId: true } }))?.ownerId
+          : null;
+        await NotificationService.sendMany(
+          [ownerId, task.reviewerId],
+          { type: 'TASK_REVIEW', message: `"${task.title}" is ready for review`, metadata: { taskId: task.id, projectId: task.projectId } },
           req.user!.userId,
         );
       }

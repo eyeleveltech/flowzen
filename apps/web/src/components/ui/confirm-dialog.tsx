@@ -88,7 +88,7 @@ export function ConfirmDialog() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onCancel}
-            className="absolute inset-0 bg-[#000000]/30 backdrop-blur-xs"
+            className="absolute inset-0 bg-black/30 backdrop-blur-xs"
           />
 
           {/* Modal Container */}

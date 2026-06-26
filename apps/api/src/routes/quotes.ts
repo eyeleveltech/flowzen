@@ -42,6 +42,7 @@ const quoteSchema = z.object({
   projectStartDate: z.string().optional(),
   deliveryDate: z.string().optional(),
   projectNotes: z.string().optional(),
+  scope: z.string().optional(),
   termsConditions: z.string().min(1, 'Terms & conditions are required'),
   lineItems: z.array(lineItemSchema).min(1, 'At least one line item is required'),
 });
@@ -74,6 +75,7 @@ function buildDocData(body: z.infer<typeof quoteSchema>, client: any, orgState: 
     projectStartDate: body.projectStartDate ? new Date(body.projectStartDate) : null,
     deliveryDate: body.deliveryDate ? new Date(body.deliveryDate) : null,
     projectNotes: body.projectNotes || null,
+    scope: body.scope || null,
     termsConditions: body.termsConditions,
     untaxedAmount: fin.untaxedAmount,
     totalDiscount: fin.totalDiscount,
@@ -195,7 +197,7 @@ quoteRouter.patch('/:id', validate(quoteSchema.partial().extend({ lineItems: z.a
     if (body.lineItems) fin = computeQuoteFinancials(body.lineItems);
 
     const data: any = {};
-    const fields = ['documentType', 'paymentTerms', 'customerRef', 'salespersonId', 'salesTeam', 'onlineSignature', 'onlinePayment', 'tags', 'paymentMethod', 'clientGst', 'projectNotes', 'termsConditions', 'contactPerson', 'clientEmail', 'clientPhone', 'billingAddress'];
+    const fields = ['documentType', 'paymentTerms', 'customerRef', 'salespersonId', 'salesTeam', 'onlineSignature', 'onlinePayment', 'tags', 'paymentMethod', 'clientGst', 'projectNotes', 'scope', 'termsConditions', 'contactPerson', 'clientEmail', 'clientPhone', 'billingAddress'];
     for (const f of fields) if (body[f] !== undefined) data[f] = body[f];
     for (const d of ['documentDate', 'expirationDate', 'projectStartDate', 'deliveryDate']) if (body[d] !== undefined) data[d] = body[d] ? new Date(body[d]) : null;
 
@@ -278,6 +280,29 @@ quoteRouter.post('/:id/generate-pdf', async (req: AuthRequest, res: Response, ne
     res.json({ pdfUrl });
   } catch (error: any) {
     res.status(500).json({ error: `PDF generation failed: ${error?.message || 'unknown error'}` });
+  }
+});
+
+// DELETE /api/crm/quotes/:id
+quoteRouter.delete('/:id', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const id = req.params.id as string;
+    
+    const existing = await prisma.quoteDocument.findFirst({ where: { id, organizationId: orgId } });
+    if (!existing) {
+      res.status(404).json({ error: 'Quotation not found' });
+      return;
+    }
+    
+    // Optional: Only allow deleting DRAFT or CANCELLED quotes?
+    // Let's just allow deletion.
+    await prisma.quoteDocument.delete({ where: { id } });
+    emitToOrganization(req.app.get('io'), orgId, 'quote:deleted', { id });
+    
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
   }
 });
 

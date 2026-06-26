@@ -18,7 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import toast from 'react-hot-toast';
 import { useAuthStore, useConfirmStore } from '@/stores';
-import { useTasks, useProjects, useMembers } from '@/hooks/useQueries';
+import { useTasks, useProjects, useMembers, useTeams } from '@/hooks/useQueries';
 import { useQueryClient } from '@tanstack/react-query';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { TaskDetailDrawer } from '@/components/tasks/task-detail-drawer';
@@ -31,6 +31,7 @@ interface Task {
   project?: { id: string; name: string };
   assignee?: { id: string; name: string; avatar?: string | null } | null;
   assignees?: { id: string; name: string; avatar?: string | null }[];
+  assignedBy?: { id: string; name: string; avatar?: string | null } | null;
   reviewer?: { id: string; name: string; avatar?: string | null } | null;
   _count?: { subtasks: number; comments: number };
   comments?: { id: string; content: string; createdAt: string; author: { id: string; name: string; avatar?: string | null } }[];
@@ -43,7 +44,7 @@ const statusColors: Record<string, string> = {
   BACKLOG: 'bg-gray-100 text-gray-500', TODO: 'bg-slate-100 text-slate-600',
   IN_PROGRESS: 'bg-blue-50 text-blue-700', REVIEW: 'bg-amber-50 text-amber-700',
   APPROVED: 'bg-teal-50 text-teal-700',
-  BLOCKED: 'bg-red-50 text-red-700', COMPLETED: 'bg-emerald-50 text-emerald-700',
+  BLOCKED: 'bg-red-50 text-red-700', ON_HOLD: 'bg-purple-50 text-purple-700', COMPLETED: 'bg-emerald-50 text-emerald-700',
 };
 
 const priorityDots: Record<string, string> = {
@@ -72,7 +73,7 @@ function AssigneeAvatars({ task, size = 26 }: { task: { assignees?: AssigneePers
         </div>
       ))}
       {extra > 0 && (
-        <div style={{ height: size, width: size }} className="flex items-center justify-center rounded-full text-[10px] font-medium ring-2 ring-white bg-[#F3F4F6] text-[#6B7280]">+{extra}</div>
+        <div style={{ height: size, width: size }} className="flex items-center justify-center rounded-full text-[10px] font-medium ring-2 ring-white bg-[#F3F4F6] text-secondary">+{extra}</div>
       )}
     </div>
   );
@@ -86,6 +87,7 @@ const taskSchema = z.object({
   assigneeId: z.string().optional(),
   assigneeIds: z.array(z.string()).optional(),
   reviewerId: z.string().optional(),
+  assignedById: z.string().optional(),
   priority: z.string(),
   status: z.string(),
   dueDate: z.string().optional(),
@@ -97,14 +99,14 @@ type TaskFormValues = z.infer<typeof taskSchema>;
 
 // Fresh blank task form values (function so assignedDate is always "today").
 const blankTaskValues = (): TaskFormValues => ({
-  title: '', description: '', type: 'OTHER', projectId: '', assigneeId: '', assigneeIds: [],
+  title: '', description: '', type: 'OTHER', projectId: '', assigneeId: '', assigneeIds: [], assignedById: '',
   reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: '',
   assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '',
 });
 
-const kanbanCols = ['TODO', 'IN_PROGRESS', 'REVIEW', 'APPROVED', 'COMPLETED'];
+const kanbanCols = ['TODO', 'IN_PROGRESS', 'REVIEW', 'APPROVED', 'ON_HOLD', 'COMPLETED'];
 const kanbanLabels: Record<string, string> = {
-  TODO: 'To Do', IN_PROGRESS: 'In Progress', REVIEW: 'In Review', APPROVED: 'Approved', COMPLETED: 'Done',
+  TODO: 'To Do', IN_PROGRESS: 'In Progress', REVIEW: 'In Review', APPROVED: 'Approved', ON_HOLD: 'On Hold', COMPLETED: 'Done',
 };
 
 function TasksContent() {
@@ -118,6 +120,8 @@ function TasksContent() {
   const [projectFilter, setProjectFilter] = useState<string[]>([]);
   const [assigneeFilter, setAssigneeFilter] = useState<string[]>(user?.id ? [user.id] : []);
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
+  const [teamFilter, setTeamFilter] = useState<string[]>([]);
+  const [sort, setSort] = useState<string>('');
   const filterHydrated = useRef(false);
 
   useEffect(() => {
@@ -147,12 +151,13 @@ function TasksContent() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage
-  } = useTasks(search, statusFilter.join(','), projectFilter.join(','), assigneeFilter.join(','), priorityFilter.join(','), searchParams.get('filter'));
+  } = useTasks(search, statusFilter.join(','), projectFilter.join(','), assigneeFilter.join(','), priorityFilter.join(','), teamFilter.join(','), searchParams.get('filter'), sort);
 
   const tasks = useMemo(() => data?.pages.flatMap((page) => page.tasks) || [], [data]);
   const { data: projectsData } = useProjects();
   const projects = useMemo(() => projectsData?.pages.flatMap((page) => page.projects) || [], [projectsData]);
   const { data: members = [] } = useMembers();
+  const { data: teams = [] } = useTeams();
   const loading = isLoadingTasks;
 
   const [boardTasks, setBoardTasks] = useState<Task[]>([]);
@@ -161,16 +166,22 @@ function TasksContent() {
   }, [tasks]);
 
   useEffect(() => {
-    if (taskIdParam && tasks.length > 0) {
+    if (taskIdParam) {
       const t = tasks.find((x) => x.id === taskIdParam);
-      if (t && t.id !== selectedTask?.id) {
-        setSelectedTaskState(t);
-        // Fetch full task details (including comments)
-        api.get<Task>(`/tasks/${t.id}`).then((fullTask) => {
-          setSelectedTaskState(prev => prev?.id === fullTask.id ? fullTask : prev);
+      if (t) {
+        if (t.id !== selectedTask?.id) {
+          setSelectedTaskState(t);
+          api.get<Task>(`/tasks/${t.id}`).then((fullTask) => {
+            setSelectedTaskState(prev => prev?.id === fullTask.id ? fullTask : prev);
+          }).catch(() => {});
+        }
+      } else if (!selectedTask || selectedTask.id !== taskIdParam) {
+        // Not in the current list (e.g. from a notification), fetch it directly
+        api.get<Task>(`/tasks/${taskIdParam}`).then((fullTask) => {
+          setSelectedTaskState(fullTask);
         }).catch(() => {});
       }
-    } else if (!taskIdParam && selectedTask) {
+    } else {
       setSelectedTaskState(null);
     }
   }, [taskIdParam, tasks, selectedTask?.id]);
@@ -272,6 +283,7 @@ function TasksContent() {
         reviewerId: data.reviewerId || undefined,
         dueDate: data.dueDate || undefined,
         assignedDate: data.assignedDate || undefined,
+        assignedById: data.assignedById || undefined,
         driveLink: data.driveLink || undefined,
       });
       toast.success('Task created successfully');
@@ -291,6 +303,7 @@ function TasksContent() {
         reviewerId: data.reviewerId || undefined,
         dueDate: data.dueDate || undefined,
         assignedDate: data.assignedDate || undefined,
+        assignedById: data.assignedById || undefined,
         driveLink: data.driveLink || undefined,
       });
       toast.success('Task updated successfully');
@@ -315,6 +328,7 @@ function TasksContent() {
       status: t.status,
       dueDate: t.dueDate ? new Date(t.dueDate).toISOString().split('T')[0] : '',
       assignedDate: t.assignedDate ? new Date(t.assignedDate).toISOString().split('T')[0] : '',
+      assignedById: t.assignedBy?.id || '',
       loggedHours: t.loggedHours || 0,
       driveLink: t.driveLink || '',
     });
@@ -397,13 +411,15 @@ function TasksContent() {
           <p className="text-sm text-secondary mt-1">{tasks.length} tasks</p>
         </div>
         <div className="flex items-center gap-3">
-          {(search || projectFilter.length || statusFilter.length || priorityFilter.length || (user?.role !== 'TEAM_MEMBER' && !(assigneeFilter.length === 1 && assigneeFilter[0] === user?.id)) || searchParams.get('filter')) && (
+          {(search || projectFilter.length || statusFilter.length || priorityFilter.length || teamFilter.length || sort || (user?.role !== 'TEAM_MEMBER' && !(assigneeFilter.length === 1 && assigneeFilter[0] === user?.id)) || searchParams.get('filter')) && (
             <button
               onClick={() => {
                 setSearch('');
                 setProjectFilter([]);
                 setStatusFilter([]);
                 setPriorityFilter([]);
+                setTeamFilter([]);
+                setSort('');
                 if (user?.role !== 'TEAM_MEMBER') setAssigneeFilter(user?.id ? [user.id] : []);
                 router.replace('/tasks', { scroll: false });
               }}
@@ -412,6 +428,10 @@ function TasksContent() {
               <X className="h-4 w-4" /> Clear Filters
             </button>
           )}
+          <div className="flex rounded-xl border border-border p-1 bg-white shadow-sm">
+            <button onClick={() => setView('board')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${view === 'board' ? 'bg-primary text-white' : 'text-secondary hover:bg-gray-100'}`}>Board</button>
+            <button onClick={() => setView('list')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${view === 'list' ? 'bg-primary text-white' : 'text-secondary hover:bg-gray-100'}`}>List</button>
+          </div>
           <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all">
             <Plus className="h-4 w-4" /> New Task
           </button>
@@ -443,6 +463,7 @@ function TasksContent() {
               { label: 'In Review', value: 'REVIEW' },
               { label: 'Approved', value: 'APPROVED' },
               { label: 'Blocked', value: 'BLOCKED' },
+              { label: 'On Hold', value: 'ON_HOLD' },
               { label: 'Done', value: 'COMPLETED' },
             ]}
           />
@@ -460,6 +481,14 @@ function TasksContent() {
             ]}
           />
         </div>
+        <div className="w-48">
+          <MultiSelect
+            value={teamFilter}
+            onChange={setTeamFilter}
+            placeholder="All Departments"
+            options={teams.map((t: any) => ({ label: t.name, value: t.id }))}
+          />
+        </div>
         {user?.role !== 'TEAM_MEMBER' && (
           <div className="w-48">
             <MultiSelect
@@ -470,10 +499,23 @@ function TasksContent() {
             />
           </div>
         )}
-        <div className="flex rounded-xl border border-border p-1">
-          <button onClick={() => setView('board')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${view === 'board' ? 'bg-primary text-white' : 'text-secondary'}`}>Board</button>
-          <button onClick={() => setView('list')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${view === 'list' ? 'bg-primary text-white' : 'text-secondary'}`}>List</button>
-        </div>
+        {view === 'list' && (
+          <div className="w-48">
+            <Select
+              ariaLabel="Sort Tasks"
+              value={sort}
+              onChange={setSort}
+              options={[
+                { label: 'Default Sort', value: '' },
+                { label: 'Created: Newest', value: 'createdAt_desc' },
+                { label: 'Created: Oldest', value: 'createdAt_asc' },
+                { label: 'Due Date: Earliest', value: 'dueDate_asc' },
+                { label: 'Due Date: Latest', value: 'dueDate_desc' },
+                { label: 'Updated: Newest', value: 'updatedAt_desc' },
+              ]}
+            />
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -546,7 +588,7 @@ function TasksContent() {
                                             <MessageSquare className="h-3 w-3" /> {t._count?.comments}
                                           </span>
                                         )}
-                                        <AssigneeAvatars task={t} size={26} />
+                                        <span className="text-[11px] font-medium text-[#4B5563]">{assigneeLabel(t)}</span>
                                         {(t.loggedHours ?? 0) > 0 && (
                                           <span className="text-[10px] text-secondary bg-[#F3F4F6] px-1.5 py-0.5 rounded-md font-medium tabular-nums border border-border">
                                             ⏱ {t.loggedHours}h
@@ -647,7 +689,7 @@ function TasksContent() {
                           {t.status.replace('_', ' ')}
                         </span>
                         <div className="flex items-center gap-2">
-                          <AssigneeAvatars task={t} size={24} />
+                          <span className="text-[11px] font-medium text-[#4B5563]">{assigneeLabel(t)}</span>
                         </div>
                       </div>
                     </div>
@@ -787,6 +829,17 @@ function TasksContent() {
                       />
                     )} />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Assigned By</label>
+                    <Controller name="assignedById" control={control} render={({ field }) => (
+                      <Select
+                        ariaLabel="Assigned By"
+                        value={field.value || ''}
+                        onChange={field.onChange}
+                        options={[{ label: 'Self (Default)', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
+                      />
+                    )} />
+                  </div>
                   <div className="sm:col-span-2">
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignees</label>
                     <Controller name="assigneeIds" control={control} render={({ field }) => (
@@ -852,6 +905,12 @@ function TasksContent() {
                     <span className="text-sm text-secondary">Created</span>
                     <span className="text-sm font-medium text-primary">{formatDate(selectedTask.createdAt)}</span>
                   </div>
+                  {selectedTask.assignedBy && (
+                    <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
+                      <span className="text-sm text-secondary">Assigned By</span>
+                      <span className="text-sm font-medium text-primary">{selectedTask.assignedBy.name}</span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
                     <span className="text-sm text-secondary">Due Date</span>
                     <span className="text-sm font-medium text-primary">{formatDate(selectedTask.dueDate)}</span>
@@ -1032,6 +1091,17 @@ function TasksContent() {
                   value={field.value || ''}
                   onChange={field.onChange}
                   options={[{ label: 'No Reviewer', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
+                />
+              )} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-[#374151] mb-1.5">Assigned By</label>
+              <Controller name="assignedById" control={control} render={({ field }) => (
+                <Select
+                  ariaLabel="Assigned By"
+                  value={field.value || ''}
+                  onChange={field.onChange}
+                  options={[{ label: 'Self (Default)', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
                 />
               )} />
             </div>

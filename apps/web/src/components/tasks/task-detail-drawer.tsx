@@ -11,14 +11,14 @@ import { useConfirmStore } from '@/stores';
 const titleCase = (s?: string | null) =>
   s ? s.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '—';
 
-const kanbanCols = ['TODO', 'IN_PROGRESS', 'REVIEW', 'APPROVED', 'COMPLETED'];
+const kanbanCols = ['TODO', 'IN_PROGRESS', 'REVIEW', 'APPROVED', 'ON_HOLD', 'COMPLETED'];
 const kanbanLabels: Record<string, string> = {
-  TODO: 'To Do', IN_PROGRESS: 'In Progress', REVIEW: 'In Review', APPROVED: 'Approved', COMPLETED: 'Done',
+  TODO: 'To Do', IN_PROGRESS: 'In Progress', REVIEW: 'In Review', APPROVED: 'Approved', ON_HOLD: 'On Hold', COMPLETED: 'Done',
 };
 const statusColors: Record<string, string> = {
   BACKLOG: 'bg-gray-100 text-gray-500', TODO: 'bg-slate-100 text-slate-600',
   IN_PROGRESS: 'bg-blue-50 text-blue-700', REVIEW: 'bg-amber-50 text-amber-700',
-  APPROVED: 'bg-teal-50 text-teal-700', BLOCKED: 'bg-red-50 text-red-700', COMPLETED: 'bg-emerald-50 text-emerald-700',
+  APPROVED: 'bg-teal-50 text-teal-700', BLOCKED: 'bg-red-50 text-red-700', ON_HOLD: 'bg-purple-50 text-purple-700', COMPLETED: 'bg-emerald-50 text-emerald-700',
 };
 const priorityDots: Record<string, string> = {
   LOW: 'bg-gray-300', MEDIUM: 'bg-blue-400', HIGH: 'bg-orange-500', URGENT: 'bg-red-500',
@@ -161,9 +161,11 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
             {task.description && <div className="text-sm text-secondary mb-4 prose prose-sm prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: task.description }} />}
 
             <div className="space-y-1">
+              <Row label="Client" value={task.client?.company || task.project?.client?.company || task.client?.name || task.project?.client?.name} />
               <Row label="Project" value={task.project?.name} />
               <Row label="Task Type" value={titleCase(task.type)} />
               <Row label="Assignees" value={(task.assignees?.length ? task.assignees.map((a: any) => a.name) : (task.assignee ? [task.assignee.name] : [])).join(', ') || 'Unassigned'} highlight />
+              {task.assignedBy && <Row label="Assigned By" value={task.assignedBy.name} />}
               {task.reviewer && <Row label="Reviewer" value={task.reviewer.name} />}
               <Row label="Priority" value={titleCase(task.priority)} />
               <Row label="Assigned Date" value={formatDate(task.assignedDate)} />

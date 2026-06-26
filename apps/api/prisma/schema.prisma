@@ -62,6 +62,21 @@ enum ProjectPriority {
   CRITICAL
 }
 
+enum ProjectPlatform {
+  INSTAGRAM
+  FACEBOOK
+  LINKEDIN
+  X_TWITTER
+  TIKTOK
+  YOUTUBE
+  GOOGLE_ADS
+  WEBSITE
+  MOBILE_APP
+  E_COMMERCE
+  CROSS_PLATFORM
+  OTHER
+}
+
 enum TaskStatus {
   BACKLOG
   TODO
@@ -69,6 +84,7 @@ enum TaskStatus {
   REVIEW
   APPROVED
   BLOCKED
+  ON_HOLD
   COMPLETED
 }
 
@@ -182,6 +198,7 @@ enum LostReason {
 enum NotificationType {
   TASK_ASSIGNED
   TASK_COMPLETED
+  TASK_REVIEW
   DEADLINE_APPROACHING
   COMMENT_ADDED
   PROJECT_STATUS_CHANGED
@@ -267,6 +284,7 @@ model User {
   ownedProjects  Project[]       @relation("ProjectOwner")
   assignedTasks  Task[]          @relation("TaskAssignee")
   assignedTasksMulti Task[]      @relation("TaskAssignees")
+  assignedTasksBy Task[]         @relation("TaskAssigner")
   reviewedTasks  Task[]          @relation("TaskReviewer")
   apiKeys        ApiKey[]
   comments       Comment[]
@@ -364,6 +382,7 @@ model Project {
   ownerId     String
   templateId  String?
   color       String          @default("#3B82F6")
+  platform    ProjectPlatform?
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
@@ -440,6 +459,7 @@ model Task {
   clientId    String?
   assigneeId  String?
   reviewerId  String?
+  assignedById String?
   parentId    String?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
@@ -454,6 +474,7 @@ model Task {
   client     Client?         @relation("ClientTasks", fields: [clientId], references: [id], onDelete: Cascade)
   assignee   User?           @relation("TaskAssignee", fields: [assigneeId], references: [id])
   assignees  User[]          @relation("TaskAssignees")
+  assignedBy User?           @relation("TaskAssigner", fields: [assignedById], references: [id])
   reviewer   User?           @relation("TaskReviewer", fields: [reviewerId], references: [id])
   parent     Task?           @relation("SubTasks", fields: [parentId], references: [id])
   subtasks   Task[]          @relation("SubTasks")
@@ -758,6 +779,7 @@ model QuoteDocument {
   projectStartDate DateTime?
   deliveryDate     DateTime?
   projectNotes     String?      @db.Text
+  scope            String?      @db.Text
   termsConditions  String       @db.Text
   status           QuoteStatus  @default(DRAFT)
   // Snapshot of computed totals at save time (server-authoritative).

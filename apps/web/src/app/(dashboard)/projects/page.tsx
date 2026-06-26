@@ -76,7 +76,7 @@ function ProjectsContent() {
     defaultValues: {
       name: '', description: '', clientId: '', ownerId: '',
       type: 'ONE_TIME', scope: '', reportingCadence: 'NONE', clientApprovalRequired: false, tags: [], projectNotes: '', folderLink: '',
-      startDate: '', endDate: '', priority: 'MEDIUM', budget: '', status: 'PLANNING', memberIds: [], teamIds: [],
+      startDate: '', endDate: '', priority: 'MEDIUM', budget: '', status: 'PLANNING', platform: undefined, memberIds: [], teamIds: [],
     }
   });
   const formValues = watch();
@@ -468,7 +468,7 @@ function ProjectsContent() {
                 
                 {templates.length > 0 && (
                   <div className="mb-2 pb-4 border-b border-[#F3F4F6]">
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5 flex items-center gap-2">
+                    <label className="flex text-sm font-medium text-[#374151] mb-1.5 items-center gap-2">
                       Start from a Template <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">New</span>
                     </label>
                     <Select
@@ -501,7 +501,7 @@ function ProjectsContent() {
                     <RichTextEditor value={formValues.description || ''} onChange={(val) => setValue('description', val, { shouldValidate: true })} placeholder="Project description..." />
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Project Type</label>
                       <Select
@@ -540,6 +540,28 @@ function ProjectsContent() {
                           { label: 'Medium', value: 'MEDIUM' },
                           { label: 'High', value: 'HIGH' },
                           { label: 'Urgent', value: 'CRITICAL' },
+                        ]}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Platform</label>
+                      <Select
+                        value={formValues.platform || ''}
+                        onChange={(val) => setValue('platform', val as any)}
+                        options={[
+                          { label: 'None', value: '' },
+                          { label: 'Instagram', value: 'INSTAGRAM' },
+                          { label: 'Facebook', value: 'FACEBOOK' },
+                          { label: 'LinkedIn', value: 'LINKEDIN' },
+                          { label: 'X (Twitter)', value: 'X_TWITTER' },
+                          { label: 'TikTok', value: 'TIKTOK' },
+                          { label: 'YouTube', value: 'YOUTUBE' },
+                          { label: 'Google Ads', value: 'GOOGLE_ADS' },
+                          { label: 'Website', value: 'WEBSITE' },
+                          { label: 'Mobile App', value: 'MOBILE_APP' },
+                          { label: 'E-Commerce', value: 'E_COMMERCE' },
+                          { label: 'Cross Platform', value: 'CROSS_PLATFORM' },
+                          { label: 'Other', value: 'OTHER' },
                         ]}
                       />
                     </div>

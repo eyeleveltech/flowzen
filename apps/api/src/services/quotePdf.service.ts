@@ -34,11 +34,7 @@ function buildHtml(quote: any, org: any, logoUri: string): string {
   const c = (org?.settings as any)?.company || {};
   const companyName = c.name || org?.name || 'EyeLevel Growth Studio';
   const title = quote.documentType === 'QUOTATION' ? 'QUOTATION' : 'PROFORMA INVOICE';
-  const taxRows = [
-    Number(quote.cgst) > 0 ? `<tr><td>CGST</td><td class="r">${inr(quote.cgst)}</td></tr>` : '',
-    Number(quote.sgst) > 0 ? `<tr><td>SGST</td><td class="r">${inr(quote.sgst)}</td></tr>` : '',
-    Number(quote.igst) > 0 ? `<tr><td>IGST</td><td class="r">${inr(quote.igst)}</td></tr>` : '',
-  ].join('');
+  const taxRows = Number(quote.totalTax) > 0 ? `<tr><td>Total Tax</td><td class="r">${inr(quote.totalTax)}</td></tr>` : '';
   const hasRcm = (quote.lineItems || []).some((li: any) => resolveTaxType(li.taxType).mode === 'RC');
 
   const lines = (quote.lineItems || []).map((li: any) => `
@@ -81,6 +77,10 @@ function buildHtml(quote: any, org: any, logoUri: string): string {
     .words { margin-top: 8px; font-style: italic; color: #374151; font-size: 11px; }
     .tc { margin-top: 24px; } .tc h3, .bank h3, .sign h3 { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: ${BRAND}; margin: 0 0 6px; }
     .tc p { white-space: pre-wrap; color: #374151; font-size: 11px; line-height: 1.55; }
+    .scope-block { margin-top: 24px; color: #374151; font-size: 11px; line-height: 1.55; }
+    .scope-block h3 { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: ${BRAND}; margin: 0 0 6px; }
+    .scope-block ul, .scope-block ol { margin: 6px 0 6px 20px; padding: 0; }
+    .scope-block p { margin: 4px 0; }
     .bottom { display: flex; justify-content: space-between; margin-top: 28px; gap: 24px; }
     .sign { width: 210px; text-align: center; }
     .sign .line { border-top: 1px solid #9CA3AF; margin-top: 46px; padding-top: 4px; color: #6B7280; }
@@ -139,6 +139,7 @@ function buildHtml(quote: any, org: any, logoUri: string): string {
       <div class="words r">${esc(quote.amountInWords || '')}</div>
       ${hasRcm ? `<div class="r" style="margin-top:4px; font-size:10px; font-weight:600; color:${BRAND};">Tax payable under reverse charge (RCM).</div>` : ''}
 
+      ${quote.scope ? `<div class="scope-block"><h3>Scope of Work</h3><div>${quote.scope}</div></div>` : ''}
       <div class="tc"><h3>Terms &amp; Conditions</h3><p>${esc(quote.termsConditions)}</p></div>
 
       <div class="bottom">

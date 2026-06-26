@@ -6,6 +6,7 @@ import { X, Plus, Trash2, Save, FileDown, Search, Check, AlertTriangle } from 'l
 import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import { Select } from '@/components/ui/select';
+import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { useMembers } from '@/hooks/useQueries';
 import { useAuthStore } from '@/stores';
 import { TAX_TYPES, resolveTaxType, DEFAULT_TAX_TYPE } from '../lib/tax-catalog';
@@ -39,7 +40,7 @@ export function QuoteFormModal({ editId, duplicateOf, onClose, onSaved }: { edit
     documentDate: new Date().toISOString().split('T')[0],
     expirationDate: '', paymentTerms: '50-50', customerRef: '',
     salespersonId: user?.id || '', salesTeam: '', onlineSignature: false, onlinePayment: false,
-    tags: '', paymentMethod: '', clientGst: '', projectStartDate: '', deliveryDate: '', projectNotes: '',
+    tags: '', paymentMethod: '', clientGst: '', projectStartDate: '', deliveryDate: '', projectNotes: '', scope: '',
     termsConditions: DEFAULT_TERMS,
   });
   const [lineItems, setLineItems] = useState<Line[]>([emptyLine()]);
@@ -79,7 +80,7 @@ export function QuoteFormModal({ editId, duplicateOf, onClose, onSaved }: { edit
         tags: (q.tags || []).join(', '), paymentMethod: q.paymentMethod || '', clientGst: q.clientGst || '',
         projectStartDate: q.projectStartDate ? new Date(q.projectStartDate).toISOString().split('T')[0] : '',
         deliveryDate: q.deliveryDate ? new Date(q.deliveryDate).toISOString().split('T')[0] : '',
-        projectNotes: q.projectNotes || '', termsConditions: q.termsConditions || DEFAULT_TERMS,
+        projectNotes: q.projectNotes || '', scope: q.scope || '', termsConditions: q.termsConditions || DEFAULT_TERMS,
       });
       setLineItems((q.lineItems || []).map((li: any) => ({
         description: li.description, unit: li.unit, quantity: String(Number(li.quantity)), unitPrice: String(Number(li.unitPrice)),
@@ -141,7 +142,7 @@ export function QuoteFormModal({ editId, duplicateOf, onClose, onSaved }: { edit
       tags: form.tags ? form.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
       paymentMethod: form.paymentMethod || undefined, clientGst: form.clientGst || undefined,
       projectStartDate: form.projectStartDate || undefined, deliveryDate: form.deliveryDate || undefined,
-      projectNotes: form.projectNotes || undefined, termsConditions: form.termsConditions,
+      projectNotes: form.projectNotes || undefined, scope: form.scope || undefined, termsConditions: form.termsConditions,
       lineItems: lineItems.map((li) => ({
         description: li.description, unit: li.unit, quantity: parseFloat(li.quantity) || 0, unitPrice: parseFloat(li.unitPrice) || 0,
         discountPct: parseFloat(li.discountPct) || 0, taxPct: parseFloat(li.taxPct) || 0, taxType: li.taxType || DEFAULT_TAX_TYPE,
@@ -320,18 +321,22 @@ export function QuoteFormModal({ editId, duplicateOf, onClose, onSaved }: { edit
               <Row label="Sub Total" value={formatCurrency(fin.untaxed + fin.disc)} />
               {fin.disc > 0 && <Row label="Discount" value={`- ${formatCurrency(fin.disc)}`} />}
               {fin.disc > 0 && <Row label="Taxable Amount" value={formatCurrency(fin.untaxed)} />}
-              {fin.cgst > 0 && <Row label="CGST" value={formatCurrency(fin.cgst)} />}
-              {fin.sgst > 0 && <Row label="SGST" value={formatCurrency(fin.sgst)} />}
-              {fin.igst > 0 && <Row label="IGST" value={formatCurrency(fin.igst)} />}
+              {fin.totalTax > 0 && <Row label="Total Tax" value={formatCurrency(fin.totalTax)} />}
               <div className="flex justify-between pt-2 mt-1 border-t border-border"><span className="font-bold text-primary">Grand Total</span><span className="font-bold text-primary text-base">{formatCurrency(fin.grand)}</span></div>
               {fin.rcm && <p className="text-[11px] text-amber-700 pt-1">Tax payable under reverse charge (RCM).</p>}
             </div>
           </div>
 
-          {/* Terms */}
-          <div>
-            <label className="block text-sm font-medium text-[#374151] mb-1.5">Terms &amp; Conditions</label>
+          {/* Scope & Terms */}
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-[#374151] mb-1.5">Scope of Work</label>
+              <RichTextEditor value={form.scope} onChange={(v) => setForm({ ...form, scope: v })} placeholder="Enter scope of work..." />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-[#374151] mb-1.5">Terms &amp; Conditions</label>
             <textarea value={form.termsConditions} onChange={(e) => setForm({ ...form, termsConditions: e.target.value })} rows={4} className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus:border-primary resize-none" />
+            </div>
           </div>
 
           {/* Other Info (collapsible) */}
