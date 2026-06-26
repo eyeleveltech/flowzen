@@ -45,6 +45,15 @@ interface Client {
   _count?: { projects: number };
 }
 
+// A standardized industry list so values don't drift ("Other" vs "Sports/Events").
+const PAGE_SIZE = 20;
+
+const INDUSTRY_OPTIONS = [
+  'Sports', 'Events', 'Healthcare', 'Real Estate', 'Education', 'Technology',
+  'Retail', 'Hospitality', 'Finance', 'Manufacturing', 'Media & Entertainment',
+  'Food & Beverage', 'Automotive', 'Non-Profit', 'Professional Services', 'Other',
+];
+
 const statusColors: Record<string, string> = {
   PROSPECT: 'bg-blue-50 text-blue-700',
   ACTIVE: 'bg-emerald-50 text-emerald-700',
@@ -59,6 +68,7 @@ function ClientsContent() {
   const { user } = useAuthStore();
   const [clients, setClients] = useState<Client[]>([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1); // grows when "Load more" is clicked
   const [search, setSearch] = useState('');
   const urlStatus = searchParams.get('status');
   const [statusFilter, setStatusFilter] = useState<string[]>(urlStatus ? [urlStatus] : []);
@@ -142,7 +152,13 @@ function ClientsContent() {
         sse.off('client:deleted');
       };
     }
-  }, [filtersHydrated, search, statusFilter, cityFilter, accountManagerFilter, engagementTypeFilter, industryFilter]);
+  }, [filtersHydrated, search, statusFilter, cityFilter, accountManagerFilter, engagementTypeFilter, industryFilter, page]);
+
+  // Any filter change resets back to the first page.
+  useEffect(() => {
+    setPage(1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, statusFilter, cityFilter, accountManagerFilter, engagementTypeFilter, industryFilter]);
 
   async function fetchClients() {
     try {
@@ -153,6 +169,8 @@ function ClientsContent() {
       if (accountManagerFilter.length) params.set('accountManagerId', accountManagerFilter.join(','));
       if (engagementTypeFilter.length) params.set('engagementType', engagementTypeFilter.join(','));
       if (industryFilter) params.set('industry', industryFilter);
+      // Fetch a growing window (page 1 .. current page) so "Load more" stays consistent with SSE refetches.
+      params.set('limit', String(page * PAGE_SIZE));
       const data = await api.get<{ clients: Client[]; total: number }>(`/clients?${params}`);
       setClients(data.clients);
       setTotal(data.total);
@@ -429,12 +447,14 @@ function ClientsContent() {
             className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
           />
         </div>
-        <div className="w-full sm:w-auto relative">
-          <input
+        <div className="w-full sm:w-auto sm:min-w-[170px]">
+          <Select
             value={industryFilter}
-            onChange={(e) => setIndustryFilter(e.target.value)}
-            placeholder="Filter by industry..."
-            className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
+            onChange={setIndustryFilter}
+            options={[
+              { label: 'All Industries', value: '' },
+              ...INDUSTRY_OPTIONS.map((i) => ({ label: i, value: i })),
+            ]}
           />
         </div>
       </div>
@@ -486,7 +506,7 @@ function ClientsContent() {
                         <p className="text-sm font-medium text-primary">
                           {getClientDisplayName(client)}
                         </p>
-                        {client.name !== 'Internal' && client.company && <p className="text-xs text-[#9CA3AF]">{client.name}</p>}
+                        {client.name !== 'Internal' && client.company && client.name !== client.company && <p className="text-xs text-[#9CA3AF]">{client.name}</p>}
                         {client.name === 'Internal' && <p className="text-xs font-medium text-[#9CA3AF]">(Internal)</p>}
                       </div>
                     </div>
@@ -571,7 +591,7 @@ function ClientsContent() {
                     </p>
                     {client.name === 'Internal' ? (
                       <p className="text-xs font-medium text-secondary mt-0.5">(Internal)</p>
-                    ) : client.company ? (
+                    ) : client.company && client.name !== client.company ? (
                       <p className="text-xs text-secondary mt-0.5">{client.name}</p>
                     ) : (
                       <p className="text-xs text-secondary mt-0.5">{client.industry || '—'}</p>
@@ -605,6 +625,19 @@ function ClientsContent() {
           ))
         )}
       </div>
+
+      {/* Load more */}
+      {!loading && clients.length < total && (
+        <div className="flex flex-col items-center gap-2 mt-6">
+          <p className="text-xs text-secondary">Showing {clients.length} of {total}</p>
+          <button
+            onClick={() => setPage((p) => p + 1)}
+            className="rounded-xl border border-border bg-white px-5 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all"
+          >
+            Load more
+          </button>
+        </div>
+      )}
 
       {/* Create Modal */}
       <AnimatePresence>
@@ -645,8 +678,18 @@ function ClientsContent() {
                   {formError && <div className="absolute top-0 left-6 right-6 -mt-2 z-10 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 shadow-sm border border-red-100">{formError}</div>}
                   <Field label="Client Name *" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
                   <Field label="Company" value={form.company} onChange={(v) => setForm({ ...form, company: v })} />
-                  <Field label="Industry" value={form.industry} onChange={(v) => setForm({ ...form, industry: v })} />
-                  
+                  <div>
+                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Industry</label>
+                    <Select
+                      value={form.industry}
+                      onChange={(v) => setForm({ ...form, industry: v })}
+                      options={[
+                        { label: 'Select industry', value: '' },
+                        ...INDUSTRY_OPTIONS.map((i) => ({ label: i, value: i })),
+                      ]}
+                    />
+                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Engagement Type</label>
                     <Select

@@ -678,14 +678,14 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
     if (PURSUED_STAGES.includes(stage) && !clientId) {
       const newClient = await prisma.client.create({
         data: {
-          name: existingLead.contactName || existingLead.companyName || 'Unknown',
+          name: existingLead.companyName || existingLead.contactName || 'Unknown',
           company: existingLead.companyName || null,
           email: existingLead.contactEmail || null,
           phone: existingLead.contactPhone || null,
           status: 'PROSPECT',
           organizationId: orgId,
-          ...(existingLead.jobTitle && existingLead.contactName ? {
-            contacts: { create: { name: existingLead.contactName, designation: existingLead.jobTitle, email: existingLead.contactEmail || null, phone: existingLead.contactPhone || null } }
+          ...(existingLead.contactName ? {
+            contacts: { create: { name: existingLead.contactName, designation: existingLead.jobTitle || null, email: existingLead.contactEmail || null, phone: existingLead.contactPhone || null } }
           } : {})
         }
       });
@@ -786,12 +786,15 @@ crmRouter.post('/leads/:id/hold', authorize('SUPER_ADMIN', 'ADMIN'), async (req:
     if (!clientId) {
       const newClient = await prisma.client.create({
         data: {
-          name: existingLead.contactName || existingLead.companyName || 'Unknown',
+          name: existingLead.companyName || existingLead.contactName || 'Unknown',
           company: existingLead.companyName || null,
           email: existingLead.contactEmail || null,
           phone: existingLead.contactPhone || null,
           status: 'ONHOLD',
           organizationId: orgId,
+          ...(existingLead.contactName ? {
+            contacts: { create: { name: existingLead.contactName, designation: existingLead.jobTitle || null, email: existingLead.contactEmail || null, phone: existingLead.contactPhone || null } }
+          } : {})
         },
       });
       clientId = newClient.id;
@@ -888,12 +891,15 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
       if (PURSUED_STAGES.includes(stage) && !clientId) {
         const newClient = await prisma.client.create({
           data: {
-            name: existingLead.contactName || existingLead.companyName || 'Unknown',
+            name: existingLead.companyName || existingLead.contactName || 'Unknown',
             company: existingLead.companyName || null,
             email: existingLead.contactEmail || null,
             phone: existingLead.contactPhone || null,
             status: 'PROSPECT',
             organizationId: orgId,
+            ...(existingLead.contactName ? {
+              contacts: { create: { name: existingLead.contactName, designation: existingLead.jobTitle || null, email: existingLead.contactEmail || null, phone: existingLead.contactPhone || null } }
+            } : {})
           }
         });
         clientId = newClient.id;

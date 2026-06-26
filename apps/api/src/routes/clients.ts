@@ -15,7 +15,6 @@ const clientSchema = z.object({
   name: z.string().min(1),
   company: z.string().optional(),
   industry: z.string().optional(),
-  contactPerson: z.string().optional(),
   email: z.string().email().optional().or(z.literal('')),
   phone: z.string().optional(),
   address: z.string().optional(),
@@ -56,7 +55,7 @@ clientRouter.get('/', async (req: AuthRequest, res: Response, next) => {
       where.OR = [
         { name: { contains: search as string, mode: 'insensitive' } },
         { company: { contains: search as string, mode: 'insensitive' } },
-        { contactPerson: { contains: search as string, mode: 'insensitive' } },
+        { contacts: { some: { name: { contains: search as string, mode: 'insensitive' } } } },
       ];
     }
 
