@@ -9,12 +9,16 @@ import { getSSE } from '@/lib/sse';
 import { LeadListView } from './components/LeadListView';
 import { PipelineDashboard } from './components/PipelineDashboard';
 import { PipelineBoardView } from './components/PipelineBoardView';
+import { Plus } from 'lucide-react';
+import { LeadModal } from './components/LeadModal';
+import { AnimatePresence } from 'framer-motion';
 
 function PipelineContent() {
   const router = useRouter();
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'BOARD' | 'LIST' | 'DASHBOARD'>('BOARD');
   const [totalLeads, setTotalLeads] = useState(0);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     fetchTotal();
@@ -45,7 +49,16 @@ function PipelineContent() {
           <h1 className="text-2xl font-semibold text-primary tracking-tight">Pipeline</h1>
           <p className="text-sm text-secondary mt-1">{totalLeads} total leads</p>
         </div>
-        <div className="flex items-center gap-2 p-1 bg-[#F3F4F6] rounded-xl self-start sm:self-auto">
+        <div className="flex flex-wrap items-center gap-4 self-start sm:self-auto w-full sm:w-auto">
+          {activeTab === 'BOARD' && (
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-[#1F2937] transition-all shadow-sm"
+            >
+              <Plus className="h-4 w-4" /> Add Lead
+            </button>
+          )}
+          <div className="flex items-center gap-2 p-1 bg-[#F3F4F6] rounded-xl">
           <button
             onClick={() => setActiveTab('BOARD')}
             className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'BOARD' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-[#374151]'}`}
@@ -65,6 +78,7 @@ function PipelineContent() {
             Analytics
           </button>
         </div>
+        </div>
       </div>
 
       {/* Main Content Area */}
@@ -77,6 +91,19 @@ function PipelineContent() {
       >
         {activeTab === 'BOARD' ? <PipelineBoardView /> : activeTab === 'LIST' ? <LeadListView /> : <PipelineDashboard />}
       </motion.div>
+
+      <AnimatePresence>
+        {isModalOpen && (
+          <LeadModal
+            initialMode="MANUAL"
+            onClose={() => setIsModalOpen(false)}
+            onSuccess={() => {
+              setIsModalOpen(false);
+              fetchTotal();
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

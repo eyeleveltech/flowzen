@@ -691,6 +691,10 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
       });
       clientId = newClient.id;
       await prisma.lead.update({ where: { id: leadId }, data: { clientId } });
+    } else if (stage === 'NEW_LEAD' && clientId && existingLead.client?.status === 'PROSPECT') {
+      await prisma.lead.update({ where: { id: leadId }, data: { clientId: null } });
+      await prisma.client.delete({ where: { id: clientId } });
+      clientId = null;
     }
 
     if (clientId) {
@@ -832,6 +836,50 @@ crmRouter.post('/leads/:id/hold', authorize('SUPER_ADMIN', 'ADMIN'), async (req:
   }
 });
 
+// POST /api/crm/leads/:id/unhold — unpark a lead's client from ON_HOLD.
+crmRouter.post('/leads/:id/unhold', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const leadId = req.params.id as string;
+
+    const existingLead = await prisma.lead.findFirst({ where: { id: leadId, organizationId: orgId } });
+    if (!existingLead) {
+      res.status(404).json({ error: 'Lead not found' });
+      return;
+    }
+
+    if (existingLead.clientId) {
+      await prisma.client.update({ where: { id: existingLead.clientId }, data: { status: 'PROSPECT' } });
+    }
+
+    const updatedLead = await prisma.lead.findUnique({
+      where: { id: leadId },
+      include: { client: true, assignedTo: { select: { id: true, name: true, avatar: true } } },
+    });
+
+    await prisma.activity.create({
+      data: {
+        type: 'LEAD_UPDATED',
+        message: `removed hold from lead "${existingLead.contactName || existingLead.companyName}"`,
+        entityType: 'LEAD',
+        entityId: leadId,
+        userId: req.user!.userId,
+        leadId,
+      },
+    });
+
+    const io = req.app.get('io');
+    emitToOrganization(io, orgId, 'lead:updated', updatedLead);
+    if (existingLead.clientId) {
+      emitToOrganization(io, orgId, 'client:updated', { id: existingLead.clientId });
+    }
+
+    res.json(updatedLead);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // PATCH /api/crm/leads/:id
 crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
@@ -904,6 +952,11 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
         });
         clientId = newClient.id;
         updateData.clientId = clientId;
+      } else if (stage === 'NEW_LEAD' && clientId && existingLead.client?.status === 'PROSPECT') {
+        await prisma.lead.update({ where: { id: leadId }, data: { clientId: null } });
+        await prisma.client.delete({ where: { id: clientId } });
+        clientId = null;
+        updateData.clientId = null;
       }
       if (clientId) {
         let newStatus: 'ACTIVE' | 'PROJECT_COMPLETED' | 'CHURNED' | null = null;
@@ -1054,8 +1107,55 @@ crmRouter.post('/leads/:id/fields', authorize('SUPER_ADMIN', 'ADMIN'), async (re
   }
 });
 
-// (Removed a duplicate POST /leads/:id/notes registration — Express only ran the first one,
-//  so this second handler was dead code. Notes are handled by the earlier /leads/:id/notes route.)
+// POST /api/crm/leads/:id/prepare-project
+crmRouter.post('/leads/:id/prepare-project', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const leadId = req.params.id as string;
+
+    const lead = await prisma.lead.findFirst({
+      where: { id: leadId, organizationId: orgId },
+      include: { client: true }
+    });
+
+    if (!lead) {
+      res.status(404).json({ error: 'Lead not found' });
+      return;
+    }
+
+    let clientId = lead.clientId;
+
+    if (!clientId) {
+      // Create a PROSPECT client first if it doesn't exist
+      const newClient = await prisma.client.create({
+        data: {
+          name: lead.companyName || lead.contactName || 'Unknown',
+          company: lead.companyName || null,
+          email: lead.contactEmail || null,
+          phone: lead.contactPhone || null,
+          status: 'PROSPECT',
+          organizationId: orgId,
+          ...(lead.contactName ? {
+            contacts: { create: { name: lead.contactName, designation: lead.jobTitle || null, email: lead.contactEmail || null, phone: lead.contactPhone || null } }
+          } : {})
+        }
+      });
+      clientId = newClient.id;
+      await prisma.lead.update({ where: { id: leadId }, data: { clientId } });
+    }
+
+    const ownerId = lead.assignedToId || req.user!.userId;
+    const suggestedName = `${lead.companyName || lead.contactName || 'New Deal'} Project`;
+
+    res.status(200).json({
+      clientId,
+      ownerId,
+      suggestedName
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 // DELETE /api/crm/leads/:id
 crmRouter.delete('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {

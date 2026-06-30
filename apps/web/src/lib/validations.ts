@@ -28,14 +28,6 @@ export const projectSchema = z.object({
 }, {
   message: "End date cannot be before start date",
   path: ["endDate"],
-}).refine((data) => {
-  if ((data.type === 'ONE_TIME' || data.type === 'EVENT') && !data.endDate) {
-    return false;
-  }
-  return true;
-}, {
-  message: "End date is required for this project type",
-  path: ["endDate"],
 });
 
 export type ProjectFormValues = z.infer<typeof projectSchema>;

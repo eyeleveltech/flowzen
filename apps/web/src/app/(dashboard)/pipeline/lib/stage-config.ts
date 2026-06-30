@@ -29,11 +29,11 @@ export const STAGE_FIELDS: Record<string, StageField[]> = {
 
   // MEETING → PROPOSAL
   PROPOSAL: [
-    { key: 'meetingNotes', label: 'Meeting Notes', type: 'textarea', required: true },
+    { key: 'meetingNotes', label: 'Meeting Notes', type: 'textarea' },
     { key: 'auditRequired', label: 'Audit Required?', type: 'select', options: ['No', 'Yes'], required: true },
     { key: 'auditFindings', label: 'Audit Findings (required if audit done)', type: 'textarea' },
     { key: 'auditReportLink', label: 'Audit Report Link (required if audit done)', type: 'text' },
-    { key: 'servicesInScope', label: 'Services Agreed in Scope', type: 'checklist', options: ['SEO', 'Social Media', 'Paid Ads', 'Content', 'GMB', 'Email', 'PR', 'Events', 'Website'], required: true },
+    { key: 'servicesInScope', label: 'Services Agreed in Scope', type: 'checklist', options: ['SEO', 'Social Media', 'Paid Ads', 'Content', 'GMB', 'Email', 'PR', 'Events', 'Website', 'Others'], required: true },
     { key: 'nextStepAgreed', label: 'Next Step Agreed', type: 'text' },
   ],
 

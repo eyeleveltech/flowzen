@@ -625,11 +625,10 @@ function ProjectsContent() {
                     </div>
                     <div>
                       <Field 
-                        label={`End Date ${(formValues.type === 'ONE_TIME' || formValues.type === 'EVENT') ? '*' : ''}`} 
+                        label="End Date" 
                         type="date" 
                         value={formValues.endDate || ''} 
                         onChange={(v) => setValue('endDate', v, { shouldValidate: true })} 
-                        required={formValues.type === 'ONE_TIME' || formValues.type === 'EVENT'} 
                       />
                       {errors.endDate && <p className="mt-1 text-xs text-red-500">{errors.endDate.message}</p>}
                     </div>

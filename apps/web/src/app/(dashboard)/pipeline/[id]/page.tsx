@@ -14,7 +14,7 @@ import { STAGE_FIELDS } from '../lib/stage-config';
 import { StageTransitionModal } from '../components/StageTransitionModal';
 import { WonCelebrationModal } from '../components/WonCelebrationModal';
 import { EditLeadModal } from '../components/EditLeadModal';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2, FolderPlus } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { IntelligenceTab } from '../components/IntelligenceTab';
 import { TimelineTab } from '../components/TimelineTab';
@@ -101,11 +101,27 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
 
       {/* Header */}
       <div className="bg-white border-b border-border px-8 py-6">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
           <button onClick={() => router.push('/pipeline')} className="flex items-center gap-2 text-sm text-secondary hover:text-primary transition-colors">
             <ArrowLeft className="w-4 h-4" /> Back to Pipeline
           </button>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+            {lead.stage !== 'NEW_LEAD' && (
+              <button
+                onClick={() => {
+                  const params = new URLSearchParams({ create: 'true' });
+                  params.set('prefillName', `${displayName} Project`);
+                  const clientId = lead.clientId || lead.client?.id;
+                  if (clientId) params.set('prefillClientId', clientId);
+                  if (lead.dealValue) params.set('prefillBudget', String(lead.dealValue));
+                  if (lead.assignedToId) params.set('prefillOwnerId', lead.assignedToId);
+                  router.push(`/projects?${params.toString()}`);
+                }}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-[#1F2937] transition-colors"
+              >
+                <FolderPlus className="w-4 h-4" /> Create Project
+              </button>
+            )}
             <button
               onClick={() => setIsEditModalOpen(true)}
               className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-[#4B5563] bg-white border border-border rounded-lg hover:bg-[#F9FAFB] transition-colors"
@@ -155,12 +171,12 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           </div>
 
           {/* Deal value + actions */}
-          <div className="flex items-stretch gap-4 shrink-0">
-            <div className="text-right pr-4 border-r border-border flex flex-col justify-center">
+          <div className="flex flex-col sm:flex-row sm:items-stretch gap-4 shrink-0 w-full lg:w-auto mt-4 lg:mt-0">
+            <div className="sm:text-right sm:pr-4 sm:border-r border-border flex flex-col justify-center">
               <p className="text-xs font-medium text-secondary uppercase tracking-wider">Deal Value</p>
               <p className="text-2xl font-bold text-primary">{lead.dealValue ? formatCurrency(lead.dealValue) : '—'}</p>
             </div>
-            <div className="flex flex-col gap-2 w-52">
+            <div className="flex flex-col gap-2 w-full sm:w-52">
               <Select
                 value=""
                 onChange={(val) => {
@@ -226,8 +242,8 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
       })()}
 
       {/* Tabs */}
-      <div className="bg-white border-b border-border px-8">
-        <div className="max-w-7xl mx-auto flex gap-1">
+      <div className="flex gap-6 border-b border-border bg-white overflow-x-auto whitespace-nowrap custom-scrollbar px-8">
+        <div className="max-w-7xl mx-auto flex gap-1 w-full">
           {([['details', 'Details'], ['timeline', 'Timeline'], ['contacts', 'Contacts']] as const).map(([k, label]) => (
             <button key={k} onClick={() => setActiveTab(k)} className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${activeTab === k ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-primary'}`}>{label}</button>
           ))}

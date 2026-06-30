@@ -136,7 +136,7 @@ export function StageTransitionModal({ currentStage, targetStage, onClose, onSub
           <form id="stage-form" onSubmit={handleSubmit} className="space-y-5">
             
             {requiresDealValue && (
-              <div className="grid grid-cols-2 gap-4 pb-4 border-b border-border">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-4 border-b border-border">
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Deal Value (₹)</label>
                   <input type="number" value={dealValue} onChange={e => setDealValue(e.target.value)} required className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary" />

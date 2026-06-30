@@ -11,6 +11,7 @@ import { ChevronDown, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { StageTransitionModal } from './StageTransitionModal';
 import { WonCelebrationModal } from './WonCelebrationModal';
+import { useQueryClient } from '@tanstack/react-query';
 
 // All 15 pipeline stages in chronological order (used by the per-card stage menu)
 const PIPELINE_STAGES = [
@@ -44,11 +45,12 @@ const STAGE_BADGES: Record<string, { label: string, bg: string, text: string }> 
 
 export function PipelineBoardView() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
   // Lead pending a stage transition (drag target or menu pick). When set, the StageTransitionModal opens.
-  const [pendingTransition, setPendingTransition] = useState<{ lead: any; targetStage: string } | null>(null);
+  const [pendingTransition, setPendingTransition] = useState<{ lead: any; targetStage: string; previousLeads?: any[] } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Per-card stage menu: anchored dropdown to pick an exact stage (e.g. LEAD -> MQL within a group).
   const [stageMenu, setStageMenu] = useState<{ lead: any; x: number; y: number; up: boolean } | null>(null);
@@ -160,10 +162,35 @@ export function PipelineBoardView() {
     const newStage = destGroup.stages[0]; // Default to first chronological stage in target group
     if (newStage === lead.stage) return;
 
-    // Open the same stage-transition form used on the lead detail page so the
-    // user can capture stage-specific details before the move is committed.
-    // The card stays in its original column until the form is confirmed.
-    setPendingTransition({ lead, targetStage: newStage });
+    const currentIndex = PIPELINE_STAGES.indexOf(lead.stage);
+    const targetIndex = PIPELINE_STAGES.indexOf(newStage);
+
+    if (targetIndex < currentIndex) {
+      // Optimistic update for backward move to prevent snap-back
+      const previousLeads = [...leads];
+      setLeads(leads.map(l => l.id === lead.id ? { ...l, stage: newStage } : l));
+
+      setIsSubmitting(true);
+      api.post(`/crm/leads/${lead.id}/stage`, { stage: newStage, fields: {} })
+        .then(() => {
+          toast.success('Stage updated successfully');
+          queryClient.invalidateQueries({ queryKey: ['leads'] });
+          queryClient.invalidateQueries({ queryKey: ['clients'] });
+          fetchLeads();
+        })
+        .catch((err: any) => {
+          toast.error(err.message || 'Failed to update stage');
+          setLeads(previousLeads); // revert on failure
+        })
+        .finally(() => {
+          setIsSubmitting(false);
+        });
+    } else {
+      // Optimistic update for forward move too
+      const previousLeads = [...leads];
+      setLeads(leads.map(l => l.id === lead.id ? { ...l, stage: newStage } : l));
+      setPendingTransition({ lead, targetStage: newStage, previousLeads });
+    }
   };
 
   async function submitStageTransition(payload: any) {
@@ -173,9 +200,11 @@ export function PipelineBoardView() {
     try {
       await api.post(`/crm/leads/${lead.id}/stage`, payload);
       toast.success('Stage updated successfully');
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      await fetchLeads(); // Fetch new data before closing modal
       setPendingTransition(null);
       if (payload?.stage === 'CONTRACT') setWonModalLead(lead);
-      fetchLeads();
     } catch (err: any) {
       // Re-throw so the modal can surface the error and stay open.
       throw err;
@@ -312,9 +341,9 @@ export function PipelineBoardView() {
       {/* Per-card stage menu — pick any exact stage, including within the same group (LEAD -> MQL) */}
       {stageMenu && (
         <>
-          <div className="fixed inset-0 z-[60]" onClick={() => setStageMenu(null)} />
+          <div className="fixed inset-0 z-60" onClick={() => setStageMenu(null)} />
           <div
-            className="fixed z-[61] w-56 max-h-80 overflow-y-auto bg-white rounded-xl shadow-2xl border border-border py-1"
+            className="fixed z-61 w-56 max-h-80 overflow-y-auto bg-white rounded-xl shadow-2xl border border-border py-1"
             style={{
               top: stageMenu.up ? stageMenu.y - 6 : stageMenu.y + 6,
               left: stageMenu.x,
@@ -331,8 +360,29 @@ export function PipelineBoardView() {
                   type="button"
                   disabled={isCurrent}
                   onClick={() => {
-                    setPendingTransition({ lead: stageMenu.lead, targetStage: stage });
-                    setStageMenu(null);
+                    const currIdx = PIPELINE_STAGES.indexOf(stageMenu.lead.stage);
+                    const targIdx = PIPELINE_STAGES.indexOf(stage);
+                    if (targIdx < currIdx) {
+                      const prevLeads = [...leads];
+                      setLeads(leads.map(l => l.id === stageMenu.lead.id ? { ...l, stage } : l));
+                      setStageMenu(null);
+                      api.post(`/crm/leads/${stageMenu.lead.id}/stage`, { stage, fields: {} })
+                        .then(() => {
+                          toast.success('Stage updated successfully');
+                          queryClient.invalidateQueries({ queryKey: ['leads'] });
+                          queryClient.invalidateQueries({ queryKey: ['clients'] });
+                          fetchLeads();
+                        })
+                        .catch((err: any) => {
+                          toast.error(err.message || 'Failed to update stage');
+                          setLeads(prevLeads);
+                        });
+                    } else {
+                      const prevLeads = [...leads];
+                      setLeads(leads.map(l => l.id === stageMenu.lead.id ? { ...l, stage } : l));
+                      setPendingTransition({ lead: stageMenu.lead, targetStage: stage, previousLeads: prevLeads });
+                      setStageMenu(null);
+                    }
                   }}
                   className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left transition-colors ${
                     isCurrent ? 'text-gray-300 cursor-default bg-gray-50/50' : 'text-primary hover:bg-gray-50'
@@ -353,7 +403,10 @@ export function PipelineBoardView() {
           <StageTransitionModal
             currentStage={pendingTransition.lead.stage}
             targetStage={pendingTransition.targetStage}
-            onClose={() => setPendingTransition(null)}
+            onClose={() => {
+              if (pendingTransition.previousLeads) setLeads(pendingTransition.previousLeads);
+              setPendingTransition(null);
+            }}
             onSubmit={submitStageTransition}
             isLoading={isSubmitting}
           />

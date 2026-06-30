@@ -38,7 +38,8 @@ export function QuoteFormModal({ editId, duplicateOf, onClose, onSaved }: { edit
   const [form, setForm] = useState({
     contactPerson: '', clientEmail: '', clientPhone: '', billingAddress: '',
     documentDate: new Date().toISOString().split('T')[0],
-    expirationDate: '', paymentTerms: '50-50', customerRef: '',
+    expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], 
+    paymentTerms: 'Immediate', customerRef: '',
     salespersonId: user?.id || '', salesTeam: '', onlineSignature: false, onlinePayment: false,
     tags: '', paymentMethod: '', clientGst: '', projectStartDate: '', deliveryDate: '', projectNotes: '', scope: '',
     termsConditions: DEFAULT_TERMS,
