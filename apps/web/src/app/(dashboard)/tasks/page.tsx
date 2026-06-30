@@ -9,7 +9,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatDate, formatShortDate, getInitials, getAvatarColor, triggerHaptic } from '@/lib/utils';
-import { Plus, Search, X, MessageSquare, CheckCircle2, ListChecks, Trash2 } from 'lucide-react';
+import { Search, Plus, Filter, MessageSquare, ChevronDown, ChevronRight, AlertCircle, X, ChevronUp, ChevronLeft, Calendar, ListChecks, Trash2 } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { Drawer } from '@/components/ui/drawer';
@@ -41,10 +41,10 @@ interface Project { id: string; name: string; members?: { user: { id: string; na
 interface Member { id: string; name: string; }
 
 const statusColors: Record<string, string> = {
-  BACKLOG: 'bg-gray-100 text-gray-500', TODO: 'bg-slate-100 text-slate-600',
+  TODO: 'bg-slate-100 text-slate-600',
   IN_PROGRESS: 'bg-blue-50 text-blue-700', REVIEW: 'bg-amber-50 text-amber-700',
   APPROVED: 'bg-teal-50 text-teal-700',
-  BLOCKED: 'bg-red-50 text-red-700', ON_HOLD: 'bg-purple-50 text-purple-700', COMPLETED: 'bg-emerald-50 text-emerald-700',
+  ON_HOLD: 'bg-purple-50 text-purple-700', COMPLETED: 'bg-emerald-50 text-emerald-700',
 };
 
 const priorityDots: Record<string, string> = {
@@ -131,6 +131,13 @@ function TasksContent() {
     }
   }, [user?.id]);
   const [view, setView] = useState<'list' | 'board'>('list');
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setView('list');
+    }
+  }, []);
 
   const showCreate = searchParams.get('create') === 'true';
   const setShowCreate = (open: boolean) => {
@@ -405,12 +412,12 @@ function TasksContent() {
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="h-full flex flex-col space-y-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-semibold text-primary tracking-tight">Tasks</h1>
           <p className="text-sm text-secondary mt-1">{tasks.length} tasks</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {(search || projectFilter.length || statusFilter.length || priorityFilter.length || teamFilter.length || sort || (user?.role !== 'TEAM_MEMBER' && !(assigneeFilter.length === 1 && assigneeFilter[0] === user?.id)) || searchParams.get('filter')) && (
             <button
               onClick={() => {
@@ -438,38 +445,48 @@ function TasksContent() {
         </div>
       </div>
 
-      <div className="flex items-center gap-3 mb-6 flex-wrap">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tasks..." className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+      <div className="flex flex-col gap-3 mb-6">
+        <div className="flex items-center gap-2 w-full md:max-w-sm">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tasks..." className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+          </div>
+          <button 
+            onClick={() => setShowMobileFilters(!showMobileFilters)} 
+            className="md:hidden flex items-center justify-center p-2.5 rounded-xl border border-border bg-white text-secondary hover:bg-gray-50 transition-colors"
+          >
+            <Filter className="h-4 w-4" />
+          </button>
         </div>
-        <div className="w-48">
+        <div className={`flex flex-wrap items-center gap-3 ${showMobileFilters ? 'flex' : 'hidden md:flex'}`}>
+          <div className="w-full md:w-48">
           <MultiSelect
+            showSelectAll
             value={projectFilter}
             onChange={setProjectFilter}
             placeholder="All Projects"
             options={projects.map((p) => ({ label: p.name, value: p.id }))}
           />
         </div>
-        <div className="w-44">
+        <div className="w-full md:w-44">
           <MultiSelect
+            showSelectAll
             value={statusFilter}
             onChange={setStatusFilter}
             placeholder="All Statuses"
             options={[
-              { label: 'Backlog', value: 'BACKLOG' },
               { label: 'To Do', value: 'TODO' },
               { label: 'In Progress', value: 'IN_PROGRESS' },
               { label: 'In Review', value: 'REVIEW' },
               { label: 'Approved', value: 'APPROVED' },
-              { label: 'Blocked', value: 'BLOCKED' },
               { label: 'On Hold', value: 'ON_HOLD' },
               { label: 'Done', value: 'COMPLETED' },
             ]}
           />
         </div>
-        <div className="w-44">
+        <div className="w-full md:w-44">
           <MultiSelect
+            showSelectAll
             value={priorityFilter}
             onChange={setPriorityFilter}
             placeholder="All Priorities"
@@ -481,8 +498,9 @@ function TasksContent() {
             ]}
           />
         </div>
-        <div className="w-48">
+        <div className="w-full md:w-48">
           <MultiSelect
+            showSelectAll
             value={teamFilter}
             onChange={setTeamFilter}
             placeholder="All Departments"
@@ -490,8 +508,9 @@ function TasksContent() {
           />
         </div>
         {user?.role !== 'TEAM_MEMBER' && (
-          <div className="w-48">
+          <div className="w-full md:w-44">
             <MultiSelect
+              showSelectAll
               value={assigneeFilter}
               onChange={setAssigneeFilter}
               placeholder="All Assignees"
@@ -500,7 +519,7 @@ function TasksContent() {
           </div>
         )}
         {view === 'list' && (
-          <div className="w-48">
+          <div className="w-full md:w-48">
             <Select
               ariaLabel="Sort Tasks"
               value={sort}
@@ -516,6 +535,7 @@ function TasksContent() {
             />
           </div>
         )}
+      </div>
       </div>
 
       {loading ? (
@@ -844,6 +864,7 @@ function TasksContent() {
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignees</label>
                     <Controller name="assigneeIds" control={control} render={({ field }) => (
                       <MultiSelect
+                        showSelectAll
                         compact={false}
                         value={field.value || []}
                         onChange={field.onChange}

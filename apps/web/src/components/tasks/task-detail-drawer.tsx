@@ -16,9 +16,9 @@ const kanbanLabels: Record<string, string> = {
   TODO: 'To Do', IN_PROGRESS: 'In Progress', REVIEW: 'In Review', APPROVED: 'Approved', ON_HOLD: 'On Hold', COMPLETED: 'Done',
 };
 const statusColors: Record<string, string> = {
-  BACKLOG: 'bg-gray-100 text-gray-500', TODO: 'bg-slate-100 text-slate-600',
+  TODO: 'bg-slate-100 text-slate-600',
   IN_PROGRESS: 'bg-blue-50 text-blue-700', REVIEW: 'bg-amber-50 text-amber-700',
-  APPROVED: 'bg-teal-50 text-teal-700', BLOCKED: 'bg-red-50 text-red-700', ON_HOLD: 'bg-purple-50 text-purple-700', COMPLETED: 'bg-emerald-50 text-emerald-700',
+  APPROVED: 'bg-teal-50 text-teal-700', ON_HOLD: 'bg-purple-50 text-purple-700', COMPLETED: 'bg-emerald-50 text-emerald-700',
 };
 const priorityDots: Record<string, string> = {
   LOW: 'bg-gray-300', MEDIUM: 'bg-blue-400', HIGH: 'bg-orange-500', URGENT: 'bg-red-500',

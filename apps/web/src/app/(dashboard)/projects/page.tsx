@@ -211,6 +211,7 @@ function ProjectsContent() {
                 value={statusFilter}
                 onChange={setStatusFilter}
                 placeholder="All Statuses"
+                showSelectAll
                 options={[
                   { label: 'Active', value: 'ACTIVE' },
                   { label: 'Delayed', value: 'DELAYED' },
@@ -228,6 +229,7 @@ function ProjectsContent() {
                 value={clientFilter}
                 onChange={setClientFilter}
                 placeholder="All Clients"
+                showSelectAll
                 options={clients.filter(c => c._count?.projects > 0).map(c => ({ label: getClientDisplayName(c), value: c.id }))}
               />
             </div>
@@ -237,6 +239,7 @@ function ProjectsContent() {
                   value={ownerFilter}
                   onChange={setOwnerFilter}
                   placeholder="All Owners"
+                  showSelectAll
                   options={members.filter(m => m.totalProjects > 0).map(m => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
                 />
               </div>
