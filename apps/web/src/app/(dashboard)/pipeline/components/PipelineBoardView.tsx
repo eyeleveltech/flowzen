@@ -172,10 +172,11 @@ export function PipelineBoardView() {
 
       setIsSubmitting(true);
       api.post(`/crm/leads/${lead.id}/stage`, { stage: newStage, fields: {} })
-        .then(() => {
+        .then((updatedLead: any) => {
           toast.success('Stage updated successfully');
           queryClient.invalidateQueries({ queryKey: ['leads'] });
           queryClient.invalidateQueries({ queryKey: ['clients'] });
+          queryClient.setQueryData(['lead', lead.id], updatedLead);
           fetchLeads();
         })
         .catch((err: any) => {
@@ -198,10 +199,11 @@ export function PipelineBoardView() {
     const lead = pendingTransition.lead;
     setIsSubmitting(true);
     try {
-      await api.post(`/crm/leads/${lead.id}/stage`, payload);
+      const updatedLead = await api.post(`/crm/leads/${lead.id}/stage`, payload);
       toast.success('Stage updated successfully');
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['clients'] });
+      queryClient.setQueryData(['lead', lead.id], updatedLead);
       await fetchLeads(); // Fetch new data before closing modal
       setPendingTransition(null);
       if (payload?.stage === 'CONTRACT') setWonModalLead(lead);
@@ -367,10 +369,11 @@ export function PipelineBoardView() {
                       setLeads(leads.map(l => l.id === stageMenu.lead.id ? { ...l, stage } : l));
                       setStageMenu(null);
                       api.post(`/crm/leads/${stageMenu.lead.id}/stage`, { stage, fields: {} })
-                        .then(() => {
+                        .then((updatedLead: any) => {
                           toast.success('Stage updated successfully');
                           queryClient.invalidateQueries({ queryKey: ['leads'] });
                           queryClient.invalidateQueries({ queryKey: ['clients'] });
+                          queryClient.setQueryData(['lead', stageMenu.lead.id], updatedLead);
                           fetchLeads();
                         })
                         .catch((err: any) => {

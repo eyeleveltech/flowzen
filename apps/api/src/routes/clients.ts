@@ -332,9 +332,17 @@ clientRouter.delete('/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthR
       return;
     }
 
-    const client = await prisma.client.deleteMany({
-      where: { id: (req.params.id as string), organizationId: req.user!.organizationId },
-    });
+    try {
+      await prisma.client.deleteMany({
+        where: { id: (req.params.id as string), organizationId: req.user!.organizationId },
+      });
+    } catch (err: any) {
+      if (err.message && err.message.includes('foreign key constraint')) {
+        res.status(400).json({ error: 'Cannot delete this client because they have associated records (e.g., quotes) that must be deleted first.' });
+        return;
+      }
+      throw err;
+    }
 
     const io = req.app.get('io');
     emitToOrganization(io, req.user!.organizationId, 'client:deleted', { id: (req.params.id as string) });

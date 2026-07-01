@@ -693,7 +693,11 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
       await prisma.lead.update({ where: { id: leadId }, data: { clientId } });
     } else if (stage === 'NEW_LEAD' && clientId && existingLead.client?.status === 'PROSPECT') {
       await prisma.lead.update({ where: { id: leadId }, data: { clientId: null } });
-      await prisma.client.delete({ where: { id: clientId } });
+      try {
+        await prisma.client.delete({ where: { id: clientId } });
+      } catch (err) {
+        console.warn(`Could not delete client ${clientId} during backward pipeline transition. It may have dependent records.`, err);
+      }
       clientId = null;
     }
 

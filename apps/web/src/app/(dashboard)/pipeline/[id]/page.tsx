@@ -19,6 +19,7 @@ import { Select } from '@/components/ui/select';
 import { IntelligenceTab } from '../components/IntelligenceTab';
 import { TimelineTab } from '../components/TimelineTab';
 import { ContactsTab } from '../components/ContactsTab';
+import { useConfirmStore } from '@/stores';
 
 const PIPELINE_STAGES = [
   'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
@@ -33,6 +34,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'details' | 'timeline' | 'contacts'>('details');
   const [wonModalLead, setWonModalLead] = useState<any>(null);
+  const confirm = useConfirmStore((s) => s.confirm);
   
   // Safe unwrapping for Next.js 15 async params
   const { id: leadId } = use(params);
@@ -45,7 +47,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const stageMutation = useMutation({
     mutationFn: (payload: any) => api.post(`/crm/leads/${leadId}/stage`, payload),
     onSuccess: (data: any, variables: any) => {
-      queryClient.invalidateQueries({ queryKey: ['lead', leadId] });
+      queryClient.setQueryData(['lead', leadId], data);
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       setIsModalOpen(false);
       toast.success('Stage updated successfully');
@@ -129,8 +131,16 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
               <Pencil className="w-4 h-4" /> Edit
             </button>
             <button
-              onClick={() => {
-                if (window.confirm('Are you sure you want to delete this lead? This action cannot be undone.')) {
+              onClick={async () => {
+                const isConfirmed = await confirm({
+                  title: 'Delete Lead',
+                  message: 'This permanently deletes the lead. This action cannot be undone.',
+                  confirmText: 'Delete Lead',
+                  cancelText: 'Cancel',
+                  variant: 'danger',
+                  requireText: lead.stage === 'NEW_LEAD' ? undefined : displayName,
+                });
+                if (isConfirmed) {
                   deleteMutation.mutate();
                 }
               }}
