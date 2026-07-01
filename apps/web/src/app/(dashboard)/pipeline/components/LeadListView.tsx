@@ -292,7 +292,7 @@ export function LeadListView() {
       </div>
 
       {/* Data Table */}
-      <div className="rounded-2xl border border-border bg-white overflow-hidden">
+      <div className="hidden md:block rounded-2xl border border-border bg-white overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px]">
             <thead>
@@ -384,6 +384,69 @@ export function LeadListView() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="md:hidden flex flex-col gap-3 pb-4 mt-4">
+        {loading ? (
+          Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="p-4 rounded-xl border border-border bg-white">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="h-10 w-10 rounded-full skeleton" />
+                <div className="space-y-2">
+                  <div className="h-4 w-24 rounded skeleton" />
+                  <div className="h-3 w-16 rounded skeleton" />
+                </div>
+              </div>
+              <div className="h-3 w-32 rounded skeleton" />
+            </div>
+          ))
+        ) : filteredLeads.length === 0 ? (
+          <div className="p-8 text-center text-sm text-[#9CA3AF] bg-white rounded-xl border border-border">
+            No leads found.
+          </div>
+        ) : (
+          filteredLeads.map((lead) => (
+            <motion.div
+              key={lead.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              onClick={() => router.push(`/pipeline/${lead.id}`)}
+              className="bg-white border border-border rounded-xl p-4 cursor-pointer hover:border-primary/30 hover:shadow-sm transition-all"
+            >
+              <div className="flex justify-between items-start mb-3">
+                <div className="flex items-center gap-3">
+                  <div className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${getAvatarColor(getClientDisplayName(lead.client) || lead.contactName)}`}>
+                    {getInitials(getClientDisplayName(lead.client) || lead.contactName)}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-primary">{getClientDisplayName(lead.client) || lead.contactName}</h3>
+                    {lead.companyName && <p className="text-xs text-secondary">{lead.companyName}</p>}
+                  </div>
+                </div>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                  lead.stage === 'PROJECT_COMPLETED' ? 'bg-green-50 text-green-700 border-green-200' :
+                  lead.stage === 'CHURNED' ? 'bg-red-50 text-red-700 border-red-200' :
+                  'text-primary bg-[#F3F4F6] border-border'
+                }`}>
+                  {lead.stage.replace(/_/g, ' ')}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <p className="text-[#9CA3AF]">Deal Value</p>
+                  <p className="font-medium text-[#374151]">{lead.dealValue ? formatCurrency(lead.dealValue) : '—'}</p>
+                </div>
+                <div>
+                  <p className="text-[#9CA3AF]">Close Date</p>
+                  <p className="font-medium text-[#374151]">
+                    {lead.expectedCloseDate ? new Date(lead.expectedCloseDate).toLocaleDateString() : '—'}
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          ))
+        )}
       </div>
 
       {/* Create Modal */}

@@ -351,12 +351,12 @@ function ClientsContent() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-semibold text-primary tracking-tight">Clients</h1>
           <p className="text-sm text-secondary mt-1">{total} total clients</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
           {(!!search || statusFilter.length > 0 || !!cityFilter || !!industryFilter || engagementTypeFilter.length > 0 || accountManagerFilter.length > 0) && (
             <button
               onClick={() => {
@@ -368,7 +368,7 @@ function ClientsContent() {
                 setAccountManagerFilter([]);
                 router.replace('/clients', { scroll: false });
               }}
-              className="flex items-center gap-1.5 rounded-xl bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors border border-red-100"
+              className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 rounded-xl bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors border border-red-100 whitespace-nowrap"
             >
               <X className="h-4 w-4" /> Clear Filters
             </button>
@@ -376,7 +376,7 @@ function ClientsContent() {
           <button
             onClick={handleExport}
             disabled={isExporting}
-            className="flex items-center gap-2 rounded-xl border border-border bg-white px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all disabled:opacity-50"
+            className="flex-1 sm:flex-none justify-center flex items-center gap-2 rounded-xl border border-border bg-white px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all disabled:opacity-50 whitespace-nowrap"
           >
             <Download className="h-4 w-4" />
             {isExporting ? 'Exporting...' : 'Export CSV'}
@@ -386,7 +386,7 @@ function ClientsContent() {
               setShowCreate(true);
               setCreationMode('MANUAL');
             }}
-            className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all"
+            className="flex-1 sm:flex-none justify-center flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all whitespace-nowrap"
           >
             <Plus className="h-4 w-4" /> Add Client
           </button>
@@ -755,7 +755,7 @@ function ClientsContent() {
                             <X className="h-3.5 w-3.5" />
                           </button>
                         )}
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <Field label="Name *" value={contact.name} onChange={(v) => { const c = [...form.contacts]; c[i].name = v; setForm({ ...form, contacts: c }); }} required />
                           <Field label="Designation" value={contact.designation} onChange={(v) => { const c = [...form.contacts]; c[i].designation = v; setForm({ ...form, contacts: c }); }} />
                           <Field label="Email" type="email" value={contact.email} onChange={(v) => { const c = [...form.contacts]; c[i].email = v; setForm({ ...form, contacts: c }); }} />

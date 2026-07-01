@@ -10,8 +10,10 @@ import { Select } from '@/components/ui/select';
 import { useMembers, useClients } from '@/hooks/useQueries';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
+import { useQueryClient } from '@tanstack/react-query';
 
 export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onClose: () => void; onSuccess: () => void; initialMode?: 'MANUAL' | 'BULK' }) {
+  const queryClient = useQueryClient();
   const { data: members = [] } = useMembers();
   const { data: clients = [] } = useClients();
   
@@ -81,13 +83,13 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
       industry: client.industry || '',
       city: client.city || ''
     }));
-    setClientSearch(client.name + (client.company ? ` (${client.company})` : ''));
+    setClientSearch(client.company || client.name);
     setShowClientDropdown(false);
   };
 
   const handleClientSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setClientSearch(e.target.value);
-    setForm(prev => ({ ...prev, clientId: '', contactName: e.target.value }));
+    setForm(prev => ({ ...prev, clientId: '', companyName: e.target.value }));
     setShowClientDropdown(true);
   };
 
@@ -114,6 +116,8 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
 
       await api.post('/crm/leads', payload);
       toast.success('Lead added successfully');
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
       onSuccess();
     } catch (err: any) {
       toast.error(err.message || 'An error occurred');
@@ -254,7 +258,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                         value={clientSearch}
                         onChange={handleClientSearchChange}
                         onFocus={() => setShowClientDropdown(true)}
-                        placeholder="Search existing clients or type new..."
+                        placeholder="Search existing clients or type company name..."
                         className={`w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all ${form.clientId ? 'bg-blue-50 border-blue-200 text-blue-900' : ''}`}
                       />
                       {form.clientId && (
@@ -262,37 +266,24 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                       )}
                     </div>
                     
-                    {showClientDropdown && clientSearch.length > 0 && (
+                    {showClientDropdown && clientSearch.length > 0 && filteredClients.length > 0 && (
                       <div className="absolute z-10 w-full mt-1 bg-white border border-border rounded-xl shadow-lg max-h-48 overflow-y-auto p-1">
-                        {filteredClients.length > 0 ? (
-                          filteredClients.map((client: any) => (
-                            <button
-                              key={client.id}
-                              type="button"
-                              onClick={() => handleSelectClient(client)}
-                              className="w-full text-left px-3 py-2 text-sm text-[#374151] hover:bg-gray-50 rounded-lg flex flex-col transition-colors"
-                            >
-                              <span className="font-medium">{client.name}</span>
-                              {client.company && <span className="text-xs text-secondary">{client.company}</span>}
-                            </button>
-                          ))
-                        ) : (
-                          <div className="px-3 py-2 text-sm text-secondary flex items-center justify-between">
-                            <span>No exact match found.</span>
-                            <span className="bg-primary/10 text-primary text-xs px-2 py-0.5 rounded font-medium">Will create new</span>
-                          </div>
-                        )}
+                        {filteredClients.map((client: any) => (
+                          <button
+                            key={client.id}
+                            type="button"
+                            onClick={() => handleSelectClient(client)}
+                            className="w-full text-left px-3 py-2 text-sm text-[#374151] hover:bg-gray-50 rounded-lg flex flex-col transition-colors"
+                          >
+                            <span className="font-medium">{client.name}</span>
+                            {client.company && <span className="text-xs text-secondary">{client.company}</span>}
+                          </button>
+                        ))}
                       </div>
                     )}
                   </div>
 
-                  {!form.clientId && (
-                    <div className="pl-4 border-l-2 border-primary/20 space-y-4 py-1">
-                      <Field label="Company Name" value={form.companyName} onChange={(v) => setForm({ ...form, companyName: v })} placeholder="Optional company name" />
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Field label="LinkedIn URL" value={form.linkedinUrl} onChange={(v) => setForm({ ...form, linkedinUrl: v })} placeholder="linkedin.com/in/username" />
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority <span className="text-red-500">*</span></label>
@@ -368,14 +359,8 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                     <Field label="Website" value={form.website} onChange={(v) => setForm({ ...form, website: v })} placeholder="example.com" />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Field label="State" value={form.state} onChange={(v) => setForm({ ...form, state: v })} placeholder="e.g. Tamil Nadu" />
-                    <Field label="Deal Value (₹)" type="number" icon={<IndianRupee className="h-4 w-4 text-secondary" />} value={form.dealValue} onChange={(v) => setForm({ ...form, dealValue: v })} placeholder="0.00" />
-                    <Field label="Expected Revenue (Monthly, ₹)" type="number" icon={<IndianRupee className="h-4 w-4 text-secondary" />} value={form.expectedRevenue} onChange={(v) => setForm({ ...form, expectedRevenue: v })} placeholder="0.00" />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <Field label="Close Date" type="date" value={form.expectedCloseDate} onChange={(v) => setForm({ ...form, expectedCloseDate: v })} />
                     <Field label="Follow-up Date" type="date" value={form.followUpDate} onChange={(v) => setForm({ ...form, followUpDate: v })} />
                   </div>
                 </div>
@@ -390,7 +375,6 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                   <div className="grid grid-cols-2 gap-4">
                     <Field label="Contact Name" required error={errors.contactName} value={form.contactName} onChange={(v) => {
                       setForm({ ...form, contactName: v });
-                      if(!form.clientId) setClientSearch(v);
                     }} placeholder="Full Name" />
                     <Field label="Job Title" value={form.jobTitle} onChange={(v) => setForm({ ...form, jobTitle: v })} placeholder="e.g. Marketing Director" />
                   </div>

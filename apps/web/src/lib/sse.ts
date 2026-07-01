@@ -62,7 +62,10 @@ class SSEClient {
 
 let sseInstance: SSEClient | null = null;
 
-export function getSSE(): SSEClient | null {
+export function getSSE(): SSEClient {
+  if (!sseInstance) {
+    sseInstance = new SSEClient();
+  }
   return sseInstance;
 }
 

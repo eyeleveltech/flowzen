@@ -19,6 +19,8 @@ class ApiClient {
     
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
       ...(isMutation ? { 'X-Idempotency-Key': crypto.randomUUID() } : {}),
       ...options.headers,
     };
@@ -27,6 +29,7 @@ class ApiClient {
       method: options.method || 'GET',
       headers,
       credentials: 'include',
+      cache: 'no-store',
       body: options.body ? JSON.stringify(options.body) : undefined,
     });
 

@@ -124,7 +124,7 @@ projectRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
     const project = await prisma.project.findFirst({
       where: where as any,
       include: {
-        client: { select: { id: true, name: true, company: true } },
+        client: { select: { id: true, name: true, company: true, lead: { select: { id: true } } } },
         owner: { select: { id: true, name: true, avatar: true, email: true } },
         members: { include: { user: { select: { id: true, name: true, avatar: true, role: true, designation: true } } } },
         teams: { include: { team: { include: { members: { select: { id: true, name: true, avatar: true, role: true, designation: true } } } } } },
@@ -168,10 +168,7 @@ projectRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), va
   try {
     const { memberIds, teamIds, folderLink, ...projectData } = req.body;
 
-    if ((projectData.type === 'ONE_TIME' || projectData.type === 'EVENT') && !projectData.endDate) {
-      res.status(400).json({ error: 'End date is required for One-Time and Event projects' });
-      return;
-    }
+
 
     let finalClientId = projectData.clientId;
     if (!finalClientId) {
@@ -245,10 +242,7 @@ projectRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), 
 
     const { memberIds, teamIds, folderLink, ...projectData } = req.body;
 
-    if ((projectData.type === 'ONE_TIME' || projectData.type === 'EVENT') && !projectData.endDate) {
-      res.status(400).json({ error: 'End date is required for One-Time and Event projects' });
-      return;
-    }
+
 
     let finalClientId = projectData.clientId;
     if (!finalClientId) {

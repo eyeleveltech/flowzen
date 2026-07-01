@@ -4,6 +4,7 @@ import { useState, useEffect, useId } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
+import { getSSE } from '@/lib/sse';
 import { formatDate, formatCurrency, getInitials, getAvatarColor, getClientDisplayName, formatRelativeDate } from '@/lib/utils';
 import { ArrowLeft, Mail, Phone, MapPin, Building2, DollarSign, X, Plus, Users, Globe, Briefcase, Trash2, Calendar, FolderKanban } from 'lucide-react';
 import { Select } from '@/components/ui/select';
@@ -70,7 +71,21 @@ export default function ClientDetailPage() {
   const [orgProfile, setOrgProfile] = useState<any>(null);
 
   useEffect(() => {
-    api.get<ClientDetail>(`/clients/${id}`).then(setClient).catch(() => router.push('/clients'));
+    const fetchClient = () => api.get<ClientDetail>(`/clients/${id}`).then(setClient).catch(() => router.push('/clients'));
+    fetchClient();
+
+    const sse = getSSE();
+    if (sse) {
+      const handleUpdate = (data: any) => {
+        if (!data || !data.id || data.id === id) {
+          fetchClient();
+        }
+      };
+      sse.on('client:updated', handleUpdate);
+      return () => {
+        sse.off('client:updated', handleUpdate);
+      };
+    }
   }, [id, router]);
 
   useEffect(() => {
@@ -172,7 +187,7 @@ export default function ClientDetailPage() {
       </button>
 
       {/* Header */}
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 sm:gap-4 mb-8">
         <div className="flex items-start gap-4">
           <div className={`flex h-16 w-16 items-center justify-center rounded-2xl text-xl font-bold ${getAvatarColor(getClientDisplayName(client))}`}>
             {getInitials(getClientDisplayName(client))}
@@ -189,7 +204,7 @@ export default function ClientDetailPage() {
           </div>
         </div>
         {client.name !== 'Internal' && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
             {!['PROJECT_COMPLETED', 'CHURNED'].includes(client.status) && (
               <button
                 onClick={() => setShowCreateProject(true)}
@@ -198,10 +213,10 @@ export default function ClientDetailPage() {
                 <Plus className="h-4 w-4" /> Create Project
               </button>
             )}
-            <button onClick={openEdit} className="px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-[#374151] hover:bg-gray-50 transition-colors shadow-sm">
+            <button onClick={openEdit} className="flex-1 sm:flex-none px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-[#374151] hover:bg-gray-50 transition-colors shadow-sm whitespace-nowrap">
               Edit Client
             </button>
-            <button onClick={handleDelete} className="px-4 py-2 bg-white border border-red-200 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors shadow-sm flex items-center gap-1.5">
+            <button onClick={handleDelete} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-red-200 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap">
               <Trash2 className="h-4 w-4" />
               Delete
             </button>
@@ -210,7 +225,7 @@ export default function ClientDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-border mb-6">
+      <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto whitespace-nowrap custom-scrollbar pb-1">
         {tabs.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-all ${tab === t.id ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-primary'}`}>
             {t.label}
@@ -528,8 +543,8 @@ export default function ClientDetailPage() {
       <AnimatePresence>
         {viewModalContent && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] bg-black/20 backdrop-blur-sm" onClick={() => setViewModalContent(null)} />
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-[60] w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 flex flex-col">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-60 bg-black/20 backdrop-blur-sm" onClick={() => setViewModalContent(null)} />
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-60 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 flex flex-col">
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] shrink-0">
                 <h2 className="text-lg font-semibold text-primary">{viewModalContent.title}</h2>
                 <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>

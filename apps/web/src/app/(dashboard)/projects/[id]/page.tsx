@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { formatDate, formatShortDate, getInitials, formatRelativeDate, getAvatarColor, getClientDisplayName } from '@/lib/utils';
-import { ArrowLeft, Clock, MessageSquare, MoreHorizontal, CheckCircle2, ChevronRight, Plus, X, Trash2, Users, DollarSign, Briefcase, Filter } from 'lucide-react';
+import { ArrowLeft, Clock, MessageSquare, MoreHorizontal, CheckCircle2, ChevronRight, Plus, X, Trash2, Users, DollarSign, Briefcase, Filter, ArrowUpRight } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { TaskDetailDrawer } from '@/components/tasks/task-detail-drawer';
 import { MultiSelect } from '@/components/ui/multi-select';
@@ -20,7 +20,7 @@ interface ProjectDetail {
   type: string; scope?: string | null; reportingCadence: string; clientApprovalRequired: boolean;
   tags: string[]; projectNotes?: string | null; folderLink?: string | null;
   startDate?: string | null; endDate?: string | null; budget?: number | null;
-  client?: { id: string; name: string; company?: string | null };
+  client?: { id: string; name: string; company?: string | null; lead?: { id: string } | null };
   owner?: { id: string; name: string; avatar?: string | null; email?: string | null };
   members?: { id: string; user: { id: string; name: string; avatar?: string | null; role?: string } }[];
   teams?: { id: string; team: { id: string; name: string; members: { id: string; name: string; avatar?: string | null; role?: string }[] } }[];
@@ -471,6 +471,11 @@ export default function ProjectDetailPage() {
           <p className="text-base font-medium text-secondary">{project.client ? getClientDisplayName(project.client) : 'Internal Project'}</p>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          {project.client?.lead?.id && (
+            <button onClick={() => router.push(`/pipeline/${project.client!.lead!.id}`)} className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-primary bg-white hover:bg-primary/5 transition-all flex items-center gap-1.5">
+              Pipeline <ArrowUpRight className="h-4 w-4" />
+            </button>
+          )}
           {project.folderLink && (
             <a href={project.folderLink} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-[#2563EB] bg-white hover:bg-blue-50 transition-all flex items-center gap-1.5">
               Drive Folder
