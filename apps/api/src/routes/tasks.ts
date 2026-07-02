@@ -47,6 +47,8 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     if (type) where.type = whereIn(type);
     if (projectId) where.projectId = whereIn(projectId);
     
+    const andConditions: any[] = [];
+    
     if (filter === 'overdue') {
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
@@ -54,12 +56,32 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
       if (!status) {
         where.status = { notIn: ['COMPLETED'] };
       }
+    } else if (filter === 'today') {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+      if (!status) {
+        andConditions.push({
+          OR: [
+            { dueDate: { lt: todayStart }, status: { notIn: ['COMPLETED'] } },
+            { dueDate: { gte: todayStart, lte: todayEnd } }
+          ]
+        });
+      } else {
+        andConditions.push({
+          OR: [
+            { dueDate: { lt: todayStart } },
+            { dueDate: { gte: todayStart, lte: todayEnd } }
+          ]
+        });
+      }
     } else if (filter === 'approval') {
       where.status = 'REVIEW';
     }
     
+    
     // Match either the primary assignee or any of the multi-assignees.
-    const andConditions: any[] = [];
     const assigneeMatch = (uid: string) => ({ OR: [{ assigneeId: uid }, { assignees: { some: { id: uid } } }] });
     if (req.user!.role === 'TEAM_MEMBER') {
       andConditions.push(assigneeMatch(req.user!.userId));

@@ -264,7 +264,7 @@ quoteRouter.post('/:id/generate-pdf', async (req: AuthRequest, res: Response, ne
     const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { name: true, logo: true, address: true, phone: true, website: true, settings: true } });
 
     const pdfUrl = await generateQuotePdf(quote, org);
-    await prisma.quoteDocument.update({ where: { id }, data: { pdfUrl } });
+    await prisma.quoteDocument.update({ where: { id }, data: { pdfUrl, status: 'SENT' } });
 
     // Log to the originating lead's timeline, if this client came from a lead (Module E).
     const lead = await prisma.lead.findFirst({ where: { clientId: quote.clientId, organizationId: orgId }, select: { id: true } });

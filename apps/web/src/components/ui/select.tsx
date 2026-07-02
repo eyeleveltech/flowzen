@@ -32,7 +32,7 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const isMobile = useMediaQuery('(max-width: 768px)');
-  
+
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [rect, setRect] = useState<DOMRect | null>(null);
@@ -66,9 +66,9 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
   const q = searchQuery.trim().toLowerCase();
   const filteredOptions = q
     ? options.filter(opt =>
-        opt.label.toLowerCase().includes(q) ||
-        (opt.sublabel ? opt.sublabel.toLowerCase().includes(q) : false)
-      )
+      opt.label.toLowerCase().includes(q) ||
+      (opt.sublabel ? opt.sublabel.toLowerCase().includes(q) : false)
+    )
     : options;
 
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -76,7 +76,7 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
-        containerRef.current && 
+        containerRef.current &&
         !containerRef.current.contains(event.target as Node) &&
         dropdownRef.current &&
         !dropdownRef.current.contains(event.target as Node)
@@ -147,7 +147,7 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
       >
         <span className="flex items-center gap-2 min-w-0">
           {selectedOption?.avatar && (
-            <span className="h-5 w-5 shrink-0 rounded-full bg-[#F3F4F6] border border-[#E5E7EB] text-[#111827] text-[9px] font-semibold flex items-center justify-center">{selectedOption.avatar}</span>
+            <span className="h-5 w-5 shrink-0 rounded-full bg-[#F3F4F6] border border-border text-primary text-[9px] font-semibold flex items-center justify-center">{selectedOption.avatar}</span>
           )}
           <span className={`min-w-0 truncate ${selectedOption && selectedOption.value !== '' ? 'text-primary' : 'text-[#374151]'}`}>
             {selectedOption ? selectedOption.label : placeholder}
@@ -155,7 +155,7 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
         </span>
         <ChevronDown className={`h-4 w-4 shrink-0 text-[#9CA3AF] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
       </button>
-      
+
       {required && (
         <input
           tabIndex={-1}
@@ -177,7 +177,7 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search..."
                   autoComplete="off"
-                  className="w-full rounded-xl border border-border bg-white py-2.5 pl-10 pr-3 text-base text-primary outline-none focus:border-primary"
+                  className="w-full rounded-xl border border-border bg-white py-2.5 pl-10 pr-3 text-sm text-primary outline-none focus:border-primary"
                 />
               </div>
             )}
@@ -191,11 +191,10 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
                   onChange(option.value);
                   setIsOpen(false);
                 }}
-                className={`w-full text-left px-4 py-3.5 rounded-xl text-base transition-colors ${
-                  value === option.value
-                    ? 'bg-[#F3F4F6] text-primary font-semibold'
-                    : 'text-[#374151] active:bg-[#F9FAFB]'
-                }`}
+                className={`w-full text-left px-4 py-2 rounded-xl text-sm transition-colors ${value === option.value
+                  ? 'bg-[#F3F4F6] text-primary font-semibold'
+                  : 'text-[#374151] active:bg-[#F9FAFB]'
+                  }`}
               >
                 <span className="flex items-center gap-3">
                   {option.avatar && (
@@ -232,98 +231,97 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
                       : { top: rect ? rect.bottom + 8 : 0 }),
                   }}
                 >
-              {showSearch && (
-                <div className="sticky top-0 z-10 -mx-1.5 -mt-1.5 mb-1 border-b border-[#F3F4F6] bg-white px-1.5 pt-1.5 pb-1.5">
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#9CA3AF]" aria-hidden="true" />
-                    <input
-                      ref={searchInputRef}
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search..."
-                      autoComplete="off"
-                      className="w-full rounded-lg border border-border bg-white py-1.5 pl-8 pr-2 text-sm text-primary outline-none focus:border-primary"
+                  {showSearch && (
+                    <div className="sticky top-0 z-10 -mx-1.5 -mt-1.5 mb-1 border-b border-[#F3F4F6] bg-white px-1.5 pt-1.5 pb-1.5">
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#9CA3AF]" aria-hidden="true" />
+                        <input
+                          ref={searchInputRef}
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          placeholder="Search..."
+                          autoComplete="off"
+                          className="w-full rounded-lg border border-border bg-white py-1.5 pl-8 pr-2 text-sm text-primary outline-none focus:border-primary"
+                          onKeyDown={(e) => {
+                            if (e.key === 'ArrowDown') {
+                              e.preventDefault();
+                              (dropdownRef.current?.querySelector('[role="option"]') as HTMLElement)?.focus();
+                            } else if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (filteredOptions[0]) {
+                                onChange(filteredOptions[0].value);
+                                setIsOpen(false);
+                                containerRef.current?.querySelector('button')?.focus();
+                              }
+                            } else if (e.key === 'Escape') {
+                              e.preventDefault();
+                              setIsOpen(false);
+                              containerRef.current?.querySelector('button')?.focus();
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {filteredOptions.length === 0 && (
+                    <div className="px-3 py-2 text-sm text-[#9CA3AF]">No options found</div>
+                  )}
+                  {filteredOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      role="option"
+                      aria-selected={value === option.value}
+                      type="button"
+                      tabIndex={isOpen ? 0 : -1}
+                      onClick={() => {
+                        onChange(option.value);
+                        setIsOpen(false);
+                        containerRef.current?.querySelector('button')?.focus();
+                      }}
                       onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onChange(option.value);
+                          setIsOpen(false);
+                          containerRef.current?.querySelector('button')?.focus();
+                        }
                         if (e.key === 'ArrowDown') {
                           e.preventDefault();
-                          (dropdownRef.current?.querySelector('[role="option"]') as HTMLElement)?.focus();
-                        } else if (e.key === 'Enter') {
+                          const next = e.currentTarget.nextElementSibling as HTMLElement;
+                          if (next) next.focus();
+                        }
+                        if (e.key === 'ArrowUp') {
                           e.preventDefault();
-                          if (filteredOptions[0]) {
-                            onChange(filteredOptions[0].value);
-                            setIsOpen(false);
+                          const prev = e.currentTarget.previousElementSibling as HTMLElement;
+                          if (prev && prev.getAttribute('role') === 'option') {
+                            prev.focus();
+                          } else if (showSearch) {
+                            searchInputRef.current?.focus();
+                          } else {
                             containerRef.current?.querySelector('button')?.focus();
                           }
-                        } else if (e.key === 'Escape') {
-                          e.preventDefault();
+                        }
+                        if (e.key === 'Escape') {
                           setIsOpen(false);
                           containerRef.current?.querySelector('button')?.focus();
                         }
                       }}
-                    />
-                  </div>
-                </div>
-              )}
-              {filteredOptions.length === 0 && (
-                <div className="px-3 py-2 text-sm text-[#9CA3AF]">No options found</div>
-              )}
-              {filteredOptions.map((option) => (
-                <button
-                  key={option.value}
-                  role="option"
-                  aria-selected={value === option.value}
-                  type="button"
-                  tabIndex={isOpen ? 0 : -1}
-                  onClick={() => {
-                    onChange(option.value);
-                    setIsOpen(false);
-                    containerRef.current?.querySelector('button')?.focus();
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      onChange(option.value);
-                      setIsOpen(false);
-                      containerRef.current?.querySelector('button')?.focus();
-                    }
-                    if (e.key === 'ArrowDown') {
-                      e.preventDefault();
-                      const next = e.currentTarget.nextElementSibling as HTMLElement;
-                      if (next) next.focus();
-                    }
-                    if (e.key === 'ArrowUp') {
-                      e.preventDefault();
-                      const prev = e.currentTarget.previousElementSibling as HTMLElement;
-                      if (prev && prev.getAttribute('role') === 'option') {
-                        prev.focus();
-                      } else if (showSearch) {
-                        searchInputRef.current?.focus();
-                      } else {
-                        containerRef.current?.querySelector('button')?.focus();
-                      }
-                    }
-                    if (e.key === 'Escape') {
-                      setIsOpen(false);
-                      containerRef.current?.querySelector('button')?.focus();
-                    }
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/10 focus:bg-[#F9FAFB] ${
-                    value === option.value
-                      ? 'bg-[#F3F4F6] text-primary font-medium'
-                      : 'text-[#374151] hover:bg-[#F9FAFB]'
-                  }`}
-                >
-                  <span className="flex items-center gap-2.5">
-                    {option.avatar && (
-                      <span className="h-7 w-7 shrink-0 rounded-full bg-[#F3F4F6] border border-border text-primary text-[10px] font-semibold flex items-center justify-center">{option.avatar}</span>
-                    )}
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate">{option.label}</span>
-                      {option.sublabel && <span className="block text-[11px] text-[#9CA3AF] truncate">{option.sublabel}</span>}
-                    </span>
-                  </span>
-                </button>
-              ))}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/10 focus:bg-[#F9FAFB] ${value === option.value
+                        ? 'bg-[#F3F4F6] text-primary font-medium'
+                        : 'text-[#374151] hover:bg-[#F9FAFB]'
+                        }`}
+                    >
+                      <span className="flex items-center gap-2.5">
+                        {option.avatar && (
+                          <span className="h-7 w-7 shrink-0 rounded-full bg-[#F3F4F6] border border-border text-primary text-[10px] font-semibold flex items-center justify-center">{option.avatar}</span>
+                        )}
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate">{option.label}</span>
+                          {option.sublabel && <span className="block text-[11px] text-[#9CA3AF] truncate">{option.sublabel}</span>}
+                        </span>
+                      </span>
+                    </button>
+                  ))}
                 </motion.div>
               )}
             </AnimatePresence>,

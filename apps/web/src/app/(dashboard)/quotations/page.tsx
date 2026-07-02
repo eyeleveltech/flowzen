@@ -77,12 +77,12 @@ export default function QuotationsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-semibold text-primary tracking-tight">Quotations</h1>
           <p className="text-sm text-secondary mt-1">{quotes.length} document{quotes.length === 1 ? '' : 's'}</p>
         </div>
-        <button onClick={openNew} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all">
+        <button onClick={openNew} className="w-full sm:w-auto justify-center flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all">
           <Plus className="h-4 w-4" /> New Quotation
         </button>
       </div>
@@ -101,8 +101,8 @@ export default function QuotationsPage() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-2xl border border-border overflow-hidden">
+      {/* Desktop Table */}
+      <div className="hidden md:block bg-white rounded-2xl border border-border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -153,6 +153,51 @@ export default function QuotationsPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="md:hidden flex flex-col gap-3 pb-4">
+        {isLoading ? (
+          <div className="p-6 text-center text-sm text-secondary bg-white rounded-xl border border-border">Loading…</div>
+        ) : quotes.length === 0 ? (
+          <div className="p-8 text-center text-sm text-secondary bg-white rounded-xl border border-border">No documents yet.</div>
+        ) : quotes.map((q) => (
+          <div key={q.id} className="p-4 rounded-xl border border-border bg-white hover:shadow-sm cursor-pointer transition-all" onClick={() => openEdit(q.id)}>
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-primary leading-tight font-mono">{q.documentNumber}</p>
+                  <p className="text-[11px] text-secondary mt-0.5">{q.documentType === 'QUOTATION' ? 'Quotation' : 'Proforma Invoice'}</p>
+                </div>
+              </div>
+              <span className={`inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-md border ${STATUS_STYLES[q.status]}`}>
+                {q.status[0] + q.status.slice(1).toLowerCase()}
+              </span>
+            </div>
+            
+            <div className="mb-3">
+              <p className="text-sm font-medium text-primary">{q.clientName}</p>
+              <p className="text-xs text-secondary mt-0.5">Date: {formatDate(q.documentDate)}</p>
+            </div>
+
+            <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-50">
+              <p className="text-sm font-bold text-primary">{formatCurrency(Number(q.grandTotal))}</p>
+              
+              <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                <button title="View / Edit" onClick={() => openEdit(q.id)} className="p-1.5 rounded-lg text-secondary hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Eye className="h-3.5 w-3.5" /></button>
+                <button title="Generate / Download PDF" onClick={() => q.pdfUrl ? window.open(`${API_BASE}${q.pdfUrl}`, '_blank') : generatePdf(q.id)} className="p-1.5 rounded-lg text-secondary hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Download className="h-3.5 w-3.5" /></button>
+                <button title="Duplicate" onClick={() => duplicate(q.id)} className="p-1.5 rounded-lg text-secondary hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Copy className="h-3.5 w-3.5" /></button>
+                {q.status !== 'CANCELLED' && (
+                  <button title="Cancel" onClick={async () => { if (await confirm({ title: 'Cancel Document', message: 'Are you sure you want to cancel this document?', confirmText: 'Cancel Document', cancelText: 'Keep', variant: 'warning' })) statusMutation.mutate({ id: q.id, status: 'CANCELLED' }); }} className="p-1.5 rounded-lg text-secondary hover:bg-red-50 hover:text-red-600 transition-colors"><Ban className="h-3.5 w-3.5" /></button>
+                )}
+                <button title="Delete" onClick={async () => { if (await confirm({ title: 'Delete Document', message: 'Are you sure you want to delete this document? This cannot be undone.', confirmText: 'Delete', cancelText: 'Cancel', variant: 'danger' })) deleteMutation.mutate(q.id); }} className="p-1.5 rounded-lg text-secondary hover:bg-red-50 hover:text-red-600 transition-colors"><Trash2 className="h-3.5 w-3.5" /></button>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
 
       {showForm && (

@@ -66,7 +66,7 @@ export default function RenewalsPage() {
       </div>
 
       {/* Filter */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <button onClick={() => setStatusFilter('')} className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${!statusFilter ? 'bg-primary text-white border-primary' : 'bg-white text-secondary border-border hover:text-primary'}`}>All</button>
         {STATUSES.map((s) => (
           <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${statusFilter === s ? 'bg-primary text-white border-primary' : 'bg-white text-secondary border-border hover:text-primary'}`}>{s.replace(/_/g, ' ')}</button>
@@ -143,7 +143,7 @@ function RenewalModal({ lead, onClose, onSaved }: { lead: any; onClose: () => vo
           <div><label className={labelCls}>Renewal Status</label>
             <select className={inputCls} value={form.renewalStatus} onChange={(e) => set('renewalStatus', e.target.value)}>{STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}</select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div><label className={labelCls}>Contract Start</label><input type="date" className={inputCls} value={form.contractStartDate} onChange={(e) => set('contractStartDate', e.target.value)} /></div>
             <div><label className={labelCls}>Contract End</label><input type="date" className={inputCls} value={form.contractEndDate} onChange={(e) => set('contractEndDate', e.target.value)} /></div>
           </div>

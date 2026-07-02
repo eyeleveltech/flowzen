@@ -54,17 +54,20 @@ export function ContactsTab({ leadId, lead }: { leadId: string; lead: any }) {
     <div className="space-y-4">
       {/* Primary contact (read-only, from the lead) */}
       <div className="bg-white rounded-2xl border border-border p-5">
-        <div className="flex items-center gap-3">
-          <div className={`h-10 w-10 rounded-xl flex items-center justify-center text-sm font-bold ${getAvatarColor(lead.contactName || 'Lead')}`}>{getInitials(lead.contactName || lead.companyName || 'L')}</div>
+        <div className="flex items-start gap-3">
+          <div className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center text-sm font-bold ${getAvatarColor(lead.contactName || 'Lead')}`}>{getInitials(lead.contactName || lead.companyName || 'L')}</div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
+            {/* Name row: stacks on mobile */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
               <p className="font-semibold text-primary truncate">{lead.contactName || '—'}</p>
-              <span className="px-2 py-0.5 rounded-md bg-primary text-white text-[10px] font-semibold">Primary</span>
-              {lead.jobTitle && <span className="text-xs text-secondary">· {lead.jobTitle}</span>}
+              <div className="flex items-center gap-2">
+                <span className="inline-flex px-2 py-0.5 rounded-md bg-primary text-white text-[10px] font-semibold">Primary</span>
+                {lead.jobTitle && <span className="text-xs text-secondary">{lead.jobTitle}</span>}
+              </div>
             </div>
-            <div className="flex items-center gap-x-4 gap-y-1 mt-1 text-xs text-secondary flex-wrap">
-              {lead.contactEmail && <a href={`mailto:${lead.contactEmail}`} className="flex items-center gap-1 hover:text-primary"><Mail className="w-3 h-3" /> {lead.contactEmail}</a>}
-              {lead.contactPhone && <a href={`tel:${lead.contactPhone}`} className="flex items-center gap-1 hover:text-primary"><Phone className="w-3 h-3" /> {lead.contactPhone}</a>}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-x-4 mt-2 text-xs text-secondary">
+              {lead.contactEmail && <a href={`mailto:${lead.contactEmail}`} className="flex items-center gap-1.5 hover:text-primary break-all"><Mail className="w-3 h-3 shrink-0" /> {lead.contactEmail}</a>}
+              {lead.contactPhone && <a href={`tel:${lead.contactPhone}`} className="flex items-center gap-1.5 hover:text-primary"><Phone className="w-3 h-3 shrink-0" /> {lead.contactPhone}</a>}
               {lead.linkedinUrl && <a href={lead.linkedinUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-primary"><Link2 className="w-3 h-3" /> LinkedIn</a>}
             </div>
           </div>
@@ -72,8 +75,8 @@ export function ContactsTab({ leadId, lead }: { leadId: string; lead: any }) {
       </div>
 
       {/* Secondary contacts */}
-      <div className="bg-white rounded-2xl border border-border p-5">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-white rounded-2xl border border-border p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-y-3 gap-x-4 mb-4">
           <h2 className="text-base font-semibold text-primary flex items-center gap-2"><User className="w-4 h-4 text-secondary" /> Stakeholders <span className="text-secondary font-normal">({contacts.length})</span></h2>
           <button onClick={() => setModal({ open: true })} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-gray-800 transition-colors"><Plus className="w-4 h-4" /> Add Contact</button>
         </div>

@@ -448,15 +448,15 @@ export default function ProjectDetailPage() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-      <button onClick={() => router.push('/projects')} className="flex items-center gap-1.5 text-sm text-secondary hover:text-primary mb-6 transition-colors">
+      <button onClick={() => router.push('/projects')} className="flex items-center gap-1.5 text-sm text-secondary hover:text-primary mb-4 md:mb-6 transition-colors">
         <ArrowLeft className="h-4 w-4" /> Back to Projects
       </button>
 
       {/* Header Top Row */}
       <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6 mb-8">
         <div>
-          <div className="flex flex-wrap items-center gap-3 mb-2">
-            <h1 className="text-3xl font-semibold text-primary tracking-tight">{project.name}</h1>
+          <div className="flex flex-wrap items-center gap-2 md:gap-3 mb-2">
+            <h1 className="text-xl md:text-3xl font-semibold text-primary tracking-tight">{project.name}</h1>
             <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium border ${healthConfig[projectHealth].color}`}>
               <div className={`h-1.5 w-1.5 rounded-full mr-1.5 ${projectHealth === 'GREEN' ? 'bg-emerald-500' : projectHealth === 'AMBER' ? 'bg-amber-500' : 'bg-red-500'}`} />
               {healthConfig[projectHealth].label}
@@ -629,9 +629,9 @@ export default function ProjectDetailPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-border mb-6">
+      <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto scrollbar-hide whitespace-nowrap">
         {tabs.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-all ${tab === t.id ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-primary'}`}>
+          <button key={t.id} onClick={() => setTab(t.id)} className={`px-3 md:px-4 py-2.5 text-sm font-medium border-b-2 transition-all shrink-0 ${tab === t.id ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-primary'}`}>
             {t.label}
           </button>
         ))}
@@ -852,7 +852,7 @@ export default function ProjectDetailPage() {
                     {m.dueDate && <span className="text-[11px] font-medium text-secondary flex items-center gap-1 mt-0.5"><Clock className="h-3 w-3" /> {formatDate(m.dueDate)}</span>}
                   </div>
                   {user?.role !== 'TEAM_MEMBER' && (
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                       <button onClick={(e) => startEditingMilestone(m, e)} className="text-secondary hover:text-primary p-1.5 rounded-lg bg-white border border-border hover:bg-gray-50">
                         Edit
                       </button>

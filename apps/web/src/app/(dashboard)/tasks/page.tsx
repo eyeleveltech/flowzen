@@ -47,6 +47,13 @@ const statusColors: Record<string, string> = {
   ON_HOLD: 'bg-purple-50 text-purple-700', COMPLETED: 'bg-emerald-50 text-emerald-700',
 };
 
+const isTaskOverdue = (task: Task) => {
+  if (!task.dueDate || task.status === 'COMPLETED') return false;
+  const due = new Date(task.dueDate);
+  due.setHours(23, 59, 59, 999);
+  return due < new Date();
+};
+
 const priorityDots: Record<string, string> = {
   LOW: 'bg-gray-300', MEDIUM: 'bg-blue-400', HIGH: 'bg-orange-500', URGENT: 'bg-red-500',
 };
@@ -144,6 +151,14 @@ function TasksContent() {
     const params = new URLSearchParams(searchParams.toString());
     if (open) params.set('create', 'true');
     else params.delete('create');
+    router.replace(`?${params.toString()}`, { scroll: false });
+  };
+
+  const currentFilter = searchParams.get('filter') || '';
+  const setQuickFilter = (val: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (val) params.set('filter', val);
+    else params.delete('filter');
     router.replace(`?${params.toString()}`, { scroll: false });
   };
 
@@ -273,13 +288,36 @@ function TasksContent() {
   useEffect(() => {
     const sse = getSSE();
     if (sse) {
+      const handleTaskUpdated = (updatedTask: any) => {
+        refetchTasks();
+        if (selectedTask?.id && updatedTask?.id === selectedTask.id) {
+          api.get<Task>(`/tasks/${updatedTask.id}`).then((fullTask) => {
+            setSelectedTaskState(fullTask);
+          }).catch(() => {});
+        }
+      };
+
+      const handleTaskDeleted = (deletedTask: any) => {
+        refetchTasks();
+        if (selectedTask?.id && deletedTask?.id === selectedTask.id) {
+          setSelectedTaskState(null);
+          toast('The task you were viewing was deleted by another user.', { icon: '🗑️' });
+        }
+      };
+
       sse.on('task:created', refetchTasks);
-      sse.on('task:updated', refetchTasks);
-      sse.on('task:deleted', refetchTasks);
+      sse.on('task:updated', handleTaskUpdated);
+      sse.on('task:deleted', handleTaskDeleted);
       sse.on('tasks:reordered', refetchTasks);
-      return () => { sse.off('task:created'); sse.off('task:updated'); sse.off('task:deleted'); sse.off('tasks:reordered'); };
+      
+      return () => { 
+        sse.off('task:created', refetchTasks); 
+        sse.off('task:updated', handleTaskUpdated); 
+        sse.off('task:deleted', handleTaskDeleted); 
+        sse.off('tasks:reordered', refetchTasks); 
+      };
     }
-  }, [refetchTasks]);
+  }, [refetchTasks, selectedTask?.id]);
 
   async function handleCreate(data: TaskFormValues) {
     setSubmitting(true);
@@ -443,6 +481,13 @@ function TasksContent() {
             <Plus className="h-4 w-4" /> New Task
           </button>
         </div>
+      </div>
+
+      <div className="flex gap-2 overflow-x-auto pb-2 mb-2 no-scrollbar">
+        <button onClick={() => setQuickFilter('')} className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium transition-all ${!currentFilter ? 'bg-primary text-white' : 'bg-gray-100 text-[#374151] hover:bg-gray-200'}`}>All Tasks</button>
+        <button onClick={() => setQuickFilter('today')} className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium transition-all ${currentFilter === 'today' ? 'bg-primary text-white shadow-sm' : 'bg-gray-100 text-[#374151] hover:bg-gray-200'}`}>Today</button>
+        <button onClick={() => setQuickFilter('overdue')} className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium transition-all ${currentFilter === 'overdue' ? 'bg-red-500 text-white shadow-sm' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>Overdue</button>
+        <button onClick={() => setQuickFilter('approval')} className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium transition-all ${currentFilter === 'approval' ? 'bg-amber-500 text-white shadow-sm' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}>Needs Approval</button>
       </div>
 
       <div className="flex flex-col gap-3 mb-6">
@@ -617,7 +662,9 @@ function TasksContent() {
                                       </div>
                                     </div>
                                     {t.dueDate && (
-                                      <p className="text-[10px] text-[#9CA3AF] mt-2">{formatShortDate(t.dueDate)}</p>
+                                      <div className="flex items-center gap-2 mt-2">
+                                        <p className={`text-[10px] ${isTaskOverdue(t) ? 'text-red-500 font-medium' : 'text-[#9CA3AF]'}`}>{formatShortDate(t.dueDate)}</p>
+                                      </div>
                                     )}
                                   </div>
                                 )}
@@ -677,7 +724,15 @@ function TasksContent() {
                               {t.status.replace('_', ' ')}
                             </span>
                           </td>
-                          <td className="px-6 py-3.5 text-sm text-secondary">{formatShortDate(t.dueDate)}</td>
+                          <td className="px-6 py-3.5 text-sm">
+                            {t.dueDate ? (
+                              <div className="flex items-center gap-2">
+                                <span className={isTaskOverdue(t) ? 'text-red-500 font-medium' : 'text-secondary'}>{formatShortDate(t.dueDate)}</span>
+                              </div>
+                            ) : (
+                              <span className="text-[#9CA3AF]">-</span>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -712,6 +767,11 @@ function TasksContent() {
                           <span className="text-[11px] font-medium text-[#4B5563]">{assigneeLabel(t)}</span>
                         </div>
                       </div>
+                      {t.dueDate && (
+                        <div className="flex items-center gap-2 mt-2">
+                          <p className={`text-[10px] ${isTaskOverdue(t) ? 'text-red-500 font-medium' : 'text-[#9CA3AF]'}`}>{formatShortDate(t.dueDate)}</p>
+                        </div>
+                      )}
                     </div>
                   </SwipeableCard>
                 ))}
