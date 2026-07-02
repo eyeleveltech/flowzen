@@ -38,7 +38,7 @@ export function QuoteFormModal({ editId, duplicateOf, onClose, onSaved }: { edit
   const [form, setForm] = useState({
     contactPerson: '', clientEmail: '', clientPhone: '', billingAddress: '',
     documentDate: new Date().toISOString().split('T')[0],
-    expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], 
+    expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     paymentTerms: 'Immediate', customerRef: '',
     salespersonId: user?.id || '', salesTeam: '', onlineSignature: false, onlinePayment: false,
     tags: '', paymentMethod: '', clientGst: '', projectStartDate: '', deliveryDate: '', projectNotes: '', scope: '',
@@ -53,11 +53,11 @@ export function QuoteFormModal({ editId, duplicateOf, onClose, onSaved }: { edit
   const clientRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    api.get<{ clients: any[] }>('/clients?limit=200').then((d) => setClients(d.clients || [])).catch(() => {});
+    api.get<{ clients: any[] }>('/clients?limit=200').then((d) => setClients(d.clients || [])).catch(() => { });
     api.get<any>('/settings/company').then((c) => {
       setOrgState(c?.state || '');
       if (!editId && !duplicateOf && c?.standardTerms) setForm((f) => ({ ...f, termsConditions: c.standardTerms }));
-    }).catch(() => {});
+    }).catch(() => { });
   }, []);
 
   // Populate for edit / duplicate
@@ -213,7 +213,7 @@ export function QuoteFormModal({ editId, duplicateOf, onClose, onSaved }: { edit
           <div className="inline-flex rounded-xl border border-border bg-white p-1">
             {(['QUOTATION', 'PROFORMA_INVOICE'] as const).map((t) => (
               <button key={t} onClick={() => !editId && setDocumentType(t)} disabled={!!editId}
-                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${documentType === t ? 'bg-primary text-white' : 'text-secondary hover:text-primary'} ${editId ? 'opacity-70 cursor-not-allowed' : ''}`}>
+                className={`px-2 md:px-4 py-2 text-xs md:text-sm font-medium rounded-lg transition-colors ${documentType === t ? 'bg-primary text-white' : 'text-secondary hover:text-primary'} ${editId ? 'opacity-70 cursor-not-allowed' : ''}`}>
                 {t === 'QUOTATION' ? 'Quotation' : 'Proforma Invoice'}
               </button>
             ))}
@@ -232,13 +232,13 @@ export function QuoteFormModal({ editId, duplicateOf, onClose, onSaved }: { edit
               {showClientList && (
                 <div className="absolute z-20 w-full mt-1 bg-white border border-border rounded-xl shadow-lg max-h-56 overflow-auto p-1">
                   {clients.length === 0 ? <div className="px-3 py-2 text-sm text-secondary">No clients found — add them on the Clients page first.</div> :
-                   filteredClients.length === 0 ? <div className="px-3 py-2 text-sm text-secondary">No match for “{clientSearch}”.</div> :
-                    filteredClients.map((c) => (
-                      <button key={c.id} onClick={() => selectClient(c)} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 rounded-lg">
-                        <span className="font-medium text-primary">{c.company || c.name}</span>
-                        {c.company && c.name && c.name !== c.company && <span className="text-xs text-secondary ml-2">{c.name}</span>}
-                      </button>
-                    ))}
+                    filteredClients.length === 0 ? <div className="px-3 py-2 text-sm text-secondary">No match for “{clientSearch}”.</div> :
+                      filteredClients.map((c) => (
+                        <button key={c.id} onClick={() => selectClient(c)} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 rounded-lg">
+                          <span className="font-medium text-primary">{c.company || c.name}</span>
+                          {c.company && c.name && c.name !== c.company && <span className="text-xs text-secondary ml-2">{c.name}</span>}
+                        </button>
+                      ))}
                 </div>
               )}
             </div>
@@ -336,7 +336,7 @@ export function QuoteFormModal({ editId, duplicateOf, onClose, onSaved }: { edit
             </div>
             <div>
               <label className="block text-sm font-medium text-[#374151] mb-1.5">Terms &amp; Conditions</label>
-            <textarea value={form.termsConditions} onChange={(e) => setForm({ ...form, termsConditions: e.target.value })} rows={4} className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus:border-primary resize-none" />
+              <textarea value={form.termsConditions} onChange={(e) => setForm({ ...form, termsConditions: e.target.value })} rows={4} className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus:border-primary resize-none" />
             </div>
           </div>
 
@@ -373,11 +373,11 @@ export function QuoteFormModal({ editId, duplicateOf, onClose, onSaved }: { edit
           </div>
         </div>
 
-        <div className="p-5 border-t border-border bg-white flex justify-end gap-3">
-          <button onClick={onClose} className="px-5 py-2.5 text-sm font-medium text-[#374151] bg-white border border-border rounded-xl hover:bg-gray-50">Cancel</button>
-          <button onClick={onSaveDraft} disabled={submitting} className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-[#374151] bg-white border border-border rounded-xl hover:bg-gray-50 disabled:opacity-50"><Save className="h-4 w-4" /> Save Draft</button>
-          <button onClick={onGeneratePdf} disabled={submitting} className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] disabled:opacity-50"><FileDown className="h-4 w-4" /> Generate PDF</button>
+        <div className="p-4 sm:p-5 border-t border-border bg-white flex flex-row justify-end gap-2 sm:gap-3">
+          <button onClick={onClose} className="flex-1 sm:flex-none w-full sm:w-auto px-2 sm:px-5 py-2.5 text-sm font-medium text-[#374151] bg-white border border-border rounded-xl hover:bg-gray-50">Cancel</button>
+          <button onClick={onGeneratePdf} disabled={submitting} className="flex-1 sm:flex-none w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] disabled:opacity-50"><FileDown className="h-4 w-4 shrink-0" /> <span className="hidden sm:inline">Generate PDF</span><span className="inline sm:hidden">PDF</span></button>
         </div>
+
       </motion.div>
     </>
   );

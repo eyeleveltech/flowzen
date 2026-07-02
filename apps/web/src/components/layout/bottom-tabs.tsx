@@ -22,6 +22,9 @@ import {
   User as UserIcon,
   LogOut,
   X,
+  FileText,
+  RefreshCw,
+  TrendingDown,
 } from 'lucide-react';
 
 type Tab = { label: string; href: string; icon: any; roles?: string[]; module?: ModuleKey | ModuleKey[] };
@@ -35,6 +38,9 @@ const primaryTabs: Tab[] = [
 ];
 
 const moreItems: Tab[] = [
+  { label: 'Quotations', href: '/quotations', icon: FileText, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
+  { label: 'Renewals', href: '/renewals', icon: RefreshCw, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
+  { label: 'Lost Deals', href: '/lost-deals', icon: TrendingDown, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
   { label: 'Calendar', href: '/calendar', icon: CalendarDays, module: 'PM' },
   { label: 'Members', href: '/team', icon: UsersRound, module: 'PM' },
   { label: 'Departments', href: '/teams', icon: Network, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'PM' },
@@ -80,7 +86,7 @@ export function BottomTabs() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm"
+              className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
               onClick={() => setShowMore(false)}
             />
             <motion.div
@@ -88,7 +94,7 @@ export function BottomTabs() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 z-[61] rounded-t-3xl bg-white shadow-2xl"
+              className="fixed bottom-0 left-0 right-0 z-40 rounded-t-3xl bg-white shadow-2xl"
             >
               {/* Handle */}
               <div className="flex justify-center pt-3 pb-1">
@@ -150,7 +156,7 @@ export function BottomTabs() {
                     logout();
                     window.location.href = '/login';
                   }}
-                  className="flex w-full items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-medium text-[#EF4444] hover:bg-red-50 transition-colors"
+                  className="flex w-full items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-medium text-danger hover:bg-red-50 transition-colors"
                 >
                   <LogOut className="h-5 w-5" />
                   Sign out
@@ -165,7 +171,7 @@ export function BottomTabs() {
       </AnimatePresence>
 
       {/* Tab Bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-white/95 backdrop-blur-xl safe-area-bottom">
+      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-white/95 backdrop-blur-xl safe-area-bottom">
         <nav className="flex items-stretch justify-around px-2 pt-1.5 pb-1.5">
           {visiblePrimary.map((tab) => {
             const isActive = pathname === tab.href || pathname.startsWith(tab.href + '/');

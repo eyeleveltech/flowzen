@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, use, type ReactNode } from 'react';
+
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Building2, User, Phone, Mail, Calendar, MapPin, Tag, Clock } from 'lucide-react';
@@ -19,6 +21,7 @@ import { Select } from '@/components/ui/select';
 import { IntelligenceTab } from '../components/IntelligenceTab';
 import { TimelineTab } from '../components/TimelineTab';
 import { ContactsTab } from '../components/ContactsTab';
+import { OverflowMarquee } from '@/components/ui/overflow-marquee';
 import { useConfirmStore } from '@/stores';
 
 const PIPELINE_STAGES = [
@@ -35,7 +38,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const [activeTab, setActiveTab] = useState<'details' | 'timeline' | 'contacts'>('details');
   const [wonModalLead, setWonModalLead] = useState<any>(null);
   const confirm = useConfirmStore((s) => s.confirm);
-  
+
   // Safe unwrapping for Next.js 15 async params
   const { id: leadId } = use(params);
 
@@ -98,16 +101,43 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
     return key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
   };
 
+  const contactInfo = (
+    <>
+      <span className="flex items-start md:items-center gap-3 md:gap-1.5 min-w-0">
+        <User className="w-5 h-5 md:w-4 md:h-4 shrink-0 text-[#9CA3AF]" />
+        <span className="flex-1 wrap-break-word min-w-0 md:flex-none">{lead.contactName || lead.client?.name || '—'}</span>
+      </span>
+      {(lead.contactEmail || lead.client?.email) && (
+        <a href={`mailto:${lead.contactEmail || lead.client?.email}`} className="flex items-start md:items-center gap-3 md:gap-1.5 hover:text-primary transition-colors min-w-0">
+          <Mail className="w-5 h-5 md:w-4 md:h-4 shrink-0 text-[#9CA3AF]" />
+          <span className="flex-1 break-all md:break-normal min-w-0 md:flex-none">{lead.contactEmail || lead.client?.email}</span>
+        </a>
+      )}
+      {(lead.contactPhone || lead.client?.phone) && (
+        <a href={`tel:${lead.contactPhone || lead.client?.phone}`} className="flex items-start md:items-center gap-3 md:gap-1.5 hover:text-primary transition-colors min-w-0">
+          <Phone className="w-5 h-5 md:w-4 md:h-4 shrink-0 text-[#9CA3AF]" />
+          <span className="flex-1 whitespace-normal min-w-0 md:flex-none">{lead.contactPhone || lead.client?.phone}</span>
+        </a>
+      )}
+      {location && (
+        <span className="flex items-start md:items-center gap-3 md:gap-1.5 min-w-0">
+          <MapPin className="w-5 h-5 md:w-4 md:h-4 shrink-0 text-[#9CA3AF]" />
+          <span className="flex-1 wrap-break-word min-w-0 md:flex-none">{location}</span>
+        </span>
+      )}
+    </>
+  );
+
   return (
     <div className="bg-gray-50/50 min-h-full">
 
-      {/* Header */}
-      <div className="bg-white border-b border-border px-8 py-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-          <button onClick={() => router.push('/pipeline')} className="flex items-center gap-2 text-sm text-secondary hover:text-primary transition-colors">
+      {/* Top Banner / Actions */}
+      <div className="bg-white border-b border-border p-5 md:p-8">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+          <Link href="/pipeline" className="flex items-center gap-2 text-sm font-medium text-secondary hover:text-primary transition-colors self-start md:self-auto">
             <ArrowLeft className="w-4 h-4" /> Back to Pipeline
-          </button>
-          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          </Link>
+          <div className="hidden md:flex flex-row items-center gap-3 w-auto">
             {lead.stage !== 'NEW_LEAD' && (
               <button
                 onClick={() => {
@@ -119,14 +149,14 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   if (lead.assignedToId) params.set('prefillOwnerId', lead.assignedToId);
                   router.push(`/projects?${params.toString()}`);
                 }}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-[#1F2937] transition-colors"
+                className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-[#1F2937] transition-colors"
               >
                 <FolderPlus className="w-4 h-4" /> Create Project
               </button>
             )}
             <button
               onClick={() => setIsEditModalOpen(true)}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-[#4B5563] bg-white border border-border rounded-lg hover:bg-[#F9FAFB] transition-colors"
+              className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-[#4B5563] bg-white border border-border rounded-lg hover:bg-[#F9FAFB] transition-colors"
             >
               <Pencil className="w-4 h-4" /> Edit
             </button>
@@ -145,59 +175,115 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 }
               }}
               disabled={deleteMutation.isPending}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 border border-red-100 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
+              className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 border border-red-100 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
             >
               <Trash2 className="w-4 h-4" /> {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
             </button>
           </div>
         </div>
-        
+
         <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-5">
           {/* Identity */}
-          <div className="flex items-start gap-4 min-w-0">
-            <div className={`h-14 w-14 shrink-0 rounded-2xl flex items-center justify-center text-lg font-bold ${getAvatarColor(displayName)}`}>
-              {getInitials(displayName)}
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h1 className="text-2xl font-bold text-primary truncate">{displayName}</h1>
-                <span className="px-2.5 py-0.5 rounded-md bg-[#F3F4F6] text-primary text-xs font-medium border border-border">
-                  {lead.stage.replace(/_/g, ' ')}
-                </span>
-                {lead.client?.status === 'ONHOLD' && (
-                  <span className="px-2.5 py-0.5 rounded-md bg-amber-50 text-amber-700 text-xs font-medium border border-amber-200">On Hold</span>
-                )}
+          <div className="flex flex-col min-w-0">
+            <div className="flex items-start gap-4 min-w-0">
+              <div className={`w-[64px] h-[64px] md:w-14 md:h-14 shrink-0 rounded-2xl flex items-center justify-center text-lg font-bold ${getAvatarColor(displayName)}`}>
+                {getInitials(displayName)}
               </div>
-              {lead.leadId && (
-                <p className="mt-1 text-xs font-mono font-medium text-secondary tracking-wide">{lead.leadId}</p>
-              )}
-              <div className="flex items-center gap-x-5 gap-y-1.5 mt-3 text-sm text-[#4B5563] flex-wrap">
-                <span className="flex items-center gap-1.5"><User className="w-4 h-4 text-[#9CA3AF]" /> {lead.contactName || lead.client?.name || '—'}</span>
-                {(lead.contactEmail || lead.client?.email) && <a href={`mailto:${lead.contactEmail || lead.client?.email}`} className="flex items-center gap-1.5 hover:text-primary transition-colors"><Mail className="w-4 h-4 text-[#9CA3AF]" /> {lead.contactEmail || lead.client?.email}</a>}
-                {(lead.contactPhone || lead.client?.phone) && <a href={`tel:${lead.contactPhone || lead.client?.phone}`} className="flex items-center gap-1.5 hover:text-primary transition-colors"><Phone className="w-4 h-4 text-[#9CA3AF]" /> {lead.contactPhone || lead.client?.phone}</a>}
-                {location && <span className="flex items-center gap-1.5"><MapPin className="w-4 h-4 text-[#9CA3AF]" /> {location}</span>}
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-col md:flex-row md:items-center gap-0 md:gap-2.5">
+                  <OverflowMarquee className="w-full md:w-auto md:max-w-md">
+                    <h1 className="text-[22px] font-bold leading-[1.2] md:text-2xl md:leading-tight text-primary">
+                      {displayName}
+                    </h1>
+                  </OverflowMarquee>
+                  <div className="flex items-center gap-2 mt-2 md:mt-0">
+                    <span className="inline-flex w-fit px-2.5 py-0.5 rounded-md bg-[#F3F4F6] text-primary text-xs font-medium border border-border">
+                      {lead.stage.replace(/_/g, ' ')}
+                    </span>
+                    {lead.client?.status === 'ONHOLD' && (
+                      <span className="inline-flex w-fit px-2.5 py-0.5 rounded-md bg-amber-50 text-amber-700 text-xs font-medium border border-amber-200">On Hold</span>
+                    )}
+                  </div>
+                </div>
+                {lead.leadId && (
+                  <p className="mt-2 md:mt-1 text-xs font-mono font-medium text-secondary tracking-wide whitespace-normal">{lead.leadId}</p>
+                )}
+                <div className="hidden md:flex md:flex-row md:items-center md:gap-x-5 md:gap-y-2.5 md:mt-4 text-sm text-[#4B5563] md:flex-wrap min-w-0">
+                  {contactInfo}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex md:hidden flex-col gap-4 mt-5 text-sm text-[#4B5563] min-w-0">
+              <div className="flex flex-col gap-3">
+                {contactInfo}
+              </div>
+
+              {/* Mobile Action Buttons */}
+              <div className="flex items-center gap-2 pt-1">
+                {lead.stage !== 'NEW_LEAD' && (
+                  <button
+                    onClick={() => {
+                      const params = new URLSearchParams({ create: 'true' });
+                      params.set('prefillName', `${displayName} Project`);
+                      const clientId = lead.clientId || lead.client?.id;
+                      if (clientId) params.set('prefillClientId', clientId);
+                      if (lead.dealValue) params.set('prefillBudget', String(lead.dealValue));
+                      if (lead.assignedToId) params.set('prefillOwnerId', lead.assignedToId);
+                      router.push(`/projects?${params.toString()}`);
+                    }}
+                    className="flex-1 flex items-center justify-center py-2.5 text-white bg-primary rounded-lg hover:bg-[#1F2937] transition-colors"
+                  >
+                    <FolderPlus className="w-4 h-4" />
+                  </button>
+                )}
+                <button
+                  onClick={() => setIsEditModalOpen(true)}
+                  className="flex-1 flex items-center justify-center py-2.5 text-[#4B5563] bg-white border border-border rounded-lg hover:bg-[#F9FAFB] transition-colors"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={async () => {
+                    const isConfirmed = await confirm({
+                      title: 'Delete Lead',
+                      message: 'This permanently deletes the lead. This action cannot be undone.',
+                      confirmText: 'Delete Lead',
+                      cancelText: 'Cancel',
+                      variant: 'danger',
+                      requireText: lead.stage === 'NEW_LEAD' ? undefined : displayName,
+                    });
+                    if (isConfirmed) {
+                      deleteMutation.mutate();
+                    }
+                  }}
+                  disabled={deleteMutation.isPending}
+                  className="flex-1 flex items-center justify-center py-2.5 text-red-600 bg-red-50 border border-red-100 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             </div>
           </div>
 
           {/* Deal value + actions */}
-          <div className="flex flex-col sm:flex-row sm:items-stretch gap-4 shrink-0 w-full lg:w-auto mt-4 lg:mt-0">
-            <div className="sm:text-right sm:pr-4 sm:border-r border-border flex flex-col justify-center">
+          <div className="flex flex-col sm:flex-row sm:items-stretch gap-4 shrink-0 w-full lg:w-auto mt-6 lg:mt-0 p-4 sm:p-0 bg-gray-50/50 sm:bg-transparent rounded-xl sm:rounded-none border sm:border-none border-border">
+            <div className="sm:text-right sm:pr-4 sm:border-r border-border flex flex-col justify-center items-start sm:items-end">
               <p className="text-xs font-medium text-secondary uppercase tracking-wider">Deal Value</p>
               <p className="text-2xl font-bold text-primary">{lead.dealValue ? formatCurrency(lead.dealValue) : '—'}</p>
             </div>
             <div className="flex flex-col gap-2 w-full sm:w-52">
               <Select
-                value=""
+                value={lead.stage}
                 onChange={(val) => {
-                  if (val) {
+                  if (val && val !== lead.stage) {
                     setTargetStage(val);
                     setIsModalOpen(true);
                   }
                 }}
-                placeholder="Move Stage To..."
-                options={PIPELINE_STAGES.filter(s => s !== lead.stage).map(s => ({
-                  label: `${PIPELINE_STAGES.indexOf(s) + 1}. ${s.replace('_', ' ')}`,
+                placeholder="Select Stage..."
+                options={PIPELINE_STAGES.map(s => ({
+                  label: `${PIPELINE_STAGES.indexOf(s) + 1}. ${s.replace(/_/g, ' ')}`,
                   value: s
                 }))}
                 className="w-full"
@@ -216,12 +302,12 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
         </div>
 
         {/* Stepper Component */}
-        <div className="mt-8 flex items-center justify-between overflow-x-auto pb-4 scrollbar-hide">
+        <div className="mt-8 hidden md:flex items-center justify-between overflow-x-auto pb-4 scrollbar-hide">
           {PIPELINE_STAGES.slice(0, 8).map((stage, idx) => {
             const isCompleted = PIPELINE_STAGES.indexOf(lead.stage) >= idx;
             const isCurrent = lead.stage === stage;
             return (
-              <div key={stage} className="flex flex-col items-center gap-2 relative min-w-25">
+              <div key={stage} className="flex flex-col items-center gap-2 relative min-w-[100px] shrink-0">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold z-10 transition-colors border ${isCurrent ? 'bg-primary text-white border-primary' : isCompleted ? 'bg-[#F3F4F6] text-primary border-border' : 'bg-white text-[#9CA3AF] border-border'}`}>
                   {idx + 1}
                 </div>
@@ -252,7 +338,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
       })()}
 
       {/* Tabs */}
-      <div className="flex gap-6 border-b border-border bg-white overflow-x-auto whitespace-nowrap custom-scrollbar px-8">
+      <div className="flex gap-4 sm:gap-6 border-b border-border bg-white overflow-x-auto whitespace-nowrap scrollbar-hide px-4 sm:px-8">
         <div className="max-w-7xl mx-auto flex gap-1 w-full">
           {([['details', 'Details'], ['timeline', 'Timeline'], ['contacts', 'Contacts']] as const).map(([k, label]) => (
             <button key={k} onClick={() => setActiveTab(k)} className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${activeTab === k ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-primary'}`}>{label}</button>
@@ -260,82 +346,82 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
         </div>
       </div>
 
-      <div className="p-8">
+      <div className="p-4 sm:p-8">
         <div className="max-w-7xl mx-auto">
           {activeTab === 'details' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl border border-border p-6">
-              <h2 className="text-base font-semibold text-primary mb-5 flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-secondary" /> Lead Details
-              </h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-5">
-                <Detail label="Company" value={lead.companyName || lead.client?.company} />
-                <Detail label="Company Size" value={lead.companySize} />
-                <Detail label="Industry" value={lead.industry || lead.client?.industry} />
-                <Detail label="Website">
-                  {website ? (
-                    <a href={website.startsWith('http') ? website : `https://${website}`} target="_blank" rel="noreferrer" className="text-sm text-blue-600 hover:underline flex items-center gap-1.5 truncate">
-                      <Globe className="w-3.5 h-3.5 shrink-0 text-[#9CA3AF]" /> <span className="truncate">{website}</span>
-                    </a>
-                  ) : <p className="text-sm text-[#9CA3AF]">—</p>}
-                </Detail>
-                <Detail label="Location" value={location} />
-                <Detail label="Source" value={lead.source?.replace(/_/g, ' ')} />
-                <Detail label="Assigned To">
-                  <div className="flex items-center gap-2">
-                    {lead.assignedTo?.avatar ? (
-                      <img src={lead.assignedTo.avatar} alt="" className="w-6 h-6 rounded-full" />
-                    ) : (
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${lead.assignedTo ? getAvatarColor(lead.assignedTo.name) : 'bg-[#F3F4F6] text-[#9CA3AF] border border-border'}`}>
-                        {lead.assignedTo ? getInitials(lead.assignedTo.name) : '?'}
-                      </div>
-                    )}
-                    <span className="text-sm font-medium text-primary truncate">{lead.assignedTo?.name || 'Unassigned'}</span>
-                  </div>
-                </Detail>
-                <Detail label="Expected Close">
-                  <p className="text-sm text-primary flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-[#9CA3AF]" />
-                    {lead.expectedCloseDate ? format(new Date(lead.expectedCloseDate), 'PP') : '—'}
-                  </p>
-                </Detail>
-                <Detail label="Created" value={lead.createdAt ? format(new Date(lead.createdAt), 'PP') : null} />
-              </div>
-            </div>
-
-            {/* LinkedIn Intelligence (Module A) — only renders when a LinkedIn URL is present */}
-            <IntelligenceTab
-              leadId={leadId}
-              linkedinUrl={lead.linkedinUrl}
-              dossier={lead.dossierJson}
-              onRefetch={() => queryClient.invalidateQueries({ queryKey: ['lead', leadId] })}
-            />
-
-            {/* Dynamic Deal Fields Rendering */}
-            {lead.dealFields && lead.dealFields.length > 0 && (
-              <div className="bg-white rounded-2xl border border-border p-6">
+            <div className="space-y-6">
+              <div className="bg-white rounded-2xl border border-border p-4 sm:p-6">
                 <h2 className="text-base font-semibold text-primary mb-5 flex items-center gap-2">
-                  <Tag className="w-4 h-4 text-secondary" /> Stage Data
+                  <Building2 className="w-4 h-4 text-secondary" /> Lead Details
                 </h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {lead.dealFields.map((field: any) => (
-                    <div key={field.id} className="bg-gray-50/70 p-3 rounded-xl border border-gray-100">
-                      <p className="text-[11px] font-semibold text-secondary uppercase tracking-wider mb-1.5">{getFieldLabel(field.fieldKey)}</p>
-                      <p className="text-sm text-primary font-medium wrap-break-word">{field.fieldValue || '—'}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-5">
+                  <Detail label="Company" value={lead.companyName || lead.client?.company} />
+                  <Detail label="Company Size" value={lead.companySize} />
+                  <Detail label="Industry" value={lead.industry || lead.client?.industry} />
+                  <Detail label="Website">
+                    {website ? (
+                      <a href={website.startsWith('http') ? website : `https://${website}`} target="_blank" rel="noreferrer" className="text-sm text-blue-600 hover:underline flex items-center gap-1.5 truncate">
+                        <Globe className="w-3.5 h-3.5 shrink-0 text-[#9CA3AF]" /> <span className="truncate">{website}</span>
+                      </a>
+                    ) : <p className="text-sm text-[#9CA3AF]">—</p>}
+                  </Detail>
+                  <Detail label="Location" value={location} />
+                  <Detail label="Source" value={lead.source?.replace(/_/g, ' ')} />
+                  <Detail label="Assigned To">
+                    <div className="flex items-center gap-2">
+                      {lead.assignedTo?.avatar ? (
+                        <img src={lead.assignedTo.avatar} alt="" className="w-6 h-6 rounded-full" />
+                      ) : (
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${lead.assignedTo ? getAvatarColor(lead.assignedTo.name) : 'bg-[#F3F4F6] text-[#9CA3AF] border border-border'}`}>
+                          {lead.assignedTo ? getInitials(lead.assignedTo.name) : '?'}
+                        </div>
+                      )}
+                      <span className="text-sm font-medium text-primary truncate">{lead.assignedTo?.name || 'Unassigned'}</span>
                     </div>
-                  ))}
+                  </Detail>
+                  <Detail label="Expected Close">
+                    <p className="text-sm text-primary flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-[#9CA3AF]" />
+                      {lead.expectedCloseDate ? format(new Date(lead.expectedCloseDate), 'PP') : '—'}
+                    </p>
+                  </Detail>
+                  <Detail label="Created" value={lead.createdAt ? format(new Date(lead.createdAt), 'PP') : null} />
                 </div>
               </div>
-            )}
-          </div>
+
+              {/* LinkedIn Intelligence (Module A) — only renders when a LinkedIn URL is present */}
+              <IntelligenceTab
+                leadId={leadId}
+                linkedinUrl={lead.linkedinUrl}
+                dossier={lead.dossierJson}
+                onRefetch={() => queryClient.invalidateQueries({ queryKey: ['lead', leadId] })}
+              />
+
+              {/* Dynamic Deal Fields Rendering */}
+              {lead.dealFields && lead.dealFields.length > 0 && (
+                <div className="bg-white rounded-2xl border border-border p-6">
+                  <h2 className="text-base font-semibold text-primary mb-5 flex items-center gap-2">
+                    <Tag className="w-4 h-4 text-secondary" /> Stage Data
+                  </h2>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {lead.dealFields.map((field: any) => (
+                      <div key={field.id} className="bg-gray-50/70 p-3 rounded-xl border border-gray-100">
+                        <p className="text-[11px] font-semibold text-secondary uppercase tracking-wider mb-1.5">{getFieldLabel(field.fieldKey)}</p>
+                        <p className="text-sm text-primary font-medium wrap-break-word">{field.fieldValue || '—'}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {activeTab === 'timeline' && (
-            <div className="max-w-4xl"><TimelineTab leadId={leadId} /></div>
+            <TimelineTab leadId={leadId} />
           )}
 
           {activeTab === 'contacts' && (
-            <div className="max-w-4xl"><ContactsTab leadId={leadId} lead={lead} /></div>
+            <ContactsTab leadId={leadId} lead={lead} />
           )}
         </div>
       </div>

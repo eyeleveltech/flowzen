@@ -779,12 +779,12 @@ function ClientsContent() {
                       ]}
                     />
                   </div>
-                  <div className="pt-4 flex gap-3">
-                    <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
+                  <div className="pt-4 flex flex-row gap-2 sm:gap-3">
+                    <button type="button" onClick={() => setShowCreate(false)} className="flex-1 w-full sm:flex-1 rounded-xl border border-border px-2 sm:px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
                       Cancel
                     </button>
-                    <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">
-                      {submitting ? 'Creating...' : 'Create Client'}
+                    <button type="submit" disabled={submitting} className="flex-1 w-full sm:flex-1 rounded-xl bg-primary px-2 sm:px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all flex items-center justify-center">
+                      {submitting ? 'Creating...' : <><span className="hidden sm:inline">Create Client</span><span className="inline sm:hidden">Create</span></>}
                     </button>
                   </div>
                 </form>
@@ -830,16 +830,16 @@ function ClientsContent() {
                     </div>
                   )}
 
-                  <div className="pt-4 flex gap-3">
-                    <button type="button" onClick={() => { setShowCreate(false); setImportFile(null); setImportPreview([]); }} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
+                  <div className="pt-4 flex flex-row gap-2 sm:gap-3">
+                    <button type="button" onClick={() => { setShowCreate(false); setImportFile(null); setImportPreview([]); }} className="flex-1 w-full sm:flex-1 rounded-xl border border-border px-2 sm:px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
                       Cancel
                     </button>
                     <button 
                       onClick={handleBulkImport} 
                       disabled={importing || importPreview.length === 0} 
-                      className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all"
+                      className="flex-1 w-full sm:flex-1 rounded-xl bg-primary px-2 sm:px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all flex items-center justify-center"
                     >
-                      {importing ? 'Importing...' : 'Import Clients'}
+                      {importing ? 'Importing...' : <><span className="hidden sm:inline">Import Clients</span><span className="inline sm:hidden">Import</span></>}
                     </button>
                   </div>
                 </div>

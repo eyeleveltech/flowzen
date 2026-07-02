@@ -84,6 +84,17 @@
     }
   }
 
+  /* Seamless marquee — track holds 2 copies, animate by 50% so copy-2
+     slides into view exactly when copy-1 exits */
+  .animate-marquee-track {
+    animation: marquee-track 14s linear infinite;
+  }
+
+  @keyframes marquee-track {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
   .skeleton {
     background: linear-gradient(90deg, #F3F4F6 25%, #E5E7EB 50%, #F3F4F6 75%);
     background-size: 200% 100%;

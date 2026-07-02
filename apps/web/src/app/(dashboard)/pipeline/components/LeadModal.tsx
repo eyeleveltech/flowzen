@@ -306,7 +306,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Lead Source <span className="text-red-500">*</span></label>
                       <Select
@@ -340,7 +340,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Company Size</label>
                       <Select
@@ -372,14 +372,14 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                     <h3 className="text-sm font-semibold text-primary">2. Contact Details</h3>
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Field label="Contact Name" required error={errors.contactName} value={form.contactName} onChange={(v) => {
                       setForm({ ...form, contactName: v });
                     }} placeholder="Full Name" />
                     <Field label="Job Title" value={form.jobTitle} onChange={(v) => setForm({ ...form, jobTitle: v })} placeholder="e.g. Marketing Director" />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Field label="Email Address" required error={errors.email} type="email" icon={<Mail className="h-4 w-4 text-secondary" />} value={form.email} onChange={(v) => setForm({ ...form, email: v })} placeholder="john@example.com" />
                     <Field label="Phone Number" required error={errors.phone} icon={<Phone className="h-4 w-4 text-secondary" />} value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="+1 (555) 000-0000" />
                   </div>
@@ -475,23 +475,23 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
           )}
         </div>
 
-        <div className="p-5 border-t border-border bg-white flex justify-end gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)] z-10">
-          <button type="button" onClick={onClose} className="px-5 py-2.5 text-sm font-medium text-[#374151] bg-white border border-border rounded-xl hover:bg-gray-50 transition-colors">
+        <div className="p-4 sm:p-5 border-t border-border bg-white flex flex-row justify-end gap-2 sm:gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)] z-10">
+          <button type="button" onClick={onClose} className="flex-1 sm:flex-none w-full sm:w-auto px-2 sm:px-5 py-2.5 text-sm font-medium text-[#374151] bg-white border border-border rounded-xl hover:bg-gray-50 transition-colors">
             Cancel
           </button>
           {creationMode === 'MANUAL' ? (
-            <button type="submit" form="lead-form" disabled={submitting} className="px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] shadow-sm transition-all disabled:opacity-50 flex items-center gap-2">
-              <Save className="h-4 w-4" />
-              {submitting ? 'Saving...' : 'Save Lead'}
+            <button type="submit" form="lead-form" disabled={submitting} className="flex-1 sm:flex-none w-full sm:w-auto justify-center px-2 sm:px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5 sm:gap-2">
+              <Save className="h-4 w-4 shrink-0" />
+              {submitting ? 'Saving...' : <><span className="hidden sm:inline">Save Lead</span><span className="inline sm:hidden">Save</span></>}
             </button>
           ) : importResult ? (
-            <button onClick={onSuccess} className="px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] shadow-sm transition-all flex items-center gap-2">
+            <button onClick={onSuccess} className="w-full sm:w-auto justify-center px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] shadow-sm transition-all flex items-center gap-2">
               <Check className="h-4 w-4" /> Done
             </button>
           ) : (
-            <button onClick={handleBulkImport} disabled={importing || importPreview.length === 0} className="px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] shadow-sm transition-all disabled:opacity-50 flex items-center gap-2">
-              <Upload className="h-4 w-4" />
-              {importing ? 'Importing...' : 'Import Leads'}
+            <button onClick={handleBulkImport} disabled={importing || importPreview.length === 0} className="flex-1 sm:flex-none w-full sm:w-auto justify-center px-2 sm:px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5 sm:gap-2">
+              <Upload className="h-4 w-4 shrink-0" />
+              {importing ? 'Importing...' : <><span className="hidden sm:inline">Import Leads</span><span className="inline sm:hidden">Import</span></>}
             </button>
           )}
         </div>

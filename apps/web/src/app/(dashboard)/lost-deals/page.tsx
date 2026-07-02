@@ -51,15 +51,15 @@ export default function LostDealsPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-primary tracking-tight flex items-center gap-2"><TrendingDown className="w-5 h-5 text-secondary" /> Lost Deal Analysis</h1>
           <p className="text-sm text-secondary mt-1">Where and why deals are being lost{data ? ` · ${data.total} churned` : ''}.</p>
         </div>
-        <div className="flex items-end gap-2">
-          <div><label className="block text-[10px] font-semibold text-secondary uppercase mb-1">From</label><input type="date" value={range.from} onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))} className="rounded-lg border border-border bg-gray-50 px-3 py-1.5 text-sm" /></div>
-          <div><label className="block text-[10px] font-semibold text-secondary uppercase mb-1">To</label><input type="date" value={range.to} onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))} className="rounded-lg border border-border bg-gray-50 px-3 py-1.5 text-sm" /></div>
-          <button onClick={exportCsv} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-secondary border border-border rounded-lg hover:text-primary"><Download className="w-4 h-4" /> CSV</button>
+        <div className="flex flex-col sm:flex-row sm:items-end gap-2 w-full md:w-auto">
+          <div className="w-full sm:w-auto"><label className="block text-[10px] font-semibold text-secondary uppercase mb-1">From</label><input type="date" value={range.from} onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))} className="w-full sm:w-auto rounded-lg border border-border bg-gray-50 px-3 py-1.5 text-sm" /></div>
+          <div className="w-full sm:w-auto"><label className="block text-[10px] font-semibold text-secondary uppercase mb-1">To</label><input type="date" value={range.to} onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))} className="w-full sm:w-auto rounded-lg border border-border bg-gray-50 px-3 py-1.5 text-sm" /></div>
+          <button onClick={exportCsv} className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm font-medium text-secondary border border-border rounded-lg hover:text-primary"><Download className="w-4 h-4" /> CSV</button>
         </div>
       </div>
 
@@ -72,8 +72,8 @@ export default function LostDealsPage() {
           {/* Section 1 — Loss by reason */}
           <div className="bg-white rounded-2xl border border-border p-5">
             <h2 className="text-sm font-semibold text-primary mb-4">Loss by Reason</h2>
-            <div className="flex items-center gap-4">
-              <ResponsiveContainer width="50%" height={200}>
+            <div className="flex flex-col md:flex-row md:items-center gap-4">
+              <ResponsiveContainer width="100%" height={200} className="md:w-1/2!">
                 <PieChart>
                   <Pie data={data.lossByReason} dataKey="count" nameKey="reason" innerRadius={45} outerRadius={75}>
                     {data.lossByReason.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
@@ -81,11 +81,11 @@ export default function LostDealsPage() {
                   <Tooltip />
                 </PieChart>
               </ResponsiveContainer>
-              <div className="flex-1 space-y-1.5">
+              <div className="flex-1 w-full space-y-1.5">
                 {data.lossByReason.map((r: any, i: number) => (
                   <div key={r.reason} className="flex items-center justify-between text-sm">
-                    <span className="flex items-center gap-2 text-[#374151]"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: COLORS[i % COLORS.length] }} /> {label(r.reason)}</span>
-                    <span className="text-secondary">{r.count} · {r.pct}%</span>
+                    <span className="flex items-center gap-2 text-[#374151]"><span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: COLORS[i % COLORS.length] }} /> <span className="truncate">{label(r.reason)}</span></span>
+                    <span className="text-secondary shrink-0 ml-2">{r.count} · {r.pct}%</span>
                   </div>
                 ))}
               </div>
@@ -110,12 +110,14 @@ export default function LostDealsPage() {
           <div className="bg-white rounded-2xl border border-border p-5">
             <h2 className="text-sm font-semibold text-primary mb-4">Competitor Tracker</h2>
             {data.competitors.length === 0 ? <p className="text-sm text-secondary py-6 text-center">No competitors recorded.</p> : (
-              <table className="w-full text-sm">
-                <thead><tr className="text-left text-[11px] uppercase text-secondary border-b border-border"><th className="py-2">Competitor</th><th className="py-2 text-right">Times</th><th className="py-2 text-right">Avg Lost</th><th className="py-2">Verticals</th></tr></thead>
-                <tbody>{data.competitors.map((c: any) => (
-                  <tr key={c.competitor} className="border-b border-gray-50"><td className="py-2 font-medium text-primary">{c.competitor}</td><td className="py-2 text-right">{c.count}</td><td className="py-2 text-right">{formatCurrency(c.avgValue)}</td><td className="py-2 text-secondary text-xs">{c.verticals.join(', ') || '—'}</td></tr>
-                ))}</tbody>
-              </table>
+              <div className="overflow-x-auto w-full">
+                <table className="w-full text-sm min-w-[400px]">
+                  <thead><tr className="text-left text-[11px] uppercase text-secondary border-b border-border"><th className="py-2">Competitor</th><th className="py-2 text-right">Times</th><th className="py-2 text-right">Avg Lost</th><th className="py-2">Verticals</th></tr></thead>
+                  <tbody>{data.competitors.map((c: any) => (
+                    <tr key={c.competitor} className="border-b border-gray-50"><td className="py-2 font-medium text-primary">{c.competitor}</td><td className="py-2 text-right">{c.count}</td><td className="py-2 text-right">{formatCurrency(c.avgValue)}</td><td className="py-2 text-secondary text-xs">{c.verticals.join(', ') || '—'}</td></tr>
+                  ))}</tbody>
+                </table>
+              </div>
             )}
           </div>
 
@@ -138,12 +140,14 @@ export default function LostDealsPage() {
           <div className="bg-white rounded-2xl border border-border p-5 lg:col-span-2">
             <h2 className="text-sm font-semibold text-primary mb-4">Reactivation Pipeline</h2>
             {data.reactivation.length === 0 ? <p className="text-sm text-secondary py-6 text-center">No leads flagged for reactivation.</p> : (
-              <table className="w-full text-sm">
-                <thead><tr className="text-left text-[11px] uppercase text-secondary border-b border-border"><th className="py-2">Client</th><th className="py-2">Lost Date</th><th className="py-2">Reactivation Window</th><th className="py-2 text-right">Value</th><th className="py-2">Assigned To</th></tr></thead>
-                <tbody>{data.reactivation.map((r: any) => (
-                  <tr key={r.id} className="border-b border-gray-50"><td className="py-2 font-medium text-primary">{r.name}</td><td className="py-2 text-secondary">{fmtDate(r.lostDate)}</td><td className="py-2 text-amber-700 font-medium">{fmtDate(r.window)}</td><td className="py-2 text-right">{formatCurrency(r.value)}</td><td className="py-2 text-secondary">{r.assignedTo || '—'}</td></tr>
-                ))}</tbody>
-              </table>
+              <div className="overflow-x-auto w-full">
+                <table className="w-full text-sm min-w-[600px]">
+                  <thead><tr className="text-left text-[11px] uppercase text-secondary border-b border-border"><th className="py-2">Client</th><th className="py-2">Lost Date</th><th className="py-2">Reactivation Window</th><th className="py-2 text-right">Value</th><th className="py-2">Assigned To</th></tr></thead>
+                  <tbody>{data.reactivation.map((r: any) => (
+                    <tr key={r.id} className="border-b border-gray-50"><td className="py-2 font-medium text-primary">{r.name}</td><td className="py-2 text-secondary">{fmtDate(r.lostDate)}</td><td className="py-2 text-amber-700 font-medium">{fmtDate(r.window)}</td><td className="py-2 text-right">{formatCurrency(r.value)}</td><td className="py-2 text-secondary">{r.assignedTo || '—'}</td></tr>
+                  ))}</tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>

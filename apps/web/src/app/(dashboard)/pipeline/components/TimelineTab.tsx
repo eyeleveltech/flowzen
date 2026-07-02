@@ -62,8 +62,8 @@ export function TimelineTab({ leadId }: { leadId: string }) {
   }, [leadId, category, load]);
 
   return (
-    <div className="bg-white rounded-2xl border border-border p-6">
-      <div className="flex items-center justify-between mb-5">
+    <div className="bg-white rounded-2xl border border-border p-4 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-y-3 gap-x-4 mb-5">
         <h2 className="text-base font-semibold text-primary flex items-center gap-2"><ActivityIcon className="w-4 h-4 text-secondary" /> Activity Timeline</h2>
         <button onClick={() => setModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-gray-800 transition-colors">
           <Plus className="w-4 h-4" /> Add Activity
@@ -100,7 +100,7 @@ export function TimelineTab({ leadId }: { leadId: string }) {
                   <Icon className="w-3 h-3 text-secondary" />
                 </div>
                 <div className="flex items-center gap-2 mb-0.5">
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold ${a.user ? getAvatarColor(a.user.name) : 'bg-gray-100 text-gray-400'}`}>{a.user ? getInitials(a.user.name) : '•'}</div>
+                  <div className={`hidden md:flex w-5 h-5 rounded-full items-center justify-center text-[9px] font-bold ${a.user ? getAvatarColor(a.user.name) : 'bg-gray-100 text-gray-400'}`}>{a.user ? getInitials(a.user.name) : '•'}</div>
                   <p className="text-sm text-primary"><span className="font-medium">{a.user?.name || 'System'}</span> <span className="text-[#4B5563]">{a.message}</span></p>
                 </div>
                 <p className="text-xs text-secondary ml-7" title={format(new Date(a.createdAt), 'PPpp')}>{formatDistanceToNow(new Date(a.createdAt), { addSuffix: true })}</p>
