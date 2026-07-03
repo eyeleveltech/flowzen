@@ -404,6 +404,7 @@ export function PipelineBoardView() {
       <AnimatePresence>
         {pendingTransition && (
           <StageTransitionModal
+            lead={pendingTransition.lead}
             currentStage={pendingTransition.lead.stage}
             targetStage={pendingTransition.targetStage}
             onClose={() => {

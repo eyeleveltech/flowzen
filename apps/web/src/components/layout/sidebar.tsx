@@ -42,7 +42,7 @@ const navItems: NavItem[] = [
   { label: 'Calendar', href: '/calendar', icon: CalendarDays, module: 'PM' },
   { label: 'Members', href: '/team', icon: UsersRound, module: 'PM' },
   { label: 'Departments', href: '/teams', icon: Network, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'PM' },
-  { label: 'Reports', href: '/reports', icon: BarChart3, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'], module: 'PM' },
+  { label: 'Reports', href: '/reports', icon: BarChart3, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'], module: ['CRM', 'PM'] },
 ];
 
 const bottomItems = [
@@ -87,10 +87,10 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
     >
       {/* Logo */}
       <div className={cn("flex h-16 items-center px-5 border-b border-border", sidebarCollapsed ? "justify-center px-0" : "justify-start")}>
-        <img 
-          src="/logo_flowzen.png" 
-          alt="Flowzen" 
-          className={cn("w-auto object-contain", sidebarCollapsed ? "h-6" : "h-10")} 
+        <img
+          src="/logo_flowzen.png"
+          alt="Flowzen"
+          className={cn("w-auto object-contain", sidebarCollapsed ? "h-6" : "h-10")}
         />
       </div>
 

@@ -13,6 +13,7 @@ const PIPELINE_STAGES = [
 ];
 
 interface StageTransitionModalProps {
+  lead: any;
   currentStage: string;
   targetStage: string;
   onClose: () => void;
@@ -20,7 +21,7 @@ interface StageTransitionModalProps {
   isLoading: boolean;
 }
 
-export function StageTransitionModal({ currentStage, targetStage, onClose, onSubmit, isLoading }: StageTransitionModalProps) {
+export function StageTransitionModal({ lead, currentStage, targetStage, onClose, onSubmit, isLoading }: StageTransitionModalProps) {
   const currentIndex = PIPELINE_STAGES.indexOf(currentStage);
   const targetIndex = PIPELINE_STAGES.indexOf(targetStage);
   
@@ -40,17 +41,31 @@ export function StageTransitionModal({ currentStage, targetStage, onClose, onSub
   }
   
   const fields = combinedFields;
-  const [formData, setFormData] = useState<Record<string, any>>({});
+
+  // Pre-fill form data from existing deal fields
+  const initialFormData: Record<string, any> = {};
+  if (lead && lead.dealFields && Array.isArray(lead.dealFields)) {
+    lead.dealFields.forEach((df: any) => {
+      const fieldConfig = combinedFields.find(f => f.key === df.fieldKey);
+      if (fieldConfig && fieldConfig.type === 'checklist') {
+        initialFormData[df.fieldKey] = df.fieldValue ? df.fieldValue.split(', ') : [];
+      } else {
+        initialFormData[df.fieldKey] = df.fieldValue || '';
+      }
+    });
+  }
+
+  const [formData, setFormData] = useState<Record<string, any>>(initialFormData);
   
   // Deal value + expected close date are confirmed when entering NEGOTIATION / CONTRACT.
   const requiresDealValue = ['NEGOTIATION', 'CONTRACT'].includes(targetStage);
   const showsContractType = ['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(targetStage);
 
   // Specific required fields based on the brief
-  const [dealValue, setDealValue] = useState('');
-  const [expectedCloseDate, setExpectedCloseDate] = useState('');
-  const [contractType, setContractType] = useState('RETAINER');
-  const [lostReason, setLostReason] = useState('BUDGET');
+  const [dealValue, setDealValue] = useState(lead?.dealValue ? String(lead.dealValue) : '');
+  const [expectedCloseDate, setExpectedCloseDate] = useState(lead?.expectedCloseDate ? String(lead.expectedCloseDate).substring(0, 10) : '');
+  const [contractType, setContractType] = useState(lead?.contractType || 'RETAINER');
+  const [lostReason, setLostReason] = useState(lead?.lostReason || 'BUDGET');
   const [lostReasonOther, setLostReasonOther] = useState('');
   const [notes, setNotes] = useState('');
 
