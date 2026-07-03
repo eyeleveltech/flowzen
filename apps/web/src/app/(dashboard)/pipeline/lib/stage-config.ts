@@ -23,7 +23,7 @@ export const STAGE_FIELDS: Record<string, StageField[]> = {
   MEETING: [
     { key: 'channelUsed', label: 'Outreach Channel Used', type: 'select', options: ['WhatsApp', 'Email', 'LinkedIn', 'Call'], required: true },
     { key: 'responseStatus', label: 'Response Status', type: 'select', options: ['Responded Positive', 'No Response', 'Responded Negative', 'Requested Callback'], required: true },
-    { key: 'meetingDate', label: 'Meeting Date Confirmed', type: 'date', required: true },
+    { key: 'meetingDate', label: 'Meeting Date Confirmed', type: 'date', required: false },
     { key: 'outreachMessageUsed', label: 'Outreach Message Used', type: 'text' },
   ],
 

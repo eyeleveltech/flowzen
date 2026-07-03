@@ -4,16 +4,17 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { Save } from 'lucide-react';
+import { Select } from '@/components/ui/select';
 
 // Company billing details used by the Quotation / Proforma generator.
 export function BillingTab() {
-  const [form, setForm] = useState({ state: '', gst: '', pan: '', email: '', bankName: '', bankAccount: '', bankIfsc: '', standardTerms: '' });
+  const [form, setForm] = useState({ state: '', gst: '', pan: '', email: '', bankName: '', bankAccount: '', bankIfsc: '', standardTerms: '', quotationTemplate: 'CLASSIC' });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     api.get<any>('/settings/company').then((c) => {
-      setForm((f) => ({ ...f, state: c.state || '', gst: c.gst || '', pan: c.pan || '', email: c.email || '', bankName: c.bankName || '', bankAccount: c.bankAccount || '', bankIfsc: c.bankIfsc || '', standardTerms: c.standardTerms || '' }));
+      setForm((f) => ({ ...f, state: c.state || '', gst: c.gst || '', pan: c.pan || '', email: c.email || '', bankName: c.bankName || '', bankAccount: c.bankAccount || '', bankIfsc: c.bankIfsc || '', standardTerms: c.standardTerms || '', quotationTemplate: c.quotationTemplate || 'CLASSIC' }));
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
@@ -57,6 +58,23 @@ export function BillingTab() {
       <div>
         <label className="block text-sm font-medium text-[#374151] mb-1.5">Standard Terms &amp; Conditions</label>
         <textarea value={form.standardTerms} onChange={(e) => setForm({ ...form, standardTerms: e.target.value })} rows={5} placeholder="Pre-filled on every new quotation…" className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus:border-primary resize-none" />
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-primary mb-3">Document Styling</h3>
+        <div className="w-full sm:w-1/2">
+          <label className="block text-sm font-medium text-[#374151] mb-1.5">Quotation &amp; Proforma Template</label>
+          <Select
+            value={form.quotationTemplate}
+            onChange={(v) => setForm({ ...form, quotationTemplate: v })}
+            options={[
+              { label: 'Classic (Brand Colors)', value: 'CLASSIC' },
+              { label: 'Minimal (Clean Black & White)', value: 'MINIMAL' },
+              { label: 'Modern (Rounded & Sleek)', value: 'MODERN' }
+            ]}
+          />
+          <p className="mt-1 text-[11px] text-secondary">Choose the layout style for generated PDFs.</p>
+        </div>
       </div>
 
       <div className="flex justify-end">
