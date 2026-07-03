@@ -45,7 +45,7 @@ export function canAccessModule(user: MaybeUser, key: ModuleKey): boolean {
 // Which module a route belongs to (null = shared/core: keep the current module).
 export function moduleForPath(pathname: string): ModuleKey | null {
   if (pathname.startsWith('/pipeline') || pathname.startsWith('/quotations') || pathname.startsWith('/renewals') || pathname.startsWith('/lost-deals')) return 'CRM';
-  if (['/dashboard', '/projects', '/tasks', '/calendar', '/team', '/teams', '/reports'].some((p) => pathname.startsWith(p))) {
+  if (['/dashboard', '/projects', '/tasks', '/calendar', '/team', '/teams'].some((p) => pathname.startsWith(p))) {
     return 'PM';
   }
   return null; // /clients, /settings, /profile, /modules

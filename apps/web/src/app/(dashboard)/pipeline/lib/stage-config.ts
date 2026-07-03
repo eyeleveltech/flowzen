@@ -15,14 +15,14 @@ export const STAGE_FIELDS: Record<string, StageField[]> = {
 
   // NEW_LEAD → OUTREACH
   OUTREACH: [
-    { key: 'sourceOfLead', label: 'Source of Lead', type: 'select', options: ['LinkedIn', 'Referral', 'Form', 'Event', 'Inbound', 'Manual'], required: true },
-    { key: 'linkedinStatus', label: 'LinkedIn Profile', type: 'select', options: ['Found', 'Not found'], required: true },
+    { key: 'sourceOfLead', label: 'Source of Lead', type: 'select', options: ['LinkedIn', 'Referral', 'Form', 'Event', 'Inbound', 'Manual'], required: false },
+    { key: 'linkedinStatus', label: 'LinkedIn Profile', type: 'select', options: ['Found', 'Not found'], required: false },
   ],
 
   // OUTREACH → MEETING
   MEETING: [
-    { key: 'channelUsed', label: 'Outreach Channel Used', type: 'select', options: ['WhatsApp', 'Email', 'LinkedIn', 'Call'], required: true },
-    { key: 'responseStatus', label: 'Response Status', type: 'select', options: ['Responded Positive', 'No Response', 'Responded Negative', 'Requested Callback'], required: true },
+    { key: 'channelUsed', label: 'Outreach Channel Used', type: 'select', options: ['WhatsApp', 'Email', 'LinkedIn', 'Call'], required: false },
+    { key: 'responseStatus', label: 'Response Status', type: 'select', options: ['Responded Positive', 'No Response', 'Responded Negative', 'Requested Callback'], required: false },
     { key: 'meetingDate', label: 'Meeting Date Confirmed', type: 'date', required: false },
     { key: 'outreachMessageUsed', label: 'Outreach Message Used', type: 'text' },
   ],
@@ -30,46 +30,46 @@ export const STAGE_FIELDS: Record<string, StageField[]> = {
   // MEETING → PROPOSAL
   PROPOSAL: [
     { key: 'meetingNotes', label: 'Meeting Notes', type: 'textarea' },
-    { key: 'auditRequired', label: 'Audit Required?', type: 'select', options: ['No', 'Yes'], required: true },
+    { key: 'auditRequired', label: 'Audit Required?', type: 'select', options: ['No', 'Yes'], required: false },
     { key: 'auditFindings', label: 'Audit Findings (required if audit done)', type: 'textarea' },
     { key: 'auditReportLink', label: 'Audit Report Link (required if audit done)', type: 'text' },
-    { key: 'servicesInScope', label: 'Services Agreed in Scope', type: 'checklist', options: ['SEO', 'Social Media', 'Paid Ads', 'Content', 'GMB', 'Email', 'PR', 'Events', 'Website', 'Others'], required: true },
+    { key: 'servicesInScope', label: 'Services Agreed in Scope', type: 'checklist', options: ['SEO', 'Social Media', 'Paid Ads', 'Content', 'GMB', 'Email', 'PR', 'Events', 'Website', 'Others'], required: false },
     { key: 'nextStepAgreed', label: 'Next Step Agreed', type: 'text' },
   ],
 
   // PROPOSAL → NEGOTIATION
   NEGOTIATION: [
-    { key: 'proposalDocumentLink', label: 'Proposal Document Link', type: 'text', required: true },
-    { key: 'proposalSentDate', label: 'Proposal Sent Date', type: 'date', required: true },
-    { key: 'engagementType', label: 'Engagement Type', type: 'select', options: ['Retainer', 'Project', 'Hybrid'], required: true },
+    { key: 'proposalDocumentLink', label: 'Proposal Document Link', type: 'text', required: false },
+    { key: 'proposalSentDate', label: 'Proposal Sent Date', type: 'date', required: false },
+    { key: 'engagementType', label: 'Engagement Type', type: 'select', options: ['Retainer', 'Project', 'Hybrid'], required: false },
     { key: 'proposalValidUntil', label: 'Proposal Valid Until', type: 'date' },
   ],
 
   // NEGOTIATION → CONTRACT (also combined on a PROPOSAL → CONTRACT skip)
   CONTRACT: [
-    { key: 'agreedFinalValue', label: 'Agreed Final Value (₹)', type: 'number', required: true },
-    { key: 'lastContactedDate', label: 'Last Contacted Date', type: 'date', required: true },
+    { key: 'agreedFinalValue', label: 'Agreed Final Value (₹)', type: 'number', required: false },
+    { key: 'lastContactedDate', label: 'Last Contacted Date', type: 'date', required: false },
     { key: 'counterOfferLog', label: 'Counter Offer Log / Key Objections', type: 'textarea' },
   ],
 
   // CONTRACT → ACTIVE_RETAINER / ACTIVE_PROJECT
   ACTIVE_RETAINER: [
-    { key: 'signedContractLink', label: 'Signed Contract Document Link', type: 'text', required: true },
-    { key: 'paymentTerms', label: 'Payment Terms', type: 'select', options: ['100% Advance', '50-50', 'Monthly', 'Milestone-based'], required: true },
-    { key: 'billingFrequency', label: 'Billing Frequency', type: 'select', options: ['Monthly', 'Quarterly', 'One-Time'], required: true },
-    { key: 'startDate', label: 'Start Date Confirmed', type: 'date', required: true },
+    { key: 'signedContractLink', label: 'Signed Contract Document Link', type: 'text', required: false },
+    { key: 'paymentTerms', label: 'Payment Terms', type: 'select', options: ['100% Advance', '50-50', 'Monthly', 'Milestone-based'], required: false },
+    { key: 'billingFrequency', label: 'Billing Frequency', type: 'select', options: ['Monthly', 'Quarterly', 'One-Time'], required: false },
+    { key: 'startDate', label: 'Start Date Confirmed', type: 'date', required: false },
   ],
   ACTIVE_PROJECT: [
-    { key: 'signedContractLink', label: 'Signed Contract Document Link', type: 'text', required: true },
-    { key: 'paymentTerms', label: 'Payment Terms', type: 'select', options: ['100% Advance', '50-50', 'Monthly', 'Milestone-based'], required: true },
-    { key: 'billingFrequency', label: 'Billing Frequency', type: 'select', options: ['Monthly', 'Quarterly', 'One-Time'], required: true },
-    { key: 'startDate', label: 'Start Date Confirmed', type: 'date', required: true },
+    { key: 'signedContractLink', label: 'Signed Contract Document Link', type: 'text', required: false },
+    { key: 'paymentTerms', label: 'Payment Terms', type: 'select', options: ['100% Advance', '50-50', 'Monthly', 'Milestone-based'], required: false },
+    { key: 'billingFrequency', label: 'Billing Frequency', type: 'select', options: ['Monthly', 'Quarterly', 'One-Time'], required: false },
+    { key: 'startDate', label: 'Start Date Confirmed', type: 'date', required: false },
   ],
 
   // ACTIVE_PROJECT → PROJECT_COMPLETED
   PROJECT_COMPLETED: [
-    { key: 'completionDate', label: 'Completion Date', type: 'date', required: true },
-    { key: 'deliverablesSignOff', label: 'Final Deliverables Sign-off Note', type: 'textarea', required: true },
+    { key: 'completionDate', label: 'Completion Date', type: 'date', required: false },
+    { key: 'deliverablesSignOff', label: 'Final Deliverables Sign-off Note', type: 'textarea', required: false },
   ],
 
   // ANY → CHURNED (the reason is required via the modal's dedicated dropdown)

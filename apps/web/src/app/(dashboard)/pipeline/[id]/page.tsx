@@ -16,6 +16,7 @@ import { STAGE_FIELDS } from '../lib/stage-config';
 import { StageTransitionModal } from '../components/StageTransitionModal';
 import { WonCelebrationModal } from '../components/WonCelebrationModal';
 import { EditLeadModal } from '../components/EditLeadModal';
+import { PipelineDetailsModal } from '../components/PipelineDetailsModal';
 import { Pencil, Trash2, FolderPlus } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { IntelligenceTab } from '../components/IntelligenceTab';
@@ -35,6 +36,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [targetStage, setTargetStage] = useState('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isPipelineDetailsModalOpen, setIsPipelineDetailsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'details' | 'timeline' | 'contacts'>('details');
   const [wonModalLead, setWonModalLead] = useState<any>(null);
   const confirm = useConfirmStore((s) => s.confirm);
@@ -155,6 +157,12 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
               </button>
             )}
             <button
+              onClick={() => setIsPipelineDetailsModalOpen(true)}
+              className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-[#4B5563] bg-white border border-border rounded-lg hover:bg-[#F9FAFB] transition-colors"
+            >
+              <Tag className="w-4 h-4" /> Stage Data
+            </button>
+            <button
               onClick={() => setIsEditModalOpen(true)}
               className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-[#4B5563] bg-white border border-border rounded-lg hover:bg-[#F9FAFB] transition-colors"
             >
@@ -237,6 +245,12 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                     <FolderPlus className="w-4 h-4" />
                   </button>
                 )}
+                <button
+                  onClick={() => setIsPipelineDetailsModalOpen(true)}
+                  className="flex-1 flex items-center justify-center py-2.5 text-[#4B5563] bg-white border border-border rounded-lg hover:bg-[#F9FAFB] transition-colors"
+                >
+                  <Tag className="w-4 h-4" />
+                </button>
                 <button
                   onClick={() => setIsEditModalOpen(true)}
                   className="flex-1 flex items-center justify-center py-2.5 text-[#4B5563] bg-white border border-border rounded-lg hover:bg-[#F9FAFB] transition-colors"
@@ -430,6 +444,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
       <AnimatePresence>
         {isModalOpen && (
           <StageTransitionModal
+            lead={lead}
             currentStage={lead.stage}
             targetStage={targetStage}
             onClose={() => setIsModalOpen(false)}
@@ -456,6 +471,20 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
               queryClient.invalidateQueries({ queryKey: ['lead', leadId] });
               queryClient.invalidateQueries({ queryKey: ['leads'] });
               setIsEditModalOpen(false);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isPipelineDetailsModalOpen && (
+          <PipelineDetailsModal
+            lead={lead}
+            onClose={() => setIsPipelineDetailsModalOpen(false)}
+            onSuccess={() => {
+              queryClient.invalidateQueries({ queryKey: ['lead', leadId] });
+              queryClient.invalidateQueries({ queryKey: ['leads'] });
+              setIsPipelineDetailsModalOpen(false);
             }}
           />
         )}

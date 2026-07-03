@@ -975,7 +975,20 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
       }
     }
 
-    if (Object.keys(updateData).length === 0) {
+    const fields = req.body.fields;
+    if (fields && typeof fields === 'object' && Object.keys(fields).length > 0) {
+      for (const [key, value] of Object.entries(fields)) {
+        const strValue = Array.isArray(value) ? value.join(', ') : (value ? String(value) : null);
+        await prisma.dealField.upsert({
+          where: { leadId_fieldKey: { leadId, fieldKey: key } },
+          update: { fieldValue: strValue },
+          create: { leadId, fieldKey: key, fieldValue: strValue }
+        });
+      }
+      changes.push('updated pipeline details');
+    }
+
+    if (Object.keys(updateData).length === 0 && (!fields || Object.keys(fields).length === 0)) {
       res.json(existingLead);
       return;
     }
@@ -985,7 +998,8 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
       data: updateData,
       include: {
         client: true,
-        assignedTo: { select: { id: true, name: true, avatar: true } }
+        assignedTo: { select: { id: true, name: true, avatar: true } },
+        dealFields: true,
       }
     });
 

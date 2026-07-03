@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
-import { useAuthStore } from '@/stores';
+import { useAuthStore, useModuleStore } from '@/stores';
 import { useRouter } from 'next/navigation';
 import { formatDate, formatCurrency, getAvatarColor, getInitials, getClientDisplayName } from '@/lib/utils';
 import { PieChart, ListTodo, Users, FolderKanban, Clock, AlertTriangle, TrendingUp, LayoutDashboard, IndianRupee, Target, Trophy, Download } from 'lucide-react';
@@ -74,8 +74,17 @@ const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
 
 export default function ReportsPage() {
   const { user } = useAuthStore();
+  const { activeModule } = useModuleStore();
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>('executive');
+  const [tab, setTab] = useState<Tab>(activeModule === 'CRM' ? 'executive' : 'projects');
+
+  useEffect(() => {
+    if (activeModule === 'CRM' && !['executive', 'clients'].includes(tab)) {
+      setTab('executive');
+    } else if (activeModule === 'PM' && !['projects', 'tasks', 'team', 'clients'].includes(tab)) {
+      setTab('projects');
+    }
+  }, [activeModule, tab]);
 
   const [datePreset, setDatePreset] = useState('this_quarter');
   const [customRange, setCustomRange] = useState({ start: '', end: '' });
@@ -100,13 +109,15 @@ export default function ReportsPage() {
     api.get<ClientReport>('/reports/clients').then(setClientReport).catch(() => { });
   }, [user, router]);
 
-  const tabs = [
-    { id: 'executive' as Tab, label: 'Executive', icon: LayoutDashboard },
-    { id: 'projects' as Tab, label: 'Projects', icon: FolderKanban },
-    { id: 'tasks' as Tab, label: 'Tasks', icon: ListTodo },
-    { id: 'team' as Tab, label: 'Team', icon: Users },
-    { id: 'clients' as Tab, label: 'Clients', icon: PieChart },
+  const allTabs = [
+    { id: 'executive' as Tab, label: 'Executive', icon: LayoutDashboard, module: 'CRM' },
+    { id: 'projects' as Tab, label: 'Projects', icon: FolderKanban, module: 'PM' },
+    { id: 'tasks' as Tab, label: 'Tasks', icon: ListTodo, module: 'PM' },
+    { id: 'team' as Tab, label: 'Team', icon: Users, module: 'PM' },
+    { id: 'clients' as Tab, label: 'Clients', icon: PieChart, module: 'ALL' },
   ];
+
+  const tabs = allTabs.filter(t => t.module === 'ALL' || t.module === activeModule);
 
   const periodLabel = datePresetOptions.find(o => o.value === datePreset)?.label || '';
 
@@ -422,7 +433,7 @@ function MetricCard({ label, value, suffix, danger, icon: Icon }: { label: strin
         <p className={`text-[11px] sm:text-xs font-medium uppercase tracking-wide ${danger ? 'text-red-600' : 'text-secondary'}`}>{label}</p>
         {Icon && <Icon className={`w-4 h-4 shrink-0 ${danger ? 'text-red-500' : 'text-[#9CA3AF]'}`} />}
       </div>
-      <p className={`text-3xl font-semibold tabular-nums tracking-tight ${danger ? 'text-red-600' : 'text-primary'}`}>
+      <p title={String(value)} className={`${String(value).length > 12 ? 'text-lg sm:text-xl' : String(value).length > 8 ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-3xl'} font-semibold tabular-nums tracking-tight ${danger ? 'text-red-600' : 'text-primary'}`}>
         {value}
         {suffix && <span className={`text-sm font-medium ml-2 ${danger ? 'text-red-400' : 'text-[#9CA3AF]'}`}>{suffix}</span>}
       </p>

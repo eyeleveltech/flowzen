@@ -44,7 +44,7 @@ const moreItems: Tab[] = [
   { label: 'Calendar', href: '/calendar', icon: CalendarDays, module: 'PM' },
   { label: 'Members', href: '/team', icon: UsersRound, module: 'PM' },
   { label: 'Departments', href: '/teams', icon: Network, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'PM' },
-  { label: 'Reports', href: '/reports', icon: BarChart3, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'], module: 'PM' },
+  { label: 'Reports', href: '/reports', icon: BarChart3, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'], module: ['CRM', 'PM'] },
   { label: 'Settings', href: '/settings', icon: Settings, roles: ['SUPER_ADMIN', 'ADMIN'] },
   { label: 'Profile', href: '/profile', icon: UserIcon },
 ];
@@ -131,16 +131,14 @@ export function BottomTabs() {
                       onClick={() => setShowMore(false)}
                     >
                       <div
-                        className={`flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-medium transition-all duration-150 ${
-                          isActive
+                        className={`flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-medium transition-all duration-150 ${isActive
                             ? 'bg-primary text-white'
                             : 'text-[#374151] hover:bg-[#F9FAFB]'
-                        }`}
+                          }`}
                       >
                         <item.icon
-                          className={`h-5 w-5 ${
-                            isActive ? 'text-white' : 'text-[#9CA3AF]'
-                          }`}
+                          className={`h-5 w-5 ${isActive ? 'text-white' : 'text-[#9CA3AF]'
+                            }`}
                         />
                         {item.label}
                       </div>
@@ -189,14 +187,12 @@ export function BottomTabs() {
                   />
                 )}
                 <tab.icon
-                  className={`h-5 w-5 transition-colors duration-150 ${
-                    isActive ? 'text-primary' : 'text-[#9CA3AF]'
-                  }`}
+                  className={`h-5 w-5 transition-colors duration-150 ${isActive ? 'text-primary' : 'text-[#9CA3AF]'
+                    }`}
                 />
                 <span
-                  className={`text-[10px] font-medium transition-colors duration-150 ${
-                    isActive ? 'text-primary' : 'text-[#9CA3AF]'
-                  }`}
+                  className={`text-[10px] font-medium transition-colors duration-150 ${isActive ? 'text-primary' : 'text-[#9CA3AF]'
+                    }`}
                 >
                   {tab.label}
                 </span>
@@ -217,14 +213,12 @@ export function BottomTabs() {
               />
             )}
             <MoreHorizontal
-              className={`h-5 w-5 transition-colors duration-150 ${
-                isMoreActive ? 'text-primary' : 'text-[#9CA3AF]'
-              }`}
+              className={`h-5 w-5 transition-colors duration-150 ${isMoreActive ? 'text-primary' : 'text-[#9CA3AF]'
+                }`}
             />
             <span
-              className={`text-[10px] font-medium transition-colors duration-150 ${
-                isMoreActive ? 'text-primary' : 'text-[#9CA3AF]'
-              }`}
+              className={`text-[10px] font-medium transition-colors duration-150 ${isMoreActive ? 'text-primary' : 'text-[#9CA3AF]'
+                }`}
             >
               More
             </span>
