@@ -19,6 +19,8 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
     contactPhone: lead.contactPhone || '',
     jobTitle: lead.jobTitle || '',
     linkedinUrl: lead.linkedinUrl || '',
+    instagramHandle: lead.instagramHandle || '',
+    facebookPage: lead.facebookPage || '',
     companySize: lead.companySize || '',
     website: lead.website || '',
     industry: lead.industry || '',
@@ -102,6 +104,10 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
             </div>
 
             <Field id="edit-linkedin" label="LinkedIn URL" value={form.linkedinUrl} onChange={(v) => setForm({ ...form, linkedinUrl: v })} placeholder="linkedin.com/in/username" />
+            <div className="grid grid-cols-2 gap-4">
+              <Field id="edit-instagram" label="Instagram Handle" value={form.instagramHandle} onChange={(v) => setForm({ ...form, instagramHandle: v })} placeholder="@username or URL" />
+              <Field id="edit-facebook" label="Facebook Page" value={form.facebookPage} onChange={(v) => setForm({ ...form, facebookPage: v })} placeholder="URL or username" />
+            </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>

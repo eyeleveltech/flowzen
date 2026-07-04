@@ -22,6 +22,7 @@ import { useTasks, useProjects, useMembers, useTeams } from '@/hooks/useQueries'
 import { useQueryClient } from '@tanstack/react-query';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { TaskDetailDrawer } from '@/components/tasks/task-detail-drawer';
+import { ColumnDropdown } from '@/components/ui/column-dropdown';
 
 interface Task {
   id: string; title: string; description?: string | null; priority: string; status: string;
@@ -571,6 +572,14 @@ function TasksContent() {
               onChange={setSort}
               options={[
                 { label: 'Default Sort', value: '' },
+                { label: 'Project: A-Z', value: 'project_asc' },
+                { label: 'Project: Z-A', value: 'project_desc' },
+                { label: 'Priority: Low to Urgent', value: 'priority_asc' },
+                { label: 'Priority: Urgent to Low', value: 'priority_desc' },
+                { label: 'Status: To Do to Done', value: 'status_asc' },
+                { label: 'Status: Done to To Do', value: 'status_desc' },
+                { label: 'Task Name: A-Z', value: 'title_asc' },
+                { label: 'Task Name: Z-A', value: 'title_desc' },
                 { label: 'Created: Newest', value: 'createdAt_desc' },
                 { label: 'Created: Oldest', value: 'createdAt_asc' },
                 { label: 'Due Date: Earliest', value: 'dueDate_asc' },
@@ -691,10 +700,40 @@ function TasksContent() {
                     <thead>
                       <tr className="border-b border-[#F3F4F6]">
                         <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Task</th>
-                        <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Project</th>
+                        <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
+                          <ColumnDropdown 
+                            title="Project" 
+                            sortAscValue="project_asc" 
+                            sortDescValue="project_desc" 
+                            sortAscLabel="Sort A to Z"
+                            sortDescLabel="Sort Z to A"
+                            currentSort={sort} 
+                            onSortChange={setSort}
+                          />
+                        </th>
                         <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Assignee</th>
-                        <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Priority</th>
-                        <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Status</th>
+                        <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
+                          <ColumnDropdown 
+                            title="Priority" 
+                            sortAscValue="priority_asc" 
+                            sortDescValue="priority_desc" 
+                            sortAscLabel="Low to Urgent"
+                            sortDescLabel="Urgent to Low"
+                            currentSort={sort} 
+                            onSortChange={setSort}
+                          />
+                        </th>
+                        <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
+                          <ColumnDropdown 
+                            title="Status" 
+                            sortAscValue="status_asc" 
+                            sortDescValue="status_desc" 
+                            sortAscLabel="To Do to Done"
+                            sortDescLabel="Done to To Do"
+                            currentSort={sort} 
+                            onSortChange={setSort}
+                          />
+                        </th>
                         <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Due Date</th>
                       </tr>
                     </thead>

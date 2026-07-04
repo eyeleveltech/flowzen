@@ -26,6 +26,8 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
     phone: '',
     source: 'MANUAL',
     linkedinUrl: '',
+    instagramHandle: '',
+    facebookPage: '',
     assignedToId: '',
     dealValue: '',
     expectedRevenue: '',
@@ -169,6 +171,8 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
         phone: row.Phone ?? row.phone ?? row.Mobile ?? row.mobile ?? '',
         stage: row.Stage ?? row.stage ?? 'NEW_LEAD',
         linkedinUrl: row.LinkedinUrl ?? row.linkedinUrl ?? '',
+        instagramHandle: row.InstagramHandle ?? row.instagramHandle ?? '',
+        facebookPage: row.FacebookPage ?? row.facebookPage ?? '',
         dealValue: row.DealValue ?? row.dealValue ?? '',
         expectedCloseDate: row.ExpectedCloseDate ?? row.expectedCloseDate ?? '',
         industry: row.Industry ?? row.industry ?? '',
@@ -197,7 +201,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
   }
 
   function downloadTemplate() {
-    const csv = Papa.unparse([{ ContactName: 'John Doe', CompanyName: 'Example LLC', Email: 'john@example.com', Phone: '+1-555-0100', Stage: 'NEW_LEAD', DealValue: '50000', ExpectedCloseDate: '2026-06-01', Industry: 'IT/SaaS', City: 'Chennai', Website: 'example.com', Notes: 'Needs immediate follow up' }]);
+    const csv = Papa.unparse([{ ContactName: 'John Doe', CompanyName: 'Example LLC', Email: 'john@example.com', Phone: '+1-555-0100', Stage: 'NEW_LEAD', DealValue: '50000', ExpectedCloseDate: '2026-06-01', Industry: 'IT/SaaS', City: 'Chennai', Website: 'example.com', LinkedinUrl: 'linkedin.com/in/johndoe', InstagramHandle: '@johndoe', FacebookPage: 'facebook.com/johndoe', Notes: 'Needs immediate follow up' }]);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'lead_import_template.csv'; link.click();
   }
@@ -304,6 +308,11 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                         <style>{`select { padding-left: 2rem !important; }`}</style>
                       </div>
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Field label="Instagram Handle" value={form.instagramHandle} onChange={(v) => setForm({ ...form, instagramHandle: v })} placeholder="@username or URL" />
+                    <Field label="Facebook Page" value={form.facebookPage} onChange={(v) => setForm({ ...form, facebookPage: v })} placeholder="URL or username" />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

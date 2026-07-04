@@ -58,7 +58,8 @@ crmRouter.get('/leads', async (req: AuthRequest, res: Response, next) => {
       closeDateFrom,
       closeDateTo,
       dateAddedFrom,
-      dateAddedTo
+      dateAddedTo,
+      sort
     } = req.query;
 
     const where: Record<string, unknown> = { organizationId: orgId };
@@ -97,7 +98,17 @@ crmRouter.get('/leads', async (req: AuthRequest, res: Response, next) => {
         },
         dealFields: true,
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: sort === 'client_asc' ? [{ contactName: 'asc' }]
+             : sort === 'client_desc' ? [{ contactName: 'desc' }]
+             : sort === 'stage_asc' ? [{ stage: 'asc' }]
+             : sort === 'stage_desc' ? [{ stage: 'desc' }]
+             : sort === 'dealValue_asc' ? [{ dealValue: 'asc' }]
+             : sort === 'dealValue_desc' ? [{ dealValue: 'desc' }]
+             : sort === 'closeDate_asc' ? [{ expectedCloseDate: 'asc' }]
+             : sort === 'closeDate_desc' ? [{ expectedCloseDate: 'desc' }]
+             : sort === 'owner_asc' ? [{ assignedTo: { name: 'asc' } }]
+             : sort === 'owner_desc' ? [{ assignedTo: { name: 'desc' } }]
+             : [{ createdAt: 'desc' }],
     });
 
     res.json(leads);

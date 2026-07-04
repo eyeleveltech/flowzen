@@ -8,6 +8,7 @@ import { formatCurrency, getAvatarColor, getInitials, getClientDisplayName } fro
 import { Plus, Search, Filter, ChevronRight, TrendingUp, Upload } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
+import { ColumnDropdown } from '@/components/ui/column-dropdown';
 import { LeadModal } from './LeadModal';
 import { useMembers } from '@/hooks/useQueries';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -42,6 +43,7 @@ export function LeadListView() {
   const [closeDateTo, setCloseDateTo] = useState(searchParams.get('closeDateTo') || '');
   const [dateAddedFrom, setDateAddedFrom] = useState(searchParams.get('dateAddedFrom') || '');
   const [dateAddedTo, setDateAddedTo] = useState(searchParams.get('dateAddedTo') || '');
+  const [sort, setSort] = useState(searchParams.get('sort') || '');
 
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [showWonLost, setShowWonLost] = useState(false);
@@ -75,6 +77,7 @@ export function LeadListView() {
     if (closeDateTo) params.set('closeDateTo', closeDateTo);
     if (dateAddedFrom) params.set('dateAddedFrom', dateAddedFrom);
     if (dateAddedTo) params.set('dateAddedTo', dateAddedTo);
+    if (sort) params.set('sort', sort);
 
     const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
     window.history.replaceState(null, '', newUrl);
@@ -89,7 +92,7 @@ export function LeadListView() {
         sse.off('lead:updated', handleUpdate);
       };
     }
-  }, [search, stageFilter, ownerFilter, minDealValue, maxDealValue, leadSource, priority, closeDateFrom, closeDateTo, dateAddedFrom, dateAddedTo]);
+  }, [search, stageFilter, ownerFilter, minDealValue, maxDealValue, leadSource, priority, closeDateFrom, closeDateTo, dateAddedFrom, dateAddedTo, sort]);
 
   async function fetchLeads(params: URLSearchParams) {
     try {
@@ -296,12 +299,62 @@ export function LeadListView() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px]">
             <thead>
-              <tr className="border-b border-[#F3F4F6] bg-[#F9FAFB]">
-                <th className="px-6 py-3.5 text-left text-xs font-semibold text-secondary uppercase tracking-wider">Client</th>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold text-secondary uppercase tracking-wider">Stage</th>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold text-secondary uppercase tracking-wider">Deal Value</th>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold text-secondary uppercase tracking-wider">Close Date</th>
-                <th className="px-6 py-3.5 text-left text-xs font-semibold text-secondary uppercase tracking-wider">Owner</th>
+              <tr className="border-b border-[#F3F4F6] bg-white">
+                <th className="px-6 py-3.5 text-left text-xs font-semibold text-secondary uppercase tracking-wider">
+                  <ColumnDropdown 
+                    title="Client" 
+                    sortAscValue="client_asc" 
+                    sortDescValue="client_desc" 
+                    sortAscLabel="Sort A to Z"
+                    sortDescLabel="Sort Z to A"
+                    currentSort={sort} 
+                    onSortChange={setSort} 
+                  />
+                </th>
+                <th className="px-6 py-3.5 text-left text-xs font-semibold text-secondary uppercase tracking-wider">
+                  <ColumnDropdown 
+                    title="Stage" 
+                    sortAscValue="stage_asc" 
+                    sortDescValue="stage_desc" 
+                    sortAscLabel="New Lead to End"
+                    sortDescLabel="End to New Lead"
+                    currentSort={sort} 
+                    onSortChange={setSort} 
+                  />
+                </th>
+                <th className="px-6 py-3.5 text-left text-xs font-semibold text-secondary uppercase tracking-wider">
+                  <ColumnDropdown 
+                    title="Deal Value" 
+                    sortAscValue="dealValue_asc" 
+                    sortDescValue="dealValue_desc" 
+                    sortAscLabel="Sort Lowest to Highest"
+                    sortDescLabel="Sort Highest to Lowest"
+                    currentSort={sort} 
+                    onSortChange={setSort} 
+                  />
+                </th>
+                <th className="px-6 py-3.5 text-left text-xs font-semibold text-secondary uppercase tracking-wider">
+                  <ColumnDropdown 
+                    title="Close Date" 
+                    sortAscValue="closeDate_asc" 
+                    sortDescValue="closeDate_desc" 
+                    sortAscLabel="Sort Earliest to Latest"
+                    sortDescLabel="Sort Latest to Earliest"
+                    currentSort={sort} 
+                    onSortChange={setSort} 
+                  />
+                </th>
+                <th className="px-6 py-3.5 text-left text-xs font-semibold text-secondary uppercase tracking-wider">
+                  <ColumnDropdown 
+                    title="Owner" 
+                    sortAscValue="owner_asc" 
+                    sortDescValue="owner_desc" 
+                    sortAscLabel="Sort A to Z"
+                    sortDescLabel="Sort Z to A"
+                    currentSort={sort} 
+                    onSortChange={setSort} 
+                  />
+                </th>
                 <th className="px-6 py-3.5"></th>
               </tr>
             </thead>

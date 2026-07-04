@@ -129,7 +129,15 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
                : sort === 'createdAt_desc' ? [{ createdAt: 'desc' }]
                : sort === 'updatedAt_asc' ? [{ updatedAt: 'asc' }]
                : sort === 'updatedAt_desc' ? [{ updatedAt: 'desc' }]
-               : [{ order: 'asc' }, { createdAt: 'desc' }],
+               : sort === 'project_asc' ? [{ project: { name: 'asc' } }]
+               : sort === 'project_desc' ? [{ project: { name: 'desc' } }]
+               : sort === 'priority_asc' ? [{ priority: 'asc' }]
+               : sort === 'priority_desc' ? [{ priority: 'desc' }]
+               : sort === 'status_asc' ? [{ status: 'asc' }]
+               : sort === 'status_desc' ? [{ status: 'desc' }]
+               : sort === 'title_asc' ? [{ title: 'asc' }]
+               : sort === 'title_desc' ? [{ title: 'desc' }]
+               : [{ priority: 'desc' }, { createdAt: 'desc' }],
         skip,
         take: parseInt(limit as string),
       }),
