@@ -6,6 +6,8 @@ import { EmailService } from '../services/email.js';
 import { emitToOrganization } from '../sse.js';
 import { seedDefaultModules } from '../lib/modules.js';
 import rateLimit from 'express-rate-limit';
+import { createAuditLog } from '../utils/audit.js';
+import { toProperCase } from '../utils/properCase.js';
 
 const settingsLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -113,7 +115,16 @@ settingsRouter.get('/notification-preferences', async (req: AuthRequest, res: Re
   try {
     const user = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { settings: true } });
     const n = ((user?.settings as any)?.notifications) || {};
-    res.json({ followUpDue: n.followUpDue !== false, staleLead: n.staleLead !== false, dailyDigest: n.dailyDigest !== false, digestTime: n.digestTime || '08:00' });
+    res.json({
+      followUpDue: n.followUpDue !== false,
+      staleLead: n.staleLead !== false,
+      dailyDigest: n.dailyDigest !== false,
+      digestTime: n.digestTime || '08:00',
+      taskAssigned: n.taskAssigned !== false,
+      taskDue24h: n.taskDue24h !== false,
+      taskOverdue: n.taskOverdue !== false,
+      taskComment: n.taskComment !== false
+    });
   } catch (error) { next(error); }
 });
 
@@ -123,7 +134,9 @@ settingsRouter.patch('/notification-preferences', async (req: AuthRequest, res: 
     const user = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { settings: true } });
     const settings = (user?.settings as any) || {};
     const notifications = { ...(settings.notifications || {}) };
-    for (const k of ['followUpDue', 'staleLead', 'dailyDigest', 'digestTime']) if (req.body[k] !== undefined) notifications[k] = req.body[k];
+    for (const k of ['followUpDue', 'staleLead', 'dailyDigest', 'digestTime', 'taskAssigned', 'taskDue24h', 'taskOverdue', 'taskComment']) {
+      if (req.body[k] !== undefined) notifications[k] = req.body[k];
+    }
     const updated = await prisma.user.update({ where: { id: req.user!.userId }, data: { settings: { ...settings, notifications } }, select: { settings: true } });
     res.json(((updated.settings as any)?.notifications) || {});
   } catch (error) { next(error); }
@@ -243,7 +256,7 @@ settingsRouter.post('/users', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimiter
 
     const user = await prisma.user.create({
       data: {
-        name,
+        name: toProperCase(name),
         email,
         password: hashedPassword,
         role: role || 'TEAM_MEMBER',
@@ -300,7 +313,7 @@ settingsRouter.put('/users/:id', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimi
     }
 
     const dataToUpdate: any = {
-      name: req.body.name,
+      name: req.body.name ? toProperCase(req.body.name) : undefined,
       role: roleToSet,
       department: req.body.department,
       designation: req.body.designation,
@@ -322,6 +335,24 @@ settingsRouter.put('/users/:id', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimi
         status: true,
       },
     });
+
+    const oldRole = targetUser.role;
+    const isRoleChanged = roleToSet && roleToSet !== oldRole;
+    if (isRoleChanged) {
+      await createAuditLog({
+        organizationId: req.user!.organizationId,
+        userId: req.user!.userId,
+        action: 'UPDATE_ROLE',
+        entityType: 'USER',
+        entityId: targetUserId,
+        details: {
+          userName: targetUser.name,
+          userEmail: targetUser.email,
+          previousRole: oldRole,
+          newRole: roleToSet
+        }
+      });
+    }
 
     emitToOrganization(req.app.get('io'), req.user!.organizationId, 'member:changed', { id: user.id });
     res.json(user);
@@ -435,6 +466,18 @@ settingsRouter.post('/users/:id/transfer-super-admin', authorize('SUPER_ADMIN'),
       }),
     ]);
 
+    await createAuditLog({
+      organizationId: req.user!.organizationId,
+      userId: currentUserId,
+      action: 'TRANSFER_SUPER_ADMIN',
+      entityType: 'USER',
+      entityId: targetUserId,
+      details: {
+        transferredToName: targetUser.name,
+        transferredToEmail: targetUser.email
+      }
+    });
+
     res.json({ message: 'Super Admin role transferred successfully' });
   } catch (error) {
     next(error);
@@ -521,3 +564,21 @@ settingsRouter.delete('/workflows/:id', authorize('SUPER_ADMIN', 'ADMIN'), async
     next(error);
   }
 });
+
+// GET /api/settings/audit-logs
+settingsRouter.get('/audit-logs', authorize('SUPER_ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const logs = await prisma.auditLog.findMany({
+      where: { organizationId: req.user!.organizationId },
+      include: {
+        user: { select: { name: true, email: true, avatar: true } }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100
+    });
+    res.json(logs);
+  } catch (error) {
+    next(error);
+  }
+});
+

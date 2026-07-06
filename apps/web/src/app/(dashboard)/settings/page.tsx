@@ -15,9 +15,10 @@ import { TemplatesTab } from '@/components/settings/TemplatesTab';
 import { PermissionsTab } from '@/components/settings/PermissionsTab';
 import { ModulesTab } from '@/components/settings/ModulesTab';
 import { BillingTab } from '@/components/settings/BillingTab';
+import { AuditLogsTab } from '@/components/settings/AuditLogsTab';
 import { Skeleton } from '@/components/ui/skeleton';
 
-type Tab = 'organization' | 'modules' | 'billing' | 'users' | 'templates' | 'permissions' | 'workflows' | 'notifications';
+type Tab = 'organization' | 'modules' | 'billing' | 'users' | 'templates' | 'permissions' | 'workflows' | 'notifications' | 'audit';
 
 export default function SettingsPage() {
   const { user } = useAuthStore();
@@ -87,6 +88,10 @@ export default function SettingsPage() {
     { id: 'permissions', label: 'Permissions', icon: Shield },
   ];
 
+  if (user?.role === 'SUPER_ADMIN') {
+    tabs.push({ id: 'audit', label: 'Audit Logs', icon: FileText });
+  }
+
   return (
     <div className="max-w-6xl mx-auto space-y-8">
       <div>
@@ -126,6 +131,7 @@ export default function SettingsPage() {
         {tab === 'templates' && <TemplatesTab templates={templates} fetchTemplates={fetchTemplates} />}
         {tab === 'notifications' && <NotificationsTab />}
         {tab === 'permissions' && <PermissionsTab />}
+        {tab === 'audit' && <AuditLogsTab />}
       </motion.div>
     </div>
   );

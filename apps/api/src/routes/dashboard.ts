@@ -243,14 +243,17 @@ dashboardRouter.get('/team-workload', async (req: AuthRequest, res: Response, ne
     }
 
     const members = await prisma.user.findMany({
-      where: { organizationId: orgId, status: 'ACTIVE', ...dateFilter },
+      where: { organizationId: orgId, status: 'ACTIVE' },
       select: {
         id: true,
         name: true,
         avatar: true,
         role: true,
         department: true,
-        assignedTasks: { select: { status: true } },
+        assignedTasks: {
+          where: dateFilter,
+          select: { status: true }
+        },
       },
     });
 
@@ -422,7 +425,10 @@ dashboardRouter.get('/my-tasks', async (req: AuthRequest, res: Response, next) =
       include: {
         project: { select: { id: true, name: true } }
       },
-      orderBy: { dueDate: 'asc' }
+      orderBy: [
+        { priority: 'desc' },
+        { dueDate: 'asc' }
+      ]
     });
     res.json(tasks);
   } catch (error) {
@@ -506,7 +512,7 @@ dashboardRouter.get('/client-health', async (req: AuthRequest, res: Response, ne
       });
 
       let health = 'Green';
-      if (overdueTasks >= 3 || projectPastEndDate) health = 'Red';
+      if (overdueTasks >= 4 || projectPastEndDate) health = 'Red';
       else if (overdueTasks > 0) health = 'Amber';
 
       return {

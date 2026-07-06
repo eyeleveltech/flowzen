@@ -200,6 +200,7 @@ enum NotificationType {
   TASK_COMPLETED
   TASK_REVIEW
   DEADLINE_APPROACHING
+  TASK_OVERDUE
   COMMENT_ADDED
   PROJECT_STATUS_CHANGED
   CLIENT_ADDED
@@ -238,6 +239,7 @@ model Organization {
   leads   Lead[]
   modules OrganizationModule[]
   quotes  QuoteDocument[]
+  auditLogs AuditLog[]      @relation("OrganizationAuditLogs")
 
   @@map("organizations")
 }
@@ -298,6 +300,7 @@ model User {
   assignedLeads  Lead[]          @relation("LeadAssignee")
   stageChanges   StageHistory[]  @relation("StageChanger")
   quotesAsSalesperson QuoteDocument[] @relation("QuoteSalesperson")
+  auditLogs           AuditLog[]      @relation("UserAuditLogs")
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -892,3 +895,22 @@ model WorkflowRule {
   @@index([organizationId, isActive])
   @@map("workflow_rules")
 }
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  action         String   // e.g., "CREATE", "UPDATE", "DELETE", "ARCHIVE"
+  entityType     String   // e.g., "USER", "LEAD", "CLIENT", "PROJECT"
+  entityId       String
+  details        Json?    // Stores specific changes
+  createdAt      DateTime @default(now())
+
+  user         User         @relation("UserAuditLogs", fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation("OrganizationAuditLogs", fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([userId])
+  @@map("audit_logs")
+}
+

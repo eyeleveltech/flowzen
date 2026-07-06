@@ -34,28 +34,42 @@ export class NotificationService {
       emitToUser(null, payload.userId, 'notification:new', notification);
 
       // 3. Fallback: Send Email
-      // To prevent spam, we can only send emails for high priority items, 
-      // or check if the user is currently connected to Socket.io.
-      // For now, we will send an email for specific events like TASK_ASSIGNED.
-      if (payload.type === 'TASK_ASSIGNED' || payload.type === 'DEADLINE_APPROACHING') {
+      const pmTypes: NotificationType[] = ['TASK_ASSIGNED', 'DEADLINE_APPROACHING', 'TASK_OVERDUE', 'COMMENT_ADDED', 'MENTION'];
+      if (pmTypes.includes(payload.type)) {
         const user = await prisma.user.findUnique({
           where: { id: payload.userId },
-          select: { email: true, name: true },
+          select: { email: true, name: true, settings: true },
         });
 
         if (user && user.email) {
-          await this.sendEmail({
-            to: user.email,
-            subject: `New Notification: ${payload.type.replace(/_/g, ' ')}`,
-            html: `
-              <div style="font-family: sans-serif; padding: 20px;">
-                <h2>Hello ${user.name.split(' ')[0]},</h2>
-                <p>${payload.message}</p>
-                <br />
-                <a href="${process.env.NEXT_PUBLIC_APP_URL}/dashboard" style="background: #111827; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 8px;">View in Dashboard</a>
-              </div>
-            `,
-          });
+          const n = ((user.settings as any)?.notifications) || {};
+          let emailEnabled = false;
+
+          if (payload.type === 'TASK_ASSIGNED' && n.taskAssigned !== false) emailEnabled = true;
+          if (payload.type === 'DEADLINE_APPROACHING' && n.taskDue24h !== false) emailEnabled = true;
+          if (payload.type === 'TASK_OVERDUE' && n.taskOverdue !== false) emailEnabled = true;
+          if ((payload.type === 'COMMENT_ADDED' || payload.type === 'MENTION') && n.taskComment !== false) emailEnabled = true;
+
+          if (emailEnabled) {
+            let subject = `New Notification: ${payload.type.replace(/_/g, ' ')}`;
+            if (payload.type === 'TASK_ASSIGNED') subject = `[Flowzen] New Task Assigned`;
+            else if (payload.type === 'DEADLINE_APPROACHING') subject = `[Flowzen] Task Due Soon`;
+            else if (payload.type === 'TASK_OVERDUE') subject = `[Flowzen] Task Overdue Alert`;
+            else if (payload.type === 'COMMENT_ADDED' || payload.type === 'MENTION') subject = `[Flowzen] New Comment/Mention on Task`;
+
+            await this.sendEmail({
+              to: user.email,
+              subject,
+              html: `
+                <div style="font-family: sans-serif; padding: 20px;">
+                  <h2>Hello ${user.name.split(' ')[0]},</h2>
+                  <p>${payload.message}</p>
+                  <br />
+                  <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/dashboard" style="background: #111827; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 8px;">View in Dashboard</a>
+                </div>
+              `,
+            });
+          }
         }
       }
 

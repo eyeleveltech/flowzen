@@ -117,11 +117,16 @@ export function useDashboardData(role?: string, dateRange?: { startDate?: string
         pendingApprovals = pending;
         clientHealth = health;
       }
+      let myProjects: any[] = [];
+      if (role === 'TEAM_MEMBER') {
+        const res = await api.get<any>('/projects?status=ACTIVE&limit=5');
+        myProjects = res.projects || [];
+      }
       if (role === 'PROJECT_MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN') {
         workload = await api.get<any[]>(`/dashboard/team-workload${queryStr}`);
       }
       
-      return { stats, activity, deadlines, velocity, statusDist, workload, myTasks, pendingApprovals, clientHealth };
+      return { stats, activity, deadlines, velocity, statusDist, workload, myTasks, pendingApprovals, clientHealth, myProjects };
     },
     enabled: !!role,
     refetchInterval: 60000,

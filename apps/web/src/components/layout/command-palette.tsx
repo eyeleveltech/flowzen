@@ -172,7 +172,7 @@ export function CommandPalette() {
                         id: m.id,
                         label: m.name,
                         sub: m.email,
-                        href: `/team/${m.id}`,
+                        href: `/members?memberId=${m.id}`,
                       }))}
                       onNavigate={navigate}
                     />

@@ -7,6 +7,7 @@ import { emitToOrganization } from '../sse.js';
 import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
 import { NotificationService } from '../services/notifications.js';
 import { toList, whereIn } from '../utils/query.js';
+import { createAuditLog } from '../utils/audit.js';
 
 export const projectRouter = Router();
 projectRouter.use(authenticate);
@@ -312,6 +313,17 @@ projectRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), 
           projectId: project.id,
         },
       });
+
+      if (project.status === 'COMPLETED' || project.status === 'CANCELLED') {
+        await createAuditLog({
+          organizationId: req.user!.organizationId,
+          userId: req.user!.userId,
+          action: 'PROJECT_ARCHIVE',
+          entityType: 'PROJECT',
+          entityId: project.id,
+          details: { name: project.name, status: project.status }
+        });
+      }
     }
 
     const io = req.app.get('io');
@@ -341,6 +353,15 @@ projectRouter.delete('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'
     const io = req.app.get('io');
     emitToOrganization(io, req.user!.organizationId, 'project:deleted', { id: (req.params.id as string) });
     await invalidateOrganizationCache(req.user!.organizationId);
+
+    await createAuditLog({
+      organizationId: req.user!.organizationId,
+      userId: req.user!.userId,
+      action: 'PROJECT_DELETE',
+      entityType: 'PROJECT',
+      entityId: project.id,
+      details: { name: project.name }
+    });
 
     res.json({ message: 'Project deleted' });
   } catch (error) {

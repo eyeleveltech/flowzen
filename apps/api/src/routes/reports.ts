@@ -13,21 +13,26 @@ reportRouter.get('/projects', async (req: AuthRequest, res: Response, next) => {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
+    const whereClause: any = { client: { organizationId: orgId } };
+    if (req.query.teamId) {
+      whereClause.teams = { some: { teamId: req.query.teamId as string } };
+    }
+
     const [total, completed, active, delayed, planning, onHold, projectsList] = await Promise.all([
-      prisma.project.count({ where: { client: { organizationId: orgId } } }),
-      prisma.project.count({ where: { client: { organizationId: orgId }, status: 'COMPLETED' } }),
-      prisma.project.count({ where: { client: { organizationId: orgId }, status: 'IN_PROGRESS' } }),
+      prisma.project.count({ where: whereClause }),
+      prisma.project.count({ where: { ...whereClause, status: 'COMPLETED' } }),
+      prisma.project.count({ where: { ...whereClause, status: 'IN_PROGRESS' } }),
       prisma.project.count({
         where: {
-          client: { organizationId: orgId },
+          ...whereClause,
           endDate: { lt: todayStart },
           status: { notIn: ['COMPLETED', 'CANCELLED'] },
         },
       }),
-      prisma.project.count({ where: { client: { organizationId: orgId }, status: 'PLANNING' } }),
-      prisma.project.count({ where: { client: { organizationId: orgId }, status: 'ON_HOLD' } }),
+      prisma.project.count({ where: { ...whereClause, status: 'PLANNING' } }),
+      prisma.project.count({ where: { ...whereClause, status: 'ON_HOLD' } }),
       prisma.project.findMany({
-        where: { client: { organizationId: orgId } },
+        where: whereClause,
         select: {
           status: true,
           type: true,
@@ -82,19 +87,24 @@ reportRouter.get('/tasks', async (req: AuthRequest, res: Response, next) => {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
+    const whereClause: any = { project: { client: { organizationId: orgId } } };
+    if (req.query.teamId) {
+      whereClause.assignee = { teamId: req.query.teamId as string };
+    }
+
     const [total, completed, overdue, tasksList] = await Promise.all([
-      prisma.task.count({ where: { project: { client: { organizationId: orgId } } } }),
-      prisma.task.count({ where: { project: { client: { organizationId: orgId } }, status: 'COMPLETED' } }),
+      prisma.task.count({ where: whereClause }),
+      prisma.task.count({ where: { ...whereClause, status: 'COMPLETED' } }),
       prisma.task.count({ 
         where: { 
-          project: { client: { organizationId: orgId } }, 
+          ...whereClause, 
           dueDate: { lt: todayStart },
           status: { notIn: ['COMPLETED'] }
         } 
       }),
       prisma.task.findMany({
         where: { 
-          project: { client: { organizationId: orgId } },
+          ...whereClause,
           status: { notIn: ['COMPLETED'] }
         },
         select: {
@@ -138,8 +148,13 @@ reportRouter.get('/team', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
 
+    const whereClause: any = { organizationId: orgId, status: 'ACTIVE' };
+    if (req.query.teamId) {
+      whereClause.teamId = req.query.teamId as string;
+    }
+
     const members = await prisma.user.findMany({
-      where: { organizationId: orgId, status: 'ACTIVE' },
+      where: whereClause,
       select: {
         id: true,
         name: true,

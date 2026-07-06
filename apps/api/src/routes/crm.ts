@@ -8,6 +8,7 @@ import { whereIn } from '../utils/query.js';
 import { generateLeadId, normalizePhone } from '../utils/leadId.js';
 import { runIntelligence } from '../services/intelligence.service.js';
 import { logActivity, ActivityType, ACTIVITY_CATEGORIES } from '../services/activity.service.js';
+import { createAuditLog } from '../utils/audit.js';
 
 export const crmRouter = Router();
 crmRouter.use(authenticate);
@@ -492,6 +493,15 @@ crmRouter.post('/leads', authorize('SUPER_ADMIN', 'ADMIN'), validate(leadSchema)
     const io = req.app.get('io');
     emitToOrganization(io, orgId, 'lead:updated', lead);
 
+    await createAuditLog({
+      organizationId: orgId,
+      userId: req.user!.userId,
+      action: 'LEAD_CREATE',
+      entityType: 'LEAD',
+      entityId: lead.id,
+      details: { contactName: lead.contactName, companyName: lead.companyName }
+    });
+
     res.status(201).json(lead);
   } catch (error) {
     next(error);
@@ -959,6 +969,7 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
             email: existingLead.contactEmail || null,
             phone: existingLead.contactPhone || null,
             status: 'PROSPECT',
+            contractValue: existingLead.dealValue || null,
             organizationId: orgId,
             ...(existingLead.contactName ? {
               contacts: { create: { name: existingLead.contactName, designation: existingLead.jobTitle || null, email: existingLead.contactEmail || null, phone: existingLead.contactPhone || null } }
@@ -979,7 +990,13 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
         else if (stage === 'PROJECT_COMPLETED') newStatus = 'PROJECT_COMPLETED';
         else if (stage === 'CHURNED') newStatus = 'CHURNED';
         if (newStatus) {
-          await prisma.client.update({ where: { id: clientId }, data: { status: newStatus } });
+          await prisma.client.update({
+            where: { id: clientId },
+            data: {
+              status: newStatus,
+              contractValue: existingLead.dealValue || undefined
+            }
+          });
           const io = req.app.get('io');
           emitToOrganization(io, orgId, 'client:updated', { id: clientId });
         }
@@ -1014,6 +1031,13 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
       }
     });
 
+    if (updatedLead.clientId && dealValue !== undefined) {
+      await prisma.client.update({
+        where: { id: updatedLead.clientId },
+        data: { contractValue: dealValue || null }
+      });
+    }
+
     // Log Activity for all non-stage changes combined
     if (changes.length > 0) {
       await prisma.activity.create({
@@ -1037,6 +1061,19 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
 
     const io = req.app.get('io');
     emitToOrganization(io, orgId, 'lead:updated', updatedLead);
+
+    await createAuditLog({
+      organizationId: orgId,
+      userId: req.user!.userId,
+      action: 'LEAD_UPDATE',
+      entityType: 'LEAD',
+      entityId: leadId,
+      details: {
+        contactName: updatedLead.contactName,
+        companyName: updatedLead.companyName,
+        changes: changes
+      }
+    });
 
     res.json(updatedLead);
   } catch (error) {
@@ -1223,6 +1260,15 @@ crmRouter.delete('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Au
     // Emit real-time event
     const io = req.app.get('io');
     emitToOrganization(io, orgId, 'lead:updated', { id: leadId, deleted: true });
+
+    await createAuditLog({
+      organizationId: orgId,
+      userId: req.user!.userId,
+      action: 'LEAD_DELETE',
+      entityType: 'LEAD',
+      entityId: leadId,
+      details: { contactName: existingLead.contactName, companyName: existingLead.companyName }
+    });
 
     res.json({ success: true });
   } catch (error) {
