@@ -4,7 +4,7 @@ import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { Plus, X, Edit2, Shield, Trash2, Mail, Building2, UserCircle, UserX } from 'lucide-react';
 import { Select } from '@/components/ui/select';
-import { getInitials, getAvatarColor } from '@/lib/utils';
+import { getInitials, getAvatarColor, toProperCase } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useConfirmStore } from '@/stores';
 
@@ -37,7 +37,7 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
     e.preventDefault();
     setSaving(true);
     try {
-      await api.post('/settings/users', inviteForm);
+      await api.post('/settings/users', { ...inviteForm, name: toProperCase(inviteForm.name) });
       toast.success('Invitation sent');
       setShowInvite(false);
       setInviteForm({ name: '', email: '', role: 'TEAM_MEMBER', department: '', designation: '' });
@@ -55,7 +55,7 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
     setSaving(true);
     try {
       await api.put(`/settings/users/${editingUser.id}`, {
-        name: editingUser.name,
+        name: toProperCase(editingUser.name),
         role: editingUser.role,
         department: editingUser.department,
         designation: editingUser.designation,
@@ -193,8 +193,8 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
             <AnimatePresence>
         {showInvite && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/20 backdrop-blur-sm" onClick={() => setShowInvite(false)} />
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-[101] w-full max-w-md bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto flex flex-col">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-100 bg-black/20 backdrop-blur-sm" onClick={() => setShowInvite(false)} />
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-101 w-full max-w-md bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto flex flex-col">
               <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface sticky top-0 z-10 shrink-0">
                 <h3 className="text-base font-semibold text-primary">Invite Member</h3>
                 <button type="button" onClick={() => setShowInvite(false)} className="text-secondary hover:text-primary p-1 rounded-md hover:bg-border transition-colors"><X className="h-5 w-5" /></button>
@@ -239,8 +239,8 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
       <AnimatePresence>
         {editingUser && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/20 backdrop-blur-sm" onClick={() => setEditingUser(null)} />
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-[101] w-full max-w-md bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto flex flex-col">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-100 bg-black/20 backdrop-blur-sm" onClick={() => setEditingUser(null)} />
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-101 w-full max-w-md bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto flex flex-col">
               <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface sticky top-0 z-10 shrink-0">
                 <h3 className="text-base font-semibold text-primary">Edit User</h3>
                 <button type="button" onClick={() => setEditingUser(null)} className="text-secondary hover:text-primary p-1 rounded-md hover:bg-border transition-colors"><X className="h-5 w-5" /></button>

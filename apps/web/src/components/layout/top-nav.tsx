@@ -225,7 +225,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
           </button>
 
           {isMobile ? (
-            <Drawer isOpen={showNotifications} onClose={() => setShowNotifications(false)} title="Notifications">
+            <Drawer isOpen={showNotifications} onClose={() => setShowNotifications(false)} title="In-App Notifications">
               {unreadCount > 0 && (
                 <div className="flex justify-end mb-2">
                   <button onClick={markAllAsRead} className="text-xs font-medium text-secondary hover:text-primary transition-colors bg-[#F9FAFB] px-3 py-1.5 rounded-lg">
@@ -278,7 +278,10 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                   className="absolute right-0 mt-2 w-96 rounded-2xl border border-border bg-white shadow-lg shadow-black/5"
                 >
                   <div className="flex items-center justify-between px-4 py-3 border-b border-[#F3F4F6]">
-                    <h3 className="text-sm font-semibold text-primary">Notifications</h3>
+                    <div>
+                      <h3 className="text-sm font-semibold text-primary">In-App Notifications</h3>
+                      <p className="text-[10px] text-secondary mt-0.5">Real-time activity logs</p>
+                    </div>
                     {unreadCount > 0 && (
                       <button onClick={markAllAsRead} className="text-xs text-secondary hover:text-primary transition-colors">
                         Mark all read

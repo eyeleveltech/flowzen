@@ -56,13 +56,63 @@ async function runDeadlineCheck() {
   }
 }
 
+/**
+ * Finds tasks that are past their due dates and are not completed,
+ * then alerts their assignees. Deduplication uses recently-created
+ * TASK_OVERDUE notifications within the DEDUP_WINDOW_MS.
+ */
+async function runOverdueCheck() {
+  try {
+    const now = new Date();
+
+    const tasks = await prisma.task.findMany({
+      where: {
+        dueDate: { lt: now },
+        status: { notIn: ['COMPLETED'] },
+        assigneeId: { not: null },
+      },
+      select: { id: true, title: true, assigneeId: true, projectId: true },
+    });
+
+    if (tasks.length === 0) return;
+
+    const since = new Date(now.getTime() - DEDUP_WINDOW_MS);
+    const recent = await prisma.notification.findMany({
+      where: { type: 'TASK_OVERDUE', createdAt: { gte: since } },
+      select: { metadata: true },
+    });
+    const alreadyNotified = new Set(
+      recent.map((n) => (n.metadata as any)?.taskId).filter(Boolean),
+    );
+
+    let sent = 0;
+    for (const task of tasks) {
+      if (alreadyNotified.has(task.id)) continue;
+      await NotificationService.send({
+        type: 'TASK_OVERDUE',
+        message: `"${task.title}" is overdue`,
+        userId: task.assigneeId!,
+        metadata: { taskId: task.id, projectId: task.projectId },
+      });
+      sent++;
+    }
+
+    if (sent > 0) logger.info(`[Scheduler] Sent ${sent} overdue task notification(s)`);
+  } catch (error) {
+    logger.error('[Scheduler] Overdue check failed:', error);
+  }
+}
+
 export function startScheduler() {
   // Run shortly after boot (let the app settle), then on a fixed interval.
   setTimeout(runDeadlineCheck, 30 * 1000);
   setInterval(runDeadlineCheck, CHECK_INTERVAL_MS);
 
+  setTimeout(runOverdueCheck, 45 * 1000);
+  setInterval(runOverdueCheck, CHECK_INTERVAL_MS);
+
   // Module F — daily CRM jobs (follow-up due, stale leads, digest) at 08:00 IST.
   cron.schedule('0 8 * * *', () => { runDailyNotificationJobs().catch((e) => logger.error('[Scheduler] daily jobs failed', e)); }, { timezone: 'Asia/Kolkata' });
 
-  logger.info('[Scheduler] Deadline + daily notification schedulers started');
+  logger.info('[Scheduler] Deadline, Overdue + daily notification schedulers started');
 }

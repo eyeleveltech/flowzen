@@ -91,6 +91,18 @@ export default function ReportsPage() {
   const dateRange = computeRange(datePreset, customRange);
   const { data: exec } = useExecutiveReport(dateRange);
 
+  interface Department {
+    id: string;
+    name: string;
+  }
+
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [selectedDepartment, setSelectedDepartment] = useState<string>('');
+
+  useEffect(() => {
+    api.get<{ teams: Department[] }>('/teams').then((res) => setDepartments(res.teams || [])).catch(() => { });
+  }, []);
+
   const [projectReport, setProjectReport] = useState<ProjectReport | null>(null);
   const [taskReport, setTaskReport] = useState<TaskReport | null>(null);
   const [teamReport, setTeamReport] = useState<TeamReport | null>(null);
@@ -102,12 +114,13 @@ export default function ReportsPage() {
       return;
     }
 
-    // Fetch all reports
-    api.get<ProjectReport>('/reports/projects').then(setProjectReport).catch(() => { });
-    api.get<TaskReport>('/reports/tasks').then(setTaskReport).catch(() => { });
-    api.get<TeamReport>('/reports/team').then(setTeamReport).catch(() => { });
+    const queryParams = selectedDepartment ? `?teamId=${selectedDepartment}` : '';
+
+    api.get<ProjectReport>(`/reports/projects${queryParams}`).then(setProjectReport).catch(() => { });
+    api.get<TaskReport>(`/reports/tasks${queryParams}`).then(setTaskReport).catch(() => { });
+    api.get<TeamReport>(`/reports/team${queryParams}`).then(setTeamReport).catch(() => { });
     api.get<ClientReport>('/reports/clients').then(setClientReport).catch(() => { });
-  }, [user, router]);
+  }, [user, router, selectedDepartment]);
 
   const allTabs = [
     { id: 'executive' as Tab, label: 'Executive', icon: LayoutDashboard, module: 'CRM' },
@@ -148,6 +161,37 @@ export default function ReportsPage() {
           );
         })}
       </div>
+
+      {/* Department Filter (Only for Projects, Tasks, and Team reports) */}
+      {['projects', 'tasks', 'team'].includes(tab) && (
+        <div className="no-print flex flex-wrap items-center gap-3 mb-6 bg-[#F9FAFB] border border-border rounded-2xl p-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-secondary uppercase tracking-wider">Filter by Department:</span>
+            <Select
+              value={selectedDepartment}
+              onChange={setSelectedDepartment}
+              options={[
+                { label: 'All Departments', value: '' },
+                ...departments.map((d) => ({ label: d.name, value: d.id }))
+              ]}
+              className="w-48"
+            />
+          </div>
+          {user?.teamId && (
+            <button
+              onClick={() => setSelectedDepartment(user.teamId || '')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all flex items-center gap-1.5 ${
+                selectedDepartment === user.teamId
+                  ? 'bg-primary text-white border-primary shadow-sm'
+                  : 'bg-white text-secondary border-border hover:text-primary hover:bg-[#F9FAFB]'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              My Department
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ---------------- EXECUTIVE (BOSS VIEW) ---------------- */}
       {tab === 'executive' && (

@@ -31,7 +31,16 @@ function Toggle({ checked, onChange, label, desc }: { checked: boolean; onChange
 export function NotificationsTab() {
   const { user } = useAuthStore();
   const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
-  const [prefs, setPrefs] = useState<any>({ followUpDue: true, staleLead: true, dailyDigest: true, digestTime: '08:00' });
+  const [prefs, setPrefs] = useState<any>({
+    followUpDue: true,
+    staleLead: true,
+    dailyDigest: true,
+    digestTime: '08:00',
+    taskAssigned: true,
+    taskDue24h: true,
+    taskOverdue: true,
+    taskComment: true
+  });
   const [thresholds, setThresholds] = useState<Record<string, number>>({});
   const [crmEmail, setCrmEmail] = useState('');
   const [saving, setSaving] = useState(false);
@@ -61,11 +70,23 @@ export function NotificationsTab() {
   return (
     <div className="space-y-8 max-w-2xl">
       <div>
-        <h3 className="text-sm font-semibold text-primary mb-1">My alerts</h3>
+        <h3 className="text-sm font-semibold text-primary mb-1">Email Notification Preferences</h3>
+        <p className="text-xs text-secondary mb-4">
+          Configure which events trigger an email alert directly to your inbox. 
+          In-app notification badges on your dashboard bell icon will continue to log all events.
+        </p>
         <div className="divide-y divide-gray-100">
           <Toggle label="Follow-up due alerts" desc="Notify me when a lead's follow-up date arrives or is overdue." checked={prefs.followUpDue} onChange={(v) => setPrefs((p: any) => ({ ...p, followUpDue: v }))} />
           <Toggle label="Stale lead alerts" desc="Notify me when a lead has had no activity past its stage threshold." checked={prefs.staleLead} onChange={(v) => setPrefs((p: any) => ({ ...p, staleLead: v }))} />
           <Toggle label="Daily email digest" desc="A morning summary of follow-ups due, overdue, and stale leads." checked={prefs.dailyDigest} onChange={(v) => setPrefs((p: any) => ({ ...p, dailyDigest: v }))} />
+          
+          <div className="border-t border-gray-100 my-4 pt-4">
+            <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-2">Project Management Alerts</h4>
+            <Toggle label="Task Assigned" desc="Email me when a new task is assigned to me." checked={prefs.taskAssigned !== false} onChange={(v) => setPrefs((p: any) => ({ ...p, taskAssigned: v }))} />
+            <Toggle label="Task Due in 24 Hours" desc="Email me when a task assigned to me is due in 24 hours." checked={prefs.taskDue24h !== false} onChange={(v) => setPrefs((p: any) => ({ ...p, taskDue24h: v }))} />
+            <Toggle label="Task Overdue Alerts" desc="Email me when a task assigned to me becomes overdue." checked={prefs.taskOverdue !== false} onChange={(v) => setPrefs((p: any) => ({ ...p, taskOverdue: v }))} />
+            <Toggle label="Comments on my Tasks" desc="Email me when someone leaves a comment or mentions me on my task." checked={prefs.taskComment !== false} onChange={(v) => setPrefs((p: any) => ({ ...p, taskComment: v }))} />
+          </div>
         </div>
       </div>
 

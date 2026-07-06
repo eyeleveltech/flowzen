@@ -7,6 +7,7 @@ import { emitToOrganization } from '../sse.js';
 import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
 import { NotificationService } from '../services/notifications.js';
 import { whereIn } from '../utils/query.js';
+import { createAuditLog } from '../utils/audit.js';
 
 export const clientRouter = Router();
 clientRouter.use(authenticate);
@@ -178,6 +179,15 @@ clientRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), val
     emitToOrganization(io, req.user!.organizationId, 'client:created', client);
     await invalidateOrganizationCache(req.user!.organizationId);
 
+    await createAuditLog({
+      organizationId: req.user!.organizationId,
+      userId: req.user!.userId,
+      action: 'CLIENT_CREATE',
+      entityType: 'CLIENT',
+      entityId: client.id,
+      details: { name: client.name, company: client.company }
+    });
+
     res.status(201).json(client);
   } catch (error) {
     next(error);
@@ -309,6 +319,15 @@ clientRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), v
     emitToOrganization(io, req.user!.organizationId, 'client:updated', updated);
     await invalidateOrganizationCache(req.user!.organizationId);
 
+    await createAuditLog({
+      organizationId: req.user!.organizationId,
+      userId: req.user!.userId,
+      action: 'CLIENT_UPDATE',
+      entityType: 'CLIENT',
+      entityId: updated.id,
+      details: { name: updated.name, company: updated.company }
+    });
+
     res.json(updated);
   } catch (error) {
     next(error);
@@ -347,6 +366,15 @@ clientRouter.delete('/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthR
     const io = req.app.get('io');
     emitToOrganization(io, req.user!.organizationId, 'client:deleted', { id: (req.params.id as string) });
     await invalidateOrganizationCache(req.user!.organizationId);
+
+    await createAuditLog({
+      organizationId: req.user!.organizationId,
+      userId: req.user!.userId,
+      action: 'CLIENT_DELETE',
+      entityType: 'CLIENT',
+      entityId: existing.id,
+      details: { name: existing.name, company: existing.company }
+    });
 
     res.json({ message: 'Client deleted' });
   } catch (error) {

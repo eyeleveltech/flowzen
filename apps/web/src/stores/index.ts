@@ -17,6 +17,7 @@ interface User {
   };
   enabledModules?: string[];
   lastActivityReadAt?: string | null;
+  teamId?: string | null;
 }
 
 interface AuthStore {

@@ -228,7 +228,7 @@ export default function DashboardPage() {
   const { 
     stats, activity = [], deadlines = [], velocity = [], 
     statusDist = [], workload = [], myTasks = [], 
-    pendingApprovals = [], clientHealth = [] 
+    pendingApprovals = [], clientHealth = [], myProjects = [] 
   } = data || {};
 
   const [updatingTask, setUpdatingTask] = useState<string | null>(null);
@@ -340,7 +340,7 @@ export default function DashboardPage() {
       </motion.div>
 
       {/* KPI GRID */}
-      {isManager && (
+      {isManager ? (
         <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
           <div onClick={() => router.push('/clients?status=ACTIVE')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
             <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Active Clients</p><Building2 className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors"/></div>
@@ -354,7 +354,7 @@ export default function DashboardPage() {
             <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Delayed Projects</p><AlertTriangle className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors"/></div>
             <p className="text-3xl font-semibold text-primary">{stats.delayedProjects}</p>
           </div>
-          <div onClick={() => router.push('/team')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
+          <div onClick={() => router.push('/members')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
             <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Team Members</p><UsersRound className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors"/></div>
             <p className="text-3xl font-semibold text-primary">{stats.totalMembers}</p>
           </div>
@@ -364,6 +364,34 @@ export default function DashboardPage() {
               <span className={`h-2.5 w-2.5 rounded-full ${stats.overdueTasks > 0 ? 'bg-red-500' : 'bg-border'}`} />
               <p className={`text-3xl font-semibold ${stats.overdueTasks > 0 ? 'text-red-500' : 'text-primary'}`}>{stats.overdueTasks || 0}</p>
             </div>
+          </div>
+        </motion.div>
+      ) : (
+        <motion.div variants={item} className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <div onClick={() => router.push('/projects')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Projects</p><FolderKanban className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors"/></div>
+            <p className="text-3xl font-semibold text-primary">{stats.activeProjects || 0}</p>
+          </div>
+          <div onClick={() => router.push('/tasks')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Open Tasks</p><CheckSquare className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors"/></div>
+            <p className="text-3xl font-semibold text-primary">{stats.openTasks || 0}</p>
+          </div>
+          <div onClick={() => router.push('/tasks?filter=completed')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Completed Tasks</p><CheckCircle2 className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors"/></div>
+            <p className="text-3xl font-semibold text-primary">{stats.completedTasks || 0}</p>
+          </div>
+          <div onClick={() => router.push('/tasks?filter=overdue')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Overdue Tasks</p><Clock className="w-4 h-4 shrink-0 text-[#9CA3AF]"/></div>
+            <div className="flex items-center gap-2">
+              <span className={`h-2.5 w-2.5 rounded-full ${stats.overdueTasks > 0 ? 'bg-red-500' : 'bg-border'}`} />
+              <p className={`text-3xl font-semibold ${stats.overdueTasks > 0 ? 'text-red-500' : 'text-primary'}`}>{stats.overdueTasks || 0}</p>
+            </div>
+          </div>
+          <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full">
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">My Completion Rate</p><Zap className="w-4 h-4 shrink-0 text-[#9CA3AF]"/></div>
+            <p className="text-3xl font-semibold text-primary">
+              {stats.openTasks + stats.completedTasks > 0 ? Math.round((stats.completedTasks / (stats.openTasks + stats.completedTasks)) * 100) : 0}%
+            </p>
           </div>
         </motion.div>
       )}
@@ -407,6 +435,18 @@ export default function DashboardPage() {
                           </div>
                           <div className="flex items-center gap-3 mt-1 text-xs text-secondary">
                             <span>{t.project?.name || 'No project'}</span>
+                            {t.priority && (
+                              <span className="flex items-center gap-1">
+                                &middot;
+                                <span className={`h-1.5 w-1.5 rounded-full ${
+                                  t.priority === 'URGENT' ? 'bg-red-500' :
+                                  t.priority === 'HIGH' ? 'bg-orange-500' :
+                                  t.priority === 'MEDIUM' ? 'bg-blue-500' :
+                                  'bg-gray-400'
+                                }`} />
+                                <span className="capitalize text-[10px] font-medium">{t.priority.toLowerCase()}</span>
+                              </span>
+                            )}
                             {t.dueDate && (
                               <span className="flex items-center gap-1">
                                 {new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED' ? (
@@ -510,53 +550,7 @@ export default function DashboardPage() {
             </motion.div>
           )}
 
-          {/* VELOCITY TREND CHART */}
-          {isManager && velocity.length > 0 && (
-            <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Activity className="w-4 h-4 text-secondary"/> Task Completion Velocity</h2>
-                <span className="text-xs font-medium text-secondary">Last 30 Days</span>
-              </div>
-              <div className="w-full relative" style={{ height: 256 }}>
-                <ResponsiveContainer width="100%" height={256}>
-                  <AreaChart data={velocity} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorTasks" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#111827" stopOpacity={0.1}/>
-                        <stop offset="95%" stopColor="#111827" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
-                    <XAxis 
-                      dataKey="name" 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fontSize: 10, fill: '#9CA3AF' }} 
-                      dy={10} 
-                      minTickGap={20}
-                    />
-                    <YAxis 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fontSize: 10, fill: '#9CA3AF' }} 
-                      allowDecimals={false}
-                    />
-                    <RechartsTooltip content={<CustomTooltip />} cursor={{ stroke: '#D1D5DB', strokeWidth: 1, strokeDasharray: '4 4' }} />
-                    <Area 
-                      type="monotone" 
-                      dataKey="tasks" 
-                      name="Completed Tasks" 
-                      stroke="#111827" 
-                      strokeWidth={2}
-                      fillOpacity={1} 
-                      fill="url(#colorTasks)" 
-                      activeDot={{ r: 4, strokeWidth: 0, fill: '#111827' }}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </motion.div>
-          )}
+
 
         </div>
 
@@ -606,65 +600,73 @@ export default function DashboardPage() {
               </div>
             )}
           </motion.div>
+          
+          {/* MY PROJECTS (TEAM_MEMBER ONLY) */}
+          {!isManager && myProjects.length > 0 && (
+            <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4"><FolderKanban className="w-4 h-4 text-secondary"/> My Projects</h2>
+              <div className="space-y-3 flex-1">
+                {myProjects.map((p: any) => (
+                  <div 
+                    key={p.id} 
+                    onClick={() => router.push(`/projects/${p.id}`)}
+                    className="flex justify-between items-center p-3 hover:bg-surface rounded-xl cursor-pointer border border-border group transition-all"
+                  >
+                    <div className="min-w-0 pr-3">
+                      <p className="text-sm font-semibold text-primary truncate group-hover:text-black transition-colors">{p.name}</p>
+                      <p className="text-xs text-secondary truncate">{p.client?.company || p.client?.name || 'No Client'}</p>
+                    </div>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 border rounded-sm bg-[#F3F4F6] text-primary border-border shrink-0">
+                      {p.status.replace(/_/g, ' ').toLowerCase()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 pt-3 border-t border-border flex justify-center">
+                <button onClick={() => router.push('/projects')} className="text-xs font-semibold text-secondary hover:text-primary transition-colors flex items-center gap-1">
+                  View All Projects <ChevronRight className="w-3 h-3" />
+                </button>
+              </div>
+            </motion.div>
+          )}
 
-          {/* TEAM WORKLOAD CHART */}
-          {isManager && workload.length > 0 && (
-            <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5">
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-6"><BarIcon className="w-4 h-4 text-secondary"/> Team Workload</h2>
-              <div className="h-50 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={workload} margin={{ top: 10, right: 10, left: 25, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                    <XAxis 
-                      dataKey="name" 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fontSize: 10, fill: '#6B7280' }} 
-                      dy={10} 
-                      tickFormatter={(name) => typeof name === 'string' ? name.split(' ')[0] : name} 
-                    />
-                    <YAxis 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fontSize: 10, fill: '#6B7280' }} 
-                      label={{ value: 'Active Tasks', angle: -90, position: 'insideLeft', offset: -10, style: { fontSize: 10, fill: '#6B7280' } }}
-                    />
-                    <RechartsTooltip 
-                      cursor={{ fill: '#FAFAFA' }} 
-                      content={({ active, payload }) => {
-                        if (active && payload && payload.length) {
-                          const data = payload[0].payload;
-                          return (
-                            <div className="bg-white/95 backdrop-blur-xl border border-border shadow-md rounded-xl p-3 min-w-30">
-                              <p className="text-[10px] font-bold text-secondary mb-1.5 uppercase tracking-wider">{data.name}</p>
-                              <div className="flex justify-between gap-4 text-sm items-center mb-1">
-                                <span className="font-medium text-primary">Active Tasks</span>
-                                <span className="font-semibold text-accent">{data.activeTasks}</span>
-                              </div>
-                              <div className="flex justify-between gap-4 text-sm items-center">
-                                <span className="font-medium text-primary">Completion Rate</span>
-                                <span className="font-semibold text-accent">{data.completionRate}%</span>
-                              </div>
-                            </div>
-                          );
-                        }
-                        return null;
+          {/* MY PERFORMANCE (TEAM_MEMBER ONLY) */}
+          {!isManager && (
+            <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4"><Zap className="w-4 h-4 text-secondary"/> My Performance</h2>
+              
+              <div className="space-y-4">
+                {/* Completion Rate Progress Bar */}
+                <div>
+                  <div className="flex justify-between items-baseline mb-1.5">
+                    <span className="text-xs font-semibold text-secondary">Task Completion Rate</span>
+                    <span className="text-sm font-bold text-primary">
+                      {stats.openTasks + stats.completedTasks > 0 ? Math.round((stats.completedTasks / (stats.openTasks + stats.completedTasks)) * 100) : 0}%
+                    </span>
+                  </div>
+                  <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-primary rounded-full transition-all duration-500" 
+                      style={{ 
+                        width: `${stats.openTasks + stats.completedTasks > 0 ? Math.round((stats.completedTasks / (stats.openTasks + stats.completedTasks)) * 100) : 0}%` 
                       }}
                     />
-                    <Bar 
-                      dataKey="activeTasks" 
-                      name="Active Tasks" 
-                      radius={[2, 2, 0, 0]}
-                      maxBarSize={50}
-                      onClick={(data) => router.push(`/team?memberId=${data.id}`)}
-                      className="cursor-pointer"
-                    >
-                      {workload.map((entry: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={entry.activeTasks > 8 ? '#6B7280' : '#111827'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Metrics Details */}
+                <div className="grid grid-cols-2 gap-4 pt-2">
+                  <div className="p-3 bg-surface border border-border rounded-xl">
+                    <p className="text-[10px] font-semibold text-secondary uppercase tracking-wider mb-1">
+                      Completed {datePreset === 'all_time' ? 'Total' : datePreset.replace('_', ' ')}
+                    </p>
+                    <p className="text-xl font-bold text-primary">{stats.completedTasks || 0}</p>
+                  </div>
+                  <div className="p-3 bg-surface border border-border rounded-xl">
+                    <p className="text-[10px] font-semibold text-secondary uppercase tracking-wider mb-1">Overdue Tasks</p>
+                    <p className={`text-xl font-bold ${stats.overdueTasks > 0 ? 'text-[#EF4444]' : 'text-primary'}`}>{stats.overdueTasks || 0}</p>
+                  </div>
+                </div>
               </div>
             </motion.div>
           )}
@@ -701,6 +703,124 @@ export default function DashboardPage() {
 
         </div>
       </div>
+
+      {/* TASK COMPLETION VELOCITY CHART */}
+      {isManager && velocity.length > 0 && (
+        <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Activity className="w-4 h-4 text-secondary"/> Task Completion Velocity</h2>
+            <span className="text-xs font-medium text-secondary">Last 30 Days</span>
+          </div>
+          <div className="w-full relative" style={{ height: 256 }}>
+            <ResponsiveContainer width="100%" height={256}>
+              <AreaChart data={velocity} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorTasks" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#111827" stopOpacity={0.1}/>
+                    <stop offset="95%" stopColor="#111827" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
+                <XAxis 
+                  dataKey="name" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 10, fill: '#9CA3AF' }} 
+                  dy={10} 
+                  minTickGap={20}
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 10, fill: '#9CA3AF' }} 
+                  allowDecimals={false}
+                />
+                <RechartsTooltip content={<CustomTooltip />} cursor={{ stroke: '#D1D5DB', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                <Area 
+                  type="monotone" 
+                  dataKey="tasks" 
+                  name="Completed Tasks" 
+                  stroke="#111827" 
+                  strokeWidth={2}
+                  fillOpacity={1} 
+                  fill="url(#colorTasks)" 
+                  activeDot={{ r: 4, strokeWidth: 0, fill: '#111827' }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </motion.div>
+      )}
+
+      {/* TEAM WORKLOAD CHART */}
+      {isManager && workload.length > 0 && (
+        <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-6"><BarIcon className="w-4 h-4 text-secondary"/> Team Workload</h2>
+          <div className="h-60 w-full overflow-x-auto scrollbar-thin pb-2">
+            <div 
+              className="h-full" 
+              style={{ 
+                width: workload.length > 5 ? `${workload.length * 120}px` : '100%',
+                minWidth: '100%' 
+              }}
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={workload} margin={{ top: 10, right: 10, left: 25, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                  <XAxis 
+                    dataKey="name" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fontSize: 10, fill: '#6B7280' }} 
+                    dy={10} 
+                    tickFormatter={(name) => typeof name === 'string' ? name.split(' ')[0] : name} 
+                  />
+                  <YAxis 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fontSize: 10, fill: '#6B7280' }} 
+                    label={{ value: 'Active Tasks', angle: -90, position: 'insideLeft', offset: -10, style: { fontSize: 10, fill: '#6B7280' } }}
+                  />
+                  <RechartsTooltip 
+                    cursor={{ fill: '#FAFAFA' }} 
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-white/95 backdrop-blur-xl border border-border shadow-md rounded-xl p-3 min-w-30">
+                            <p className="text-[10px] font-bold text-secondary mb-1.5 uppercase tracking-wider">{data.name}</p>
+                            <div className="flex justify-between gap-4 text-sm items-center mb-1">
+                              <span className="font-medium text-primary">Active Tasks</span>
+                              <span className="font-semibold text-accent">{data.activeTasks}</span>
+                            </div>
+                            <div className="flex justify-between gap-4 text-sm items-center">
+                              <span className="font-medium text-primary">Completion Rate</span>
+                              <span className="font-semibold text-accent">{data.completionRate}%</span>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Bar 
+                    dataKey="activeTasks" 
+                    name="Active Tasks" 
+                    radius={[2, 2, 0, 0]}
+                    maxBarSize={50}
+                    onClick={(data) => router.push(`/members?memberId=${data.id}`)}
+                    className="cursor-pointer"
+                  >
+                    {workload.map((entry: any, index: number) => (
+                      <Cell key={`cell-${index}`} fill={entry.activeTasks > 8 ? '#6B7280' : '#111827'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </motion.div>
+      )}
       
       {/* EXPLICIT BOTTOM SPACER */}
       <div className="h-24 md:h-32 w-full shrink-0" aria-hidden="true" />
