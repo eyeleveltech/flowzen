@@ -664,7 +664,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="p-3 bg-surface border border-border rounded-xl">
                     <p className="text-[10px] font-semibold text-secondary uppercase tracking-wider mb-1">Overdue Tasks</p>
-                    <p className={`text-xl font-bold ${stats.overdueTasks > 0 ? 'text-[#EF4444]' : 'text-primary'}`}>{stats.overdueTasks || 0}</p>
+                    <p className={`text-xl font-bold ${stats.overdueTasks > 0 ? 'text-danger' : 'text-primary'}`}>{stats.overdueTasks || 0}</p>
                   </div>
                 </div>
               </div>
