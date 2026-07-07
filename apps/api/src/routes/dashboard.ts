@@ -161,6 +161,14 @@ dashboardRouter.get('/activity', async (req: AuthRequest, res: Response, next) =
       whereClause.entityType = 'PROJECT';
     } else if (filter === 'ME') {
       whereClause.userId = req.user!.userId;
+    } else if (filter === 'MY_PROJECTS') {
+      whereClause.project = {
+        OR: [
+          { ownerId: req.user!.userId },
+          { members: { some: { userId: req.user!.userId } } },
+          { teams: { some: { team: { members: { some: { id: req.user!.userId } } } } } },
+        ],
+      };
     }
 
     const activities = await prisma.activity.findMany({

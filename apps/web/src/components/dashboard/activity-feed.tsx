@@ -1,10 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useActivityFeed } from '@/hooks/useActivityFeed';
 import { formatRelativeDate, getInitials } from '@/lib/utils';
-import { Select } from '@/components/ui/select';
 import { Zap, Check } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores';
@@ -15,6 +14,15 @@ export function ActivityFeedWidget({ itemVariants }: { itemVariants?: any }) {
   const router = useRouter();
   const { user, setAuth } = useAuthStore();
   const [filter, setFilter] = useState('ALL');
+  const filterHydrated = useRef(false);
+
+  useEffect(() => {
+    if (user && !filterHydrated.current) {
+      setFilter(user.role === 'TEAM_MEMBER' ? 'MY_PROJECTS' : 'ALL');
+      filterHydrated.current = true;
+    }
+  }, [user]);
+
   const [markingRead, setMarkingRead] = useState(false);
 
   const {
@@ -103,19 +111,27 @@ export function ActivityFeedWidget({ itemVariants }: { itemVariants?: any }) {
           <Check className="w-3 h-3" /> Mark read
         </button>
       </div>
-      
-      <div className="mb-4">
-        <Select
-          value={filter}
-          onChange={setFilter}
-          options={[
-            { label: 'All Activity', value: 'ALL' },
-            { label: 'Tasks only', value: 'TASKS' },
-            { label: 'Projects only', value: 'PROJECTS' },
-            { label: 'My Activity', value: 'ME' },
-          ]}
-          className="w-full !py-1.5 !text-xs !rounded-lg"
-        />
+      <div className="mb-4 flex rounded-xl border border-border p-1 bg-gray-50/50 shadow-inner">
+        <button
+          onClick={() => setFilter('ALL')}
+          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            filter === 'ALL'
+              ? 'bg-primary text-white shadow-sm'
+              : 'text-secondary hover:text-primary hover:bg-gray-100/50'
+          }`}
+        >
+          All Activity
+        </button>
+        <button
+          onClick={() => setFilter('MY_PROJECTS')}
+          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            filter === 'MY_PROJECTS'
+              ? 'bg-primary text-white shadow-sm'
+              : 'text-secondary hover:text-primary hover:bg-gray-100/50'
+          }`}
+        >
+          My Projects
+        </button>
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto custom-scrollbar pr-2 relative max-h-75">
@@ -148,7 +164,7 @@ export function ActivityFeedWidget({ itemVariants }: { itemVariants?: any }) {
                 )}
               </div>
               <div className="pt-0.5 flex-1">
-                <p className={`text-xs leading-snug ${isUnread ? 'text-[#111827]' : 'text-[#4B5563]'}`}>
+                <p className={`text-xs leading-snug ${isUnread ? 'text-primary' : 'text-[#4B5563]'}`}>
                   {getReadableMessage(item)}
                 </p>
                 <p className="text-[10px] text-[#9CA3AF] mt-1 font-medium">{formatRelativeDate(item.createdAt)}</p>
