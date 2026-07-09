@@ -138,7 +138,7 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
                : sort === 'status_desc' ? [{ status: 'desc' }]
                : sort === 'title_asc' ? [{ title: 'asc' }]
                : sort === 'title_desc' ? [{ title: 'desc' }]
-               : [{ priority: 'desc' }, { createdAt: 'desc' }],
+               : [{ createdAt: 'desc' }],
         skip,
         take: parseInt(limit as string),
       }),

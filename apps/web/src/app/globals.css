@@ -118,6 +118,14 @@
   .h-safe-area-bottom {
     height: env(safe-area-inset-bottom, 0px);
   }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 }
 
 /* ── Print: Executive report export (only #exec-report prints) ── */

@@ -133,6 +133,18 @@ function ProjectsContent() {
     }
   }, [refetchProjects]);
 
+  // Lock body scroll when create project drawer is open
+  useEffect(() => {
+    if (showCreate) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showCreate]);
+
   const handleCreate = handleSubmit(async (data) => {
     setFormError('');
     setSubmitting(true);
@@ -466,7 +478,7 @@ function ProjectsContent() {
                 <h2 className="text-lg font-semibold text-primary">New Project</h2>
                 <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
               </div>
-              <form onSubmit={handleCreate} className="relative p-6 space-y-8">
+              <form onSubmit={handleCreate} className="relative p-6 pb-24 md:pb-6 space-y-8">
                 {formError && <div className="absolute top-0 left-6 right-6 -mt-2 z-10 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 border border-red-100">{formError}</div>}
                 
                 {templates.length > 0 && (

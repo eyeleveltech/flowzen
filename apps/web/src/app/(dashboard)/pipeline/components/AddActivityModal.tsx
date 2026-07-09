@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { X, Phone, Calendar, Pencil, Mail } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -22,6 +22,14 @@ export function AddActivityModal({ leadId, onClose, onSuccess }: { leadId: strin
   const [form, setForm] = useState<Record<string, any>>({});
   const [saving, setSaving] = useState(false);
   const set = (k: string, v: any) => setForm((f) => ({ ...f, [k]: v }));
+
+  // Lock body scroll when AddActivityModal is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
 
   const submit = async () => {
     setSaving(true);
@@ -116,7 +124,7 @@ export function AddActivityModal({ leadId, onClose, onSuccess }: { leadId: strin
           )}
         </div>
 
-        <div className="p-5 border-t border-border bg-white flex justify-end gap-3 sticky bottom-0">
+        <div className="p-5 pb-safe border-t border-border bg-white flex justify-end gap-3 sticky bottom-0">
           <button onClick={onClose} className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-border rounded-xl hover:bg-gray-50">Cancel</button>
           <button onClick={submit} disabled={saving} className="px-5 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-gray-800 disabled:opacity-50">{saving ? 'Saving…' : 'Log Activity'}</button>
         </div>

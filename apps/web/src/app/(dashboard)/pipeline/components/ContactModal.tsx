@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -25,6 +25,14 @@ export function ContactModal({ leadId, contact, onClose, onSuccess }: { leadId: 
   });
   const [saving, setSaving] = useState(false);
   const set = (k: string, v: any) => setForm((f) => ({ ...f, [k]: v }));
+
+  // Lock body scroll when ContactModal is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
 
   const submit = async () => {
     if (!form.name.trim()) { toast.error('Name is required'); return; }
@@ -68,7 +76,7 @@ export function ContactModal({ leadId, contact, onClose, onSuccess }: { leadId: 
           <div><label className={labelCls}>Notes</label><textarea rows={3} className={inputCls} value={form.notes} onChange={(e) => set('notes', e.target.value)} placeholder="Context about this person's involvement" /></div>
         </div>
 
-        <div className="p-5 border-t border-border bg-white flex justify-end gap-3 sticky bottom-0">
+        <div className="p-5 pb-safe border-t border-border bg-white flex justify-end gap-3 sticky bottom-0">
           <button onClick={onClose} className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-border rounded-xl hover:bg-gray-50">Cancel</button>
           <button onClick={submit} disabled={saving} className="px-5 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-gray-800 disabled:opacity-50">{saving ? 'Saving…' : isEdit ? 'Save' : 'Add Contact'}</button>
         </div>

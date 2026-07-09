@@ -33,6 +33,10 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       const t = event.target as Node;
+      // If click target is inside a portaled select dropdown or drawer, ignore it.
+      if (t instanceof HTMLElement && (t.closest('.multiselect-drawer') || t.closest('[data-multiselect-dropdown]'))) {
+        return;
+      }
       // The dropdown is portaled to <body>, so check it too (not just the trigger).
       if (
         containerRef.current && !containerRef.current.contains(t) &&
@@ -170,7 +174,7 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
       )}
 
       {isOpen && isMobile ? (
-        <Drawer isOpen={isOpen} onClose={() => setIsOpen(false)} title={placeholder}>
+        <Drawer isOpen={isOpen} onClose={() => setIsOpen(false)} title={placeholder} className="multiselect-drawer">
           <div className="flex flex-col space-y-1 mb-4">
             {compact && options.length > 7 && (
               <input

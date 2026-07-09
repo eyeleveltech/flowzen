@@ -41,7 +41,7 @@ export function Drawer({ isOpen, onClose, title, children, className = '' }: Dra
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm"
+            className="fixed inset-0 z-[200] bg-black/40 backdrop-blur-sm"
           />
 
           {isMobile ? (
@@ -51,7 +51,7 @@ export function Drawer({ isOpen, onClose, title, children, className = '' }: Dra
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className={`fixed bottom-0 left-0 right-0 z-[101] max-h-[90dvh] overflow-y-auto rounded-t-2xl bg-white shadow-2xl ${className}`}
+              className={`fixed bottom-0 left-0 right-0 z-[201] max-h-[90dvh] overflow-y-auto rounded-t-2xl bg-white shadow-2xl ${className}`}
             >
               <div className="sticky top-0 z-10 flex flex-col items-center justify-center bg-white pt-3 pb-2">
                 <div className="h-1.5 w-12 rounded-full bg-gray-300" />
@@ -68,7 +68,7 @@ export function Drawer({ isOpen, onClose, title, children, className = '' }: Dra
             </motion.div>
           ) : (
             /* DESKTOP: Centered Modal */
-            <div className="fixed inset-0 z-[101] flex items-center justify-center p-4 pointer-events-none">
+            <div className="fixed inset-0 z-[201] flex items-center justify-center p-4 pointer-events-none">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
