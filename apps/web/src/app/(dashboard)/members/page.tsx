@@ -17,6 +17,7 @@ interface TeamMember {
   id: string; name: string; email: string; avatar?: string | null;
   role: string; department?: string | null; designation?: string | null; phone?: string | null;
   totalTasks: number; totalProjects: number; activeTasks: number; capacity: number;
+  overloadThreshold?: number;
 }
 
 interface TaskDetail {
@@ -48,6 +49,7 @@ interface MemberDetail {
   joiningDate?: string | null;
   assignedTasks: TaskDetail[];
   ownedProjects: ProjectDetail[];
+  overloadThreshold?: number;
   stats: {
     totalTasks: number;
     activeTasks: number;
@@ -158,14 +160,15 @@ export default function TeamPage() {
       );
     }
 
-    const { name, email, role, department, designation, phone, joiningDate, assignedTasks, ownedProjects, stats } = memberDetail;
+    const { name, email, role, department, designation, phone, joiningDate, assignedTasks, ownedProjects, stats, overloadThreshold = 25 } = memberDetail;
     const activeTasks = assignedTasks.filter((t) => t.status !== 'COMPLETED');
+    const isOverloaded = activeTasks.length > overloadThreshold;
 
     return (
       <div className="space-y-6">
         {/* Profile Card Header */}
         <div className="flex items-center gap-4">
- <div className={`h-16 w-16 rounded-2xl flex items-center justify-center font-semibold text-2xl shrink-0 ${getAvatarColor(name)}`}>
+          <div className={`h-16 w-16 rounded-2xl flex items-center justify-center font-semibold text-2xl shrink-0 ${getAvatarColor(name)}`}>
             {getInitials(name)}
           </div>
           <div className="flex-1 min-w-0">
@@ -227,21 +230,30 @@ export default function TeamPage() {
               className="space-y-6"
             >
               {/* Capacity Bar */}
-              <div className="bg-surface p-5 rounded-2xl border border-border/80">
+              <div className={`p-5 rounded-2xl border transition-colors ${isOverloaded ? 'bg-red-50/30 border-red-100' : 'bg-surface border-border/80'}`}>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-semibold text-primary">Workload Allocation</span>
+                  <span className="text-xs font-semibold text-primary flex items-center gap-1.5">
+                    Workload Allocation
+                    {isOverloaded && (
+                      <span className="inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">
+                        Overloaded
+                      </span>
+                    )}
+                  </span>
                   <span className="text-xs font-bold text-primary tabular-nums">{stats.capacity}%</span>
                 </div>
                 <div className="h-2 w-full rounded-full bg-border overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-500 ${
-                      stats.capacity > 80 ? 'bg-red-500' : stats.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                      isOverloaded ? 'bg-red-500' : stats.capacity > 80 ? 'bg-red-500' : stats.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'
                     }`}
                     style={{ width: `${stats.capacity}%` }}
                   />
                 </div>
                 <div className="flex items-center text-[10px] text-[#86868B] mt-2.5 font-medium">
-                  {stats.capacity > 80 ? (
+                  {isOverloaded ? (
+                    <><AlertCircle className="w-3.5 h-3.5 text-red-500 mr-1.5 animate-bounce" /> Overloaded: active tasks ({activeTasks.length}) exceeds threshold ({overloadThreshold}).</>
+                  ) : stats.capacity > 80 ? (
                     <><AlertCircle className="w-3.5 h-3.5 text-red-500 mr-1.5" /> Critical capacity. Nearing overload, consider offloading.</>
                   ) : stats.capacity > 50 ? (
                     <><Zap className="w-3.5 h-3.5 text-amber-500 mr-1.5" /> Active workload. Capable of handling smaller tasks.</>
@@ -440,6 +452,7 @@ export default function TeamPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {filteredTeam.map((m) => {
                 const isSelected = selectedId === m.id;
+                const isOverloaded = m.activeTasks > (m.overloadThreshold ?? 25);
                 return (
                   <div
                     key={m.id}
@@ -452,11 +465,18 @@ export default function TeamPage() {
                   >
                     <div className="flex items-center gap-4 mb-5">
                       {/* Avatar */}
- <div className={`h-12 w-12 rounded-2xl flex items-center justify-center font-medium text-lg shrink-0 ${getAvatarColor(m.name)}`}>
+                      <div className={`h-12 w-12 rounded-2xl flex items-center justify-center font-medium text-lg shrink-0 ${getAvatarColor(m.name)}`}>
                         {getInitials(m.name)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-[15px] font-semibold text-primary truncate leading-snug group-hover:text-black transition-colors">{m.name}</h3>
+                        <div className="flex items-center justify-between gap-1.5">
+                          <h3 className="text-[15px] font-semibold text-primary truncate leading-snug group-hover:text-black transition-colors">{m.name}</h3>
+                          {isOverloaded && (
+                            <span className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-100 animate-pulse shrink-0">
+                              Overloaded
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[13px] text-[#86868B] truncate mt-0.5">
                           {m.designation || roleLabels[m.role] || m.role}
                           {m.department && <span className="mx-1.5 opacity-50">·</span>}

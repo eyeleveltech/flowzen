@@ -196,6 +196,78 @@ taskRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
   }
 });
 
+// POST /api/tasks/bulk-approve
+taskRouter.post('/bulk-approve', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const { taskIds } = req.body;
+    if (!Array.isArray(taskIds) || taskIds.length === 0) {
+      res.status(400).json({ error: 'Invalid taskIds' });
+      return;
+    }
+
+    const tasks = await prisma.task.findMany({
+      where: {
+        id: { in: taskIds },
+        status: 'REVIEW',
+        project: { client: { organizationId: req.user!.organizationId } }
+      }
+    });
+
+    const updatedTasks = await Promise.all(
+      tasks.map(async (t) => {
+        const updated = await prisma.task.update({
+          where: { id: t.id },
+          data: { status: 'APPROVED' }
+        });
+
+        await prisma.activity.create({
+          data: {
+            type: 'TASK_STATUS_CHANGED',
+            message: `changed task "${updated.title}" status to APPROVED`,
+            entityType: 'TASK',
+            entityId: updated.id,
+            userId: req.user!.userId,
+            taskId: updated.id,
+            projectId: updated.projectId,
+          },
+        });
+
+        await executeWorkflowRules('TASK_STATUS_CHANGE', {
+          task: updated,
+          oldStatus: 'REVIEW',
+          newStatus: 'APPROVED',
+          orgId: req.user!.organizationId,
+        });
+        return updated;
+      })
+    );
+
+    const uniqueProjectIds = Array.from(new Set(tasks.map(t => t.projectId).filter(Boolean))) as string[];
+    await Promise.all(
+      uniqueProjectIds.map(async (projectId) => {
+        const projectTasks = await prisma.task.findMany({
+          where: { projectId, parentId: null },
+          select: { status: true },
+        });
+        const completed = projectTasks.filter((t) => t.status === 'COMPLETED').length;
+        const progress = projectTasks.length > 0 ? Math.round((completed / projectTasks.length) * 100) : 0;
+        await prisma.project.update({
+          where: { id: projectId },
+          data: { progress },
+        });
+      })
+    );
+
+    const io = req.app.get('io');
+    emitToOrganization(io, req.user!.organizationId, 'task:updated', { taskIds: updatedTasks.map(t => t.id) });
+    await invalidateOrganizationCache(req.user!.organizationId);
+
+    res.json({ success: true, count: updatedTasks.length });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // POST /api/tasks — Create a task (Idempotent)
 taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest, res: Response, next) => {
   try {

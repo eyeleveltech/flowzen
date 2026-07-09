@@ -10,32 +10,40 @@ teamRouter.get('/', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
 
-    const members = await prisma.user.findMany({
-      where: { organizationId: orgId, status: 'ACTIVE' },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        avatar: true,
-        role: true,
-        department: true,
-        designation: true,
-        team: { select: { name: true } },
-        phone: true,
-        joiningDate: true,
-        _count: {
-          select: {
-            assignedTasks: true,
-            ownedProjects: true,
+    const [members, org] = await Promise.all([
+      prisma.user.findMany({
+        where: { organizationId: orgId, status: 'ACTIVE' },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          avatar: true,
+          role: true,
+          department: true,
+          designation: true,
+          team: { select: { name: true } },
+          phone: true,
+          joiningDate: true,
+          _count: {
+            select: {
+              assignedTasks: true,
+              ownedProjects: true,
+            },
+          },
+          assignedTasks: {
+            where: { status: { notIn: ['COMPLETED'] } },
+            select: { id: true, status: true, priority: true },
           },
         },
-        assignedTasks: {
-          where: { status: { notIn: ['COMPLETED'] } },
-          select: { id: true, status: true, priority: true },
-        },
-      },
-      orderBy: { name: 'asc' },
-    });
+        orderBy: { name: 'asc' },
+      }),
+      prisma.organization.findUnique({
+        where: { id: orgId },
+        select: { settings: true },
+      })
+    ]);
+
+    const overloadThreshold = ((org?.settings as any)?.overloadThreshold) || 25;
 
     const enriched = members.map((m) => ({
       id: m.id,
@@ -51,6 +59,7 @@ teamRouter.get('/', async (req: AuthRequest, res: Response, next) => {
       totalProjects: m._count.ownedProjects,
       activeTasks: m.assignedTasks.length,
       capacity: Math.min(100, Math.round((m.assignedTasks.length / 10) * 100)),
+      overloadThreshold,
     }));
 
     res.json(enriched);
@@ -62,34 +71,42 @@ teamRouter.get('/', async (req: AuthRequest, res: Response, next) => {
 // GET /api/team/:id
 teamRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
   try {
-    const member = await prisma.user.findFirst({
-      where: { id: (req.params.id as string), organizationId: req.user!.organizationId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        avatar: true,
-        role: true,
-        department: true,
-        designation: true,
-        team: { select: { name: true } },
-        phone: true,
-        joiningDate: true,
-        assignedTasks: {
-          include: {
-            project: { select: { id: true, name: true } },
+    const orgId = req.user!.organizationId;
+
+    const [member, org] = await Promise.all([
+      prisma.user.findFirst({
+        where: { id: (req.params.id as string), organizationId: orgId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          avatar: true,
+          role: true,
+          department: true,
+          designation: true,
+          team: { select: { name: true } },
+          phone: true,
+          joiningDate: true,
+          assignedTasks: {
+            include: {
+              project: { select: { id: true, name: true } },
+            },
+            orderBy: { createdAt: 'desc' },
           },
-          orderBy: { createdAt: 'desc' },
-        },
-        ownedProjects: {
-          include: {
-            client: { select: { id: true, name: true, company: true } },
-            _count: { select: { tasks: true } },
+          ownedProjects: {
+            include: {
+              client: { select: { id: true, name: true, company: true } },
+              _count: { select: { tasks: true } },
+            },
+            orderBy: { createdAt: 'desc' },
           },
-          orderBy: { createdAt: 'desc' },
         },
-      },
-    });
+      }),
+      prisma.organization.findUnique({
+        where: { id: orgId },
+        select: { settings: true },
+      })
+    ]);
 
     if (!member) {
       res.status(404).json({ error: 'Team member not found' });
@@ -98,10 +115,12 @@ teamRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
 
     const activeTasks = member.assignedTasks.filter((t) => t.status !== 'COMPLETED');
     const completedTasks = member.assignedTasks.filter((t) => t.status === 'COMPLETED');
+    const overloadThreshold = ((org?.settings as any)?.overloadThreshold) || 25;
 
     res.json({
       ...member,
       department: member.team?.name || member.department,
+      overloadThreshold,
       stats: {
         totalTasks: member.assignedTasks.length,
         activeTasks: activeTasks.length,

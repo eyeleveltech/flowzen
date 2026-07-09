@@ -149,11 +149,15 @@ settingsRouter.get('/notification-thresholds', authorize('SUPER_ADMIN', 'ADMIN')
     const org = await prisma.organization.findUnique({ where: { id: req.user!.organizationId }, select: { settings: true } });
     const defaults = { OUTREACH: 5, MEETING: 7, PROPOSAL: 7, NEGOTIATION: 5, CONTRACT: 3 };
     const settings = (org?.settings as any) || {};
-    res.json({ thresholds: { ...defaults, ...(settings.staleThresholds || {}) }, crmNotificationEmail: settings.crmNotificationEmail || '' });
+    res.json({
+      thresholds: { ...defaults, ...(settings.staleThresholds || {}) },
+      crmNotificationEmail: settings.crmNotificationEmail || '',
+      overloadThreshold: settings.overloadThreshold || 25
+    });
   } catch (error) { next(error); }
 });
 
-// PATCH /api/settings/notification-thresholds (Admin) — body: { thresholds?, crmNotificationEmail? }
+// PATCH /api/settings/notification-thresholds (Admin) — body: { thresholds?, crmNotificationEmail?, overloadThreshold? }
 settingsRouter.patch('/notification-thresholds', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     const org = await prisma.organization.findUnique({ where: { id: req.user!.organizationId }, select: { settings: true } });
@@ -168,9 +172,13 @@ settingsRouter.patch('/notification-thresholds', authorize('SUPER_ADMIN', 'ADMIN
       if (Number.isFinite(n) && n >= 1) staleThresholds[k] = Math.round(n);
     }
     if (req.body?.crmNotificationEmail !== undefined) settings.crmNotificationEmail = String(req.body.crmNotificationEmail || '').trim();
+    if (req.body?.overloadThreshold !== undefined) {
+      const val = Number(req.body.overloadThreshold);
+      if (Number.isFinite(val) && val >= 1) settings.overloadThreshold = Math.round(val);
+    }
     const updated = await prisma.organization.update({ where: { id: req.user!.organizationId }, data: { settings: { ...settings, staleThresholds } }, select: { settings: true } });
     const s = (updated.settings as any) || {};
-    res.json({ thresholds: s.staleThresholds || {}, crmNotificationEmail: s.crmNotificationEmail || '' });
+    res.json({ thresholds: s.staleThresholds || {}, crmNotificationEmail: s.crmNotificationEmail || '', overloadThreshold: s.overloadThreshold || 25 });
   } catch (error) { next(error); }
 });
 
@@ -577,6 +585,84 @@ settingsRouter.get('/audit-logs', authorize('SUPER_ADMIN'), async (req: AuthRequ
       take: 100
     });
     res.json(logs);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/settings/api-keys — List active API keys (Super Admin only)
+settingsRouter.get('/api-keys', authorize('SUPER_ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const keys = await prisma.apiKey.findMany({
+      where: { organizationId: req.user!.organizationId },
+      select: {
+        id: true,
+        name: true,
+        lastUsedAt: true,
+        createdAt: true,
+        user: { select: { id: true, name: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(keys);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/settings/api-keys — Generate new API key (Super Admin only)
+settingsRouter.post('/api-keys', authorize('SUPER_ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const { name } = req.body;
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      res.status(400).json({ error: 'Name is required' });
+      return;
+    }
+
+    const rawToken = 'fz_' + crypto.randomBytes(24).toString('hex');
+
+    const apiKey = await prisma.apiKey.create({
+      data: {
+        key: rawToken,
+        name: name.trim(),
+        userId: req.user!.userId,
+        organizationId: req.user!.organizationId,
+      },
+      select: {
+        id: true,
+        key: true,
+        name: true,
+        createdAt: true,
+        user: { select: { id: true, name: true } }
+      }
+    });
+
+    res.status(201).json(apiKey);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /api/settings/api-keys/:id — Revoke API key (Super Admin only)
+settingsRouter.delete('/api-keys/:id', authorize('SUPER_ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const apiKey = await prisma.apiKey.findFirst({
+      where: {
+        id: req.params.id as string,
+        organizationId: req.user!.organizationId
+      }
+    });
+
+    if (!apiKey) {
+      res.status(404).json({ error: 'API Key not found' });
+      return;
+    }
+
+    await prisma.apiKey.delete({
+      where: { id: apiKey.id }
+    });
+
+    res.json({ success: true });
   } catch (error) {
     next(error);
   }

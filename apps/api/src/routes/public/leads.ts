@@ -73,16 +73,18 @@ const formatLeadResponse = (dbLead: any) => {
   let notes = "";
   if (dbLead.client?.notes && dbLead.client.notes.length > 0) {
     notes = dbLead.client.notes[0].content;
+  } else if (dbLead.notes && dbLead.notes.length > 0) {
+    notes = dbLead.notes[0].content;
   }
 
   return {
     id: dbLead.id,
-    company_name: dbLead.client.company || dbLead.client.name,
-    contact_name: dbLead.client.contactPerson || dbLead.client.name,
-    contact_email: dbLead.client.email || '',
-    contact_phone: dbLead.client.phone || '',
-    contact_whatsapp: dbLead.client.phone || '',
-    vertical: dbLead.client.industry || '',
+    company_name: dbLead.client?.company || dbLead.companyName || 'Unknown Company',
+    contact_name: dbLead.client?.contactPerson || dbLead.client?.name || dbLead.contactName || 'Unknown Lead',
+    contact_email: dbLead.client?.email || dbLead.contactEmail || '',
+    contact_phone: dbLead.client?.phone || dbLead.contactPhone || '',
+    contact_whatsapp: dbLead.client?.phone || dbLead.contactPhone || '',
+    vertical: dbLead.client?.industry || '',
     source: mapEnumToSource(dbLead.source),
     stage: mapEnumToStage(dbLead.stage),
     monthly_value: dbLead.dealValue || 0,
@@ -108,7 +110,21 @@ const formatLeadResponse = (dbLead: any) => {
 leadRouter.get('/', async (req: Request, res: Response) => {
   try {
     const orgId = (req as any).user.organizationId;
-    const { stage, stage_not, vertical, assigned_to_id, days_since_contact_gte, next_followup_before, next_followup_on, monthly_value_gte } = req.query;
+    const {
+      stage,
+      stage_not,
+      vertical,
+      assigned_to_id,
+      assigned,
+      days_since_contact_gte,
+      next_followup_before,
+      next_followup_on,
+      monthly_value_gte,
+      from,
+      to,
+      limit,
+      page
+    } = req.query;
 
     const where: any = { organizationId: orgId };
 
@@ -121,8 +137,9 @@ leadRouter.get('/', async (req: Request, res: Response) => {
       where.stage = { notIn: excludedStages };
     }
 
-    if (assigned_to_id) {
-      where.assignedToId = assigned_to_id;
+    const finalAssignee = assigned_to_id || assigned;
+    if (finalAssignee) {
+      where.assignedToId = finalAssignee as string;
     }
 
     if (monthly_value_gte) {
@@ -143,6 +160,17 @@ leadRouter.get('/', async (req: Request, res: Response) => {
       where.expectedCloseDate = { lte: new Date(next_followup_before as string) };
     }
 
+    if (from || to) {
+      where.createdAt = {};
+      if (from) where.createdAt.gte = new Date(from as string);
+      if (to) where.createdAt.lte = new Date(to as string);
+    }
+
+    // Pagination calculations
+    const parsedLimit = limit ? parseInt(limit as string, 10) : 100;
+    const parsedPage = page ? parseInt(page as string, 10) : 1;
+    const skip = (parsedPage - 1) * parsedLimit;
+
     // Fetch leads
     const leads = await prisma.lead.findMany({
       where,
@@ -151,7 +179,10 @@ leadRouter.get('/', async (req: Request, res: Response) => {
         assignedTo: true,
         activities: { orderBy: { createdAt: 'desc' }, take: 1 },
         stageHistory: { orderBy: { changedAt: 'desc' }, take: 1 }
-      }
+      },
+      skip,
+      take: parsedLimit,
+      orderBy: { createdAt: 'desc' }
     });
 
     // Post-process filters (like days_since_contact_gte which can't easily be queried natively)
@@ -162,10 +193,20 @@ leadRouter.get('/', async (req: Request, res: Response) => {
       processedLeads = processedLeads.filter(l => l.days_since_contact >= minDays);
     }
 
-    res.json(processedLeads);
+    const total = await prisma.lead.count({ where });
+
+    res.json({
+      success: true,
+      data: processedLeads,
+      meta: {
+        page: parsedPage,
+        limit: parsedLimit,
+        total
+      }
+    });
   } catch (error) {
     console.error('[Public API GET /leads Error]:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ success: false, error: 'Internal server error', code: 500 });
   }
 });
 
@@ -185,7 +226,7 @@ leadRouter.get('/:id', async (req: Request, res: Response) => {
       }
     });
 
-    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+    if (!lead) return res.status(404).json({ success: false, error: 'Lead not found', code: 404 });
 
     const formattedLead = formatLeadResponse(lead) as any;
     
@@ -204,9 +245,9 @@ leadRouter.get('/:id', async (req: Request, res: Response) => {
       created_at: act.createdAt
     }));
 
-    res.json(formattedLead);
+    res.json({ success: true, data: formattedLead });
   } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ success: false, error: 'Internal server error', code: 500 });
   }
 });
 
@@ -229,12 +270,6 @@ leadRouter.post('/', async (req: Request, res: Response) => {
         industry: vertical,
         organizationId: orgId,
         status: 'PROSPECT',
-        notes: notes ? {
-          create: {
-            content: notes,
-            authorId: (req as any).user.userId
-          }
-        } : undefined
       }
     });
 
@@ -247,12 +282,20 @@ leadRouter.post('/', async (req: Request, res: Response) => {
         dealValue: monthly_value,
         assignedToId: assigned_to_id || (req as any).user.userId,
         expectedCloseDate: next_followup_date ? new Date(next_followup_date) : undefined,
+        notes: notes ? {
+          create: {
+            content: notes,
+            authorId: (req as any).user.userId,
+            clientId: client.id
+          }
+        } : undefined
       },
       include: {
         client: { include: { notes: true } },
         assignedTo: true,
         activities: true,
-        stageHistory: true
+        stageHistory: true,
+        notes: true
       }
     });
 
@@ -275,24 +318,32 @@ leadRouter.post('/', async (req: Request, res: Response) => {
       io.to(`org_${orgId}`).emit('lead:updated', lead);
     }
 
-    res.status(201).json(formatLeadResponse(lead));
+    res.status(201).json({ success: true, data: formatLeadResponse(lead) });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ success: false, error: 'Internal server error', code: 500 });
   }
 });
 
 // PATCH /leads/:id
 leadRouter.patch('/:id', async (req: Request, res: Response) => {
   try {
-    const { stage, next_followup_date, notes } = req.body;
+    const { stage, next_followup_date, close_date, monthly_value, value, assigned_to_id, assigned_user_id, notes } = req.body;
     
     const existing = await prisma.lead.findFirst({ where: { id: req.params.id as string, organizationId: (req as any).user.organizationId }, include: { client: true } });
-    if (!existing) return res.status(404).json({ error: 'Lead not found' });
+    if (!existing) return res.status(404).json({ success: false, error: 'Lead not found', code: 404 });
 
     const updateData: any = {};
     if (stage) updateData.stage = mapStageToEnum(stage);
-    if (next_followup_date) updateData.expectedCloseDate = new Date(next_followup_date);
+    
+    const finalFollowup = next_followup_date || close_date;
+    if (finalFollowup) updateData.expectedCloseDate = new Date(finalFollowup);
+
+    const finalValue = monthly_value !== undefined ? monthly_value : value;
+    if (finalValue !== undefined) updateData.dealValue = Number(finalValue);
+
+    const finalAssignee = assigned_to_id || assigned_user_id;
+    if (finalAssignee) updateData.assignedToId = finalAssignee;
 
     // If stage is dead, set lost reason
     if (stage === '10. Dead / No Response') {
@@ -306,7 +357,8 @@ leadRouter.patch('/:id', async (req: Request, res: Response) => {
         client: { include: { notes: true } },
         assignedTo: true,
         activities: true,
-        stageHistory: true
+        stageHistory: true,
+        notes: true
       }
     });
 
@@ -315,14 +367,16 @@ leadRouter.patch('/:id', async (req: Request, res: Response) => {
         data: {
           content: notes,
           clientId: lead.clientId,
+          leadId: lead.id,
           authorId: (req as any).user.userId
         }
       });
     }
 
-    res.json(formatLeadResponse(lead));
+    res.json({ success: true, data: formatLeadResponse(lead) });
   } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+    console.error(error);
+    res.status(500).json({ success: false, error: 'Internal server error', code: 500 });
   }
 });
 
@@ -346,17 +400,20 @@ leadRouter.post('/:id/activities', async (req: Request, res: Response) => {
     });
 
     res.status(201).json({
-      id: activity.id,
-      lead_id: activity.leadId,
-      type: activity.type,
-      direction: activity.direction,
-      summary: activity.message,
-      done_by: { id: activity.userId, name: (activity as any).user?.name },
-      activity_date: activity.createdAt,
-      created_at: activity.createdAt
+      success: true,
+      data: {
+        id: activity.id,
+        lead_id: activity.leadId,
+        type: activity.type,
+        direction: activity.direction,
+        summary: activity.message,
+        done_by: { id: activity.userId, name: (activity as any).user?.name },
+        activity_date: activity.createdAt,
+        created_at: activity.createdAt
+      }
     });
   } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ success: false, error: 'Internal server error', code: 500 });
   }
 });
 
@@ -366,8 +423,8 @@ leadRouter.post('/:id/convert', async (req: Request, res: Response) => {
     const { poc_name, poc_email, poc_phone, monthly_retainer, retainer_start_date } = req.body;
 
     const lead = await prisma.lead.findFirst({ where: { id: req.params.id as string, organizationId: (req as any).user.organizationId }, include: { client: true } });
-    if (!lead) return res.status(404).json({ error: 'Lead not found' });
-    if (!lead.clientId) return res.status(400).json({ error: 'Lead has no client yet — move it to the MEETING stage first.' });
+    if (!lead) return res.status(404).json({ success: false, error: 'Lead not found', code: 404 });
+    if (!lead.clientId) return res.status(400).json({ success: false, error: 'Lead has no client yet — move it to the MEETING stage first.', code: 400 });
 
     // Update Client record to Active
     const client = await prisma.client.update({
@@ -396,22 +453,25 @@ leadRouter.post('/:id/convert', async (req: Request, res: Response) => {
     });
 
     res.status(200).json({
-      id: client.id,
-      name: client.name,
-      lead_id: lead.id,
-      poc_name: client.contactPerson,
-      poc_email: client.email,
-      poc_phone: client.phone,
-      vertical: client.industry,
-      monthly_retainer: client.contractValue,
-      retainer_start_date: client.startDate?.toISOString().split('T')[0],
-      status: 'active',
-      created_at: client.createdAt,
-      project_id: project.id,
-      project_name: project.name
+      success: true,
+      data: {
+        id: client.id,
+        name: client.name,
+        lead_id: lead.id,
+        poc_name: client.contactPerson,
+        poc_email: client.email,
+        poc_phone: client.phone,
+        vertical: client.industry,
+        monthly_retainer: client.contractValue,
+        retainer_start_date: client.startDate?.toISOString().split('T')[0],
+        status: 'active',
+        created_at: client.createdAt,
+        project_id: project.id,
+        project_name: project.name
+      }
     });
   } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ success: false, error: 'Internal server error', code: 500 });
   }
 });
 
