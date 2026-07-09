@@ -6,20 +6,12 @@ import { X, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { formatDate } from '@/lib/utils';
+import { TASK_STATUSES, TASK_STATUS_LABELS, TASK_STATUS_COLORS } from '@/lib/task-status';
 import { useConfirmStore } from '@/stores';
 
 const titleCase = (s?: string | null) =>
   s ? s.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '—';
 
-const kanbanCols = ['TODO', 'IN_PROGRESS', 'REVIEW', 'APPROVED', 'ON_HOLD', 'COMPLETED'];
-const kanbanLabels: Record<string, string> = {
-  TODO: 'To Do', IN_PROGRESS: 'In Progress', REVIEW: 'In Review', APPROVED: 'Approved', ON_HOLD: 'On Hold', COMPLETED: 'Done',
-};
-const statusColors: Record<string, string> = {
-  TODO: 'bg-slate-100 text-slate-600',
-  IN_PROGRESS: 'bg-blue-50 text-blue-700', REVIEW: 'bg-amber-50 text-amber-700',
-  APPROVED: 'bg-teal-50 text-teal-700', ON_HOLD: 'bg-purple-50 text-purple-700', COMPLETED: 'bg-emerald-50 text-emerald-700',
-};
 const priorityDots: Record<string, string> = {
   LOW: 'bg-gray-300', MEDIUM: 'bg-blue-400', HIGH: 'bg-orange-500', URGENT: 'bg-red-500',
 };
@@ -142,7 +134,7 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
           <div className="p-6">
             <div className="flex items-center justify-between border-b border-[#F3F4F6] pb-4 mb-4">
               <div className="flex items-center gap-2">
-                <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[task.status]}`}>{task.status.replace('_', ' ')}</span>
+                <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${TASK_STATUS_COLORS[task.status]}`}>{task.status.replace('_', ' ')}</span>
                 <span className={`h-2 w-2 rounded-full ${priorityDots[task.priority]}`} />
               </div>
               {manage && (
@@ -185,9 +177,9 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
               <div className="mt-6">
                 <p className="block text-sm font-medium text-[#374151] mb-2">Update Status</p>
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Update Status">
-                  {kanbanCols.map((s) => (
+                  {TASK_STATUSES.map((s) => (
                     <button key={s} onClick={() => updateStatus(s)} className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${task.status === s ? 'bg-primary text-white' : 'border border-border text-secondary hover:bg-[#F9FAFB]'}`}>
-                      {kanbanLabels[s]}
+                      {TASK_STATUS_LABELS[s]}
                     </button>
                   ))}
                 </div>

@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { formatDate, formatShortDate, getInitials, formatRelativeDate, getAvatarColor, getClientDisplayName } from '@/lib/utils';
+import { TASK_STATUS_COLORS, TASK_STATUS_OPTIONS } from '@/lib/task-status';
 import { ArrowLeft, Clock, MessageSquare, MoreHorizontal, CheckCircle2, ChevronRight, Plus, X, Trash2, Users, DollarSign, Briefcase, Filter, ArrowUpRight } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { TaskDetailDrawer } from '@/components/tasks/task-detail-drawer';
@@ -39,11 +40,11 @@ interface ProjectDetail {
 
 type Tab = 'tasks' | 'milestones' | 'team' | 'activity' | 'comments';
 
+// Project statuses only — task badges use TASK_STATUS_COLORS.
 const statusColors: Record<string, string> = {
   PLANNING: 'bg-violet-50 text-violet-700', IN_PROGRESS: 'bg-blue-50 text-blue-700',
   REVIEW: 'bg-amber-50 text-amber-700', COMPLETED: 'bg-emerald-50 text-emerald-700',
   ON_HOLD: 'bg-orange-50 text-orange-700', CANCELLED: 'bg-red-50 text-red-700',
-  TODO: 'bg-slate-100 text-slate-600',
 };
 
 const priorityDots: Record<string, string> = {
@@ -662,13 +663,7 @@ export default function ProjectDetailPage() {
             
             <div className={`flex flex-wrap items-center gap-2 ${showTaskFilters ? 'flex' : 'hidden md:flex'}`}>
               <div className="w-full md:w-40">
-                <MultiSelect value={taskStatusFilter} onChange={setTaskStatusFilter} placeholder="All Statuses" options={[
-                  { label: 'To Do', value: 'TODO' },
-                  { label: 'In Progress', value: 'IN_PROGRESS' },
-                  { label: 'In Review', value: 'REVIEW' },
-                  { label: 'Approved', value: 'APPROVED' },
-                  { label: 'Done', value: 'COMPLETED' },
-                ]} />
+                <MultiSelect value={taskStatusFilter} onChange={setTaskStatusFilter} placeholder="All Statuses" options={TASK_STATUS_OPTIONS} />
               </div>
               <div className="w-full md:w-40">
                 <MultiSelect value={taskPriorityFilter} onChange={setTaskPriorityFilter} placeholder="All Priorities" options={[
@@ -735,7 +730,7 @@ export default function ProjectDetailPage() {
                           </div>
                         ) : <span className="text-sm text-[#9CA3AF]">—</span>}
                       </td>
-                      <td className="px-6 py-3"><span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[t.status]}`}>{t.status.replace('_', ' ')}</span></td>
+                      <td className="px-6 py-3"><span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${TASK_STATUS_COLORS[t.status]}`}>{t.status.replace('_', ' ')}</span></td>
                       <td className="px-6 py-3 text-sm text-secondary">{formatShortDate(t.dueDate)}</td>
                       <td className="px-6 py-3 text-right">
                         {(user?.role !== 'TEAM_MEMBER' || t.assignee?.id === user?.id) && (
@@ -792,7 +787,7 @@ export default function ProjectDetailPage() {
                         </div>
                       </div>
                     </div>
-                    <span className={`shrink-0 inline-flex items-center rounded-lg px-2 py-0.5 text-[10px] font-medium ${statusColors[t.status]}`}>
+                    <span className={`shrink-0 inline-flex items-center rounded-lg px-2 py-0.5 text-[10px] font-medium ${TASK_STATUS_COLORS[t.status]}`}>
                       {t.status.replace('_', ' ')}
                     </span>
                   </div>
@@ -1049,15 +1044,7 @@ export default function ProjectDetailPage() {
                       ariaLabel="Status"
                       value={taskForm.status}
                       onChange={(val) => setTaskForm({ ...taskForm, status: val })}
-                      options={[
-                        { label: 'Backlog', value: 'BACKLOG' },
-                        { label: 'To Do', value: 'TODO' },
-                        { label: 'In Progress', value: 'IN_PROGRESS' },
-                        { label: 'In Review', value: 'REVIEW' },
-                        { label: 'Approved', value: 'APPROVED' },
-                        { label: 'Blocked', value: 'BLOCKED' },
-                        { label: 'Done', value: 'COMPLETED' },
-                      ]}
+                      options={TASK_STATUS_OPTIONS}
                     />
                   </div>
                 )}

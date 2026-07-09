@@ -22,7 +22,8 @@ const taskSchema = z.object({
   assigneeIds: z.array(z.string()).optional(),
   reviewerId: z.string().optional().nullable(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
-  status: z.enum(['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'APPROVED', 'BLOCKED', 'COMPLETED']).optional(),
+  // Must stay in sync with `enum TaskStatus` in schema.prisma.
+  status: z.enum(['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'APPROVED', 'BLOCKED', 'ON_HOLD', 'COMPLETED']).optional(),
   dueDate: z.string().optional().nullable(),
   assignedDate: z.string().optional().nullable(),
   assignedById: z.string().optional().nullable(),

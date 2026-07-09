@@ -9,6 +9,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatDate, formatShortDate, getInitials, getAvatarColor, triggerHaptic } from '@/lib/utils';
+import { TASK_STATUSES, TASK_STATUS_LABELS, TASK_STATUS_COLORS, TASK_STATUS_OPTIONS } from '@/lib/task-status';
 import { Search, Plus, Filter, MessageSquare, ChevronDown, ChevronRight, AlertCircle, X, ChevronUp, ChevronLeft, Calendar, ListChecks, Trash2 } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
@@ -40,13 +41,6 @@ interface Task {
 
 interface Project { id: string; name: string; members?: { user: { id: string; name: string } }[]; teams?: { team: { members: { user: { id: string; name: string } }[] } }[] }
 interface Member { id: string; name: string; }
-
-const statusColors: Record<string, string> = {
-  TODO: 'bg-slate-100 text-slate-600',
-  IN_PROGRESS: 'bg-blue-50 text-blue-700', REVIEW: 'bg-amber-50 text-amber-700',
-  APPROVED: 'bg-teal-50 text-teal-700',
-  ON_HOLD: 'bg-purple-50 text-purple-700', COMPLETED: 'bg-emerald-50 text-emerald-700',
-};
 
 const isTaskOverdue = (task: Task) => {
   if (!task.dueDate || task.status === 'COMPLETED') return false;
@@ -111,11 +105,6 @@ const blankTaskValues = (): TaskFormValues => ({
   reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: '',
   assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '',
 });
-
-const kanbanCols = ['TODO', 'IN_PROGRESS', 'REVIEW', 'APPROVED', 'ON_HOLD', 'COMPLETED'];
-const kanbanLabels: Record<string, string> = {
-  TODO: 'To Do', IN_PROGRESS: 'In Progress', REVIEW: 'In Review', APPROVED: 'Approved', ON_HOLD: 'On Hold', COMPLETED: 'Done',
-};
 
 function TasksContent() {
   const router = useRouter();
@@ -520,14 +509,7 @@ function TasksContent() {
             value={statusFilter}
             onChange={setStatusFilter}
             placeholder="All Statuses"
-            options={[
-              { label: 'To Do', value: 'TODO' },
-              { label: 'In Progress', value: 'IN_PROGRESS' },
-              { label: 'In Review', value: 'REVIEW' },
-              { label: 'Approved', value: 'APPROVED' },
-              { label: 'On Hold', value: 'ON_HOLD' },
-              { label: 'Done', value: 'COMPLETED' },
-            ]}
+            options={TASK_STATUS_OPTIONS}
           />
         </div>
         <div className="w-full md:w-44">
@@ -594,7 +576,7 @@ function TasksContent() {
 
       {loading ? (
         <div className="flex gap-4 overflow-x-auto pb-4 h-full">
-          {kanbanCols.map((col) => (
+          {TASK_STATUSES.map((col) => (
             <div key={col} className="min-w-[260px] flex-1 flex flex-col">
               <div className="flex items-center gap-2 mb-3 px-1">
                 <Skeleton className="h-4 w-20" />
@@ -622,13 +604,13 @@ function TasksContent() {
           {view === 'board' && (
             <DragDropContext onDragEnd={onDragEnd}>
               <div className="flex gap-4 overflow-x-auto pb-4 h-full">
-                {kanbanCols.map((col) => {
+                {TASK_STATUSES.map((col) => {
                   const colTasks = boardTasks.filter((t) => t.status === col);
                   return (
                     <div key={col} className="min-w-[260px] flex-1 flex flex-col">
                       <div className="flex items-center gap-2 mb-3 px-1">
-                        <div className={`h-2 w-2 rounded-full ${statusColors[col]?.split(' ')[0] || 'bg-gray-200'}`} />
-                        <span className="text-xs font-medium text-[#374151] uppercase tracking-wide">{kanbanLabels[col]}</span>
+                        <div className={`h-2 w-2 rounded-full ${TASK_STATUS_COLORS[col]?.split(' ')[0] || 'bg-gray-200'}`} />
+                        <span className="text-xs font-medium text-[#374151] uppercase tracking-wide">{TASK_STATUS_LABELS[col]}</span>
                         <span className="ml-auto text-xs text-[#9CA3AF] bg-[#F3F4F6] rounded-full px-2 py-0.5 tabular-nums">{colTasks.length}</span>
                       </div>
                       <Droppable droppableId={col}>
@@ -759,7 +741,7 @@ function TasksContent() {
                             <span className="text-xs font-medium text-[#374151] capitalize">{t.priority.toLowerCase()}</span>
                           </td>
                           <td className="px-6 py-3.5">
-                            <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[t.status]}`}>
+                            <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${TASK_STATUS_COLORS[t.status]}`}>
                               {t.status.replace('_', ' ')}
                             </span>
                           </td>
@@ -799,7 +781,7 @@ function TasksContent() {
                         <p className="text-sm font-medium text-primary leading-snug">{t.title}</p>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className={`inline-flex items-center rounded-lg px-2 py-0.5 text-[10px] font-medium ${statusColors[t.status]}`}>
+                        <span className={`inline-flex items-center rounded-lg px-2 py-0.5 text-[10px] font-medium ${TASK_STATUS_COLORS[t.status]}`}>
                           {t.status.replace('_', ' ')}
                         </span>
                         <div className="flex items-center gap-2">
@@ -871,7 +853,7 @@ function TasksContent() {
               <div className="flex items-center gap-2">
                 {!isEditing && (
                   <>
-                    <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[selectedTask.status]}`}>{selectedTask.status.replace('_', ' ')}</span>
+                    <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${TASK_STATUS_COLORS[selectedTask.status]}`}>{selectedTask.status.replace('_', ' ')}</span>
                     <span className={`h-2 w-2 rounded-full ${priorityDots[selectedTask.priority]}`} />
                   </>
                 )}
@@ -1068,13 +1050,13 @@ function TasksContent() {
                   <div className="mt-6">
                     <label className="block text-sm font-medium text-[#374151] mb-2">Update Status</label>
                     <div className="flex flex-wrap gap-2">
-                      {kanbanCols.map((s) => (
+                      {TASK_STATUSES.map((s) => (
                         <button
                           key={s}
                           onClick={() => updateTaskStatus(selectedTask.id, s)}
                           className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${selectedTask.status === s ? 'bg-primary text-white' : 'border border-border text-secondary hover:bg-[#F9FAFB]'}`}
                         >
-                          {kanbanLabels[s]}
+                          {TASK_STATUS_LABELS[s]}
                         </button>
                       ))}
                     </div>
