@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatRelativeDate, formatDate, formatShortDate, getInitials } from '@/lib/utils';
+import { TASK_STATUS_OPTIONS } from '@/lib/task-status';
 import { useAuthStore } from '@/stores';
 import { useRouter } from 'next/navigation';
 import { useDashboardData } from '@/hooks/useQueries';
@@ -360,16 +361,6 @@ export default function DashboardPage() {
     }
   };
 
-  const statusOptions = [
-    { label: 'Backlog', value: 'BACKLOG' },
-    { label: 'To Do', value: 'TODO' },
-    { label: 'In Progress', value: 'IN_PROGRESS' },
-    { label: 'In Review', value: 'REVIEW' },
-    { label: 'Approved', value: 'APPROVED' },
-    { label: 'Blocked', value: 'BLOCKED' },
-    { label: 'Done', value: 'COMPLETED' },
-  ];
-
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="px-4 pt-4 md:px-8 md:pt-8 w-full max-w-7xl mx-auto space-y-8 pb-10">
       
@@ -543,7 +534,7 @@ export default function DashboardPage() {
                           <Select 
                             value={t.status}
                             onChange={(val) => updateTaskStatus(t.id, val)}
-                            options={statusOptions}
+                            options={TASK_STATUS_OPTIONS}
                             className="w-full text-xs"
                           />
                         )}
