@@ -105,6 +105,19 @@ export default function ProjectDetailPage() {
     api.get<{ teams: {id: string, name: string}[] }>('/teams').then((res) => setTeams(res.teams)).catch(() => {});
   }, [fetchProject]);
 
+  // Lock body scroll when any drawer is open
+  useEffect(() => {
+    const anyOpen = showEditProject || showCreateTask || isEditingTask || showMilestoneModal || !!viewModalContent;
+    if (anyOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showEditProject, showCreateTask, isEditingTask, showMilestoneModal, viewModalContent]);
+
   async function handleSaveTask(e: React.FormEvent) {
     e.preventDefault();
     setSubmittingTask(true);
@@ -954,7 +967,7 @@ export default function ProjectDetailPage() {
                 <h2 className="text-lg font-semibold text-primary">{isEditingTask ? 'Edit Task' : 'New Task'}</h2>
                 <button onClick={() => setShowCreateTask(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
               </div>
-              <form onSubmit={handleSaveTask} className="p-6 space-y-4">
+              <form onSubmit={handleSaveTask} className="p-6 pb-24 md:pb-6 space-y-4">
                 <div>
                   <label htmlFor="pt-title" className="block text-sm font-medium text-[#374151] mb-1.5">Title *</label>
                   <input id="pt-title" value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
@@ -1081,7 +1094,7 @@ export default function ProjectDetailPage() {
                 <h2 className="text-lg font-semibold text-primary">Edit Project</h2>
                 <button onClick={() => setShowEditProject(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
               </div>
-              <form onSubmit={handleEditProject} className="p-6 space-y-8">
+              <form onSubmit={handleEditProject} className="p-6 pb-24 md:pb-6 space-y-8">
                 {/* Basic Info */}
                 <div className="space-y-4">
                   <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Basic Info</h3>
@@ -1312,7 +1325,7 @@ export default function ProjectDetailPage() {
                 <h2 className="text-lg font-semibold text-primary">{viewModalContent.title}</h2>
                 <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
               </div>
-              <div className="p-6 overflow-y-auto flex-1">
+              <div className="p-6 pb-24 md:pb-6 overflow-y-auto flex-1">
                 <div 
                   className="prose prose-sm max-w-none text-[#374151]"
                   dangerouslySetInnerHTML={{ __html: viewModalContent.content }}
@@ -1331,7 +1344,7 @@ export default function ProjectDetailPage() {
                 <h2 className="text-lg font-semibold text-primary">{isEditingMilestone ? 'Edit Milestone' : 'New Milestone'}</h2>
                 <button onClick={() => setShowMilestoneModal(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
               </div>
-              <form onSubmit={handleSaveMilestone} className="p-6 space-y-4">
+              <form onSubmit={handleSaveMilestone} className="p-6 pb-24 md:pb-6 space-y-4">
                 <div>
                   <label htmlFor="ms-name" className="block text-sm font-medium text-[#374151] mb-1.5">Milestone Name *</label>
                   <input id="ms-name" value={milestoneForm.name} onChange={(e) => setMilestoneForm({ ...milestoneForm, name: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />

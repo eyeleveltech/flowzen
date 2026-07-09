@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { X, Save } from 'lucide-react';
@@ -37,6 +37,14 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
 
   const [errors, setErrors] = useState<{ contactName?: string; contactEmail?: string; contactPhone?: string }>({});
   const [submitting, setSubmitting] = useState(false);
+
+  // Lock body scroll when EditLeadModal is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
 
   // Null-safe: a lead may have no client yet (created before OUTREACH).
   const leadLabel = lead.contactName || lead.companyName || lead.client?.name || 'this lead';
@@ -187,7 +195,7 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
           </form>
         </div>
 
-        <div className="p-6 border-t border-border bg-[#F9FAFB] shrink-0 flex items-center justify-end gap-3">
+        <div className="p-6 pb-safe border-t border-border bg-[#F9FAFB] shrink-0 flex items-center justify-end gap-3">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-[#374151] hover:bg-border rounded-xl transition-all">
             Cancel
           </button>

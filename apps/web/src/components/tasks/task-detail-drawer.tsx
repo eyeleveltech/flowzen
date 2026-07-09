@@ -94,6 +94,14 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskId]);
 
+  // Lock body scroll when drawer is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
+
   async function updateStatus(status: string) {
     setTask((prev: any) => (prev ? { ...prev, status } : prev));
     try {
@@ -139,7 +147,7 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
         {loading || !task ? (
           <div className="p-10 flex justify-center"><div className="h-7 w-7 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>
         ) : (
-          <div className="p-6">
+          <div className="p-6 pb-24 md:pb-6">
             <div className="flex items-center justify-between border-b border-[#F3F4F6] pb-4 mb-4">
               <div className="flex items-center gap-2">
                 <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[task.status]}`}>{task.status.replace('_', ' ')}</span>

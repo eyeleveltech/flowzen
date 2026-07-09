@@ -167,6 +167,19 @@ function TasksContent() {
   const [selectedTask, setSelectedTaskState] = useState<Task | null>(null);
   const [isEditing, setIsEditing] = useState(false);
 
+  // Lock body scroll when create or edit drawer is open on mobile
+  useEffect(() => {
+    const shouldLock = showCreate || (selectedTask && isEditing);
+    if (shouldLock) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showCreate, selectedTask, isEditing]);
+
   const {
     data,
     isLoading: isLoadingTasks,
@@ -451,7 +464,7 @@ function TasksContent() {
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="h-full flex flex-col space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-semibold text-primary tracking-tight">Tasks</h1>
           <p className="text-sm text-secondary mt-1">{tasks.length} tasks</p>
@@ -492,20 +505,20 @@ function TasksContent() {
       </div>
 
       <div className="flex flex-col gap-3 mb-6">
-        <div className="flex items-center gap-2 w-full md:max-w-sm">
+        <div className="flex items-center gap-2 w-full sm:max-w-sm">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tasks..." className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
           </div>
           <button 
             onClick={() => setShowMobileFilters(!showMobileFilters)} 
-            className="md:hidden flex items-center justify-center p-2.5 rounded-xl border border-border bg-white text-secondary hover:bg-gray-50 transition-colors"
+            className="sm:hidden flex items-center justify-center p-2.5 rounded-xl border border-border bg-white text-secondary hover:bg-gray-50 transition-colors"
           >
             <Filter className="h-4 w-4" />
           </button>
         </div>
-        <div className={`flex flex-wrap items-center gap-3 ${showMobileFilters ? 'flex' : 'hidden md:flex'}`}>
-          <div className="w-full md:w-48">
+        <div className={`flex flex-wrap items-center gap-3 ${showMobileFilters ? 'flex' : 'hidden sm:flex'}`}>
+          <div className="w-full sm:w-48">
           <MultiSelect
             showSelectAll
             value={projectFilter}
@@ -514,7 +527,7 @@ function TasksContent() {
             options={projects.map((p) => ({ label: p.name, value: p.id }))}
           />
         </div>
-        <div className="w-full md:w-44">
+        <div className="w-full sm:w-44">
           <MultiSelect
             showSelectAll
             value={statusFilter}
@@ -530,7 +543,7 @@ function TasksContent() {
             ]}
           />
         </div>
-        <div className="w-full md:w-44">
+        <div className="w-full sm:w-44">
           <MultiSelect
             showSelectAll
             value={priorityFilter}
@@ -544,7 +557,7 @@ function TasksContent() {
             ]}
           />
         </div>
-        <div className="w-full md:w-48">
+        <div className="w-full sm:w-48">
           <MultiSelect
             showSelectAll
             value={teamFilter}
@@ -554,7 +567,7 @@ function TasksContent() {
           />
         </div>
         {user?.role !== 'TEAM_MEMBER' && (
-          <div className="w-full md:w-44">
+          <div className="w-full sm:w-44">
             <MultiSelect
               showSelectAll
               value={assigneeFilter}
@@ -565,7 +578,7 @@ function TasksContent() {
           </div>
         )}
         {view === 'list' && (
-          <div className="w-full md:w-48">
+          <div className="w-full sm:w-48">
             <Select
               ariaLabel="Sort Tasks"
               value={sort}
@@ -864,7 +877,7 @@ function TasksContent() {
                   <X className="h-4 w-4 text-secondary" />
                 </button>
               </div>
-              <div className="p-6">
+              <div className="p-6 pb-24 md:pb-6">
                 {selectedTask && (
           <div className="flex flex-col">
             <div className="flex items-center justify-between border-b border-[#F3F4F6] pb-4 mb-4">
@@ -1156,7 +1169,7 @@ function TasksContent() {
                   <X className="h-4 w-4 text-secondary" />
                 </button>
               </div>
-              <div className="p-6">
+              <div className="p-6 pb-24 md:pb-6">
                 <form onSubmit={handleSubmit(handleCreate)} className="space-y-4">
           <div>
             <label htmlFor="tn-title" className="block text-sm font-medium text-[#374151] mb-1.5">Title *</label>

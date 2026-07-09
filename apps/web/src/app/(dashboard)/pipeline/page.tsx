@@ -29,6 +29,12 @@ function PipelineContent() {
     }
   }, []);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setActiveTab('LIST');
+    }
+  }, []);
+
   async function fetchTotal() {
     try {
       const data = await api.get<any[]>('/crm/leads');

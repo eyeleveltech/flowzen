@@ -26,6 +26,18 @@ export function ContactsTab({ leadId, lead }: { leadId: string; lead: any }) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Lock body scroll when dossier side panel is open
+  useEffect(() => {
+    if (dossier) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [dossier]);
+
   const runIntelligence = async (c: any) => {
     setRunning(c.id);
     try {
@@ -140,7 +152,7 @@ export function ContactsTab({ leadId, lead }: { leadId: string; lead: any }) {
                 <h2 className="text-lg font-semibold text-primary flex items-center gap-2"><Sparkles className="w-5 h-5 text-secondary" /> {dossier.name} — Dossier</h2>
                 <button onClick={() => setDossier(null)} className="p-2 rounded-xl hover:bg-gray-100"><X className="h-4 w-4 text-secondary" /></button>
               </div>
-              <div className="p-6"><DossierView d={dossier.dossierJson} /></div>
+              <div className="p-6 pb-24 md:pb-6"><DossierView d={dossier.dossierJson} /></div>
             </motion.div>
           </>
         )}

@@ -69,6 +69,14 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Lock body scroll when LeadModal is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
+
   const filteredClients = clients?.filter((c: any) => 
     c.name.toLowerCase().includes(clientSearch.toLowerCase()) || 
     (c.company && c.company.toLowerCase().includes(clientSearch.toLowerCase()))
@@ -484,7 +492,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
           )}
         </div>
 
-        <div className="p-4 sm:p-5 border-t border-border bg-white flex flex-row justify-end gap-2 sm:gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)] z-10">
+        <div className="p-4 pb-safe sm:p-5 border-t border-border bg-white flex flex-row justify-end gap-2 sm:gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)] z-10">
           <button type="button" onClick={onClose} className="flex-1 sm:flex-none w-full sm:w-auto px-2 sm:px-5 py-2.5 text-sm font-medium text-[#374151] bg-white border border-border rounded-xl hover:bg-gray-50 transition-colors">
             Cancel
           </button>
