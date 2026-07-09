@@ -78,13 +78,9 @@ const formatTaskResponse = (task: any) => {
 // GET /tasks
 taskRouter.get('/', async (req: Request, res: Response) => {
   try {
-    const { linked_to, linked_id, assignee_id, status, priority, due_before, due_on, unassigned, overdue } = req.query;
+    const { linked_to, linked_id, assignee_id, status, priority, due_before, due_on, unassigned, overdue, limit, page } = req.query;
 
     const where: any = {};
-    
-    // Scoping to org (requires checking relations)
-    // Note: A more complex org check might be needed if tasks don't have orgId directly,
-    // they belong to projects or leads which belong to orgId.
     
     if (linked_to === 'lead' && linked_id) {
       where.leadId = linked_id;
@@ -113,18 +109,36 @@ taskRouter.get('/', async (req: Request, res: Response) => {
       where.status = { notIn: ['COMPLETED', 'APPROVED'] };
     }
 
-    const tasks = await prisma.task.findMany({
-      where,
-      include: {
-        assignee: true,
-        project: true,
-        lead: { include: { client: true } }
+    const parsedLimit = limit ? parseInt(limit as string, 10) : 100;
+    const parsedPage = page ? parseInt(page as string, 10) : 1;
+    const skip = (parsedPage - 1) * parsedLimit;
+
+    const [tasks, total] = await Promise.all([
+      prisma.task.findMany({
+        where,
+        include: {
+          assignee: true,
+          project: true,
+          lead: { include: { client: true } }
+        },
+        skip,
+        take: parsedLimit,
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.task.count({ where })
+    ]);
+
+    res.json({
+      success: true,
+      data: tasks.map(formatTaskResponse),
+      meta: {
+        page: parsedPage,
+        limit: parsedLimit,
+        total
       }
     });
-
-    res.json(tasks.map(formatTaskResponse));
   } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ success: false, error: 'Internal server error', code: 500 });
   }
 });
 
@@ -133,7 +147,7 @@ taskRouter.post('/', async (req: Request, res: Response) => {
   try {
     const { tasks } = req.body;
     if (!tasks || !Array.isArray(tasks)) {
-      return res.status(400).json({ error: 'Expected an array of tasks under "tasks" key' });
+      return res.status(400).json({ success: false, error: 'Expected an array of tasks under "tasks" key', code: 400 });
     }
 
     const createdTasks = [];
@@ -176,9 +190,9 @@ taskRouter.post('/', async (req: Request, res: Response) => {
       createdTasks.push(formatTaskResponse(newTask));
     }
 
-    res.status(201).json(createdTasks);
+    res.status(201).json({ success: true, data: createdTasks });
   } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ success: false, error: 'Internal server error', code: 500 });
   }
 });
 
@@ -187,10 +201,12 @@ taskRouter.patch('/:id', async (req: Request, res: Response) => {
   try {
     const { status, notes } = req.body;
     
+    const existing = await prisma.task.findFirst({ where: { id: req.params.id as string } });
+    if (!existing) return res.status(404).json({ success: false, error: 'Task not found', code: 404 });
+
     const updateData: any = {};
     if (status) updateData.status = mapAiStatusToEnum(status as string);
     if (notes) {
-      // Could append to description or add a comment
       updateData.description = notes; 
     }
 
@@ -200,9 +216,9 @@ taskRouter.patch('/:id', async (req: Request, res: Response) => {
       include: { assignee: true, project: true, lead: { include: { client: true } } }
     });
 
-    res.json(formatTaskResponse(updatedTask));
+    res.json({ success: true, data: formatTaskResponse(updatedTask) });
   } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ success: false, error: 'Internal server error', code: 500 });
   }
 });
 

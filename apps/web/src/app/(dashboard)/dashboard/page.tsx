@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
@@ -47,7 +47,19 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-const PendingApprovalItem = ({ task, onRefresh }: { task: any; onRefresh: () => void }) => {
+const PendingApprovalItem = ({
+  task,
+  onRefresh,
+  selected,
+  onSelectChange,
+  onApproveAllForProject
+}: {
+  task: any;
+  onRefresh: () => void;
+  selected: boolean;
+  onSelectChange: (selected: boolean) => void;
+  onApproveAllForProject?: (projectId: string) => void;
+}) => {
   const router = useRouter();
   const [isRequestingChanges, setIsRequestingChanges] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -96,75 +108,100 @@ const PendingApprovalItem = ({ task, onRefresh }: { task: any; onRefresh: () => 
   };
 
   return (
-    <div className="flex flex-col border border-transparent hover:border-border rounded-xl transition-all hover:bg-surface mb-1">
-      <div 
-        onClick={() => router.push(`/tasks?taskId=${task.id}`)}
-        className="flex flex-col p-3 cursor-pointer"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3 min-w-0">
-            {task.assignee && (
-              <div className="h-8 w-8 rounded-full bg-[#F3F4F6] text-primary text-[10px] font-bold flex items-center justify-center shrink-0 border border-border mt-0.5">
-                {getInitials(task.assignee.name)}
-              </div>
-            )}
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-primary truncate" title={task.title}>{task.title}</p>
-              <div className="flex items-center gap-2 text-xs text-secondary mt-0.5">
-                <span className="truncate max-w-[120px]" title={task.project?.name}>{task.project?.name}</span>
-                <span>•</span>
-                <span className="whitespace-nowrap">{formatRelativeDate(task.updatedAt)}</span>
+    <div className="flex border border-transparent hover:border-border rounded-xl transition-all hover:bg-surface mb-1 items-center px-2">
+      <input
+        type="checkbox"
+        checked={selected}
+        onChange={(e) => onSelectChange(e.target.checked)}
+        onClick={(e) => e.stopPropagation()}
+        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary mr-2 cursor-pointer shrink-0"
+      />
+      <div className="flex-1 min-w-0">
+        <div 
+          onClick={() => router.push(`/tasks?taskId=${task.id}`)}
+          className="flex flex-col py-3 cursor-pointer"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3 min-w-0">
+              {task.assignee && (
+                <div className="h-8 w-8 rounded-full bg-[#F3F4F6] text-primary text-[10px] font-bold flex items-center justify-center shrink-0 border border-border mt-0.5">
+                  {getInitials(task.assignee.name)}
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-primary truncate" title={task.title}>{task.title}</p>
+                <div className="flex flex-wrap items-center gap-1.5 text-xs text-secondary mt-0.5">
+                  <span className="truncate max-w-[150px]" title={task.project?.name}>
+                    {task.project?.client?.name ? `${task.project.client.name} / ` : ''}{task.project?.name}
+                  </span>
+                  <span>•</span>
+                  <span className="whitespace-nowrap">{formatRelativeDate(task.updatedAt)}</span>
+                  {onApproveAllForProject && task.projectId && (
+                    <>
+                      <span>•</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onApproveAllForProject(task.projectId);
+                        }}
+                        className="text-[10px] text-emerald-600 font-bold hover:underline hover:text-emerald-700 whitespace-nowrap"
+                      >
+                        Approve Project Tasks
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button 
-              disabled={submitting}
-              onClick={handleApprove}
-              className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
-              title="Approve"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-            </button>
-            <button 
-              disabled={submitting}
-              onClick={handleRequestChangesClick}
-              className={`flex items-center justify-center h-8 w-8 rounded-lg transition-colors ${isRequestingChanges ? 'bg-amber-100 text-amber-700' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}
-              title="Request Changes"
-            >
-              <AlertTriangle className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button 
+                disabled={submitting}
+                onClick={handleApprove}
+                className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                title="Approve"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+              </button>
+              <button 
+                disabled={submitting}
+                onClick={handleRequestChangesClick}
+                className={`flex items-center justify-center h-8 w-8 rounded-lg transition-colors ${isRequestingChanges ? 'bg-amber-100 text-amber-700' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}
+                title="Request Changes"
+              >
+                <AlertTriangle className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
+        
+        {isRequestingChanges && (
+          <div className="pb-3 pt-1" onClick={(e) => e.stopPropagation()}>
+            <textarea
+              autoFocus
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              placeholder="What needs to be changed?"
+              className="w-full text-sm border border-border rounded-lg p-2.5 outline-none focus:border-primary resize-none h-20 bg-white"
+            />
+            <div className="flex justify-end gap-2 mt-2">
+              <button 
+                disabled={submitting}
+                onClick={() => setIsRequestingChanges(false)}
+                className="px-3 py-1.5 text-xs font-medium text-secondary hover:text-primary transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                disabled={submitting || !commentText.trim()}
+                onClick={handleSubmitChanges}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-primary rounded-lg hover:bg-[#1F2937] transition-colors disabled:opacity-50"
+              >
+                {submitting ? 'Submitting...' : 'Submit Feedback'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-      
-      {isRequestingChanges && (
-        <div className="px-3 pb-3 pt-1" onClick={(e) => e.stopPropagation()}>
-          <textarea
-            autoFocus
-            value={commentText}
-            onChange={(e) => setCommentText(e.target.value)}
-            placeholder="What needs to be changed?"
-            className="w-full text-sm border border-border rounded-lg p-2.5 outline-none focus:border-primary resize-none h-20 bg-white"
-          />
-          <div className="flex justify-end gap-2 mt-2">
-            <button 
-              disabled={submitting}
-              onClick={() => setIsRequestingChanges(false)}
-              className="px-3 py-1.5 text-xs font-medium text-secondary hover:text-primary transition-colors"
-            >
-              Cancel
-            </button>
-            <button 
-              disabled={submitting || !commentText.trim()}
-              onClick={handleSubmitChanges}
-              className="px-3 py-1.5 text-xs font-medium text-white bg-primary rounded-lg hover:bg-[#1F2937] transition-colors disabled:opacity-50"
-            >
-              {submitting ? 'Submitting...' : 'Submit Feedback'}
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
@@ -232,6 +269,46 @@ export default function DashboardPage() {
   } = data || {};
 
   const [updatingTask, setUpdatingTask] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'date' | 'client' | 'project'>('date');
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [bulkApproving, setBulkApproving] = useState(false);
+
+  const sortedApprovals = useMemo(() => {
+    const list = [...pendingApprovals];
+    if (sortBy === 'date') {
+      return list.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    }
+    if (sortBy === 'client') {
+      return list.sort((a, b) => {
+        const nameA = a.project?.client?.name || '';
+        const nameB = b.project?.client?.name || '';
+        return nameA.localeCompare(nameB);
+      });
+    }
+    if (sortBy === 'project') {
+      return list.sort((a, b) => {
+        const nameA = a.project?.name || '';
+        const nameB = b.project?.name || '';
+        return nameA.localeCompare(nameB);
+      });
+    }
+    return list;
+  }, [pendingApprovals, sortBy]);
+
+  const handleBulkApprove = async (taskIds: string[]) => {
+    if (taskIds.length === 0) return;
+    try {
+      setBulkApproving(true);
+      await api.post('/tasks/bulk-approve', { taskIds });
+      toast.success(`Successfully approved ${taskIds.length} task(s)!`);
+      setSelectedTaskIds((prev) => prev.filter((id) => !taskIds.includes(id)));
+      fetchAll();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to approve tasks');
+    } finally {
+      setBulkApproving(false);
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -304,21 +381,21 @@ export default function DashboardPage() {
         </div>
         
         {/* DATE RANGE FILTER */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           {datePreset === 'custom' && (
             <div className="flex items-center gap-2">
               <input 
                 type="date" 
                 value={customRange.start} 
                 onChange={(e) => setCustomRange(prev => ({ ...prev, start: e.target.value }))}
-                className="text-sm px-3 py-2 border border-border rounded-lg bg-white outline-none focus:border-primary"
+                className="text-xs sm:text-sm px-3 py-2 rounded-xl border border-border bg-gray-50 outline-none focus:border-primary focus:bg-white transition-all w-32 sm:w-36 text-primary font-medium"
               />
-              <span className="text-secondary">-</span>
+              <span className="text-secondary text-xs sm:text-sm font-semibold">-</span>
               <input 
                 type="date" 
                 value={customRange.end} 
                 onChange={(e) => setCustomRange(prev => ({ ...prev, end: e.target.value }))}
-                className="text-sm px-3 py-2 border border-border rounded-lg bg-white outline-none focus:border-primary"
+                className="text-xs sm:text-sm px-3 py-2 rounded-xl border border-border bg-gray-50 outline-none focus:border-primary focus:bg-white transition-all w-32 sm:w-36 text-primary font-medium"
               />
             </div>
           )}
@@ -334,7 +411,7 @@ export default function DashboardPage() {
               { label: 'Last Quarter', value: 'last_quarter' },
               { label: 'Custom Range', value: 'custom' },
             ]}
-            className="w-44"
+            className="w-36 sm:w-44"
           />
         </div>
       </motion.div>
@@ -482,19 +559,81 @@ export default function DashboardPage() {
           {isManager && (
             <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow overflow-hidden flex flex-col">
               <div 
-                onClick={() => router.push('/tasks?filter=approval')} 
-                className="p-5 border-b border-border flex justify-between items-center cursor-pointer hover:bg-surface transition-colors"
+                className="p-5 border-b border-border flex flex-col gap-3 md:flex-row md:items-center justify-between"
               >
-                <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><CheckCircle2 className="w-4 h-4 text-secondary"/> Pending Approvals</h2>
-                {pendingApprovals.length > 0 && <span className="text-xs font-medium text-primary bg-[#F3F4F6] border border-border px-2 py-0.5 rounded-md">{pendingApprovals.length}</span>}
+                <div className="flex items-center gap-2 cursor-pointer" onClick={() => router.push('/tasks?filter=approval')}>
+                  <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><CheckCircle2 className="w-4 h-4 text-secondary"/> Pending Approvals</h2>
+                  {pendingApprovals.length > 0 && <span className="text-xs font-medium text-primary bg-[#F3F4F6] border border-border px-2 py-0.5 rounded-md">{pendingApprovals.length}</span>}
+                </div>
+
+                {pendingApprovals.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-3" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-1.5 text-xs relative z-10">
+                      <span className="text-secondary font-medium">Sort:</span>
+                      <Select 
+                        value={sortBy}
+                        onChange={(val) => setSortBy(val as any)}
+                        options={[
+                          { label: 'Date', value: 'date' },
+                          { label: 'Client', value: 'client' },
+                          { label: 'Project', value: 'project' },
+                        ]}
+                        className="w-24"
+                        buttonClassName="py-1 px-2 text-xs rounded-xl"
+                      />
+                    </div>
+
+                    <label className="flex items-center gap-1.5 text-xs text-secondary font-medium cursor-pointer select-none">
+                      <input 
+                        type="checkbox"
+                        checked={pendingApprovals.length > 0 && selectedTaskIds.length === pendingApprovals.length}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedTaskIds(pendingApprovals.map((t: any) => t.id));
+                          } else {
+                            setSelectedTaskIds([]);
+                          }
+                        }}
+                        className="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                      />
+                      Select All
+                    </label>
+
+                    {selectedTaskIds.length > 0 && (
+                      <button
+                        onClick={() => handleBulkApprove(selectedTaskIds)}
+                        disabled={bulkApproving}
+                        className="px-2.5 py-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 transition-colors rounded-lg flex items-center gap-1 shadow-sm"
+                      >
+                        {bulkApproving ? 'Approving…' : `Approve Selected (${selectedTaskIds.length})`}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
-              <div className="p-2 max-h-75 overflow-y-auto custom-scrollbar">
+              <div className="p-2 max-h-85 overflow-y-auto custom-scrollbar">
                 {pendingApprovals.length === 0 ? (
                   <p className="text-sm text-secondary text-center py-6">No tasks waiting for review.</p>
                 ) : (
                   <div className="space-y-1">
-                    {pendingApprovals.map((t: any) => (
-                      <PendingApprovalItem key={t.id} task={t} onRefresh={fetchAll} />
+                    {sortedApprovals.map((t: any) => (
+                      <PendingApprovalItem 
+                        key={t.id} 
+                        task={t} 
+                        onRefresh={fetchAll} 
+                        selected={selectedTaskIds.includes(t.id)}
+                        onSelectChange={(checked) => {
+                          setSelectedTaskIds((prev) => 
+                            checked ? [...prev, t.id] : prev.filter((id) => id !== t.id)
+                          );
+                        }}
+                        onApproveAllForProject={(projectId) => {
+                          const projectTaskIds = pendingApprovals
+                            .filter((item: any) => item.projectId === projectId)
+                            .map((item: any) => item.id);
+                          handleBulkApprove(projectTaskIds);
+                        }}
+                      />
                     ))}
                   </div>
                 )}

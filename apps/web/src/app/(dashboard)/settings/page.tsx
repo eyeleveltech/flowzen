@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { useAuthStore } from '@/stores';
 import { useRouter } from 'next/navigation';
-import { Building2, Users, FileText, Shield, Zap, Boxes, Receipt, Bell } from 'lucide-react';
+import { Building2, Users, FileText, Shield, Zap, Boxes, Receipt, Bell, Key } from 'lucide-react';
 import { OrganizationTab } from '@/components/settings/OrganizationTab';
 import { NotificationsTab } from '@/components/settings/NotificationsTab';
 import { UsersTab } from '@/components/settings/UsersTab';
@@ -16,9 +16,10 @@ import { PermissionsTab } from '@/components/settings/PermissionsTab';
 import { ModulesTab } from '@/components/settings/ModulesTab';
 import { BillingTab } from '@/components/settings/BillingTab';
 import { AuditLogsTab } from '@/components/settings/AuditLogsTab';
+import { ApiKeysTab } from '@/components/settings/ApiKeysTab';
 import { Skeleton } from '@/components/ui/skeleton';
 
-type Tab = 'organization' | 'modules' | 'billing' | 'users' | 'templates' | 'permissions' | 'workflows' | 'notifications' | 'audit';
+type Tab = 'organization' | 'modules' | 'billing' | 'users' | 'templates' | 'permissions' | 'workflows' | 'notifications' | 'audit' | 'api';
 
 export default function SettingsPage() {
   const { user } = useAuthStore();
@@ -89,6 +90,7 @@ export default function SettingsPage() {
   ];
 
   if (user?.role === 'SUPER_ADMIN') {
+    tabs.push({ id: 'api', label: 'API Keys', icon: Key });
     tabs.push({ id: 'audit', label: 'Audit Logs', icon: FileText });
   }
 
@@ -132,6 +134,7 @@ export default function SettingsPage() {
         {tab === 'notifications' && <NotificationsTab />}
         {tab === 'permissions' && <PermissionsTab />}
         {tab === 'audit' && <AuditLogsTab />}
+        {tab === 'api' && <ApiKeysTab />}
       </motion.div>
     </div>
   );

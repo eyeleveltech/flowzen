@@ -15,7 +15,7 @@ export const apiKeyAuth = async (req: Request, res: Response, next: NextFunction
     }
 
     if (!token) {
-      res.status(401).json({ error: 'Missing or invalid API key' });
+      res.status(401).json({ success: false, error: 'Missing or invalid API key', code: 401 });
       return;
     }
 
@@ -24,7 +24,7 @@ export const apiKeyAuth = async (req: Request, res: Response, next: NextFunction
     });
 
     if (!apiKey) {
-      res.status(401).json({ error: 'Invalid API key' });
+      res.status(401).json({ success: false, error: 'Invalid API key', code: 401 });
       return;
     }
 
@@ -45,6 +45,6 @@ export const apiKeyAuth = async (req: Request, res: Response, next: NextFunction
     next();
   } catch (error) {
     console.error('[API Key Auth Error]:', error);
-    res.status(500).json({ error: 'Internal server error during authentication' });
+    res.status(500).json({ success: false, error: 'Internal server error during authentication', code: 500 });
   }
 };

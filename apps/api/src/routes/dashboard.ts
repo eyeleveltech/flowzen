@@ -458,7 +458,13 @@ dashboardRouter.get('/pending-approvals', async (req: AuthRequest, res: Response
         status: 'REVIEW'
       },
       include: {
-        project: { select: { id: true, name: true } },
+        project: {
+          select: {
+            id: true,
+            name: true,
+            client: { select: { id: true, name: true } }
+          }
+        },
         assignee: { select: { id: true, name: true, avatar: true } }
       },
       orderBy: { updatedAt: 'desc' }

@@ -43,11 +43,18 @@ export function NotificationsTab() {
   });
   const [thresholds, setThresholds] = useState<Record<string, number>>({});
   const [crmEmail, setCrmEmail] = useState('');
+  const [overloadThreshold, setOverloadThreshold] = useState<number>(25);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     api.get<any>('/settings/notification-preferences').then(setPrefs).catch(() => {});
-    if (isAdmin) api.get<any>('/settings/notification-thresholds').then((d) => { setThresholds(d.thresholds || {}); setCrmEmail(d.crmNotificationEmail || ''); }).catch(() => {});
+    if (isAdmin) {
+      api.get<any>('/settings/notification-thresholds').then((d) => {
+        setThresholds(d.thresholds || {});
+        setCrmEmail(d.crmNotificationEmail || '');
+        setOverloadThreshold(d.overloadThreshold ?? 25);
+      }).catch(() => {});
+    }
   }, [isAdmin]);
 
   const save = async () => {
@@ -57,7 +64,11 @@ export function NotificationsTab() {
       if (isAdmin) {
         // Drop blank/invalid threshold fields so we never persist a 0-day threshold.
         const cleanThresholds = Object.fromEntries(Object.entries(thresholds).filter(([, v]) => Number.isFinite(v) && (v as number) >= 1));
-        await api.patch('/settings/notification-thresholds', { thresholds: cleanThresholds, crmNotificationEmail: crmEmail });
+        await api.patch('/settings/notification-thresholds', {
+          thresholds: cleanThresholds,
+          crmNotificationEmail: crmEmail,
+          overloadThreshold
+        });
       }
       toast.success('Notification settings saved');
     } catch (e: any) {
@@ -116,6 +127,20 @@ export function NotificationsTab() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="border-t border-gray-100 pt-6">
+          <h3 className="text-sm font-semibold text-primary mb-1">Task Overload Threshold <span className="font-normal text-secondary">(org-wide)</span></h3>
+          <p className="text-xs text-secondary mb-3">Maximum active (uncompleted) tasks a team member should hold before warning managers that they are overloaded.</p>
+          <input
+            type="number"
+            min={1}
+            value={overloadThreshold}
+            onChange={(e) => setOverloadThreshold(Number(e.target.value))}
+            className="w-full max-w-[150px] rounded-xl border border-border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:bg-white"
+          />
         </div>
       )}
 
