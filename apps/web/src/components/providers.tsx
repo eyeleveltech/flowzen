@@ -7,6 +7,7 @@ import { connectSSE, disconnectSSE } from '@/lib/sse';
 import { Toaster } from 'react-hot-toast';
 
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { TimeTrackingPrompt } from '@/components/ui/time-tracking-prompt';
 import { GlobalEvents } from '@/components/global-events';
 
 const queryClient = new QueryClient({
@@ -26,6 +27,7 @@ export function Providers({ children }: { children: ReactNode }) {
         {children}
         <GlobalEvents />
         <ConfirmDialog />
+        <TimeTrackingPrompt />
         <Toaster position="top-right" />
       </SocketProvider>
     </QueryClientProvider>

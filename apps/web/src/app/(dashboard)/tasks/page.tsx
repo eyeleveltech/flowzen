@@ -18,7 +18,7 @@ import { SwipeableCard } from '@/components/ui/swipeable-card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import toast from 'react-hot-toast';
-import { useAuthStore, useConfirmStore } from '@/stores';
+import { useAuthStore, useConfirmStore, useTimeTrackingStore } from '@/stores';
 import { useTasks, useProjects, useMembers, useTeams } from '@/hooks/useQueries';
 import { useQueryClient } from '@tanstack/react-query';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
@@ -30,7 +30,7 @@ interface Task {
   dueDate?: string | null; assignedDate?: string | null; completedAt?: string | null; createdAt: string; projectId: string;
   loggedHours?: number | null;
   type: string; driveLink?: string | null; reviewerId?: string | null;
-  project?: { id: string; name: string };
+  project?: { id: string; name: string; client?: { name: string } };
   assignee?: { id: string; name: string; avatar?: string | null } | null;
   assignees?: { id: string; name: string; avatar?: string | null }[];
   assignedBy?: { id: string; name: string; avatar?: string | null } | null;
@@ -47,6 +47,16 @@ const isTaskOverdue = (task: Task) => {
   const due = new Date(task.dueDate);
   due.setHours(23, 59, 59, 999);
   return due < new Date();
+};
+
+const getDaysLate = (task: Task) => {
+  if (!task.dueDate || task.status === 'COMPLETED') return 0;
+  const due = new Date(task.dueDate);
+  due.setHours(23, 59, 59, 999);
+  const now = new Date();
+  if (due >= now) return 0;
+  const diffTime = Math.abs(now.getTime() - due.getTime());
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
 const priorityDots: Record<string, string> = {
@@ -401,6 +411,16 @@ function TasksContent() {
       await api.put(`/tasks/${taskId}`, { status });
       toast.success('Task status updated');
       refetchTasks();
+      
+      if (status === 'COMPLETED') {
+        const taskObj = tasks.find(t => t.id === taskId);
+        const hours = await useTimeTrackingStore.getState().prompt({ taskId, taskTitle: taskObj?.title || 'Task' });
+        if (hours) {
+          await api.put(`/tasks/${taskId}`, { loggedHours: hours });
+          toast.success('Time logged');
+          refetchTasks();
+        }
+      }
     } catch (err: any) {
       toast.error(err.message || 'Failed to update status');
       refetchTasks(); // revert optimistic change on failure
@@ -445,6 +465,16 @@ function TasksContent() {
       await api.put(`/tasks/${draggableId}`, { status: newStatus });
       toast.success('Task moved successfully');
       refetchTasks();
+      
+      if (newStatus === 'COMPLETED') {
+        const taskObj = tasks.find(t => t.id === draggableId);
+        const hours = await useTimeTrackingStore.getState().prompt({ taskId: draggableId, taskTitle: taskObj?.title || 'Task' });
+        if (hours) {
+          await api.put(`/tasks/${draggableId}`, { loggedHours: hours });
+          toast.success('Time logged');
+          refetchTasks();
+        }
+      }
     } catch (err: any) {
       toast.error(err.message || 'Failed to move task');
       setBoardTasks(tasks);
@@ -555,7 +585,7 @@ function TasksContent() {
               value={assigneeFilter}
               onChange={setAssigneeFilter}
               placeholder="All Assignees"
-              options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
+              options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
             />
           </div>
         )}
@@ -650,7 +680,9 @@ function TasksContent() {
                                       <p className="text-sm font-medium text-primary leading-snug">{t.title}</p>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                      <span className="text-[11px] text-[#9CA3AF]">{t.project?.name}</span>
+                                      <span className="text-[11px] text-[#9CA3AF]">
+                                        {t.project?.client?.name ? `${t.project.client.name} • ` : ''}{t.project?.name}
+                                      </span>
                                       <div className="flex items-center gap-2">
                                         {(t._count?.comments ?? 0) > 0 && (
                                           <span className="flex items-center gap-0.5 text-[10px] text-[#9CA3AF]">
@@ -667,7 +699,9 @@ function TasksContent() {
                                     </div>
                                     {t.dueDate && (
                                       <div className="flex items-center gap-2 mt-2">
-                                        <p className={`text-[10px] ${isTaskOverdue(t) ? 'text-red-500 font-medium' : 'text-[#9CA3AF]'}`}>{formatShortDate(t.dueDate)}</p>
+                                        <p className={`text-[10px] ${isTaskOverdue(t) ? 'text-red-500 font-medium' : 'text-[#9CA3AF]'}`}>
+                                          {isTaskOverdue(t) ? `Overdue (${getDaysLate(t)} days late)` : formatShortDate(t.dueDate)}
+                                        </p>
                                       </div>
                                     )}
                                   </div>
@@ -695,6 +729,7 @@ function TasksContent() {
                     <thead>
                       <tr className="border-b border-[#F3F4F6]">
                         <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Task</th>
+                        <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>
                         <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
                           <ColumnDropdown 
                             title="Project" 
@@ -741,6 +776,7 @@ function TasksContent() {
                               <span className="text-sm font-medium text-primary">{t.title}</span>
                             </div>
                           </td>
+                          <td className="px-6 py-3.5 text-sm text-secondary">{t.project?.client?.name || '-'}</td>
                           <td className="px-6 py-3.5 text-sm text-secondary">{t.project?.name}</td>
                           <td className="px-6 py-3.5">
                             {taskAssignees(t).length ? (
@@ -761,7 +797,9 @@ function TasksContent() {
                           <td className="px-6 py-3.5 text-sm">
                             {t.dueDate ? (
                               <div className="flex items-center gap-2">
-                                <span className={isTaskOverdue(t) ? 'text-red-500 font-medium' : 'text-secondary'}>{formatShortDate(t.dueDate)}</span>
+                                <span className={isTaskOverdue(t) ? 'text-red-500 font-medium' : 'text-secondary'}>
+                                  {isTaskOverdue(t) ? `Overdue (${getDaysLate(t)} ${getDaysLate(t) === 1 ? 'day' : 'days'} late)` : formatShortDate(t.dueDate)}
+                                </span>
                               </div>
                             ) : (
                               <span className="text-[#9CA3AF]">-</span>
@@ -939,7 +977,7 @@ function TasksContent() {
                         ariaLabel="Reviewer"
                         value={field.value || ''}
                         onChange={field.onChange}
-                        options={[{ label: 'No Reviewer', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
+                        options={[{ label: 'No Reviewer', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))]}
                       />
                     )} />
                   </div>
@@ -950,7 +988,7 @@ function TasksContent() {
                         ariaLabel="Assigned By"
                         value={field.value || ''}
                         onChange={field.onChange}
-                        options={[{ label: 'Self (Default)', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
+                        options={[{ label: 'Self (Default)', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))]}
                       />
                     )} />
                   </div>
@@ -963,7 +1001,7 @@ function TasksContent() {
                         value={field.value || []}
                         onChange={field.onChange}
                         placeholder="Add assignees..."
-                        options={availableAssignees.map((m: any) => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name) }))}
+                        options={availableAssignees.map((m: any) => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
                       />
                     )} />
                   </div>
@@ -1205,7 +1243,7 @@ function TasksContent() {
                   ariaLabel="Reviewer"
                   value={field.value || ''}
                   onChange={field.onChange}
-                  options={[{ label: 'No Reviewer', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
+                  options={[{ label: 'No Reviewer', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))]}
                 />
               )} />
             </div>
@@ -1216,7 +1254,7 @@ function TasksContent() {
                   ariaLabel="Assigned By"
                   value={field.value || ''}
                   onChange={field.onChange}
-                  options={[{ label: 'Self (Default)', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
+                  options={[{ label: 'Self (Default)', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))]}
                 />
               )} />
             </div>
@@ -1228,7 +1266,7 @@ function TasksContent() {
                   value={field.value || []}
                   onChange={field.onChange}
                   placeholder="Add assignees..."
-                  options={availableAssignees.map((m: any) => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name) }))}
+                  options={availableAssignees.map((m: any) => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
                 />
               )} />
             </div>

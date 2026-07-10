@@ -7,7 +7,7 @@ import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { formatDate } from '@/lib/utils';
 import { TASK_STATUSES, TASK_STATUS_LABELS, TASK_STATUS_COLORS } from '@/lib/task-status';
-import { useConfirmStore } from '@/stores';
+import { useConfirmStore, useTimeTrackingStore } from '@/stores';
 
 const titleCase = (s?: string | null) =>
   s ? s.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '—';
@@ -100,6 +100,16 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
       await api.put(`/tasks/${taskId}`, { status });
       toast.success('Status updated');
       onChanged?.();
+      
+      if (status === 'COMPLETED') {
+        const hours = await useTimeTrackingStore.getState().prompt({ taskId, taskTitle: task?.title || 'Task' });
+        if (hours) {
+          await api.put(`/tasks/${taskId}`, { loggedHours: hours });
+          toast.success('Time logged');
+          fetchTask();
+          onChanged?.();
+        }
+      }
     } catch (err: any) {
       toast.error(err.message || 'Failed to update status');
       fetchTask();

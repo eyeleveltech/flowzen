@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { formatDate, formatShortDate, getInitials, formatRelativeDate, getAvatarColor, getClientDisplayName } from '@/lib/utils';
 import { TASK_STATUS_COLORS, TASK_STATUS_OPTIONS } from '@/lib/task-status';
-import { ArrowLeft, Clock, MessageSquare, MoreHorizontal, CheckCircle2, ChevronRight, Plus, X, Trash2, Users, DollarSign, Briefcase, Filter, ArrowUpRight } from 'lucide-react';
+import { ArrowLeft, Edit2, Plus, Calendar as CalendarIcon, Flag, Clock, Users, Link2, CheckCircle2, Circle, MoreVertical, Trash2, Mail, FileText, ChevronDown, Check, X, File, AlertCircle, TrendingUp, DollarSign, Briefcase, MessageSquare, MoreHorizontal, ChevronRight, Filter, ArrowUpRight } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { TaskDetailDrawer } from '@/components/tasks/task-detail-drawer';
 
@@ -15,7 +15,7 @@ import { MultiSelect } from '@/components/ui/multi-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { TagsInput } from '@/components/ui/tags-input';
 import toast from 'react-hot-toast';
-import { useAuthStore, useConfirmStore } from '@/stores';
+import { useAuthStore, useConfirmStore, useTimeTrackingStore } from '@/stores';
 
 interface ProjectDetail {
   id: string; name: string; description?: string | null; status: string; priority: string; progress: number;
@@ -149,6 +149,15 @@ export default function ProjectDetailPage() {
         });
       }
       toast.success(isEditingTask ? 'Task updated' : 'Task created');
+      
+      if (isEditingTask && taskForm.status === 'COMPLETED') {
+        const hours = await useTimeTrackingStore.getState().prompt({ taskId: editingTaskId, taskTitle: taskForm.title });
+        if (hours) {
+          await api.put(`/tasks/${editingTaskId}`, { loggedHours: hours });
+          toast.success('Time logged');
+        }
+      }
+      
       setShowCreateTask(false);
       setIsEditingTask(false);
       setEditingTaskId('');

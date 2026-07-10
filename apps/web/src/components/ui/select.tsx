@@ -13,6 +13,8 @@ export interface Option {
   value: string;
   sublabel?: string; // optional secondary line shown under the label (e.g. designation)
   avatar?: string;   // optional initials shown in a circular badge (e.g. for users)
+  capacity?: number;
+  isOverloaded?: boolean;
 }
 
 export interface SelectProps {
@@ -204,6 +206,12 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
                     <span className="block truncate">{option.label}</span>
                     {option.sublabel && <span className="block text-xs text-[#9CA3AF] truncate">{option.sublabel}</span>}
                   </span>
+                  {option.capacity !== undefined && (
+                    <span className="flex items-center gap-1.5 shrink-0 ml-2" title={`Capacity: ${option.capacity}%`}>
+                      <span className={`w-2 h-2 rounded-full ${option.isOverloaded || option.capacity > 80 ? 'bg-red-500' : option.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                      <span className="text-[11px] font-medium text-[#86868B]">{option.capacity}%</span>
+                    </span>
+                  )}
                 </span>
               </button>
             ))}
@@ -319,6 +327,12 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
                           <span className="block truncate">{option.label}</span>
                           {option.sublabel && <span className="block text-[11px] text-[#9CA3AF] truncate">{option.sublabel}</span>}
                         </span>
+                        {option.capacity !== undefined && (
+                          <span className="flex items-center gap-1.5 shrink-0 ml-2" title={`Capacity: ${option.capacity}%`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${option.isOverloaded || option.capacity > 80 ? 'bg-red-500' : option.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                            <span className="text-[10px] font-medium text-[#86868B]">{option.capacity}%</span>
+                          </span>
+                        )}
                       </span>
                     </button>
                   ))}

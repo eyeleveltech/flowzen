@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatRelativeDate, formatDate, formatShortDate, getInitials } from '@/lib/utils';
 import { TASK_STATUS_OPTIONS } from '@/lib/task-status';
-import { useAuthStore } from '@/stores';
+import { useAuthStore, useTimeTrackingStore } from '@/stores';
 import { useRouter } from 'next/navigation';
 import { useDashboardData } from '@/hooks/useQueries';
 import toast from 'react-hot-toast';
@@ -353,6 +353,16 @@ export default function DashboardPage() {
     try {
       await api.put(`/tasks/${taskId}`, { status });
       toast.success('Task status updated');
+      
+      if (status === 'COMPLETED') {
+        const taskObj = data?.myTasks?.find((t: any) => t.id === taskId);
+        const hours = await useTimeTrackingStore.getState().prompt({ taskId, taskTitle: taskObj?.title || 'Task' });
+        if (hours) {
+          await api.put(`/tasks/${taskId}`, { loggedHours: hours });
+          toast.success('Time logged');
+        }
+      }
+      
       fetchAll();
     } catch (err: any) {
       toast.error(err.message || 'Failed to update status');

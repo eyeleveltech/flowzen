@@ -559,9 +559,10 @@ function ExecutiveTab({ data, periodLabel }: { data: any; periodLabel: string })
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-8">
 
       {/* KPI ROW */}
-      <motion.div variants={item} className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <motion.div variants={item} className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-4">
         <MetricCard label="Active Revenue" value={formatCurrency(revenue.activeRevenue)} icon={IndianRupee} />
-        <MetricCard label="Pipeline Value" value={formatCurrency(revenue.pipelineValue)} icon={TrendingUp} />
+        <MetricCard label="Weighted Forecast" value={formatCurrency(revenue.weightedPipelineValue || 0)} icon={PieChart} />
+        <MetricCard label="Raw Pipeline" value={formatCurrency(revenue.pipelineValue)} icon={TrendingUp} />
         <MetricCard label="Win Rate" value={`${revenue.winRate}%`} icon={Trophy} />
         <MetricCard label="On-Time Delivery" value={`${delivery.onTimeRate}%`} icon={Target} danger={delivery.onTimeRate < 70} />
         <MetricCard label="Overdue Tasks" value={delivery.overdueTasks} icon={AlertTriangle} danger={delivery.overdueTasks > 0} />
@@ -575,7 +576,8 @@ function ExecutiveTab({ data, periodLabel }: { data: any; periodLabel: string })
           <div className="lg:col-span-1 space-y-3">
             <StatRow label="Won deals" value={formatCurrency(revenue.wonValue)} sub={`${revenue.wonCount} deals`} tone="green" />
             <StatRow label="Lost deals" value={formatCurrency(revenue.lostValue)} sub={`${revenue.lostCount} deals`} tone="red" />
-            <StatRow label="Open pipeline" value={formatCurrency(revenue.pipelineValue)} sub="active leads" />
+            <StatRow label="Weighted forecast" value={formatCurrency(revenue.weightedPipelineValue || 0)} sub="probability adjusted" tone="green" />
+            <StatRow label="Open pipeline" value={formatCurrency(revenue.pipelineValue)} sub="raw active leads" />
           </div>
           <div className="lg:col-span-2 rounded-2xl border border-border bg-white p-5">
             <h3 className="text-sm font-semibold text-primary mb-4">Reasons for Loss</h3>
