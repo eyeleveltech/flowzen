@@ -16,6 +16,10 @@ interface ColumnDropdownProps {
   currentSort?: string;
   onSortChange?: (val: string) => void;
   align?: 'left' | 'right';
+  // Filter
+  filterOptions?: { label: string; value: string }[];
+  selectedFilters?: string[];
+  onFilterChange?: (values: string[]) => void;
 }
 
 export function ColumnDropdown({
@@ -26,7 +30,10 @@ export function ColumnDropdown({
   sortDescLabel = 'Sort Highest to Lowest',
   currentSort,
   onSortChange,
-  align = 'left'
+  align = 'left',
+  filterOptions,
+  selectedFilters,
+  onFilterChange
 }: ColumnDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -73,7 +80,18 @@ export function ColumnDropdown({
     setIsOpen(false);
   };
 
+  const handleToggleFilter = (val: string) => {
+    if (!onFilterChange) return;
+    const current = selectedFilters || [];
+    if (current.includes(val)) {
+      onFilterChange(current.filter(item => item !== val));
+    } else {
+      onFilterChange([...current, val]);
+    }
+  };
+
   const isSorted = currentSort === sortAscValue || currentSort === sortDescValue;
+  const isFiltered = selectedFilters && selectedFilters.length > 0;
 
   return (
     <>
@@ -82,14 +100,14 @@ export function ColumnDropdown({
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
           "flex items-center gap-1.5 hover:text-primary transition-colors focus:outline-none rounded-md px-1 -ml-1",
-          isSorted ? "text-primary font-semibold" : ""
+          (isSorted || isFiltered) ? "text-primary font-semibold" : ""
         )}
       >
         {title}
         <ChevronDown className={cn(
           "h-3.5 w-3.5 transition-transform",
           isOpen ? "rotate-180" : "",
-          isSorted ? "text-primary" : "text-secondary opacity-50"
+          (isSorted || isFiltered) ? "text-primary" : "text-secondary opacity-50"
         )} />
       </button>
 
@@ -133,6 +151,23 @@ export function ColumnDropdown({
                     <ArrowUpZA className="h-4 w-4 text-secondary" /> {sortDescLabel}
                   </button>
                 )}
+              </div>
+            )}
+            
+            {/* Filtering Section */}
+            {filterOptions && filterOptions.length > 0 && (
+              <div className={cn("p-1 max-h-60 overflow-y-auto", (sortAscValue || sortDescValue) ? "border-t border-border" : "")}>
+                {filterOptions.map(opt => {
+                  const isChecked = selectedFilters?.includes(opt.value);
+                  return (
+                    <label key={opt.value} className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-surface cursor-pointer transition-colors group">
+                      <div className={cn("h-4 w-4 rounded-sm border flex items-center justify-center transition-colors", isChecked ? "bg-primary border-primary text-white" : "border-border bg-white group-hover:border-primary/50")}>
+                        {isChecked && <svg width="10" height="8" viewBox="0 0 10 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 4.5L3.5 7L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      </div>
+                      <span className={cn("text-sm transition-colors", isChecked ? "text-primary font-medium" : "text-[#374151]")}>{opt.label}</span>
+                    </label>
+                  );
+                })}
               </div>
             )}
           </motion.div>

@@ -10,6 +10,7 @@ import { TASK_STATUS_COLORS, TASK_STATUS_OPTIONS } from '@/lib/task-status';
 import { ArrowLeft, Clock, MessageSquare, MoreHorizontal, CheckCircle2, ChevronRight, Plus, X, Trash2, Users, DollarSign, Briefcase, Filter, ArrowUpRight } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { TaskDetailDrawer } from '@/components/tasks/task-detail-drawer';
+
 import { MultiSelect } from '@/components/ui/multi-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { TagsInput } from '@/components/ui/tags-input';
@@ -67,10 +68,12 @@ export default function ProjectDetailPage() {
   // Task filters within this project's Tasks tab
   const [taskSearch, setTaskSearch] = useState('');
   const [taskStatusFilter, setTaskStatusFilter] = useState<string[]>([]);
+
   const [taskAssigneeFilter, setTaskAssigneeFilter] = useState<string[]>([]);
   const [taskPriorityFilter, setTaskPriorityFilter] = useState<string[]>([]);
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
   const [showTaskFilters, setShowTaskFilters] = useState(false);
+
 
   // Edit Project States
   const [showEditProject, setShowEditProject] = useState(false);
@@ -439,14 +442,23 @@ export default function ProjectDetailPage() {
     if (taskSearch && !t.title.toLowerCase().includes(taskSearch.toLowerCase())) return false;
     if (taskStatusFilter.length && !taskStatusFilter.includes(t.status)) return false;
     if (taskPriorityFilter.length && !taskPriorityFilter.includes(t.priority)) return false;
+    
     if (taskAssigneeFilter.length) {
       const ids = t.assignees?.length ? t.assignees.map((a: any) => a.id) : (t.assignee ? [t.assignee.id] : []);
       if (!taskAssigneeFilter.some((id) => ids.includes(id))) return false;
     }
     return true;
   });
-  const hasTaskFilters = !!(taskSearch || taskStatusFilter.length || taskAssigneeFilter.length || taskPriorityFilter.length);
 
+  let finalTasks = [...filteredTasks];
+  finalTasks.sort((a, b) => {
+    const priorityOrder: Record<string, number> = { URGENT: 5, CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
+    const valA = priorityOrder[a.priority] || 0;
+    const valB = priorityOrder[b.priority] || 0;
+    return valB - valA;
+  });
+
+  const hasTaskFilters = !!(taskSearch || taskStatusFilter.length || taskAssigneeFilter.length || taskPriorityFilter.length);
   let projectHealth: 'GREEN' | 'AMBER' | 'RED' = 'GREEN';
   if (overdueTasksCount >= 3 || (project.endDate && new Date(project.endDate) < todayStart && project.status !== 'COMPLETED')) {
     projectHealth = 'RED';
@@ -704,19 +716,19 @@ export default function ProjectDetailPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-[#F3F4F6]">
-                  <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase">Task</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase">Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase">Assignee</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase">Due Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Task</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Type</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Assignee</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Due Date</th>
                   <th className="px-6 py-3"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F3F4F6]">
-                {filteredTasks.length === 0 ? (
+                {finalTasks.length === 0 ? (
                   <tr><td colSpan={6} className="px-6 py-8 text-center text-sm text-[#9CA3AF]">{hasTaskFilters ? 'No tasks match your filters' : 'No tasks yet'}</td></tr>
                 ) : (
-                  filteredTasks.map((t) => (
+                  finalTasks.map((t) => (
                     <tr key={t.id} className="hover:bg-surface transition-colors cursor-pointer" onClick={() => setDetailTaskId(t.id)}>
                       <td className="px-6 py-3">
                         <div className="flex items-center gap-2">
@@ -766,12 +778,12 @@ export default function ProjectDetailPage() {
 
           {/* Mobile Card View */}
           <div className="md:hidden flex flex-col gap-3">
-            {filteredTasks.length === 0 ? (
+            {finalTasks.length === 0 ? (
               <div className="p-8 text-center text-sm text-[#9CA3AF] bg-white rounded-xl border border-border">
                 {hasTaskFilters ? 'No tasks match your filters' : 'No tasks yet'}
               </div>
             ) : (
-              filteredTasks.map((t) => (
+              finalTasks.map((t) => (
                 <motion.div
                   key={t.id}
                   initial={{ opacity: 0, y: 10 }}
