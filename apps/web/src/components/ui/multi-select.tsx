@@ -9,6 +9,8 @@ interface Option {
   label: string;
   image?: string;
   colorClass?: string;
+  capacity?: number;
+  isOverloaded?: boolean;
 }
 
 interface MultiSelectProps {
@@ -224,7 +226,13 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
                       {isSelected && <Check className="h-3.5 w-3.5 text-white" />}
                     </div>
                     {opt.image && <div className={`w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-primary text-white'}`}>{opt.image}</div>}
-                    <span className="truncate">{opt.label}</span>
+                    <span className="truncate flex-1">{opt.label}</span>
+                    {opt.capacity !== undefined && (
+                      <span className="flex items-center gap-1.5 shrink-0 ml-2" title={`Capacity: ${opt.capacity}%`}>
+                        <span className={`w-2 h-2 rounded-full ${opt.isOverloaded || opt.capacity > 80 ? 'bg-red-500' : opt.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                        <span className="text-[11px] font-medium text-[#86868B]">{opt.capacity}%</span>
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -320,7 +328,13 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
                     {isSelected && <Check className="h-3 w-3 text-white" />}
                   </div>
                   {opt.image && <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-primary text-white'}`}>{opt.image}</div>}
-                  <span className="text-[#374151] truncate">{opt.label}</span>
+                  <span className="text-[#374151] truncate flex-1">{opt.label}</span>
+                  {opt.capacity !== undefined && (
+                    <span className="flex items-center gap-1.5 shrink-0 ml-2" title={`Capacity: ${opt.capacity}%`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${opt.isOverloaded || opt.capacity > 80 ? 'bg-red-500' : opt.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                      <span className="text-[10px] font-medium text-[#86868B]">{opt.capacity}%</span>
+                    </span>
+                  )}
                 </div>
               );
             })}

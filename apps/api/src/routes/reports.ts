@@ -342,11 +342,24 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
     ]);
 
     // ── Revenue & Sales ──
+    const STAGE_PROBABILITIES: Record<string, number> = {
+      NEW_LEAD: 0.1,
+      OUTREACH: 0.2,
+      MEETING: 0.3,
+      PROPOSAL: 0.4,
+      NEGOTIATION: 0.7,
+      CONTRACT: 0.9,
+      ACTIVE_RETAINER: 1.0,
+      ACTIVE_PROJECT: 1.0,
+      PROJECT_COMPLETED: 1.0,
+      CHURNED: 0.0,
+    };
+
     const activeRevenue = clients.filter(c => c.status === 'ACTIVE').reduce((s, c) => s + (c.contractValue || 0), 0);
     const WON_STAGES = ['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED'];
-    const pipelineValue = leads
-      .filter(l => l.stage !== 'CHURNED' && l.stage !== 'PROJECT_COMPLETED')
-      .reduce((s, l) => s + (l.dealValue || 0), 0);
+    const openPipelineLeads = leads.filter(l => l.stage !== 'CHURNED' && l.stage !== 'PROJECT_COMPLETED');
+    const pipelineValue = openPipelineLeads.reduce((s, l) => s + (l.dealValue || 0), 0);
+    const weightedPipelineValue = openPipelineLeads.reduce((s, l) => s + ((l.dealValue || 0) * (STAGE_PROBABILITIES[l.stage] || 0)), 0);
     const won = leads.filter(l => WON_STAGES.includes(l.stage) && inPeriod(l.updatedAt));
     const lost = leads.filter(l => l.stage === 'CHURNED' && inPeriod(l.updatedAt));
     const wonValue = won.reduce((s, l) => s + (l.dealValue || 0), 0);
@@ -436,7 +449,7 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
 
     res.json({
       period: hasPeriod ? { startDate: periodStart, endDate: periodEnd } : null,
-      revenue: { activeRevenue, pipelineValue, wonValue, lostValue, wonCount: won.length, lostCount: lost.length, winRate, lostReasons },
+      revenue: { activeRevenue, pipelineValue, weightedPipelineValue, wonValue, lostValue, wonCount: won.length, lostCount: lost.length, winRate, lostReasons },
       delivery: { onTimeRate, overdueTasks, projectHealth: { onTrack, atRisk: atRiskProjects, delayed, total: activeProjects.length }, velocity },
       team: { avgUtilization, totalLoggedHours, members: teamMembers },
       clients: {

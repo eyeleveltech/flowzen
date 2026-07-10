@@ -117,7 +117,7 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
       prisma.task.findMany({
         where: where as any,
         include: {
-          project: { select: { id: true, name: true, color: true } },
+          project: { select: { id: true, name: true, color: true, client: { select: { name: true } } } },
           assignee: { select: { id: true, name: true, avatar: true } },
           assignees: { select: { id: true, name: true, avatar: true } },
           assignedBy: { select: { id: true, name: true, avatar: true } },
@@ -319,7 +319,7 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
         order: await prisma.task.count({ where: { projectId, parentId: parentId || null } }),
       },
       include: {
-        project: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true, client: { select: { name: true } } } },
         assignee: { select: { id: true, name: true, avatar: true } },
         assignees: { select: { id: true, name: true, avatar: true } },
         assignedBy: { select: { id: true, name: true } },
@@ -405,7 +405,7 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
                : {}),
       },
       include: {
-        project: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true, client: { select: { name: true } } } },
         assignee: { select: { id: true, name: true, avatar: true } },
         assignees: { select: { id: true, name: true, avatar: true } },
         reviewer: { select: { id: true, name: true, avatar: true } },
