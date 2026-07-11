@@ -483,7 +483,10 @@ export default function DashboardPage() {
           <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow flex flex-col">
             <div className="p-5 border-b border-border flex justify-between items-center">
               <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><CheckSquare className="w-4 h-4 text-secondary"/> My Tasks</h2>
-              <span className="text-xs font-medium text-secondary bg-surface border border-border px-2 py-0.5 rounded-md">{myTasks.length} Open</span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-medium text-secondary bg-surface border border-border px-2 py-0.5 rounded-md">{myTasks.length} Open</span>
+                <button onClick={() => router.push('/tasks')} className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline transition-colors">View All</button>
+              </div>
             </div>
             <div className="flex-1 overflow-visible max-h-100 overflow-y-auto custom-scrollbar p-2">
               {myTasks.length === 0 ? (

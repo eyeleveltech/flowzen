@@ -789,10 +789,15 @@ function TasksContent() {
                           <td className="px-6 py-3.5">
                             <span className="text-xs font-medium text-[#374151] capitalize">{t.priority.toLowerCase()}</span>
                           </td>
-                          <td className="px-6 py-3.5">
-                            <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${TASK_STATUS_COLORS[t.status]}`}>
-                              {t.status.replace('_', ' ')}
-                            </span>
+                          <td className="px-6 py-3.5" onClick={(e) => e.stopPropagation()}>
+                            <div className="w-36">
+                              <Select
+                                value={t.status}
+                                onChange={(val) => updateTaskStatus(t.id, val)}
+                                options={TASK_STATUS_OPTIONS}
+                                buttonClassName={`py-1 px-2.5 text-xs font-medium border-transparent shadow-none ${TASK_STATUS_COLORS[t.status] || ''}`}
+                              />
+                            </div>
                           </td>
                           <td className="px-6 py-3.5 text-sm">
                             {t.dueDate ? (

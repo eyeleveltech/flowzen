@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { X, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -39,6 +40,8 @@ function Row({ label, value, highlight, danger }: { label: string; value?: strin
 }
 
 export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage = true, currentUserId }: TaskDetailDrawerProps) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const [task, setTask] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [comment, setComment] = useState('');
@@ -102,13 +105,14 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
       onChanged?.();
       
       if (status === 'COMPLETED') {
+        onClose();
         const hours = await useTimeTrackingStore.getState().prompt({ taskId, taskTitle: task?.title || 'Task' });
         if (hours) {
           await api.put(`/tasks/${taskId}`, { loggedHours: hours });
           toast.success('Time logged');
-          fetchTask();
           onChanged?.();
         }
+        return;
       }
     } catch (err: any) {
       toast.error(err.message || 'Failed to update status');
@@ -132,7 +136,9 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
     }
   }
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-100 bg-black/20 backdrop-blur-sm" onClick={onClose} />
       <motion.div
@@ -241,6 +247,7 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
           </div>
         )}
       </motion.div>
-    </>
+    </>,
+    document.body
   );
 }
