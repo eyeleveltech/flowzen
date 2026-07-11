@@ -51,7 +51,7 @@ clientRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     if (city) where.city = { contains: city as string, mode: 'insensitive' };
     if (accountManagerId) where.accountManagerId = whereIn(accountManagerId);
     if (engagementType) where.engagementType = whereIn(engagementType);
-    if (industry) where.industry = { contains: industry as string, mode: 'insensitive' };
+    if (industry) where.industry = whereIn(industry);
     if (search) {
       where.OR = [
         { name: { contains: search as string, mode: 'insensitive' } },

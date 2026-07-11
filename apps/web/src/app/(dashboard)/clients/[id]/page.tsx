@@ -252,30 +252,34 @@ export default function ClientDetailPage() {
               </div>
             ) : (
               <>
-                {client.engagementType && <InfoRow icon={Briefcase} label="Engagement Type" value={client.engagementType} />}
-                {client.website && <InfoRow icon={Globe} label="Website" value={client.website} />}
-                {client.city && <InfoRow icon={MapPin} label="City" value={client.city} />}
-                {client.address && <InfoRow icon={MapPin} label="Address" value={client.address} />}
-                {client.industry && <InfoRow icon={Building2} label="Industry" value={client.industry} />}
-                {client.accountManager && <InfoRow icon={Users} label="Account Manager" value={client.accountManager.name} />}
-                {client.assetLinks && <InfoRow icon={Globe} label="Asset Links" value={client.assetLinks} />}
-                {client.startDate && <InfoRow icon={DollarSign} label="Start Date" value={formatDate(client.startDate)} />}
+                <InfoRow icon={Briefcase} label="Engagement Type" value={client.engagementType || '—'} />
+                <InfoRow icon={Globe} label="Website" value={client.website || '—'} />
+                <InfoRow icon={MapPin} label="City" value={client.city || '—'} />
+                <InfoRow icon={MapPin} label="Address" value={client.address || '—'} />
+                <InfoRow icon={Building2} label="Industry" value={client.industry || '—'} />
+                <InfoRow icon={Users} label="Account Manager" value={client.accountManager?.name || '—'} />
+                <InfoRow icon={Globe} label="Asset Links" value={client.assetLinks || '—'} />
+                <InfoRow icon={DollarSign} label="Start Date" value={client.startDate ? formatDate(client.startDate) : '—'} />
                 
-                {client.scope && (
-                  <div className="mt-4 pt-4 border-t border-[#F3F4F6]">
-                    <span className="block text-xs font-semibold text-secondary uppercase tracking-wider mb-3">Scope</span>
-                    <div 
-                      className="text-sm text-[#374151] line-clamp-2 prose prose-sm max-w-none"
-                      dangerouslySetInnerHTML={{ __html: client.scope }}
-                    />
-                    <button 
-                      onClick={() => setViewModalContent({ title: 'Scope', content: client.scope || '' })}
-                      className="mt-3 text-xs font-medium text-[#2563EB] hover:text-[#1D4ED8]"
-                    >
-                      View full scope
-                    </button>
-                  </div>
-                )}
+                <div className="mt-4 pt-4 border-t border-[#F3F4F6]">
+                  <span className="block text-xs font-semibold text-secondary uppercase tracking-wider mb-3">Scope</span>
+                  {client.scope ? (
+                    <>
+                      <div 
+                        className="text-sm text-[#374151] line-clamp-2 prose prose-sm max-w-none"
+                        dangerouslySetInnerHTML={{ __html: client.scope }}
+                      />
+                      <button 
+                        onClick={() => setViewModalContent({ title: 'Scope', content: client.scope || '' })}
+                        className="mt-3 text-xs font-medium text-[#2563EB] hover:text-[#1D4ED8]"
+                      >
+                        View full scope
+                      </button>
+                    </>
+                  ) : (
+                    <p className="text-sm text-[#9CA3AF]">No scope defined.</p>
+                  )}
+                </div>
               </>
             )}
 

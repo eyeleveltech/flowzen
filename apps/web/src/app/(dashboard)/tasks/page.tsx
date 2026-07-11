@@ -764,7 +764,17 @@ function TasksContent() {
                             onSortChange={setSort}
                           />
                         </th>
-                        <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Due Date</th>
+                        <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
+                          <ColumnDropdown 
+                            title="Due Date" 
+                            sortAscValue="dueDate_asc" 
+                            sortDescValue="dueDate_desc" 
+                            sortAscLabel="Earliest First"
+                            sortDescLabel="Latest First"
+                            currentSort={sort} 
+                            onSortChange={setSort}
+                          />
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#F3F4F6]">

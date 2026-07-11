@@ -9,8 +9,9 @@ import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatDate, formatCurrency, getInitials, getAvatarColor, getClientDisplayName } from '@/lib/utils';
 import {
-  Plus, Search, Filter, Users, Building2, Mail, Phone, X, ChevronRight, FolderKanban, Download, Upload, FileText
+  Plus, Search, Filter, Users, Building2, Mail, Phone, X, ChevronRight, FolderKanban, Download, Upload, FileText, List, LayoutGrid, Columns, Check
 } from 'lucide-react';
+import { ClientTimelineView } from '@/components/clients/client-timeline-view';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
@@ -73,13 +74,23 @@ function ClientsContent() {
   const urlStatus = searchParams.get('status');
   const [statusFilter, setStatusFilter] = useState<string[]>(urlStatus ? [urlStatus] : []);
 
+  const [currentView, setCurrentView] = useState<'table' | 'timeline'>('table');
+  const ALL_COLUMNS = [
+    { id: 'client', label: 'Client' },
+    { id: 'industry', label: 'Industry' },
+    { id: 'contact', label: 'Contact' },
+    { id: 'projects', label: 'Projects' },
+    { id: 'status', label: 'Status' }
+  ];
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(ALL_COLUMNS.map(c => c.id));
+  const [showColumnDropdown, setShowColumnDropdown] = useState(false);
+
   useEffect(() => {
     if (urlStatus) setStatusFilter([urlStatus]);
   }, [urlStatus]);
-  const [cityFilter, setCityFilter] = useState('');
   const [accountManagerFilter, setAccountManagerFilter] = useState<string[]>([]);
   const [engagementTypeFilter, setEngagementTypeFilter] = useState<string[]>([]);
-  const [industryFilter, setIndustryFilter] = useState('');
+  const [industryFilter, setIndustryFilter] = useState<string[]>([]);
   const [filtersHydrated, setFiltersHydrated] = useState(false);
 
   // Restore the filters saved last time (so they survive opening a client and
@@ -91,10 +102,11 @@ function ClientsContent() {
         const f = JSON.parse(raw);
         if (f.search) setSearch(f.search);
         if (!urlStatus && f.statusFilter?.length) setStatusFilter(f.statusFilter);
-        if (f.cityFilter) setCityFilter(f.cityFilter);
         if (f.accountManagerFilter?.length) setAccountManagerFilter(f.accountManagerFilter);
         if (f.engagementTypeFilter?.length) setEngagementTypeFilter(f.engagementTypeFilter);
-        if (f.industryFilter) setIndustryFilter(f.industryFilter);
+        if (f.industryFilter?.length) setIndustryFilter(f.industryFilter);
+        if (f.currentView && f.currentView !== 'gantt') setCurrentView(f.currentView);
+        if (f.visibleColumns) setVisibleColumns(f.visibleColumns);
       }
     } catch { /* ignore */ }
     setFiltersHydrated(true);
@@ -105,9 +117,9 @@ function ClientsContent() {
   useEffect(() => {
     if (!filtersHydrated) return;
     try {
-      sessionStorage.setItem('flowzen:clients:filters', JSON.stringify({ search, statusFilter, cityFilter, accountManagerFilter, engagementTypeFilter, industryFilter }));
+      sessionStorage.setItem('flowzen:clients:filters', JSON.stringify({ search, statusFilter, accountManagerFilter, engagementTypeFilter, industryFilter, currentView, visibleColumns }));
     } catch { /* ignore */ }
-  }, [filtersHydrated, search, statusFilter, cityFilter, accountManagerFilter, engagementTypeFilter, industryFilter]);
+  }, [filtersHydrated, search, statusFilter, accountManagerFilter, engagementTypeFilter, industryFilter, currentView, visibleColumns]);
 
   const [showCreate, setShowCreate] = useState(searchParams.get('create') === 'true');
   const [loading, setLoading] = useState(true);
@@ -152,23 +164,22 @@ function ClientsContent() {
         sse.off('client:deleted');
       };
     }
-  }, [filtersHydrated, search, statusFilter, cityFilter, accountManagerFilter, engagementTypeFilter, industryFilter, page]);
+  }, [filtersHydrated, search, statusFilter, accountManagerFilter, engagementTypeFilter, industryFilter, page]);
 
   // Any filter change resets back to the first page.
   useEffect(() => {
     setPage(1);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, statusFilter, cityFilter, accountManagerFilter, engagementTypeFilter, industryFilter]);
+  }, [search, statusFilter, accountManagerFilter, engagementTypeFilter, industryFilter]);
 
   async function fetchClients() {
     try {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
       if (statusFilter.length) params.set('status', statusFilter.join(','));
-      if (cityFilter) params.set('city', cityFilter);
       if (accountManagerFilter.length) params.set('accountManagerId', accountManagerFilter.join(','));
       if (engagementTypeFilter.length) params.set('engagementType', engagementTypeFilter.join(','));
-      if (industryFilter) params.set('industry', industryFilter);
+      if (industryFilter.length) params.set('industry', industryFilter.join(','));
       // Fetch a growing window (page 1 .. current page) so "Load more" stays consistent with SSE refetches.
       params.set('limit', String(page * PAGE_SIZE));
       const data = await api.get<{ clients: Client[]; total: number }>(`/clients?${params}`);
@@ -357,13 +368,12 @@ function ClientsContent() {
           <p className="text-sm text-secondary mt-1">{total} total clients</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-          {(!!search || statusFilter.length > 0 || !!cityFilter || !!industryFilter || engagementTypeFilter.length > 0 || accountManagerFilter.length > 0) && (
+          {(!!search || statusFilter.length > 0 || industryFilter.length > 0 || engagementTypeFilter.length > 0 || accountManagerFilter.length > 0) && (
             <button
               onClick={() => {
                 setSearch('');
                 setStatusFilter([]);
-                setCityFilter('');
-                setIndustryFilter('');
+                setIndustryFilter([]);
                 setEngagementTypeFilter([]);
                 setAccountManagerFilter([]);
                 router.replace('/clients', { scroll: false });
@@ -408,7 +418,8 @@ function ClientsContent() {
           <MultiSelect
             value={statusFilter}
             onChange={setStatusFilter}
-            placeholder="All Status"
+            placeholder="Status"
+            showSelectAll={true}
             options={[
               { label: 'Prospect', value: 'PROSPECT' },
               { label: 'Active', value: 'ACTIVE' },
@@ -422,7 +433,8 @@ function ClientsContent() {
           <MultiSelect
             value={engagementTypeFilter}
             onChange={setEngagementTypeFilter}
-            placeholder="All Engagements"
+            placeholder="Engagements"
+            showSelectAll={true}
             options={[
               { label: 'Retainer', value: 'Retainer' },
               { label: 'Project', value: 'Project' },
@@ -435,41 +447,90 @@ function ClientsContent() {
           <MultiSelect
             value={accountManagerFilter}
             onChange={setAccountManagerFilter}
-            placeholder="All Account Managers"
+            placeholder="Account Managers"
+            showSelectAll={true}
             options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
           />
         </div>
-        <div className="w-full sm:w-auto relative">
-          <input
-            value={cityFilter}
-            onChange={(e) => setCityFilter(e.target.value)}
-            placeholder="Filter by city..."
-            className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
-          />
-        </div>
         <div className="w-full sm:w-auto sm:min-w-[170px]">
-          <Select
+          <MultiSelect
             value={industryFilter}
             onChange={setIndustryFilter}
-            options={[
-              { label: 'All Industries', value: '' },
-              ...INDUSTRY_OPTIONS.map((i) => ({ label: i, value: i })),
-            ]}
+            placeholder="Industries"
+            showSelectAll={true}
+            options={INDUSTRY_OPTIONS.map((i) => ({ label: i, value: i }))}
           />
         </div>
       </div>
 
+      {/* View Tabs */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center bg-[#F3F4F6] p-1 rounded-lg">
+          <button onClick={() => setCurrentView('table')} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${currentView === 'table' ? 'bg-white shadow-sm text-primary' : 'text-secondary hover:text-primary'}`}>
+            <List className="w-4 h-4" /> Table
+          </button>
+          <button onClick={() => setCurrentView('timeline')} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${currentView === 'timeline' ? 'bg-white shadow-sm text-primary' : 'text-secondary hover:text-primary'}`}>
+            <LayoutGrid className="w-4 h-4" /> Timeline
+          </button>
+        </div>
+        
+        {currentView === 'table' && (
+          <div className="relative">
+            <button 
+              onClick={() => setShowColumnDropdown(!showColumnDropdown)}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-secondary hover:text-primary bg-white border border-border rounded-lg shadow-sm transition-colors hover:bg-[#F9FAFB]"
+            >
+              <Columns className="w-4 h-4" /> View Options
+            </button>
+            <AnimatePresence>
+              {showColumnDropdown && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowColumnDropdown(false)} />
+                  <motion.div 
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 5 }}
+                    className="absolute right-0 top-full mt-2 w-48 bg-white border border-border rounded-xl shadow-lg z-50 overflow-hidden py-1"
+                  >
+                    <div className="px-3 py-2 border-b border-[#F3F4F6] text-[10px] font-semibold text-secondary uppercase tracking-wider">
+                      Visible Columns
+                    </div>
+                    {ALL_COLUMNS.map(col => (
+                      <button
+                        key={col.id}
+                        onClick={() => {
+                          setVisibleColumns(prev => 
+                            prev.includes(col.id) 
+                              ? prev.filter(c => c !== col.id)
+                              : [...prev, col.id]
+                          )
+                        }}
+                        className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#F9FAFB] transition-colors"
+                      >
+                        <span className="text-[#374151]">{col.label}</span>
+                        {visibleColumns.includes(col.id) && <Check className="w-4 h-4 text-primary" />}
+                      </button>
+                    ))}
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+      </div>
+
       {/* Desktop Table View */}
+      {currentView === 'table' && (
       <div className="hidden md:block rounded-2xl border border-border bg-white overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[800px]">
             <thead>
             <tr className="border-b border-[#F3F4F6]">
-              <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>
-              <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Industry</th>
-              <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Contact</th>
-              <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Projects</th>
-              <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Status</th>
+              {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>}
+              {visibleColumns.includes('industry') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Industry</th>}
+              {visibleColumns.includes('contact') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Contact</th>}
+              {visibleColumns.includes('projects') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Projects</th>}
+              {visibleColumns.includes('status') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Status</th>}
               <th className="px-6 py-3.5"></th>
             </tr>
           </thead>
@@ -497,50 +558,60 @@ function ClientsContent() {
                   className="hover:bg-surface cursor-pointer transition-colors"
                   onClick={() => router.push(`/clients/${client.id}`)}
                 >
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`h-8 w-8 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(getClientDisplayName(client))}`}>
-                        {getInitials(getClientDisplayName(client))}
+                  {visibleColumns.includes('client') && (
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`h-8 w-8 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(getClientDisplayName(client))}`}>
+                          {getInitials(getClientDisplayName(client))}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-primary">
+                            {getClientDisplayName(client)}
+                          </p>
+                          {client.name !== 'Internal' && client.company && client.name !== client.company && <p className="text-xs text-[#9CA3AF]">{client.name}</p>}
+                          {client.name === 'Internal' && <p className="text-xs font-medium text-[#9CA3AF]">(Internal)</p>}
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-primary">
-                          {getClientDisplayName(client)}
-                        </p>
-                        {client.name !== 'Internal' && client.company && client.name !== client.company && <p className="text-xs text-[#9CA3AF]">{client.name}</p>}
-                        {client.name === 'Internal' && <p className="text-xs font-medium text-[#9CA3AF]">(Internal)</p>}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-secondary">
-                    {client.name === 'Internal' && orgProfile?.industry ? orgProfile.industry : client.industry || '—'}
-                  </td>
-                  <td className="px-6 py-4">
-                    {client.name === 'Internal' ? (
-                      <div>
-                        <p className="text-sm text-[#374151] font-medium">Internal Contact</p>
-                        {orgProfile?.phone && <p className="text-[11px] text-secondary">{orgProfile.phone}</p>}
-                      </div>
-                    ) : client.contacts && client.contacts.length > 0 ? (
-                      <div>
-                        <p className="text-sm text-[#374151] font-medium">{client.contacts[0].name}</p>
-                        {client.contacts[0].designation && <p className="text-[11px] text-secondary">{client.contacts[0].designation}</p>}
-                        {client.contacts.length > 1 && (
-                          <span className="text-[10px] font-medium bg-[#F3F4F6] text-[#4B5563] px-1.5 py-0.5 rounded mt-1 inline-block">
-                            +{client.contacts.length - 1} more
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-sm text-[#9CA3AF]">—</span>
-                    )}
-                  </td>
+                    </td>
+                  )}
+                  {visibleColumns.includes('industry') && (
+                    <td className="px-6 py-4 text-sm text-secondary">
+                      {client.name === 'Internal' && orgProfile?.industry ? orgProfile.industry : client.industry || '—'}
+                    </td>
+                  )}
+                  {visibleColumns.includes('contact') && (
+                    <td className="px-6 py-4">
+                      {client.name === 'Internal' ? (
+                        <div>
+                          <p className="text-sm text-[#374151] font-medium">Internal Contact</p>
+                          {orgProfile?.phone && <p className="text-[11px] text-secondary">{orgProfile.phone}</p>}
+                        </div>
+                      ) : client.contacts && client.contacts.length > 0 ? (
+                        <div>
+                          <p className="text-sm text-[#374151] font-medium">{client.contacts[0].name}</p>
+                          {client.contacts[0].designation && <p className="text-[11px] text-secondary">{client.contacts[0].designation}</p>}
+                          {client.contacts.length > 1 && (
+                            <span className="text-[10px] font-medium bg-[#F3F4F6] text-[#4B5563] px-1.5 py-0.5 rounded mt-1 inline-block">
+                              +{client.contacts.length - 1} more
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-[#9CA3AF]">—</span>
+                      )}
+                    </td>
+                  )}
 
-                  <td className="px-6 py-4 text-sm text-secondary tabular-nums">{client._count?.projects ?? 0}</td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[client.status] || 'bg-gray-50 text-gray-500'}`}>
-                      {client.status.replace('_', ' ')}
-                    </span>
-                  </td>
+                  {visibleColumns.includes('projects') && (
+                    <td className="px-6 py-4 text-sm text-secondary tabular-nums">{client._count?.projects ?? 0}</td>
+                  )}
+                  {visibleColumns.includes('status') && (
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[client.status] || 'bg-gray-50 text-gray-500'}`}>
+                        {client.status.replace('_', ' ')}
+                      </span>
+                    </td>
+                  )}
                   <td className="px-6 py-4">
                     <ChevronRight className="h-4 w-4 text-[#D1D5DB]" />
                   </td>
@@ -551,6 +622,9 @@ function ClientsContent() {
         </table>
         </div>
       </div>
+      )}
+
+      {currentView === 'timeline' && <ClientTimelineView clients={clients} loading={loading} />}
 
       {/* Mobile Card View */}
       <div className="md:hidden flex flex-col gap-3 pb-4">
