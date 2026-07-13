@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatDate, formatShortDate, getInitials, getAvatarColor, getClientDisplayName } from '@/lib/utils';
-import { Plus, LayoutList, GanttChartSquare, Calendar, ChevronRight, BarChart3, Clock, LayoutGrid, Search, X } from 'lucide-react';
+import { Plus, LayoutList, GanttChartSquare, Calendar, ChevronRight, BarChart3, Clock, LayoutGrid, Search, X, Check, Settings, Kanban } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '@/stores';
 import { useProjectFilters } from '@/stores/projectFilters';
@@ -21,6 +21,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useProjects, useClients, useMembers, useTeams, useTemplates } from '@/hooks/useQueries';
 import { projectSchema, type ProjectFormValues } from '@/lib/validations';
 import { CalendarView } from '@/components/projects/calendar-view';
+import { ProjectGanttView } from '@/components/projects/project-gantt-view';
+import { ViewSettingsPanel } from '@/components/ui/view-settings-panel';
+import { ProjectBoardView } from './components/ProjectBoardView';
 
 interface Project {
   id: string; name: string; description?: string | null; status: string; priority: string; progress: number;
@@ -36,7 +39,7 @@ interface Client { id: string; name: string; }
 interface Member { id: string; name: string; }
 interface Team { id: string; name: string; }
 
-type ViewMode = 'list' | 'timeline' | 'calendar';
+type ViewMode = 'list' | 'board' | 'timeline' | 'calendar' | 'gantt';
 
 const statusColors: Record<string, string> = {
   PLANNING: 'bg-violet-50 text-violet-700', IN_PROGRESS: 'bg-blue-50 text-blue-700',
@@ -58,7 +61,38 @@ function ProjectsContent() {
   const urlStatus = searchParams.get('status');
   // Filters live in an in-memory store so they persist while navigating into a
   // project and back, but reset on a full page refresh.
-  const { search, setSearch, statusFilter, setStatusFilter, clientFilter, setClientFilter, ownerFilter, setOwnerFilter } = useProjectFilters();
+  const { search, setSearch, statusFilter, setStatusFilter, clientFilter, setClientFilter, ownerFilter, setOwnerFilter, dueDateFilter, setDueDateFilter } = useProjectFilters();
+
+  const ALL_PROJECT_COLUMNS = [
+    { id: 'project', label: 'Project' },
+    { id: 'client', label: 'Client' },
+    { id: 'progress', label: 'Progress' },
+    { id: 'status', label: 'Status' },
+    { id: 'owner', label: 'Owner' },
+    { id: 'dueDate', label: 'Due Date' },
+  ];
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(ALL_PROJECT_COLUMNS.map(c => c.id));
+  const [showColumnDropdown, setShowColumnDropdown] = useState(false);
+  const [showViewSettings, setShowViewSettings] = useState(false);
+  const [viewName, setViewName] = useState('All Projects');
+
+  const LOCAL_STORAGE_KEY = 'flowzen_view_projects';
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.name) setViewName(parsed.name);
+          if (parsed.visibleColumns) setVisibleColumns(parsed.visibleColumns);
+          if (parsed.viewType) setView(parsed.viewType);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (urlStatus) setStatusFilter([urlStatus]);
@@ -76,7 +110,7 @@ function ProjectsContent() {
     defaultValues: {
       name: '', description: '', clientId: '', ownerId: '',
       type: 'ONE_TIME', scope: '', reportingCadence: 'NONE', clientApprovalRequired: false, tags: [], projectNotes: '', folderLink: '',
-      startDate: '', endDate: '', priority: 'MEDIUM', budget: '', status: 'PLANNING', platform: undefined, memberIds: [], teamIds: [],
+      startDate: '', endDate: '', priority: 'MEDIUM', status: 'PLANNING', platform: undefined, memberIds: [], teamIds: [],
     }
   });
   const formValues = watch();
@@ -94,11 +128,10 @@ function ProjectsContent() {
       prefillApplied.current = true;
       if (pName) setValue('name', pName);
       if (pClientId) setValue('clientId', pClientId);
-      if (pBudget) setValue('budget', pBudget);
+
       if (pOwnerId) setValue('ownerId', pOwnerId);
-      // Strip the prefill params from the URL (keep create=true so the modal stays open)
       const params = new URLSearchParams(searchParams.toString());
-      ['prefillName', 'prefillClientId', 'prefillBudget', 'prefillOwnerId'].forEach((k) => params.delete(k));
+      ['prefillName', 'prefillClientId', 'prefillOwnerId'].forEach((k) => params.delete(k));
       router.replace(`?${params.toString()}`, { scroll: false });
     }
   }, [searchParams, setValue, router]);
@@ -110,7 +143,7 @@ function ProjectsContent() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage
-  } = useProjects(search, view === 'calendar', statusFilter.join(','), clientFilter.join(','), ownerFilter.join(','));
+  } = useProjects(search, view === 'calendar', statusFilter.join(','), clientFilter.join(','), ownerFilter.join(','), dueDateFilter);
 
   const projects = data?.pages.flatMap((page) => page.projects) || [];
   const { data: clients = [] } = useClients();
@@ -151,7 +184,7 @@ function ProjectsContent() {
     try {
       const payload = {
         ...data,
-        budget: data.budget ? parseFloat(data.budget as any) : undefined,
+
         startDate: data.startDate || undefined,
         endDate: data.endDate || undefined,
       };
@@ -174,25 +207,33 @@ function ProjectsContent() {
 
   const viewButtons = [
     { mode: 'list' as ViewMode, icon: LayoutList, label: 'List' },
-    { mode: 'timeline' as ViewMode, icon: GanttChartSquare, label: 'Timeline' },
+    { mode: 'board' as ViewMode, icon: Kanban, label: 'Board' },
+    { mode: 'timeline' as ViewMode, icon: BarChart3, label: 'Timeline' },
     { mode: 'calendar' as ViewMode, icon: Calendar, label: 'Calendar' },
+    { mode: 'gantt' as ViewMode, icon: GanttChartSquare, label: 'Gantt' },
   ];
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-primary tracking-tight">Projects</h1>
+          <h1 className="text-2xl font-semibold text-primary tracking-tight flex items-center gap-2">
+            Projects
+            <span className="text-xs font-normal text-secondary bg-[#F3F4F6] px-2 py-0.5 rounded-lg border border-border">
+              {viewName}
+            </span>
+          </h1>
           <p className="text-sm text-secondary mt-1">{projects.length} projects</p>
         </div>
         <div className="flex items-center gap-3">
-          {(!!search || statusFilter.length > 0 || clientFilter.length > 0 || ownerFilter.length > 0) && (
+          {(!!search || statusFilter.length > 0 || clientFilter.length > 0 || ownerFilter.length > 0 || !!dueDateFilter) && (
             <button
               onClick={() => {
                 setSearch('');
                 setStatusFilter([]);
                 setClientFilter([]);
                 setOwnerFilter([]);
+                setDueDateFilter('');
                 router.replace('/projects', { scroll: false });
               }}
               className="flex items-center gap-1.5 rounded-xl bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors border border-red-100"
@@ -222,7 +263,7 @@ function ProjectsContent() {
               <MultiSelect
                 value={statusFilter}
                 onChange={setStatusFilter}
-                placeholder="All Statuses"
+                placeholder="Status"
                 showSelectAll
                 options={[
                   { label: 'Active', value: 'ACTIVE' },
@@ -240,7 +281,7 @@ function ProjectsContent() {
               <MultiSelect
                 value={clientFilter}
                 onChange={setClientFilter}
-                placeholder="All Clients"
+                placeholder="Clients"
                 showSelectAll
                 options={clients.filter(c => c._count?.projects > 0).map(c => ({ label: getClientDisplayName(c), value: c.id }))}
               />
@@ -250,25 +291,43 @@ function ProjectsContent() {
                 <MultiSelect
                   value={ownerFilter}
                   onChange={setOwnerFilter}
-                  placeholder="All Owners"
+                  placeholder="Project Managers"
                   showSelectAll
                   options={members.filter(m => m.totalProjects > 0).map(m => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
                 />
               </div>
             )}
+            <div className="w-36">
+              <input
+                type="date"
+                value={dueDateFilter}
+                onChange={(e) => setDueDateFilter(e.target.value)}
+                className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-[#374151] outline-none focus:border-primary transition-all"
+                title="Due Date Filter"
+              />
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center shrink-0 rounded-xl border border-border p-1 bg-white">
-          {viewButtons.map((v) => (
-            <button
-              key={v.mode}
-              onClick={() => setView(v.mode)}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${view === v.mode ? 'bg-primary text-white' : 'text-secondary hover:text-primary'}`}
-            >
-              <v.icon className="h-3.5 w-3.5" /> {v.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center rounded-xl border border-border p-1 bg-white">
+            {viewButtons.map((v) => (
+              <button
+                key={v.mode}
+                onClick={() => setView(v.mode)}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${view === v.mode ? 'bg-primary text-white' : 'text-secondary hover:text-primary'}`}
+              >
+                <v.icon className="h-3.5 w-3.5" /> {v.label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setShowViewSettings(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-secondary hover:text-primary bg-white border border-border rounded-lg shadow-sm transition-colors hover:bg-gray-50 h-[38px]"
+            title="Configure View Settings"
+          >
+            <Settings className="w-3.5 h-3.5" /> View Settings
+          </button>
         </div>
       </div>
 
@@ -295,48 +354,97 @@ function ProjectsContent() {
                 <table className="w-full min-w-[800px]">
                   <thead>
                     <tr className="border-b border-[#F3F4F6]">
-                      <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Project</th>
-                      <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>
-                      <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Progress</th>
-                      <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Status</th>
-                      <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Owner</th>
-                      <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Due Date</th>
-                      <th className="px-6 py-3.5"></th>
+                      {visibleColumns.includes('project') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Project</th>}
+                      {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>}
+                      {visibleColumns.includes('progress') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Progress</th>}
+                      {visibleColumns.includes('status') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Status</th>}
+                      {visibleColumns.includes('owner') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Owner</th>}
+                      {visibleColumns.includes('dueDate') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Due Date</th>}
+                      <th className="px-6 py-3.5 w-10 text-center relative select-none">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setShowColumnDropdown(!showColumnDropdown); }}
+                          className="inline-flex items-center justify-center h-6 w-6 rounded-md text-[#9CA3AF] hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
+                          title="Toggle visible columns"
+                        >
+                          +
+                        </button>
+                        <AnimatePresence>
+                          {showColumnDropdown && (
+                            <>
+                              <div className="fixed inset-0 z-40" onClick={() => setShowColumnDropdown(false)} />
+                              <motion.div 
+                                initial={{ opacity: 0, y: 5 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: 5 }}
+                                className="absolute right-0 top-full mt-2 w-48 bg-white border border-border rounded-xl shadow-lg z-50 overflow-hidden py-1"
+                              >
+                                <div className="px-3 py-2 border-b border-[#F3F4F6] text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
+                                  Visible Columns
+                                </div>
+                                {ALL_PROJECT_COLUMNS.map(col => (
+                                  <button
+                                    key={col.id}
+                                    onClick={() => {
+                                      setVisibleColumns(prev => 
+                                        prev.includes(col.id) 
+                                          ? prev.filter(c => c !== col.id)
+                                          : [...prev, col.id]
+                                      )
+                                    }}
+                                    className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#F9FAFB] transition-colors"
+                                  >
+                                    <span className="text-[#374151]">{col.label}</span>
+                                    {visibleColumns.includes(col.id) && <Check className="w-4 h-4 text-primary" />}
+                                  </button>
+                                ))}
+                              </motion.div>
+                            </>
+                          )}
+                        </AnimatePresence>
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#F3F4F6]">
                     {projects.map((p) => (
                       <motion.tr key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="hover:bg-surface cursor-pointer transition-colors" onClick={() => router.push(`/projects/${p.id}`)}>
-                        <td className="px-6 py-4">
-                          <p className="text-sm font-medium text-primary">{p.name}</p>
-                          <p className="text-xs text-[#9CA3AF]">{p._count?.tasks ?? 0} tasks</p>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-secondary">{p.client ? getClientDisplayName(p.client) : '—'}</td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <div className="h-1.5 w-20 rounded-full bg-[#F3F4F6] overflow-hidden">
-                              <div className="h-full rounded-full bg-primary" style={{ width: `${p.progress}%` }} />
-                            </div>
-                            <span className="text-xs text-secondary tabular-nums">{p.progress}%</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[p.status] || 'bg-gray-50 text-gray-500'}`}>
-                            {p.status.replace('_', ' ')}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          {p.owner && (
+                        {visibleColumns.includes('project') && (
+                          <td className="px-6 py-4">
+                            <p className="text-sm font-medium text-primary">{p.name}</p>
+                            <p className="text-xs text-[#9CA3AF]">{p._count?.tasks ?? 0} tasks</p>
+                          </td>
+                        )}
+                        {visibleColumns.includes('client') && <td className="px-6 py-4 text-sm text-secondary">{p.client ? getClientDisplayName(p.client) : '—'}</td>}
+                        {visibleColumns.includes('progress') && (
+                          <td className="px-6 py-4">
                             <div className="flex items-center gap-2">
- <div className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold ${getAvatarColor(p.owner.name)}`}>
-                                {getInitials(p.owner.name)}
+                              <div className="h-1.5 w-20 rounded-full bg-[#F3F4F6] overflow-hidden">
+                                <div className="h-full rounded-full bg-primary" style={{ width: `${p.progress}%` }} />
                               </div>
-                              <span className="text-sm text-[#374151]">{p.owner.name}</span>
+                              <span className="text-xs text-secondary tabular-nums">{p.progress}%</span>
                             </div>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-secondary">{formatShortDate(p.endDate)}</td>
-                        <td className="px-6 py-4"><ChevronRight className="h-4 w-4 text-[#D1D5DB]" /></td>
+                          </td>
+                        )}
+                        {visibleColumns.includes('status') && (
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex items-center whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[p.status] || 'bg-gray-50 text-gray-500'}`}>
+                              {p.status.replace('_', ' ')}
+                            </span>
+                          </td>
+                        )}
+                        {visibleColumns.includes('owner') && (
+                          <td className="px-6 py-4">
+                            {p.owner && (
+                              <div className="flex items-center gap-2">
+                                <div className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold ${getAvatarColor(p.owner.name)}`}>
+                                  {getInitials(p.owner.name)}
+                                </div>
+                                <span className="text-sm text-[#374151]">{p.owner.name}</span>
+                              </div>
+                            )}
+                          </td>
+                        )}
+                        {visibleColumns.includes('dueDate') && <td className="px-6 py-4 text-sm text-secondary">{formatShortDate(p.endDate)}</td>}
+                        <td className="px-6 py-4 text-right w-10 text-secondary"><ChevronRight className="h-4 w-4 inline-block" /></td>
                       </motion.tr>
                     ))}
                   </tbody>
@@ -412,6 +520,12 @@ function ProjectsContent() {
 
 
 
+        {view === 'board' && (
+          <div className="mt-4">
+            <ProjectBoardView projects={projects} onUpdateProject={refetchProjects} userRole={user?.role} />
+          </div>
+        )}
+
       {view === 'timeline' && (
         <div className="rounded-2xl border border-border bg-white p-6">
           <div className="space-y-3">
@@ -451,6 +565,10 @@ function ProjectsContent() {
 
       {view === 'calendar' && (
         <CalendarView projects={projects} />
+      )}
+
+      {view === 'gantt' && (
+        <ProjectGanttView projects={projects} loading={loading} />
       )}
 
           {/* Load More Button */}
@@ -658,9 +776,7 @@ function ProjectsContent() {
                       placeholder="Enter the scope of work..."
                     />
                   </div>
-                  <div>
-                    <Field label="Budget" type="number" value={formValues.budget || ''} onChange={(v) => setValue('budget', v)} />
-                  </div>
+
                 </div>
 
                 {/* Workflow */}
@@ -729,6 +845,50 @@ function ProjectsContent() {
           </>
         )}
       </AnimatePresence>
+      <ViewSettingsPanel
+        isOpen={showViewSettings}
+        onClose={() => setShowViewSettings(false)}
+        viewName={viewName}
+        onViewNameChange={setViewName}
+        viewType={view === 'list' ? 'list' : 'board'}
+        onViewTypeChange={(type) => setView(type === 'list' ? 'list' : 'timeline')}
+        columns={ALL_PROJECT_COLUMNS}
+        visibleColumns={visibleColumns}
+        onVisibleColumnsChange={setVisibleColumns}
+        onSave={() => {
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({
+              name: viewName,
+              visibleColumns,
+              viewType: view
+            }));
+          }
+          toast.success('View Settings saved successfully!');
+          setShowViewSettings(false);
+        }}
+        onReset={() => {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem(LOCAL_STORAGE_KEY);
+          }
+          setViewName('All Projects');
+          setView('list');
+          setVisibleColumns(ALL_PROJECT_COLUMNS.map(c => c.id));
+          toast.success('View Settings reset to defaults');
+        }}
+        onClone={() => {
+          const clonedName = viewName + ' (Copy)';
+          setViewName(clonedName);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({
+              name: clonedName,
+              visibleColumns,
+              viewType: view
+            }));
+          }
+          toast.success('Cloned successfully to a new view copy!');
+          setShowViewSettings(false);
+        }}
+      />
     </div>
   );
 }

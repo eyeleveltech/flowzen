@@ -33,7 +33,9 @@ async function loadBrandLogo(): Promise<string> {
 function buildClassicHtml(quote: any, org: any, logoUri: string): string {
   const c = (org?.settings as any)?.company || {};
   const companyName = c.name || org?.name || 'EyeLevel Growth Studio';
-  const title = quote.documentType === 'QUOTATION' ? 'QUOTATION' : 'PROFORMA INVOICE';
+  let title = 'PROFORMA INVOICE';
+  if (quote.documentType === 'QUOTATION') title = 'QUOTATION';
+  if (quote.documentType === 'INVOICE') title = 'INVOICE';
   const taxRows = Number(quote.totalTax) > 0 ? `<tr><td>Total Tax</td><td class="r">${inr(quote.totalTax)}</td></tr>` : '';
   const hasRcm = (quote.lineItems || []).some((li: any) => resolveTaxType(li.taxType).mode === 'RC');
 

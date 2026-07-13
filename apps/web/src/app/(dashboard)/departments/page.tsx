@@ -187,7 +187,7 @@ export default function TeamsPage() {
             <thead>
             <tr className="bg-[#F9FAFB] border-b border-border">
               <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide">Department Name</th>
-              <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide">Head / Leader</th>
+              <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide">Manager</th>
               <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide">Members</th>
               <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide text-right">Actions</th>
             </tr>
@@ -215,7 +215,7 @@ export default function TeamsPage() {
                       <span className="text-sm font-medium text-primary">{team.leader.name}</span>
                     </div>
                   ) : (
-                    <span className="text-sm text-[#9CA3AF] italic">No Leader</span>
+                    <span className="text-sm text-[#9CA3AF] italic">No Manager</span>
                   )}
                 </td>
                 <td className="px-6 py-5">
@@ -270,7 +270,7 @@ export default function TeamsPage() {
             <div key={team.id} className="p-4 hover:bg-[#F9FAFB] transition-colors relative">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 text-blue-600 flex items-center justify-center border border-blue-100/50 shrink-0">
+                  <div className="h-10 w-10 rounded-xl bg-linear-to-br from-blue-50 to-indigo-50 text-blue-600 flex items-center justify-center border border-blue-100/50 shrink-0">
                     <Users className="h-5 w-5" />
                   </div>
                   <div>
@@ -290,7 +290,7 @@ export default function TeamsPage() {
 
               <div className="grid grid-cols-2 gap-4 mt-4 bg-[#F9FAFB] p-3 rounded-xl border border-border">
                 <div>
-                  <span className="text-[10px] font-medium text-secondary uppercase tracking-wide block mb-1">Head</span>
+                  <span className="text-[10px] font-medium text-secondary uppercase tracking-wide block mb-1">Manager</span>
                   {team.leader ? (
                     <div className="flex items-center gap-2">
  <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${getAvatarColor(team.leader.name)}`}>
@@ -299,7 +299,7 @@ export default function TeamsPage() {
                       <span className="text-xs font-medium text-primary truncate">{team.leader.name}</span>
                     </div>
                   ) : (
-                    <span className="text-xs text-[#9CA3AF] italic">No Leader</span>
+                    <span className="text-xs text-[#9CA3AF] italic">No Manager</span>
                   )}
                 </div>
                 
@@ -387,14 +387,14 @@ export default function TeamsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Department Head</label>
+                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Manager</label>
                   <Select
                     value={form.leaderId}
                     onChange={(val) => setForm({ ...form, leaderId: val })}
-                    options={[{ label: 'Select a head (optional)', value: '' }, ...users.filter(u => form.memberIds.includes(u.id)).map(u => ({ label: u.name, value: u.id }))]}
+                    options={[{ label: 'Select a manager (optional)', value: '' }, ...users.filter(u => form.memberIds.includes(u.id)).map(u => ({ label: u.name, value: u.id }))]}
                   />
                   {form.memberIds.length === 0 && (
-                    <p className="text-xs text-secondary mt-1">Please add members first before assigning a head.</p>
+                    <p className="text-xs text-secondary mt-1">Please add members first before assigning a manager.</p>
                   )}
                 </div>
                 

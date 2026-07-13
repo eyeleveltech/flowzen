@@ -24,12 +24,14 @@ const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
 type Line = { description: string; unit: string; quantity: string; unitPrice: string; discountPct: string; taxPct: string; taxType: string };
 const emptyLine = (): Line => ({ description: '', unit: 'Units', quantity: '1', unitPrice: '', discountPct: '', taxPct: '18', taxType: DEFAULT_TAX_TYPE });
 
-export function QuoteFormModal({ editId, duplicateOf, onClose, onSaved }: { editId: string | null; duplicateOf: any; onClose: () => void; onSaved: () => void }) {
+export function QuoteFormModal({ editId: initialEditId, duplicateOf, onClose, onSaved }: { editId: string | null; duplicateOf: any; onClose: () => void; onSaved: () => void }) {
   const { user } = useAuthStore();
   const { data: members = [] } = useMembers();
   const [clients, setClients] = useState<any[]>([]);
   const [orgState, setOrgState] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
+  // editId may change after first save (new doc -> DRAFT with ID)
+  const [editId, setEditId] = useState<string | null>(initialEditId);
 
   const [documentType, setDocumentType] = useState<'QUOTATION' | 'PROFORMA_INVOICE'>('QUOTATION');
   const [clientId, setClientId] = useState('');
@@ -180,7 +182,20 @@ export function QuoteFormModal({ editId, duplicateOf, onClose, onSaved }: { edit
 
   async function onSaveDraft() {
     const id = await save();
-    if (id) onSaved();
+    if (id) {
+      setEditId(id); // switch to edit mode so subsequent saves patch the same doc
+      onSaved();
+    }
+  }
+
+  // Save draft but STAY in the modal so the user can keep editing
+  async function onSaveDraftStay() {
+    const id = await save();
+    if (id) {
+      setEditId(id); // patch on next save
+      onSaved(); // refresh the list in background
+      toast.success('Draft saved — you can keep editing');
+    }
   }
 
   async function onGeneratePdf() {
@@ -374,8 +389,15 @@ export function QuoteFormModal({ editId, duplicateOf, onClose, onSaved }: { edit
         </div>
 
         <div className="p-4 sm:p-5 border-t border-border bg-white flex flex-row justify-end gap-2 sm:gap-3">
-          <button onClick={onClose} className="flex-1 sm:flex-none w-full sm:w-auto px-2 sm:px-5 py-2.5 text-sm font-medium text-[#374151] bg-white border border-border rounded-xl hover:bg-gray-50">Cancel</button>
-          <button onClick={onGeneratePdf} disabled={submitting} className="flex-1 sm:flex-none w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] disabled:opacity-50"><FileDown className="h-4 w-4 shrink-0" /> <span className="hidden sm:inline">Generate PDF</span><span className="inline sm:hidden">PDF</span></button>
+          <button onClick={onClose} className="px-4 py-2.5 text-sm font-medium text-[#374151] bg-white border border-border rounded-xl hover:bg-gray-50">Cancel</button>
+          <button onClick={onSaveDraftStay} disabled={submitting} className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-[#374151] bg-white border border-border rounded-xl hover:bg-gray-50 disabled:opacity-50">
+            <Save className="h-4 w-4 shrink-0" />
+            <span className="hidden sm:inline">Save Draft</span><span className="inline sm:hidden">Save</span>
+          </button>
+          <button onClick={onGeneratePdf} disabled={submitting} className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] disabled:opacity-50">
+            <FileDown className="h-4 w-4 shrink-0" />
+            <span className="hidden sm:inline">Generate PDF</span><span className="inline sm:hidden">PDF</span>
+          </button>
         </div>
 
       </motion.div>

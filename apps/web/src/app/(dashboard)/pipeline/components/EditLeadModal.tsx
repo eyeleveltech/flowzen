@@ -18,7 +18,6 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
     contactEmail: lead.contactEmail || '',
     contactPhone: lead.contactPhone || '',
     jobTitle: lead.jobTitle || '',
-    linkedinUrl: lead.linkedinUrl || '',
     instagramHandle: lead.instagramHandle || '',
     facebookPage: lead.facebookPage || '',
     companySize: lead.companySize || '',
@@ -33,6 +32,9 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
     dealValue: lead.dealValue ? String(lead.dealValue) : '',
     expectedCloseDate: lead.expectedCloseDate ? new Date(lead.expectedCloseDate).toISOString().split('T')[0] : '',
     priority: lead.priority || 'MEDIUM',
+    followUpDate: lead.followUpDate ? new Date(lead.followUpDate).toISOString().split('T')[0] : '',
+    linkedinUrl: lead.linkedinUrl || '',
+    lastContactedDate: lead.lastContactedDate ? new Date(lead.lastContactedDate).toISOString().split('T')[0] : '',
   });
 
   const [errors, setErrors] = useState<{ contactName?: string; contactEmail?: string; contactPhone?: string }>({});
@@ -66,6 +68,8 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
         ...form,
         dealValue: form.dealValue ? parseFloat(form.dealValue) : undefined,
         expectedCloseDate: form.expectedCloseDate || undefined,
+        followUpDate: form.followUpDate || null,
+        lastContactedDate: form.lastContactedDate || null,
         assignedToId: form.assignedToId || undefined,
       };
       await api.patch(`/crm/leads/${lead.id}`, payload);
@@ -111,10 +115,14 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
               <Field id="edit-jobTitle" label="Job Title" value={form.jobTitle} onChange={(v) => setForm({ ...form, jobTitle: v })} placeholder="e.g. Marketing Director" />
             </div>
 
-            <Field id="edit-linkedin" label="LinkedIn URL" value={form.linkedinUrl} onChange={(v) => setForm({ ...form, linkedinUrl: v })} placeholder="linkedin.com/in/username" />
             <div className="grid grid-cols-2 gap-4">
+              <Field id="edit-linkedin" label="LinkedIn Profile URL" value={form.linkedinUrl} onChange={(v) => setForm({ ...form, linkedinUrl: v })} placeholder="https://linkedin.com/..." />
               <Field id="edit-instagram" label="Instagram Handle" value={form.instagramHandle} onChange={(v) => setForm({ ...form, instagramHandle: v })} placeholder="@username or URL" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <Field id="edit-facebook" label="Facebook Page" value={form.facebookPage} onChange={(v) => setForm({ ...form, facebookPage: v })} placeholder="URL or username" />
+              <div />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -191,6 +199,11 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
             <div className="grid grid-cols-2 gap-4">
               <Field id="edit-dealValue" label="Deal Value (₹)" type="number" value={form.dealValue} onChange={(v) => setForm({ ...form, dealValue: v })} placeholder="e.g. 50000" />
               <Field id="edit-closeDate" label="Expected Close Date" type="date" value={form.expectedCloseDate} onChange={(v) => setForm({ ...form, expectedCloseDate: v })} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field id="edit-followUpDate" label="Next Follow-up Date" type="date" value={form.followUpDate} onChange={(v) => setForm({ ...form, followUpDate: v })} />
+              <Field id="edit-lastContactedDate" label="Last Contacted Date" type="date" value={form.lastContactedDate} onChange={(v) => setForm({ ...form, lastContactedDate: v })} />
             </div>
           </form>
         </div>

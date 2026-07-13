@@ -156,7 +156,7 @@ export function LeadListView() {
               <MultiSelect
                 value={stageFilter}
                 onChange={setStageFilter}
-                placeholder="All Stages"
+                placeholder="Stages"
                 options={STAGES.map(s => ({ label: s.replace(/_/g, ' '), value: s }))}
               />
             </div>
@@ -165,7 +165,7 @@ export function LeadListView() {
               <MultiSelect
                 value={ownerFilter}
                 onChange={setOwnerFilter}
-                placeholder="All Owners"
+                placeholder="Owners"
                 options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
               />
             </div>
@@ -229,7 +229,7 @@ export function LeadListView() {
                   <MultiSelect
                     value={priority}
                     onChange={setPriority}
-                    placeholder="All Priorities"
+                    placeholder="Priorities"
                     options={PRIORITIES.map(p => ({ label: p, value: p }))}
                   />
                 </div>
@@ -240,7 +240,7 @@ export function LeadListView() {
                   <MultiSelect
                     value={leadSource}
                     onChange={setLeadSource}
-                    placeholder="All Sources"
+                    placeholder="Sources"
                     options={LEAD_SOURCES.map(s => ({ label: s.replace(/_/g, ' '), value: s }))}
                   />
                 </div>

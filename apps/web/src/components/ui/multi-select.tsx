@@ -24,7 +24,7 @@ interface MultiSelectProps {
   showSelectAll?: boolean;
 }
 
-export function MultiSelect({ options, value, onChange, placeholder = 'Select...', compact = true, showSelectAll = false }: MultiSelectProps) {
+export function MultiSelect({ options, value, onChange, placeholder = 'Select...', compact = true, showSelectAll = true }: MultiSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);

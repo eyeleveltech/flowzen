@@ -32,11 +32,36 @@ dashboardRouter.get('/stats', async (req: AuthRequest, res: Response, next) => {
 
     const [activeClients, activeProjects, openTasks, completedTasks, delayedProjects, totalMembers, overdueTasks] =
       await Promise.all([
-        prisma.client.count({ where: { organizationId: orgId, status: 'ACTIVE', ...dateFilter } }),
+        // §2.1 Active Clients: clients with ≥1 project in an open/active status OR ≥1 task in open status
+        prisma.client.count({
+          where: {
+            organizationId: orgId,
+            OR: [
+              {
+                projects: {
+                  some: {
+                    status: { in: ['PLANNING', 'IN_PROGRESS', 'REVIEW', 'ON_HOLD'] },
+                    ...dateFilter,
+                  }
+                }
+              },
+              {
+                tasks: {
+                  some: {
+                    status: { in: ['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'BLOCKED', 'ON_HOLD'] },
+                    ...dateFilter,
+                  }
+                }
+              }
+            ]
+          }
+        }),
+        // §2.2 Active Projects: projects in open status with ≥1 non-completed task
         prisma.project.count({
           where: { 
             client: { organizationId: orgId }, 
-            status: { in: ['PLANNING', 'IN_PROGRESS', 'REVIEW'] },
+            status: { in: ['PLANNING', 'IN_PROGRESS', 'REVIEW', 'ON_HOLD'] },
+            tasks: { some: { status: { not: 'COMPLETED' } } },
             ...dateFilter,
             ...(role === 'PROJECT_MANAGER' ? { ownerId: userId } : {}),
             ...(role === 'TEAM_MEMBER' ? { members: { some: { userId } } } : {})

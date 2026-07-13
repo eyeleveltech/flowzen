@@ -10,13 +10,14 @@ import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatDate, formatShortDate, getInitials, getAvatarColor, triggerHaptic } from '@/lib/utils';
 import { TASK_STATUSES, TASK_STATUS_LABELS, TASK_STATUS_COLORS, TASK_STATUS_OPTIONS } from '@/lib/task-status';
-import { Search, Plus, Filter, MessageSquare, ChevronDown, ChevronRight, AlertCircle, X, ChevronUp, ChevronLeft, Calendar, ListChecks, Trash2 } from 'lucide-react';
+import { Search, Plus, Filter, MessageSquare, ChevronDown, ChevronRight, AlertCircle, X, ChevronUp, ChevronLeft, Calendar, ListChecks, Trash2, Check, Settings } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { Drawer } from '@/components/ui/drawer';
 import { SwipeableCard } from '@/components/ui/swipeable-card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
+import { ViewSettingsPanel } from '@/components/ui/view-settings-panel';
 import toast from 'react-hot-toast';
 import { useAuthStore, useConfirmStore, useTimeTrackingStore } from '@/stores';
 import { useTasks, useProjects, useMembers, useTeams } from '@/hooks/useQueries';
@@ -106,14 +107,16 @@ const taskSchema = z.object({
   assignedDate: z.string().optional(),
   loggedHours: z.number().min(0).optional(),
   driveLink: z.string().url('Must be a valid URL').optional().or(z.literal('')),
+  isRecurring: z.boolean().optional(),
+  recurrenceFrequency: z.string().optional(),
 });
 type TaskFormValues = z.infer<typeof taskSchema>;
 
 // Fresh blank task form values (function so assignedDate is always "today").
 const blankTaskValues = (): TaskFormValues => ({
   title: '', description: '', type: 'OTHER', projectId: '', assigneeId: '', assigneeIds: [], assignedById: '',
-  reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: '',
-  assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '',
+  reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: new Date().toISOString().split('T')[0],
+  assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '', isRecurring: false, recurrenceFrequency: 'WEEKLY'
 });
 
 function TasksContent() {
@@ -129,7 +132,41 @@ function TasksContent() {
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
   const [teamFilter, setTeamFilter] = useState<string[]>([]);
   const [sort, setSort] = useState<string>('');
+  const [dueDateFrom, setDueDateFrom] = useState('');
+  const [dueDateTo, setDueDateTo] = useState('');
   const filterHydrated = useRef(false);
+
+  const ALL_TASK_COLUMNS = [
+    { id: 'task', label: 'Task' },
+    { id: 'client', label: 'Client' },
+    { id: 'project', label: 'Project' },
+    { id: 'assignee', label: 'Assignee' },
+    { id: 'priority', label: 'Priority' },
+    { id: 'status', label: 'Status' },
+    { id: 'dueDate', label: 'Due Date' },
+  ];
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(ALL_TASK_COLUMNS.map(c => c.id));
+  const [showColumnDropdown, setShowColumnDropdown] = useState(false);
+  const [showViewSettings, setShowViewSettings] = useState(false);
+  const [viewName, setViewName] = useState('All Tasks');
+
+  const LOCAL_STORAGE_KEY = 'flowzen_view_tasks';
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.name) setViewName(parsed.name);
+          if (parsed.visibleColumns) setVisibleColumns(parsed.visibleColumns);
+          if (parsed.viewType) setView(parsed.viewType);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (user?.id && !filterHydrated.current) {
@@ -186,7 +223,7 @@ function TasksContent() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage
-  } = useTasks(search, statusFilter.join(','), projectFilter.join(','), assigneeFilter.join(','), priorityFilter.join(','), teamFilter.join(','), searchParams.get('filter'), sort);
+  } = useTasks(search, statusFilter.join(','), projectFilter.join(','), assigneeFilter.join(','), priorityFilter.join(','), teamFilter.join(','), searchParams.get('filter'), sort, dueDateFrom, dueDateTo);
 
   const tasks = useMemo(() => data?.pages.flatMap((page) => page.tasks) || [], [data]);
   const { data: projectsData } = useProjects();
@@ -485,7 +522,12 @@ function TasksContent() {
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="h-full flex flex-col space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-primary tracking-tight">Tasks</h1>
+          <h1 className="text-2xl font-semibold text-primary tracking-tight flex items-center gap-2">
+            Tasks
+            <span className="text-xs font-normal text-secondary bg-[#F3F4F6] px-2 py-0.5 rounded-lg border border-border">
+              {viewName}
+            </span>
+          </h1>
           <p className="text-sm text-secondary mt-1">{tasks.length} tasks</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -506,10 +548,7 @@ function TasksContent() {
               <X className="h-4 w-4" /> Clear Filters
             </button>
           )}
-          <div className="flex rounded-xl border border-border p-1 bg-white shadow-sm">
-            <button onClick={() => setView('board')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${view === 'board' ? 'bg-primary text-white' : 'text-secondary hover:bg-gray-100'}`}>Board</button>
-            <button onClick={() => setView('list')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${view === 'list' ? 'bg-primary text-white' : 'text-secondary hover:bg-gray-100'}`}>List</button>
-          </div>
+
           <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all">
             <Plus className="h-4 w-4" /> New Task
           </button>
@@ -542,7 +581,7 @@ function TasksContent() {
             showSelectAll
             value={projectFilter}
             onChange={setProjectFilter}
-            placeholder="All Projects"
+            placeholder="Projects"
             options={projects.map((p) => ({ label: p.name, value: p.id }))}
           />
         </div>
@@ -551,44 +590,23 @@ function TasksContent() {
             showSelectAll
             value={statusFilter}
             onChange={setStatusFilter}
-            placeholder="All Statuses"
+            placeholder="Status"
             options={TASK_STATUS_OPTIONS}
           />
         </div>
-        <div className="w-full sm:w-44">
-          <MultiSelect
-            showSelectAll
-            value={priorityFilter}
-            onChange={setPriorityFilter}
-            placeholder="All Priorities"
-            options={[
-              { label: 'Low', value: 'LOW' },
-              { label: 'Medium', value: 'MEDIUM' },
-              { label: 'High', value: 'HIGH' },
-              { label: 'Urgent', value: 'URGENT' },
-            ]}
-          />
-        </div>
-        <div className="w-full sm:w-48">
-          <MultiSelect
-            showSelectAll
-            value={teamFilter}
-            onChange={setTeamFilter}
-            placeholder="All Departments"
-            options={teams.map((t: any) => ({ label: t.name, value: t.id }))}
-          />
-        </div>
+
         {user?.role !== 'TEAM_MEMBER' && (
           <div className="w-full sm:w-44">
             <MultiSelect
               showSelectAll
               value={assigneeFilter}
               onChange={setAssigneeFilter}
-              placeholder="All Assignees"
+              placeholder="Assignees"
               options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
             />
           </div>
         )}
+
         {view === 'list' && (
           <div className="w-full sm:w-48">
             <Select
@@ -728,97 +746,160 @@ function TasksContent() {
                   <table className="w-full min-w-[800px]">
                     <thead>
                       <tr className="border-b border-[#F3F4F6]">
-                        <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Task</th>
-                        <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>
-                        <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
-                          <ColumnDropdown 
-                            title="Project" 
-                            sortAscValue="project_asc" 
-                            sortDescValue="project_desc" 
-                            sortAscLabel="Sort A to Z"
-                            sortDescLabel="Sort Z to A"
-                            currentSort={sort} 
-                            onSortChange={setSort}
-                          />
-                        </th>
-                        <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Assignee</th>
-                        <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
-                          <ColumnDropdown 
-                            title="Priority" 
-                            sortAscValue="priority_asc" 
-                            sortDescValue="priority_desc" 
-                            sortAscLabel="Low to Urgent"
-                            sortDescLabel="Urgent to Low"
-                            currentSort={sort} 
-                            onSortChange={setSort}
-                          />
-                        </th>
-                        <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
-                          <ColumnDropdown 
-                            title="Status" 
-                            sortAscValue="status_asc" 
-                            sortDescValue="status_desc" 
-                            sortAscLabel="To Do to Done"
-                            sortDescLabel="Done to To Do"
-                            currentSort={sort} 
-                            onSortChange={setSort}
-                          />
-                        </th>
-                        <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
-                          <ColumnDropdown 
-                            title="Due Date" 
-                            sortAscValue="dueDate_asc" 
-                            sortDescValue="dueDate_desc" 
-                            sortAscLabel="Earliest First"
-                            sortDescLabel="Latest First"
-                            currentSort={sort} 
-                            onSortChange={setSort}
-                          />
+                        {visibleColumns.includes('task') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Task</th>}
+                        {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>}
+                        {visibleColumns.includes('project') && (
+                          <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
+                            <ColumnDropdown 
+                              title="Project" 
+                              sortAscValue="project_asc" 
+                              sortDescValue="project_desc" 
+                              sortAscLabel="Sort A to Z"
+                              sortDescLabel="Sort Z to A"
+                              currentSort={sort} 
+                              onSortChange={setSort}
+                            />
+                          </th>
+                        )}
+                        {visibleColumns.includes('assignee') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Assignee</th>}
+                        {visibleColumns.includes('priority') && (
+                          <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
+                            <ColumnDropdown 
+                              title="Priority" 
+                              sortAscValue="priority_asc" 
+                              sortDescValue="priority_desc" 
+                              sortAscLabel="Low to Urgent"
+                              sortDescLabel="Urgent to Low"
+                              currentSort={sort} 
+                              onSortChange={setSort}
+                            />
+                          </th>
+                        )}
+                        {visibleColumns.includes('status') && (
+                          <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
+                            <ColumnDropdown 
+                              title="Status" 
+                              sortAscValue="status_asc" 
+                              sortDescValue="status_desc" 
+                              sortAscLabel="To Do to Done"
+                              sortDescLabel="Done to To Do"
+                              currentSort={sort} 
+                              onSortChange={setSort}
+                            />
+                          </th>
+                        )}
+                        {visibleColumns.includes('dueDate') && (
+                          <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
+                            <ColumnDropdown 
+                              title="Due Date" 
+                              sortAscValue="dueDate_asc" 
+                              sortDescValue="dueDate_desc" 
+                              sortAscLabel="Earliest First"
+                              sortDescLabel="Latest First"
+                              currentSort={sort} 
+                              onSortChange={setSort}
+                            />
+                          </th>
+                        )}
+                        <th className="px-6 py-3.5 w-10 text-center relative select-none">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setShowColumnDropdown(!showColumnDropdown); }}
+                            className="inline-flex items-center justify-center h-6 w-6 rounded-md text-[#9CA3AF] hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
+                            title="Toggle visible columns"
+                          >
+                            +
+                          </button>
+                          <AnimatePresence>
+                            {showColumnDropdown && (
+                              <>
+                                <div className="fixed inset-0 z-40" onClick={() => setShowColumnDropdown(false)} />
+                                <motion.div 
+                                  initial={{ opacity: 0, y: 5 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  exit={{ opacity: 0, y: 5 }}
+                                  className="absolute right-0 top-full mt-2 w-48 bg-white border border-border rounded-xl shadow-lg z-50 overflow-hidden py-1"
+                                >
+                                  <div className="px-3 py-2 border-b border-[#F3F4F6] text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
+                                    Visible Columns
+                                  </div>
+                                  {ALL_TASK_COLUMNS.map(col => (
+                                    <button
+                                      key={col.id}
+                                      onClick={() => {
+                                        setVisibleColumns(prev => 
+                                          prev.includes(col.id) 
+                                            ? prev.filter(c => c !== col.id)
+                                            : [...prev, col.id]
+                                        )
+                                      }}
+                                      className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#F9FAFB] transition-colors"
+                                    >
+                                      <span className="text-[#374151]">{col.label}</span>
+                                      {visibleColumns.includes(col.id) && <Check className="w-4 h-4 text-primary" />}
+                                    </button>
+                                  ))}
+                                </motion.div>
+                              </>
+                            )}
+                          </AnimatePresence>
                         </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#F3F4F6]">
                       {tasks.map((t) => (
                         <tr key={t.id} className="hover:bg-surface cursor-pointer transition-colors" onClick={() => setSelectedTask(t)}>
-                          <td className="px-6 py-3.5">
-                            <div className="flex items-center gap-2">
-                              <div className={`h-2 w-2 rounded-full shrink-0 ${priorityDots[t.priority]}`} />
-                              <span className="text-sm font-medium text-primary">{t.title}</span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-3.5 text-sm text-secondary">{t.project?.client?.name || '-'}</td>
-                          <td className="px-6 py-3.5 text-sm text-secondary">{t.project?.name}</td>
-                          <td className="px-6 py-3.5">
-                            {taskAssignees(t).length ? (
+                          {visibleColumns.includes('task') && (
+                            <td className="px-6 py-3.5">
                               <div className="flex items-center gap-2">
-                                <AssigneeAvatars task={t} size={24} />
-                                <span className="text-sm text-[#374151]">{assigneeLabel(t)}</span>
+                                <div className={`h-2 w-2 rounded-full shrink-0 ${priorityDots[t.priority]}`} />
+                                <span className="text-sm font-medium text-primary">{t.title}</span>
                               </div>
-                            ) : <span className="text-sm text-[#9CA3AF]">Unassigned</span>}
-                          </td>
-                          <td className="px-6 py-3.5">
-                            <span className="text-xs font-medium text-[#374151] capitalize">{t.priority.toLowerCase()}</span>
-                          </td>
-                          <td className="px-6 py-3.5" onClick={(e) => e.stopPropagation()}>
-                            <div className="w-36">
-                              <Select
-                                value={t.status}
-                                onChange={(val) => updateTaskStatus(t.id, val)}
-                                options={TASK_STATUS_OPTIONS}
-                                buttonClassName={`py-1 px-2.5 text-xs font-medium border-transparent shadow-none ${TASK_STATUS_COLORS[t.status] || ''}`}
-                              />
-                            </div>
-                          </td>
-                          <td className="px-6 py-3.5 text-sm">
-                            {t.dueDate ? (
-                              <div className="flex items-center gap-2">
-                                <span className={isTaskOverdue(t) ? 'text-red-500 font-medium' : 'text-secondary'}>
-                                  {isTaskOverdue(t) ? `Overdue (${getDaysLate(t)} ${getDaysLate(t) === 1 ? 'day' : 'days'} late)` : formatShortDate(t.dueDate)}
-                                </span>
+                            </td>
+                          )}
+                          {visibleColumns.includes('client') && <td className="px-6 py-3.5 text-sm text-secondary">{t.project?.client?.name || '-'}</td>}
+                          {visibleColumns.includes('project') && <td className="px-6 py-3.5 text-sm text-secondary">{t.project?.name}</td>}
+                          {visibleColumns.includes('assignee') && (
+                            <td className="px-6 py-3.5">
+                              {taskAssignees(t).length ? (
+                                <div className="flex items-center gap-2">
+                                  <AssigneeAvatars task={t} size={24} />
+                                  <span className="text-sm text-[#374151]">{assigneeLabel(t)}</span>
+                                </div>
+                              ) : <span className="text-sm text-[#9CA3AF]">Unassigned</span>}
+                            </td>
+                          )}
+                          {visibleColumns.includes('priority') && (
+                            <td className="px-6 py-3.5">
+                              <span className="text-xs font-medium text-[#374151] capitalize">{t.priority.toLowerCase()}</span>
+                            </td>
+                          )}
+                          {visibleColumns.includes('status') && (
+                            <td className="px-6 py-3.5" onClick={(e) => e.stopPropagation()}>
+                              <div className="w-36">
+                                <Select
+                                  value={t.status}
+                                  onChange={(val) => updateTaskStatus(t.id, val)}
+                                  options={TASK_STATUS_OPTIONS}
+                                  buttonClassName={`py-1 px-2.5 text-xs font-medium border-transparent shadow-none ${TASK_STATUS_COLORS[t.status] || ''}`}
+                                />
                               </div>
-                            ) : (
-                              <span className="text-[#9CA3AF]">-</span>
-                            )}
+                            </td>
+                          )}
+                          {visibleColumns.includes('dueDate') && (
+                            <td className="px-6 py-3.5 text-sm">
+                              {t.dueDate ? (
+                                <div className="flex items-center gap-2">
+                                  <span className={isTaskOverdue(t) ? 'text-red-500 font-medium' : 'text-secondary'}>
+                                    {isTaskOverdue(t) ? `Overdue (${getDaysLate(t)} ${getDaysLate(t) === 1 ? 'day' : 'days'} late)` : formatShortDate(t.dueDate)}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-[#9CA3AF]">-</span>
+                              )}
+                            </td>
+                          )}
+                          <td className="px-6 py-3.5 text-right w-10 text-secondary">
+                            <ChevronRight className="h-4 w-4 inline-block" />
                           </td>
                         </tr>
                       ))}
@@ -1039,6 +1120,25 @@ function TasksContent() {
                     <label htmlFor="te-dueDate" className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
                     <input id="te-dueDate" type="date" {...register('dueDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                   </div>
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" {...register('isRecurring')} className="rounded border-border text-primary focus:ring-primary w-4 h-4" />
+                      <span className="text-sm font-medium text-[#374151]">Repeat Task</span>
+                    </label>
+                  </div>
+                  {watch('isRecurring') && (
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Repeat Frequency</label>
+                      <Controller name="recurrenceFrequency" control={control} render={({ field }) => (
+                        <Select
+                          ariaLabel="Repeat Frequency"
+                          value={field.value || 'WEEKLY'}
+                          onChange={field.onChange}
+                          options={[{ label: 'Daily', value: 'DAILY' }, { label: 'Weekly', value: 'WEEKLY' }, { label: 'Monthly', value: 'MONTHLY' }, { label: 'Yearly', value: 'YEARLY' }]}
+                        />
+                      )} />
+                    </div>
+                  )}
                   <div>
                     <label htmlFor="te-loggedHours" className="block text-sm font-medium text-[#374151] mb-1.5">Time Spent (hours)</label>
                     <input id="te-loggedHours" type="number" step="0.5" min="0" {...register('loggedHours', { valueAsNumber: true })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
@@ -1324,6 +1424,7 @@ function TasksContent() {
           </>
         )}
       </AnimatePresence>
+
     </motion.div>
   );
 }

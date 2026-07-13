@@ -1,7 +1,7 @@
 import { prisma } from './prisma.js';
 
 // The modules every new organization starts with (both enabled).
-export const DEFAULT_MODULES = ['CRM', 'PM'] as const;
+export const DEFAULT_MODULES = ['CRM', 'PM', 'REVENUE'] as const;
 
 export async function getEnabledModuleKeys(organizationId: string): Promise<string[]> {
   const rows = await prisma.organizationModule.findMany({

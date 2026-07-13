@@ -47,7 +47,7 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
       name: '', description: '', clientId, ownerId: '',
       type: 'ONE_TIME', scope: '', reportingCadence: 'NONE', clientApprovalRequired: false,
       tags: [], projectNotes: '', folderLink: '', startDate: '', endDate: '',
-      priority: 'MEDIUM', budget: '', status: 'PLANNING', memberIds: [], teamIds: [],
+      priority: 'MEDIUM', status: 'PLANNING', memberIds: [], teamIds: [],
     },
   });
 
@@ -59,7 +59,7 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
     try {
       const payload = {
         ...data,
-        budget: data.budget ? parseFloat(data.budget as any) : undefined,
+
         startDate: data.startDate || undefined,
         endDate: data.endDate || undefined,
       };
@@ -190,8 +190,7 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
               <RichTextEditor value={formValues.scope || ''} onChange={(val) => setValue('scope', val)} placeholder="Enter the scope of work..." />
             </div>
             <div>
-              <label htmlFor="cp-budget" className="block text-sm font-medium text-[#374151] mb-1.5">Budget (₹)</label>
-              <input id="cp-budget" type="number" value={formValues.budget || ''} onChange={(e) => setValue('budget', e.target.value)} className={inputClass} />
+
             </div>
           </div>
 

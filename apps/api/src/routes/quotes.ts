@@ -240,6 +240,22 @@ quoteRouter.patch('/:id/status', async (req: AuthRequest, res: Response, next) =
     const existing = await prisma.quoteDocument.findFirst({ where: { id, organizationId: orgId } });
     if (!existing) { res.status(404).json({ error: 'Quotation not found' }); return; }
     const updated = await prisma.quoteDocument.update({ where: { id }, data: { status: status as any } });
+    
+    // Auto-create subscription when a quote is accepted
+    if (status === 'ACCEPTED' && existing.status !== 'ACCEPTED') {
+      await prisma.subscription.create({
+        data: {
+          organizationId: orgId,
+          clientId: existing.clientId,
+          amount: existing.grandTotal,
+          billingFrequency: 'MONTHLY',
+          startDate: new Date(),
+          status: 'ACTIVE',
+          notes: 'Auto-created from Quote ' + existing.documentNumber,
+        }
+      });
+    }
+
     emitToOrganization(req.app.get('io'), orgId, 'quote:updated', { id });
     res.json(updated);
   } catch (error) {

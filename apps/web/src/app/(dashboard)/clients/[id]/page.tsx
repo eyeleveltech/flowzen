@@ -11,7 +11,7 @@ import { Select } from '@/components/ui/select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import toast from 'react-hot-toast';
 import { useMembers } from '@/hooks/useQueries';
-import { useConfirmStore } from '@/stores';
+import { useConfirmStore, useModuleStore } from '@/stores';
 import { CreateProjectModal } from '@/components/projects/create-project-modal';
 
 interface ClientContact {
@@ -50,6 +50,7 @@ const projectStatusColors: Record<string, string> = {
 export default function ClientDetailPage() {
   const { id } = useParams();
   const confirm = useConfirmStore((s) => s.confirm);
+  const { activeModule } = useModuleStore();
   const router = useRouter();
   const [client, setClient] = useState<ClientDetail | null>(null);
   const [tab, setTab] = useState<Tab>('overview');
@@ -199,7 +200,15 @@ export default function ClientDetailPage() {
             <div className="flex items-center gap-3 mt-1">
               {client.name !== 'Internal' && client.company && <span className="text-sm text-secondary">{client.name}</span>}
               {client.name === 'Internal' && <span className="text-sm font-medium text-secondary">(Internal)</span>}
-              <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[client.status]}`}>{client.status}</span>
+              <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[client.status]}`}>
+                {activeModule === 'PM' ? (
+                  client.status === 'PROSPECT' ? 'Prospect' :
+                  client.status === 'ACTIVE' ? 'Active' :
+                  client.status === 'ONHOLD' ? 'On Hold' :
+                  client.status === 'PROJECT_COMPLETED' ? 'Completed' :
+                  client.status === 'CHURNED' ? 'Churned' : client.status
+                ) : client.status}
+              </span>
             </div>
           </div>
         </div>
@@ -251,22 +260,48 @@ export default function ClientDetailPage() {
                 <InfoRow icon={Phone} label="Main Phone" value={orgProfile.phone || 'Not specified'} />
               </div>
             ) : (
-              <>
-                <InfoRow icon={Briefcase} label="Engagement Type" value={client.engagementType || '—'} />
-                <InfoRow icon={Globe} label="Website" value={client.website || '—'} />
-                <InfoRow icon={MapPin} label="City" value={client.city || '—'} />
-                <InfoRow icon={MapPin} label="Address" value={client.address || '—'} />
-                <InfoRow icon={Building2} label="Industry" value={client.industry || '—'} />
-                <InfoRow icon={Users} label="Account Manager" value={client.accountManager?.name || '—'} />
-                <InfoRow icon={Globe} label="Asset Links" value={client.assetLinks || '—'} />
-                <InfoRow icon={DollarSign} label="Start Date" value={client.startDate ? formatDate(client.startDate) : '—'} />
-                
-                <div className="mt-4 pt-4 border-t border-[#F3F4F6]">
-                  <span className="block text-xs font-semibold text-secondary uppercase tracking-wider mb-3">Scope</span>
+              <div className="space-y-6">
+                {/* Company Details */}
+                <div>
+                  <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-[#F3F4F6]">Company Details</h4>
+                  <div className="grid grid-cols-2 gap-y-4 gap-x-2">
+                    <InfoRow icon={Building2} label="Industry" value={client.industry || '—'} />
+                    <InfoRow icon={Globe} label="Website" value={client.website || '—'} />
+                    <InfoRow icon={Globe} label="Asset Links" value={client.assetLinks || '—'} />
+                    <InfoRow icon={Users} label="Account Manager" value={client.accountManager?.name || '—'} />
+                  </div>
+                </div>
+
+                {/* Billing / Address */}
+                <div>
+                  <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-[#F3F4F6]">Billing & Address</h4>
+                  <div className="grid grid-cols-2 gap-y-4 gap-x-2 mb-4">
+                    <InfoRow icon={MapPin} label="City" value={client.city || '—'} />
+                    <InfoRow icon={MapPin} label="State" value={client.state || '—'} />
+                    <InfoRow icon={DollarSign} label="GST Number" value={client.gstNumber || '—'} />
+                    <InfoRow icon={MapPin} label="Address" value={client.address || '—'} />
+                  </div>
+                  {client.billingAddress && (
+                    <div className="text-sm text-[#374151] bg-gray-50 p-3 rounded-xl border border-gray-100">
+                      <span className="block text-xs font-semibold text-secondary mb-1">Billing Address</span>
+                      {client.billingAddress}
+                    </div>
+                  )}
+                </div>
+
+                {/* Engagement */}
+                <div>
+                  <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-[#F3F4F6]">Engagement</h4>
+                  <div className="grid grid-cols-2 gap-y-4 gap-x-2 mb-4">
+                    <InfoRow icon={Briefcase} label="Engagement Type" value={client.engagementType || '—'} />
+                    <InfoRow icon={Calendar} label="Start Date" value={client.startDate ? formatDate(client.startDate) : '—'} />
+                  </div>
+                  
                   {client.scope ? (
-                    <>
+                    <div className="mt-2 bg-blue-50/50 p-4 rounded-xl border border-blue-100/50">
+                      <span className="block text-xs font-semibold text-blue-900 mb-2">Scope of Work</span>
                       <div 
-                        className="text-sm text-[#374151] line-clamp-2 prose prose-sm max-w-none"
+                        className="text-sm text-[#374151] line-clamp-3 prose prose-sm max-w-none"
                         dangerouslySetInnerHTML={{ __html: client.scope }}
                       />
                       <button 
@@ -275,12 +310,12 @@ export default function ClientDetailPage() {
                       >
                         View full scope
                       </button>
-                    </>
+                    </div>
                   ) : (
                     <p className="text-sm text-[#9CA3AF]">No scope defined.</p>
                   )}
                 </div>
-              </>
+              </div>
             )}
 
             {client.contacts && client.contacts.length > 0 && (
@@ -436,8 +471,7 @@ export default function ClientDetailPage() {
               </div>
               <form onSubmit={handleEdit} className="relative p-6 space-y-4">
                 {editError && <div className="absolute top-0 left-6 right-6 -mt-2 z-10 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 shadow-sm border border-red-100">{editError}</div>}
-                <Field label="Client Name *" value={editForm.name} onChange={(v) => setEditForm({ ...editForm, name: v })} required />
-                <Field label="Company" value={editForm.company} onChange={(v) => setEditForm({ ...editForm, company: v })} />
+                <Field label="Company Name *" value={editForm.company || editForm.name} onChange={(v) => setEditForm({ ...editForm, name: v, company: v })} required />
                 <Field label="Industry" value={editForm.industry} onChange={(v) => setEditForm({ ...editForm, industry: v })} />
                 
                 <div>
@@ -517,18 +551,31 @@ export default function ClientDetailPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Status</label>
-                  <Select
-                    value={editForm.status}
-                    onChange={(val) => setEditForm({ ...editForm, status: val })}
-                    options={[
-                      { label: 'Prospect', value: 'PROSPECT' },
-                      { label: 'Active', value: 'ACTIVE' },
-                      { label: 'On Hold', value: 'ONHOLD' },
-                      { label: 'Churned', value: 'CHURNED' },
-                      { label: 'Project Completed', value: 'PROJECT_COMPLETED' },
-                    ]}
-                  />
+                  <label className="block text-sm font-medium text-[#374151] mb-1.5">
+                    {activeModule === 'PM' ? 'Lifecycle Stage' : 'Status'}
+                  </label>
+                  {activeModule === 'PM' ? (
+                    <div className="w-full rounded-xl border border-border bg-gray-50 px-4 py-2.5 text-sm text-[#9CA3AF] cursor-not-allowed select-none">
+                      {editForm.status === 'PROSPECT' ? 'Prospect' :
+                       editForm.status === 'ACTIVE' ? 'Active' :
+                       editForm.status === 'ONHOLD' ? 'On Hold' :
+                       editForm.status === 'PROJECT_COMPLETED' ? 'Completed' :
+                       editForm.status === 'CHURNED' ? 'Churned' : editForm.status}
+                      <span className="ml-2 text-xs text-amber-500 font-medium">(Managed via CRM)</span>
+                    </div>
+                  ) : (
+                    <Select
+                      value={editForm.status}
+                      onChange={(val) => setEditForm({ ...editForm, status: val })}
+                      options={[
+                        { label: 'Prospect', value: 'PROSPECT' },
+                        { label: 'Active', value: 'ACTIVE' },
+                        { label: 'On Hold', value: 'ONHOLD' },
+                        { label: 'Churned', value: 'CHURNED' },
+                        { label: 'Project Completed', value: 'PROJECT_COMPLETED' },
+                      ]}
+                    />
+                  )}
                 </div>
                 <div className="pt-4 flex gap-3">
                   <button type="button" onClick={() => setShowEdit(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">

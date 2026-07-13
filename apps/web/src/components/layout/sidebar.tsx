@@ -25,7 +25,10 @@ import {
   TrendingDown,
   ArrowLeftRight,
   FileText,
-  RefreshCw
+  RefreshCw,
+  DollarSign,
+  Wallet,
+  Receipt
 } from 'lucide-react';
 
 type NavItem = { label: string; href: string; icon: any; roles?: string[]; module: ModuleKey | ModuleKey[] };
@@ -33,7 +36,15 @@ type NavItem = { label: string; href: string; icon: any; roles?: string[]; modul
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, module: 'PM' },
   { label: 'Pipeline', href: '/pipeline', icon: TrendingUp, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
-  { label: 'Quotations', href: '/quotations', icon: FileText, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
+  { label: 'Quotations', href: '/quotations', icon: FileText, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'], module: 'CRM' },
+  { label: 'Revenue Overview', href: '/revenue', icon: DollarSign, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
+  { label: 'Contracts', href: '/contracts', icon: FileText, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
+  { label: 'Invoice Drafts', href: '/invoice-drafts', icon: FileText, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
+  { label: 'Invoices', href: '/invoices', icon: Receipt, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
+  { label: 'Payments', href: '/payments', icon: DollarSign, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
+  { label: 'Subscriptions', href: '/subscriptions', icon: RefreshCw, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
+  { label: 'Receivables', href: '/receivables', icon: Wallet, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
+  { label: 'Expenses', href: '/expenses', icon: Wallet, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
   { label: 'Renewals', href: '/renewals', icon: RefreshCw, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
   { label: 'Lost Deals', href: '/lost-deals', icon: TrendingDown, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
   { label: 'Clients', href: '/clients', icon: Building2, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'], module: ['CRM', 'PM'] },

@@ -7,9 +7,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { formatDate, formatShortDate, getInitials, formatRelativeDate, getAvatarColor, getClientDisplayName } from '@/lib/utils';
 import { TASK_STATUS_COLORS, TASK_STATUS_OPTIONS } from '@/lib/task-status';
-import { ArrowLeft, Edit2, Plus, Calendar as CalendarIcon, Flag, Clock, Users, Link2, CheckCircle2, Circle, MoreVertical, Trash2, Mail, FileText, ChevronDown, Check, X, File, AlertCircle, TrendingUp, DollarSign, Briefcase, MessageSquare, MoreHorizontal, ChevronRight, Filter, ArrowUpRight } from 'lucide-react';
+import { ArrowLeft, Edit2, Plus, Calendar as CalendarIcon, Flag, Clock, Users, Link2, CheckCircle2, Circle, MoreVertical, Trash2, Mail, FileText, ChevronDown, Check, X, File, AlertCircle, TrendingUp, DollarSign, Briefcase, MessageSquare, MoreHorizontal, ChevronRight, Filter, ArrowUpRight, Settings, Kanban, LayoutList } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { TaskDetailDrawer } from '@/components/tasks/task-detail-drawer';
+import { TaskBoardView } from '../components/TaskBoardView';
+import { ViewSettingsPanel } from '@/components/ui/view-settings-panel';
 
 import { MultiSelect } from '@/components/ui/multi-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
@@ -39,7 +41,7 @@ interface ProjectDetail {
   comments?: { id: string; content: string; createdAt: string; author: { id: string; name: string; avatar?: string | null } }[];
 }
 
-type Tab = 'tasks' | 'milestones' | 'team' | 'activity' | 'comments';
+type Tab = 'tasks' | 'team' | 'activity' | 'comments';
 
 // Project statuses only — task badges use TASK_STATUS_COLORS.
 const statusColors: Record<string, string> = {
@@ -63,16 +65,46 @@ export default function ProjectDetailPage() {
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [isEditingTask, setIsEditingTask] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState('');
-  const [taskForm, setTaskForm] = useState({ title: '', description: '', type: 'OTHER', assigneeIds: [] as string[], reviewerId: '', assignedById: '', priority: 'MEDIUM', status: 'TODO', dueDate: '', assignedDate: '', loggedHours: 0, driveLink: '' });
+  const [taskForm, setTaskForm] = useState({ title: '', description: '', type: 'OTHER', assigneeIds: [] as string[], reviewerId: '', assignedById: '', priority: 'MEDIUM', status: 'TODO', dueDate: '', assignedDate: '', loggedHours: 0, driveLink: '', isRecurring: false, recurrenceFrequency: 'WEEKLY' });
   const [submittingTask, setSubmittingTask] = useState(false);
   // Task filters within this project's Tasks tab
+  const [taskView, setTaskView] = useState<'list' | 'board'>('list');
   const [taskSearch, setTaskSearch] = useState('');
   const [taskStatusFilter, setTaskStatusFilter] = useState<string[]>([]);
+  const [taskDueDateFilter, setTaskDueDateFilter] = useState<string>('');
 
   const [taskAssigneeFilter, setTaskAssigneeFilter] = useState<string[]>([]);
-  const [taskPriorityFilter, setTaskPriorityFilter] = useState<string[]>([]);
+  const [taskTypeFilter, setTaskTypeFilter] = useState<string[]>([]);
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
   const [showTaskFilters, setShowTaskFilters] = useState(false);
+
+  const ALL_TASK_COLUMNS = [
+    { id: 'task', label: 'Task' },
+    { id: 'type', label: 'Type' },
+    { id: 'assignee', label: 'Assignee' },
+    { id: 'status', label: 'Status' },
+    { id: 'dueDate', label: 'Due Date' },
+  ];
+
+  const [showViewSettings, setShowViewSettings] = useState(false);
+  const [visibleTaskColumns, setVisibleTaskColumns] = useState<string[]>(ALL_TASK_COLUMNS.map(c => c.id));
+  const [viewName, setViewName] = useState('All Tasks');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && id) {
+      const saved = localStorage.getItem(`flowzen_view_tasks_${id}`);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.name) setViewName(parsed.name);
+          if (parsed.visibleColumns) setVisibleTaskColumns(parsed.visibleColumns);
+          if (parsed.viewType) setTaskView(parsed.viewType);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+  }, [id]);
 
 
   // Edit Project States
@@ -161,7 +193,7 @@ export default function ProjectDetailPage() {
       setShowCreateTask(false);
       setIsEditingTask(false);
       setEditingTaskId('');
-      setTaskForm({ title: '', description: '', type: 'OTHER', assigneeIds: [], reviewerId: '', assignedById: '', priority: 'MEDIUM', status: 'TODO', dueDate: new Date().toISOString().split('T')[0], assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '' });
+      setTaskForm({ title: '', description: '', type: 'OTHER', assigneeIds: [], reviewerId: '', assignedById: '', priority: 'MEDIUM', status: 'TODO', dueDate: new Date().toISOString().split('T')[0], assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '', isRecurring: false, recurrenceFrequency: 'WEEKLY' });
       const updated = await api.get<ProjectDetail>(`/projects/${id}`);
       setProject(updated);
       // The global Tasks list + dashboard read cached data — refresh them.
@@ -183,10 +215,12 @@ export default function ProjectDetailPage() {
       priority: t.priority,
       status: t.status,
       dueDate: t.dueDate ? new Date(t.dueDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-      assignedDate: t.assignedDate ? new Date(t.assignedDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      assignedDate: t.assignedDate ? t.assignedDate.split('T')[0] : '',
       assignedById: t.assignedBy?.id || '',
       loggedHours: t.loggedHours || 0,
       driveLink: t.driveLink || '',
+      isRecurring: t.isRecurring || false,
+      recurrenceFrequency: t.recurrenceFrequency || 'WEEKLY'
     });
     setEditingTaskId(t.id);
     setIsEditingTask(true);
@@ -194,7 +228,7 @@ export default function ProjectDetailPage() {
   }
 
   function openCreateTask() {
-    setTaskForm({ title: '', description: '', type: 'OTHER', assigneeIds: [], reviewerId: '', assignedById: '', priority: 'MEDIUM', status: 'TODO', dueDate: new Date().toISOString().split('T')[0], assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '' });
+    setTaskForm({ title: '', description: '', type: 'OTHER', assigneeIds: [], reviewerId: '', assignedById: '', priority: 'MEDIUM', status: 'TODO', dueDate: new Date().toISOString().split('T')[0], assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '', isRecurring: false, recurrenceFrequency: 'WEEKLY' });
     setIsEditingTask(false);
     setEditingTaskId('');
     setShowCreateTask(true);
@@ -430,7 +464,6 @@ export default function ProjectDetailPage() {
 
   const tabs = [
     { id: 'tasks' as Tab, label: `Tasks (${project.tasks?.length ?? 0})` },
-    { id: 'milestones' as Tab, label: `Milestones (${project.milestones?.length ?? 0})` },
     { id: 'team' as Tab, label: `Team (${allProjectMembers.length})` },
     { id: 'comments' as Tab, label: `Comments (${project.comments?.length ?? 0})` },
     { id: 'activity' as Tab, label: 'Activity' },
@@ -447,11 +480,17 @@ export default function ProjectDetailPage() {
   const taskAssignees = Array.from(new Map(
     projectTasks.flatMap((t) => (t.assignees?.length ? t.assignees : (t.assignee ? [t.assignee] : []))).map((a: any) => [a.id, a]),
   ).values());
+
   const filteredTasks = projectTasks.filter((t) => {
     if (taskSearch && !t.title.toLowerCase().includes(taskSearch.toLowerCase())) return false;
     if (taskStatusFilter.length && !taskStatusFilter.includes(t.status)) return false;
-    if (taskPriorityFilter.length && !taskPriorityFilter.includes(t.priority)) return false;
-    
+    if (taskTypeFilter.length && !taskTypeFilter.includes(t.type || 'OTHER')) return false;
+    if (taskDueDateFilter) {
+      if (!t.dueDate) return false;
+      const due = new Date(t.dueDate); due.setHours(0, 0, 0, 0);
+      const filter = new Date(taskDueDateFilter); filter.setHours(0, 0, 0, 0);
+      if (due.getTime() !== filter.getTime()) return false;
+    }
     if (taskAssigneeFilter.length) {
       const ids = t.assignees?.length ? t.assignees.map((a: any) => a.id) : (t.assignee ? [t.assignee.id] : []);
       if (!taskAssigneeFilter.some((id) => ids.includes(id))) return false;
@@ -467,7 +506,7 @@ export default function ProjectDetailPage() {
     return valB - valA;
   });
 
-  const hasTaskFilters = !!(taskSearch || taskStatusFilter.length || taskAssigneeFilter.length || taskPriorityFilter.length);
+  const hasTaskFilters = !!(taskSearch || taskStatusFilter.length || taskAssigneeFilter.length || taskTypeFilter.length || taskDueDateFilter);
   let projectHealth: 'GREEN' | 'AMBER' | 'RED' = 'GREEN';
   if (overdueTasksCount >= 3 || (project.endDate && new Date(project.endDate) < todayStart && project.status !== 'COMPLETED')) {
     projectHealth = 'RED';
@@ -548,26 +587,6 @@ export default function ProjectDetailPage() {
             </div>
           </div>
         </div>
-
-        {/* Budget Card */}
-        {project.budget !== undefined && project.budget !== null && (
-          <div className="bg-white rounded-2xl border border-border p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <DollarSign className="h-4 w-4 text-[#9CA3AF]" />
-              <span className="text-xs font-medium text-secondary uppercase tracking-wide">Budget Tracking</span>
-            </div>
-            <div className="space-y-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-secondary">Total</span>
-                <span className="font-semibold text-primary">${project.budget.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-secondary">Spent</span>
-                <span className="font-medium text-primary">$0</span>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Client Details Card */}
         <div className="bg-white rounded-2xl border border-border p-5">
@@ -675,6 +694,7 @@ export default function ProjectDetailPage() {
       {tab === 'tasks' && (
         <div className="space-y-4">
           <div className="flex flex-col gap-3">
+            {/* Search bar row */}
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2 flex-1 min-w-[200px] max-w-sm">
                 <input
@@ -683,6 +703,20 @@ export default function ProjectDetailPage() {
                   placeholder="Search tasks..."
                   className="flex-1 w-full rounded-lg border border-border bg-white px-3 py-1.5 text-sm outline-none focus:border-primary transition-all"
                 />
+                <div className="hidden md:flex items-center rounded-lg border border-border p-0.5 bg-white shrink-0">
+                  <button
+                    onClick={() => setTaskView('list')}
+                    className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-all ${taskView === 'list' ? 'bg-primary text-white' : 'text-secondary hover:text-primary'}`}
+                  >
+                    <LayoutList className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setTaskView('board')}
+                    className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-all ${taskView === 'board' ? 'bg-primary text-white' : 'text-secondary hover:text-primary'}`}
+                  >
+                    <Kanban className="h-3.5 w-3.5" />
+                  </button>
+                </div>
                 <button 
                   onClick={() => setShowTaskFilters(!showTaskFilters)} 
                   className="md:hidden flex items-center justify-center p-1.5 rounded-lg border border-border bg-white text-secondary hover:bg-gray-50 transition-colors"
@@ -690,85 +724,202 @@ export default function ProjectDetailPage() {
                   <Filter className="h-4 w-4" />
                 </button>
               </div>
-              <button onClick={openCreateTask} className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1F2937] transition-all shrink-0">
-                <Plus className="h-3.5 w-3.5" /> Add Task
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button onClick={openCreateTask} className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1F2937] transition-all">
+                  <Plus className="h-3.5 w-3.5" /> Add Task
+                </button>
+                <button 
+                  onClick={() => setShowViewSettings(true)}
+                  className="flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-secondary hover:text-primary transition-all shadow-sm" 
+                  title="Customize View"
+                >
+                  <Settings className="h-3.5 w-3.5" /> Customize
+                </button>
+              </div>
             </div>
-            
+            {/* Filters row */}
             <div className={`flex flex-wrap items-center gap-2 ${showTaskFilters ? 'flex' : 'hidden md:flex'}`}>
               <div className="w-full md:w-40">
-                <MultiSelect value={taskStatusFilter} onChange={setTaskStatusFilter} placeholder="All Statuses" options={TASK_STATUS_OPTIONS} />
+                <MultiSelect value={taskStatusFilter} onChange={setTaskStatusFilter} placeholder="Status" options={TASK_STATUS_OPTIONS} />
               </div>
               <div className="w-full md:w-40">
-                <MultiSelect value={taskPriorityFilter} onChange={setTaskPriorityFilter} placeholder="All Priorities" options={[
-                  { label: 'Low', value: 'LOW' },
-                  { label: 'Medium', value: 'MEDIUM' },
-                  { label: 'High', value: 'HIGH' },
-                  { label: 'Urgent', value: 'URGENT' },
+                <MultiSelect value={taskTypeFilter} onChange={setTaskTypeFilter} placeholder="Task Type" options={[
+                  { label: 'Design', value: 'DESIGN' },
+                  { label: 'Content', value: 'CONTENT' },
+                  { label: 'Video', value: 'VIDEO' },
+                  { label: 'Marketing', value: 'DIGITAL_MARKETING' },
+                  { label: 'Social Media', value: 'SOCIAL_MEDIA' },
+                  { label: 'Development', value: 'DEVELOPMENT' },
+                  { label: 'Strategy', value: 'STRATEGY' },
+                  { label: 'Business', value: 'BUSINESS' },
+                  { label: 'Other', value: 'OTHER' },
                 ]} />
               </div>
               <div className="w-full md:w-44">
-                <MultiSelect value={taskAssigneeFilter} onChange={setTaskAssigneeFilter} placeholder="All Assignees" options={taskAssignees.map((a: any) => ({ value: a.id, label: a.name, image: getInitials(a.name), colorClass: getAvatarColor(a.name) }))} />
+                <MultiSelect value={taskAssigneeFilter} onChange={setTaskAssigneeFilter} placeholder="Assignee" options={taskAssignees.map((a: any) => ({ value: a.id, label: a.name, image: getInitials(a.name), colorClass: getAvatarColor(a.name) }))} />
+              </div>
+              <div className="w-full md:w-auto">
+                <input
+                  type="date"
+                  value={taskDueDateFilter}
+                  onChange={(e) => setTaskDueDateFilter(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-white px-3 py-1.5 text-sm outline-none focus:border-primary text-secondary"
+                  title="Filter by due date"
+                />
               </div>
               {hasTaskFilters && (
                 <button
-                  onClick={() => { setTaskSearch(''); setTaskStatusFilter([]); setTaskAssigneeFilter([]); setTaskPriorityFilter([]); }}
+                  onClick={() => { setTaskSearch(''); setTaskStatusFilter([]); setTaskAssigneeFilter([]); setTaskTypeFilter([]); setTaskDueDateFilter(''); }}
                   className="text-xs text-secondary hover:text-primary underline px-1"
                 >
                   Clear
                 </button>
               )}
             </div>
-            </div>
-          {/* Desktop Table View */}
-          <div className="hidden md:block rounded-2xl border border-border bg-white overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-[#F3F4F6]">
-                  <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Task</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Assignee</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Due Date</th>
-                  <th className="px-6 py-3"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#F3F4F6]">
+          </div>
+
+          {taskView === 'board' ? (
+            <TaskBoardView 
+              tasks={finalTasks} 
+              onUpdateTask={() => {
+                queryClient.invalidateQueries({ queryKey: ['project', id] });
+              }} 
+              onTaskClick={(t) => setDetailTaskId(t.id)} 
+            />
+          ) : (
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block rounded-2xl border border-border bg-white overflow-hidden">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-[#F3F4F6]">
+                      {visibleTaskColumns.includes('task') && <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Task</th>}
+                      {visibleTaskColumns.includes('type') && <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Type</th>}
+                      {visibleTaskColumns.includes('assignee') && <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Assignee</th>}
+                      {visibleTaskColumns.includes('status') && <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Status</th>}
+                      {visibleTaskColumns.includes('dueDate') && <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Due Date</th>}
+                      <th className="px-6 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#F3F4F6]">
+                    {finalTasks.length === 0 ? (
+                      <tr><td colSpan={visibleTaskColumns.length + 1} className="px-6 py-8 text-center text-sm text-[#9CA3AF]">{hasTaskFilters ? 'No tasks match your filters' : 'No tasks yet'}</td></tr>
+                    ) : (
+                      finalTasks.map((t) => (
+                        <tr key={t.id} className="hover:bg-surface transition-colors cursor-pointer" onClick={() => setDetailTaskId(t.id)}>
+                          {visibleTaskColumns.includes('task') && (
+                            <td className="px-6 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className={`h-2 w-2 rounded-full shrink-0 ${priorityDots[t.priority]}`} />
+                                <span className="text-sm font-medium text-primary">{t.title}</span>
+                                {(t.loggedHours ?? 0) > 0 && (
+                                  <div className="flex flex-col gap-1 ml-2">
+                                    <span className="text-[10px] text-secondary bg-[#F3F4F6] px-1.5 py-0.5 rounded-md font-medium tabular-nums border border-border leading-none whitespace-nowrap">⏱ {t.loggedHours || 0}h</span>
+                                  </div>
+                                )}
+                                {(t._count?.comments ?? 0) > 0 && (
+                                  <span className="flex items-center gap-0.5 text-[10px] text-[#9CA3AF] ml-1"><MessageSquare className="h-3 w-3" />{t._count?.comments}</span>
+                                )}
+                              </div>
+                            </td>
+                          )}
+                          {visibleTaskColumns.includes('type') && (
+                            <td className="px-6 py-3">
+                              <span className="text-xs text-secondary capitalize">{(t.type || 'other').toLowerCase().replace(/_/g, ' ')}</span>
+                            </td>
+                          )}
+                          {visibleTaskColumns.includes('assignee') && (
+                            <td className="px-6 py-3">
+                              {t.assignee ? (
+                                <div className="flex items-center gap-1.5">
+                                  <div className={`h-5 w-5 rounded-full text-[8px] font-semibold flex items-center justify-center ${getAvatarColor(t.assignee.name)}`}>{getInitials(t.assignee.name)}</div>
+                                  <span className="text-sm text-[#374151]">{t.assignee.name}{(t.assignees?.length || 0) > 1 ? ` +${t.assignees!.length - 1}` : ''}</span>
+                                </div>
+                              ) : <span className="text-sm text-[#9CA3AF]">—</span>}
+                            </td>
+                          )}
+                          {visibleTaskColumns.includes('status') && (
+                            <td className="px-6 py-3"><span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${TASK_STATUS_COLORS[t.status]}`}>{t.status.replace('_', ' ')}</span></td>
+                          )}
+                          {visibleTaskColumns.includes('dueDate') && (
+                            <td className="px-6 py-3 text-sm text-secondary">{formatShortDate(t.dueDate)}</td>
+                          )}
+                          <td className="px-6 py-3 text-right">
+                            {(user?.role !== 'TEAM_MEMBER' || t.assignee?.id === user?.id) && (
+                              <div className="flex items-center justify-end gap-2">
+                                <button onClick={(e) => startEditingTask(t, e)} className="text-xs font-medium text-secondary hover:text-primary transition-colors bg-white border border-border rounded-lg px-2.5 py-1">
+                                  Edit
+                                </button>
+                                <button onClick={(e) => handleDeleteTask(t.id, e)} className="text-secondary hover:text-red-600 transition-colors bg-white border border-border rounded-lg p-1.5 hover:bg-red-50 hover:border-red-100">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="md:hidden flex flex-col gap-3">
                 {finalTasks.length === 0 ? (
-                  <tr><td colSpan={6} className="px-6 py-8 text-center text-sm text-[#9CA3AF]">{hasTaskFilters ? 'No tasks match your filters' : 'No tasks yet'}</td></tr>
+                  <div className="p-8 text-center text-sm text-[#9CA3AF] bg-white rounded-xl border border-border">
+                    {hasTaskFilters ? 'No tasks match your filters' : 'No tasks yet'}
+                  </div>
                 ) : (
                   finalTasks.map((t) => (
-                    <tr key={t.id} className="hover:bg-surface transition-colors cursor-pointer" onClick={() => setDetailTaskId(t.id)}>
-                      <td className="px-6 py-3">
-                        <div className="flex items-center gap-2">
-                          <div className={`h-2 w-2 rounded-full shrink-0 ${priorityDots[t.priority]}`} />
-                          <span className="text-sm font-medium text-primary">{t.title}</span>
-                          {(t.loggedHours ?? 0) > 0 && (
-                            <div className="flex flex-col gap-1 ml-2">
-                              <span className="text-[10px] text-secondary bg-[#F3F4F6] px-1.5 py-0.5 rounded-md font-medium tabular-nums border border-border leading-none whitespace-nowrap">⏱ {t.loggedHours || 0}h</span>
+                    <motion.div
+                      key={t.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      onClick={() => setDetailTaskId(t.id)}
+                      className="p-4 rounded-xl border border-border bg-white hover:border-primary cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-start gap-2 flex-1 pr-3">
+                          <div className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${priorityDots[t.priority]}`} />
+                          <div>
+                            <p className="text-sm font-medium text-primary leading-tight">{t.title}</p>
+                            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                              <span className="text-xs font-medium text-secondary">{formatShortDate(t.dueDate)}</span>
+                              {(t.loggedHours ?? 0) > 0 && (
+                                <span className="text-[10px] text-secondary bg-[#F3F4F6] px-1.5 py-0.5 rounded-md font-medium tabular-nums border border-border">
+                                  ⏱ {t.loggedHours || 0}h
+                                </span>
+                              )}
+                              {(t._count?.comments ?? 0) > 0 && (
+                                <span className="flex items-center gap-0.5 text-[10px] text-[#9CA3AF]">
+                                  <MessageSquare className="h-3 w-3" />
+                                  {t._count?.comments}
+                                </span>
+                              )}
                             </div>
-                          )}
-                          {(t._count?.comments ?? 0) > 0 && (
-                            <span className="flex items-center gap-0.5 text-[10px] text-[#9CA3AF] ml-1"><MessageSquare className="h-3 w-3" />{t._count?.comments}</span>
+                          </div>
+                        </div>
+                        <span className={`shrink-0 inline-flex items-center rounded-lg px-2 py-0.5 text-[10px] font-medium ${TASK_STATUS_COLORS[t.status]}`}>
+                          {t.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center justify-between mt-4">
+                        <div className="flex items-center gap-2">
+                          {t.assignee ? (
+                            <>
+                              <div className={`h-6 w-6 rounded-full text-[10px] font-semibold flex items-center justify-center ${getAvatarColor(t.assignee.name)}`}>
+                                {getInitials(t.assignee.name)}
+                              </div>
+                              <span className="text-xs font-medium text-[#374151]">{t.assignee.name}{(t.assignees?.length || 0) > 1 ? ` +${t.assignees!.length - 1}` : ''}</span>
+                            </>
+                          ) : (
+                            <span className="text-xs text-[#9CA3AF]">Unassigned</span>
                           )}
                         </div>
-                      </td>
-                      <td className="px-6 py-3">
-                        <span className="text-xs text-secondary capitalize">{(t.type || 'other').toLowerCase().replace(/_/g, ' ')}</span>
-                      </td>
-                      <td className="px-6 py-3">
-                        {t.assignee ? (
-                          <div className="flex items-center gap-1.5">
- <div className={`h-5 w-5 rounded-full text-[8px] font-semibold flex items-center justify-center ${getAvatarColor(t.assignee.name)}`}>{getInitials(t.assignee.name)}</div>
-                            <span className="text-sm text-[#374151]">{t.assignee.name}{(t.assignees?.length || 0) > 1 ? ` +${t.assignees!.length - 1}` : ''}</span>
-                          </div>
-                        ) : <span className="text-sm text-[#9CA3AF]">—</span>}
-                      </td>
-                      <td className="px-6 py-3"><span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${TASK_STATUS_COLORS[t.status]}`}>{t.status.replace('_', ' ')}</span></td>
-                      <td className="px-6 py-3 text-sm text-secondary">{formatShortDate(t.dueDate)}</td>
-                      <td className="px-6 py-3 text-right">
+                        
                         {(user?.role !== 'TEAM_MEMBER' || t.assignee?.id === user?.id) && (
-                          <div className="flex items-center justify-end gap-2">
+                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                             <button onClick={(e) => startEditingTask(t, e)} className="text-xs font-medium text-secondary hover:text-primary transition-colors bg-white border border-border rounded-lg px-2.5 py-1">
                               Edit
                             </button>
@@ -777,123 +928,13 @@ export default function ProjectDetailPage() {
                             </button>
                           </div>
                         )}
-                      </td>
-                    </tr>
+                      </div>
+                    </motion.div>
                   ))
                 )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile Card View */}
-          <div className="md:hidden flex flex-col gap-3">
-            {finalTasks.length === 0 ? (
-              <div className="p-8 text-center text-sm text-[#9CA3AF] bg-white rounded-xl border border-border">
-                {hasTaskFilters ? 'No tasks match your filters' : 'No tasks yet'}
               </div>
-            ) : (
-              finalTasks.map((t) => (
-                <motion.div
-                  key={t.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  onClick={() => setDetailTaskId(t.id)}
-                  className="p-4 rounded-xl border border-border bg-white hover:border-primary cursor-pointer transition-colors"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-start gap-2 flex-1 pr-3">
-                      <div className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${priorityDots[t.priority]}`} />
-                      <div>
-                        <p className="text-sm font-medium text-primary leading-tight">{t.title}</p>
-                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                          <span className="text-xs font-medium text-secondary">{formatShortDate(t.dueDate)}</span>
-                          {(t.loggedHours ?? 0) > 0 && (
-                            <span className="text-[10px] text-secondary bg-[#F3F4F6] px-1.5 py-0.5 rounded-md font-medium tabular-nums border border-border">
-                              ⏱ {t.loggedHours || 0}h
-                            </span>
-                          )}
-                          {(t._count?.comments ?? 0) > 0 && (
-                            <span className="flex items-center gap-0.5 text-[10px] text-[#9CA3AF]">
-                              <MessageSquare className="h-3 w-3" />
-                              {t._count?.comments}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <span className={`shrink-0 inline-flex items-center rounded-lg px-2 py-0.5 text-[10px] font-medium ${TASK_STATUS_COLORS[t.status]}`}>
-                      {t.status.replace('_', ' ')}
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between mt-4">
-                    <div className="flex items-center gap-2">
-                      {t.assignee ? (
-                        <>
- <div className={`h-6 w-6 rounded-full text-[10px] font-semibold flex items-center justify-center ${getAvatarColor(t.assignee.name)}`}>
-                            {getInitials(t.assignee.name)}
-                          </div>
-                          <span className="text-xs font-medium text-[#374151]">{t.assignee.name}{(t.assignees?.length || 0) > 1 ? ` +${t.assignees!.length - 1}` : ''}</span>
-                        </>
-                      ) : (
-                        <span className="text-xs text-[#9CA3AF]">Unassigned</span>
-                      )}
-                    </div>
-                    
-                    {(user?.role !== 'TEAM_MEMBER' || t.assignee?.id === user?.id) && (
-                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                        <button onClick={(e) => startEditingTask(t, e)} className="text-xs font-medium text-secondary hover:text-primary transition-colors bg-white border border-border rounded-lg px-2.5 py-1">
-                          Edit
-                        </button>
-                        <button onClick={(e) => handleDeleteTask(t.id, e)} className="text-secondary hover:text-red-600 transition-colors bg-white border border-border rounded-lg p-1.5 hover:bg-red-50 hover:border-red-100">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-
-      {tab === 'milestones' && (
-        <div className="space-y-4">
-          <div className="flex justify-end">
-            {user?.role !== 'TEAM_MEMBER' && (
-              <button onClick={openCreateMilestone} className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1F2937] transition-all">
-                <Plus className="h-3.5 w-3.5" /> Add Milestone
-              </button>
-            )}
-          </div>
-          <div className="space-y-3">
-            {project.milestones?.length === 0 ? (
-              <div className="py-8 text-center text-sm text-[#9CA3AF] border border-dashed border-border rounded-2xl bg-white">No milestones defined</div>
-            ) : (
-              project.milestones?.map((m) => (
-                <div key={m.id} className={`flex items-center gap-4 rounded-2xl border border-border bg-white p-4 transition-colors hover:border-gray-300 group ${m.completed ? 'opacity-60 bg-gray-50' : ''}`}>
-                  <button onClick={(e) => toggleMilestoneCompletion(m.id, m.completed, e)} className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${m.completed ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-[#D1D5DB] hover:border-emerald-500'}`}>
-                    {m.completed && <CheckCircle2 className="h-3.5 w-3.5" />}
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-semibold truncate ${m.completed ? 'text-[#9CA3AF] line-through' : 'text-primary'}`}>{m.name}</p>
-                    {m.dueDate && <span className="text-[11px] font-medium text-secondary flex items-center gap-1 mt-0.5"><Clock className="h-3 w-3" /> {formatDate(m.dueDate)}</span>}
-                  </div>
-                  {user?.role !== 'TEAM_MEMBER' && (
-                    <div className="flex items-center gap-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                      <button onClick={(e) => startEditingMilestone(m, e)} className="text-secondary hover:text-primary p-1.5 rounded-lg bg-white border border-border hover:bg-gray-50">
-                        Edit
-                      </button>
-                      <button onClick={(e) => handleDeleteMilestone(m.id, e)} className="text-secondary hover:text-red-600 p-1.5 rounded-lg bg-white border border-border hover:bg-red-50 hover:border-red-100">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
+            </>
+          )}
         </div>
       )}
 
@@ -1062,6 +1103,23 @@ export default function ProjectDetailPage() {
                     <label htmlFor="pt-dueDate" className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
                     <input id="pt-dueDate" type="date" value={taskForm.dueDate} onChange={(e) => setTaskForm({ ...taskForm, dueDate: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                   </div>
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={taskForm.isRecurring} onChange={(e) => setTaskForm({ ...taskForm, isRecurring: e.target.checked })} className="rounded border-border text-primary focus:ring-primary w-4 h-4" />
+                      <span className="text-sm font-medium text-[#374151]">Repeat Task</span>
+                    </label>
+                  </div>
+                  {taskForm.isRecurring && (
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Repeat Frequency</label>
+                      <Select
+                        ariaLabel="Repeat Frequency"
+                        value={taskForm.recurrenceFrequency || 'WEEKLY'}
+                        onChange={(val) => setTaskForm({ ...taskForm, recurrenceFrequency: val })}
+                        options={[{ label: 'Daily', value: 'DAILY' }, { label: 'Weekly', value: 'WEEKLY' }, { label: 'Monthly', value: 'MONTHLY' }, { label: 'Yearly', value: 'YEARLY' }]}
+                      />
+                    </div>
+                  )}
                   <div>
                     <label htmlFor="pt-loggedHours" className="block text-sm font-medium text-[#374151] mb-1.5">Time Spent (hours)</label>
                     <input id="pt-loggedHours" type="number" step="0.5" min="0" value={taskForm.loggedHours} onChange={(e) => setTaskForm({ ...taskForm, loggedHours: parseFloat(e.target.value) || 0 })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
@@ -1247,8 +1305,7 @@ export default function ProjectDetailPage() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="pe-budget" className="block text-sm font-medium text-[#374151] mb-1.5">Budget</label>
-                    <input id="pe-budget" type="number" value={editForm.budget} onChange={(e) => setEditForm({ ...editForm, budget: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+
                   </div>
                 </div>
 
@@ -1389,6 +1446,28 @@ export default function ProjectDetailPage() {
           />
         )}
       </AnimatePresence>
+
+      <ViewSettingsPanel
+        isOpen={showViewSettings}
+        onClose={() => setShowViewSettings(false)}
+        viewName={viewName}
+        onViewNameChange={setViewName}
+        viewType={taskView}
+        onViewTypeChange={setTaskView}
+        columns={ALL_TASK_COLUMNS}
+        visibleColumns={visibleTaskColumns}
+        onVisibleColumnsChange={setVisibleTaskColumns}
+        onSave={() => {
+          localStorage.setItem(`flowzen_view_tasks_${id}`, JSON.stringify({ viewType: taskView, visibleColumns: visibleTaskColumns, name: viewName }));
+          setShowViewSettings(false);
+          toast.success('View saved successfully');
+        }}
+        onReset={() => {
+          setTaskView('list');
+          setVisibleTaskColumns(ALL_TASK_COLUMNS.map(c => c.id));
+          setViewName('All Tasks');
+        }}
+      />
     </motion.div>
   );
 }

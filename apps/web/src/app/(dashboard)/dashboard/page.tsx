@@ -479,85 +479,140 @@ export default function DashboardPage() {
         {/* LEFT COLUMN */}
         <div className="lg:col-span-2 space-y-6">
           
-          {/* MY TASKS */}
-          <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow flex flex-col">
-            <div className="p-5 border-b border-border flex justify-between items-center">
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><CheckSquare className="w-4 h-4 text-secondary"/> My Tasks</h2>
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-medium text-secondary bg-surface border border-border px-2 py-0.5 rounded-md">{myTasks.length} Open</span>
-                <button onClick={() => router.push('/tasks')} className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline transition-colors">View All</button>
-              </div>
-            </div>
-            <div className="flex-1 overflow-visible max-h-100 overflow-y-auto custom-scrollbar p-2">
-              {myTasks.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <p className="text-sm font-medium text-secondary">You have no open tasks.</p>
+          {/* PENDING TASKS */}
+          {(() => {
+            const overdueCount = myTasks.filter((t: any) => t.dueDate && new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED').length;
+            const hasOverdue = overdueCount > 0;
+            const hasTasks = myTasks.length > 0;
+            // Sort: overdue first, then by priority weight, then by dueDate
+            const priorityWeight: Record<string, number> = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+            const sortedTasks = [...myTasks].sort((a: any, b: any) => {
+              const aOverdue = a.dueDate && new Date(a.dueDate) < todayStart ? 0 : 1;
+              const bOverdue = b.dueDate && new Date(b.dueDate) < todayStart ? 0 : 1;
+              if (aOverdue !== bOverdue) return aOverdue - bOverdue;
+              const aPri = priorityWeight[a.priority] ?? 4;
+              const bPri = priorityWeight[b.priority] ?? 4;
+              if (aPri !== bPri) return aPri - bPri;
+              return new Date(a.dueDate || 0).getTime() - new Date(b.dueDate || 0).getTime();
+            });
+
+            return (
+              <motion.div
+                variants={item}
+                className={`rounded-2xl bg-white border flex flex-col transition-all ${
+                  hasOverdue
+                    ? 'border-red-300 shadow-[0_0_0_3px_rgba(239,68,68,0.12)]'
+                    : hasTasks
+                    ? 'border-amber-300 shadow-[0_0_0_3px_rgba(245,158,11,0.10)]'
+                    : 'border-border hover:shadow-sm'
+                }`}
+              >
+                {/* Header */}
+                <div className="p-5 border-b border-border flex justify-between items-center">
+                  <h2 className="flex items-center gap-2 text-sm font-semibold text-primary">
+                    <BellDot className={`w-4 h-4 ${hasOverdue ? 'text-red-500' : hasTasks ? 'text-amber-500' : 'text-secondary'}`} />
+                    Pending Tasks
+                  </h2>
+                  <div className="flex items-center gap-2.5">
+                    {hasTasks && (
+                      <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${
+                        hasOverdue
+                          ? 'bg-red-50 text-red-700 border-red-200'
+                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}>
+                        {hasOverdue ? `${overdueCount} overdue` : `${myTasks.length} pending`}
+                      </span>
+                    )}
+                    <button onClick={() => router.push('/tasks')} className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline transition-colors">
+                      View All
+                    </button>
+                  </div>
                 </div>
-              ) : (
-                <div className="space-y-1">
-                  {myTasks.map((t: any) => (
-                    <div 
-                      key={t.id} 
-                      className="group flex flex-col sm:flex-row sm:items-center justify-between p-3 hover:bg-surface rounded-xl transition-all border border-transparent hover:border-border"
-                    >
-                      <div 
-                        onClick={() => handleOpenTask(t.id, t.readAt)}
-                        className="flex items-start gap-3 min-w-0 flex-1 cursor-pointer"
-                      >
-                        {!t.readAt ? (
-                          <div className="mt-1 shrink-0"><span className="flex h-2 w-2 rounded-full bg-primary" /></div>
-                        ) : (
-                          <div className="mt-1 shrink-0"><span className="flex h-2 w-2 rounded-full bg-border" /></div>
-                        )}
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-semibold text-primary truncate">{t.title}</p>
-                            {!t.readAt && <span className="text-[10px] font-bold text-primary border border-primary px-1 rounded-sm uppercase">New</span>}
-                          </div>
-                          <div className="flex items-center gap-3 mt-1 text-xs text-secondary">
-                            <span>{t.project?.name || 'No project'}</span>
-                            {t.priority && (
-                              <span className="flex items-center gap-1">
-                                &middot;
-                                <span className={`h-1.5 w-1.5 rounded-full ${
-                                  t.priority === 'URGENT' ? 'bg-red-500' :
-                                  t.priority === 'HIGH' ? 'bg-orange-500' :
-                                  t.priority === 'MEDIUM' ? 'bg-blue-500' :
-                                  'bg-gray-400'
-                                }`} />
-                                <span className="capitalize text-[10px] font-medium">{t.priority.toLowerCase()}</span>
-                              </span>
-                            )}
-                            {t.dueDate && (
-                              <span className="flex items-center gap-1">
-                                {new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED' ? (
-                                  <span className="text-red-500 font-semibold">&middot; Overdue ({formatShortDate(t.dueDate)})</span>
-                                ) : (
-                                  <span>&middot; {formatShortDate(t.dueDate)}</span>
-                                )}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="mt-3 sm:mt-0 sm:ml-4 shrink-0 flex items-center gap-2 w-35">
-                        {updatingTask === t.id ? (
-                          <span className="text-xs text-secondary w-full text-center">Updating...</span>
-                        ) : (
-                          <Select 
-                            value={t.status}
-                            onChange={(val) => updateTaskStatus(t.id, val)}
-                            options={TASK_STATUS_OPTIONS}
-                            className="w-full text-xs"
-                          />
-                        )}
-                      </div>
+
+                {/* Task list */}
+                <div className="flex-1 overflow-y-auto max-h-[400px] custom-scrollbar p-2">
+                  {sortedTasks.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-14 text-center gap-2">
+                      <span className="text-2xl">🎉</span>
+                      <p className="text-sm font-semibold text-emerald-600">You're all caught up!</p>
+                      <p className="text-xs text-secondary">No pending tasks right now.</p>
                     </div>
-                  ))}
+                  ) : (
+                    <div className="space-y-1">
+                      {sortedTasks.map((t: any) => {
+                        const isOverdue = t.dueDate && new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED';
+                        const priorityBorder =
+                          t.priority === 'URGENT' ? 'border-l-red-500' :
+                          t.priority === 'HIGH'   ? 'border-l-orange-400' :
+                          t.priority === 'MEDIUM' ? 'border-l-blue-400' :
+                          'border-l-gray-200';
+                        const priorityChipStyle =
+                          t.priority === 'URGENT' ? 'bg-red-50 text-red-700 border-red-200' :
+                          t.priority === 'HIGH'   ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                          t.priority === 'MEDIUM' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          'bg-gray-50 text-gray-600 border-gray-200';
+
+                        return (
+                          <div
+                            key={t.id}
+                            className={`group flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl transition-all border-l-2 border border-transparent hover:border-border hover:bg-surface ${priorityBorder} ${isOverdue ? 'bg-red-50/40' : ''}`}
+                          >
+                            <div
+                              onClick={() => handleOpenTask(t.id, t.readAt)}
+                              className="flex items-start gap-3 min-w-0 flex-1 cursor-pointer"
+                            >
+                              {!t.readAt ? (
+                                <div className="mt-1.5 shrink-0"><span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" /></div>
+                              ) : (
+                                <div className="mt-1.5 shrink-0"><span className="flex h-2 w-2 rounded-full bg-border" /></div>
+                              )}
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <p className="text-sm font-semibold text-primary truncate">{t.title}</p>
+                                  {!t.readAt && <span className="text-[9px] font-bold text-primary border border-primary px-1 py-px rounded-sm uppercase tracking-wide">New</span>}
+                                  {t.priority && (
+                                    <span className={`text-[9px] font-bold px-1.5 py-px rounded-md border uppercase tracking-wide ${priorityChipStyle}`}>
+                                      {t.priority}
+                                    </span>
+                                  )}
+                                  {isOverdue && (
+                                    <span className="text-[9px] font-bold px-1.5 py-px rounded-md border bg-red-100 text-red-700 border-red-200 uppercase tracking-wide">
+                                      Overdue
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-secondary">
+                                  <span>{t.project?.name || 'No project'}</span>
+                                  {t.dueDate && (
+                                    <span className={`flex items-center gap-1 ${isOverdue ? 'text-red-600 font-semibold' : ''}`}>
+                                      · {formatShortDate(t.dueDate)}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="mt-3 sm:mt-0 sm:ml-4 shrink-0 flex items-center gap-2 w-35">
+                              {updatingTask === t.id ? (
+                                <span className="text-xs text-secondary w-full text-center">Updating...</span>
+                              ) : (
+                                <Select
+                                  value={t.status}
+                                  onChange={(val) => updateTaskStatus(t.id, val)}
+                                  options={TASK_STATUS_OPTIONS}
+                                  className="w-full text-xs"
+                                />
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </motion.div>
+              </motion.div>
+            );
+          })()}
+
 
           {/* PENDING APPROVALS */}
           {isManager && (

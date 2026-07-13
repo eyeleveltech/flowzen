@@ -25,7 +25,6 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
     email: '',
     phone: '',
     source: 'MANUAL',
-    linkedinUrl: '',
     instagramHandle: '',
     facebookPage: '',
     assignedToId: '',
@@ -33,6 +32,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
     expectedRevenue: '',
     expectedCloseDate: '',
     followUpDate: '',
+    lastContactedDate: '',
     industry: '',
     city: '',
     state: '',
@@ -122,6 +122,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
         expectedRevenue: form.expectedRevenue ? parseFloat(form.expectedRevenue) : undefined,
         expectedCloseDate: form.expectedCloseDate || undefined,
         followUpDate: form.followUpDate || undefined,
+        lastContactedDate: form.lastContactedDate || undefined,
       };
 
       await api.post('/crm/leads', payload);
@@ -295,8 +296,8 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                     )}
                   </div>
 
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field label="LinkedIn URL" value={form.linkedinUrl} onChange={(v) => setForm({ ...form, linkedinUrl: v })} placeholder="linkedin.com/in/username" />
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority <span className="text-red-500">*</span></label>
                       <div className="relative">
@@ -376,9 +377,10 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                     <Field label="Website" value={form.website} onChange={(v) => setForm({ ...form, website: v })} placeholder="example.com" />
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     <Field label="State" value={form.state} onChange={(v) => setForm({ ...form, state: v })} placeholder="e.g. Tamil Nadu" />
-                    <Field label="Follow-up Date" type="date" value={form.followUpDate} onChange={(v) => setForm({ ...form, followUpDate: v })} />
+                    <Field label="Next Follow-up Date" type="date" value={form.followUpDate} onChange={(v) => setForm({ ...form, followUpDate: v })} />
+                    <Field label="Last Contacted Date" type="date" value={form.lastContactedDate} onChange={(v) => setForm({ ...form, lastContactedDate: v })} />
                   </div>
                 </div>
 

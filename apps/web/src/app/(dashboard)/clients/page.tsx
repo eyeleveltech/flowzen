@@ -4,18 +4,19 @@ import { useState, useEffect, useId, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { useAuthStore } from '@/stores';
+import { useAuthStore, useModuleStore } from '@/stores';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatDate, formatCurrency, getInitials, getAvatarColor, getClientDisplayName } from '@/lib/utils';
 import {
-  Plus, Search, Filter, Users, Building2, Mail, Phone, X, ChevronRight, FolderKanban, Download, Upload, FileText, List, LayoutGrid, Columns, Check
+  Plus, Search, Filter, Users, Building2, Mail, Phone, X, ChevronRight, FolderKanban, Download, Upload, FileText, List, LayoutGrid, Columns, Check, Settings
 } from 'lucide-react';
 import { ClientTimelineView } from '@/components/clients/client-timeline-view';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { useMembers } from '@/hooks/useQueries';
+import { ViewSettingsPanel } from '@/components/ui/view-settings-panel';
 import Papa from 'papaparse';
 
 interface ClientContact {
@@ -67,6 +68,7 @@ function ClientsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuthStore();
+  const { activeModule } = useModuleStore();
   const [clients, setClients] = useState<Client[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1); // grows when "Load more" is clicked
@@ -80,10 +82,30 @@ function ClientsContent() {
     { id: 'industry', label: 'Industry' },
     { id: 'contact', label: 'Contact' },
     { id: 'projects', label: 'Projects' },
-    { id: 'status', label: 'Status' }
+    { id: 'status', label: activeModule === 'PM' ? 'Lifecycle Stage' : 'Status' }
   ];
   const [visibleColumns, setVisibleColumns] = useState<string[]>(ALL_COLUMNS.map(c => c.id));
   const [showColumnDropdown, setShowColumnDropdown] = useState(false);
+  const [showViewSettings, setShowViewSettings] = useState(false);
+  const [viewName, setViewName] = useState('All Companies');
+
+  const LOCAL_STORAGE_KEY = 'flowzen_view_clients';
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.name) setViewName(parsed.name);
+          if (parsed.visibleColumns) setVisibleColumns(parsed.visibleColumns);
+          if (parsed.viewType) setCurrentView(parsed.viewType);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (urlStatus) setStatusFilter([urlStatus]);
@@ -364,7 +386,12 @@ function ClientsContent() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-primary tracking-tight">Clients</h1>
+          <h1 className="text-2xl font-semibold text-primary tracking-tight flex items-center gap-2">
+            Clients
+            <span className="text-xs font-normal text-secondary bg-[#F3F4F6] px-2 py-0.5 rounded-lg border border-border">
+              {viewName}
+            </span>
+          </h1>
           <p className="text-sm text-secondary mt-1">{total} total clients</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
@@ -447,7 +474,7 @@ function ClientsContent() {
           <MultiSelect
             value={accountManagerFilter}
             onChange={setAccountManagerFilter}
-            placeholder="Account Managers"
+            placeholder="Account Manager"
             showSelectAll={true}
             options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
           />
@@ -465,57 +492,26 @@ function ClientsContent() {
 
       {/* View Tabs */}
       <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center bg-[#F3F4F6] p-1 rounded-lg">
-          <button onClick={() => setCurrentView('table')} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${currentView === 'table' ? 'bg-white shadow-sm text-primary' : 'text-secondary hover:text-primary'}`}>
-            <List className="w-4 h-4" /> Table
-          </button>
-          <button onClick={() => setCurrentView('timeline')} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${currentView === 'timeline' ? 'bg-white shadow-sm text-primary' : 'text-secondary hover:text-primary'}`}>
-            <LayoutGrid className="w-4 h-4" /> Timeline
+        <div className="flex items-center gap-3">
+          <div className="flex items-center bg-[#F3F4F6] p-1 rounded-lg">
+            <button onClick={() => setCurrentView('table')} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${currentView === 'table' ? 'bg-white shadow-sm text-primary' : 'text-secondary hover:text-primary'}`}>
+              <List className="w-4 h-4" /> Table
+            </button>
+            <button onClick={() => setCurrentView('timeline')} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${currentView === 'timeline' ? 'bg-white shadow-sm text-primary' : 'text-secondary hover:text-primary'}`}>
+              <LayoutGrid className="w-4 h-4" /> Timeline
+            </button>
+          </div>
+          <button
+            onClick={() => setShowViewSettings(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-secondary hover:text-primary bg-white border border-border rounded-lg shadow-sm transition-colors hover:bg-gray-50"
+            title="Configure View Settings"
+          >
+            <Settings className="w-3.5 h-3.5" /> View Settings
           </button>
         </div>
         
         {currentView === 'table' && (
-          <div className="relative">
-            <button 
-              onClick={() => setShowColumnDropdown(!showColumnDropdown)}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-secondary hover:text-primary bg-white border border-border rounded-lg shadow-sm transition-colors hover:bg-[#F9FAFB]"
-            >
-              <Columns className="w-4 h-4" /> View Options
-            </button>
-            <AnimatePresence>
-              {showColumnDropdown && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowColumnDropdown(false)} />
-                  <motion.div 
-                    initial={{ opacity: 0, y: 5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 5 }}
-                    className="absolute right-0 top-full mt-2 w-48 bg-white border border-border rounded-xl shadow-lg z-50 overflow-hidden py-1"
-                  >
-                    <div className="px-3 py-2 border-b border-[#F3F4F6] text-[10px] font-semibold text-secondary uppercase tracking-wider">
-                      Visible Columns
-                    </div>
-                    {ALL_COLUMNS.map(col => (
-                      <button
-                        key={col.id}
-                        onClick={() => {
-                          setVisibleColumns(prev => 
-                            prev.includes(col.id) 
-                              ? prev.filter(c => c !== col.id)
-                              : [...prev, col.id]
-                          )
-                        }}
-                        className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#F9FAFB] transition-colors"
-                      >
-                        <span className="text-[#374151]">{col.label}</span>
-                        {visibleColumns.includes(col.id) && <Check className="w-4 h-4 text-primary" />}
-                      </button>
-                    ))}
-                  </motion.div>
-                </>
-              )}
-            </AnimatePresence>
-          </div>
+          <div className="relative" />
         )}
       </div>
 
@@ -530,8 +526,49 @@ function ClientsContent() {
               {visibleColumns.includes('industry') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Industry</th>}
               {visibleColumns.includes('contact') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Contact</th>}
               {visibleColumns.includes('projects') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Projects</th>}
-              {visibleColumns.includes('status') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Status</th>}
-              <th className="px-6 py-3.5"></th>
+              {visibleColumns.includes('status') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">{activeModule === 'PM' ? 'Lifecycle Stage' : 'Status'}</th>}
+              <th className="px-6 py-3.5 w-10 text-center relative select-none">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setShowColumnDropdown(!showColumnDropdown); }}
+                  className="inline-flex items-center justify-center h-6 w-6 rounded-md text-[#9CA3AF] hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
+                  title="Toggle visible columns"
+                >
+                  +
+                </button>
+                <AnimatePresence>
+                  {showColumnDropdown && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowColumnDropdown(false)} />
+                      <motion.div 
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 5 }}
+                        className="absolute right-0 top-full mt-2 w-48 bg-white border border-border rounded-xl shadow-lg z-50 overflow-hidden py-1"
+                      >
+                        <div className="px-3 py-2 border-b border-[#F3F4F6] text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
+                          Visible Columns
+                        </div>
+                        {ALL_COLUMNS.map(col => (
+                          <button
+                            key={col.id}
+                            onClick={() => {
+                              setVisibleColumns(prev => 
+                                prev.includes(col.id) 
+                                  ? prev.filter(c => c !== col.id)
+                                  : [...prev, col.id]
+                              )
+                            }}
+                            className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#F9FAFB] transition-colors"
+                          >
+                            <span className="text-[#374151]">{col.label}</span>
+                            {visibleColumns.includes(col.id) && <Check className="w-4 h-4 text-primary" />}
+                          </button>
+                        ))}
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#F3F4F6]">
@@ -750,8 +787,7 @@ function ClientsContent() {
               {creationMode === 'MANUAL' ? (
                 <form onSubmit={handleCreate} className="relative p-6 space-y-4">
                   {formError && <div className="absolute top-0 left-6 right-6 -mt-2 z-10 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 shadow-sm border border-red-100">{formError}</div>}
-                  <Field label="Client Name *" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
-                  <Field label="Company" value={form.company} onChange={(v) => setForm({ ...form, company: v })} />
+                  <Field label="Company Name *" value={form.company} onChange={(v) => setForm({ ...form, name: v, company: v })} required />
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Industry</label>
                     <Select
@@ -922,6 +958,50 @@ function ClientsContent() {
           </>
         )}
       </AnimatePresence>
+      <ViewSettingsPanel
+        isOpen={showViewSettings}
+        onClose={() => setShowViewSettings(false)}
+        viewName={viewName}
+        onViewNameChange={setViewName}
+        viewType={currentView === 'table' ? 'list' : 'board'}
+        onViewTypeChange={(type) => setCurrentView(type === 'list' ? 'table' : 'timeline')}
+        columns={ALL_COLUMNS}
+        visibleColumns={visibleColumns}
+        onVisibleColumnsChange={setVisibleColumns}
+        onSave={() => {
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({
+              name: viewName,
+              visibleColumns,
+              viewType: currentView
+            }));
+          }
+          toast.success('View Settings saved successfully!');
+          setShowViewSettings(false);
+        }}
+        onReset={() => {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem(LOCAL_STORAGE_KEY);
+          }
+          setViewName('All Companies');
+          setCurrentView('table');
+          setVisibleColumns(ALL_COLUMNS.map(c => c.id));
+          toast.success('View Settings reset to defaults');
+        }}
+        onClone={() => {
+          const clonedName = viewName + ' (Copy)';
+          setViewName(clonedName);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({
+              name: clonedName,
+              visibleColumns,
+              viewType: currentView
+            }));
+          }
+          toast.success('Cloned successfully to a new view copy!');
+          setShowViewSettings(false);
+        }}
+      />
     </div>
   );
 }

@@ -14,35 +14,44 @@ import { WonCelebrationModal } from './WonCelebrationModal';
 import { useQueryClient } from '@tanstack/react-query';
 import { LeadModal } from './LeadModal';
 
-// All 15 pipeline stages in chronological order (used by the per-card stage menu)
+// All pipeline stages in chronological order (used by the per-card stage menu)
 const PIPELINE_STAGES = [
   'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
-  'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED', 'CHURNED',
+  'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'ON_HOLD', 'PROJECT_COMPLETED', 'CHURNED',
 ];
 
+// Probability weights used to compute weighted deal value per column
+const STAGE_WEIGHTS: Record<string, number> = {
+  NEW_LEAD: 0.10, OUTREACH: 0.20, MEETING: 0.35, PROPOSAL: 0.50, NEGOTIATION: 0.75,
+  CONTRACT: 0.90, ACTIVE_RETAINER: 1.00, ACTIVE_PROJECT: 1.00, ON_HOLD: 0.10,
+  PROJECT_COMPLETED: 1.00, CHURNED: 0.00,
+};
+
 const GROUPS = [
-  { id: 'New', title: 'New', color: '#7c3aed', stages: ['NEW_LEAD'] },
+  { id: 'New', title: 'New Lead', color: '#7c3aed', stages: ['NEW_LEAD'] },
   { id: 'Outreach', title: 'Outreach', color: '#0891b2', stages: ['OUTREACH'] },
   { id: 'Meeting', title: 'Meeting', color: '#d97706', stages: ['MEETING'] },
   { id: 'Proposal', title: 'Proposal', color: '#2563eb', stages: ['PROPOSAL'] },
   { id: 'Negotiation', title: 'Negotiation', color: '#0369a1', stages: ['NEGOTIATION'] },
-  { id: 'Closing', title: 'Closing', color: '#15803d', stages: ['CONTRACT'] },
+  { id: 'WonClosed', title: 'Won & Closed', color: '#15803d', stages: ['CONTRACT'] },
   { id: 'Active', title: 'Active', color: '#0f766e', stages: ['ACTIVE_RETAINER', 'ACTIVE_PROJECT'] },
-  { id: 'Closed', title: 'Closed', color: '#475569', stages: ['PROJECT_COMPLETED'] },
-  { id: 'Lost', title: 'Lost', color: '#dc2626', stages: ['CHURNED'] },
+  { id: 'OnHold', title: 'On Hold', color: '#9ca3af', stages: ['ON_HOLD'] },
+  { id: 'Completed', title: 'Project Completed', color: '#475569', stages: ['PROJECT_COMPLETED'] },
+  { id: 'Lost', title: 'Lost & Closed', color: '#dc2626', stages: ['CHURNED'] },
 ];
 
 const STAGE_BADGES: Record<string, { label: string, bg: string, text: string }> = {
-  'NEW_LEAD': { label: 'NEW', bg: '#7c3aed', text: '#ffffff' },
+  'NEW_LEAD': { label: 'NEW LEAD', bg: '#7c3aed', text: '#ffffff' },
   'OUTREACH': { label: 'OUTREACH', bg: '#0891b2', text: '#ffffff' },
   'MEETING': { label: 'MEETING', bg: '#d97706', text: '#ffffff' },
   'PROPOSAL': { label: 'PROPOSAL', bg: '#2563eb', text: '#ffffff' },
   'NEGOTIATION': { label: 'NEGOTIATION', bg: '#0369a1', text: '#ffffff' },
-  'CONTRACT': { label: 'CONTRACT', bg: '#15803d', text: '#ffffff' },
-  'ACTIVE_RETAINER': { label: 'RETAINER', bg: '#0f766e', text: '#ffffff' },
-  'ACTIVE_PROJECT': { label: 'PROJECT', bg: '#1d4ed8', text: '#ffffff' },
+  'CONTRACT': { label: 'WON & CLOSED', bg: '#15803d', text: '#ffffff' },
+  'ACTIVE_RETAINER': { label: 'ACTIVE (RETAINER)', bg: '#0f766e', text: '#ffffff' },
+  'ACTIVE_PROJECT': { label: 'ACTIVE (PROJECT)', bg: '#1d4ed8', text: '#ffffff' },
+  'ON_HOLD': { label: 'ON HOLD', bg: '#9ca3af', text: '#ffffff' },
   'PROJECT_COMPLETED': { label: 'COMPLETED', bg: '#166534', text: '#ffffff' },
-  'CHURNED': { label: 'CHURNED', bg: '#dc2626', text: '#ffffff' },
+  'CHURNED': { label: 'LOST & CLOSED', bg: '#dc2626', text: '#ffffff' },
 };
 
 export function PipelineBoardView() {
@@ -239,8 +248,8 @@ export function PipelineBoardView() {
     }
   }
 
-  // Hide Won/Lost columns by default; the "Show Won/Lost" toggle reveals them.
-  const visibleGroups = showWonLost ? GROUPS : GROUPS.filter(g => g.id !== 'Closed' && g.id !== 'Lost');
+  // Hide Won/Lost/Completed columns by default; the toggle reveals them.
+  const visibleGroups = showWonLost ? GROUPS : GROUPS.filter(g => g.id !== 'Completed' && g.id !== 'Lost');
 
   if (!isMounted || loading) {
     return (
@@ -270,6 +279,11 @@ export function PipelineBoardView() {
           {visibleGroups.map((group) => {
             const columnLeads = columns[group.id] || [];
             const columnValue = columnLeads.reduce((acc, curr) => acc + (curr.dealValue || 0), 0);
+            // Weighted value = sum of (dealValue × stage probability weight) per card
+            const columnWeightedValue = columnLeads.reduce((acc, curr) => {
+              const weight = STAGE_WEIGHTS[curr.stage] ?? 0.5;
+              return acc + (curr.dealValue || 0) * weight;
+            }, 0);
             const isCollapsed = collapsedColumns.includes(group.id);
 
             if (isCollapsed) {
@@ -412,22 +426,28 @@ export function PipelineBoardView() {
                   )}
                 </Droppable>
 
-                {/* Column Footer */}
-                <div className="px-4 py-2.5 bg-white border-t border-gray-200 flex items-center justify-between shrink-0 select-none">
-                  <div className="flex flex-col">
-                    <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider">Total Value</span>
-                    <span className="text-xs font-bold text-primary">
-                      {formatCurrency(columnValue)}
-                    </span>
+                {/* Column Footer — fixed, shows total + weighted deal values */}
+                <div className="px-3 py-2.5 bg-white border-t border-gray-200 flex items-center justify-between shrink-0 select-none">
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider block">Total</span>
+                        <span className="text-xs font-bold text-primary">{formatCurrency(columnValue)}</span>
+                      </div>
+                      <div className="border-l border-gray-100 pl-3">
+                        <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider block">Weighted</span>
+                        <span className="text-xs font-bold text-emerald-600">{formatCurrency(columnWeightedValue)}</span>
+                      </div>
+                    </div>
                   </div>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       setIsAddModalOpen(true);
                     }}
-                    className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:text-blue-600 transition-colors py-1 px-2 rounded-lg hover:bg-gray-50"
+                    className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:text-blue-600 transition-colors py-1 px-2.5 rounded-lg hover:bg-gray-50 border border-gray-200"
                   >
-                    <Plus className="w-3.5 h-3.5" /> Add
+                    <Plus className="w-3.5 h-3.5" /> Add Lead
                   </button>
                 </div>
               </div>

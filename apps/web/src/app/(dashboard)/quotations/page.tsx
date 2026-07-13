@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, FileText, Download, Copy, Ban, Search, Eye, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
 import { Select } from '@/components/ui/select';
 import toast from 'react-hot-toast';
 import { useConfirmStore } from '@/stores';
@@ -29,6 +30,7 @@ export default function QuotationsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [duplicateOf, setDuplicateOf] = useState<any>(null);
+  const router = useRouter();
 
   const { data, isLoading } = useQuery({
     queryKey: ['quotes', search, typeFilter, statusFilter],
@@ -75,6 +77,28 @@ export default function QuotationsPage() {
     setDuplicateOf(q); setEditId(null); setShowForm(true);
   }
 
+  async function createInvoiceDraft(q: any) {
+    const t = toast.loading('Creating invoice draft...');
+    try {
+      const payload = {
+        quoteId: q.id,
+        draftNumber: `INV-${q.documentNumber.split('-')[1] || Date.now()}`,
+        clientId: q.clientId,
+        clientName: q.clientName,
+        lineItems: q.lineItems,
+        grandTotal: q.grandTotal,
+        notes: 'Created from Quote ' + q.documentNumber,
+      };
+      await api.post('/revenue/invoice-drafts', payload);
+      toast.dismiss(t);
+      toast.success('Invoice draft created successfully');
+      router.push('/invoices'); // Or wherever the revenue module is
+    } catch (e: any) {
+      toast.dismiss(t);
+      toast.error(e.message || 'Failed to create invoice draft');
+    }
+  }
+
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -94,10 +118,10 @@ export default function QuotationsPage() {
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search number or client..." className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
         </div>
         <div className="w-full sm:w-48">
-          <Select value={typeFilter} onChange={setTypeFilter} options={[{ label: 'All Types', value: '' }, { label: 'Quotation', value: 'QUOTATION' }, { label: 'Proforma Invoice', value: 'PROFORMA_INVOICE' }]} />
+          <Select value={typeFilter} onChange={setTypeFilter} options={[{ label: 'Types', value: '' }, { label: 'Quotation', value: 'QUOTATION' }, { label: 'Proforma Invoice', value: 'PROFORMA_INVOICE' }]} />
         </div>
         <div className="w-full sm:w-44">
-          <Select value={statusFilter} onChange={setStatusFilter} options={[{ label: 'All Status', value: '' }, ...['DRAFT', 'SENT', 'ACCEPTED', 'EXPIRED', 'CANCELLED'].map(s => ({ label: s[0] + s.slice(1).toLowerCase(), value: s }))]} />
+          <Select value={statusFilter} onChange={setStatusFilter} options={[{ label: 'Status', value: '' }, ...['DRAFT', 'SENT', 'ACCEPTED', 'EXPIRED', 'CANCELLED'].map(s => ({ label: s[0] + s.slice(1).toLowerCase(), value: s }))]} />
         </div>
       </div>
 
@@ -142,6 +166,11 @@ export default function QuotationsPage() {
                       <button title="View / Edit" onClick={() => openEdit(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Eye className="h-4 w-4" /></button>
                       <button title="Generate / Download PDF" onClick={() => q.pdfUrl ? window.open(`${API_BASE}${q.pdfUrl}`, '_blank') : generatePdf(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Download className="h-4 w-4" /></button>
                       <button title="Duplicate" onClick={() => duplicate(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Copy className="h-4 w-4" /></button>
+                      {q.status === 'ACCEPTED' && (
+                        <button title="Move to Invoice Draft" onClick={async () => { if (await confirm({ title: 'Create Invoice', message: 'Move this quote to an Invoice Draft?', confirmText: 'Create Invoice', cancelText: 'Cancel' })) createInvoiceDraft(q); }} className="p-1.5 rounded-lg hover:bg-emerald-50 hover:text-emerald-600 transition-colors">
+                          <FileText className="h-4 w-4" />
+                        </button>
+                      )}
                       {q.status !== 'CANCELLED' && (
                         <button title="Cancel" onClick={async () => { if (await confirm({ title: 'Cancel Document', message: 'Are you sure you want to cancel this document?', confirmText: 'Cancel Document', cancelText: 'Keep', variant: 'warning' })) statusMutation.mutate({ id: q.id, status: 'CANCELLED' }); }} className="p-1.5 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors"><Ban className="h-4 w-4" /></button>
                       )}
@@ -190,6 +219,11 @@ export default function QuotationsPage() {
                 <button title="View / Edit" onClick={() => openEdit(q.id)} className="p-1.5 rounded-lg text-secondary hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Eye className="h-3.5 w-3.5" /></button>
                 <button title="Generate / Download PDF" onClick={() => q.pdfUrl ? window.open(`${API_BASE}${q.pdfUrl}`, '_blank') : generatePdf(q.id)} className="p-1.5 rounded-lg text-secondary hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Download className="h-3.5 w-3.5" /></button>
                 <button title="Duplicate" onClick={() => duplicate(q.id)} className="p-1.5 rounded-lg text-secondary hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Copy className="h-3.5 w-3.5" /></button>
+                {q.status === 'ACCEPTED' && (
+                  <button title="Move to Invoice Draft" onClick={async () => { if (await confirm({ title: 'Create Invoice', message: 'Move this quote to an Invoice Draft?', confirmText: 'Create Invoice', cancelText: 'Cancel' })) createInvoiceDraft(q); }} className="p-1.5 rounded-lg text-secondary hover:bg-emerald-50 hover:text-emerald-600 transition-colors">
+                    <FileText className="h-3.5 w-3.5" />
+                  </button>
+                )}
                 {q.status !== 'CANCELLED' && (
                   <button title="Cancel" onClick={async () => { if (await confirm({ title: 'Cancel Document', message: 'Are you sure you want to cancel this document?', confirmText: 'Cancel Document', cancelText: 'Keep', variant: 'warning' })) statusMutation.mutate({ id: q.id, status: 'CANCELLED' }); }} className="p-1.5 rounded-lg text-secondary hover:bg-red-50 hover:text-red-600 transition-colors"><Ban className="h-3.5 w-3.5" /></button>
                 )}

@@ -10,6 +10,19 @@ import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
 import { idempotency } from '../middleware/idempotency.js';
 import { toList, whereIn } from '../utils/query.js';
 
+
+function calculateNextDueDate(date: Date | string | null, freq: string) {
+  if (!date) return null;
+  const d = new Date(date);
+  if (freq === 'DAILY') d.setDate(d.getDate() + 1);
+  else if (freq === 'WEEKLY') d.setDate(d.getDate() + 7);
+  else if (freq === 'MONTHLY') d.setMonth(d.getMonth() + 1);
+  else if (freq === 'YEARLY') d.setFullYear(d.getFullYear() + 1);
+  return d;
+}
+
+// Ensure the helper is at the top
+
 export const taskRouter = Router();
 taskRouter.use(authenticate);
 
@@ -30,6 +43,8 @@ const taskSchema = z.object({
   parentId: z.string().optional().nullable(),
   loggedHours: z.number().optional().nullable(),
   estimatedHours: z.number().optional().nullable(),
+  isRecurring: z.boolean().optional(),
+  recurrenceFrequency: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY']).optional().nullable(),
   driveLink: z.string().optional().nullable(),
 });
 
@@ -37,7 +52,7 @@ const taskSchema = z.object({
 taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const { search, status, priority, projectId, assigneeId, type, clientId, filter, teamId, sort, page = '1', limit = '50' } = req.query;
+    const { search, status, priority, projectId, assigneeId, type, clientId, filter, teamId, sort, dueDateFrom, dueDateTo, page = '1', limit = '50' } = req.query;
 
     const projectFilter: any = { client: { organizationId: orgId } };
     if (clientId) projectFilter.clientId = whereIn(clientId);
@@ -47,6 +62,13 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     if (priority) where.priority = whereIn(priority);
     if (type) where.type = whereIn(type);
     if (projectId) where.projectId = whereIn(projectId);
+
+    if (dueDateFrom || dueDateTo) {
+      const dateRange: any = {};
+      if (dueDateFrom) dateRange.gte = new Date(dueDateFrom as string);
+      if (dueDateTo) dateRange.lte = new Date(dueDateTo as string);
+      where.dueDate = dateRange;
+    }
     
     const andConditions: any[] = [];
     
@@ -85,7 +107,15 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     // Match either the primary assignee or any of the multi-assignees.
     const assigneeMatch = (uid: string) => ({ OR: [{ assigneeId: uid }, { assignees: { some: { id: uid } } }] });
     if (req.user!.role === 'TEAM_MEMBER') {
-      andConditions.push(assigneeMatch(req.user!.userId));
+      const uid = req.user!.userId;
+      andConditions.push({
+        OR: [
+          { assigneeId: uid },
+          { assignees: { some: { id: uid } } },
+          { project: { members: { some: { userId: uid } } } },
+          { project: { teams: { some: { team: { members: { some: { id: uid } } } } } } }
+        ]
+      });
     } else {
       const assigneeIds = toList(assigneeId);
       // Any of the selected assignees (primary or multi-assignee).
@@ -449,7 +479,52 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
       });
 
       // Notify the project owner + reviewer when work is completed (not the completer).
+      
       if (task.status === 'COMPLETED' && existing.status !== 'COMPLETED') {
+        if (task.isRecurring && task.recurrenceFrequency) {
+          // Spawn the next task
+          const nextTask = await prisma.task.create({
+            data: {
+              title: task.title,
+              description: task.description,
+              type: task.type,
+              projectId: task.projectId,
+              assigneeId: task.assigneeId,
+              reviewerId: task.reviewerId,
+              assignedById: task.assignedById,
+              priority: task.priority,
+              status: 'TODO',
+              dueDate: calculateNextDueDate(task.dueDate || new Date(), task.recurrenceFrequency),
+              assignedDate: new Date(),
+              parentId: task.parentId,
+              estimatedHours: task.estimatedHours,
+              driveLink: task.driveLink,
+              isRecurring: true,
+              recurrenceFrequency: task.recurrenceFrequency,
+              order: task.order + 1,
+            }
+          });
+          
+          if (existing.assignees && existing.assignees.length > 0) {
+            await prisma.task.update({
+              where: { id: nextTask.id },
+              data: { assignees: { connect: existing.assignees.map(a => ({ id: a.id })) } }
+            });
+          }
+          
+          await prisma.activity.create({
+            data: {
+              type: 'TASK_CREATED',
+              message: `spawned repeating task "${nextTask.title}"`,
+              entityType: 'TASK',
+              entityId: nextTask.id,
+              userId: req.user!.userId,
+              taskId: nextTask.id,
+              projectId: nextTask.projectId,
+            },
+          });
+        }
+
         const ownerId = task.projectId
           ? (await prisma.project.findUnique({ where: { id: task.projectId }, select: { ownerId: true } }))?.ownerId
           : null;
