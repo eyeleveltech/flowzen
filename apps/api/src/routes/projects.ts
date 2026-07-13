@@ -15,9 +15,9 @@ projectRouter.use(authenticate);
 const projectSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
-  type: z.enum(['RETAINER', 'ONE_TIME', 'EVENT', 'INTERNAL']).optional(),
+  type: z.enum(['RETAINER', 'ONE_TIME', 'EVENT', 'INTERNAL']).optional().or(z.literal('')),
   scope: z.string().optional(),
-  reportingCadence: z.enum(['WEEKLY', 'FORTNIGHTLY', 'MONTHLY', 'NONE']).optional(),
+  reportingCadence: z.enum(['WEEKLY', 'FORTNIGHTLY', 'MONTHLY', 'NONE']).optional().or(z.literal('')),
   clientApprovalRequired: z.boolean().optional(),
   tags: z.array(z.string()).optional(),
   projectNotes: z.string().optional(),
@@ -26,18 +26,19 @@ const projectSchema = z.object({
   ownerId: z.string(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
-  status: z.enum(['PLANNING', 'IN_PROGRESS', 'REVIEW', 'COMPLETED', 'ON_HOLD', 'CANCELLED']).optional(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional().or(z.literal('')),
+  status: z.enum(['PLANNING', 'IN_PROGRESS', 'REVIEW', 'COMPLETED', 'ON_HOLD', 'CANCELLED']).optional().or(z.literal('')),
   budget: z.number().optional(),
-  platform: z.enum(['INSTAGRAM', 'FACEBOOK', 'LINKEDIN', 'X_TWITTER', 'TIKTOK', 'YOUTUBE', 'GOOGLE_ADS', 'WEBSITE', 'MOBILE_APP', 'E_COMMERCE', 'CROSS_PLATFORM', 'OTHER']).optional(),
+  platform: z.enum(['INSTAGRAM', 'FACEBOOK', 'LINKEDIN', 'X_TWITTER', 'TIKTOK', 'YOUTUBE', 'GOOGLE_ADS', 'WEBSITE', 'MOBILE_APP', 'E_COMMERCE', 'CROSS_PLATFORM', 'OTHER']).optional().nullable().or(z.literal('')),
   memberIds: z.array(z.string()).optional(),
+  teamIds: z.array(z.string()).optional(),
 });
 
 // GET /api/projects
 projectRouter.get('/', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const { search, status, priority, clientId, ownerId, page = '1', limit = '20' } = req.query;
+    const { search, status, priority, clientId, ownerId, endDate, page = '1', limit = '20' } = req.query;
 
     const where: Record<string, unknown> = { client: { organizationId: orgId } };
     
@@ -66,6 +67,9 @@ projectRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     if (priority) where.priority = whereIn(priority);
     if (clientId) where.clientId = whereIn(clientId);
     if (ownerId) where.ownerId = whereIn(ownerId);
+    if (endDate) {
+      where.endDate = { lte: new Date(endDate as string) };
+    }
     if (search) {
       const searchCondition = {
         OR: [
@@ -171,6 +175,12 @@ projectRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), va
 
 
 
+    if (projectData.platform === '') projectData.platform = null;
+    if (projectData.reportingCadence === '') projectData.reportingCadence = 'NONE';
+    if (projectData.type === '') projectData.type = 'ONE_TIME';
+    if (projectData.priority === '') projectData.priority = 'MEDIUM';
+    if (projectData.status === '') projectData.status = 'PLANNING';
+
     let finalClientId = projectData.clientId;
     if (!finalClientId) {
       const org = await prisma.organization.findUnique({ where: { id: req.user!.organizationId } });
@@ -200,6 +210,9 @@ projectRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), va
             ? Array.from(new Set([...req.body.memberIds, req.body.ownerId])).map((id: string) => ({ userId: id as string }))
             : [{ userId: req.body.ownerId }],
         },
+        teams: req.body.teamIds ? {
+          create: req.body.teamIds.map((id: string) => ({ teamId: id }))
+        } : undefined,
       },
       include: {
         client: { select: { id: true, name: true, company: true } },
@@ -245,8 +258,14 @@ projectRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), 
 
 
 
+    if (projectData.platform === '') projectData.platform = null;
+    if (projectData.reportingCadence === '') projectData.reportingCadence = 'NONE';
+    if (projectData.type === '') projectData.type = 'ONE_TIME';
+    if (projectData.priority === '') projectData.priority = 'MEDIUM';
+    if (projectData.status === '') projectData.status = 'PLANNING';
+
     let finalClientId = projectData.clientId;
-    if (!finalClientId) {
+    if (finalClientId === '') {
       const org = await prisma.organization.findUnique({ where: { id: req.user!.organizationId } });
       const internalName = `${org?.name || 'Internal'} (Internal)`;
       
@@ -260,20 +279,28 @@ projectRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), 
         });
       }
       finalClientId = internalClient.id;
+    } else if (finalClientId === undefined) {
+      finalClientId = existing.clientId;
     }
 
     const project = await prisma.project.update({
       where: { id: (req.params.id as string) },
       data: {
         ...projectData,
-        folderLink: folderLink || null,
+        ...(folderLink !== undefined ? { folderLink: folderLink || null } : {}),
         clientId: finalClientId,
-        startDate: projectData.startDate ? new Date(projectData.startDate) : undefined,
-        endDate: projectData.endDate ? new Date(projectData.endDate) : undefined,
-        ...(req.body.memberIds ? {
+        ...(projectData.startDate !== undefined ? { startDate: projectData.startDate ? new Date(projectData.startDate) : null } : {}),
+        ...(projectData.endDate !== undefined ? { endDate: projectData.endDate ? new Date(projectData.endDate) : null } : {}),
+        ...(req.body.memberIds !== undefined ? {
           members: {
             deleteMany: {},
             create: Array.from(new Set([...req.body.memberIds, req.body.ownerId || existing.ownerId])).map((id: string) => ({ userId: id as string })),
+          },
+        } : {}),
+        ...(req.body.teamIds !== undefined ? {
+          teams: {
+            deleteMany: {},
+            create: req.body.teamIds.map((id: string) => ({ teamId: id })),
           },
         } : {}),
       },
@@ -348,6 +375,12 @@ projectRouter.delete('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'
       return;
     }
 
+    // Nullify projectId on associated expenses to prevent foreign key constraint violation
+    await prisma.expense.updateMany({
+      where: { projectId: project.id },
+      data: { projectId: null }
+    });
+
     await prisma.project.delete({ where: { id: (req.params.id as string) } });
 
     const io = req.app.get('io');
@@ -364,8 +397,12 @@ projectRouter.delete('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'
     });
 
     res.json({ message: 'Project deleted' });
-  } catch (error) {
-    next(error);
+  } catch (error: any) {
+    if (error.code === 'P2003' || (error.message && /foreign key/i.test(error.message))) {
+      res.status(400).json({ error: 'Cannot delete project due to associated records that cannot be deleted.' });
+    } else {
+      next(error);
+    }
   }
 });
 

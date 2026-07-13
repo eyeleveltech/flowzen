@@ -1,5 +1,5 @@
 'use client';
-
+import { ModuleKey } from '@/lib/modules';
 import { create } from 'zustand';
 
 interface User {
@@ -91,8 +91,8 @@ export const useUIStore = create<UIStore>((set) => ({
 // is the primary signal; this persists the last module for shared/core pages.
 
 interface ModuleStore {
-  activeModule: 'CRM' | 'PM';
-  setActiveModule: (m: 'CRM' | 'PM') => void;
+  activeModule: ModuleKey;
+  setActiveModule: (m: ModuleKey) => void;
   hydrate: () => void;
 }
 
@@ -105,7 +105,7 @@ export const useModuleStore = create<ModuleStore>((set) => ({
   hydrate: () => {
     if (typeof window === 'undefined') return;
     const saved = localStorage.getItem('flowzen-active-module');
-    if (saved === 'CRM' || saved === 'PM') set({ activeModule: saved });
+    if (saved === 'CRM' || saved === 'PM' || saved === 'REVENUE') set({ activeModule: saved as ModuleKey });
   },
 }));
 

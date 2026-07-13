@@ -4,17 +4,19 @@ import { useState, useEffect, useId, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { useAuthStore } from '@/stores';
+import { useAuthStore, useModuleStore } from '@/stores';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatDate, formatCurrency, getInitials, getAvatarColor, getClientDisplayName } from '@/lib/utils';
 import {
-  Plus, Search, Filter, Users, Building2, Mail, Phone, X, ChevronRight, FolderKanban, Download, Upload, FileText
+  Plus, Search, Filter, Users, Building2, Mail, Phone, X, ChevronRight, FolderKanban, Download, Upload, FileText, List, LayoutGrid, Columns, Check, Settings
 } from 'lucide-react';
+import { ClientTimelineView } from '@/components/clients/client-timeline-view';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { useMembers } from '@/hooks/useQueries';
+import { ViewSettingsPanel } from '@/components/ui/view-settings-panel';
 import Papa from 'papaparse';
 
 interface ClientContact {
@@ -66,6 +68,7 @@ function ClientsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuthStore();
+  const { activeModule } = useModuleStore();
   const [clients, setClients] = useState<Client[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1); // grows when "Load more" is clicked
@@ -73,13 +76,43 @@ function ClientsContent() {
   const urlStatus = searchParams.get('status');
   const [statusFilter, setStatusFilter] = useState<string[]>(urlStatus ? [urlStatus] : []);
 
+  const [currentView, setCurrentView] = useState<'table' | 'timeline'>('table');
+  const ALL_COLUMNS = [
+    { id: 'client', label: 'Client' },
+    { id: 'industry', label: 'Industry' },
+    { id: 'contact', label: 'Contact' },
+    { id: 'projects', label: 'Projects' },
+    { id: 'status', label: activeModule === 'PM' ? 'Lifecycle Stage' : 'Status' }
+  ];
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(ALL_COLUMNS.map(c => c.id));
+  const [showColumnDropdown, setShowColumnDropdown] = useState(false);
+  const [showViewSettings, setShowViewSettings] = useState(false);
+  const [viewName, setViewName] = useState('All Companies');
+
+  const LOCAL_STORAGE_KEY = 'flowzen_view_clients';
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.name) setViewName(parsed.name);
+          if (parsed.visibleColumns) setVisibleColumns(parsed.visibleColumns);
+          if (parsed.viewType) setCurrentView(parsed.viewType);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+  }, []);
+
   useEffect(() => {
     if (urlStatus) setStatusFilter([urlStatus]);
   }, [urlStatus]);
-  const [cityFilter, setCityFilter] = useState('');
   const [accountManagerFilter, setAccountManagerFilter] = useState<string[]>([]);
   const [engagementTypeFilter, setEngagementTypeFilter] = useState<string[]>([]);
-  const [industryFilter, setIndustryFilter] = useState('');
+  const [industryFilter, setIndustryFilter] = useState<string[]>([]);
   const [filtersHydrated, setFiltersHydrated] = useState(false);
 
   // Restore the filters saved last time (so they survive opening a client and
@@ -91,10 +124,11 @@ function ClientsContent() {
         const f = JSON.parse(raw);
         if (f.search) setSearch(f.search);
         if (!urlStatus && f.statusFilter?.length) setStatusFilter(f.statusFilter);
-        if (f.cityFilter) setCityFilter(f.cityFilter);
         if (f.accountManagerFilter?.length) setAccountManagerFilter(f.accountManagerFilter);
         if (f.engagementTypeFilter?.length) setEngagementTypeFilter(f.engagementTypeFilter);
-        if (f.industryFilter) setIndustryFilter(f.industryFilter);
+        if (f.industryFilter?.length) setIndustryFilter(f.industryFilter);
+        if (f.currentView && f.currentView !== 'gantt') setCurrentView(f.currentView);
+        if (f.visibleColumns) setVisibleColumns(f.visibleColumns);
       }
     } catch { /* ignore */ }
     setFiltersHydrated(true);
@@ -105,9 +139,9 @@ function ClientsContent() {
   useEffect(() => {
     if (!filtersHydrated) return;
     try {
-      sessionStorage.setItem('flowzen:clients:filters', JSON.stringify({ search, statusFilter, cityFilter, accountManagerFilter, engagementTypeFilter, industryFilter }));
+      sessionStorage.setItem('flowzen:clients:filters', JSON.stringify({ search, statusFilter, accountManagerFilter, engagementTypeFilter, industryFilter, currentView, visibleColumns }));
     } catch { /* ignore */ }
-  }, [filtersHydrated, search, statusFilter, cityFilter, accountManagerFilter, engagementTypeFilter, industryFilter]);
+  }, [filtersHydrated, search, statusFilter, accountManagerFilter, engagementTypeFilter, industryFilter, currentView, visibleColumns]);
 
   const [showCreate, setShowCreate] = useState(searchParams.get('create') === 'true');
   const [loading, setLoading] = useState(true);
@@ -152,23 +186,22 @@ function ClientsContent() {
         sse.off('client:deleted');
       };
     }
-  }, [filtersHydrated, search, statusFilter, cityFilter, accountManagerFilter, engagementTypeFilter, industryFilter, page]);
+  }, [filtersHydrated, search, statusFilter, accountManagerFilter, engagementTypeFilter, industryFilter, page]);
 
   // Any filter change resets back to the first page.
   useEffect(() => {
     setPage(1);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, statusFilter, cityFilter, accountManagerFilter, engagementTypeFilter, industryFilter]);
+  }, [search, statusFilter, accountManagerFilter, engagementTypeFilter, industryFilter]);
 
   async function fetchClients() {
     try {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
       if (statusFilter.length) params.set('status', statusFilter.join(','));
-      if (cityFilter) params.set('city', cityFilter);
       if (accountManagerFilter.length) params.set('accountManagerId', accountManagerFilter.join(','));
       if (engagementTypeFilter.length) params.set('engagementType', engagementTypeFilter.join(','));
-      if (industryFilter) params.set('industry', industryFilter);
+      if (industryFilter.length) params.set('industry', industryFilter.join(','));
       // Fetch a growing window (page 1 .. current page) so "Load more" stays consistent with SSE refetches.
       params.set('limit', String(page * PAGE_SIZE));
       const data = await api.get<{ clients: Client[]; total: number }>(`/clients?${params}`);
@@ -353,17 +386,21 @@ function ClientsContent() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-primary tracking-tight">Clients</h1>
+          <h1 className="text-2xl font-semibold text-primary tracking-tight flex items-center gap-2">
+            Clients
+            <span className="text-xs font-normal text-secondary bg-[#F3F4F6] px-2 py-0.5 rounded-lg border border-border">
+              {viewName}
+            </span>
+          </h1>
           <p className="text-sm text-secondary mt-1">{total} total clients</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-          {(!!search || statusFilter.length > 0 || !!cityFilter || !!industryFilter || engagementTypeFilter.length > 0 || accountManagerFilter.length > 0) && (
+          {(!!search || statusFilter.length > 0 || industryFilter.length > 0 || engagementTypeFilter.length > 0 || accountManagerFilter.length > 0) && (
             <button
               onClick={() => {
                 setSearch('');
                 setStatusFilter([]);
-                setCityFilter('');
-                setIndustryFilter('');
+                setIndustryFilter([]);
                 setEngagementTypeFilter([]);
                 setAccountManagerFilter([]);
                 router.replace('/clients', { scroll: false });
@@ -408,7 +445,8 @@ function ClientsContent() {
           <MultiSelect
             value={statusFilter}
             onChange={setStatusFilter}
-            placeholder="All Status"
+            placeholder="Status"
+            showSelectAll={true}
             options={[
               { label: 'Prospect', value: 'PROSPECT' },
               { label: 'Active', value: 'ACTIVE' },
@@ -422,7 +460,8 @@ function ClientsContent() {
           <MultiSelect
             value={engagementTypeFilter}
             onChange={setEngagementTypeFilter}
-            placeholder="All Engagements"
+            placeholder="Engagements"
+            showSelectAll={true}
             options={[
               { label: 'Retainer', value: 'Retainer' },
               { label: 'Project', value: 'Project' },
@@ -435,42 +474,101 @@ function ClientsContent() {
           <MultiSelect
             value={accountManagerFilter}
             onChange={setAccountManagerFilter}
-            placeholder="All Account Managers"
+            placeholder="Account Manager"
+            showSelectAll={true}
             options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
           />
         </div>
-        <div className="w-full sm:w-auto relative">
-          <input
-            value={cityFilter}
-            onChange={(e) => setCityFilter(e.target.value)}
-            placeholder="Filter by city..."
-            className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
-          />
-        </div>
         <div className="w-full sm:w-auto sm:min-w-[170px]">
-          <Select
+          <MultiSelect
             value={industryFilter}
             onChange={setIndustryFilter}
-            options={[
-              { label: 'All Industries', value: '' },
-              ...INDUSTRY_OPTIONS.map((i) => ({ label: i, value: i })),
-            ]}
+            placeholder="Industries"
+            showSelectAll={true}
+            options={INDUSTRY_OPTIONS.map((i) => ({ label: i, value: i }))}
           />
         </div>
       </div>
 
+      {/* View Tabs */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center bg-[#F3F4F6] p-1 rounded-lg">
+            <button onClick={() => setCurrentView('table')} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${currentView === 'table' ? 'bg-white shadow-sm text-primary' : 'text-secondary hover:text-primary'}`}>
+              <List className="w-4 h-4" /> Table
+            </button>
+            <button onClick={() => setCurrentView('timeline')} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${currentView === 'timeline' ? 'bg-white shadow-sm text-primary' : 'text-secondary hover:text-primary'}`}>
+              <LayoutGrid className="w-4 h-4" /> Timeline
+            </button>
+          </div>
+          <button
+            onClick={() => setShowViewSettings(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-secondary hover:text-primary bg-white border border-border rounded-lg shadow-sm transition-colors hover:bg-gray-50"
+            title="Configure View Settings"
+          >
+            <Settings className="w-3.5 h-3.5" /> View Settings
+          </button>
+        </div>
+        
+        {currentView === 'table' && (
+          <div className="relative" />
+        )}
+      </div>
+
       {/* Desktop Table View */}
+      {currentView === 'table' && (
       <div className="hidden md:block rounded-2xl border border-border bg-white overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[800px]">
             <thead>
             <tr className="border-b border-[#F3F4F6]">
-              <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>
-              <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Industry</th>
-              <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Contact</th>
-              <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Projects</th>
-              <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Status</th>
-              <th className="px-6 py-3.5"></th>
+              {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>}
+              {visibleColumns.includes('industry') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Industry</th>}
+              {visibleColumns.includes('contact') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Contact</th>}
+              {visibleColumns.includes('projects') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Projects</th>}
+              {visibleColumns.includes('status') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">{activeModule === 'PM' ? 'Lifecycle Stage' : 'Status'}</th>}
+              <th className="px-6 py-3.5 w-10 text-center relative select-none">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setShowColumnDropdown(!showColumnDropdown); }}
+                  className="inline-flex items-center justify-center h-6 w-6 rounded-md text-[#9CA3AF] hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
+                  title="Toggle visible columns"
+                >
+                  +
+                </button>
+                <AnimatePresence>
+                  {showColumnDropdown && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowColumnDropdown(false)} />
+                      <motion.div 
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 5 }}
+                        className="absolute right-0 top-full mt-2 w-48 bg-white border border-border rounded-xl shadow-lg z-50 overflow-hidden py-1"
+                      >
+                        <div className="px-3 py-2 border-b border-[#F3F4F6] text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
+                          Visible Columns
+                        </div>
+                        {ALL_COLUMNS.map(col => (
+                          <button
+                            key={col.id}
+                            onClick={() => {
+                              setVisibleColumns(prev => 
+                                prev.includes(col.id) 
+                                  ? prev.filter(c => c !== col.id)
+                                  : [...prev, col.id]
+                              )
+                            }}
+                            className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#F9FAFB] transition-colors"
+                          >
+                            <span className="text-[#374151]">{col.label}</span>
+                            {visibleColumns.includes(col.id) && <Check className="w-4 h-4 text-primary" />}
+                          </button>
+                        ))}
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#F3F4F6]">
@@ -497,50 +595,60 @@ function ClientsContent() {
                   className="hover:bg-surface cursor-pointer transition-colors"
                   onClick={() => router.push(`/clients/${client.id}`)}
                 >
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`h-8 w-8 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(getClientDisplayName(client))}`}>
-                        {getInitials(getClientDisplayName(client))}
+                  {visibleColumns.includes('client') && (
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`h-8 w-8 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(getClientDisplayName(client))}`}>
+                          {getInitials(getClientDisplayName(client))}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-primary">
+                            {getClientDisplayName(client)}
+                          </p>
+                          {client.name !== 'Internal' && client.company && client.name !== client.company && <p className="text-xs text-[#9CA3AF]">{client.name}</p>}
+                          {client.name === 'Internal' && <p className="text-xs font-medium text-[#9CA3AF]">(Internal)</p>}
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-primary">
-                          {getClientDisplayName(client)}
-                        </p>
-                        {client.name !== 'Internal' && client.company && client.name !== client.company && <p className="text-xs text-[#9CA3AF]">{client.name}</p>}
-                        {client.name === 'Internal' && <p className="text-xs font-medium text-[#9CA3AF]">(Internal)</p>}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-secondary">
-                    {client.name === 'Internal' && orgProfile?.industry ? orgProfile.industry : client.industry || '—'}
-                  </td>
-                  <td className="px-6 py-4">
-                    {client.name === 'Internal' ? (
-                      <div>
-                        <p className="text-sm text-[#374151] font-medium">Internal Contact</p>
-                        {orgProfile?.phone && <p className="text-[11px] text-secondary">{orgProfile.phone}</p>}
-                      </div>
-                    ) : client.contacts && client.contacts.length > 0 ? (
-                      <div>
-                        <p className="text-sm text-[#374151] font-medium">{client.contacts[0].name}</p>
-                        {client.contacts[0].designation && <p className="text-[11px] text-secondary">{client.contacts[0].designation}</p>}
-                        {client.contacts.length > 1 && (
-                          <span className="text-[10px] font-medium bg-[#F3F4F6] text-[#4B5563] px-1.5 py-0.5 rounded mt-1 inline-block">
-                            +{client.contacts.length - 1} more
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-sm text-[#9CA3AF]">—</span>
-                    )}
-                  </td>
+                    </td>
+                  )}
+                  {visibleColumns.includes('industry') && (
+                    <td className="px-6 py-4 text-sm text-secondary">
+                      {client.name === 'Internal' && orgProfile?.industry ? orgProfile.industry : client.industry || '—'}
+                    </td>
+                  )}
+                  {visibleColumns.includes('contact') && (
+                    <td className="px-6 py-4">
+                      {client.name === 'Internal' ? (
+                        <div>
+                          <p className="text-sm text-[#374151] font-medium">Internal Contact</p>
+                          {orgProfile?.phone && <p className="text-[11px] text-secondary">{orgProfile.phone}</p>}
+                        </div>
+                      ) : client.contacts && client.contacts.length > 0 ? (
+                        <div>
+                          <p className="text-sm text-[#374151] font-medium">{client.contacts[0].name}</p>
+                          {client.contacts[0].designation && <p className="text-[11px] text-secondary">{client.contacts[0].designation}</p>}
+                          {client.contacts.length > 1 && (
+                            <span className="text-[10px] font-medium bg-[#F3F4F6] text-[#4B5563] px-1.5 py-0.5 rounded mt-1 inline-block">
+                              +{client.contacts.length - 1} more
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-[#9CA3AF]">—</span>
+                      )}
+                    </td>
+                  )}
 
-                  <td className="px-6 py-4 text-sm text-secondary tabular-nums">{client._count?.projects ?? 0}</td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[client.status] || 'bg-gray-50 text-gray-500'}`}>
-                      {client.status.replace('_', ' ')}
-                    </span>
-                  </td>
+                  {visibleColumns.includes('projects') && (
+                    <td className="px-6 py-4 text-sm text-secondary tabular-nums">{client._count?.projects ?? 0}</td>
+                  )}
+                  {visibleColumns.includes('status') && (
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[client.status] || 'bg-gray-50 text-gray-500'}`}>
+                        {client.status.replace('_', ' ')}
+                      </span>
+                    </td>
+                  )}
                   <td className="px-6 py-4">
                     <ChevronRight className="h-4 w-4 text-[#D1D5DB]" />
                   </td>
@@ -551,6 +659,9 @@ function ClientsContent() {
         </table>
         </div>
       </div>
+      )}
+
+      {currentView === 'timeline' && <ClientTimelineView clients={clients} loading={loading} />}
 
       {/* Mobile Card View */}
       <div className="md:hidden flex flex-col gap-3 pb-4">
@@ -676,8 +787,7 @@ function ClientsContent() {
               {creationMode === 'MANUAL' ? (
                 <form onSubmit={handleCreate} className="relative p-6 space-y-4">
                   {formError && <div className="absolute top-0 left-6 right-6 -mt-2 z-10 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 shadow-sm border border-red-100">{formError}</div>}
-                  <Field label="Client Name *" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
-                  <Field label="Company" value={form.company} onChange={(v) => setForm({ ...form, company: v })} />
+                  <Field label="Company Name *" value={form.company} onChange={(v) => setForm({ ...form, name: v, company: v })} required />
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Industry</label>
                     <Select
@@ -848,6 +958,50 @@ function ClientsContent() {
           </>
         )}
       </AnimatePresence>
+      <ViewSettingsPanel
+        isOpen={showViewSettings}
+        onClose={() => setShowViewSettings(false)}
+        viewName={viewName}
+        onViewNameChange={setViewName}
+        viewType={currentView === 'table' ? 'list' : 'board'}
+        onViewTypeChange={(type) => setCurrentView(type === 'list' ? 'table' : 'timeline')}
+        columns={ALL_COLUMNS}
+        visibleColumns={visibleColumns}
+        onVisibleColumnsChange={setVisibleColumns}
+        onSave={() => {
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({
+              name: viewName,
+              visibleColumns,
+              viewType: currentView
+            }));
+          }
+          toast.success('View Settings saved successfully!');
+          setShowViewSettings(false);
+        }}
+        onReset={() => {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem(LOCAL_STORAGE_KEY);
+          }
+          setViewName('All Companies');
+          setCurrentView('table');
+          setVisibleColumns(ALL_COLUMNS.map(c => c.id));
+          toast.success('View Settings reset to defaults');
+        }}
+        onClone={() => {
+          const clonedName = viewName + ' (Copy)';
+          setViewName(clonedName);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({
+              name: clonedName,
+              visibleColumns,
+              viewType: currentView
+            }));
+          }
+          toast.success('Cloned successfully to a new view copy!');
+          setShowViewSettings(false);
+        }}
+      />
     </div>
   );
 }

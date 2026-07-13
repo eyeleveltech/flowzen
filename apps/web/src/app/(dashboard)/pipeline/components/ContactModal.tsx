@@ -65,7 +65,7 @@ export function ContactModal({ leadId, contact, onClose, onSuccess }: { leadId: 
             <div><label className={labelCls}>Email</label><input className={inputCls} value={form.email} onChange={(e) => set('email', e.target.value)} /></div>
             <div><label className={labelCls}>Phone</label><input className={inputCls} value={form.phone} onChange={(e) => set('phone', e.target.value)} /></div>
           </div>
-          <div><label className={labelCls}>LinkedIn URL</label><input className={inputCls} value={form.linkedinUrl} onChange={(e) => set('linkedinUrl', e.target.value)} placeholder="Enables per-contact Intelligence" /></div>
+
           <div>
             <label className={labelCls}>Role in Deal *</label>
             <select className={inputCls} value={form.role} onChange={(e) => set('role', e.target.value)}>

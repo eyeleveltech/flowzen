@@ -81,7 +81,7 @@ export function AddActivityModal({ leadId, onClose, onSuccess }: { leadId: strin
               </div>
               <div><label className={labelCls}>Call Notes</label><textarea rows={3} className={inputCls} value={form.body || ''} onChange={(e) => set('body', e.target.value)} /></div>
               <label className="flex items-center gap-2 text-sm text-primary"><input type="checkbox" checked={!!form.followUpRequired} onChange={(e) => set('followUpRequired', e.target.checked)} /> Follow-up required</label>
-              {form.followUpRequired && <div><label className={labelCls}>Follow-up Date</label><input type="date" className={inputCls} value={form.followUpDate || ''} onChange={(e) => set('followUpDate', e.target.value)} /></div>}
+              {form.followUpRequired && <div><label className={labelCls}>Next Follow-up Date</label><input type="date" className={inputCls} value={form.followUpDate || ''} onChange={(e) => set('followUpDate', e.target.value)} /></div>}
             </>
           )}
 

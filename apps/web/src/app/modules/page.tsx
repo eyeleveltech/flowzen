@@ -6,11 +6,12 @@ import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { useAuthStore, useModuleStore } from '@/stores';
 import { accessibleModules, ModuleKey } from '@/lib/modules';
-import { FolderKanban, TrendingUp, ArrowRight } from 'lucide-react';
+import { FolderKanban, TrendingUp, ArrowRight, DollarSign } from 'lucide-react';
 
 const moduleIcons: Record<ModuleKey, typeof FolderKanban> = {
   PM: FolderKanban,
   CRM: TrendingUp,
+  REVENUE: DollarSign,
 };
 
 export default function ModulePickerPage() {

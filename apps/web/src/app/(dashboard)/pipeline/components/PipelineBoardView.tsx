@@ -7,40 +7,51 @@ import { getSSE } from '@/lib/sse';
 import { formatCurrency } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence } from 'framer-motion';
-import { ChevronDown, Check } from 'lucide-react';
+import { ChevronDown, Check, Plus, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { StageTransitionModal } from './StageTransitionModal';
 import { WonCelebrationModal } from './WonCelebrationModal';
 import { useQueryClient } from '@tanstack/react-query';
+import { LeadModal } from './LeadModal';
 
-// All 15 pipeline stages in chronological order (used by the per-card stage menu)
+// All pipeline stages in chronological order (used by the per-card stage menu)
 const PIPELINE_STAGES = [
   'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
-  'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED', 'CHURNED',
+  'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'ON_HOLD', 'PROJECT_COMPLETED', 'CHURNED',
 ];
 
+// Probability weights used to compute weighted deal value per column
+const STAGE_WEIGHTS: Record<string, number> = {
+  NEW_LEAD: 0.10, OUTREACH: 0.20, MEETING: 0.35, PROPOSAL: 0.50, NEGOTIATION: 0.75,
+  CONTRACT: 0.90, ACTIVE_RETAINER: 1.00, ACTIVE_PROJECT: 1.00, ON_HOLD: 0.10,
+  PROJECT_COMPLETED: 1.00, CHURNED: 0.00,
+};
+
 const GROUPS = [
-  { id: 'New', title: 'New', color: '#7c3aed', stages: ['NEW_LEAD'] },
+  { id: 'New', title: 'New Lead', color: '#7c3aed', stages: ['NEW_LEAD'] },
   { id: 'Outreach', title: 'Outreach', color: '#0891b2', stages: ['OUTREACH'] },
   { id: 'Meeting', title: 'Meeting', color: '#d97706', stages: ['MEETING'] },
   { id: 'Proposal', title: 'Proposal', color: '#2563eb', stages: ['PROPOSAL'] },
   { id: 'Negotiation', title: 'Negotiation', color: '#0369a1', stages: ['NEGOTIATION'] },
-  { id: 'Closing', title: 'Closing', color: '#15803d', stages: ['CONTRACT'] },
+  { id: 'WonClosed', title: 'Won & Closed', color: '#15803d', stages: ['CONTRACT'] },
   { id: 'Active', title: 'Active', color: '#0f766e', stages: ['ACTIVE_RETAINER', 'ACTIVE_PROJECT'] },
-  { id: 'Closed', title: 'Closed', color: '#475569', stages: ['PROJECT_COMPLETED', 'CHURNED'] },
+  { id: 'OnHold', title: 'On Hold', color: '#9ca3af', stages: ['ON_HOLD'] },
+  { id: 'Completed', title: 'Project Completed', color: '#475569', stages: ['PROJECT_COMPLETED'] },
+  { id: 'Lost', title: 'Lost & Closed', color: '#dc2626', stages: ['CHURNED'] },
 ];
 
 const STAGE_BADGES: Record<string, { label: string, bg: string, text: string }> = {
-  'NEW_LEAD': { label: 'NEW', bg: '#7c3aed', text: '#ffffff' },
+  'NEW_LEAD': { label: 'NEW LEAD', bg: '#7c3aed', text: '#ffffff' },
   'OUTREACH': { label: 'OUTREACH', bg: '#0891b2', text: '#ffffff' },
   'MEETING': { label: 'MEETING', bg: '#d97706', text: '#ffffff' },
   'PROPOSAL': { label: 'PROPOSAL', bg: '#2563eb', text: '#ffffff' },
   'NEGOTIATION': { label: 'NEGOTIATION', bg: '#0369a1', text: '#ffffff' },
-  'CONTRACT': { label: 'CONTRACT', bg: '#15803d', text: '#ffffff' },
-  'ACTIVE_RETAINER': { label: 'RETAINER', bg: '#0f766e', text: '#ffffff' },
-  'ACTIVE_PROJECT': { label: 'PROJECT', bg: '#1d4ed8', text: '#ffffff' },
+  'CONTRACT': { label: 'WON & CLOSED', bg: '#15803d', text: '#ffffff' },
+  'ACTIVE_RETAINER': { label: 'ACTIVE (RETAINER)', bg: '#0f766e', text: '#ffffff' },
+  'ACTIVE_PROJECT': { label: 'ACTIVE (PROJECT)', bg: '#1d4ed8', text: '#ffffff' },
+  'ON_HOLD': { label: 'ON HOLD', bg: '#9ca3af', text: '#ffffff' },
   'PROJECT_COMPLETED': { label: 'COMPLETED', bg: '#166534', text: '#ffffff' },
-  'CHURNED': { label: 'CHURNED', bg: '#dc2626', text: '#ffffff' },
+  'CHURNED': { label: 'LOST & CLOSED', bg: '#dc2626', text: '#ffffff' },
 };
 
 export function PipelineBoardView() {
@@ -57,6 +68,28 @@ export function PipelineBoardView() {
   // Won celebration modal + Won/Lost column visibility.
   const [wonModalLead, setWonModalLead] = useState<any>(null);
   const [showWonLost, setShowWonLost] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [collapsedColumns, setCollapsedColumns] = useState<string[]>([]);
+
+  // Load collapsed columns from sessionStorage
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem('flowzen:pipeline:collapsed-columns');
+      if (saved) {
+        setCollapsedColumns(JSON.parse(saved));
+      }
+    } catch (e) {}
+  }, []);
+
+  const toggleCollapse = (columnId: string) => {
+    setCollapsedColumns(prev => {
+      const next = prev.includes(columnId)
+        ? prev.filter(c => c !== columnId)
+        : [...prev, columnId];
+      sessionStorage.setItem('flowzen:pipeline:collapsed-columns', JSON.stringify(next));
+      return next;
+    });
+  };
 
   // Horizontal edge auto-scroll while dragging a card (the dnd lib's built-in auto-scroll
   // doesn't reliably pan the board's horizontal container past nested vertical columns).
@@ -215,8 +248,8 @@ export function PipelineBoardView() {
     }
   }
 
-  // Hide Won/Lost columns by default; the "Show Won/Lost" toggle reveals them.
-  const visibleGroups = showWonLost ? GROUPS : GROUPS.filter(g => g.id !== 'Won' && g.id !== 'Lost');
+  // Hide Won/Lost/Completed columns by default; the toggle reveals them.
+  const visibleGroups = showWonLost ? GROUPS : GROUPS.filter(g => g.id !== 'Completed' && g.id !== 'Lost');
 
   if (!isMounted || loading) {
     return (
@@ -227,7 +260,7 @@ export function PipelineBoardView() {
   }
 
   return (
-    <div className="flex-1 w-full overflow-hidden flex flex-col">
+    <div className="w-full flex flex-col h-[calc(100vh-185px)] min-h-[550px] overflow-hidden">
 
       <div className="flex items-center justify-end px-1 pb-2 shrink-0">
         <label className="flex items-center gap-2 text-xs font-medium text-secondary cursor-pointer select-none">
@@ -241,19 +274,77 @@ export function PipelineBoardView() {
         </label>
       </div>
 
-      <div ref={scrollRef} className="flex flex-1 w-full overflow-x-auto overflow-y-hidden gap-4 pb-4 px-1 custom-scrollbar">
+      <div ref={scrollRef} className="flex flex-1 w-full overflow-x-auto overflow-y-hidden gap-4 pb-2 px-1 custom-scrollbar min-h-0">
         <DragDropContext onDragStart={startAutoScroll} onDragEnd={handleDragEnd}>
           {visibleGroups.map((group) => {
             const columnLeads = columns[group.id] || [];
-            
+            const columnValue = columnLeads.reduce((acc, curr) => acc + (curr.dealValue || 0), 0);
+            // Weighted value = sum of (dealValue × stage probability weight) per card
+            const columnWeightedValue = columnLeads.reduce((acc, curr) => {
+              const weight = STAGE_WEIGHTS[curr.stage] ?? 0.5;
+              return acc + (curr.dealValue || 0) * weight;
+            }, 0);
+            const isCollapsed = collapsedColumns.includes(group.id);
+
+            if (isCollapsed) {
+              return (
+                <div
+                  key={group.id}
+                  onClick={() => toggleCollapse(group.id)}
+                  className="flex flex-col w-12 h-full shrink-0 border border-gray-200 rounded-xl cursor-pointer py-4 justify-between items-center transition-all select-none group/col shadow-sm hover:shadow"
+                  style={{ 
+                    borderLeft: `4px solid ${group.color}`,
+                    backgroundColor: `${group.color}08` // 3% opacity tint of stage color
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="p-1 rounded-lg transition-colors"
+                    style={{ color: group.color }}
+                  >
+                    <ChevronsRight className="w-4 h-4 hover:scale-110 transition-transform" />
+                  </button>
+
+                  <div className="flex flex-col items-center justify-center flex-1">
+                    <span 
+                      className="rotate-90 origin-center whitespace-nowrap text-xs font-bold uppercase tracking-wider select-none transform"
+                      style={{ color: group.color }}
+                    >
+                      {group.title}
+                    </span>
+                  </div>
+
+                  <div
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm"
+                    style={{ backgroundColor: group.color }}
+                  >
+                    {columnLeads.length}
+                  </div>
+                </div>
+              );
+            }
+
             return (
-              <div key={group.id} className="flex flex-col min-w-[280px] w-[280px] h-full shrink-0">
+              <div key={group.id} className="flex flex-col flex-1 min-w-[260px] max-w-[340px] h-full shrink-0 border border-gray-200 bg-gray-50/80 rounded-xl overflow-hidden shadow-sm">
                 {/* Column Header */}
                 <div 
-                  className="px-4 py-3 rounded-t-xl flex items-center justify-between"
+                  className="px-4 py-3 flex items-center justify-between shrink-0 animate-fade-in"
                   style={{ backgroundColor: group.color }}
                 >
-                  <h3 className="text-sm font-semibold text-white tracking-wide">{group.title}</h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleCollapse(group.id);
+                      }}
+                      className="p-0.5 rounded text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+                      title="Collapse column"
+                    >
+                      <ChevronsLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <h3 className="text-sm font-semibold text-white tracking-wide">{group.title}</h3>
+                  </div>
                   <div className="bg-white/25 px-2.5 py-0.5 rounded-full text-xs font-bold text-white shadow-sm backdrop-blur-sm">
                     {columnLeads.length}
                   </div>
@@ -265,8 +356,8 @@ export function PipelineBoardView() {
                     <div
                       ref={provided.innerRef}
                       {...provided.droppableProps}
-                      className={`flex-1 bg-gray-50/80 border-x border-b border-gray-200 rounded-b-xl p-3 overflow-y-auto space-y-3 transition-colors ${
-                        snapshot.isDraggingOver ? 'bg-gray-100' : ''
+                      className={`flex-1 p-3 overflow-y-auto space-y-3 transition-colors custom-scrollbar min-h-0 ${
+                        snapshot.isDraggingOver ? 'bg-gray-100/50' : 'bg-transparent'
                       }`}
                     >
                       {columnLeads.map((lead, index) => {
@@ -334,9 +425,36 @@ export function PipelineBoardView() {
                     </div>
                   )}
                 </Droppable>
+
+                {/* Column Footer — fixed, shows total + weighted deal values */}
+                <div className="px-3 py-2.5 bg-white border-t border-gray-200 flex items-center justify-between shrink-0 select-none">
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider block">Total</span>
+                        <span className="text-xs font-bold text-primary">{formatCurrency(columnValue)}</span>
+                      </div>
+                      <div className="border-l border-gray-100 pl-3">
+                        <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider block">Weighted</span>
+                        <span className="text-xs font-bold text-emerald-600">{formatCurrency(columnWeightedValue)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsAddModalOpen(true);
+                    }}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:text-blue-600 transition-colors py-1 px-2.5 rounded-lg hover:bg-gray-50 border border-gray-200"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add Lead
+                  </button>
+                </div>
               </div>
             );
           })}
+          {/* Edge Spacer */}
+          <div className="w-2 shrink-0" />
         </DragDropContext>
       </div>
 
@@ -424,9 +542,24 @@ export function PipelineBoardView() {
         )}
       </AnimatePresence>
 
+      {/* Local Add Lead Modal */}
+      <AnimatePresence>
+        {isAddModalOpen && (
+          <LeadModal
+            initialMode="MANUAL"
+            onClose={() => setIsAddModalOpen(false)}
+            onSuccess={() => {
+              setIsAddModalOpen(false);
+              fetchLeads();
+            }}
+          />
+        )}
+      </AnimatePresence>
+
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {
-          height: 10px;
+          width: 6px;
+          height: 8px;
         }
         .custom-scrollbar::-webkit-scrollbar-track {
           background: transparent;
@@ -434,7 +567,7 @@ export function PipelineBoardView() {
         .custom-scrollbar::-webkit-scrollbar-thumb {
           background-color: rgba(156, 163, 175, 0.3);
           border-radius: 20px;
-          border: 2px solid transparent;
+          border: 1px solid transparent;
           background-clip: padding-box;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {

@@ -30,6 +30,7 @@ const stageEnumToMap: Record<LeadStage, string> = {
   ACTIVE_PROJECT: '8. Closed Won',
   PROJECT_COMPLETED: '8. Closed Won',
   CHURNED: '9. Closed Lost',
+  ON_HOLD: 'On Hold',
 };
 
 const mapStageToEnum = (aiStage: string): LeadStage => stageMapToEnum[aiStage] || 'NEW_LEAD';

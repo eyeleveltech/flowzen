@@ -21,6 +21,7 @@ import { profileRouter } from './routes/profile.js';
 import { workflowRouter } from './routes/workflows.js';
 import { crmRouter } from './routes/crm.js';
 import { quoteRouter } from './routes/quotes.js';
+import { revenueRouter } from './routes/revenue.js';
 import publicApiRouter from './routes/public/index.js';
 import { sseRouter } from './sse.js';
 import './workers/emailWorker.js'; // Initialize BullMQ email worker
@@ -81,6 +82,7 @@ app.use('/api/stream', sseRouter);
 // CRM module (Admins only):
 app.use('/api/crm/quotes', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), requireModule('CRM'), quoteRouter);
 app.use('/api/crm', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), requireModule('CRM'), crmRouter);
+app.use('/api/revenue', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), revenueRouter);
 app.use('/api/analytics', analyticsRouter);
 
 // Shared infrastructure — available whenever CRM or PM is on (both use clients + the members list):

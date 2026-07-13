@@ -2,9 +2,9 @@ import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tansta
 import { api } from '@/lib/api';
 
 // --- Projects ---
-export function useProjects(search?: string, includeCalendarData?: boolean, statusFilter?: string, clientId?: string, ownerId?: string) {
+export function useProjects(search?: string, includeCalendarData?: boolean, statusFilter?: string, clientId?: string, ownerId?: string, endDate?: string) {
   return useInfiniteQuery({
-    queryKey: ['projects', search, includeCalendarData, statusFilter, clientId, ownerId],
+    queryKey: ['projects', search, includeCalendarData, statusFilter, clientId, ownerId, endDate],
     queryFn: async ({ pageParam = 1 }) => {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
@@ -12,6 +12,7 @@ export function useProjects(search?: string, includeCalendarData?: boolean, stat
       if (statusFilter) params.set('status', statusFilter);
       if (clientId) params.set('clientId', clientId);
       if (ownerId) params.set('ownerId', ownerId);
+      if (endDate) params.set('endDate', endDate);
       params.set('page', String(pageParam));
       params.set('limit', '50');
       return api.get<{ projects: any[], page: number, totalPages: number }>(`/projects?${params}`);
@@ -22,9 +23,9 @@ export function useProjects(search?: string, includeCalendarData?: boolean, stat
 }
 
 // --- Tasks ---
-export function useTasks(search?: string, statusFilter?: string, projectFilter?: string, assigneeId?: string, priorityFilter?: string, teamFilter?: string, filter?: string | null, sort?: string) {
+export function useTasks(search?: string, statusFilter?: string, projectFilter?: string, assigneeId?: string, priorityFilter?: string, teamFilter?: string, filter?: string | null, sort?: string, dueDateFrom?: string, dueDateTo?: string) {
   return useInfiniteQuery({
-    queryKey: ['tasks', search, statusFilter, projectFilter, assigneeId, priorityFilter, teamFilter, filter, sort],
+    queryKey: ['tasks', search, statusFilter, projectFilter, assigneeId, priorityFilter, teamFilter, filter, sort, dueDateFrom, dueDateTo],
     queryFn: async ({ pageParam = 1 }) => {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
@@ -35,6 +36,8 @@ export function useTasks(search?: string, statusFilter?: string, projectFilter?:
       if (teamFilter) params.set('teamId', teamFilter);
       if (filter) params.set('filter', filter);
       if (sort) params.set('sort', sort);
+      if (dueDateFrom) params.set('dueDateFrom', dueDateFrom);
+      if (dueDateTo) params.set('dueDateTo', dueDateTo);
       params.set('page', String(pageParam));
       params.set('limit', '50');
       return api.get<{ tasks: any[], page: number, totalPages: number }>(`/tasks?${params}`);

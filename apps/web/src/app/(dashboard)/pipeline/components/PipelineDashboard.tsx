@@ -268,7 +268,7 @@ export function PipelineDashboard() {
           <MultiSelect
             value={ownerFilter}
             onChange={setOwnerFilter}
-            placeholder="All Owners"
+            placeholder="Owners"
             options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
           />
         </div>

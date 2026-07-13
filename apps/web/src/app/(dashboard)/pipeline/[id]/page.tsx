@@ -267,6 +267,13 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 <span className="text-2xl font-bold text-primary leading-none">{lead.dealValue ? formatCurrency(lead.dealValue) : '—'}</span>
               </div>
               <div className="w-px bg-border hidden sm:block"></div>
+              <div className="flex flex-col sm:items-end justify-center">
+                <span className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-1">Next Follow-up Date</span>
+                <span className="text-sm font-bold text-primary leading-none">
+                  {lead.followUpDate ? format(new Date(lead.followUpDate), 'PP') : '—'}
+                </span>
+              </div>
+              <div className="w-px bg-border hidden sm:block"></div>
               <div className="flex flex-col">
                 <span className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-2">Stage Action</span>
                 <div className="flex items-center gap-2">
@@ -384,6 +391,18 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                         <p className="text-sm font-medium text-primary flex items-center gap-1.5">
                           <Calendar className="w-3.5 h-3.5 text-gray-400" />
                           {lead.expectedCloseDate ? format(new Date(lead.expectedCloseDate), 'PP') : '—'}
+                        </p>
+                      </Detail>
+                      <Detail label="Next Follow-up Date">
+                        <p className="text-sm font-medium text-primary flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-gray-400" />
+                          {lead.followUpDate ? format(new Date(lead.followUpDate), 'PP') : '—'}
+                        </p>
+                      </Detail>
+                      <Detail label="Last Contacted Date">
+                        <p className="text-sm font-medium text-primary flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                          {lead.lastContactedDate ? format(new Date(lead.lastContactedDate), 'PP') : '—'}
                         </p>
                       </Detail>
                       <Detail label="Created" value={lead.createdAt ? format(new Date(lead.createdAt), 'PP') : null} />

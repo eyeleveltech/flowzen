@@ -179,7 +179,7 @@ export default function CalendarPage() {
             <MultiSelect
               value={projectIdFilter}
               onChange={setProjectIdFilter}
-              placeholder="All Projects"
+              placeholder="Projects"
               options={projects.map(p => ({ label: p.name, value: p.id }))}
             />
           </div>
@@ -187,7 +187,7 @@ export default function CalendarPage() {
             <MultiSelect
               value={clientIdFilter}
               onChange={setClientIdFilter}
-              placeholder="All Clients"
+              placeholder="Clients/Owners"
               options={clients.map(c => ({ label: getClientDisplayName(c), value: c.id }))}
             />
           </div>
@@ -195,7 +195,7 @@ export default function CalendarPage() {
             <MultiSelect
               value={typeFilter}
               onChange={setTypeFilter}
-              placeholder="All Types"
+              placeholder="Types"
               options={[
                 { label: 'Design', value: 'DESIGN' },
                 { label: 'Content', value: 'CONTENT' },
@@ -214,7 +214,7 @@ export default function CalendarPage() {
               <MultiSelect
                 value={assigneeFilter}
                 onChange={setAssigneeFilter}
-                placeholder="All Assignees"
+                placeholder="Assignees"
                 options={members.map(m => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
               />
             </div>

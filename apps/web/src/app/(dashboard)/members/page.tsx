@@ -424,7 +424,7 @@ export default function TeamPage() {
               <MultiSelect
                 value={selectedDept}
                 onChange={setSelectedDept}
-                placeholder="All Departments"
+                placeholder="Departments"
                 options={departments.map((d) => ({ label: d, value: d }))}
               />
             </div>
@@ -434,7 +434,7 @@ export default function TeamPage() {
               <MultiSelect
                 value={selectedRole}
                 onChange={setSelectedRole}
-                placeholder="All Roles"
+                placeholder="Roles"
                 options={Object.entries(roleLabels).map(([val, label]) => ({ label, value: val }))}
               />
             </div>

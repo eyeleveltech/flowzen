@@ -11,10 +11,12 @@ interface ProjectFiltersStore {
   statusFilter: string[];
   clientFilter: string[];
   ownerFilter: string[];
+  dueDateFilter: string;
   setSearch: (v: string) => void;
   setStatusFilter: (v: string[]) => void;
   setClientFilter: (v: string[]) => void;
   setOwnerFilter: (v: string[]) => void;
+  setDueDateFilter: (v: string) => void;
 }
 
 export const useProjectFilters = create<ProjectFiltersStore>((set) => ({
@@ -22,8 +24,10 @@ export const useProjectFilters = create<ProjectFiltersStore>((set) => ({
   statusFilter: [],
   clientFilter: [],
   ownerFilter: [],
+  dueDateFilter: '',
   setSearch: (v) => set({ search: v }),
   setStatusFilter: (v) => set({ statusFilter: v }),
   setClientFilter: (v) => set({ clientFilter: v }),
   setOwnerFilter: (v) => set({ ownerFilter: v }),
+  setDueDateFilter: (v) => set({ dueDateFilter: v }),
 }));

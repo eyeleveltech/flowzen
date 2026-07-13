@@ -1,6 +1,6 @@
 // Module-based system: the two modules, who can access them, and routing helpers.
 
-export type ModuleKey = 'CRM' | 'PM';
+export type ModuleKey = 'CRM' | 'PM' | 'REVENUE';
 
 export interface ModuleDef {
   key: ModuleKey;
@@ -25,6 +25,13 @@ export const MODULES: ModuleDef[] = [
     home: '/pipeline',
     allowedRoles: ['SUPER_ADMIN', 'ADMIN'], // admins only
   },
+  {
+    key: 'REVENUE',
+    label: 'Revenue',
+    description: 'Contracts, Invoices, Subscriptions & P&L.',
+    home: '/revenue',
+    allowedRoles: ['SUPER_ADMIN'], // Only Akmal
+  },
 ];
 
 type MaybeUser = { role?: string; enabledModules?: string[] } | null | undefined;
@@ -44,6 +51,7 @@ export function canAccessModule(user: MaybeUser, key: ModuleKey): boolean {
 
 // Which module a route belongs to (null = shared/core: keep the current module).
 export function moduleForPath(pathname: string): ModuleKey | null {
+  if (pathname.startsWith('/invoices') || pathname.startsWith('/contracts') || pathname.startsWith('/expenses') || pathname.startsWith('/subscriptions') || pathname.startsWith('/payments') || pathname.startsWith('/revenue') || pathname.startsWith('/invoice-drafts') || pathname.startsWith('/receivables')) return 'REVENUE';
   if (pathname.startsWith('/pipeline') || pathname.startsWith('/quotations') || pathname.startsWith('/renewals') || pathname.startsWith('/lost-deals')) return 'CRM';
   if (['/dashboard', '/projects', '/tasks', '/calendar', '/members', '/departments'].some((p) => pathname.startsWith(p))) {
     return 'PM';

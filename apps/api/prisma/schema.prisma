@@ -171,6 +171,7 @@ enum LeadStage {
   ACTIVE_PROJECT
   PROJECT_COMPLETED
   CHURNED
+  ON_HOLD
 }
 
 enum ContractType {
@@ -239,7 +240,13 @@ model Organization {
   leads   Lead[]
   modules OrganizationModule[]
   quotes  QuoteDocument[]
-  auditLogs AuditLog[]      @relation("OrganizationAuditLogs")
+  auditLogs     AuditLog[]      @relation("OrganizationAuditLogs")
+  // Revenue
+  invoiceDrafts InvoiceDraft[]
+  contracts     Contract[]
+  payments      Payment[]
+  subscriptions Subscription[]
+  expenses      Expense[]
 
   @@map("organizations")
 }
@@ -302,8 +309,6 @@ model User {
   quotesAsSalesperson QuoteDocument[] @relation("QuoteSalesperson")
   auditLogs           AuditLog[]      @relation("UserAuditLogs")
 
-  @@index([organizationId])
-  @@index([organizationId, status])
   @@map("users")
 }
 
@@ -359,8 +364,13 @@ model Client {
   tasks        Task[]        @relation("ClientTasks")
   quotes       QuoteDocument[]
 
-  @@index([organizationId])
-  @@index([organizationId, status])
+    // Revenue
+  invoiceDrafts InvoiceDraft[] @relation("ClientInvoiceDrafts")
+  contracts     Contract[]     @relation("ClientContracts")
+  payments      Payment[]      @relation("ClientPayments")
+  subscriptions Subscription[] @relation("ClientSubscriptions")
+  expenses      Expense[]      @relation("ClientExpenses")
+
   @@map("clients")
 }
 
@@ -398,6 +408,7 @@ model Project {
   members    ProjectMember[]
   teams      ProjectTeam[]
   comments               Comment[]
+  expenses   Expense[]   @relation("ProjectExpenses")
 
   @@index([clientId, status])
   @@index([ownerId, status])
@@ -430,7 +441,6 @@ model Team {
   members  User[]        @relation("TeamMembers")
   projects ProjectTeam[]
 
-  @@index([organizationId])
   @@map("teams")
 }
 
@@ -471,6 +481,8 @@ model Task {
   loggedHours Float?       @default(0)
   estimatedHours Float?    @default(0)
   driveLink   String?
+  isRecurring Boolean      @default(false)
+  recurrenceFrequency String?
 
   project    Project?        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   lead       Lead?           @relation("LeadTasks", fields: [leadId], references: [id], onDelete: Cascade)
@@ -690,7 +702,6 @@ model Lead {
   notes             Note[]
   contacts          LeadContact[]
 
-  @@index([organizationId])
   @@index([organizationId, stage])
   @@index([organizationId, contactPhone])
   @@map("leads")
@@ -802,8 +813,8 @@ model QuoteDocument {
   organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   client           Client       @relation(fields: [clientId], references: [id])
   salesperson      User?        @relation("QuoteSalesperson", fields: [salespersonId], references: [id])
+  invoiceDraft     InvoiceDraft?
 
-  @@index([organizationId, status])
   @@index([clientId])
   @@map("quote_documents")
 }
@@ -909,8 +920,167 @@ model AuditLog {
   user         User         @relation("UserAuditLogs", fields: [userId], references: [id], onDelete: Cascade)
   organization Organization @relation("OrganizationAuditLogs", fields: [organizationId], references: [id], onDelete: Cascade)
 
-  @@index([organizationId])
   @@index([userId])
   @@map("audit_logs")
 }
 
+
+// -- §5 Revenue Module ----------------------------------------------------------
+
+enum ContractStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  TERMINATED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  REFUNDED
+}
+
+enum ExpenseCategory {
+  VENDOR
+  TRAVEL
+  EQUIPMENT
+  MARKETING
+  MISC
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+  EXPIRED
+}
+
+model InvoiceDraft {
+  id             String        @id @default(cuid())
+  organizationId String
+  quoteId        String        @unique
+  draftNumber    String        @unique
+  clientId       String
+  clientName     String
+  status         InvoiceStatus @default(DRAFT)
+  lineItems      Json
+  untaxedAmount  Decimal       @default(0)
+  cgst           Decimal       @default(0)
+  sgst           Decimal       @default(0)
+  igst           Decimal       @default(0)
+  totalTax       Decimal       @default(0)
+  grandTotal     Decimal
+  notes          String?       @db.Text
+  pdfUrl         String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quote          QuoteDocument @relation(fields: [quoteId], references: [id])
+  client         Client        @relation("ClientInvoiceDrafts", fields: [clientId], references: [id])
+
+  @@map("invoice_drafts")
+}
+
+model Contract {
+  id               String         @id @default(cuid())
+  organizationId   String
+  clientId         String
+  title            String
+  value            Decimal
+  advanceAmount    Decimal?
+  advanceReceived  Boolean        @default(false)
+  cgst             Decimal        @default(0)
+  sgst             Decimal        @default(0)
+  igst             Decimal        @default(0)
+  totalTax         Decimal        @default(0)
+  billingFrequency String
+  startDate        DateTime
+  endDate          DateTime?
+  status           ContractStatus @default(ACTIVE)
+  notes            String?        @db.Text
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client           Client         @relation("ClientContracts", fields: [clientId], references: [id])
+  payments         Payment[]
+  subscriptions    Subscription[]
+
+  @@map("contracts")
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  organizationId String
+  clientId       String
+  contractId     String?
+  amount         Decimal
+  paidOn         DateTime
+  method         String?
+  reference      String?
+  notes          String?
+  status         PaymentStatus @default(PAID)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client         Client        @relation("ClientPayments", fields: [clientId], references: [id])
+  contract       Contract?     @relation(fields: [contractId], references: [id])
+
+  @@index([clientId])
+  @@map("payments")
+}
+
+model Subscription {
+  id               String             @id @default(cuid())
+  organizationId   String
+  clientId         String
+  contractId       String?
+  amount           Decimal
+  taxIncluded      Boolean            @default(false)
+  billingFrequency String
+  startDate        DateTime
+  nextBillingDate  DateTime?
+  status           SubscriptionStatus @default(ACTIVE)
+  notes            String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client           Client             @relation("ClientSubscriptions", fields: [clientId], references: [id])
+  contract         Contract?          @relation(fields: [contractId], references: [id])
+
+  @@map("subscriptions")
+}
+
+model Expense {
+  id             String          @id @default(cuid())
+  organizationId String
+  projectId      String?
+  clientId       String?
+  vendor         String
+  category       ExpenseCategory @default(MISC)
+  amount         Decimal
+  date           DateTime
+  description    String?
+  receiptUrl     String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project        Project?        @relation("ProjectExpenses", fields: [projectId], references: [id])
+  client         Client?         @relation("ClientExpenses", fields: [clientId], references: [id])
+
+  @@index([projectId])
+  @@map("expenses")
+}

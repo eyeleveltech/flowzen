@@ -51,7 +51,7 @@ clientRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     if (city) where.city = { contains: city as string, mode: 'insensitive' };
     if (accountManagerId) where.accountManagerId = whereIn(accountManagerId);
     if (engagementType) where.engagementType = whereIn(engagementType);
-    if (industry) where.industry = { contains: industry as string, mode: 'insensitive' };
+    if (industry) where.industry = whereIn(industry);
     if (search) {
       where.OR = [
         { name: { contains: search as string, mode: 'insensitive' } },
@@ -356,8 +356,8 @@ clientRouter.delete('/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthR
         where: { id: (req.params.id as string), organizationId: req.user!.organizationId },
       });
     } catch (err: any) {
-      if (err.message && err.message.includes('foreign key constraint')) {
-        res.status(400).json({ error: 'Cannot delete this client because they have associated records (e.g., quotes) that must be deleted first.' });
+      if (err.code === 'P2003' || (err.message && /foreign key/i.test(err.message))) {
+        res.status(400).json({ error: 'Cannot delete this client because they have associated records (e.g., quotes, contracts, subscriptions) that must be deleted first.' });
         return;
       }
       throw err;
