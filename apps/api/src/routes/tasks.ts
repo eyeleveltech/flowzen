@@ -107,15 +107,9 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     // Match either the primary assignee or any of the multi-assignees.
     const assigneeMatch = (uid: string) => ({ OR: [{ assigneeId: uid }, { assignees: { some: { id: uid } } }] });
     if (req.user!.role === 'TEAM_MEMBER') {
-      const uid = req.user!.userId;
-      andConditions.push({
-        OR: [
-          { assigneeId: uid },
-          { assignees: { some: { id: uid } } },
-          { project: { members: { some: { userId: uid } } } },
-          { project: { teams: { some: { team: { members: { some: { id: uid } } } } } } }
-        ]
-      });
+      // Team members only ever see tasks assigned to them (primary or co-assignee),
+      // regardless of any assigneeId param sent by the client.
+      andConditions.push(assigneeMatch(req.user!.userId));
     } else {
       const assigneeIds = toList(assigneeId);
       // Any of the selected assignees (primary or multi-assignee).

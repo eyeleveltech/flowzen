@@ -249,7 +249,7 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
           aria-multiselectable="true"
           className="fixed z-9999 overflow-y-auto rounded-xl border border-border bg-white py-1.5 shadow-lg shadow-black/5"
           style={{
-            width: rect ? Math.max(rect.width, 160) : 'auto',
+            width: rect ? Math.max(rect.width, 200) : 'auto',
             left: rect ? rect.left : 0,
             maxHeight: dropdownMaxHeight,
             ...(openUp

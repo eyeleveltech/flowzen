@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo, Suspense } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { z } from 'zod';
@@ -147,13 +147,15 @@ function TasksContent() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [projectFilter, setProjectFilter] = useState<string[]>([]);
-  const [assigneeFilter, setAssigneeFilter] = useState<string[]>(user?.id ? [user.id] : []);
+  // Default to all tasks. Team members are scoped to their own tasks by the API
+  // (the assignee filter isn't shown to them); admins/managers see everyone and
+  // can narrow with the people filter.
+  const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
   const [teamFilter, setTeamFilter] = useState<string[]>([]);
   const [sort, setSort] = useState<string>('createdAt_desc');
   const [dueDateFrom, setDueDateFrom] = useState('');
   const [dueDateTo, setDueDateTo] = useState('');
-  const filterHydrated = useRef(false);
 
   const ALL_TASK_COLUMNS = [
     { id: 'task', label: 'Task' },
@@ -187,12 +189,6 @@ function TasksContent() {
     }
   }, []);
 
-  useEffect(() => {
-    if (user?.id && !filterHydrated.current) {
-      setAssigneeFilter([user.id]);
-      filterHydrated.current = true;
-    }
-  }, [user?.id]);
   const [view, setView] = useState<'list' | 'board'>('list');
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
@@ -616,7 +612,7 @@ function TasksContent() {
           <p className="text-sm text-secondary mt-1">{tasks.length} tasks</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          {(search || projectFilter.length || statusFilter.length || priorityFilter.length || teamFilter.length || sort || (user?.role !== 'TEAM_MEMBER' && !(assigneeFilter.length === 1 && assigneeFilter[0] === user?.id)) || searchParams.get('filter')) && (
+          {(search || projectFilter.length || statusFilter.length || priorityFilter.length || teamFilter.length || sort || assigneeFilter.length > 0 || searchParams.get('filter')) && (
             <button
               onClick={() => {
                 setSearch('');
@@ -625,7 +621,7 @@ function TasksContent() {
                 setPriorityFilter([]);
                 setTeamFilter([]);
                 setSort('');
-                if (user?.role !== 'TEAM_MEMBER') setAssigneeFilter(user?.id ? [user.id] : []);
+                setAssigneeFilter([]);
                 router.replace('/tasks', { scroll: false });
               }}
               className="flex items-center gap-1.5 rounded-xl bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors border border-red-100"
@@ -687,7 +683,7 @@ function TasksContent() {
                 value={assigneeFilter}
                 onChange={setAssigneeFilter}
                 placeholder="Assignees"
-                options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
+                options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name), colorClass: getAvatarColor(m.name) }))}
               />
             </div>
           )}
