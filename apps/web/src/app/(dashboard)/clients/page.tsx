@@ -114,6 +114,7 @@ function ClientsContent() {
   const [engagementTypeFilter, setEngagementTypeFilter] = useState<string[]>([]);
   const [industryFilter, setIndustryFilter] = useState<string[]>([]);
   const [filtersHydrated, setFiltersHydrated] = useState(false);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   // Restore the filters saved last time (so they survive opening a client and
   // coming back). Runs once on mount; a status passed via the URL wins.
@@ -431,62 +432,77 @@ function ClientsContent() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 mb-6">
-        <div className="relative w-full sm:max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search clients..."
-            className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
-          />
+      <div className="flex flex-col gap-3 mb-6 bg-[#F9FAFB]/50 p-3 rounded-2xl border border-border">
+        {/* Search bar row */}
+        <div className="flex items-center gap-2 w-full md:max-w-sm">
+          <div className="relative flex-1 md:w-80 md:flex-initial">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search clients..."
+              className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
+            />
+          </div>
+          <button 
+            type="button"
+            onClick={() => setShowMobileFilters(!showMobileFilters)} 
+            className="md:hidden flex items-center justify-center p-2.5 rounded-xl border border-border bg-white text-secondary hover:bg-gray-50 transition-colors shrink-0 h-[38px]"
+            title="Toggle Filters"
+          >
+            <Filter className="h-4 w-4" />
+          </button>
         </div>
-        <div className="w-full sm:w-auto sm:min-w-[170px]">
-          <MultiSelect
-            value={statusFilter}
-            onChange={setStatusFilter}
-            placeholder="Status"
-            showSelectAll={true}
-            options={[
-              { label: 'Prospect', value: 'PROSPECT' },
-              { label: 'Active', value: 'ACTIVE' },
-              { label: 'On Hold', value: 'ONHOLD' },
-              { label: 'Churned', value: 'CHURNED' },
-              { label: 'Project Completed', value: 'PROJECT_COMPLETED' },
-            ]}
-          />
-        </div>
-        <div className="w-full sm:w-auto sm:min-w-[170px]">
-          <MultiSelect
-            value={engagementTypeFilter}
-            onChange={setEngagementTypeFilter}
-            placeholder="Engagements"
-            showSelectAll={true}
-            options={[
-              { label: 'Retainer', value: 'Retainer' },
-              { label: 'Project', value: 'Project' },
-              { label: 'Event', value: 'Event' },
-              { label: 'Ad-hoc', value: 'Ad-hoc' }
-            ]}
-          />
-        </div>
-        <div className="w-full sm:w-auto sm:min-w-[200px]">
-          <MultiSelect
-            value={accountManagerFilter}
-            onChange={setAccountManagerFilter}
-            placeholder="Account Manager"
-            showSelectAll={true}
-            options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
-          />
-        </div>
-        <div className="w-full sm:w-auto sm:min-w-[170px]">
-          <MultiSelect
-            value={industryFilter}
-            onChange={setIndustryFilter}
-            placeholder="Industries"
-            showSelectAll={true}
-            options={INDUSTRY_OPTIONS.map((i) => ({ label: i, value: i }))}
-          />
+        
+        {/* Filters options row */}
+        <div className={`flex-wrap items-center gap-3 w-full ${showMobileFilters ? 'flex' : 'hidden md:flex'}`}>
+          <div className="w-full md:w-auto md:min-w-[170px]">
+            <MultiSelect
+              value={statusFilter}
+              onChange={setStatusFilter}
+              placeholder="Status"
+              showSelectAll={true}
+              options={[
+                { label: 'Prospect', value: 'PROSPECT' },
+                { label: 'Active', value: 'ACTIVE' },
+                { label: 'On Hold', value: 'ONHOLD' },
+                { label: 'Churned', value: 'CHURNED' },
+                { label: 'Project Completed', value: 'PROJECT_COMPLETED' },
+              ]}
+            />
+          </div>
+          <div className="w-full md:w-auto md:min-w-[170px]">
+            <MultiSelect
+              value={engagementTypeFilter}
+              onChange={setEngagementTypeFilter}
+              placeholder="Engagements"
+              showSelectAll={true}
+              options={[
+                { label: 'Retainer', value: 'Retainer' },
+                { label: 'Project', value: 'Project' },
+                { label: 'Event', value: 'Event' },
+                { label: 'Ad-hoc', value: 'Ad-hoc' }
+              ]}
+            />
+          </div>
+          <div className="w-full md:w-auto md:min-w-[200px]">
+            <MultiSelect
+              value={accountManagerFilter}
+              onChange={setAccountManagerFilter}
+              placeholder="Account Manager"
+              showSelectAll={true}
+              options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
+            />
+          </div>
+          <div className="w-full md:w-auto md:min-w-[170px]">
+            <MultiSelect
+              value={industryFilter}
+              onChange={setIndustryFilter}
+              placeholder="Industries"
+              showSelectAll={true}
+              options={INDUSTRY_OPTIONS.map((i) => ({ label: i, value: i }))}
+            />
+          </div>
         </div>
       </div>
 
