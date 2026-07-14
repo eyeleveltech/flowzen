@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { FileText, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { fileUrl } from '@/lib/files';
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-gray-100 text-gray-600 border-gray-200',
@@ -72,7 +73,7 @@ export default function InvoicesPage() {
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-1.5 text-secondary">
                       {inv.pdfUrl ? (
-                        <a href={inv.pdfUrl} target="_blank" rel="noreferrer" className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors inline-block" title="Download PDF">
+                        <a href={fileUrl(inv.pdfUrl)} target="_blank" rel="noreferrer" className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors inline-block" title="Download PDF">
                           <Download className="h-4 w-4" />
                         </a>
                       ) : (

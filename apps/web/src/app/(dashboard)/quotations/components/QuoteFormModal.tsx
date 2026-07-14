@@ -10,6 +10,7 @@ import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { useMembers } from '@/hooks/useQueries';
 import { useAuthStore } from '@/stores';
 import { TAX_TYPES, resolveTaxType, DEFAULT_TAX_TYPE } from '../lib/tax-catalog';
+import { fileUrl } from '@/lib/files';
 import toast from 'react-hot-toast';
 
 const UNITS = ['Hours', 'Days', 'Months', 'Units', 'Lump Sum'];
@@ -18,8 +19,6 @@ const PAYMENT_TERMS = [...PRESET_TERMS, 'Custom'];
 const SALES_TEAMS = ['BD', 'Digital Marketing', 'Founder'];
 const PAY_METHODS = ['Bank Transfer', 'UPI', 'Cheque', 'Online'];
 const DEFAULT_TERMS = '1. This quotation is valid until the expiration date stated above.\n2. 50% advance is required to commence work unless otherwise agreed.\n3. Taxes as applicable (GST).\n4. Timelines are indicative and subject to timely inputs and approvals.';
-
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api').replace(/\/api$/, '');
 
 type Line = { description: string; unit: string; quantity: string; unitPrice: string; discountPct: string; taxPct: string; taxType: string };
 const emptyLine = (): Line => ({ description: '', unit: 'Units', quantity: '1', unitPrice: '', discountPct: '', taxPct: '18', taxType: DEFAULT_TAX_TYPE });
@@ -205,7 +204,7 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, onClose, on
     try {
       const res = await api.post<{ pdfUrl: string }>(`/crm/quotes/${id}/generate-pdf`, {});
       toast.dismiss(t); toast.success('PDF ready');
-      window.open(`${API_BASE}${res.pdfUrl}`, '_blank');
+      window.open(fileUrl(res.pdfUrl), '_blank');
       onSaved();
     } catch (e: any) { toast.dismiss(t); toast.error(e.message || 'PDF failed'); }
   }

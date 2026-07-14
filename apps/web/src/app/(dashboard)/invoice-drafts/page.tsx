@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { FileText, Download, Loader2, Edit2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { fileUrl } from '@/lib/files';
 import { EditInvoiceDraftModal } from './components/EditInvoiceDraftModal';
 
 export default function InvoiceDraftsPage() {
@@ -30,7 +31,7 @@ export default function InvoiceDraftsPage() {
       const res = await api.post<any>(`/revenue/invoice-drafts/${id}/generate-pdf`, {});
       if (res.pdfUrl) {
         toast.success('PDF Generated successfully!');
-        window.open(res.pdfUrl, '_blank');
+        window.open(fileUrl(res.pdfUrl), '_blank');
         fetchDrafts(); // Refresh to show SENT status
       }
     } catch (err: any) {
@@ -92,7 +93,7 @@ export default function InvoiceDraftsPage() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       {draft.pdfUrl ? (
-                        <a href={draft.pdfUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50">
+                        <a href={fileUrl(draft.pdfUrl)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50">
                           <Download className="h-4 w-4" /> Download
                         </a>
                       ) : (

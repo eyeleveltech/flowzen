@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import { Select } from '@/components/ui/select';
 import toast from 'react-hot-toast';
 import { useConfirmStore } from '@/stores';
+import { fileUrl } from '@/lib/files';
 import { QuoteFormModal } from './components/QuoteFormModal';
 
 const STATUS_STYLES: Record<string, string> = {
@@ -18,8 +19,6 @@ const STATUS_STYLES: Record<string, string> = {
   EXPIRED: 'bg-amber-50 text-amber-700 border-amber-200',
   CANCELLED: 'bg-red-50 text-red-700 border-red-200',
 };
-
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api').replace(/\/api$/, '');
 
 export default function QuotationsPage() {
   const queryClient = useQueryClient();
@@ -62,7 +61,7 @@ export default function QuotationsPage() {
       const res = await api.post<{ pdfUrl: string }>(`/crm/quotes/${id}/generate-pdf`, {});
       toast.dismiss(t);
       toast.success('PDF ready');
-      window.open(`${API_BASE}${res.pdfUrl}`, '_blank');
+      window.open(fileUrl(res.pdfUrl), '_blank');
       queryClient.invalidateQueries({ queryKey: ['quotes'] });
     } catch (e: any) {
       toast.dismiss(t);
@@ -164,7 +163,7 @@ export default function QuotationsPage() {
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-1.5 text-secondary">
                       <button title="View / Edit" onClick={() => openEdit(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Eye className="h-4 w-4" /></button>
-                      <button title="Generate / Download PDF" onClick={() => q.pdfUrl ? window.open(`${API_BASE}${q.pdfUrl}`, '_blank') : generatePdf(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Download className="h-4 w-4" /></button>
+                      <button title="Generate / Download PDF" onClick={() => q.pdfUrl ? window.open(fileUrl(q.pdfUrl), '_blank') : generatePdf(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Download className="h-4 w-4" /></button>
                       <button title="Duplicate" onClick={() => duplicate(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Copy className="h-4 w-4" /></button>
                       {q.status === 'ACCEPTED' && (
                         <button title="Move to Invoice Draft" onClick={async () => { if (await confirm({ title: 'Create Invoice', message: 'Move this quote to an Invoice Draft?', confirmText: 'Create Invoice', cancelText: 'Cancel' })) createInvoiceDraft(q); }} className="p-1.5 rounded-lg hover:bg-emerald-50 hover:text-emerald-600 transition-colors">
@@ -217,7 +216,7 @@ export default function QuotationsPage() {
               
               <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                 <button title="View / Edit" onClick={() => openEdit(q.id)} className="p-1.5 rounded-lg text-secondary hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Eye className="h-3.5 w-3.5" /></button>
-                <button title="Generate / Download PDF" onClick={() => q.pdfUrl ? window.open(`${API_BASE}${q.pdfUrl}`, '_blank') : generatePdf(q.id)} className="p-1.5 rounded-lg text-secondary hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Download className="h-3.5 w-3.5" /></button>
+                <button title="Generate / Download PDF" onClick={() => q.pdfUrl ? window.open(fileUrl(q.pdfUrl), '_blank') : generatePdf(q.id)} className="p-1.5 rounded-lg text-secondary hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Download className="h-3.5 w-3.5" /></button>
                 <button title="Duplicate" onClick={() => duplicate(q.id)} className="p-1.5 rounded-lg text-secondary hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Copy className="h-3.5 w-3.5" /></button>
                 {q.status === 'ACCEPTED' && (
                   <button title="Move to Invoice Draft" onClick={async () => { if (await confirm({ title: 'Create Invoice', message: 'Move this quote to an Invoice Draft?', confirmText: 'Create Invoice', cancelText: 'Cancel' })) createInvoiceDraft(q); }} className="p-1.5 rounded-lg text-secondary hover:bg-emerald-50 hover:text-emerald-600 transition-colors">

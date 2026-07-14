@@ -62,8 +62,14 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// Static files for uploads
-app.use('/uploads', express.static('uploads'));
+// Static files for uploads. Served under BOTH paths:
+//  - /uploads      : direct access (local dev, where the browser hits the API host:port)
+//  - /api/uploads  : production, where a reverse proxy routes only /api/* to this service,
+//                    so upload URLs must go through /api to reach us (otherwise the frontend
+//                    origin serves them -> 404).
+const uploadsStatic = express.static('uploads');
+app.use('/uploads', uploadsStatic);
+app.use('/api/uploads', uploadsStatic);
 
 // Health check
 app.get('/api/health', (_req, res) => {

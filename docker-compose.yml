@@ -63,6 +63,9 @@ services:
     volumes:
       # Shared with db-backup so pre-migration dumps land in the same backups volume.
       - postgres_backups:/backups
+      # Persist generated PDFs (quotes/invoices) across container rebuilds — the
+      # uploads dir is gitignored and lives only in the container otherwise.
+      - uploads_data:/app/apps/api/uploads
     # Safe boot: take a pre-migration backup, apply reviewed migrations, then start.
     # NOTE: on the FIRST deploy after switching from `db push`, the production DB must
     # already be baselined (see MIGRATIONS.md) or `migrate deploy` will fail on existing tables.
@@ -108,6 +111,8 @@ services:
 
 volumes:
   postgres_data:
+    driver: local
+  uploads_data:
     driver: local
   postgres_backups:
     driver: local
