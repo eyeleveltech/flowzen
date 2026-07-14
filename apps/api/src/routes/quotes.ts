@@ -180,14 +180,15 @@ quoteRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
   }
 });
 
-// PATCH /api/crm/quotes/:id — update (only while DRAFT)
+// PATCH /api/crm/quotes/:id — update. Editable in any state except CANCELLED,
+// so a SENT quote can be revised and its PDF re-generated.
 quoteRouter.patch('/:id', validate(quoteSchema.partial().extend({ lineItems: z.array(lineItemSchema).min(1).optional() })), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
     const id = req.params.id as string;
     const existing = await prisma.quoteDocument.findFirst({ where: { id, organizationId: orgId } });
     if (!existing) { res.status(404).json({ error: 'Quotation not found' }); return; }
-    if (existing.status !== 'DRAFT') { res.status(400).json({ error: 'Only draft documents can be edited.' }); return; }
+    if (existing.status === 'CANCELLED') { res.status(400).json({ error: 'Cancelled documents cannot be edited.' }); return; }
 
     const body = req.body as any;
     const client = await prisma.client.findFirst({ where: { id: existing.clientId, organizationId: orgId } });

@@ -144,7 +144,7 @@ export default function QuotationsPage() {
               ) : quotes.length === 0 ? (
                 <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-secondary">No documents yet. Create your first quotation.</td></tr>
               ) : quotes.map((q) => (
-                <tr key={q.id} className="hover:bg-surface transition-colors">
+                <tr key={q.id} onClick={() => openEdit(q.id)} className="hover:bg-surface transition-colors cursor-pointer">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <FileText className="h-4 w-4 text-[#9CA3AF] shrink-0" />
@@ -160,7 +160,7 @@ export default function QuotationsPage() {
                   <td className="px-6 py-4">
                     <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md border ${STATUS_STYLES[q.status]}`}>{q.status[0] + q.status.slice(1).toLowerCase()}</span>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-1.5 text-secondary">
                       <button title="View / Edit" onClick={() => openEdit(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Eye className="h-4 w-4" /></button>
                       <button title="Generate / Download PDF" onClick={() => q.pdfUrl ? window.open(fileUrl(q.pdfUrl), '_blank') : generatePdf(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Download className="h-4 w-4" /></button>
