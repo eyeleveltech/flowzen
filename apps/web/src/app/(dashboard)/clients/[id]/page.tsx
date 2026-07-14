@@ -217,12 +217,12 @@ export default function ClientDetailPage() {
             {!['PROJECT_COMPLETED', 'CHURNED'].includes(client.status) && (
               <button
                 onClick={() => setShowCreateProject(true)}
-                className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-medium hover:bg-[#1F2937] transition-colors shadow-sm flex items-center gap-1.5"
+                className="flex-1 sm:flex-none justify-center px-4 py-2 bg-primary text-white rounded-xl text-sm font-medium hover:bg-[#1F2937] transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap"
               >
                 <Plus className="h-4 w-4" /> Create Project
               </button>
             )}
-            <button onClick={openEdit} className="flex-1 sm:flex-none px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-[#374151] hover:bg-gray-50 transition-colors shadow-sm whitespace-nowrap">
+            <button onClick={openEdit} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-[#374151] hover:bg-gray-50 transition-colors shadow-sm whitespace-nowrap">
               Edit Client
             </button>
             <button onClick={handleDelete} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-red-200 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap">

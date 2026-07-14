@@ -556,23 +556,23 @@ export default function ProjectDetailPage() {
           </div>
           <p className="text-base font-medium text-secondary">{project.client ? getClientDisplayName(project.client) : 'Internal Project'}</p>
         </div>
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
           {project.client?.lead?.id && (
-            <button onClick={() => router.push(`/pipeline/${project.client!.lead!.id}`)} className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-primary bg-white hover:bg-primary/5 transition-all flex items-center gap-1.5">
+            <button onClick={() => router.push(`/pipeline/${project.client!.lead!.id}`)} className="w-full sm:w-auto justify-center rounded-xl border border-border px-4 py-2 text-sm font-medium text-primary bg-white hover:bg-primary/5 transition-all flex items-center gap-1.5">
               Pipeline <ArrowUpRight className="h-4 w-4" />
             </button>
           )}
           {project.folderLink && (
-            <a href={project.folderLink} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-[#2563EB] bg-white hover:bg-blue-50 transition-all flex items-center gap-1.5">
+            <a href={project.folderLink} target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto justify-center rounded-xl border border-border px-4 py-2 text-sm font-medium text-[#2563EB] bg-white hover:bg-blue-50 transition-all flex items-center gap-1.5">
               Drive Folder
             </a>
           )}
           {user?.role !== 'TEAM_MEMBER' && (
-            <div className="flex items-center gap-2">
-              <button onClick={startEditingProject} className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-[#374151] bg-white hover:bg-[#F9FAFB] transition-all">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button onClick={startEditingProject} className="flex-1 sm:flex-none justify-center rounded-xl border border-border px-4 py-2 text-sm font-medium text-[#374151] bg-white hover:bg-[#F9FAFB] transition-all whitespace-nowrap">
                 Edit Project
               </button>
-              <button onClick={handleDeleteProject} className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 hover:border-red-300 transition-all flex items-center gap-1.5">
+              <button onClick={handleDeleteProject} className="flex-1 sm:flex-none justify-center rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 hover:border-red-300 transition-all flex items-center gap-1.5 whitespace-nowrap">
                 <Trash2 className="h-4 w-4" /> Delete
               </button>
             </div>

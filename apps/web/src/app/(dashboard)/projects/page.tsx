@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatDate, formatShortDate, getInitials, getAvatarColor, getClientDisplayName } from '@/lib/utils';
-import { Plus, LayoutList, GanttChartSquare, Calendar, ChevronRight, BarChart3, Clock, LayoutGrid, Search, X, Check, Settings, Kanban } from 'lucide-react';
+import { Plus, LayoutList, GanttChartSquare, Calendar, ChevronRight, BarChart3, Clock, LayoutGrid, Search, X, Check, Settings, Kanban, Filter } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '@/stores';
 import { useProjectFilters } from '@/stores/projectFilters';
@@ -58,6 +58,7 @@ function ProjectsContent() {
   const searchParams = useSearchParams();
   const { user } = useAuthStore();
   const [view, setView] = useState<ViewMode>('list');
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
   const urlStatus = searchParams.get('status');
   // Filters live in an in-memory store so they persist while navigating into a
   // project and back, but reset on a full page refresh.
@@ -253,78 +254,91 @@ function ProjectsContent() {
       <div className="flex flex-col gap-4 mb-6">
         {/* Row 1: Search & Filters (takes full width) */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-[#F9FAFB]/50 p-3 rounded-2xl border border-border">
-          <div className="flex flex-wrap items-center gap-2 flex-1">
-            <div className="relative w-full sm:w-64 shrink-0">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search projects..." className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2 text-sm outline-none focus:border-primary transition-all" />
+          <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 flex-1 w-full">
+            {/* Search Input and Mobile Toggle */}
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <div className="relative flex-1 md:w-64 md:flex-initial shrink-0">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search projects..." className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+              </div>
+              <button 
+                onClick={() => setShowMobileFilters(!showMobileFilters)} 
+                className="md:hidden flex items-center justify-center p-2.5 rounded-xl border border-border bg-white text-secondary hover:bg-gray-50 transition-colors shrink-0 h-[38px]"
+                title="Toggle Filters"
+              >
+                <Filter className="h-4 w-4" />
+              </button>
             </div>
             
-            <div className="w-40 sm:w-44">
-              <MultiSelect
-                value={statusFilter}
-                onChange={setStatusFilter}
-                placeholder="Status"
-                showSelectAll
-                options={[
-                  { label: 'Active', value: 'ACTIVE' },
-                  { label: 'Delayed', value: 'DELAYED' },
-                  { label: 'Planning', value: 'PLANNING' },
-                  { label: 'In Progress', value: 'IN_PROGRESS' },
-                  { label: 'In Review', value: 'REVIEW' },
-                  { label: 'Completed', value: 'COMPLETED' },
-                  { label: 'On Hold', value: 'ON_HOLD' },
-                  { label: 'Cancelled', value: 'CANCELLED' }
-                ]}
-              />
-            </div>
-            <div className="w-40 sm:w-44">
-              <MultiSelect
-                value={clientFilter}
-                onChange={setClientFilter}
-                placeholder="Clients"
-                showSelectAll
-                options={clients.filter(c => c._count?.projects > 0).map(c => ({ label: getClientDisplayName(c), value: c.id }))}
-              />
-            </div>
-            {user?.role !== 'TEAM_MEMBER' && (
-              <div className="w-40 sm:w-48">
+            {/* Filters */}
+            <div className={`flex-wrap items-center gap-2 flex-1 w-full ${showMobileFilters ? 'flex' : 'hidden md:flex'}`}>
+              <div className="w-full md:w-44">
                 <MultiSelect
-                  value={ownerFilter}
-                  onChange={setOwnerFilter}
-                  placeholder="Project Managers"
+                  value={statusFilter}
+                  onChange={setStatusFilter}
+                  placeholder="Status"
                   showSelectAll
-                  options={members.filter(m => m.totalProjects > 0).map(m => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
+                  options={[
+                    { label: 'Active', value: 'ACTIVE' },
+                    { label: 'Delayed', value: 'DELAYED' },
+                    { label: 'Planning', value: 'PLANNING' },
+                    { label: 'In Progress', value: 'IN_PROGRESS' },
+                    { label: 'In Review', value: 'REVIEW' },
+                    { label: 'Completed', value: 'COMPLETED' },
+                    { label: 'On Hold', value: 'ON_HOLD' },
+                    { label: 'Cancelled', value: 'CANCELLED' }
+                  ]}
                 />
               </div>
-            )}
-            <div className="w-40 sm:w-36">
-              <input
-                type="date"
-                value={dueDateFilter}
-                onChange={(e) => setDueDateFilter(e.target.value)}
-                className="w-full h-[38px] rounded-xl border border-border bg-white px-3 py-2 text-sm text-[#374151] outline-none focus:border-primary transition-all"
-                title="Due Date Filter"
-              />
+              <div className="w-full md:w-44">
+                <MultiSelect
+                  value={clientFilter}
+                  onChange={setClientFilter}
+                  placeholder="Clients"
+                  showSelectAll
+                  options={clients.filter(c => c._count?.projects > 0).map(c => ({ label: getClientDisplayName(c), value: c.id }))}
+                />
+              </div>
+              {user?.role !== 'TEAM_MEMBER' && (
+                <div className="w-full md:w-48">
+                  <MultiSelect
+                    value={ownerFilter}
+                    onChange={setOwnerFilter}
+                    placeholder="Project Managers"
+                    showSelectAll
+                    options={members.filter(m => m.totalProjects > 0).map(m => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
+                  />
+                </div>
+              )}
+              <div className="w-full md:w-36">
+                <input
+                  type="date"
+                  value={dueDateFilter}
+                  onChange={(e) => setDueDateFilter(e.target.value)}
+                  className="w-full h-[38px] rounded-xl border border-border bg-white px-3 py-2 text-sm text-[#374151] outline-none focus:border-primary transition-all"
+                  title="Due Date Filter"
+                />
+              </div>
             </div>
           </div>
         </div>
 
         {/* Row 2: View Options & View Settings */}
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center rounded-xl border border-border p-1 bg-white">
+          <div className="flex items-center rounded-xl border border-border p-1 bg-white overflow-x-auto max-w-full whitespace-nowrap no-scrollbar shrink-0">
             {viewButtons.map((v) => (
               <button
                 key={v.mode}
                 onClick={() => setView(v.mode)}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${view === v.mode ? 'bg-primary text-white shadow-sm' : 'text-secondary hover:text-primary'}`}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all shrink-0 ${view === v.mode ? 'bg-primary text-white shadow-sm' : 'text-secondary hover:text-primary'}`}
               >
-                <v.icon className="h-3.5 w-3.5" /> {v.label}
+                <v.icon className="h-3.5 w-3.5 shrink-0" /> {v.label}
               </button>
             ))}
           </div>
           <button
             onClick={() => setShowViewSettings(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#374151] bg-white border border-border rounded-lg shadow-sm transition-colors hover:bg-gray-50 h-[38px]"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#374151] bg-white border border-border rounded-lg shadow-sm transition-colors hover:bg-gray-50 h-[38px] shrink-0"
             title="Configure View Settings"
           >
             <Settings className="w-3.5 h-3.5" /> View Settings

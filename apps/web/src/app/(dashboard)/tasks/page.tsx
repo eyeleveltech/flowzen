@@ -106,6 +106,8 @@ const taskSchema = z.object({
   priority: z.string(),
   status: z.string(),
   dueDate: z.string().optional(),
+  dueDateOnly: z.string().optional(),
+  dueTimeOnly: z.string().optional(),
   assignedDate: z.string().optional(),
   loggedHours: z.number().min(0).optional(),
   driveLink: z.string().url('Must be a valid URL').optional().or(z.literal('')),
@@ -129,7 +131,10 @@ const formatForDateTimeLocal = (dateString?: string | null) => {
 // Fresh blank task form values (function so assignedDate is always "today").
 const blankTaskValues = (): TaskFormValues => ({
   title: '', description: '', type: 'OTHER', projectId: '', assigneeId: '', assigneeIds: [], assignedById: '',
-  reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: formatForDateTimeLocal(new Date().toISOString()),
+  reviewerId: '', priority: 'MEDIUM', status: 'TODO',
+  dueDate: '',
+  dueDateOnly: new Date().toISOString().split('T')[0],
+  dueTimeOnly: '23:59',
   assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '', isRecurring: false, recurrenceFrequency: 'WEEKLY'
 });
 
@@ -145,7 +150,7 @@ function TasksContent() {
   const [assigneeFilter, setAssigneeFilter] = useState<string[]>(user?.id ? [user.id] : []);
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
   const [teamFilter, setTeamFilter] = useState<string[]>([]);
-  const [sort, setSort] = useState<string>('');
+  const [sort, setSort] = useState<string>('createdAt_desc');
   const [dueDateFrom, setDueDateFrom] = useState('');
   const [dueDateTo, setDueDateTo] = useState('');
   const filterHydrated = useRef(false);
@@ -239,7 +244,30 @@ function TasksContent() {
     isFetchingNextPage
   } = useTasks(search, statusFilter.join(','), projectFilter.join(','), assigneeFilter.join(','), priorityFilter.join(','), teamFilter.join(','), searchParams.get('filter'), sort, dueDateFrom, dueDateTo);
 
-  const tasks = useMemo(() => data?.pages.flatMap((page) => page.tasks) || [], [data]);
+  const tasks = useMemo(() => {
+    const rawTasks = data?.pages.flatMap((page) => page.tasks) || [];
+    if (sort === 'createdAt_desc') {
+      const statusOrder: Record<string, number> = {
+        IN_PROGRESS: 1,
+        REVIEW: 2,
+        TODO: 3,
+        APPROVED: 4,
+        BACKLOG: 5,
+        BLOCKED: 6,
+        ON_HOLD: 7,
+        COMPLETED: 8
+      };
+      return [...rawTasks].sort((a, b) => {
+        const orderA = statusOrder[a.status] ?? 99;
+        const orderB = statusOrder[b.status] ?? 99;
+        if (orderA !== orderB) {
+          return orderA - orderB;
+        }
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+    }
+    return rawTasks;
+  }, [data, sort]);
   const { data: projectsData } = useProjects();
   const projects = useMemo(() => projectsData?.pages.flatMap((page) => page.projects) || [], [projectsData]);
   const { data: members = [] } = useMembers();
@@ -259,13 +287,13 @@ function TasksContent() {
           setSelectedTaskState(t);
           api.get<Task>(`/tasks/${t.id}`).then((fullTask) => {
             setSelectedTaskState(prev => prev?.id === fullTask.id ? fullTask : prev);
-          }).catch(() => {});
+          }).catch(() => { });
         }
       } else if (!selectedTask || selectedTask.id !== taskIdParam) {
         // Not in the current list (e.g. from a notification), fetch it directly
         api.get<Task>(`/tasks/${taskIdParam}`).then((fullTask) => {
           setSelectedTaskState(fullTask);
-        }).catch(() => {});
+        }).catch(() => { });
       }
     } else {
       setSelectedTaskState(null);
@@ -277,13 +305,13 @@ function TasksContent() {
     if (task) params.set('taskId', task.id);
     else params.delete('taskId');
     router.replace(`?${params.toString()}`, { scroll: false });
-    
+
     // Immediate UI update
     if (task && task.id !== selectedTask?.id) {
       setSelectedTaskState(task);
       api.get<Task>(`/tasks/${task.id}`).then((fullTask) => {
         setSelectedTaskState(prev => prev?.id === fullTask.id ? fullTask : prev);
-      }).catch(() => {});
+      }).catch(() => { });
     } else if (!task) {
       setSelectedTaskState(null);
     }
@@ -307,23 +335,26 @@ function TasksContent() {
   const selectedProjectId = watch('projectId');
 
   const availableAssignees = useMemo(() => {
-    const users = new Map<string, { id: string; name: string }>();
+    // Build a lookup from the enriched /api/team data (includes capacity, activeTasks, etc.)
+    const memberMap = new Map<string, any>();
+    members.forEach((m: any) => memberMap.set(m.id, m));
+
+    const addUser = (u: any, enrichedUsers: Map<string, any>) => {
+      if (!u?.id) return;
+      // Prefer the enriched team data (which has capacity) over raw project member data
+      const enriched = memberMap.get(u.id) ?? u;
+      enrichedUsers.set(u.id, enriched);
+    };
+
+    const users = new Map<string, any>();
     if (selectedProjectId) {
       const proj = projects.find(p => p.id === selectedProjectId);
       if (proj) {
-        proj.members?.forEach((m: any) => {
-          if (m.user) users.set(m.user.id, m.user);
-        });
+        proj.members?.forEach((m: any) => { if (m.user) addUser(m.user, users); });
         proj.teams?.forEach((t: any) => {
-          t.team?.members?.forEach((m: any) => {
-            // m is the User object directly in team.members
-            if (m.id) users.set(m.id, m);
-          });
+          t.team?.members?.forEach((m: any) => { if (m.id) addUser(m, users); });
         });
-        // Also add the project owner as a fallback assignee if needed
-        if (proj.owner?.id) {
-          users.set(proj.owner.id, proj.owner);
-        }
+        if (proj.owner?.id) addUser(proj.owner, users);
       }
     } else {
       members.forEach((m: any) => users.set(m.id, m));
@@ -357,7 +388,7 @@ function TasksContent() {
         if (selectedTask?.id && updatedTask?.id === selectedTask.id) {
           api.get<Task>(`/tasks/${updatedTask.id}`).then((fullTask) => {
             setSelectedTaskState(fullTask);
-          }).catch(() => {});
+          }).catch(() => { });
         }
       };
 
@@ -373,24 +404,38 @@ function TasksContent() {
       sse.on('task:updated', handleTaskUpdated);
       sse.on('task:deleted', handleTaskDeleted);
       sse.on('tasks:reordered', refetchTasks);
-      
-      return () => { 
-        sse.off('task:created', refetchTasks); 
-        sse.off('task:updated', handleTaskUpdated); 
-        sse.off('task:deleted', handleTaskDeleted); 
-        sse.off('tasks:reordered', refetchTasks); 
+
+      return () => {
+        sse.off('task:created', refetchTasks);
+        sse.off('task:updated', handleTaskUpdated);
+        sse.off('task:deleted', handleTaskDeleted);
+        sse.off('tasks:reordered', refetchTasks);
       };
     }
   }, [refetchTasks, selectedTask?.id]);
 
+  const onInvalid = (errors: any) => {
+    console.log('Form validation failed:', errors);
+    const drawer = document.getElementById('create-task-drawer') || document.getElementById('edit-task-drawer');
+    if (drawer) {
+      drawer.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
   async function handleCreate(data: TaskFormValues) {
     setSubmitting(true);
+    let combinedDueDate: string | undefined = undefined;
+    if (data.dueDateOnly) {
+      combinedDueDate = data.dueTimeOnly
+        ? `${data.dueDateOnly}T${data.dueTimeOnly}`
+        : `${data.dueDateOnly}T23:59`;
+    }
     try {
       await api.post('/tasks', {
         ...data,
         assigneeIds: data.assigneeIds || [],
         reviewerId: data.reviewerId || undefined,
-        dueDate: data.dueDate || undefined,
+        dueDate: combinedDueDate,
         assignedDate: data.assignedDate || undefined,
         assignedById: data.assignedById || undefined,
         driveLink: data.driveLink || undefined,
@@ -405,12 +450,18 @@ function TasksContent() {
   async function handleEdit(data: TaskFormValues) {
     if (!selectedTask) return;
     setSubmitting(true);
+    let combinedDueDate: string | undefined = undefined;
+    if (data.dueDateOnly) {
+      combinedDueDate = data.dueTimeOnly
+        ? `${data.dueDateOnly}T${data.dueTimeOnly}`
+        : `${data.dueDateOnly}T23:59`;
+    }
     try {
       await api.put(`/tasks/${selectedTask.id}`, {
         ...data,
         assigneeIds: data.assigneeIds || [],
         reviewerId: data.reviewerId || undefined,
-        dueDate: data.dueDate || undefined,
+        dueDate: combinedDueDate,
         assignedDate: data.assignedDate || undefined,
         assignedById: data.assignedById || undefined,
         driveLink: data.driveLink || undefined,
@@ -426,6 +477,22 @@ function TasksContent() {
   function startEditing(taskArg?: Task) {
     const t = taskArg || selectedTask;
     if (!t) return;
+
+    let dateStr = '';
+    let timeStr = '';
+    if (t.dueDate) {
+      const d = new Date(t.dueDate);
+      if (!isNaN(d.getTime())) {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const hours = String(d.getHours()).padStart(2, '0');
+        const minutes = String(d.getMinutes()).padStart(2, '0');
+        dateStr = `${year}-${month}-${day}`;
+        timeStr = `${hours}:${minutes}`;
+      }
+    }
+
     reset({
       title: t.title,
       description: t.description || '',
@@ -436,6 +503,8 @@ function TasksContent() {
       priority: t.priority,
       status: t.status,
       dueDate: t.dueDate ? formatForDateTimeLocal(t.dueDate) : '',
+      dueDateOnly: dateStr,
+      dueTimeOnly: timeStr,
       assignedDate: t.assignedDate ? new Date(t.assignedDate).toISOString().split('T')[0] : '',
       assignedById: t.assignedBy?.id || '',
       loggedHours: t.loggedHours || 0,
@@ -464,7 +533,7 @@ function TasksContent() {
       await api.put(`/tasks/${taskId}`, { status });
       toast.success('Task status updated');
       refetchTasks();
-      
+
       if (status === 'COMPLETED') {
         const taskObj = tasks.find(t => t.id === taskId);
         const hours = await useTimeTrackingStore.getState().prompt({ taskId, taskTitle: taskObj?.title || 'Task' });
@@ -518,7 +587,7 @@ function TasksContent() {
       await api.put(`/tasks/${draggableId}`, { status: newStatus });
       toast.success('Task moved successfully');
       refetchTasks();
-      
+
       if (newStatus === 'COMPLETED') {
         const taskObj = tasks.find(t => t.id === draggableId);
         const hours = await useTimeTrackingStore.getState().prompt({ taskId: draggableId, taskTitle: taskObj?.title || 'Task' });
@@ -584,8 +653,8 @@ function TasksContent() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tasks..." className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
           </div>
-          <button 
-            onClick={() => setShowMobileFilters(!showMobileFilters)} 
+          <button
+            onClick={() => setShowMobileFilters(!showMobileFilters)}
             className="sm:hidden flex items-center justify-center p-2.5 rounded-xl border border-border bg-white text-secondary hover:bg-gray-50 transition-colors"
           >
             <Filter className="h-4 w-4" />
@@ -593,62 +662,62 @@ function TasksContent() {
         </div>
         <div className={`flex flex-wrap items-center gap-3 ${showMobileFilters ? 'flex' : 'hidden sm:flex'}`}>
           <div className="w-full sm:w-48">
-          <MultiSelect
-            showSelectAll
-            value={projectFilter}
-            onChange={setProjectFilter}
-            placeholder="Projects"
-            options={projects.map((p) => ({ label: p.name, value: p.id }))}
-          />
-        </div>
-        <div className="w-full sm:w-44">
-          <MultiSelect
-            showSelectAll
-            value={statusFilter}
-            onChange={setStatusFilter}
-            placeholder="Status"
-            options={TASK_STATUS_OPTIONS}
-          />
-        </div>
-
-        {user?.role !== 'TEAM_MEMBER' && (
+            <MultiSelect
+              showSelectAll
+              value={projectFilter}
+              onChange={setProjectFilter}
+              placeholder="Projects"
+              options={projects.map((p) => ({ label: p.name, value: p.id }))}
+            />
+          </div>
           <div className="w-full sm:w-44">
             <MultiSelect
               showSelectAll
-              value={assigneeFilter}
-              onChange={setAssigneeFilter}
-              placeholder="Assignees"
-              options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
+              value={statusFilter}
+              onChange={setStatusFilter}
+              placeholder="Status"
+              options={TASK_STATUS_OPTIONS}
             />
           </div>
-        )}
 
-        {view === 'list' && (
-          <div className="w-full sm:w-48">
-            <Select
-              ariaLabel="Sort Tasks"
-              value={sort}
-              onChange={setSort}
-              options={[
-                { label: 'Default Sort', value: '' },
-                { label: 'Project: A-Z', value: 'project_asc' },
-                { label: 'Project: Z-A', value: 'project_desc' },
-                { label: 'Priority: Low to Urgent', value: 'priority_asc' },
-                { label: 'Priority: Urgent to Low', value: 'priority_desc' },
-                { label: 'Status: To Do to Done', value: 'status_asc' },
-                { label: 'Status: Done to To Do', value: 'status_desc' },
-                { label: 'Task Name: A-Z', value: 'title_asc' },
-                { label: 'Task Name: Z-A', value: 'title_desc' },
-                { label: 'Created: Newest', value: 'createdAt_desc' },
-                { label: 'Created: Oldest', value: 'createdAt_asc' },
-                { label: 'Due Date: Earliest', value: 'dueDate_asc' },
-                { label: 'Due Date: Latest', value: 'dueDate_desc' },
-                { label: 'Updated: Newest', value: 'updatedAt_desc' },
-              ]}
-            />
-          </div>
-        )}
-      </div>
+          {user?.role !== 'TEAM_MEMBER' && (
+            <div className="w-full sm:w-44">
+              <MultiSelect
+                showSelectAll
+                value={assigneeFilter}
+                onChange={setAssigneeFilter}
+                placeholder="Assignees"
+                options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
+              />
+            </div>
+          )}
+
+          {view === 'list' && (
+            <div className="w-full sm:w-48">
+              <Select
+                ariaLabel="Sort Tasks"
+                value={sort}
+                onChange={setSort}
+                options={[
+                  { label: 'Created: Newest', value: 'createdAt_desc' },
+                  { label: 'Project: A-Z', value: 'project_asc' },
+                  { label: 'Project: Z-A', value: 'project_desc' },
+                  { label: 'Priority: Low to Urgent', value: 'priority_asc' },
+                  { label: 'Priority: Urgent to Low', value: 'priority_desc' },
+                  { label: 'Status: To Do to Done', value: 'status_asc' },
+                  { label: 'Status: Done to To Do', value: 'status_desc' },
+                  { label: 'Task Name: A-Z', value: 'title_asc' },
+                  { label: 'Task Name: Z-A', value: 'title_desc' },
+                  { label: 'Created: Newest', value: 'createdAt_desc' },
+                  { label: 'Created: Oldest', value: 'createdAt_asc' },
+                  { label: 'Due Date: Earliest', value: 'dueDate_asc' },
+                  { label: 'Due Date: Latest', value: 'dueDate_desc' },
+                  { label: 'Updated: Newest', value: 'updatedAt_desc' },
+                ]}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -766,13 +835,13 @@ function TasksContent() {
                         {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>}
                         {visibleColumns.includes('project') && (
                           <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
-                            <ColumnDropdown 
-                              title="Project" 
-                              sortAscValue="project_asc" 
-                              sortDescValue="project_desc" 
+                            <ColumnDropdown
+                              title="Project"
+                              sortAscValue="project_asc"
+                              sortDescValue="project_desc"
                               sortAscLabel="Sort A to Z"
                               sortDescLabel="Sort Z to A"
-                              currentSort={sort} 
+                              currentSort={sort}
                               onSortChange={setSort}
                             />
                           </th>
@@ -780,45 +849,45 @@ function TasksContent() {
                         {visibleColumns.includes('assignee') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Assignee</th>}
                         {visibleColumns.includes('priority') && (
                           <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
-                            <ColumnDropdown 
-                              title="Priority" 
-                              sortAscValue="priority_asc" 
-                              sortDescValue="priority_desc" 
+                            <ColumnDropdown
+                              title="Priority"
+                              sortAscValue="priority_asc"
+                              sortDescValue="priority_desc"
                               sortAscLabel="Low to Urgent"
                               sortDescLabel="Urgent to Low"
-                              currentSort={sort} 
+                              currentSort={sort}
                               onSortChange={setSort}
                             />
                           </th>
                         )}
                         {visibleColumns.includes('status') && (
                           <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
-                            <ColumnDropdown 
-                              title="Status" 
-                              sortAscValue="status_asc" 
-                              sortDescValue="status_desc" 
+                            <ColumnDropdown
+                              title="Status"
+                              sortAscValue="status_asc"
+                              sortDescValue="status_desc"
                               sortAscLabel="To Do to Done"
                               sortDescLabel="Done to To Do"
-                              currentSort={sort} 
+                              currentSort={sort}
                               onSortChange={setSort}
                             />
                           </th>
                         )}
                         {visibleColumns.includes('dueDate') && (
                           <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
-                            <ColumnDropdown 
-                              title="Due Date" 
-                              sortAscValue="dueDate_asc" 
-                              sortDescValue="dueDate_desc" 
+                            <ColumnDropdown
+                              title="Due Date"
+                              sortAscValue="dueDate_asc"
+                              sortDescValue="dueDate_desc"
                               sortAscLabel="Earliest First"
                               sortDescLabel="Latest First"
-                              currentSort={sort} 
+                              currentSort={sort}
                               onSortChange={setSort}
                             />
                           </th>
                         )}
                         <th className="px-6 py-3.5 w-10 text-center relative select-none">
-                          <button 
+                          <button
                             onClick={(e) => { e.stopPropagation(); setShowColumnDropdown(!showColumnDropdown); }}
                             className="inline-flex items-center justify-center h-6 w-6 rounded-md text-[#9CA3AF] hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
                             title="Toggle visible columns"
@@ -829,7 +898,7 @@ function TasksContent() {
                             {showColumnDropdown && (
                               <>
                                 <div className="fixed inset-0 z-40" onClick={() => setShowColumnDropdown(false)} />
-                                <motion.div 
+                                <motion.div
                                   initial={{ opacity: 0, y: 5 }}
                                   animate={{ opacity: 1, y: 0 }}
                                   exit={{ opacity: 0, y: 5 }}
@@ -842,8 +911,8 @@ function TasksContent() {
                                     <button
                                       key={col.id}
                                       onClick={() => {
-                                        setVisibleColumns(prev => 
-                                          prev.includes(col.id) 
+                                        setVisibleColumns(prev =>
+                                          prev.includes(col.id)
                                             ? prev.filter(c => c !== col.id)
                                             : [...prev, col.id]
                                         )
@@ -998,6 +1067,7 @@ function TasksContent() {
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-100 bg-black/20 backdrop-blur-sm" onClick={() => { setSelectedTask(null); setIsEditing(false); }} />
             <motion.div
+              id="edit-task-drawer"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
@@ -1011,290 +1081,312 @@ function TasksContent() {
               </div>
               <div className="p-6 pb-24 md:pb-6">
                 {selectedTask && (
-          <div className="flex flex-col">
-            <div className="flex items-center justify-between border-b border-[#F3F4F6] pb-4 mb-4">
-              <div className="flex items-center gap-2">
-                {!isEditing && (
-                  <>
-                    <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${TASK_STATUS_COLORS[selectedTask.status]}`}>{selectedTask.status.replace('_', ' ')}</span>
-                    <span className={`h-2 w-2 rounded-full ${priorityDots[selectedTask.priority]}`} />
-                  </>
-                )}
-                {isEditing && <h2 className="text-lg font-semibold text-primary">Edit Task</h2>}
-              </div>
-              <div className="flex items-center gap-2">
-                {!isEditing && (user?.role !== 'TEAM_MEMBER' || selectedTask.assignee?.id === user?.id) && (
-                  <>
-                    <button onClick={() => startEditing()} className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
-                      Edit
-                    </button>
-                    <button onClick={deleteTask} className="rounded-xl border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 hover:border-red-300 transition-all flex items-center gap-1.5">
-                      <Trash2 className="h-3.5 w-3.5" /> Delete
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-            {isEditing ? (
-              <form onSubmit={handleSubmit(handleEdit)} className="space-y-4">
-                <div>
-                  <label htmlFor="te-title" className="block text-sm font-medium text-[#374151] mb-1.5">Title *</label>
-                  <input id="te-title" {...register('title')} aria-invalid={!!errors.title} aria-describedby={errors.title ? 'te-title-error' : undefined} className={`w-full rounded-xl border ${errors.title ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
-                  {errors.title && <p id="te-title-error" aria-live="polite" className="mt-1 text-xs text-red-500">{errors.title.message}</p>}
-                </div>
-                <div>
-                  <label htmlFor="te-dueDate" className="block text-sm font-medium text-[#374151] mb-1.5">Due Date and Time</label>
-                  <input id="te-dueDate" type="datetime-local" {...register('dueDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                </div>
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" {...register('isRecurring')} className="rounded border-border text-primary focus:ring-primary w-4 h-4" />
-                    <span className="text-sm font-medium text-[#374151]">Repeat Task</span>
-                  </label>
-                </div>
-                {watch('isRecurring') && (
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Repeat Frequency</label>
-                    <Controller name="recurrenceFrequency" control={control} render={({ field }) => (
-                      <Select
-                        ariaLabel="Repeat Frequency"
-                        value={field.value || 'WEEKLY'}
-                        onChange={field.onChange}
-                        options={[{ label: 'Daily', value: 'DAILY' }, { label: 'Weekly', value: 'WEEKLY' }, { label: 'Monthly', value: 'MONTHLY' }, { label: 'Yearly', value: 'YEARLY' }]}
-                      />
-                    )} />
-                  </div>
-                )}
-                <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
-                  <Controller name="description" control={control} render={({ field }) => (
-                    <RichTextEditor value={field.value || ''} onChange={field.onChange} placeholder="Task details..." />
-                  )} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Project *</label>
-                  <Controller name="projectId" control={control} render={({ field }) => (
-                    <Select
-                      ariaLabel="Project"
-                      value={field.value}
-                      onChange={field.onChange}
-                      options={[{ label: 'Select project', value: '' }, ...projects.map((p) => ({ label: p.name, value: p.id }))]}
-                    />
-                  )} />
-                  {errors.projectId && <p aria-live="polite" className="mt-1 text-xs text-red-500">{errors.projectId.message}</p>}
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Task Type</label>
-                    <Controller name="type" control={control} render={({ field }) => (
-                      <Select
-                        ariaLabel="Task Type"
-                        value={field.value || 'OTHER'}
-                        onChange={field.onChange}
-                        options={[
-                          { label: 'Design', value: 'DESIGN' },
-                          { label: 'Content', value: 'CONTENT' },
-                          { label: 'Video', value: 'VIDEO' },
-                          { label: 'Digital Marketing', value: 'DIGITAL_MARKETING' },
-                          { label: 'Social Media', value: 'SOCIAL_MEDIA' },
-                          { label: 'Development', value: 'DEVELOPMENT' },
-                          { label: 'Strategy', value: 'STRATEGY' },
-                          { label: 'Business', value: 'BUSINESS' },
-                          { label: 'Other', value: 'OTHER' },
-                        ]}
-                      />
-                    )} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Reviewer</label>
-                    <Controller name="reviewerId" control={control} render={({ field }) => (
-                      <Select
-                        ariaLabel="Reviewer"
-                        value={field.value || ''}
-                        onChange={field.onChange}
-                        options={[{ label: 'No Reviewer', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))]}
-                      />
-                    )} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Assigned By</label>
-                    <Controller name="assignedById" control={control} render={({ field }) => (
-                      <Select
-                        ariaLabel="Assigned By"
-                        value={field.value || ''}
-                        onChange={field.onChange}
-                        options={[{ label: 'Self (Default)', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))]}
-                      />
-                    )} />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignees</label>
-                    <Controller name="assigneeIds" control={control} render={({ field }) => (
-                      <MultiSelect
-                        showSelectAll
-                        compact={false}
-                        value={field.value || []}
-                        onChange={field.onChange}
-                        placeholder="Add assignees..."
-                        options={availableAssignees.map((m: any) => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
-                      />
-                    )} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority</label>
-                    <Controller name="priority" control={control} render={({ field }) => (
-                      <Select
-                        ariaLabel="Priority"
-                        value={field.value}
-                        onChange={field.onChange}
-                        options={[{ label: 'Low', value: 'LOW' }, { label: 'Medium', value: 'MEDIUM' }, { label: 'High', value: 'HIGH' }, { label: 'Urgent', value: 'URGENT' }]}
-                      />
-                    )} />
-                  </div>
-                  <div>
-                    <label htmlFor="te-assignedDate" className="block text-sm font-medium text-[#374151] mb-1.5">Assigned Date</label>
-                    <input id="te-assignedDate" type="date" {...register('assignedDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                  </div>
-                  <div>
-                    <label htmlFor="te-loggedHours" className="block text-sm font-medium text-[#374151] mb-1.5">Time Spent (hours)</label>
-                    <input id="te-loggedHours" type="number" step="0.5" min="0" {...register('loggedHours', { valueAsNumber: true })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                  </div>
-                </div>
-                <div>
-                  <label htmlFor="te-driveLink" className="block text-sm font-medium text-[#374151] mb-1.5">Drive Link (Uploads, Drafts)</label>
-                  <input id="te-driveLink" type="url" {...register('driveLink')} placeholder="https://drive.google.com/..." aria-invalid={!!errors.driveLink} aria-describedby={errors.driveLink ? 'te-driveLink-error' : undefined} className={`w-full rounded-xl border ${errors.driveLink ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
-                  {errors.driveLink && <p id="te-driveLink-error" aria-live="polite" className="mt-1 text-xs text-red-500">{errors.driveLink.message}</p>}
-                </div>
-                <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setIsEditing(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
-                  <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submitting ? 'Saving...' : 'Save Changes'}</button>
-                </div>
-              </form>
-            ) : (
-              <div>
-                <h2 className="text-xl font-semibold text-primary mb-2">{selectedTask.title}</h2>
-                {selectedTask.description && <div className="text-sm text-secondary mb-4 prose prose-sm prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: selectedTask.description }} />}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                    <span className="text-sm text-secondary">Project</span>
-                    <span className="text-sm font-medium text-primary">{selectedTask.project?.name}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6] gap-3">
-                    <span className="text-sm text-secondary shrink-0">Assignees</span>
-                    <span className="text-sm font-medium text-primary text-right">
-                      {taskAssignees(selectedTask).length ? taskAssignees(selectedTask).map((a) => a.name).join(', ') : 'Unassigned'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                    <span className="text-sm text-secondary">Created</span>
-                    <span className="text-sm font-medium text-primary">{formatDate(selectedTask.createdAt)}</span>
-                  </div>
-                  {selectedTask.assignedBy && (
-                    <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                      <span className="text-sm text-secondary">Assigned By</span>
-                      <span className="text-sm font-medium text-primary">{selectedTask.assignedBy.name}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                    <span className="text-sm text-secondary">Due Date</span>
-                    <span className="text-sm font-medium text-primary">{formatDate(selectedTask.dueDate)}</span>
-                  </div>
-                  {selectedTask.reviewer && (
-                    <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                      <span className="text-sm text-secondary">Reviewer</span>
-                      <span className="text-sm font-medium text-primary">{selectedTask.reviewer.name}</span>
-                    </div>
-                  )}
-                  {selectedTask.driveLink && (
-                    <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                      <span className="text-sm text-secondary">Drive Link</span>
-                      <a href={selectedTask.driveLink} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 hover:underline max-w-[200px] truncate">{selectedTask.driveLink}</a>
-                    </div>
-                  )}
-                  {selectedTask.completedAt && (
-                    <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                      <span className="text-sm text-secondary">Completed On</span>
-                      <span className="text-sm font-medium text-primary">{formatDate(selectedTask.completedAt)}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between py-2">
-                    <span className="text-sm text-secondary">Priority</span>
-                    <span className="text-sm font-medium text-primary capitalize">{selectedTask.priority.toLowerCase()}</span>
-                  </div>
-                  {(selectedTask.loggedHours ?? 0) > 0 && (
-                    <div className="flex items-center justify-between py-2 border-t border-[#F3F4F6]">
-                      <span className="text-sm text-secondary">Time Spent</span>
-                      <span className="text-sm font-medium text-primary">⏱ {selectedTask.loggedHours}h</span>
-                    </div>
-                  )}
-                </div>
-                {(user?.role !== 'TEAM_MEMBER' || selectedTask.assignee?.id === user?.id) && (
-                  <div className="mt-6">
-                    <label className="block text-sm font-medium text-[#374151] mb-2">Update Status</label>
-                    <div className="flex flex-wrap gap-2">
-                      {TASK_STATUSES.map((s) => (
-                        <button
-                          key={s}
-                          onClick={() => updateTaskStatus(selectedTask.id, s)}
-                          className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${selectedTask.status === s ? 'bg-primary text-white' : 'border border-border text-secondary hover:bg-[#F9FAFB]'}`}
-                        >
-                          {TASK_STATUS_LABELS[s]}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {/* Comments Section */}
-                <div className="mt-8 border-t border-[#F3F4F6] pt-6">
-                  <h3 className="text-sm font-semibold text-primary mb-4">Comments</h3>
-                  
-                  {/* Add Comment */}
-                  <div className="mb-6 flex gap-3">
-                    <div className="flex-1">
-                      <textarea
-                        value={commentContent}
-                        onChange={(e) => setCommentContent(e.target.value)}
-                        placeholder="Ask a question or post an update..."
-                        className="w-full min-h-[80px] rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus:border-primary transition-all resize-none"
-                      />
-                      <div className="mt-2 flex justify-end">
-                        <button
-                          onClick={handleAddComment}
-                          disabled={submittingComment || !commentContent.trim()}
-                          className="bg-primary text-white px-4 py-1.5 rounded-lg text-xs font-medium hover:bg-black transition-colors disabled:opacity-50"
-                        >
-                          {submittingComment ? 'Posting...' : 'Post Comment'}
-                        </button>
+                  <div className="flex flex-col">
+                    <div className="flex items-center justify-between border-b border-[#F3F4F6] pb-4 mb-4">
+                      <div className="flex items-center gap-2">
+                        {!isEditing && (
+                          <>
+                            <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${TASK_STATUS_COLORS[selectedTask.status]}`}>{selectedTask.status.replace('_', ' ')}</span>
+                            <span className={`h-2 w-2 rounded-full ${priorityDots[selectedTask.priority]}`} />
+                          </>
+                        )}
+                        {isEditing && <h2 className="text-lg font-semibold text-primary">Edit Task</h2>}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {!isEditing && (user?.role !== 'TEAM_MEMBER' || selectedTask.assignee?.id === user?.id) && (
+                          <>
+                            <button onClick={() => startEditing()} className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
+                              Edit
+                            </button>
+                            <button onClick={deleteTask} className="rounded-xl border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 hover:border-red-300 transition-all flex items-center gap-1.5">
+                              <Trash2 className="h-3.5 w-3.5" /> Delete
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
-                  </div>
-
-                  {/* Comments List */}
-                  <div className="space-y-4">
-                    {!selectedTask.comments || selectedTask.comments.length === 0 ? (
-                      <p className="text-sm text-secondary italic text-center py-4">No comments yet. Be the first to start the discussion!</p>
-                    ) : (
-                      selectedTask.comments.map((comment) => (
-                        <div key={comment.id} className="flex gap-3">
-                          <div className="h-8 w-8 rounded-full bg-[#F3F4F6] text-primary text-xs font-medium flex items-center justify-center shrink-0 border border-border">
-                            {comment.author.name.charAt(0).toUpperCase()}
+                    {isEditing ? (
+                      <form onSubmit={handleSubmit(handleEdit, onInvalid)} className="space-y-4">
+                        <div>
+                          <label htmlFor="te-title" className="block text-sm font-medium text-[#374151] mb-1.5">Title *</label>
+                          <input id="te-title" {...register('title')} aria-invalid={!!errors.title} aria-describedby={errors.title ? 'te-title-error' : undefined} className={`w-full rounded-xl border ${errors.title ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
+                          {errors.title && <p id="te-title-error" aria-live="polite" className="mt-1 text-xs text-red-500">{errors.title.message}</p>}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label htmlFor="te-dueDateOnly" className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
+                            <input id="te-dueDateOnly" type="date" {...register('dueDateOnly')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                           </div>
-                          <div className="flex-1 bg-surface border border-border rounded-xl p-3">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="font-semibold text-xs text-primary">{comment.author.name}</span>
-                              <span className="text-[10px] text-[#9CA3AF]">{new Date(comment.createdAt).toLocaleDateString()}</span>
-                            </div>
-                            <p className="text-sm text-[#374151] whitespace-pre-wrap">{comment.content}</p>
+                          <div>
+                            <label htmlFor="te-dueTimeOnly" className="block text-sm font-medium text-[#374151] mb-1.5">Due Time</label>
+                            <input id="te-dueTimeOnly" type="time" {...register('dueTimeOnly')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                           </div>
                         </div>
-                      ))
-                    )}
-                  </div>
-                </div>
+                        <div>
+                          <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
+                          <Controller name="description" control={control} render={({ field }) => (
+                            <RichTextEditor value={field.value || ''} onChange={field.onChange} placeholder="Task details..." />
+                          )} />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-[#374151] mb-1.5">Project *</label>
+                          <Controller name="projectId" control={control} render={({ field }) => (
+                            <Select
+                              ariaLabel="Project"
+                              value={field.value}
+                              onChange={field.onChange}
+                              buttonClassName={errors.projectId ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}
+                              options={[{ label: 'Select project', value: '' }, ...projects.map((p) => ({ label: p.name, value: p.id }))]}
+                            />
+                          )} />
+                          {errors.projectId && <p aria-live="polite" className="mt-1 text-xs text-red-500">{errors.projectId.message}</p>}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-[#374151] mb-1.5">Task Type</label>
+                            <Controller name="type" control={control} render={({ field }) => (
+                              <Select
+                                ariaLabel="Task Type"
+                                value={field.value || 'OTHER'}
+                                onChange={field.onChange}
+                                options={[
+                                  { label: 'Design', value: 'DESIGN' },
+                                  { label: 'Content', value: 'CONTENT' },
+                                  { label: 'Video', value: 'VIDEO' },
+                                  { label: 'Digital Marketing', value: 'DIGITAL_MARKETING' },
+                                  { label: 'Social Media', value: 'SOCIAL_MEDIA' },
+                                  { label: 'Development', value: 'DEVELOPMENT' },
+                                  { label: 'Strategy', value: 'STRATEGY' },
+                                  { label: 'Business', value: 'BUSINESS' },
+                                  { label: 'Other', value: 'OTHER' },
+                                ]}
+                              />
+                            )} />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-[#374151] mb-1.5">Reviewer</label>
+                            <Controller name="reviewerId" control={control} render={({ field }) => (
+                              <Select
+                                ariaLabel="Reviewer"
+                                value={field.value || ''}
+                                onChange={field.onChange}
+                                options={[{ label: 'No Reviewer', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))]}
+                              />
+                            )} />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-[#374151] mb-1.5">Assigned By</label>
+                            <Controller name="assignedById" control={control} render={({ field }) => (
+                              <Select
+                                ariaLabel="Assigned By"
+                                value={field.value || ''}
+                                onChange={field.onChange}
+                                options={[{ label: 'Self (Default)', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))]}
+                              />
+                            )} />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignees</label>
+                            <Controller name="assigneeIds" control={control} render={({ field }) => (
+                              <MultiSelect
+                                showSelectAll
+                                compact={false}
+                                value={field.value || []}
+                                onChange={field.onChange}
+                                placeholder="Add assignees..."
+                                options={availableAssignees.map((m: any) => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
+                              />
+                            )} />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority</label>
+                            <Controller name="priority" control={control} render={({ field }) => (
+                              <Select
+                                ariaLabel="Priority"
+                                value={field.value}
+                                onChange={field.onChange}
+                                options={[{ label: 'Low', value: 'LOW' }, { label: 'Medium', value: 'MEDIUM' }, { label: 'High', value: 'HIGH' }, { label: 'Urgent', value: 'URGENT' }]}
+                              />
+                            )} />
+                          </div>
+                          <div>
+                            <label htmlFor="te-assignedDate" className="block text-sm font-medium text-[#374151] mb-1.5">Assigned Date</label>
+                            <input id="te-assignedDate" type="date" {...register('assignedDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                          </div>
+                          <div>
+                            <label htmlFor="te-loggedHours" className="block text-sm font-medium text-[#374151] mb-1.5">Time Spent (hours)</label>
+                            <input id="te-loggedHours" type="number" step="0.5" min="0" {...register('loggedHours', { valueAsNumber: true })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                          </div>
+                          <div className="flex flex-col justify-end">
+                            <label className="block text-sm font-medium text-[#374151] mb-1.5">Repeat Task</label>
+                            <Controller
+                              name="isRecurring"
+                              control={control}
+                              render={({ field }) => (
+                                <div className="flex items-center justify-between py-2 border border-border rounded-xl px-4 bg-white h-[46px] shadow-sm">
+                                  <span className="text-sm font-medium text-[#374151]">Repeat Task</span>
+                                  <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={field.value}
+                                    onClick={() => field.onChange(!field.value)}
+                                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors ${field.value ? 'bg-primary border-primary' : 'bg-gray-200 border-gray-300'}`}
+                                  >
+                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${field.value ? 'translate-x-6' : 'translate-x-1'}`} />
+                                  </button>
+                                </div>
+                              )}
+                            />
+                          </div>
+                          {watch('isRecurring') && (
+                            <div className="sm:col-span-2">
+                              <label className="block text-sm font-medium text-[#374151] mb-1.5">Repeat Frequency</label>
+                              <Controller name="recurrenceFrequency" control={control} render={({ field }) => (
+                                <Select
+                                  ariaLabel="Repeat Frequency"
+                                  value={field.value || 'WEEKLY'}
+                                  onChange={field.onChange}
+                                  options={[{ label: 'Daily', value: 'DAILY' }, { label: 'Weekly', value: 'WEEKLY' }, { label: 'Monthly', value: 'MONTHLY' }, { label: 'Yearly', value: 'YEARLY' }]}
+                                />
+                              )} />
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <label htmlFor="te-driveLink" className="block text-sm font-medium text-[#374151] mb-1.5">Drive Link (Uploads, Drafts)</label>
+                          <input id="te-driveLink" type="url" {...register('driveLink')} placeholder="https://drive.google.com/..." aria-invalid={!!errors.driveLink} aria-describedby={errors.driveLink ? 'te-driveLink-error' : undefined} className={`w-full rounded-xl border ${errors.driveLink ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
+                          {errors.driveLink && <p id="te-driveLink-error" aria-live="polite" className="mt-1 text-xs text-red-500">{errors.driveLink.message}</p>}
+                        </div>
+                        <div className="pt-4 flex gap-3">
+                          <button type="button" onClick={() => setIsEditing(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
+                          <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submitting ? 'Saving...' : 'Save Changes'}</button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div>
+                        <h2 className="text-xl font-semibold text-primary mb-2">{selectedTask.title}</h2>
+                        {selectedTask.description && <div className="text-sm text-secondary mb-4 prose prose-sm prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: selectedTask.description }} />}
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
+                            <span className="text-sm text-secondary">Project</span>
+                            <span className="text-sm font-medium text-primary">{selectedTask.project?.name}</span>
+                          </div>
+                          <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6] gap-3">
+                            <span className="text-sm text-secondary shrink-0">Assignees</span>
+                            <span className="text-sm font-medium text-primary text-right">
+                              {taskAssignees(selectedTask).length ? taskAssignees(selectedTask).map((a) => a.name).join(', ') : 'Unassigned'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
+                            <span className="text-sm text-secondary">Created</span>
+                            <span className="text-sm font-medium text-primary">{formatDate(selectedTask.createdAt)}</span>
+                          </div>
+                          {selectedTask.assignedBy && (
+                            <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
+                              <span className="text-sm text-secondary">Assigned By</span>
+                              <span className="text-sm font-medium text-primary">{selectedTask.assignedBy.name}</span>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
+                            <span className="text-sm text-secondary">Due Date</span>
+                            <span className="text-sm font-medium text-primary">{formatDate(selectedTask.dueDate)}</span>
+                          </div>
+                          {selectedTask.reviewer && (
+                            <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
+                              <span className="text-sm text-secondary">Reviewer</span>
+                              <span className="text-sm font-medium text-primary">{selectedTask.reviewer.name}</span>
+                            </div>
+                          )}
+                          {selectedTask.driveLink && (
+                            <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
+                              <span className="text-sm text-secondary">Drive Link</span>
+                              <a href={selectedTask.driveLink} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 hover:underline max-w-[200px] truncate">{selectedTask.driveLink}</a>
+                            </div>
+                          )}
+                          {selectedTask.completedAt && (
+                            <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
+                              <span className="text-sm text-secondary">Completed On</span>
+                              <span className="text-sm font-medium text-primary">{formatDate(selectedTask.completedAt)}</span>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between py-2">
+                            <span className="text-sm text-secondary">Priority</span>
+                            <span className="text-sm font-medium text-primary capitalize">{selectedTask.priority.toLowerCase()}</span>
+                          </div>
+                          {(selectedTask.loggedHours ?? 0) > 0 && (
+                            <div className="flex items-center justify-between py-2 border-t border-[#F3F4F6]">
+                              <span className="text-sm text-secondary">Time Spent</span>
+                              <span className="text-sm font-medium text-primary">⏱ {selectedTask.loggedHours}h</span>
+                            </div>
+                          )}
+                        </div>
+                        {(user?.role !== 'TEAM_MEMBER' || selectedTask.assignee?.id === user?.id) && (
+                          <div className="mt-6">
+                            <label className="block text-sm font-medium text-[#374151] mb-2">Update Status</label>
+                            <div className="flex flex-wrap gap-2">
+                              {TASK_STATUSES.map((s) => (
+                                <button
+                                  key={s}
+                                  onClick={() => updateTaskStatus(selectedTask.id, s)}
+                                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${selectedTask.status === s ? 'bg-primary text-white' : 'border border-border text-secondary hover:bg-[#F9FAFB]'}`}
+                                >
+                                  {TASK_STATUS_LABELS[s]}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {/* Comments Section */}
+                        <div className="mt-8 border-t border-[#F3F4F6] pt-6">
+                          <h3 className="text-sm font-semibold text-primary mb-4">Comments</h3>
 
-                
-              </div>
-            )}
+                          {/* Add Comment */}
+                          <div className="mb-6 flex gap-3">
+                            <div className="flex-1">
+                              <textarea
+                                value={commentContent}
+                                onChange={(e) => setCommentContent(e.target.value)}
+                                placeholder="Ask a question or post an update..."
+                                className="w-full min-h-[80px] rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus:border-primary transition-all resize-none"
+                              />
+                              <div className="mt-2 flex justify-end">
+                                <button
+                                  onClick={handleAddComment}
+                                  disabled={submittingComment || !commentContent.trim()}
+                                  className="bg-primary text-white px-4 py-1.5 rounded-lg text-xs font-medium hover:bg-black transition-colors disabled:opacity-50"
+                                >
+                                  {submittingComment ? 'Posting...' : 'Post Comment'}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Comments List */}
+                          <div className="space-y-4">
+                            {!selectedTask.comments || selectedTask.comments.length === 0 ? (
+                              <p className="text-sm text-secondary italic text-center py-4">No comments yet. Be the first to start the discussion!</p>
+                            ) : (
+                              selectedTask.comments.map((comment) => (
+                                <div key={comment.id} className="flex gap-3">
+                                  <div className="h-8 w-8 rounded-full bg-[#F3F4F6] text-primary text-xs font-medium flex items-center justify-center shrink-0 border border-border">
+                                    {comment.author.name.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div className="flex-1 bg-surface border border-border rounded-xl p-3">
+                                    <div className="flex items-center justify-between mb-1">
+                                      <span className="font-semibold text-xs text-primary">{comment.author.name}</span>
+                                      <span className="text-[10px] text-[#9CA3AF]">{new Date(comment.createdAt).toLocaleDateString()}</span>
+                                    </div>
+                                    <p className="text-sm text-[#374151] whitespace-pre-wrap">{comment.content}</p>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+
+
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1309,6 +1401,7 @@ function TasksContent() {
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-100 bg-black/20 backdrop-blur-sm" onClick={() => setShowCreate(false)} />
             <motion.div
+              id="create-task-drawer"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
@@ -1321,35 +1414,23 @@ function TasksContent() {
                 </button>
               </div>
               <div className="p-6 pb-24 md:pb-6">
-                <form onSubmit={handleSubmit(handleCreate)} className="space-y-4">
+                <form onSubmit={handleSubmit(handleCreate, onInvalid)} className="space-y-4">
                   <div>
                     <label htmlFor="tn-title" className="block text-sm font-medium text-[#374151] mb-1.5">Title *</label>
                     <input id="tn-title" {...register('title')} aria-invalid={!!errors.title} aria-describedby={errors.title ? 'tn-title-error' : undefined} className={`w-full rounded-xl border ${errors.title ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
                     {errors.title && <p id="tn-title-error" aria-live="polite" className="mt-1 text-xs text-red-500">{errors.title.message}</p>}
                   </div>
-                  <div>
-                    <label htmlFor="tn-dueDate" className="block text-sm font-medium text-[#374151] mb-1.5">Due Date and Time</label>
-                    <input id="tn-dueDate" type="datetime-local" {...register('dueDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" {...register('isRecurring')} className="rounded border-border text-primary focus:ring-primary w-4 h-4" />
-                      <span className="text-sm font-medium text-[#374151]">Repeat Task</span>
-                    </label>
-                  </div>
-                  {watch('isRecurring') && (
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Repeat Frequency</label>
-                      <Controller name="recurrenceFrequency" control={control} render={({ field }) => (
-                        <Select
-                          ariaLabel="Repeat Frequency"
-                          value={field.value || 'WEEKLY'}
-                          onChange={field.onChange}
-                          options={[{ label: 'Daily', value: 'DAILY' }, { label: 'Weekly', value: 'WEEKLY' }, { label: 'Monthly', value: 'MONTHLY' }, { label: 'Yearly', value: 'YEARLY' }]}
-                        />
-                      )} />
+                      <label htmlFor="tn-dueDateOnly" className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
+                      <input id="tn-dueDateOnly" type="date" {...register('dueDateOnly')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                     </div>
-                  )}
+                    <div>
+                      <label htmlFor="tn-dueTimeOnly" className="block text-sm font-medium text-[#374151] mb-1.5">Due Time</label>
+                      <input id="tn-dueTimeOnly" type="time" {...register('dueTimeOnly')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                    </div>
+                  </div>
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
                     <Controller name="description" control={control} render={({ field }) => (
@@ -1363,6 +1444,7 @@ function TasksContent() {
                         ariaLabel="Project"
                         value={field.value}
                         onChange={field.onChange}
+                        buttonClassName={errors.projectId ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}
                         options={[{ label: 'Select project', value: '' }, ...projects.map((p) => ({ label: p.name, value: p.id }))]}
                       />
                     )} />
@@ -1443,16 +1525,79 @@ function TasksContent() {
                       <label htmlFor="tn-loggedHours" className="block text-sm font-medium text-[#374151] mb-1.5">Time Spent (hours)</label>
                       <input id="tn-loggedHours" type="number" step="0.5" min="0" {...register('loggedHours', { valueAsNumber: true })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                     </div>
+                    <div className="flex flex-col justify-end">
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Repeat Task</label>
+                      <Controller
+                        name="isRecurring"
+                        control={control}
+                        render={({ field }) => (
+                          <div className="flex items-center justify-between py-2 border border-border rounded-xl px-4 bg-white h-[46px] shadow-sm">
+                            <span className="text-sm font-medium text-[#374151]">Repeat Task</span>
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={field.value}
+                              onClick={() => field.onChange(!field.value)}
+                              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors ${field.value ? 'bg-primary border-primary' : 'bg-gray-200 border-gray-300'}`}
+                            >
+                              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${field.value ? 'translate-x-6' : 'translate-x-1'}`} />
+                            </button>
+                          </div>
+                        )}
+                      />
+                    </div>
+                    {watch('isRecurring') && (
+                      <div className="sm:col-span-2">
+                        <label className="block text-sm font-medium text-[#374151] mb-1.5">Repeat Frequency</label>
+                        <Controller name="recurrenceFrequency" control={control} render={({ field }) => (
+                          <Select
+                            ariaLabel="Repeat Frequency"
+                            value={field.value || 'WEEKLY'}
+                            onChange={field.onChange}
+                            options={[{ label: 'Daily', value: 'DAILY' }, { label: 'Weekly', value: 'WEEKLY' }, { label: 'Monthly', value: 'MONTHLY' }, { label: 'Yearly', value: 'YEARLY' }]}
+                          />
+                        )} />
+                      </div>
+                    )}
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Task Status</label>
+                      <Controller
+                        name="status"
+                        control={control}
+                        render={({ field }) => (
+                          <div className="flex gap-2">
+                            {[
+                              { value: 'BACKLOG', label: 'Backlog', activeClass: 'bg-red-100 text-red-700 border-red-300 ring-2 ring-red-400 ring-offset-1' },
+                              { value: 'TODO', label: 'To Do', activeClass: 'bg-grey-50 text-grey-700 border-grey-300 ring-2 ring-grey-400 ring-offset-1' },
+                              { value: 'IN_PROGRESS', label: 'In Progress', activeClass: 'bg-blue-50 text-blue-700 border-blue-300 ring-2 ring-blue-400 ring-offset-1' },
+                            ].map((opt) => (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => field.onChange(opt.value)}
+                                className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-all shadow-sm
+                                  ${field.value === opt.value
+                                    ? opt.activeClass
+                                    : 'border-border bg-white text-secondary hover:bg-[#F9FAFB]'
+                                  }`}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      />
+                    </div>
                   </div>
                   <div>
                     <label htmlFor="tn-driveLink" className="block text-sm font-medium text-[#374151] mb-1.5">Drive Link (Uploads, Drafts)</label>
                     <input id="tn-driveLink" type="url" {...register('driveLink')} placeholder="https://drive.google.com/..." aria-invalid={!!errors.driveLink} aria-describedby={errors.driveLink ? 'tn-driveLink-error' : undefined} className={`w-full rounded-xl border ${errors.driveLink ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
                     {errors.driveLink && <p id="tn-driveLink-error" aria-live="polite" className="mt-1 text-xs text-red-500">{errors.driveLink.message}</p>}
                   </div>
-          <div className="pt-4 flex gap-3">
-            <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
-            <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submitting ? 'Creating...' : 'Create Task'}</button>
-          </div>
+                  <div className="pt-4 flex gap-3">
+                    <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
+                    <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submitting ? 'Creating...' : 'Create Task'}</button>
+                  </div>
                 </form>
               </div>
             </motion.div>
