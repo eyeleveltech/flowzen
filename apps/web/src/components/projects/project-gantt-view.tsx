@@ -85,8 +85,7 @@ export function ProjectGanttView({ projects, loading = false }: ProjectGanttView
       <div className="h-full overflow-auto custom-scrollbar">
         <div style={{ minWidth: `${SIDEBAR_WIDTH + months.length * 140}px` }}>
 
-          {/* ── Sticky Header Row ── */}
-          <div className="flex sticky top-0 z-30 bg-surface border-b border-border h-12 bg-white">
+          <div className="flex sticky top-0 z-30 border-b border-border h-12 bg-white">
             {/* Sidebar header cell – sticky left */}
             <div
               className="sticky left-0 z-40 bg-white border-r border-border flex items-center px-4 shrink-0"

@@ -445,9 +445,10 @@ export function PipelineBoardView() {
                       e.stopPropagation();
                       setIsAddModalOpen(true);
                     }}
-                    className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:text-blue-600 transition-colors py-1 px-2.5 rounded-lg hover:bg-gray-50 border border-gray-200"
+                    className="flex items-center justify-center text-primary hover:text-blue-600 transition-colors p-1.5 rounded-lg hover:bg-gray-50 border border-gray-200"
+                    title="Add Lead"
                   >
-                    <Plus className="w-3.5 h-3.5" /> Add Lead
+                    <Plus className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
