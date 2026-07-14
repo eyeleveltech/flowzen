@@ -34,7 +34,7 @@ RUN apt-get update -y \
   && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
   && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
   && apt-get update -y \
-  && apt-get install -y postgresql-client-16 chromium fonts-liberation \
+  && apt-get install -y postgresql-client-16 chromium fonts-liberation fonts-noto-core \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

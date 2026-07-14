@@ -53,7 +53,7 @@ function buildClassicHtml(quote: any, org: any, logoUri: string): string {
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><style>
     * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1F2937; font-size: 12px; margin: 0; }
+    body { font-family: 'Helvetica Neue', Arial, 'Noto Sans', sans-serif; color: #1F2937; font-size: 12px; margin: 0; }
     .brand { background: ${BRAND}; color: #ffffff; padding: 22px 28px; display: flex; justify-content: space-between; align-items: flex-start; }
     .brand .logo { height: 40px; object-fit: contain; display: block; }
     .brand .title { font-size: 26px; font-weight: 800; letter-spacing: .5px; color: ${ACCENT}; margin-top: 16px; }
@@ -180,7 +180,7 @@ function buildMinimalHtml(quote: any, org: any, logoUri: string): string {
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><style>
     * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #000; font-size: 11px; margin: 0; }
+    body { font-family: 'Helvetica Neue', Arial, 'Noto Sans', sans-serif; color: #000; font-size: 11px; margin: 0; }
     .brand { padding: 30px 40px 10px 40px; display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #000; margin-bottom: 30px; }
     .brand .logo { height: 32px; object-fit: contain; display: block; filter: grayscale(100%); }
     .brand .title { font-size: 20px; font-weight: 400; letter-spacing: 2px; margin-bottom: 8px; }
@@ -304,7 +304,7 @@ function buildModernHtml(quote: any, org: any, logoUri: string): string {
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><style>
     * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    body { font-family: 'Inter', 'Segoe UI', sans-serif; color: #374151; font-size: 11px; margin: 0; background: #fafafa; }
+    body { font-family: 'Inter', 'Segoe UI', 'Noto Sans', sans-serif; color: #374151; font-size: 11px; margin: 0; background: #fafafa; }
     .sheet { background: #fff; padding: 30px; border-radius: 16px; margin: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
     .brand { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; }
     .brand .logo { height: 36px; object-fit: contain; display: block; }
