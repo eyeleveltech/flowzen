@@ -36,6 +36,8 @@ interface Task {
   assignees?: { id: string; name: string; avatar?: string | null }[];
   assignedBy?: { id: string; name: string; avatar?: string | null } | null;
   reviewer?: { id: string; name: string; avatar?: string | null } | null;
+  isRecurring?: boolean | null;
+  recurrenceFrequency?: string | null;
   _count?: { subtasks: number; comments: number };
   comments?: { id: string; content: string; createdAt: string; author: { id: string; name: string; avatar?: string | null } }[];
 }
@@ -112,10 +114,22 @@ const taskSchema = z.object({
 });
 type TaskFormValues = z.infer<typeof taskSchema>;
 
+const formatForDateTimeLocal = (dateString?: string | null) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
 // Fresh blank task form values (function so assignedDate is always "today").
 const blankTaskValues = (): TaskFormValues => ({
   title: '', description: '', type: 'OTHER', projectId: '', assigneeId: '', assigneeIds: [], assignedById: '',
-  reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: new Date().toISOString().split('T')[0],
+  reviewerId: '', priority: 'MEDIUM', status: 'TODO', dueDate: formatForDateTimeLocal(new Date().toISOString()),
   assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '', isRecurring: false, recurrenceFrequency: 'WEEKLY'
 });
 
@@ -421,11 +435,13 @@ function TasksContent() {
       reviewerId: t.reviewer?.id || '',
       priority: t.priority,
       status: t.status,
-      dueDate: t.dueDate ? new Date(t.dueDate).toISOString().split('T')[0] : '',
+      dueDate: t.dueDate ? formatForDateTimeLocal(t.dueDate) : '',
       assignedDate: t.assignedDate ? new Date(t.assignedDate).toISOString().split('T')[0] : '',
       assignedById: t.assignedBy?.id || '',
       loggedHours: t.loggedHours || 0,
       driveLink: t.driveLink || '',
+      isRecurring: t.isRecurring || false,
+      recurrenceFrequency: t.recurrenceFrequency || 'WEEKLY',
     });
     setIsEditing(true);
   }
@@ -1027,6 +1043,29 @@ function TasksContent() {
                   {errors.title && <p id="te-title-error" aria-live="polite" className="mt-1 text-xs text-red-500">{errors.title.message}</p>}
                 </div>
                 <div>
+                  <label htmlFor="te-dueDate" className="block text-sm font-medium text-[#374151] mb-1.5">Due Date and Time</label>
+                  <input id="te-dueDate" type="datetime-local" {...register('dueDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                </div>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" {...register('isRecurring')} className="rounded border-border text-primary focus:ring-primary w-4 h-4" />
+                    <span className="text-sm font-medium text-[#374151]">Repeat Task</span>
+                  </label>
+                </div>
+                {watch('isRecurring') && (
+                  <div>
+                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Repeat Frequency</label>
+                    <Controller name="recurrenceFrequency" control={control} render={({ field }) => (
+                      <Select
+                        ariaLabel="Repeat Frequency"
+                        value={field.value || 'WEEKLY'}
+                        onChange={field.onChange}
+                        options={[{ label: 'Daily', value: 'DAILY' }, { label: 'Weekly', value: 'WEEKLY' }, { label: 'Monthly', value: 'MONTHLY' }, { label: 'Yearly', value: 'YEARLY' }]}
+                      />
+                    )} />
+                  </div>
+                )}
+                <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
                   <Controller name="description" control={control} render={({ field }) => (
                     <RichTextEditor value={field.value || ''} onChange={field.onChange} placeholder="Task details..." />
@@ -1060,7 +1099,7 @@ function TasksContent() {
                           { label: 'Social Media', value: 'SOCIAL_MEDIA' },
                           { label: 'Development', value: 'DEVELOPMENT' },
                           { label: 'Strategy', value: 'STRATEGY' },
-                    { label: 'Business', value: 'BUSINESS' },
+                          { label: 'Business', value: 'BUSINESS' },
                           { label: 'Other', value: 'OTHER' },
                         ]}
                       />
@@ -1116,29 +1155,6 @@ function TasksContent() {
                     <label htmlFor="te-assignedDate" className="block text-sm font-medium text-[#374151] mb-1.5">Assigned Date</label>
                     <input id="te-assignedDate" type="date" {...register('assignedDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                   </div>
-                  <div>
-                    <label htmlFor="te-dueDate" className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
-                    <input id="te-dueDate" type="date" {...register('dueDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" {...register('isRecurring')} className="rounded border-border text-primary focus:ring-primary w-4 h-4" />
-                      <span className="text-sm font-medium text-[#374151]">Repeat Task</span>
-                    </label>
-                  </div>
-                  {watch('isRecurring') && (
-                    <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Repeat Frequency</label>
-                      <Controller name="recurrenceFrequency" control={control} render={({ field }) => (
-                        <Select
-                          ariaLabel="Repeat Frequency"
-                          value={field.value || 'WEEKLY'}
-                          onChange={field.onChange}
-                          options={[{ label: 'Daily', value: 'DAILY' }, { label: 'Weekly', value: 'WEEKLY' }, { label: 'Monthly', value: 'MONTHLY' }, { label: 'Yearly', value: 'YEARLY' }]}
-                        />
-                      )} />
-                    </div>
-                  )}
                   <div>
                     <label htmlFor="te-loggedHours" className="block text-sm font-medium text-[#374151] mb-1.5">Time Spent (hours)</label>
                     <input id="te-loggedHours" type="number" step="0.5" min="0" {...register('loggedHours', { valueAsNumber: true })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
@@ -1306,114 +1322,133 @@ function TasksContent() {
               </div>
               <div className="p-6 pb-24 md:pb-6">
                 <form onSubmit={handleSubmit(handleCreate)} className="space-y-4">
-          <div>
-            <label htmlFor="tn-title" className="block text-sm font-medium text-[#374151] mb-1.5">Title *</label>
-            <input id="tn-title" {...register('title')} aria-invalid={!!errors.title} aria-describedby={errors.title ? 'tn-title-error' : undefined} className={`w-full rounded-xl border ${errors.title ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
-            {errors.title && <p id="tn-title-error" aria-live="polite" className="mt-1 text-xs text-red-500">{errors.title.message}</p>}
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
-            <Controller name="description" control={control} render={({ field }) => (
-              <RichTextEditor value={field.value || ''} onChange={field.onChange} placeholder="Task details..." />
-            )} />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-[#374151] mb-1.5">Project *</label>
-            <Controller name="projectId" control={control} render={({ field }) => (
-              <Select
-                ariaLabel="Project"
-                value={field.value}
-                onChange={field.onChange}
-                options={[{ label: 'Select project', value: '' }, ...projects.map((p) => ({ label: p.name, value: p.id }))]}
-              />
-            )} />
-            {errors.projectId && <p aria-live="polite" className="mt-1 text-xs text-red-500">{errors.projectId.message}</p>}
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Task Type</label>
-              <Controller name="type" control={control} render={({ field }) => (
-                <Select
-                  ariaLabel="Task Type"
-                  value={field.value || 'OTHER'}
-                  onChange={field.onChange}
-                  options={[
-                    { label: 'Design', value: 'DESIGN' },
-                    { label: 'Content', value: 'CONTENT' },
-                    { label: 'Video', value: 'VIDEO' },
-                    { label: 'Digital Marketing', value: 'DIGITAL_MARKETING' },
-                    { label: 'Social Media', value: 'SOCIAL_MEDIA' },
-                    { label: 'Development', value: 'DEVELOPMENT' },
-                    { label: 'Strategy', value: 'STRATEGY' },
-                    { label: 'Business', value: 'BUSINESS' },
-                    { label: 'Other', value: 'OTHER' },
-                  ]}
-                />
-              )} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Reviewer</label>
-              <Controller name="reviewerId" control={control} render={({ field }) => (
-                <Select
-                  ariaLabel="Reviewer"
-                  value={field.value || ''}
-                  onChange={field.onChange}
-                  options={[{ label: 'No Reviewer', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))]}
-                />
-              )} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Assigned By</label>
-              <Controller name="assignedById" control={control} render={({ field }) => (
-                <Select
-                  ariaLabel="Assigned By"
-                  value={field.value || ''}
-                  onChange={field.onChange}
-                  options={[{ label: 'Self (Default)', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))]}
-                />
-              )} />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignees</label>
-              <Controller name="assigneeIds" control={control} render={({ field }) => (
-                <MultiSelect
-                  compact={false}
-                  value={field.value || []}
-                  onChange={field.onChange}
-                  placeholder="Add assignees..."
-                  options={availableAssignees.map((m: any) => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
-                />
-              )} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority</label>
-              <Controller name="priority" control={control} render={({ field }) => (
-                <Select
-                  ariaLabel="Priority"
-                  value={field.value}
-                  onChange={field.onChange}
-                  options={[{ label: 'Low', value: 'LOW' }, { label: 'Medium', value: 'MEDIUM' }, { label: 'High', value: 'HIGH' }, { label: 'Urgent', value: 'URGENT' }]}
-                />
-              )} />
-            </div>
-            <div>
-              <label htmlFor="tn-assignedDate" className="block text-sm font-medium text-[#374151] mb-1.5">Assigned Date</label>
-              <input id="tn-assignedDate" type="date" {...register('assignedDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-            </div>
-            <div>
-              <label htmlFor="tn-dueDate" className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
-              <input id="tn-dueDate" type="date" {...register('dueDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-            </div>
-            <div>
-              <label htmlFor="tn-loggedHours" className="block text-sm font-medium text-[#374151] mb-1.5">Time Spent (hours)</label>
-              <input id="tn-loggedHours" type="number" step="0.5" min="0" {...register('loggedHours', { valueAsNumber: true })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-            </div>
-          </div>
-          <div>
-            <label htmlFor="tn-driveLink" className="block text-sm font-medium text-[#374151] mb-1.5">Drive Link (Uploads, Drafts)</label>
-            <input id="tn-driveLink" type="url" {...register('driveLink')} placeholder="https://drive.google.com/..." aria-invalid={!!errors.driveLink} aria-describedby={errors.driveLink ? 'tn-driveLink-error' : undefined} className={`w-full rounded-xl border ${errors.driveLink ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
-            {errors.driveLink && <p id="tn-driveLink-error" aria-live="polite" className="mt-1 text-xs text-red-500">{errors.driveLink.message}</p>}
-          </div>
+                  <div>
+                    <label htmlFor="tn-title" className="block text-sm font-medium text-[#374151] mb-1.5">Title *</label>
+                    <input id="tn-title" {...register('title')} aria-invalid={!!errors.title} aria-describedby={errors.title ? 'tn-title-error' : undefined} className={`w-full rounded-xl border ${errors.title ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
+                    {errors.title && <p id="tn-title-error" aria-live="polite" className="mt-1 text-xs text-red-500">{errors.title.message}</p>}
+                  </div>
+                  <div>
+                    <label htmlFor="tn-dueDate" className="block text-sm font-medium text-[#374151] mb-1.5">Due Date and Time</label>
+                    <input id="tn-dueDate" type="datetime-local" {...register('dueDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" {...register('isRecurring')} className="rounded border-border text-primary focus:ring-primary w-4 h-4" />
+                      <span className="text-sm font-medium text-[#374151]">Repeat Task</span>
+                    </label>
+                  </div>
+                  {watch('isRecurring') && (
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Repeat Frequency</label>
+                      <Controller name="recurrenceFrequency" control={control} render={({ field }) => (
+                        <Select
+                          ariaLabel="Repeat Frequency"
+                          value={field.value || 'WEEKLY'}
+                          onChange={field.onChange}
+                          options={[{ label: 'Daily', value: 'DAILY' }, { label: 'Weekly', value: 'WEEKLY' }, { label: 'Monthly', value: 'MONTHLY' }, { label: 'Yearly', value: 'YEARLY' }]}
+                        />
+                      )} />
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
+                    <Controller name="description" control={control} render={({ field }) => (
+                      <RichTextEditor value={field.value || ''} onChange={field.onChange} placeholder="Task details..." />
+                    )} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Project *</label>
+                    <Controller name="projectId" control={control} render={({ field }) => (
+                      <Select
+                        ariaLabel="Project"
+                        value={field.value}
+                        onChange={field.onChange}
+                        options={[{ label: 'Select project', value: '' }, ...projects.map((p) => ({ label: p.name, value: p.id }))]}
+                      />
+                    )} />
+                    {errors.projectId && <p aria-live="polite" className="mt-1 text-xs text-red-500">{errors.projectId.message}</p>}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Task Type</label>
+                      <Controller name="type" control={control} render={({ field }) => (
+                        <Select
+                          ariaLabel="Task Type"
+                          value={field.value || 'OTHER'}
+                          onChange={field.onChange}
+                          options={[
+                            { label: 'Design', value: 'DESIGN' },
+                            { label: 'Content', value: 'CONTENT' },
+                            { label: 'Video', value: 'VIDEO' },
+                            { label: 'Digital Marketing', value: 'DIGITAL_MARKETING' },
+                            { label: 'Social Media', value: 'SOCIAL_MEDIA' },
+                            { label: 'Development', value: 'DEVELOPMENT' },
+                            { label: 'Strategy', value: 'STRATEGY' },
+                            { label: 'Business', value: 'BUSINESS' },
+                            { label: 'Other', value: 'OTHER' },
+                          ]}
+                        />
+                      )} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Reviewer</label>
+                      <Controller name="reviewerId" control={control} render={({ field }) => (
+                        <Select
+                          ariaLabel="Reviewer"
+                          value={field.value || ''}
+                          onChange={field.onChange}
+                          options={[{ label: 'No Reviewer', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))]}
+                        />
+                      )} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Assigned By</label>
+                      <Controller name="assignedById" control={control} render={({ field }) => (
+                        <Select
+                          ariaLabel="Assigned By"
+                          value={field.value || ''}
+                          onChange={field.onChange}
+                          options={[{ label: 'Self (Default)', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))]}
+                        />
+                      )} />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignees</label>
+                      <Controller name="assigneeIds" control={control} render={({ field }) => (
+                        <MultiSelect
+                          compact={false}
+                          value={field.value || []}
+                          onChange={field.onChange}
+                          placeholder="Add assignees..."
+                          options={availableAssignees.map((m: any) => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
+                        />
+                      )} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority</label>
+                      <Controller name="priority" control={control} render={({ field }) => (
+                        <Select
+                          ariaLabel="Priority"
+                          value={field.value}
+                          onChange={field.onChange}
+                          options={[{ label: 'Low', value: 'LOW' }, { label: 'Medium', value: 'MEDIUM' }, { label: 'High', value: 'HIGH' }, { label: 'Urgent', value: 'URGENT' }]}
+                        />
+                      )} />
+                    </div>
+                    <div>
+                      <label htmlFor="tn-assignedDate" className="block text-sm font-medium text-[#374151] mb-1.5">Assigned Date</label>
+                      <input id="tn-assignedDate" type="date" {...register('assignedDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                    </div>
+                    <div>
+                      <label htmlFor="tn-loggedHours" className="block text-sm font-medium text-[#374151] mb-1.5">Time Spent (hours)</label>
+                      <input id="tn-loggedHours" type="number" step="0.5" min="0" {...register('loggedHours', { valueAsNumber: true })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                    </div>
+                  </div>
+                  <div>
+                    <label htmlFor="tn-driveLink" className="block text-sm font-medium text-[#374151] mb-1.5">Drive Link (Uploads, Drafts)</label>
+                    <input id="tn-driveLink" type="url" {...register('driveLink')} placeholder="https://drive.google.com/..." aria-invalid={!!errors.driveLink} aria-describedby={errors.driveLink ? 'tn-driveLink-error' : undefined} className={`w-full rounded-xl border ${errors.driveLink ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
+                    {errors.driveLink && <p id="tn-driveLink-error" aria-live="polite" className="mt-1 text-xs text-red-500">{errors.driveLink.message}</p>}
+                  </div>
           <div className="pt-4 flex gap-3">
             <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
             <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submitting ? 'Creating...' : 'Create Task'}</button>

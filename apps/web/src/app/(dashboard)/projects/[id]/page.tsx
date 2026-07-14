@@ -54,6 +54,18 @@ const priorityDots: Record<string, string> = {
   LOW: 'bg-gray-300', MEDIUM: 'bg-blue-400', HIGH: 'bg-orange-500', CRITICAL: 'bg-red-500', URGENT: 'bg-red-500',
 };
 
+const formatForDateTimeLocal = (dateString?: string | null) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
 export default function ProjectDetailPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -193,7 +205,7 @@ export default function ProjectDetailPage() {
       setShowCreateTask(false);
       setIsEditingTask(false);
       setEditingTaskId('');
-      setTaskForm({ title: '', description: '', type: 'OTHER', assigneeIds: [], reviewerId: '', assignedById: '', priority: 'MEDIUM', status: 'TODO', dueDate: new Date().toISOString().split('T')[0], assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '', isRecurring: false, recurrenceFrequency: 'WEEKLY' });
+      setTaskForm({ title: '', description: '', type: 'OTHER', assigneeIds: [], reviewerId: '', assignedById: '', priority: 'MEDIUM', status: 'TODO', dueDate: formatForDateTimeLocal(new Date().toISOString()), assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '', isRecurring: false, recurrenceFrequency: 'WEEKLY' });
       const updated = await api.get<ProjectDetail>(`/projects/${id}`);
       setProject(updated);
       // The global Tasks list + dashboard read cached data — refresh them.
@@ -214,7 +226,7 @@ export default function ProjectDetailPage() {
       reviewerId: t.reviewer?.id || '',
       priority: t.priority,
       status: t.status,
-      dueDate: t.dueDate ? new Date(t.dueDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      dueDate: t.dueDate ? formatForDateTimeLocal(t.dueDate) : formatForDateTimeLocal(new Date().toISOString()),
       assignedDate: t.assignedDate ? t.assignedDate.split('T')[0] : '',
       assignedById: t.assignedBy?.id || '',
       loggedHours: t.loggedHours || 0,
@@ -228,7 +240,7 @@ export default function ProjectDetailPage() {
   }
 
   function openCreateTask() {
-    setTaskForm({ title: '', description: '', type: 'OTHER', assigneeIds: [], reviewerId: '', assignedById: '', priority: 'MEDIUM', status: 'TODO', dueDate: new Date().toISOString().split('T')[0], assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '', isRecurring: false, recurrenceFrequency: 'WEEKLY' });
+    setTaskForm({ title: '', description: '', type: 'OTHER', assigneeIds: [], reviewerId: '', assignedById: '', priority: 'MEDIUM', status: 'TODO', dueDate: formatForDateTimeLocal(new Date().toISOString()), assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '', isRecurring: false, recurrenceFrequency: 'WEEKLY' });
     setIsEditingTask(false);
     setEditingTaskId('');
     setShowCreateTask(true);
@@ -1030,6 +1042,27 @@ export default function ProjectDetailPage() {
                   <input id="pt-title" value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                 </div>
                 <div>
+                  <label htmlFor="pt-dueDate" className="block text-sm font-medium text-[#374151] mb-1.5">Due Date and Time</label>
+                  <input id="pt-dueDate" type="datetime-local" value={taskForm.dueDate} onChange={(e) => setTaskForm({ ...taskForm, dueDate: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                </div>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={taskForm.isRecurring} onChange={(e) => setTaskForm({ ...taskForm, isRecurring: e.target.checked })} className="rounded border-border text-primary focus:ring-primary w-4 h-4" />
+                    <span className="text-sm font-medium text-[#374151]">Repeat Task</span>
+                  </label>
+                </div>
+                {taskForm.isRecurring && (
+                  <div>
+                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Repeat Frequency</label>
+                    <Select
+                      ariaLabel="Repeat Frequency"
+                      value={taskForm.recurrenceFrequency || 'WEEKLY'}
+                      onChange={(val) => setTaskForm({ ...taskForm, recurrenceFrequency: val })}
+                      options={[{ label: 'Daily', value: 'DAILY' }, { label: 'Weekly', value: 'WEEKLY' }, { label: 'Monthly', value: 'MONTHLY' }, { label: 'Yearly', value: 'YEARLY' }]}
+                    />
+                  </div>
+                )}
+                <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
                   <RichTextEditor value={taskForm.description} onChange={(val) => setTaskForm({ ...taskForm, description: val })} placeholder="Add task details..." />
                 </div>
@@ -1048,7 +1081,7 @@ export default function ProjectDetailPage() {
                         { label: 'Social Media', value: 'SOCIAL_MEDIA' },
                         { label: 'Development', value: 'DEVELOPMENT' },
                         { label: 'Strategy', value: 'STRATEGY' },
-                    { label: 'Business', value: 'BUSINESS' },
+                        { label: 'Business', value: 'BUSINESS' },
                         { label: 'Other', value: 'OTHER' },
                       ]}
                     />
@@ -1099,27 +1132,6 @@ export default function ProjectDetailPage() {
                     <label htmlFor="pt-assignedDate" className="block text-sm font-medium text-[#374151] mb-1.5">Assigned Date</label>
                     <input id="pt-assignedDate" type="date" value={taskForm.assignedDate} onChange={(e) => setTaskForm({ ...taskForm, assignedDate: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
                   </div>
-                  <div>
-                    <label htmlFor="pt-dueDate" className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
-                    <input id="pt-dueDate" type="date" value={taskForm.dueDate} onChange={(e) => setTaskForm({ ...taskForm, dueDate: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={taskForm.isRecurring} onChange={(e) => setTaskForm({ ...taskForm, isRecurring: e.target.checked })} className="rounded border-border text-primary focus:ring-primary w-4 h-4" />
-                      <span className="text-sm font-medium text-[#374151]">Repeat Task</span>
-                    </label>
-                  </div>
-                  {taskForm.isRecurring && (
-                    <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Repeat Frequency</label>
-                      <Select
-                        ariaLabel="Repeat Frequency"
-                        value={taskForm.recurrenceFrequency || 'WEEKLY'}
-                        onChange={(val) => setTaskForm({ ...taskForm, recurrenceFrequency: val })}
-                        options={[{ label: 'Daily', value: 'DAILY' }, { label: 'Weekly', value: 'WEEKLY' }, { label: 'Monthly', value: 'MONTHLY' }, { label: 'Yearly', value: 'YEARLY' }]}
-                      />
-                    </div>
-                  )}
                   <div>
                     <label htmlFor="pt-loggedHours" className="block text-sm font-medium text-[#374151] mb-1.5">Time Spent (hours)</label>
                     <input id="pt-loggedHours" type="number" step="0.5" min="0" value={taskForm.loggedHours} onChange={(e) => setTaskForm({ ...taskForm, loggedHours: parseFloat(e.target.value) || 0 })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />

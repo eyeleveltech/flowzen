@@ -60,11 +60,7 @@ function PipelineContent() {
     }
   }, []);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      setActiveTab('LIST');
-    }
-  }, []);
+  // Removed mobile view-override useEffect to default to BOARD view on both desktop and mobile.
 
   async function fetchTotal() {
     try {
@@ -95,9 +91,10 @@ function PipelineContent() {
           {activeTab === 'BOARD' && (
             <button
               onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-[#1F2937] transition-all shadow-sm"
+              className="flex items-center justify-center rounded-xl bg-primary h-[38px] w-[38px] shrink-0 text-white hover:bg-[#1F2937] transition-all shadow-sm"
+              title="Add Lead"
             >
-              <Plus className="h-4 w-4" /> Add Lead
+              <Plus className="h-4 w-4" />
             </button>
           )}
           <div className="flex items-center gap-2 shrink-0">

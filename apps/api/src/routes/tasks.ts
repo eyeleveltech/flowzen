@@ -322,7 +322,7 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
       }
     }
 
-    const { title, description, type, projectId, assigneeId, assigneeIds, reviewerId, assignedById, priority, status, dueDate, assignedDate, parentId, estimatedHours, driveLink } = req.body;
+    const { title, description, type, projectId, assigneeId, assigneeIds, reviewerId, assignedById, priority, status, dueDate, assignedDate, parentId, estimatedHours, driveLink, isRecurring, recurrenceFrequency } = req.body;
 
     // Multi-assignee: the first of the list is the "primary" assignee (kept in
     // assigneeId for back-compat); the full set lives in the assignees relation.
@@ -346,6 +346,8 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
         parentId,
         estimatedHours,
         driveLink,
+        isRecurring: isRecurring ?? false,
+        recurrenceFrequency: recurrenceFrequency || null,
         order: await prisma.task.count({ where: { projectId, parentId: parentId || null } }),
       },
       include: {

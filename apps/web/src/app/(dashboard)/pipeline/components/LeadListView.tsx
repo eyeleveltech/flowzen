@@ -206,9 +206,10 @@ export function LeadListView() {
             </button>
             <button
               onClick={() => { setModalMode('MANUAL'); setIsModalOpen(true); }}
-              className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all w-full sm:w-auto justify-center shrink-0"
+              className="flex items-center justify-center rounded-xl bg-primary h-[44px] w-[44px] text-white hover:bg-[#1F2937] transition-all shrink-0"
+              title="Add Lead"
             >
-              <Plus className="h-4 w-4" /> Add Lead
+              <Plus className="h-4 w-4" />
             </button>
           </div>
         </div>
