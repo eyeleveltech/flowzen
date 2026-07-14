@@ -708,7 +708,6 @@ function TasksContent() {
                   { label: 'Status: Done to To Do', value: 'status_desc' },
                   { label: 'Task Name: A-Z', value: 'title_asc' },
                   { label: 'Task Name: Z-A', value: 'title_desc' },
-                  { label: 'Created: Newest', value: 'createdAt_desc' },
                   { label: 'Created: Oldest', value: 'createdAt_asc' },
                   { label: 'Due Date: Earliest', value: 'dueDate_asc' },
                   { label: 'Due Date: Latest', value: 'dueDate_desc' },
