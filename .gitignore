@@ -47,3 +47,8 @@ playwright-report/
 # one-off scratch/test scripts
 _*.mjs
 apps/*/_*.mjs
+scratch_*.py
+scratch_*.js
+clean-schema.js
+schema_errors.txt
+apps/api/schema_errors.txt

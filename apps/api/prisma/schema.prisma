@@ -309,6 +309,8 @@ model User {
   quotesAsSalesperson QuoteDocument[] @relation("QuoteSalesperson")
   auditLogs           AuditLog[]      @relation("UserAuditLogs")
 
+  @@index([organizationId])
+  @@index([organizationId, status])
   @@map("users")
 }
 
@@ -371,6 +373,8 @@ model Client {
   subscriptions Subscription[] @relation("ClientSubscriptions")
   expenses      Expense[]      @relation("ClientExpenses")
 
+  @@index([organizationId])
+  @@index([organizationId, status])
   @@map("clients")
 }
 
@@ -441,6 +445,7 @@ model Team {
   members  User[]        @relation("TeamMembers")
   projects ProjectTeam[]
 
+  @@index([organizationId])
   @@map("teams")
 }
 
@@ -816,6 +821,7 @@ model QuoteDocument {
   invoiceDraft     InvoiceDraft?
 
   @@index([clientId])
+  @@index([organizationId, status])
   @@map("quote_documents")
 }
 
@@ -920,6 +926,7 @@ model AuditLog {
   user         User         @relation("UserAuditLogs", fields: [userId], references: [id], onDelete: Cascade)
   organization Organization @relation("OrganizationAuditLogs", fields: [organizationId], references: [id], onDelete: Cascade)
 
+  @@index([organizationId])
   @@index([userId])
   @@map("audit_logs")
 }
