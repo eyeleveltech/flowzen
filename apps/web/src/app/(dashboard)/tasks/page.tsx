@@ -151,6 +151,14 @@ function TasksContent() {
   // (the assignee filter isn't shown to them); admins/managers see everyone and
   // can narrow with the people filter.
   const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
+  const [hasSetDefaultAssignee, setHasSetDefaultAssignee] = useState(false);
+
+  useEffect(() => {
+    if (user?.id && user.role !== 'TEAM_MEMBER' && !hasSetDefaultAssignee) {
+      setAssigneeFilter([user.id]);
+      setHasSetDefaultAssignee(true);
+    }
+  }, [user, hasSetDefaultAssignee]);
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
   const [teamFilter, setTeamFilter] = useState<string[]>([]);
   const [sort, setSort] = useState<string>('createdAt_desc');
@@ -636,82 +644,109 @@ function TasksContent() {
         </div>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-2 mb-2 no-scrollbar">
-        <button onClick={() => setQuickFilter('')} className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium transition-all ${!currentFilter ? 'bg-primary text-white' : 'bg-gray-100 text-[#374151] hover:bg-gray-200'}`}>All Tasks</button>
-        <button onClick={() => setQuickFilter('today')} className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium transition-all ${currentFilter === 'today' ? 'bg-primary text-white shadow-sm' : 'bg-gray-100 text-[#374151] hover:bg-gray-200'}`}>Today</button>
-        <button onClick={() => setQuickFilter('overdue')} className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium transition-all ${currentFilter === 'overdue' ? 'bg-red-500 text-white shadow-sm' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>Overdue</button>
-        <button onClick={() => setQuickFilter('approval')} className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium transition-all ${currentFilter === 'approval' ? 'bg-amber-500 text-white shadow-sm' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}>Needs Approval</button>
-      </div>
-
-      <div className="flex flex-col gap-3 mb-6">
-        <div className="flex items-center gap-2 w-full sm:max-w-sm">
-          <div className="relative flex-1">
+      {/* Redesigned Clean Tasks Toolbar */}
+      <div className="bg-[#F9FAFB]/50 border border-border rounded-2xl p-3.5 shadow-sm flex flex-col gap-3.5 w-full mb-6">
+        {/* Row 1: Search + Dropdowns */}
+        <div className="flex flex-wrap items-center justify-between gap-3 w-full">
+          {/* Search Box */}
+          <div className="relative w-full sm:w-60 md:w-130 shrink-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tasks..." className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-          </div>
-          <button
-            onClick={() => setShowMobileFilters(!showMobileFilters)}
-            className="sm:hidden flex items-center justify-center p-2.5 rounded-xl border border-border bg-white text-secondary hover:bg-gray-50 transition-colors"
-          >
-            <Filter className="h-4 w-4" />
-          </button>
-        </div>
-        <div className={`flex flex-wrap items-center gap-3 ${showMobileFilters ? 'flex' : 'hidden sm:flex'}`}>
-          <div className="w-full sm:w-48">
-            <MultiSelect
-              showSelectAll
-              value={projectFilter}
-              onChange={setProjectFilter}
-              placeholder="Projects"
-              options={projects.map((p) => ({ label: p.name, value: p.id }))}
-            />
-          </div>
-          <div className="w-full sm:w-44">
-            <MultiSelect
-              showSelectAll
-              value={statusFilter}
-              onChange={setStatusFilter}
-              placeholder="Status"
-              options={TASK_STATUS_OPTIONS}
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search tasks..."
+              className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
             />
           </div>
 
-          {user?.role !== 'TEAM_MEMBER' && (
-            <div className="w-full sm:w-44">
+          {/* Select Dropdowns */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Project Select */}
+            <div className="w-full sm:w-36">
               <MultiSelect
                 showSelectAll
-                value={assigneeFilter}
-                onChange={setAssigneeFilter}
-                placeholder="Assignees"
-                options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name), colorClass: getAvatarColor(m.name) }))}
+                value={projectFilter}
+                onChange={setProjectFilter}
+                placeholder="Projects"
+                options={projects.map((p) => ({ label: p.name, value: p.id }))}
               />
             </div>
-          )}
 
-          {view === 'list' && (
-            <div className="w-full sm:w-48">
-              <Select
-                ariaLabel="Sort Tasks"
-                value={sort}
-                onChange={setSort}
-                options={[
-                  { label: 'Created: Newest', value: 'createdAt_desc' },
-                  { label: 'Project: A-Z', value: 'project_asc' },
-                  { label: 'Project: Z-A', value: 'project_desc' },
-                  { label: 'Priority: Low to Urgent', value: 'priority_asc' },
-                  { label: 'Priority: Urgent to Low', value: 'priority_desc' },
-                  { label: 'Status: To Do to Done', value: 'status_asc' },
-                  { label: 'Status: Done to To Do', value: 'status_desc' },
-                  { label: 'Task Name: A-Z', value: 'title_asc' },
-                  { label: 'Task Name: Z-A', value: 'title_desc' },
-                  { label: 'Created: Oldest', value: 'createdAt_asc' },
-                  { label: 'Due Date: Earliest', value: 'dueDate_asc' },
-                  { label: 'Due Date: Latest', value: 'dueDate_desc' },
-                  { label: 'Updated: Newest', value: 'updatedAt_desc' },
-                ]}
+            {/* Status Select */}
+            <div className="w-full sm:w-36">
+              <MultiSelect
+                showSelectAll
+                value={statusFilter}
+                onChange={setStatusFilter}
+                placeholder="Status"
+                options={TASK_STATUS_OPTIONS}
               />
             </div>
-          )}
+
+            {/* Assignee Select (Admins/PMs only) */}
+            {user?.role !== 'TEAM_MEMBER' && (
+              <div className="w-full sm:w-36">
+                <MultiSelect
+                  showSelectAll
+                  value={assigneeFilter}
+                  onChange={setAssigneeFilter}
+                  placeholder="Assignees"
+                  options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
+                />
+              </div>
+            )}
+
+            {/* Sort Select */}
+            {view === 'list' && (
+              <div className="w-full sm:w-44">
+                <Select
+                  ariaLabel="Sort Tasks"
+                  value={sort}
+                  onChange={setSort}
+                  options={[
+                    { label: 'Created: Newest', value: 'createdAt_desc' },
+                    { label: 'Project: A-Z', value: 'project_asc' },
+                    { label: 'Project: Z-A', value: 'project_desc' },
+                    { label: 'Priority: Low to Urgent', value: 'priority_asc' },
+                    { label: 'Priority: Urgent to Low', value: 'priority_desc' },
+                    { label: 'Status: To Do to Done', value: 'status_asc' },
+                    { label: 'Status: Done to To Do', value: 'status_desc' },
+                    { label: 'Task Name: A-Z', value: 'title_asc' },
+                    { label: 'Task Name: Z-A', value: 'title_desc' },
+                    { label: 'Created: Oldest', value: 'createdAt_asc' },
+                    { label: 'Due Date: Earliest', value: 'dueDate_asc' },
+                    { label: 'Due Date: Latest', value: 'dueDate_desc' },
+                    { label: 'Updated: Newest', value: 'updatedAt_desc' },
+                  ]}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Separator line */}
+        <div className="h-px bg-border/60 w-full" />
+
+        {/* Row 2: Segmented Control tabs */}
+        <div className="flex bg-[#F3F4F6] p-1 rounded-xl gap-0.5 border border-border/50 self-start shrink-0 overflow-x-auto no-scrollbar">
+          {[
+            { id: '', label: 'All', activeColor: 'bg-white text-primary shadow-sm border border-black/5' },
+            { id: 'today', label: 'Today', activeColor: 'bg-white text-primary shadow-sm border border-black/5' },
+            { id: 'overdue', label: 'Overdue', activeColor: 'bg-red-500 text-white shadow-sm' },
+            { id: 'approval', label: 'Approval', activeColor: 'bg-amber-500 text-white shadow-sm' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setQuickFilter(tab.id)}
+              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${currentFilter === tab.id
+                ? tab.activeColor
+                : 'text-secondary hover:text-primary'
+                }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
       </div>
 

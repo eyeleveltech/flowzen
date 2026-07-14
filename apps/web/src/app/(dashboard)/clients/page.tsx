@@ -432,103 +432,108 @@ function ClientsContent() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col gap-3 mb-6 bg-[#F9FAFB]/50 p-3 rounded-2xl border border-border">
-        {/* Search bar row */}
-        <div className="flex items-center gap-2 w-full md:max-w-sm">
-          <div className="relative flex-1 md:w-80 md:flex-initial">
+      <div className="bg-[#F9FAFB]/50 border border-border rounded-2xl p-3.5 shadow-sm flex flex-col gap-3.5 w-full mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 w-full">
+          {/* Search Box */}
+          <div className="relative w-full sm:w-60 md:w-130 shrink-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search clients..."
-              className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
+              className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
             />
           </div>
-          <button 
-            type="button"
-            onClick={() => setShowMobileFilters(!showMobileFilters)} 
-            className="md:hidden flex items-center justify-center p-2.5 rounded-xl border border-border bg-white text-secondary hover:bg-gray-50 transition-colors shrink-0 h-[38px]"
-            title="Toggle Filters"
-          >
-            <Filter className="h-4 w-4" />
-          </button>
-        </div>
-        
-        {/* Filters options row */}
-        <div className={`flex-wrap items-center gap-3 w-full ${showMobileFilters ? 'flex' : 'hidden md:flex'}`}>
-          <div className="w-full md:w-auto md:min-w-[170px]">
-            <MultiSelect
-              value={statusFilter}
-              onChange={setStatusFilter}
-              placeholder="Status"
-              showSelectAll={true}
-              options={[
-                { label: 'Prospect', value: 'PROSPECT' },
-                { label: 'Active', value: 'ACTIVE' },
-                { label: 'On Hold', value: 'ONHOLD' },
-                { label: 'Churned', value: 'CHURNED' },
-                { label: 'Project Completed', value: 'PROJECT_COMPLETED' },
-              ]}
-            />
-          </div>
-          <div className="w-full md:w-auto md:min-w-[170px]">
-            <MultiSelect
-              value={engagementTypeFilter}
-              onChange={setEngagementTypeFilter}
-              placeholder="Engagements"
-              showSelectAll={true}
-              options={[
-                { label: 'Retainer', value: 'Retainer' },
-                { label: 'Project', value: 'Project' },
-                { label: 'Event', value: 'Event' },
-                { label: 'Ad-hoc', value: 'Ad-hoc' }
-              ]}
-            />
-          </div>
-          <div className="w-full md:w-auto md:min-w-[200px]">
-            <MultiSelect
-              value={accountManagerFilter}
-              onChange={setAccountManagerFilter}
-              placeholder="Account Manager"
-              showSelectAll={true}
-              options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
-            />
-          </div>
-          <div className="w-full md:w-auto md:min-w-[170px]">
-            <MultiSelect
-              value={industryFilter}
-              onChange={setIndustryFilter}
-              placeholder="Industries"
-              showSelectAll={true}
-              options={INDUSTRY_OPTIONS.map((i) => ({ label: i, value: i }))}
-            />
+
+          {/* Select Dropdowns */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Status Select */}
+            <div className="w-full sm:w-36">
+              <MultiSelect
+                value={statusFilter}
+                onChange={setStatusFilter}
+                placeholder="Status"
+                showSelectAll={true}
+                options={[
+                  { label: 'Prospect', value: 'PROSPECT' },
+                  { label: 'Active', value: 'ACTIVE' },
+                  { label: 'On Hold', value: 'ONHOLD' },
+                  { label: 'Churned', value: 'CHURNED' },
+                  { label: 'Completed', value: 'PROJECT_COMPLETED' },
+                ]}
+              />
+            </div>
+
+            {/* Engagement Select */}
+            <div className="w-full sm:w-36">
+              <MultiSelect
+                value={engagementTypeFilter}
+                onChange={setEngagementTypeFilter}
+                placeholder="Engagements"
+                showSelectAll={true}
+                options={[
+                  { label: 'Retainer', value: 'Retainer' },
+                  { label: 'Project', value: 'Project' },
+                  { label: 'Event', value: 'Event' },
+                  { label: 'Ad-hoc', value: 'Ad-hoc' }
+                ]}
+              />
+            </div>
+
+            {/* Account Manager Select */}
+            <div className="w-full sm:w-44">
+              <MultiSelect
+                value={accountManagerFilter}
+                onChange={setAccountManagerFilter}
+                placeholder="Account Manager"
+                showSelectAll={true}
+                options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
+              />
+            </div>
+
+            {/* Industries Select */}
+            <div className="w-full sm:w-36">
+              <MultiSelect
+                value={industryFilter}
+                onChange={setIndustryFilter}
+                placeholder="Industries"
+                showSelectAll={true}
+                options={INDUSTRY_OPTIONS.map((i) => ({ label: i, value: i }))}
+              />
+            </div>
           </div>
         </div>
       </div>
 
       {/* View Tabs */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center bg-[#F3F4F6] p-1 rounded-lg">
-            <button onClick={() => setCurrentView('table')} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${currentView === 'table' ? 'bg-white shadow-sm text-primary' : 'text-secondary hover:text-primary'}`}>
-              <List className="w-4 h-4" /> Table
-            </button>
-            <button onClick={() => setCurrentView('timeline')} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${currentView === 'timeline' ? 'bg-white shadow-sm text-primary' : 'text-secondary hover:text-primary'}`}>
-              <LayoutGrid className="w-4 h-4" /> Timeline
-            </button>
-          </div>
-          <button
-            onClick={() => setShowViewSettings(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-secondary hover:text-primary bg-white border border-border rounded-lg shadow-sm transition-colors hover:bg-gray-50"
-            title="Configure View Settings"
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        {/* Left Side: View switcher tabs */}
+        <div className="flex items-center rounded-xl border border-border p-1 bg-white overflow-x-auto max-w-full whitespace-nowrap no-scrollbar shrink-0">
+          <button 
+            type="button"
+            onClick={() => setCurrentView('table')} 
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all shrink-0 ${currentView === 'table' ? 'bg-primary text-white shadow-sm' : 'text-secondary hover:text-primary'}`}
           >
-            <Settings className="w-3.5 h-3.5" /> View Settings
+            <List className="w-3.5 h-3.5 shrink-0" /> Table
+          </button>
+          <button 
+            type="button"
+            onClick={() => setCurrentView('timeline')} 
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all shrink-0 ${currentView === 'timeline' ? 'bg-primary text-white shadow-sm' : 'text-secondary hover:text-primary'}`}
+          >
+            <LayoutGrid className="w-3.5 h-3.5 shrink-0" /> Timeline
           </button>
         </div>
-        
-        {currentView === 'table' && (
-          <div className="relative" />
-        )}
+
+        {/* Right Side: View Settings */}
+        <button
+          type="button"
+          onClick={() => setShowViewSettings(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#374151] bg-white border border-border rounded-lg shadow-sm transition-colors hover:bg-gray-50 h-[38px] shrink-0"
+          title="Configure View Settings"
+        >
+          <Settings className="w-3.5 h-3.5" /> View Settings
+        </button>
       </div>
 
       {/* Desktop Table View */}

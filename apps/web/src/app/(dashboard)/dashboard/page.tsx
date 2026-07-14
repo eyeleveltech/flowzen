@@ -14,7 +14,7 @@ import { Select } from '@/components/ui/select';
 import { ActivityFeedWidget } from '@/components/dashboard/activity-feed';
 import {
   Users, FolderKanban, CheckSquare, CheckCircle2, Building2, Activity, Zap,
-  AlertTriangle, UsersRound, Clock, PieChart as PieIcon, BarChart as BarIcon, BellDot, ChevronRight
+  AlertTriangle, UsersRound, Clock, PieChart as PieIcon, BarChart as BarIcon, BellDot, ChevronRight, Calendar
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -118,7 +118,7 @@ const PendingApprovalItem = ({
         className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary mr-2 cursor-pointer shrink-0"
       />
       <div className="flex-1 min-w-0">
-        <div 
+        <div
           onClick={() => router.push(`/tasks?taskId=${task.id}`)}
           className="flex flex-col py-3 cursor-pointer"
         >
@@ -155,7 +155,7 @@ const PendingApprovalItem = ({
               </div>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
-              <button 
+              <button
                 disabled={submitting}
                 onClick={handleApprove}
                 className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
@@ -163,7 +163,7 @@ const PendingApprovalItem = ({
               >
                 <CheckCircle2 className="w-4 h-4" />
               </button>
-              <button 
+              <button
                 disabled={submitting}
                 onClick={handleRequestChangesClick}
                 className={`flex items-center justify-center h-8 w-8 rounded-lg transition-colors ${isRequestingChanges ? 'bg-amber-100 text-amber-700' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}
@@ -174,7 +174,7 @@ const PendingApprovalItem = ({
             </div>
           </div>
         </div>
-        
+
         {isRequestingChanges && (
           <div className="pb-3 pt-1" onClick={(e) => e.stopPropagation()}>
             <textarea
@@ -185,14 +185,14 @@ const PendingApprovalItem = ({
               className="w-full text-sm border border-border rounded-lg p-2.5 outline-none focus:border-primary resize-none h-20 bg-white"
             />
             <div className="flex justify-end gap-2 mt-2">
-              <button 
+              <button
                 disabled={submitting}
                 onClick={() => setIsRequestingChanges(false)}
                 className="px-3 py-1.5 text-xs font-medium text-secondary hover:text-primary transition-colors"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 disabled={submitting || !commentText.trim()}
                 onClick={handleSubmitChanges}
                 className="px-3 py-1.5 text-xs font-medium text-white bg-primary rounded-lg hover:bg-[#1F2937] transition-colors disabled:opacity-50"
@@ -257,16 +257,16 @@ export default function DashboardPage() {
       end.setHours(23, 59, 59, 999);
       return { startDate: start.toISOString(), endDate: end.toISOString() };
     }
-    
+
     // Default fallback
     return { startDate: undefined, endDate: undefined };
   };
 
   const { data, refetch: fetchAll } = useDashboardData(user?.role, getDateRange());
-  const { 
-    stats, activity = [], deadlines = [], velocity = [], 
-    statusDist = [], workload = [], myTasks = [], 
-    pendingApprovals = [], clientHealth = [], myProjects = [] 
+  const {
+    stats, activity = [], deadlines = [], velocity = [],
+    statusDist = [], workload = [], myTasks = [],
+    pendingApprovals = [], clientHealth = [], myProjects = []
   } = data || {};
 
   const [updatingTask, setUpdatingTask] = useState<string | null>(null);
@@ -343,7 +343,7 @@ export default function DashboardPage() {
       try {
         await api.put(`/tasks/${taskId}`, { readAt: new Date().toISOString() });
         fetchAll();
-      } catch (err) {}
+      } catch (err) { }
     }
     router.push(`/tasks?taskId=${taskId}`);
   };
@@ -353,7 +353,7 @@ export default function DashboardPage() {
     try {
       await api.put(`/tasks/${taskId}`, { status });
       toast.success('Task status updated');
-      
+
       if (status === 'COMPLETED') {
         const taskObj = data?.myTasks?.find((t: any) => t.id === taskId);
         const hours = await useTimeTrackingStore.getState().prompt({ taskId, taskTitle: taskObj?.title || 'Task' });
@@ -362,7 +362,7 @@ export default function DashboardPage() {
           toast.success('Time logged');
         }
       }
-      
+
       fetchAll();
     } catch (err: any) {
       toast.error(err.message || 'Failed to update status');
@@ -373,36 +373,36 @@ export default function DashboardPage() {
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="px-4 pt-4 md:px-8 md:pt-8 w-full max-w-7xl mx-auto space-y-8 pb-10">
-      
+
       {/* HEADER */}
       <motion.div variants={item} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-baseline gap-3">
           <h1 className="text-2xl font-semibold text-primary tracking-tight">Overview</h1>
           <p className="text-sm font-medium text-secondary">{user.role.replace('_', ' ').toLowerCase()}</p>
         </div>
-        
+
         {/* DATE RANGE FILTER */}
         <div className="flex flex-wrap items-center gap-2.5">
           {datePreset === 'custom' && (
             <div className="flex items-center gap-2">
-              <input 
-                type="date" 
-                value={customRange.start} 
+              <input
+                type="date"
+                value={customRange.start}
                 onChange={(e) => setCustomRange(prev => ({ ...prev, start: e.target.value }))}
                 className="text-xs sm:text-sm px-3 py-2 rounded-xl border border-border bg-gray-50 outline-none focus:border-primary focus:bg-white transition-all w-32 sm:w-36 text-primary font-medium"
               />
               <span className="text-secondary text-xs sm:text-sm font-semibold">-</span>
-              <input 
-                type="date" 
-                value={customRange.end} 
+              <input
+                type="date"
+                value={customRange.end}
                 onChange={(e) => setCustomRange(prev => ({ ...prev, end: e.target.value }))}
                 className="text-xs sm:text-sm px-3 py-2 rounded-xl border border-border bg-gray-50 outline-none focus:border-primary focus:bg-white transition-all w-32 sm:w-36 text-primary font-medium"
               />
             </div>
           )}
-          <Select 
-            value={datePreset} 
-            onChange={setDatePreset} 
+          <Select
+            value={datePreset}
+            onChange={setDatePreset}
             options={[
               { label: 'All Time', value: 'all_time' },
               { label: 'Today', value: 'today' },
@@ -421,23 +421,23 @@ export default function DashboardPage() {
       {isManager ? (
         <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
           <div onClick={() => router.push('/clients?status=ACTIVE')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Active Clients</p><Building2 className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors"/></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Active Clients</p><Building2 className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.activeClients}</p>
           </div>
           <div onClick={() => router.push('/projects?status=ACTIVE')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Active Projects</p><FolderKanban className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors"/></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Active Projects</p><FolderKanban className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.activeProjects}</p>
           </div>
           <div onClick={() => router.push('/projects?status=DELAYED')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Delayed Projects</p><AlertTriangle className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors"/></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Delayed Projects</p><AlertTriangle className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.delayedProjects}</p>
           </div>
           <div onClick={() => router.push('/members')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Team Members</p><UsersRound className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors"/></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Team Members</p><UsersRound className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.totalMembers}</p>
           </div>
           <div onClick={() => router.push('/tasks?filter=overdue')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow cursor-pointer hover:bg-surface group h-full">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Overdue Tasks</p><Clock className="w-4 h-4 shrink-0 text-[#9CA3AF]"/></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Overdue Tasks</p><Clock className="w-4 h-4 shrink-0 text-[#9CA3AF]" /></div>
             <div className="flex items-center gap-2">
               <span className={`h-2.5 w-2.5 rounded-full ${stats.overdueTasks > 0 ? 'bg-red-500' : 'bg-border'}`} />
               <p className={`text-3xl font-semibold ${stats.overdueTasks > 0 ? 'text-red-500' : 'text-primary'}`}>{stats.overdueTasks || 0}</p>
@@ -447,26 +447,26 @@ export default function DashboardPage() {
       ) : (
         <motion.div variants={item} className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <div onClick={() => router.push('/projects')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Projects</p><FolderKanban className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors"/></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Projects</p><FolderKanban className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.activeProjects || 0}</p>
           </div>
           <div onClick={() => router.push('/tasks')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Open Tasks</p><CheckSquare className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors"/></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Open Tasks</p><CheckSquare className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.openTasks || 0}</p>
           </div>
           <div onClick={() => router.push('/tasks?filter=completed')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Completed Tasks</p><CheckCircle2 className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors"/></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Completed Tasks</p><CheckCircle2 className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.completedTasks || 0}</p>
           </div>
           <div onClick={() => router.push('/tasks?filter=overdue')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Overdue Tasks</p><Clock className="w-4 h-4 shrink-0 text-[#9CA3AF]"/></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Overdue Tasks</p><Clock className="w-4 h-4 shrink-0 text-[#9CA3AF]" /></div>
             <div className="flex items-center gap-2">
               <span className={`h-2.5 w-2.5 rounded-full ${stats.overdueTasks > 0 ? 'bg-red-500' : 'bg-border'}`} />
               <p className={`text-3xl font-semibold ${stats.overdueTasks > 0 ? 'text-red-500' : 'text-primary'}`}>{stats.overdueTasks || 0}</p>
             </div>
           </div>
           <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">My Completion Rate</p><Zap className="w-4 h-4 shrink-0 text-[#9CA3AF]"/></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">My Completion Rate</p><Zap className="w-4 h-4 shrink-0 text-[#9CA3AF]" /></div>
             <p className="text-3xl font-semibold text-primary">
               {stats.openTasks + stats.completedTasks > 0 ? Math.round((stats.completedTasks / (stats.openTasks + stats.completedTasks)) * 100) : 0}%
             </p>
@@ -475,10 +475,10 @@ export default function DashboardPage() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
+
         {/* LEFT COLUMN */}
         <div className="lg:col-span-2 space-y-6">
-          
+
           {/* PENDING TASKS */}
           {(() => {
             const overdueCount = myTasks.filter((t: any) => t.dueDate && new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED').length;
@@ -496,111 +496,102 @@ export default function DashboardPage() {
               return new Date(a.dueDate || 0).getTime() - new Date(b.dueDate || 0).getTime();
             });
 
+
             return (
               <motion.div
                 variants={item}
-                className={`rounded-2xl bg-white border flex flex-col transition-all ${
-                  hasOverdue
-                    ? 'border-red-300 shadow-[0_0_0_3px_rgba(239,68,68,0.12)]'
-                    : hasTasks
-                    ? 'border-amber-300 shadow-[0_0_0_3px_rgba(245,158,11,0.10)]'
-                    : 'border-border hover:shadow-sm'
-                }`}
+                className="rounded-2xl bg-white border border-border hover:shadow-md flex flex-col transition-all"
               >
                 {/* Header */}
                 <div className="p-5 border-b border-border flex justify-between items-center">
-                  <h2 className="flex items-center gap-2 text-sm font-semibold text-primary">
-                    <BellDot className={`w-4 h-4 ${hasOverdue ? 'text-red-500' : hasTasks ? 'text-amber-500' : 'text-secondary'}`} />
+                  <h2 className="flex items-center gap-2 text-base font-bold text-primary">
+                    <BellDot className="w-4.5 h-4.5 text-primary" />
                     Pending Tasks
                   </h2>
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-3">
                     {hasTasks && (
-                      <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${
-                        hasOverdue
-                          ? 'bg-red-50 text-red-700 border-red-200'
-                          : 'bg-amber-50 text-amber-700 border-amber-200'
-                      }`}>
+                      <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-lg border ${hasOverdue
+                          ? 'bg-red-50 text-red-600 border-red-100'
+                          : 'bg-[#F3F4F6] text-secondary border-border'
+                        }`}>
                         {hasOverdue ? `${overdueCount} overdue` : `${myTasks.length} pending`}
                       </span>
                     )}
-                    <button onClick={() => router.push('/tasks')} className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline transition-colors">
+                    <button onClick={() => router.push('/tasks')} className="text-xs font-semibold text-black-600 hover:text-blue-700 hover:underline transition-colors">
                       View All
                     </button>
                   </div>
                 </div>
 
                 {/* Task list */}
-                <div className="flex-1 overflow-y-auto max-h-[400px] custom-scrollbar p-2">
+                <div className="flex-1 overflow-y-auto max-h-[480px] custom-scrollbar p-3.5">
                   {sortedTasks.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-14 text-center gap-2">
-                      <span className="text-2xl">🎉</span>
+                    <div className="flex flex-col items-center justify-center py-16 text-center gap-2">
+                      <span className="text-3xl">🎉</span>
                       <p className="text-sm font-semibold text-emerald-600">You're all caught up!</p>
                       <p className="text-xs text-secondary">No pending tasks right now.</p>
                     </div>
                   ) : (
-                    <div className="space-y-1">
+                    <div className="space-y-2">
                       {sortedTasks.map((t: any) => {
                         const isOverdue = t.dueDate && new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED';
-                        const priorityBorder =
-                          t.priority === 'URGENT' ? 'border-l-red-500' :
-                          t.priority === 'HIGH'   ? 'border-l-orange-400' :
-                          t.priority === 'MEDIUM' ? 'border-l-blue-400' :
-                          'border-l-gray-200';
+                        const priorityBgColor =
+                          t.priority === 'URGENT' ? 'bg-red-500' :
+                            t.priority === 'HIGH' ? 'bg-orange-500' :
+                              t.priority === 'MEDIUM' ? 'bg-blue-500' :
+                                'bg-gray-300';
                         const priorityChipStyle =
                           t.priority === 'URGENT' ? 'bg-red-50 text-red-700 border-red-200' :
-                          t.priority === 'HIGH'   ? 'bg-orange-50 text-orange-700 border-orange-200' :
-                          t.priority === 'MEDIUM' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                          'bg-gray-50 text-gray-600 border-gray-200';
+                            t.priority === 'HIGH' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                              t.priority === 'MEDIUM' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                'bg-gray-50 text-gray-600 border-gray-200';
 
                         return (
                           <div
                             key={t.id}
-                            className={`group flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl transition-all border-l-2 border border-transparent hover:border-border hover:bg-surface ${priorityBorder} ${isOverdue ? 'bg-red-50/40' : ''}`}
+                            onClick={() => handleOpenTask(t.id, t.readAt)}
+                            className="group flex flex-col sm:flex-row sm:items-center justify-between py-2.5 px-4 rounded-xl border border-border/80 bg-white hover:bg-surface hover:border-border hover:shadow-sm cursor-pointer transition-all gap-2 sm:gap-4"
                           >
-                            <div
-                              onClick={() => handleOpenTask(t.id, t.readAt)}
-                              className="flex items-start gap-3 min-w-0 flex-1 cursor-pointer"
-                            >
-                              {!t.readAt ? (
-                                <div className="mt-1.5 shrink-0"><span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" /></div>
-                              ) : (
-                                <div className="mt-1.5 shrink-0"><span className="flex h-2 w-2 rounded-full bg-border" /></div>
+                            <div className="flex items-center min-w-0 flex-1 gap-3">
+                              {/* Urgent priority dot indicator */}
+                              {t.priority === 'URGENT' && (
+                                <span className="flex h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />
                               )}
-                              <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                  <p className="text-sm font-semibold text-primary truncate">{t.title}</p>
-                                  {!t.readAt && <span className="text-[9px] font-bold text-primary border border-primary px-1 py-px rounded-sm uppercase tracking-wide">New</span>}
-                                  {t.priority && (
-                                    <span className={`text-[9px] font-bold px-1.5 py-px rounded-md border uppercase tracking-wide ${priorityChipStyle}`}>
-                                      {t.priority}
-                                    </span>
-                                  )}
-                                  {isOverdue && (
-                                    <span className="text-[9px] font-bold px-1.5 py-px rounded-md border bg-red-100 text-red-700 border-red-200 uppercase tracking-wide">
-                                      Overdue
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-secondary">
-                                  <span>{t.project?.name || 'No project'}</span>
+
+                              {/* Text content block */}
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold text-primary truncate mb-0.5">{t.title}</p>
+                                <div className="flex flex-wrap items-center gap-2.5 text-xs text-secondary">
+                                  <span className="flex items-center gap-1">
+                                    <FolderKanban className="w-3.5 h-3.5 text-[#9CA3AF]" />
+                                    {t.project?.name || 'No project'}
+                                  </span>
                                   {t.dueDate && (
-                                    <span className={`flex items-center gap-1 ${isOverdue ? 'text-red-600 font-semibold' : ''}`}>
-                                      · {formatShortDate(t.dueDate)}
+                                    <span className={`flex items-center gap-1 ${isOverdue ? 'text-red-500 font-medium' : ''}`}>
+                                      <Calendar className="w-3.5 h-3.5 text-[#9CA3AF] shrink-0" />
+                                      {formatShortDate(t.dueDate)}
                                     </span>
                                   )}
                                 </div>
                               </div>
                             </div>
-                            <div className="mt-3 sm:mt-0 sm:ml-4 shrink-0 flex items-center gap-2 w-35">
-                              {updatingTask === t.id ? (
-                                <span className="text-xs text-secondary w-full text-center">Updating...</span>
-                              ) : (
-                                <Select
-                                  value={t.status}
-                                  onChange={(val) => updateTaskStatus(t.id, val)}
-                                  options={TASK_STATUS_OPTIONS}
-                                  className="w-full text-xs"
-                                />
+
+                            {/* Badges - align to the right on desktop, stack cleanly under title on mobile */}
+                            <div className="flex flex-wrap items-center gap-1.5 shrink-0 sm:justify-end self-start sm:self-auto pl-5 sm:pl-0">
+                              {!t.readAt && (
+                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded border border-primary/20 bg-primary/5 text-primary uppercase tracking-wide">
+                                  New
+                                </span>
+                              )}
+                              {isOverdue && (
+                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-red-50 text-red-600 border-red-100 uppercase tracking-wide">
+                                  Overdue
+                                </span>
+                              )}
+                              {t.priority && (
+                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border uppercase tracking-wide ${priorityChipStyle}`}>
+                                  {t.priority}
+                                </span>
                               )}
                             </div>
                           </div>
@@ -617,11 +608,11 @@ export default function DashboardPage() {
           {/* PENDING APPROVALS */}
           {isManager && (
             <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow overflow-hidden flex flex-col">
-              <div 
+              <div
                 className="p-5 border-b border-border flex flex-col gap-3 md:flex-row md:items-center justify-between"
               >
                 <div className="flex items-center gap-2 cursor-pointer" onClick={() => router.push('/tasks?filter=approval')}>
-                  <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><CheckCircle2 className="w-4 h-4 text-secondary"/> Pending Approvals</h2>
+                  <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><CheckCircle2 className="w-4 h-4 text-secondary" /> Pending Approvals</h2>
                   {pendingApprovals.length > 0 && <span className="text-xs font-medium text-primary bg-[#F3F4F6] border border-border px-2 py-0.5 rounded-md">{pendingApprovals.length}</span>}
                 </div>
 
@@ -629,7 +620,7 @@ export default function DashboardPage() {
                   <div className="flex flex-wrap items-center gap-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1.5 text-xs relative z-10">
                       <span className="text-secondary font-medium">Sort:</span>
-                      <Select 
+                      <Select
                         value={sortBy}
                         onChange={(val) => setSortBy(val as any)}
                         options={[
@@ -643,7 +634,7 @@ export default function DashboardPage() {
                     </div>
 
                     <label className="flex items-center gap-1.5 text-xs text-secondary font-medium cursor-pointer select-none">
-                      <input 
+                      <input
                         type="checkbox"
                         checked={pendingApprovals.length > 0 && selectedTaskIds.length === pendingApprovals.length}
                         onChange={(e) => {
@@ -676,13 +667,13 @@ export default function DashboardPage() {
                 ) : (
                   <div className="space-y-1">
                     {sortedApprovals.map((t: any) => (
-                      <PendingApprovalItem 
-                        key={t.id} 
-                        task={t} 
-                        onRefresh={fetchAll} 
+                      <PendingApprovalItem
+                        key={t.id}
+                        task={t}
+                        onRefresh={fetchAll}
                         selected={selectedTaskIds.includes(t.id)}
                         onSelectChange={(checked) => {
-                          setSelectedTaskIds((prev) => 
+                          setSelectedTaskIds((prev) =>
                             checked ? [...prev, t.id] : prev.filter((id) => id !== t.id)
                           );
                         }}
@@ -704,7 +695,7 @@ export default function DashboardPage() {
           {isManager && (
             <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow overflow-hidden">
               <div className="p-5 border-b border-border">
-                <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Activity className="w-4 h-4 text-secondary"/> Client Health</h2>
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Activity className="w-4 h-4 text-secondary" /> Client Health</h2>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left min-w-150">
@@ -723,7 +714,7 @@ export default function DashboardPage() {
                       let dotColor = 'bg-emerald-500';
                       if (c.health === 'Amber') dotColor = 'bg-amber-500';
                       if (c.health === 'Red') dotColor = 'bg-red-500';
-                      
+
                       return (
                         <tr key={c.id} onClick={() => router.push('/reports')} className="hover:bg-surface cursor-pointer transition-colors">
                           <td className="px-5 py-3 text-sm font-semibold text-primary">{c.name}</td>
@@ -754,10 +745,10 @@ export default function DashboardPage() {
 
         {/* RIGHT COLUMN */}
         <div className="space-y-6">
-          
+
           {/* UPCOMING DEADLINES */}
           <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4"><Clock className="w-4 h-4 text-secondary"/> Upcoming Deadlines</h2>
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4"><Clock className="w-4 h-4 text-secondary" /> Upcoming Deadlines</h2>
             <div className="space-y-3 max-h-62.5 overflow-y-auto custom-scrollbar pr-1 flex-1">
               {deadlines.length === 0 ? (
                 <p className="text-sm text-secondary py-4">No deadlines in next 7 days.</p>
@@ -769,9 +760,9 @@ export default function DashboardPage() {
                   else if (daysRemaining <= 3) dotColor = 'bg-[#F59E0B]'; // Orange for <= 3 days
 
                   return (
-                    <div 
-                      key={d.id} 
-                      onClick={() => handleOpenTask(d.id, null)} 
+                    <div
+                      key={d.id}
+                      onClick={() => handleOpenTask(d.id, null)}
                       title={`${d.title} (${d.project?.name || 'No project'})`}
                       className="flex justify-between items-start p-2.5 hover:bg-surface rounded-xl cursor-pointer border border-border group transition-all"
                     >
@@ -798,15 +789,15 @@ export default function DashboardPage() {
               </div>
             )}
           </motion.div>
-          
+
           {/* MY PROJECTS (TEAM_MEMBER ONLY) */}
           {!isManager && myProjects.length > 0 && (
             <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4"><FolderKanban className="w-4 h-4 text-secondary"/> My Projects</h2>
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4"><FolderKanban className="w-4 h-4 text-secondary" /> My Projects</h2>
               <div className="space-y-3 flex-1">
                 {myProjects.map((p: any) => (
-                  <div 
-                    key={p.id} 
+                  <div
+                    key={p.id}
                     onClick={() => router.push(`/projects/${p.id}`)}
                     className="flex justify-between items-center p-3 hover:bg-surface rounded-xl cursor-pointer border border-border group transition-all"
                   >
@@ -831,8 +822,8 @@ export default function DashboardPage() {
           {/* MY PERFORMANCE (TEAM_MEMBER ONLY) */}
           {!isManager && (
             <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4"><Zap className="w-4 h-4 text-secondary"/> My Performance</h2>
-              
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4"><Zap className="w-4 h-4 text-secondary" /> My Performance</h2>
+
               <div className="space-y-4">
                 {/* Completion Rate Progress Bar */}
                 <div>
@@ -843,10 +834,10 @@ export default function DashboardPage() {
                     </span>
                   </div>
                   <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-primary rounded-full transition-all duration-500" 
-                      style={{ 
-                        width: `${stats.openTasks + stats.completedTasks > 0 ? Math.round((stats.completedTasks / (stats.openTasks + stats.completedTasks)) * 100) : 0}%` 
+                    <div
+                      className="h-full bg-primary rounded-full transition-all duration-500"
+                      style={{
+                        width: `${stats.openTasks + stats.completedTasks > 0 ? Math.round((stats.completedTasks / (stats.openTasks + stats.completedTasks)) * 100) : 0}%`
                       }}
                     />
                   </div>
@@ -872,7 +863,7 @@ export default function DashboardPage() {
           {/* TASK STATUS CHART */}
           {isManager && statusDist.length > 0 && (
             <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5">
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-2"><PieIcon className="w-4 h-4 text-secondary"/> Task Status Distribution</h2>
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-2"><PieIcon className="w-4 h-4 text-secondary" /> Task Status Distribution</h2>
               <div className="h-50 w-full flex items-center justify-center">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -906,7 +897,7 @@ export default function DashboardPage() {
       {isManager && velocity.length > 0 && (
         <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Activity className="w-4 h-4 text-secondary"/> Task Completion Velocity</h2>
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Activity className="w-4 h-4 text-secondary" /> Task Completion Velocity</h2>
             <span className="text-xs font-medium text-secondary">Last 30 Days</span>
           </div>
           <div className="w-full relative" style={{ height: 256 }}>
@@ -914,34 +905,34 @@ export default function DashboardPage() {
               <AreaChart data={velocity} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorTasks" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#111827" stopOpacity={0.1}/>
-                    <stop offset="95%" stopColor="#111827" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#111827" stopOpacity={0.1} />
+                    <stop offset="95%" stopColor="#111827" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
-                <XAxis 
-                  dataKey="name" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 10, fill: '#9CA3AF' }} 
-                  dy={10} 
+                <XAxis
+                  dataKey="name"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                  dy={10}
                   minTickGap={20}
                 />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 10, fill: '#9CA3AF' }} 
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 10, fill: '#9CA3AF' }}
                   allowDecimals={false}
                 />
                 <RechartsTooltip content={<CustomTooltip />} cursor={{ stroke: '#D1D5DB', strokeWidth: 1, strokeDasharray: '4 4' }} />
-                <Area 
-                  type="monotone" 
-                  dataKey="tasks" 
-                  name="Completed Tasks" 
-                  stroke="#111827" 
+                <Area
+                  type="monotone"
+                  dataKey="tasks"
+                  name="Completed Tasks"
+                  stroke="#111827"
                   strokeWidth={2}
-                  fillOpacity={1} 
-                  fill="url(#colorTasks)" 
+                  fillOpacity={1}
+                  fill="url(#colorTasks)"
                   activeDot={{ r: 4, strokeWidth: 0, fill: '#111827' }}
                 />
               </AreaChart>
@@ -953,34 +944,34 @@ export default function DashboardPage() {
       {/* TEAM WORKLOAD CHART */}
       {isManager && workload.length > 0 && (
         <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-6"><BarIcon className="w-4 h-4 text-secondary"/> Team Workload</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-6"><BarIcon className="w-4 h-4 text-secondary" /> Team Workload</h2>
           <div className="h-60 w-full overflow-x-auto scrollbar-thin pb-2">
-            <div 
-              className="h-full" 
-              style={{ 
+            <div
+              className="h-full"
+              style={{
                 width: workload.length > 5 ? `${workload.length * 120}px` : '100%',
-                minWidth: '100%' 
+                minWidth: '100%'
               }}
             >
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={workload} margin={{ top: 10, right: 10, left: 25, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                  <XAxis 
-                    dataKey="name" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fontSize: 10, fill: '#6B7280' }} 
-                    dy={10} 
-                    tickFormatter={(name) => typeof name === 'string' ? name.split(' ')[0] : name} 
+                  <XAxis
+                    dataKey="name"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 10, fill: '#6B7280' }}
+                    dy={10}
+                    tickFormatter={(name) => typeof name === 'string' ? name.split(' ')[0] : name}
                   />
-                  <YAxis 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fontSize: 10, fill: '#6B7280' }} 
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 10, fill: '#6B7280' }}
                     label={{ value: 'Active Tasks', angle: -90, position: 'insideLeft', offset: -10, style: { fontSize: 10, fill: '#6B7280' } }}
                   />
-                  <RechartsTooltip 
-                    cursor={{ fill: '#FAFAFA' }} 
+                  <RechartsTooltip
+                    cursor={{ fill: '#FAFAFA' }}
                     content={({ active, payload }) => {
                       if (active && payload && payload.length) {
                         const data = payload[0].payload;
@@ -1001,9 +992,9 @@ export default function DashboardPage() {
                       return null;
                     }}
                   />
-                  <Bar 
-                    dataKey="activeTasks" 
-                    name="Active Tasks" 
+                  <Bar
+                    dataKey="activeTasks"
+                    name="Active Tasks"
                     radius={[2, 2, 0, 0]}
                     maxBarSize={50}
                     onClick={(data) => router.push(`/members?memberId=${data.id}`)}
@@ -1019,7 +1010,7 @@ export default function DashboardPage() {
           </div>
         </motion.div>
       )}
-      
+
       {/* EXPLICIT BOTTOM SPACER */}
       <div className="h-24 md:h-32 w-full shrink-0" aria-hidden="true" />
     </motion.div>
