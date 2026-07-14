@@ -34,7 +34,8 @@ function PipelineContent() {
           const parsed = JSON.parse(saved);
           if (parsed.name) setViewName(parsed.name);
           if (parsed.visibleColumns) setVisibleColumns(parsed.visibleColumns);
-          if (parsed.viewType) setActiveTab(parsed.viewType);
+          // Always default CRM pipeline to BOARD (Kanban) on mount
+          setActiveTab('BOARD');
         } catch (e) {
           console.error(e);
         }
@@ -66,7 +67,7 @@ function PipelineContent() {
     try {
       const data = await api.get<any[]>('/crm/leads');
       setTotalLeads(data.length || 0);
-    } catch (err) {}
+    } catch (err) { }
   }
 
   if (user && user.role === 'TEAM_MEMBER') {

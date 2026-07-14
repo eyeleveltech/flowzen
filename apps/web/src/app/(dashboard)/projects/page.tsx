@@ -250,16 +250,16 @@ function ProjectsContent() {
       </div>
 
       {/* Toolbar */}
-      <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3 mb-6">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">
-          <div className="relative w-full sm:w-64 shrink-0">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search projects..." className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2 text-sm outline-none focus:border-primary transition-all" />
-          </div>
-          
-          {/* Filters */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="w-44">
+      <div className="flex flex-col gap-4 mb-6">
+        {/* Row 1: Search & Filters (takes full width) */}
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-[#F9FAFB]/50 p-3 rounded-2xl border border-border">
+          <div className="flex flex-wrap items-center gap-2 flex-1">
+            <div className="relative w-full sm:w-64 shrink-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search projects..." className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2 text-sm outline-none focus:border-primary transition-all" />
+            </div>
+            
+            <div className="w-40 sm:w-44">
               <MultiSelect
                 value={statusFilter}
                 onChange={setStatusFilter}
@@ -277,7 +277,7 @@ function ProjectsContent() {
                 ]}
               />
             </div>
-            <div className="w-48">
+            <div className="w-40 sm:w-44">
               <MultiSelect
                 value={clientFilter}
                 onChange={setClientFilter}
@@ -287,7 +287,7 @@ function ProjectsContent() {
               />
             </div>
             {user?.role !== 'TEAM_MEMBER' && (
-              <div className="w-48">
+              <div className="w-40 sm:w-48">
                 <MultiSelect
                   value={ownerFilter}
                   onChange={setOwnerFilter}
@@ -297,25 +297,26 @@ function ProjectsContent() {
                 />
               </div>
             )}
-            <div className="w-36">
+            <div className="w-40 sm:w-36">
               <input
                 type="date"
                 value={dueDateFilter}
                 onChange={(e) => setDueDateFilter(e.target.value)}
-                className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-[#374151] outline-none focus:border-primary transition-all"
+                className="w-full h-[38px] rounded-xl border border-border bg-white px-3 py-2 text-sm text-[#374151] outline-none focus:border-primary transition-all"
                 title="Due Date Filter"
               />
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Row 2: View Options & View Settings */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center rounded-xl border border-border p-1 bg-white">
             {viewButtons.map((v) => (
               <button
                 key={v.mode}
                 onClick={() => setView(v.mode)}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${view === v.mode ? 'bg-primary text-white' : 'text-secondary hover:text-primary'}`}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${view === v.mode ? 'bg-primary text-white shadow-sm' : 'text-secondary hover:text-primary'}`}
               >
                 <v.icon className="h-3.5 w-3.5" /> {v.label}
               </button>
@@ -323,7 +324,7 @@ function ProjectsContent() {
           </div>
           <button
             onClick={() => setShowViewSettings(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-secondary hover:text-primary bg-white border border-border rounded-lg shadow-sm transition-colors hover:bg-gray-50 h-[38px]"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#374151] bg-white border border-border rounded-lg shadow-sm transition-colors hover:bg-gray-50 h-[38px]"
             title="Configure View Settings"
           >
             <Settings className="w-3.5 h-3.5" /> View Settings
