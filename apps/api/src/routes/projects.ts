@@ -138,8 +138,8 @@ projectRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
             ? { OR: [{ assigneeId: req.user!.userId }, { assignees: { some: { id: req.user!.userId } } }] }
             : undefined,
           include: {
-            assignee: { select: { id: true, name: true, avatar: true } },
-            assignees: { select: { id: true, name: true, avatar: true } },
+            assignee: { select: { id: true, name: true, avatar: true, teamId: true } },
+            assignees: { select: { id: true, name: true, avatar: true, teamId: true } },
             _count: { select: { subtasks: true, comments: true } },
           },
           orderBy: [{ status: 'asc' }, { order: 'asc' }],

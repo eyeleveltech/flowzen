@@ -69,15 +69,15 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
       if (dueDateTo) dateRange.lte = new Date(dueDateTo as string);
       where.dueDate = dateRange;
     }
-    
+
     const andConditions: any[] = [];
-    
+
     if (filter === 'overdue') {
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
       where.dueDate = { lt: todayStart };
       if (!status) {
-        where.status = { notIn: ['COMPLETED'] };
+        where.status = { notIn: ['COMPLETED', 'ON_HOLD'] };
       }
     } else if (filter === 'today') {
       const todayStart = new Date();
@@ -102,8 +102,8 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     } else if (filter === 'approval') {
       where.status = 'REVIEW';
     }
-    
-    
+
+
     // Match either the primary assignee or any of the multi-assignees.
     const assigneeMatch = (uid: string) => ({ OR: [{ assigneeId: uid }, { assignees: { some: { id: uid } } }] });
     if (req.user!.role === 'TEAM_MEMBER') {
@@ -141,7 +141,7 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
       prisma.task.findMany({
         where: where as any,
         include: {
-          project: { select: { id: true, name: true, color: true, client: { select: { name: true } } } },
+          project: { select: { id: true, name: true, color: true, client: { select: { name: true, company: true } } } },
           assignee: { select: { id: true, name: true, avatar: true } },
           assignees: { select: { id: true, name: true, avatar: true } },
           assignedBy: { select: { id: true, name: true, avatar: true } },
@@ -149,20 +149,20 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
           _count: { select: { subtasks: true, comments: true, checklist: true } },
         },
         orderBy: sort === 'dueDate_asc' ? [{ dueDate: 'asc' }]
-               : sort === 'dueDate_desc' ? [{ dueDate: 'desc' }]
-               : sort === 'createdAt_asc' ? [{ createdAt: 'asc' }]
-               : sort === 'createdAt_desc' ? [{ createdAt: 'desc' }]
-               : sort === 'updatedAt_asc' ? [{ updatedAt: 'asc' }]
-               : sort === 'updatedAt_desc' ? [{ updatedAt: 'desc' }]
-               : sort === 'project_asc' ? [{ project: { name: 'asc' } }]
-               : sort === 'project_desc' ? [{ project: { name: 'desc' } }]
-               : sort === 'priority_asc' ? [{ priority: 'asc' }]
-               : sort === 'priority_desc' ? [{ priority: 'desc' }]
-               : sort === 'status_asc' ? [{ status: 'asc' }]
-               : sort === 'status_desc' ? [{ status: 'desc' }]
-               : sort === 'title_asc' ? [{ title: 'asc' }]
-               : sort === 'title_desc' ? [{ title: 'desc' }]
-               : [{ createdAt: 'desc' }],
+          : sort === 'dueDate_desc' ? [{ dueDate: 'desc' }]
+            : sort === 'createdAt_asc' ? [{ createdAt: 'asc' }]
+              : sort === 'createdAt_desc' ? [{ createdAt: 'desc' }]
+                : sort === 'updatedAt_asc' ? [{ updatedAt: 'asc' }]
+                  : sort === 'updatedAt_desc' ? [{ updatedAt: 'desc' }]
+                    : sort === 'project_asc' ? [{ project: { name: 'asc' } }]
+                      : sort === 'project_desc' ? [{ project: { name: 'desc' } }]
+                        : sort === 'priority_asc' ? [{ priority: 'asc' }]
+                          : sort === 'priority_desc' ? [{ priority: 'desc' }]
+                            : sort === 'status_asc' ? [{ status: 'asc' }]
+                              : sort === 'status_desc' ? [{ status: 'desc' }]
+                                : sort === 'title_asc' ? [{ title: 'asc' }]
+                                  : sort === 'title_desc' ? [{ title: 'desc' }]
+                                    : [{ createdAt: 'desc' }],
         skip,
         take: parseInt(limit as string),
       }),
@@ -300,7 +300,7 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
       const isMember = await prisma.projectMember.findFirst({
         where: { projectId: req.body.projectId, userId: req.user!.userId }
       });
-      
+
       let isTeamMember = false;
       if (!isMember) {
         const projectTeams = await prisma.projectTeam.findMany({
@@ -485,7 +485,7 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
       });
 
       // Notify the project owner + reviewer when work is completed (not the completer).
-      
+
       if (task.status === 'COMPLETED' && existing.status !== 'COMPLETED') {
         if (task.isRecurring && task.recurrenceFrequency) {
           // Spawn the next task
@@ -510,14 +510,14 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
               order: task.order + 1,
             }
           });
-          
+
           if (existing.assignees && existing.assignees.length > 0) {
             await prisma.task.update({
               where: { id: nextTask.id },
               data: { assignees: { connect: existing.assignees.map(a => ({ id: a.id })) } }
             });
           }
-          
+
           await prisma.activity.create({
             data: {
               type: 'TASK_CREATED',

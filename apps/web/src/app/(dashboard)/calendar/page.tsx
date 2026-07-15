@@ -7,6 +7,7 @@ import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { getClientDisplayName, getInitials } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
+import { useTeams } from '@/hooks/useQueries';
 
 interface CalendarTask {
   id: string;
@@ -40,10 +41,11 @@ export default function CalendarPage() {
   const [clients, setClients] = useState<Client[]>([]);
   
   // Filters
+  const { data: teams = [] } = useTeams();
   const [assigneeFilter, setAssigneeFilter] = useState<string[]>(isStaff && user?.id ? [user.id] : []);
   const [projectIdFilter, setProjectIdFilter] = useState<string[]>([]);
   const [clientIdFilter, setClientIdFilter] = useState<string[]>([]);
-  const [typeFilter, setTypeFilter] = useState<string[]>([]);
+  const [departmentFilter, setDepartmentFilter] = useState<string[]>([]);
   const [hideDone, setHideDone] = useState(true);
 
   const year = date.getFullYear();
@@ -52,7 +54,7 @@ export default function CalendarPage() {
 
   useEffect(() => {
     fetchTasks();
-  }, [assigneeFilter, projectIdFilter, clientIdFilter, typeFilter, hideDone, date, view]);
+  }, [assigneeFilter, projectIdFilter, clientIdFilter, departmentFilter, hideDone, date, view]);
 
   useEffect(() => {
     if (!isStaff) {
@@ -70,7 +72,7 @@ export default function CalendarPage() {
 
     if (projectIdFilter.length) params.set('projectId', projectIdFilter.join(','));
     if (clientIdFilter.length) params.set('clientId', clientIdFilter.join(','));
-    if (typeFilter.length) params.set('type', typeFilter.join(','));
+    if (departmentFilter.length) params.set('teamId', departmentFilter.join(','));
 
     api.get<{ tasks: CalendarTask[] }>(`/tasks?${params}`)
       .then((d) => {
@@ -148,81 +150,74 @@ export default function CalendarPage() {
 
   return (
     <div>
-      <div className="flex flex-col gap-4 mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-primary tracking-tight">Calendar</h1>
-            <p className="text-sm text-secondary mt-1">Tasks and deadlines overview</p>
-          </div>
-          <div className="flex items-center gap-2 p-1 bg-[#F3F4F6] rounded-xl border border-border">
-            <button 
-              onClick={() => setView('month')} 
-              className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${view === 'month' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
-            >Month</button>
-            <button 
-              onClick={() => setView('week')} 
-              className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${view === 'week' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
-            >Week</button>
-          </div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-semibold text-primary tracking-tight">Calendar</h1>
+          <p className="text-sm text-secondary mt-1">Tasks and deadlines overview</p>
         </div>
-        
-        {/* Filters Header */}
-        <div className="flex flex-wrap items-center gap-3 p-4 bg-white border border-border rounded-2xl">
+      </div>
+
+      {/* Redesigned Clean Calendar Toolbar */}
+      <div className="bg-white border border-border rounded-2xl p-4 shadow-sm flex flex-col gap-4 w-full mb-6">
+        {/* Row 1: Active Filter Pills */}
+        <div className="flex flex-wrap items-center gap-2 w-full">
           <button
             onClick={() => setAssigneeFilter(assigneeFilter.length === 1 && assigneeFilter[0] === user?.id ? [] : (user?.id ? [user.id] : []))}
-            className={`px-4 py-2 text-xs font-medium rounded-xl transition-all ${assigneeFilter.length === 1 && assigneeFilter[0] === user?.id ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-surface border border-border text-[#374151] hover:bg-[#F3F4F6]'}`}
+            className={assigneeFilter.length === 1 && assigneeFilter[0] === user?.id 
+              ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" 
+              : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"
+            }
           >
             My Tasks
           </button>
 
-          <div className="w-44">
+          <div className="shrink-0">
             <MultiSelect
               value={projectIdFilter}
               onChange={setProjectIdFilter}
               placeholder="Projects"
+              triggerClassName={projectIdFilter.length > 0 ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
               options={projects.map(p => ({ label: p.name, value: p.id }))}
             />
           </div>
-          <div className="w-44">
+
+          <div className="shrink-0">
             <MultiSelect
               value={clientIdFilter}
               onChange={setClientIdFilter}
               placeholder="Clients/Owners"
+              triggerClassName={clientIdFilter.length > 0 ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
               options={clients.map(c => ({ label: getClientDisplayName(c), value: c.id }))}
             />
           </div>
-          <div className="w-44">
+
+          <div className="shrink-0">
             <MultiSelect
-              value={typeFilter}
-              onChange={setTypeFilter}
-              placeholder="Types"
-              options={[
-                { label: 'Design', value: 'DESIGN' },
-                { label: 'Content', value: 'CONTENT' },
-                { label: 'Video', value: 'VIDEO' },
-                { label: 'Digital Marketing', value: 'DIGITAL_MARKETING' },
-                { label: 'Social Media', value: 'SOCIAL_MEDIA' },
-                { label: 'Development', value: 'DEVELOPMENT' },
-                { label: 'Strategy', value: 'STRATEGY' },
-                { label: 'Business', value: 'BUSINESS' },
-                { label: 'Other', value: 'OTHER' },
-              ]}
+              value={departmentFilter}
+              onChange={setDepartmentFilter}
+              placeholder="Departments"
+              triggerClassName={departmentFilter.length > 0 ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              options={teams.map((t: any) => ({ label: t.name, value: t.id }))}
             />
           </div>
+
           {!isStaff && (
-            <div className="w-44">
+            <div className="shrink-0">
               <MultiSelect
                 value={assigneeFilter}
                 onChange={setAssigneeFilter}
                 placeholder="Assignees"
+                triggerClassName={assigneeFilter.length > 0 ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
                 options={members.map(m => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
               />
             </div>
           )}
+
+          {/* Hide Done Tasks Checkbox */}
           <button
             type="button"
             onClick={() => setHideDone(!hideDone)}
-            className="flex items-center gap-2 text-xs font-medium text-[#374151] ml-auto cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-primary/10 rounded-md"
+            className="flex items-center gap-2 text-xs font-semibold text-secondary ml-auto cursor-pointer select-none focus:outline-none h-9 hover:text-primary transition-colors shrink-0"
           >
             <div className={`flex items-center justify-center w-4 h-4 rounded-[4px] border transition-colors ${hideDone ? 'bg-primary border-primary' : 'border-[#D1D5DB] bg-white'}`}>
               {hideDone && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
@@ -230,26 +225,56 @@ export default function CalendarPage() {
             Hide Done Tasks
           </button>
         </div>
+
+        {/* Separator line */}
+        <div className="h-px bg-border/60 w-full" />
+
+        {/* Row 2: Navigation & switcher */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 w-full">
+          {/* Left Spacer to push Navigation to Center */}
+          <div className="hidden sm:block flex-1" />
+
+          {/* Center Side: Navigation triggers inside calendar view */}
+          <div className="flex items-center justify-center gap-2 flex-1 sm:flex-none">
+            <button onClick={prevPeriod} className="p-2 rounded-xl hover:bg-gray-50 border border-border bg-white transition-colors h-9 w-9 flex items-center justify-center shrink-0">
+              <ChevronLeft className="h-4 w-4 text-secondary" />
+            </button>
+            <div className="text-sm font-semibold text-primary px-2 min-w-36 text-center select-none">
+              {view === 'month' 
+                ? date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+                : `Week of ${startOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+              }
+            </div>
+            <button onClick={nextPeriod} className="p-2 rounded-xl hover:bg-gray-50 border border-border bg-white transition-colors h-9 w-9 flex items-center justify-center shrink-0">
+              <ChevronRight className="h-4 w-4 text-secondary" />
+            </button>
+          </div>
+
+          {/* Right Side: Segmented switcher */}
+          <div className="flex justify-center sm:justify-end flex-1">
+            <div className="flex bg-[#F3F4F6] p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center">
+              <button 
+                type="button"
+                onClick={() => setView('month')} 
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all shrink-0 ${view === 'month' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
+              >
+                Month
+              </button>
+              <button 
+                type="button"
+                onClick={() => setView('week')} 
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all shrink-0 ${view === 'week' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
+              >
+                Week
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="rounded-2xl border border-border bg-white overflow-hidden">
         <div className="overflow-x-auto md:overflow-x-visible">
           <div className="min-w-full md:min-w-[700px]">
-            {/* Navigation */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
-              <button onClick={prevPeriod} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
-                <ChevronLeft className="h-4 w-4 text-secondary" />
-              </button>
-              <h2 className="text-sm font-semibold text-primary">
-                {view === 'month' 
-                  ? date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-                  : `Week of ${startOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-                }
-              </h2>
-              <button onClick={nextPeriod} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
-                <ChevronRight className="h-4 w-4 text-secondary" />
-              </button>
-            </div>
 
             {/* Desktop Grid Headers */}
             <div className="hidden md:grid grid-cols-7 border-b border-[#F3F4F6]">

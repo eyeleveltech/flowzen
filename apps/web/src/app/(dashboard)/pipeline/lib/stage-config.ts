@@ -42,16 +42,16 @@ export const STAGE_FIELDS: Record<string, StageField[]> = {
   // CONTRACT → ACTIVE_RETAINER / ACTIVE_PROJECT (Won & Closed → Active)
   // Hard gate: signedContractLink REQUIRED — cannot proceed without it
   ACTIVE_RETAINER: [
-    { key: 'signedContractLink', label: 'Signed Contract Document Link', type: 'text', required: true },
-    { key: 'paymentTerms', label: 'Payment Terms', type: 'select', options: ['100% Advance', '50-50', 'Monthly', 'Milestone-based'], required: true },
-    { key: 'billingFrequency', label: 'Billing Frequency', type: 'select', options: ['Monthly', 'Quarterly', 'One-Time'], required: true },
-    { key: 'startDate', label: 'Start Date Confirmed', type: 'date', required: true },
+    { key: 'signedContractLink', label: 'Signed Contract Document Link', type: 'text', required: false },
+    { key: 'paymentTerms', label: 'Payment Terms', type: 'select', options: ['100% Advance', '50-50', 'Monthly', 'Milestone-based'], required: false },
+    { key: 'billingFrequency', label: 'Billing Frequency', type: 'select', options: ['Monthly', 'Quarterly', 'One-Time'], required: false },
+    { key: 'startDate', label: 'Start Date Confirmed', type: 'date', required: false },
   ],
   ACTIVE_PROJECT: [
-    { key: 'signedContractLink', label: 'Signed Contract Document Link', type: 'text', required: true },
-    { key: 'paymentTerms', label: 'Payment Terms', type: 'select', options: ['100% Advance', '50-50', 'Monthly', 'Milestone-based'], required: true },
-    { key: 'billingFrequency', label: 'Billing Frequency', type: 'select', options: ['Monthly', 'Quarterly', 'One-Time'], required: true },
-    { key: 'startDate', label: 'Start Date Confirmed', type: 'date', required: true },
+    { key: 'signedContractLink', label: 'Signed Contract Document Link', type: 'text', required: false },
+    { key: 'paymentTerms', label: 'Payment Terms', type: 'select', options: ['100% Advance', '50-50', 'Monthly', 'Milestone-based'], required: false },
+    { key: 'billingFrequency', label: 'Billing Frequency', type: 'select', options: ['Monthly', 'Quarterly', 'One-Time'], required: false },
+    { key: 'startDate', label: 'Start Date Confirmed', type: 'date', required: false },
   ],
 
   // ON_HOLD: no transition fields — parked from any stage
@@ -71,9 +71,9 @@ export const STAGE_FIELDS: Record<string, StageField[]> = {
 export const STAGE_PROBABILITIES: Record<string, number> = {
   NEW_LEAD: 0.10,
   OUTREACH: 0.20,
-  MEETING: 0.35,
-  PROPOSAL: 0.50,
-  NEGOTIATION: 0.75,
+  MEETING: 0.30,
+  PROPOSAL: 0.40,
+  NEGOTIATION: 0.70,
   CONTRACT: 0.90,
   ACTIVE_RETAINER: 1.00,
   ACTIVE_PROJECT: 1.00,

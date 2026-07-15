@@ -17,12 +17,12 @@ import { LeadModal } from './LeadModal';
 // All pipeline stages in chronological order (used by the per-card stage menu)
 const PIPELINE_STAGES = [
   'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
-  'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'ON_HOLD', 'PROJECT_COMPLETED', 'CHURNED',
+  'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'CONTRACT', 'ON_HOLD', 'PROJECT_COMPLETED', 'CHURNED',
 ];
 
 // Probability weights used to compute weighted deal value per column
 const STAGE_WEIGHTS: Record<string, number> = {
-  NEW_LEAD: 0.10, OUTREACH: 0.20, MEETING: 0.35, PROPOSAL: 0.50, NEGOTIATION: 0.75,
+  NEW_LEAD: 0.10, OUTREACH: 0.20, MEETING: 0.30, PROPOSAL: 0.40, NEGOTIATION: 0.70,
   CONTRACT: 0.90, ACTIVE_RETAINER: 1.00, ACTIVE_PROJECT: 1.00, ON_HOLD: 0.10,
   PROJECT_COMPLETED: 1.00, CHURNED: 0.00,
 };
@@ -33,8 +33,8 @@ const GROUPS = [
   { id: 'Meeting', title: 'Meeting', color: '#d97706', stages: ['MEETING'] },
   { id: 'Proposal', title: 'Proposal', color: '#2563eb', stages: ['PROPOSAL'] },
   { id: 'Negotiation', title: 'Negotiation', color: '#0369a1', stages: ['NEGOTIATION'] },
-  { id: 'WonClosed', title: 'Won & Closed', color: '#15803d', stages: ['CONTRACT'] },
   { id: 'Active', title: 'Active', color: '#0f766e', stages: ['ACTIVE_RETAINER', 'ACTIVE_PROJECT'] },
+  { id: 'WonClosed', title: 'Won & Closed', color: '#15803d', stages: ['CONTRACT'] },
   { id: 'OnHold', title: 'On Hold', color: '#9ca3af', stages: ['ON_HOLD'] },
   { id: 'Completed', title: 'Project Completed', color: '#475569', stages: ['PROJECT_COMPLETED'] },
   { id: 'Lost', title: 'Lost & Closed', color: '#dc2626', stages: ['CHURNED'] },
@@ -382,26 +382,38 @@ export function PipelineBoardView() {
                                 >
                                   {badgeInfo.label}
                                 </div>
-
-                                {/* Content */}
-                                <div className="pr-16">
-                                  <h4 className="text-[15px] font-bold text-primary truncate">
-                                    {lead.contactName || lead.companyName || lead.client?.name || 'Unknown'}
-                                  </h4>
-                                  {lead.leadId && (
-                                    <span className="text-[10px] font-mono text-gray-400 tracking-wide">{lead.leadId}</span>
-                                  )}
-                                </div>
-                                <div className="mt-1">
-                                  <p className="text-sm font-medium text-secondary truncate">
-                                    {lead.companyName || lead.client?.company || lead.contactEmail || ''}
-                                  </p>
-                                  {(lead.jobTitle || lead.client?.company) && (
-                                    <p className="text-[11px] text-gray-400 truncate mt-0.5">
-                                      {lead.jobTitle || lead.client?.company}
-                                    </p>
-                                  )}
-                                </div>
+                                 {/* Content */}
+                                 {(() => {
+                                   const displayTitle = lead.companyName || lead.client?.company || lead.contactName || lead.client?.name || 'Unknown';
+                                   const hasCompany = !!(lead.companyName || lead.client?.company);
+                                   const displaySubtitle = hasCompany 
+                                     ? (lead.contactName || lead.client?.name || lead.contactEmail || '')
+                                     : (lead.contactEmail || '');
+                                   return (
+                                     <>
+                                       <div className="pr-16">
+                                         <h4 className="text-[15px] font-bold text-primary truncate" title={displayTitle}>
+                                           {displayTitle}
+                                         </h4>
+                                         {lead.leadId && (
+                                           <span className="text-[10px] font-mono text-gray-400 tracking-wide">{lead.leadId}</span>
+                                         )}
+                                       </div>
+                                       <div className="mt-1">
+                                         {displaySubtitle && (
+                                           <p className="text-sm font-medium text-secondary truncate" title={displaySubtitle}>
+                                             {displaySubtitle}
+                                           </p>
+                                         )}
+                                         {lead.jobTitle && (
+                                           <p className="text-[11px] text-gray-400 truncate mt-0.5" title={lead.jobTitle}>
+                                             {lead.jobTitle}
+                                           </p>
+                                         )}
+                                       </div>
+                                     </>
+                                   );
+                                 })()}
 
                                 <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
                                   <p className="text-sm font-bold text-primary">

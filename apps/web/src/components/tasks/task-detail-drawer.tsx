@@ -53,7 +53,7 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
     task?.assignee?.id === currentUserId ||
     (task?.assignees || []).some((a: any) => a.id === currentUserId)
   ));
-  const dueOverdue = !!(task?.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'COMPLETED');
+  const dueOverdue = !!(task?.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'COMPLETED' && task.status !== 'ON_HOLD');
 
   async function deleteTask() {
     const ok = await confirm({

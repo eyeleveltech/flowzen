@@ -395,145 +395,167 @@ function ClientsContent() {
           </h1>
           <p className="text-sm text-secondary mt-1">{total} total clients</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-          {(!!search || statusFilter.length > 0 || industryFilter.length > 0 || engagementTypeFilter.length > 0 || accountManagerFilter.length > 0) && (
-            <button
-              onClick={() => {
-                setSearch('');
-                setStatusFilter([]);
-                setIndustryFilter([]);
-                setEngagementTypeFilter([]);
-                setAccountManagerFilter([]);
-                router.replace('/clients', { scroll: false });
-              }}
-              className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 rounded-xl bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors border border-red-100 whitespace-nowrap"
-            >
-              <X className="h-4 w-4" /> Clear Filters
-            </button>
-          )}
-          <button
-            onClick={handleExport}
-            disabled={isExporting}
-            className="flex-1 sm:flex-none justify-center flex items-center gap-2 rounded-xl border border-border bg-white px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all disabled:opacity-50 whitespace-nowrap"
-          >
-            <Download className="h-4 w-4" />
-            {isExporting ? 'Exporting...' : 'Export CSV'}
-          </button>
-          <button
-            onClick={() => {
-              setShowCreate(true);
-              setCreationMode('MANUAL');
-            }}
-            className="flex-1 sm:flex-none justify-center flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all whitespace-nowrap"
-          >
-            <Plus className="h-4 w-4" /> Add Client
-          </button>
-        </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-[#F9FAFB]/50 border border-border rounded-2xl p-3.5 shadow-sm flex flex-col gap-3.5 w-full mb-6">
-        <div className="flex flex-wrap items-center justify-between gap-3 w-full">
+      {/* Redesigned Clean Clients Toolbar */}
+      <div className="bg-white border border-border rounded-2xl p-4 shadow-sm flex flex-col gap-4 w-full mb-6">
+        {/* Row 1: Search + Active Filter Pills */}
+        <div className="flex flex-wrap items-center gap-2 w-full">
           {/* Search Box */}
-          <div className="relative w-full sm:w-60 md:w-130 shrink-0">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
+          <div className="relative w-full sm:w-64 md:w-80 shrink-0">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search clients..."
-              className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+              className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-[#9CA3AF]"
             />
           </div>
 
-          {/* Select Dropdowns */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Status Select */}
-            <div className="w-full sm:w-36">
-              <MultiSelect
-                value={statusFilter}
-                onChange={setStatusFilter}
-                placeholder="Status"
-                showSelectAll={true}
-                options={[
-                  { label: 'Prospect', value: 'PROSPECT' },
-                  { label: 'Active', value: 'ACTIVE' },
-                  { label: 'On Hold', value: 'ONHOLD' },
-                  { label: 'Churned', value: 'CHURNED' },
-                  { label: 'Completed', value: 'PROJECT_COMPLETED' },
-                ]}
-              />
-            </div>
+          {/* Filter Pills */}
+          <div className="shrink-0">
+            <MultiSelect
+              value={statusFilter}
+              onChange={setStatusFilter}
+              placeholder="Status"
+              showSelectAll={true}
+              triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              options={[
+                { label: 'Prospect', value: 'PROSPECT' },
+                { label: 'Active', value: 'ACTIVE' },
+                { label: 'On Hold', value: 'ONHOLD' },
+                { label: 'Churned', value: 'CHURNED' },
+                { label: 'Completed', value: 'PROJECT_COMPLETED' },
+              ]}
+            />
+          </div>
 
-            {/* Engagement Select */}
-            <div className="w-full sm:w-36">
-              <MultiSelect
-                value={engagementTypeFilter}
-                onChange={setEngagementTypeFilter}
-                placeholder="Engagements"
-                showSelectAll={true}
-                options={[
-                  { label: 'Retainer', value: 'Retainer' },
-                  { label: 'Project', value: 'Project' },
-                  { label: 'Event', value: 'Event' },
-                  { label: 'Ad-hoc', value: 'Ad-hoc' }
-                ]}
-              />
-            </div>
+          <div className="shrink-0">
+            <MultiSelect
+              value={engagementTypeFilter}
+              onChange={setEngagementTypeFilter}
+              placeholder="Engagements"
+              showSelectAll={true}
+              triggerClassName={engagementTypeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              options={[
+                { label: 'Retainer', value: 'Retainer' },
+                { label: 'Project', value: 'Project' },
+                { label: 'Event', value: 'Event' },
+                { label: 'Ad-hoc', value: 'Ad-hoc' }
+              ]}
+            />
+          </div>
 
-            {/* Account Manager Select */}
-            <div className="w-full sm:w-44">
-              <MultiSelect
-                value={accountManagerFilter}
-                onChange={setAccountManagerFilter}
-                placeholder="Account Manager"
-                showSelectAll={true}
-                options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
-              />
-            </div>
+          <div className="shrink-0">
+            <MultiSelect
+              value={accountManagerFilter}
+              onChange={setAccountManagerFilter}
+              placeholder="Account Manager"
+              showSelectAll={true}
+              triggerClassName={accountManagerFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
+            />
+          </div>
 
-            {/* Industries Select */}
-            <div className="w-full sm:w-36">
-              <MultiSelect
-                value={industryFilter}
-                onChange={setIndustryFilter}
-                placeholder="Industries"
-                showSelectAll={true}
-                options={INDUSTRY_OPTIONS.map((i) => ({ label: i, value: i }))}
-              />
+          <div className="shrink-0">
+            <MultiSelect
+              value={industryFilter}
+              onChange={setIndustryFilter}
+              placeholder="Industries"
+              showSelectAll={true}
+              triggerClassName={industryFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              options={INDUSTRY_OPTIONS.map((i) => ({ label: i, value: i }))}
+            />
+          </div>
+
+          {/* Action buttons on the right corner */}
+          <div className="flex items-center gap-2 ml-auto shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowViewSettings(true)}
+              className="p-2 rounded-xl border border-border bg-white hover:bg-gray-50 transition-colors text-secondary hover:text-primary h-9 w-9 flex items-center justify-center shrink-0"
+              title="Configure View Settings"
+            >
+              <Settings className="h-3.5 w-3.5" />
+            </button>
+
+            <button
+              onClick={handleExport}
+              disabled={isExporting}
+              className="flex items-center gap-2 rounded-xl border border-border bg-white px-3 text-xs font-semibold text-[#374151] hover:bg-[#F9FAFB] transition-all disabled:opacity-50 h-9 shrink-0 whitespace-nowrap"
+            >
+              <Download className="h-3.5 w-3.5" /> Export CSV
+            </button>
+
+            <button
+              onClick={() => {
+                setShowCreate(true);
+                setCreationMode('MANUAL');
+              }}
+              className="flex items-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-semibold text-white hover:bg-[#1F2937] transition-all h-9 shrink-0 whitespace-nowrap"
+            >
+              <Plus className="h-3.5 w-3.5" /> Add Client
+            </button>
+          </div>
+        </div>
+
+        {/* Separator line */}
+        <div className="h-px bg-border/60 w-full" />
+
+        {/* Row 2: Actions */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
+          {/* Left Side: Count summary */}
+          <div className="text-xs font-medium text-secondary">
+            Showing {clients.length} of {total} clients
+          </div>
+
+          {/* Right Side: View Toggles & Clear Filters */}
+          <div className="flex items-center justify-end gap-2.5 ml-auto sm:ml-0">
+            {(!!search || statusFilter.length > 0 || industryFilter.length > 0 || engagementTypeFilter.length > 0 || accountManagerFilter.length > 0) && (
+              <button
+                onClick={() => {
+                  setSearch('');
+                  setStatusFilter([]);
+                  setIndustryFilter([]);
+                  setEngagementTypeFilter([]);
+                  setAccountManagerFilter([]);
+                  router.replace('/clients', { scroll: false });
+                }}
+                className="flex items-center gap-1.5 h-9 rounded-xl bg-red-50 px-3 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors border border-red-100 whitespace-nowrap"
+              >
+                <X className="h-3.5 w-3.5" /> Clear Filters
+              </button>
+            )}
+
+            {/* Segmented View Switcher */}
+            <div className="flex bg-[#F3F4F6] p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center overflow-x-auto no-scrollbar max-w-full">
+              <button 
+                type="button"
+                onClick={() => {
+                  setCurrentView('table');
+                  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ name: viewName, visibleColumns, viewType: 'table' }));
+                }} 
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${currentView === 'table' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
+                title="Table View"
+              >
+                <List className="w-3.5 h-3.5 shrink-0" />
+                <span>Table</span>
+              </button>
+              <button 
+                type="button"
+                onClick={() => {
+                  setCurrentView('timeline');
+                  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ name: viewName, visibleColumns, viewType: 'timeline' }));
+                }} 
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${currentView === 'timeline' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
+                title="Timeline View"
+              >
+                <LayoutGrid className="w-3.5 h-3.5 shrink-0" />
+                <span>Timeline</span>
+              </button>
             </div>
           </div>
         </div>
-      </div>
-
-      {/* View Tabs */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        {/* Left Side: View switcher tabs */}
-        <div className="flex items-center rounded-xl border border-border p-1 bg-white overflow-x-auto max-w-full whitespace-nowrap no-scrollbar shrink-0">
-          <button 
-            type="button"
-            onClick={() => setCurrentView('table')} 
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all shrink-0 ${currentView === 'table' ? 'bg-primary text-white shadow-sm' : 'text-secondary hover:text-primary'}`}
-          >
-            <List className="w-3.5 h-3.5 shrink-0" /> Table
-          </button>
-          <button 
-            type="button"
-            onClick={() => setCurrentView('timeline')} 
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all shrink-0 ${currentView === 'timeline' ? 'bg-primary text-white shadow-sm' : 'text-secondary hover:text-primary'}`}
-          >
-            <LayoutGrid className="w-3.5 h-3.5 shrink-0" /> Timeline
-          </button>
-        </div>
-
-        {/* Right Side: View Settings */}
-        <button
-          type="button"
-          onClick={() => setShowViewSettings(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#374151] bg-white border border-border rounded-lg shadow-sm transition-colors hover:bg-gray-50 h-[38px] shrink-0"
-          title="Configure View Settings"
-        >
-          <Settings className="w-3.5 h-3.5" /> View Settings
-        </button>
       </div>
 
       {/* Desktop Table View */}

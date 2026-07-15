@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, Check, ChevronsUpDown } from 'lucide-react';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { Drawer } from '@/components/ui/drawer';
+import { cn } from '@/lib/utils';
 
 interface Option {
   value: string;
@@ -22,9 +23,10 @@ interface MultiSelectProps {
   // false = the chip trigger that grows as you add items (good for tall forms).
   compact?: boolean;
   showSelectAll?: boolean;
+  triggerClassName?: string;
 }
 
-export function MultiSelect({ options, value, onChange, placeholder = 'Select...', compact = true, showSelectAll = true }: MultiSelectProps) {
+export function MultiSelect({ options, value, onChange, placeholder = 'Select...', compact = true, showSelectAll = true, triggerClassName }: MultiSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -110,7 +112,11 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
             if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') { e.preventDefault(); setIsOpen(true); }
             if (e.key === 'Escape') setIsOpen(false);
           }}
-          className="flex h-[42px] w-full items-center justify-between rounded-xl border border-border bg-white px-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all text-left"
+          className={cn(
+            "flex h-[42px] w-full items-center justify-between rounded-xl border border-border bg-white px-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all text-left",
+            triggerClassName ? "h-auto border-transparent focus:ring-0 focus:border-transparent px-0 rounded-none shadow-none" : "",
+            triggerClassName
+          )}
         >
           <span className={`min-w-0 truncate ${selectedOptions.length === 0 ? 'text-[#9CA3AF]' : 'text-primary'}`}>
             {selectedOptions.length === 0
