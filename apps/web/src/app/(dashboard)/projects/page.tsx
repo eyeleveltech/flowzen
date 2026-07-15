@@ -226,123 +226,144 @@ function ProjectsContent() {
           </h1>
           <p className="text-sm text-secondary mt-1">{projects.length} projects</p>
         </div>
-        <div className="flex items-center gap-3">
-          {(!!search || statusFilter.length > 0 || clientFilter.length > 0 || ownerFilter.length > 0 || !!dueDateFilter) && (
-            <button
-              onClick={() => {
-                setSearch('');
-                setStatusFilter([]);
-                setClientFilter([]);
-                setOwnerFilter([]);
-                setDueDateFilter('');
-                router.replace('/projects', { scroll: false });
-              }}
-              className="flex items-center gap-1.5 rounded-xl bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors border border-red-100"
-            >
-              <X className="h-4 w-4" /> Clear Filters
-            </button>
-          )}
-          {user?.role !== 'TEAM_MEMBER' && (
-            <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all">
-              <Plus className="h-4 w-4" /> New Project
-            </button>
-          )}
-        </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="flex flex-col gap-4 mb-6">
-        {/* Row 1: Search & Filters (takes full width) */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-[#F9FAFB]/50 p-3 rounded-2xl border border-border">
-          <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 flex-1 w-full">
-            {/* Search Input and Mobile Toggle */}
-            <div className="flex items-center gap-2 w-full md:w-auto">
-              <div className="relative flex-1 md:w-64 md:flex-initial shrink-0">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search projects..." className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-              </div>
-              <button 
-                onClick={() => setShowMobileFilters(!showMobileFilters)} 
-                className="md:hidden flex items-center justify-center p-2.5 rounded-xl border border-border bg-white text-secondary hover:bg-gray-50 transition-colors shrink-0 h-[38px]"
-                title="Toggle Filters"
+      {/* Redesigned Clean Projects Toolbar */}
+      <div className="bg-white border border-border rounded-2xl p-4 shadow-sm flex flex-col gap-4 w-full mb-6">
+        {/* Row 1: Search + Active Filter Pills */}
+        <div className="flex flex-wrap items-center gap-2 w-full">
+          {/* Search Box */}
+          <div className="relative w-full sm:w-64 md:w-80 shrink-0">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search projects..."
+              className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-[#9CA3AF]"
+            />
+          </div>
+
+          {/* Filter Pills */}
+          <div className="shrink-0">
+            <MultiSelect
+              value={statusFilter}
+              onChange={setStatusFilter}
+              placeholder="Status"
+              showSelectAll
+              triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              options={[
+                { label: 'Active', value: 'ACTIVE' },
+                { label: 'Delayed', value: 'DELAYED' },
+                { label: 'Planning', value: 'PLANNING' },
+                { label: 'In Progress', value: 'IN_PROGRESS' },
+                { label: 'In Review', value: 'REVIEW' },
+                { label: 'Completed', value: 'COMPLETED' },
+                { label: 'On Hold', value: 'ON_HOLD' },
+                { label: 'Cancelled', value: 'CANCELLED' }
+              ]}
+            />
+          </div>
+
+          <div className="shrink-0">
+            <MultiSelect
+              value={clientFilter}
+              onChange={setClientFilter}
+              placeholder="Clients"
+              showSelectAll
+              triggerClassName={clientFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              options={clients.filter(c => c._count?.projects > 0).map(c => ({ label: getClientDisplayName(c), value: c.id }))}
+            />
+          </div>
+
+          {user?.role !== 'TEAM_MEMBER' && (
+            <div className="shrink-0">
+              <MultiSelect
+                value={ownerFilter}
+                onChange={setOwnerFilter}
+                placeholder="Project Managers"
+                showSelectAll
+                triggerClassName={ownerFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+                options={members.filter(m => m.totalProjects > 0).map(m => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
+              />
+            </div>
+          )}
+
+          <div className="shrink-0">
+            <input
+              type="date"
+              value={dueDateFilter}
+              onChange={(e) => setDueDateFilter(e.target.value)}
+              className="h-9 rounded-xl border border-dashed border-gray-300 bg-white hover:bg-gray-50 text-secondary px-3 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer"
+              title="Due Date Filter"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 ml-auto shrink-0">
+            <button
+              onClick={() => setShowViewSettings(true)}
+              className="p-2 rounded-xl border border-border bg-white hover:bg-gray-50 transition-colors text-secondary hover:text-primary h-9 w-9 flex items-center justify-center shrink-0"
+              title="Configure View Settings"
+            >
+              <Settings className="h-3.5 w-3.5" />
+            </button>
+
+            {user?.role !== 'TEAM_MEMBER' && (
+              <button
+                onClick={() => setShowCreate(true)}
+                className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-[#1F2937] transition-all h-9 shrink-0"
               >
-                <Filter className="h-4 w-4" />
+                <Plus className="h-3.5 w-3.5" /> New Project
               </button>
-            </div>
-            
-            {/* Filters */}
-            <div className={`flex-wrap items-center gap-2 flex-1 w-full ${showMobileFilters ? 'flex' : 'hidden md:flex'}`}>
-              <div className="w-full md:w-44">
-                <MultiSelect
-                  value={statusFilter}
-                  onChange={setStatusFilter}
-                  placeholder="Status"
-                  showSelectAll
-                  options={[
-                    { label: 'Active', value: 'ACTIVE' },
-                    { label: 'Delayed', value: 'DELAYED' },
-                    { label: 'Planning', value: 'PLANNING' },
-                    { label: 'In Progress', value: 'IN_PROGRESS' },
-                    { label: 'In Review', value: 'REVIEW' },
-                    { label: 'Completed', value: 'COMPLETED' },
-                    { label: 'On Hold', value: 'ON_HOLD' },
-                    { label: 'Cancelled', value: 'CANCELLED' }
-                  ]}
-                />
-              </div>
-              <div className="w-full md:w-44">
-                <MultiSelect
-                  value={clientFilter}
-                  onChange={setClientFilter}
-                  placeholder="Clients"
-                  showSelectAll
-                  options={clients.filter(c => c._count?.projects > 0).map(c => ({ label: getClientDisplayName(c), value: c.id }))}
-                />
-              </div>
-              {user?.role !== 'TEAM_MEMBER' && (
-                <div className="w-full md:w-48">
-                  <MultiSelect
-                    value={ownerFilter}
-                    onChange={setOwnerFilter}
-                    placeholder="Project Managers"
-                    showSelectAll
-                    options={members.filter(m => m.totalProjects > 0).map(m => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
-                  />
-                </div>
-              )}
-              <div className="w-full md:w-36">
-                <input
-                  type="date"
-                  value={dueDateFilter}
-                  onChange={(e) => setDueDateFilter(e.target.value)}
-                  className="w-full h-[38px] rounded-xl border border-border bg-white px-3 py-2 text-sm text-[#374151] outline-none focus:border-primary transition-all"
-                  title="Due Date Filter"
-                />
-              </div>
-            </div>
+            )}
           </div>
         </div>
 
-        {/* Row 2: View Options & View Settings */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center rounded-xl border border-border p-1 bg-white overflow-x-auto max-w-full whitespace-nowrap no-scrollbar shrink-0">
-            {viewButtons.map((v) => (
-              <button
-                key={v.mode}
-                onClick={() => setView(v.mode)}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all shrink-0 ${view === v.mode ? 'bg-primary text-white shadow-sm' : 'text-secondary hover:text-primary'}`}
-              >
-                <v.icon className="h-3.5 w-3.5 shrink-0" /> {v.label}
-              </button>
-            ))}
+        {/* Separator line */}
+        <div className="h-px bg-border/60 w-full" />
+
+        {/* Row 2: Actions */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
+          {/* Left Side: Count summary */}
+          <div className="text-xs font-medium text-secondary">
+            Showing {projects.length} projects
           </div>
-          <button
-            onClick={() => setShowViewSettings(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#374151] bg-white border border-border rounded-lg shadow-sm transition-colors hover:bg-gray-50 h-[38px] shrink-0"
-            title="Configure View Settings"
-          >
-            <Settings className="w-3.5 h-3.5" /> View Settings
-          </button>
+
+          {/* Right Side: Switchers, Settings, New project, Clear filters */}
+          <div className="flex flex-wrap items-center justify-end gap-2.5 ml-auto sm:ml-0">
+            {(!!search || statusFilter.length > 0 || clientFilter.length > 0 || ownerFilter.length > 0 || !!dueDateFilter) && (
+              <button
+                onClick={() => {
+                  setSearch('');
+                  setStatusFilter([]);
+                  setClientFilter([]);
+                  setOwnerFilter([]);
+                  setDueDateFilter('');
+                  router.replace('/projects', { scroll: false });
+                }}
+                className="flex items-center gap-1.5 h-9 rounded-xl bg-red-50 px-3 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors border border-red-100"
+              >
+                <X className="h-3.5 w-3.5" /> Clear Filters
+              </button>
+            )}
+
+            {/* Segmented View Mode Switcher */}
+            <div className="flex bg-[#F3F4F6] p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center overflow-x-auto no-scrollbar max-w-full">
+              {viewButtons.map((v) => (
+                <button
+                  key={v.mode}
+                  onClick={() => {
+                    setView(v.mode);
+                    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ name: viewName, visibleColumns, viewType: v.mode }));
+                  }}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${view === v.mode ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
+                  title={`${v.label} View`}
+                >
+                  <v.icon className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">{v.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 

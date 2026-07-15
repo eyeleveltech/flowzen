@@ -45,7 +45,7 @@ export function TimeTrackingPrompt() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onCancel}
-            className="absolute inset-0 bg-black/30 backdrop-blur-xs"
+            className="fixed inset-0 bg-black/40 backdrop-blur-xs"
           />
 
           {/* Modal Container */}
@@ -61,13 +61,13 @@ export function TimeTrackingPrompt() {
               onClick={onCancel}
               className="absolute right-4 top-4 rounded-lg p-1.5 text-[#9CA3AF] hover:bg-[#F3F4F6] hover:text-[#4B5563] transition-colors"
             >
-              <X className="h-4 w-4" />
+              <X className="h-4.5 w-4.5" />
             </button>
 
             {/* Header / Body */}
             <div className="flex gap-4">
               <div className="shrink-0">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/5 text-primary">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-600 border border-blue-100">
                   <Clock className="h-6 w-6" />
                 </div>
               </div>
@@ -75,11 +75,11 @@ export function TimeTrackingPrompt() {
                 <h3 className="text-base font-semibold text-primary leading-6 truncate">
                   Task Completed!
                 </h3>
-                <p className="mt-2 text-sm text-secondary leading-relaxed line-clamp-2">
-                  <span className="font-medium text-primary">{options.taskTitle}</span>
+                <p className="mt-1 text-sm text-secondary leading-relaxed line-clamp-2">
+                  <span className="font-semibold text-primary">{options.taskTitle}</span>
                 </p>
                 
-                <p className="mt-4 text-sm text-secondary mb-1.5 font-medium">
+                <p className="mt-5 text-sm text-[#4B5563] mb-2 font-medium">
                   How long did this take?
                 </p>
                 <div className="relative">
@@ -93,9 +93,10 @@ export function TimeTrackingPrompt() {
                     onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
                     placeholder="e.g. 1.5"
                     autoComplete="off"
-                    className="w-full rounded-xl border border-border px-3 py-2 text-sm text-primary outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/10 placeholder:text-[#9CA3AF]"
+                    style={{ appearance: 'textfield', WebkitAppearance: 'none', MozAppearance: 'textfield' }}
+                    className="w-full rounded-xl border border-border pl-4 pr-16 py-2.5 text-sm text-primary outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/10 placeholder:text-[#9CA3AF]"
                   />
-                  <span className="absolute right-4 top-2.5 text-xs font-medium text-secondary">
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-secondary pointer-events-none select-none">
                     hours
                   </span>
                 </div>
@@ -107,7 +108,7 @@ export function TimeTrackingPrompt() {
               <button
                 type="button"
                 onClick={onCancel}
-                className="px-4 py-2 text-sm font-semibold text-[#4B5563] bg-white border border-border rounded-xl hover:bg-[#F9FAFB] transition-all duration-200 active:scale-95"
+                className="px-4 py-2.5 text-sm font-semibold text-[#4B5563] bg-white border border-border rounded-xl hover:bg-[#F9FAFB] transition-all duration-200 active:scale-95"
               >
                 Skip
               </button>
@@ -115,7 +116,7 @@ export function TimeTrackingPrompt() {
                 type="button"
                 onClick={handleSubmit}
                 disabled={!hours || isNaN(parseFloat(hours)) || parseFloat(hours) <= 0}
-                className="px-4 py-2 text-sm font-semibold text-white bg-primary rounded-xl hover:bg-[#1F2937] transition-all duration-200 shadow-sm active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100"
+                className="px-5 py-2.5 text-sm font-semibold text-white bg-primary rounded-xl hover:bg-[#1F2937] transition-all duration-200 shadow-sm active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100"
               >
                 Log Time
               </button>

@@ -77,7 +77,7 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
       todayStart.setHours(0, 0, 0, 0);
       where.dueDate = { lt: todayStart };
       if (!status) {
-        where.status = { notIn: ['COMPLETED'] };
+        where.status = { notIn: ['COMPLETED', 'ON_HOLD'] };
       }
     } else if (filter === 'today') {
       const todayStart = new Date();
@@ -141,7 +141,7 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
       prisma.task.findMany({
         where: where as any,
         include: {
-          project: { select: { id: true, name: true, color: true, client: { select: { name: true } } } },
+          project: { select: { id: true, name: true, color: true, client: { select: { name: true, company: true } } } },
           assignee: { select: { id: true, name: true, avatar: true } },
           assignees: { select: { id: true, name: true, avatar: true } },
           assignedBy: { select: { id: true, name: true, avatar: true } },
@@ -404,7 +404,7 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
 
     // Keep assigneeIds out of the Prisma spread, and translate any assignee change
     // into both the primary field (assigneeId) and the assignees relation.
-    const { assigneeIds: bodyAssigneeIds, ...rest } = req.body;
+    const { assigneeIds: bodyAssigneeIds, dueDateOnly, dueTimeOnly, ...rest } = req.body;
     let assigneeUpdate: any = {};
     let newAssigneeIds: string[] | null = null;
     if (Array.isArray(bodyAssigneeIds)) {

@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 
 const PIPELINE_STAGES = [
   'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
-  'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'ON_HOLD', 'PROJECT_COMPLETED', 'CHURNED'
+  'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'CONTRACT', 'ON_HOLD', 'PROJECT_COMPLETED', 'CHURNED'
 ];
 
 const STAGE_LABELS: Record<string, string> = {
@@ -100,19 +100,6 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
 
     // Note: auditFindings and auditReportLink have been removed as per §3.4
 
-    // §3.5 Hard gate: moving to Active requires a signed contract link
-    if (isActivationGate && !formData['signedContractLink']?.trim()) {
-      toast.error('Contract must be closed (upload the signed contract link) before moving to Active.');
-      return;
-    }
-
-    // §3.5 Hard gate: payment fields are required for Active
-    if (isActivationGate) {
-      if (!formData['paymentTerms']) { toast.error('Payment Terms are required to activate.'); return; }
-      if (!formData['billingFrequency']) { toast.error('Billing Frequency is required to activate.'); return; }
-      if (!formData['startDate']) { toast.error('Start Date is required to activate.'); return; }
-    }
-
     const payload: any = {
       stage: targetStage,
       fields: formData,
@@ -130,8 +117,13 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
       payload.lostReason = lostReason;
     }
 
-    payload.followUpDate = followUpDate || null;
-    payload.lastContactedDate = lastContactedDate || null;
+    if (!['ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(targetStage)) {
+      payload.followUpDate = followUpDate || null;
+      payload.lastContactedDate = lastContactedDate || null;
+    } else {
+      payload.followUpDate = null;
+      payload.lastContactedDate = null;
+    }
 
     try {
       await onSubmit(payload);
@@ -224,26 +216,28 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">Next Follow-up Date</label>
-                <input
-                  type="date"
-                  value={followUpDate}
-                  onChange={e => setFollowUpDate(e.target.value)}
-                  className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary"
-                />
+            {!['ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(targetStage) && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Next Follow-up Date</label>
+                  <input
+                    type="date"
+                    value={followUpDate}
+                    onChange={e => setFollowUpDate(e.target.value)}
+                    className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Last Contacted Date</label>
+                  <input
+                    type="date"
+                    value={lastContactedDate}
+                    onChange={e => setLastContactedDate(e.target.value)}
+                    className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">Last Contacted Date</label>
-                <input
-                  type="date"
-                  value={lastContactedDate}
-                  onChange={e => setLastContactedDate(e.target.value)}
-                  className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary"
-                />
-              </div>
-            </div>
+            )}
 
             {/* Dynamic stage fields */}
             {fields.map((field: StageField) => (

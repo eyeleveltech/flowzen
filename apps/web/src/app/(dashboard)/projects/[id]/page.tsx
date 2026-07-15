@@ -7,11 +7,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { formatDate, formatShortDate, getInitials, formatRelativeDate, getAvatarColor, getClientDisplayName } from '@/lib/utils';
 import { TASK_STATUS_COLORS, TASK_STATUS_OPTIONS } from '@/lib/task-status';
-import { ArrowLeft, Edit2, Plus, Calendar as CalendarIcon, Flag, Clock, Users, Link2, CheckCircle2, Circle, MoreVertical, Trash2, Mail, FileText, ChevronDown, Check, X, File, AlertCircle, TrendingUp, DollarSign, Briefcase, MessageSquare, MoreHorizontal, ChevronRight, Filter, ArrowUpRight, Settings, Kanban, LayoutList } from 'lucide-react';
+import { ArrowLeft, Edit2, Plus, Calendar as CalendarIcon, Flag, Clock, Users, Link2, CheckCircle2, Circle, MoreVertical, Trash2, Mail, FileText, ChevronDown, Check, X, File, AlertCircle, TrendingUp, DollarSign, Briefcase, MessageSquare, MoreHorizontal, ChevronRight, Filter, ArrowUpRight, Settings, Kanban, LayoutList, Search } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { TaskDetailDrawer } from '@/components/tasks/task-detail-drawer';
+import { TaskFormDrawer } from '@/components/tasks/task-form-drawer';
 import { TaskBoardView } from '../components/TaskBoardView';
 import { ViewSettingsPanel } from '@/components/ui/view-settings-panel';
+import { ColumnDropdown } from '@/components/ui/column-dropdown';
 
 import { MultiSelect } from '@/components/ui/multi-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
@@ -54,6 +56,23 @@ const priorityDots: Record<string, string> = {
   LOW: 'bg-gray-300', MEDIUM: 'bg-blue-400', HIGH: 'bg-orange-500', CRITICAL: 'bg-red-500', URGENT: 'bg-red-500',
 };
 
+const isTaskOverdue = (task: { dueDate?: string | null; status: string }) => {
+  if (!task.dueDate || task.status === 'COMPLETED' || task.status === 'ON_HOLD') return false;
+  const due = new Date(task.dueDate);
+  due.setHours(23, 59, 59, 999);
+  return due < new Date();
+};
+
+const getDaysLate = (task: { dueDate?: string | null; status: string }) => {
+  if (!task.dueDate || task.status === 'COMPLETED') return 0;
+  const due = new Date(task.dueDate);
+  due.setHours(23, 59, 59, 999);
+  const now = new Date();
+  if (due >= now) return 0;
+  const diffTime = Math.abs(now.getTime() - due.getTime());
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+};
+
 const formatForDateTimeLocal = (dateString?: string | null) => {
   if (!dateString) return '';
   const date = new Date(dateString);
@@ -75,10 +94,7 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [tab, setTab] = useState<Tab>('tasks');
   const [showCreateTask, setShowCreateTask] = useState(false);
-  const [isEditingTask, setIsEditingTask] = useState(false);
-  const [editingTaskId, setEditingTaskId] = useState('');
-  const [taskForm, setTaskForm] = useState({ title: '', description: '', type: 'OTHER', assigneeIds: [] as string[], reviewerId: '', assignedById: '', priority: 'MEDIUM', status: 'TODO', dueDate: '', assignedDate: '', loggedHours: 0, driveLink: '', isRecurring: false, recurrenceFrequency: 'WEEKLY' });
-  const [submittingTask, setSubmittingTask] = useState(false);
+  const [editingTask, setEditingTask] = useState<any | null>(null);
   // Task filters within this project's Tasks tab
   const [taskView, setTaskView] = useState<'list' | 'board'>('list');
   const [taskSearch, setTaskSearch] = useState('');
@@ -89,18 +105,23 @@ export default function ProjectDetailPage() {
   const [taskTypeFilter, setTaskTypeFilter] = useState<string[]>([]);
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
   const [showTaskFilters, setShowTaskFilters] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
 
   const ALL_TASK_COLUMNS = [
-    { id: 'task', label: 'Task' },
-    { id: 'type', label: 'Type' },
+    { id: 'task',     label: 'Task' },
+    { id: 'type',     label: 'Department' },
     { id: 'assignee', label: 'Assignee' },
-    { id: 'status', label: 'Status' },
-    { id: 'dueDate', label: 'Due Date' },
+    { id: 'priority', label: 'Priority' },
+    { id: 'status',   label: 'Status' },
+    { id: 'dueDate',  label: 'Due Date' },
   ];
 
   const [showViewSettings, setShowViewSettings] = useState(false);
   const [visibleTaskColumns, setVisibleTaskColumns] = useState<string[]>(ALL_TASK_COLUMNS.map(c => c.id));
   const [viewName, setViewName] = useState('All Tasks');
+  const [taskSort, setTaskSort] = useState('');
+  const [taskPriorityFilter, setTaskPriorityFilter] = useState<string[]>([]);
+  const [showColumnDropdown, setShowColumnDropdown] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && id) {
@@ -155,7 +176,7 @@ export default function ProjectDetailPage() {
 
   // Lock body scroll when any drawer is open
   useEffect(() => {
-    const anyOpen = showEditProject || showCreateTask || isEditingTask || showMilestoneModal || !!viewModalContent;
+    const anyOpen = showEditProject || showCreateTask || !!editingTask || showMilestoneModal || !!viewModalContent;
     if (anyOpen) {
       document.body.style.overflow = 'hidden';
     } else {
@@ -164,85 +185,16 @@ export default function ProjectDetailPage() {
     return () => {
       document.body.style.overflow = '';
     };
-  }, [showEditProject, showCreateTask, isEditingTask, showMilestoneModal, viewModalContent]);
-
-  async function handleSaveTask(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmittingTask(true);
-    try {
-      if (isEditingTask) {
-        await api.put(`/tasks/${editingTaskId}`, {
-          ...taskForm,
-          projectId: project?.id,
-          assigneeIds: taskForm.assigneeIds,
-          reviewerId: taskForm.reviewerId || undefined,
-          assignedById: taskForm.assignedById || undefined,
-          dueDate: taskForm.dueDate || undefined,
-          driveLink: taskForm.driveLink || undefined,
-        });
-      } else {
-        await api.post('/tasks', {
-          ...taskForm,
-          projectId: project?.id,
-          assigneeIds: taskForm.assigneeIds,
-          reviewerId: taskForm.reviewerId || undefined,
-          assignedById: taskForm.assignedById || undefined,
-          dueDate: taskForm.dueDate || undefined,
-          assignedDate: taskForm.assignedDate || undefined,
-          driveLink: taskForm.driveLink || undefined,
-        });
-      }
-      toast.success(isEditingTask ? 'Task updated' : 'Task created');
-      
-      if (isEditingTask && taskForm.status === 'COMPLETED') {
-        const hours = await useTimeTrackingStore.getState().prompt({ taskId: editingTaskId, taskTitle: taskForm.title });
-        if (hours) {
-          await api.put(`/tasks/${editingTaskId}`, { loggedHours: hours });
-          toast.success('Time logged');
-        }
-      }
-      
-      setShowCreateTask(false);
-      setIsEditingTask(false);
-      setEditingTaskId('');
-      setTaskForm({ title: '', description: '', type: 'OTHER', assigneeIds: [], reviewerId: '', assignedById: '', priority: 'MEDIUM', status: 'TODO', dueDate: formatForDateTimeLocal(new Date().toISOString()), assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '', isRecurring: false, recurrenceFrequency: 'WEEKLY' });
-      const updated = await api.get<ProjectDetail>(`/projects/${id}`);
-      setProject(updated);
-      // The global Tasks list + dashboard read cached data — refresh them.
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to save task');
-    } finally { setSubmittingTask(false); }
-  }
+  }, [showEditProject, showCreateTask, editingTask, showMilestoneModal, viewModalContent]);
 
   function startEditingTask(t: any, e?: React.MouseEvent) {
     e?.stopPropagation();
-    setTaskForm({
-      title: t.title,
-      description: t.description || '',
-      type: t.type || 'OTHER',
-      assigneeIds: t.assignees?.length ? t.assignees.map((a: any) => a.id) : (t.assignee ? [t.assignee.id] : []),
-      reviewerId: t.reviewer?.id || '',
-      priority: t.priority,
-      status: t.status,
-      dueDate: t.dueDate ? formatForDateTimeLocal(t.dueDate) : formatForDateTimeLocal(new Date().toISOString()),
-      assignedDate: t.assignedDate ? t.assignedDate.split('T')[0] : '',
-      assignedById: t.assignedBy?.id || '',
-      loggedHours: t.loggedHours || 0,
-      driveLink: t.driveLink || '',
-      isRecurring: t.isRecurring || false,
-      recurrenceFrequency: t.recurrenceFrequency || 'WEEKLY'
-    });
-    setEditingTaskId(t.id);
-    setIsEditingTask(true);
+    setEditingTask(t);
     setShowCreateTask(true);
   }
 
   function openCreateTask() {
-    setTaskForm({ title: '', description: '', type: 'OTHER', assigneeIds: [], reviewerId: '', assignedById: '', priority: 'MEDIUM', status: 'TODO', dueDate: formatForDateTimeLocal(new Date().toISOString()), assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '', isRecurring: false, recurrenceFrequency: 'WEEKLY' });
-    setIsEditingTask(false);
-    setEditingTaskId('');
+    setEditingTask(null);
     setShowCreateTask(true);
   }
 
@@ -319,6 +271,50 @@ export default function ProjectDetailPage() {
     } catch (err: any) {
       toast.error(err.message || 'Failed to delete project');
       console.error(err);
+    }
+  }
+
+  async function updateTaskStatus(taskId: string, status: string) {
+    if (!project) return;
+    
+    const previousTasks = project.tasks;
+    // Optimistic UI Update
+    setProject(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        tasks: (prev.tasks || []).map(t => t.id === taskId ? { ...t, status } : t)
+      };
+    });
+
+    try {
+      await api.put(`/tasks/${taskId}`, { status });
+      toast.success('Task status updated');
+      fetchProject();
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+
+      if (status === 'COMPLETED') {
+        const taskObj = project.tasks?.find(t => t.id === taskId);
+        const hours = await useTimeTrackingStore.getState().prompt({ taskId, taskTitle: taskObj?.title || 'Task' });
+        if (hours) {
+          await api.put(`/tasks/${taskId}`, { loggedHours: hours });
+          toast.success('Time logged');
+          fetchProject();
+          queryClient.invalidateQueries({ queryKey: ['tasks'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+        }
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update status');
+      // Revert optimistic update
+      setProject(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          tasks: previousTasks
+        };
+      });
     }
   }
 
@@ -470,6 +466,7 @@ export default function ProjectDetailPage() {
   );
 
   const allProjectMembers = Array.from(new Map([
+    ...(project.owner ? [project.owner] : []),
     ...(project.members || []).map(m => m.user),
     ...(project.teams?.flatMap(t => t.team.members) || [])
   ].map(u => [u.id, u])).values());
@@ -485,7 +482,7 @@ export default function ProjectDetailPage() {
   todayStart.setHours(0, 0, 0, 0);
   const completedTasks = project.tasks?.filter((t) => t.status === 'COMPLETED').length ?? 0;
   const totalTasks = project.tasks?.length ?? 0;
-  const overdueTasksCount = project.tasks?.filter(t => t.dueDate && new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED').length || 0;
+  const overdueTasksCount = project.tasks?.filter(t => isTaskOverdue(t)).length || 0;
 
   // Tasks tab: filtering (multi-select)
   const projectTasks = (project.tasks || []) as any[];
@@ -494,9 +491,15 @@ export default function ProjectDetailPage() {
   ).values());
 
   const filteredTasks = projectTasks.filter((t) => {
+    if (!showCompleted && t.status === 'COMPLETED') return false;
     if (taskSearch && !t.title.toLowerCase().includes(taskSearch.toLowerCase())) return false;
     if (taskStatusFilter.length && !taskStatusFilter.includes(t.status)) return false;
-    if (taskTypeFilter.length && !taskTypeFilter.includes(t.type || 'OTHER')) return false;
+    if (taskTypeFilter.length) {
+      const people = t.assignees && t.assignees.length ? t.assignees : (t.assignee ? [t.assignee] : []);
+      const matchesTeam = people.some((p: any) => p.teamId && taskTypeFilter.includes(p.teamId));
+      if (!matchesTeam) return false;
+    }
+    if (taskPriorityFilter.length && !taskPriorityFilter.includes(t.priority)) return false;
     if (taskDueDateFilter) {
       if (!t.dueDate) return false;
       const due = new Date(t.dueDate); due.setHours(0, 0, 0, 0);
@@ -510,15 +513,26 @@ export default function ProjectDetailPage() {
     return true;
   });
 
+  const priorityOrder: Record<string, number> = { URGENT: 5, CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
   let finalTasks = [...filteredTasks];
-  finalTasks.sort((a, b) => {
-    const priorityOrder: Record<string, number> = { URGENT: 5, CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
-    const valA = priorityOrder[a.priority] || 0;
-    const valB = priorityOrder[b.priority] || 0;
-    return valB - valA;
-  });
+  if (taskSort === 'priority_desc') {
+    finalTasks.sort((a, b) => (priorityOrder[b.priority] || 0) - (priorityOrder[a.priority] || 0));
+  } else if (taskSort === 'priority_asc') {
+    finalTasks.sort((a, b) => (priorityOrder[a.priority] || 0) - (priorityOrder[b.priority] || 0));
+  } else if (taskSort === 'status_asc') {
+    finalTasks.sort((a, b) => a.status.localeCompare(b.status));
+  } else if (taskSort === 'status_desc') {
+    finalTasks.sort((a, b) => b.status.localeCompare(a.status));
+  } else if (taskSort === 'dueDate_asc') {
+    finalTasks.sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''));
+  } else if (taskSort === 'dueDate_desc') {
+    finalTasks.sort((a, b) => (b.dueDate || '').localeCompare(a.dueDate || ''));
+  } else {
+    // Default: priority descending
+    finalTasks.sort((a, b) => (priorityOrder[b.priority] || 0) - (priorityOrder[a.priority] || 0));
+  }
 
-  const hasTaskFilters = !!(taskSearch || taskStatusFilter.length || taskAssigneeFilter.length || taskTypeFilter.length || taskDueDateFilter);
+  const hasTaskFilters = !!(taskSearch || taskStatusFilter.length || taskAssigneeFilter.length || taskTypeFilter.length || taskDueDateFilter || showCompleted || taskPriorityFilter.length || taskSort);
   let projectHealth: 'GREEN' | 'AMBER' | 'RED' = 'GREEN';
   if (overdueTasksCount >= 3 || (project.endDate && new Date(project.endDate) < todayStart && project.status !== 'COMPLETED')) {
     projectHealth = 'RED';
@@ -705,88 +719,148 @@ export default function ProjectDetailPage() {
 
       {tab === 'tasks' && (
         <div className="space-y-4">
-          <div className="flex flex-col gap-3">
-            {/* Search bar row */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2 flex-1 min-w-[200px] max-w-sm">
+          {/* Redesigned Clean Projects Task Toolbar */}
+          <div className="bg-white border border-border rounded-2xl p-4 shadow-sm flex flex-col gap-4 w-full mb-6">
+            {/* Row 1: Search + Active Filter Pills */}
+            <div className="flex flex-wrap items-center gap-2 w-full">
+              {/* Search Box */}
+              <div className="relative w-full sm:w-64 md:w-80 shrink-0">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
                 <input
                   value={taskSearch}
                   onChange={(e) => setTaskSearch(e.target.value)}
                   placeholder="Search tasks..."
-                  className="flex-1 w-full rounded-lg border border-border bg-white px-3 py-1.5 text-sm outline-none focus:border-primary transition-all"
+                  className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-[#9CA3AF]"
                 />
-                <div className="hidden md:flex items-center rounded-lg border border-border p-0.5 bg-white shrink-0">
-                  <button
-                    onClick={() => setTaskView('list')}
-                    className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-all ${taskView === 'list' ? 'bg-primary text-white' : 'text-secondary hover:text-primary'}`}
-                  >
-                    <LayoutList className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={() => setTaskView('board')}
-                    className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-all ${taskView === 'board' ? 'bg-primary text-white' : 'text-secondary hover:text-primary'}`}
-                  >
-                    <Kanban className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-                <button 
-                  onClick={() => setShowTaskFilters(!showTaskFilters)} 
-                  className="md:hidden flex items-center justify-center p-1.5 rounded-lg border border-border bg-white text-secondary hover:bg-gray-50 transition-colors"
-                >
-                  <Filter className="h-4 w-4" />
-                </button>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button onClick={openCreateTask} className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1F2937] transition-all">
-                  <Plus className="h-3.5 w-3.5" /> Add Task
-                </button>
-                <button 
-                  onClick={() => setShowViewSettings(true)}
-                  className="flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-secondary hover:text-primary transition-all shadow-sm" 
-                  title="Customize View"
-                >
-                  <Settings className="h-3.5 w-3.5" /> Customize
-                </button>
+
+              {/* Filter Pills */}
+              <div className="shrink-0">
+                <MultiSelect
+                  value={taskStatusFilter}
+                  onChange={setTaskStatusFilter}
+                  placeholder="Status"
+                  triggerClassName={taskStatusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+                  options={TASK_STATUS_OPTIONS}
+                />
               </div>
-            </div>
-            {/* Filters row */}
-            <div className={`flex flex-wrap items-center gap-2 ${showTaskFilters ? 'flex' : 'hidden md:flex'}`}>
-              <div className="w-full md:w-40">
-                <MultiSelect value={taskStatusFilter} onChange={setTaskStatusFilter} placeholder="Status" options={TASK_STATUS_OPTIONS} />
+
+              <div className="shrink-0">
+                <MultiSelect
+                  value={taskTypeFilter}
+                  onChange={setTaskTypeFilter}
+                  placeholder="Department"
+                  triggerClassName={taskTypeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+                  options={teams.map((t: any) => ({ label: t.name, value: t.id }))}
+                />
               </div>
-              <div className="w-full md:w-40">
-                <MultiSelect value={taskTypeFilter} onChange={setTaskTypeFilter} placeholder="Task Type" options={[
-                  { label: 'Design', value: 'DESIGN' },
-                  { label: 'Content', value: 'CONTENT' },
-                  { label: 'Video', value: 'VIDEO' },
-                  { label: 'Marketing', value: 'DIGITAL_MARKETING' },
-                  { label: 'Social Media', value: 'SOCIAL_MEDIA' },
-                  { label: 'Development', value: 'DEVELOPMENT' },
-                  { label: 'Strategy', value: 'STRATEGY' },
-                  { label: 'Business', value: 'BUSINESS' },
-                  { label: 'Other', value: 'OTHER' },
-                ]} />
+
+              <div className="shrink-0">
+                <MultiSelect
+                  value={taskPriorityFilter}
+                  onChange={setTaskPriorityFilter}
+                  placeholder="Priority"
+                  triggerClassName={taskPriorityFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+                  options={[
+                    { label: 'Low', value: 'LOW' },
+                    { label: 'Medium', value: 'MEDIUM' },
+                    { label: 'High', value: 'HIGH' },
+                    { label: 'Critical', value: 'CRITICAL' },
+                    { label: 'Urgent', value: 'URGENT' },
+                  ]}
+                />
               </div>
-              <div className="w-full md:w-44">
-                <MultiSelect value={taskAssigneeFilter} onChange={setTaskAssigneeFilter} placeholder="Assignee" options={taskAssignees.map((a: any) => ({ value: a.id, label: a.name, image: getInitials(a.name), colorClass: getAvatarColor(a.name) }))} />
+
+              <div className="shrink-0">
+                <MultiSelect
+                  value={taskAssigneeFilter}
+                  onChange={setTaskAssigneeFilter}
+                  placeholder="Assignee"
+                  triggerClassName={taskAssigneeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+                  options={allProjectMembers.map((a: any) => ({ value: a.id, label: a.name, image: getInitials(a.name), colorClass: getAvatarColor(a.name) }))}
+                />
               </div>
-              <div className="w-full md:w-auto">
+
+              <div className="shrink-0">
                 <input
                   type="date"
                   value={taskDueDateFilter}
                   onChange={(e) => setTaskDueDateFilter(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-white px-3 py-1.5 text-sm outline-none focus:border-primary text-secondary"
+                  className="h-9 rounded-xl border border-dashed border-gray-300 bg-white hover:bg-gray-50 text-secondary px-3 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer"
                   title="Filter by due date"
                 />
               </div>
-              {hasTaskFilters && (
+
+              <div className="flex items-center gap-1.5 border border-border rounded-xl px-3 h-9 bg-white shadow-sm shrink-0">
+                <label htmlFor="proj-show-completed" className="text-xs font-semibold text-[#4B5563] cursor-pointer select-none">Show Done</label>
                 <button
-                  onClick={() => { setTaskSearch(''); setTaskStatusFilter([]); setTaskAssigneeFilter([]); setTaskTypeFilter([]); setTaskDueDateFilter(''); }}
-                  className="text-xs text-secondary hover:text-primary underline px-1"
+                  id="proj-show-completed"
+                  type="button"
+                  role="switch"
+                  aria-checked={showCompleted}
+                  onClick={() => setShowCompleted(!showCompleted)}
+                  className={`relative inline-flex h-4.5 w-8 shrink-0 items-center rounded-full border transition-colors ${showCompleted ? 'bg-primary border-primary' : 'bg-gray-200 border-gray-300'}`}
                 >
-                  Clear
+                  <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform ${showCompleted ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
                 </button>
-              )}
+              </div>
+            </div>
+
+            {/* Separator line */}
+            <div className="h-px bg-border/60 w-full" />
+
+            {/* Row 2: Actions */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
+              {/* Left Side: Task Count */}
+              <div className="text-xs font-medium text-secondary">
+                Showing {finalTasks.length} of {project.tasks?.length ?? 0} tasks
+              </div>
+
+              {/* Right Side: View switcher, settings, add task, clear filters */}
+              <div className="flex items-center justify-end gap-2.5 ml-auto sm:ml-0">
+                {hasTaskFilters && (
+                  <button
+                    onClick={() => { setTaskSearch(''); setTaskStatusFilter([]); setTaskAssigneeFilter([]); setTaskTypeFilter([]); setTaskDueDateFilter(''); setShowCompleted(false); setTaskPriorityFilter([]); setTaskSort(''); }}
+                    className="flex items-center gap-1.5 h-9 rounded-xl bg-red-50 px-3 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors border border-red-100"
+                  >
+                    <X className="h-3.5 w-3.5" /> Clear Filters
+                  </button>
+                )}
+
+                {/* List / Board Toggle Buttons */}
+                <div className="flex bg-[#F3F4F6] p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTaskView('list');
+                      localStorage.setItem(`flowzen_view_tasks_${id}`, JSON.stringify({ name: viewName, visibleColumns: visibleTaskColumns, viewType: 'list' }));
+                    }}
+                    className={`p-1.5 rounded-lg transition-all ${taskView === 'list' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
+                    title="List View"
+                  >
+                    <LayoutList className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTaskView('board');
+                      localStorage.setItem(`flowzen_view_tasks_${id}`, JSON.stringify({ name: viewName, visibleColumns: visibleTaskColumns, viewType: 'board' }));
+                    }}
+                    className={`p-1.5 rounded-lg transition-all ${taskView === 'board' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
+                    title="Board View"
+                  >
+                    <Kanban className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                <button onClick={() => setShowViewSettings(true)} className="p-2 rounded-xl border border-border bg-white hover:bg-gray-50 transition-colors text-secondary hover:text-primary h-9 w-9 flex items-center justify-center" title="Customize View">
+                  <Settings className="h-3.5 w-3.5" />
+                </button>
+
+                <button onClick={openCreateTask} className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-[#1F2937] transition-all h-9">
+                  <Plus className="h-3.5 w-3.5" /> Add Task
+                </button>
+              </div>
             </div>
           </div>
 
@@ -806,11 +880,102 @@ export default function ProjectDetailPage() {
                   <thead>
                     <tr className="border-b border-[#F3F4F6]">
                       {visibleTaskColumns.includes('task') && <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Task</th>}
-                      {visibleTaskColumns.includes('type') && <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Type</th>}
+                      {visibleTaskColumns.includes('type') && <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Department</th>}
                       {visibleTaskColumns.includes('assignee') && <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Assignee</th>}
-                      {visibleTaskColumns.includes('status') && <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Status</th>}
-                      {visibleTaskColumns.includes('dueDate') && <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Due Date</th>}
-                      <th className="px-6 py-3"></th>
+                      {visibleTaskColumns.includes('priority') && (
+                        <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">
+                          <ColumnDropdown
+                            title="Priority"
+                            sortAscValue="priority_asc"
+                            sortDescValue="priority_desc"
+                            sortAscLabel="Low to Urgent"
+                            sortDescLabel="Urgent to Low"
+                            currentSort={taskSort}
+                            onSortChange={setTaskSort}
+                            filterOptions={[
+                              { label: 'Low', value: 'LOW' },
+                              { label: 'Medium', value: 'MEDIUM' },
+                              { label: 'High', value: 'HIGH' },
+                              { label: 'Critical', value: 'CRITICAL' },
+                              { label: 'Urgent', value: 'URGENT' },
+                            ]}
+                            selectedFilters={taskPriorityFilter}
+                            onFilterChange={setTaskPriorityFilter}
+                          />
+                        </th>
+                      )}
+                      {visibleTaskColumns.includes('status') && (
+                        <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">
+                          <ColumnDropdown
+                            title="Status"
+                            sortAscValue="status_asc"
+                            sortDescValue="status_desc"
+                            sortAscLabel="To Do to Done"
+                            sortDescLabel="Done to To Do"
+                            currentSort={taskSort}
+                            onSortChange={setTaskSort}
+                            filterOptions={TASK_STATUS_OPTIONS}
+                            selectedFilters={taskStatusFilter}
+                            onFilterChange={setTaskStatusFilter}
+                          />
+                        </th>
+                      )}
+                      {visibleTaskColumns.includes('dueDate') && (
+                        <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">
+                          <ColumnDropdown
+                            title="Due Date"
+                            sortAscValue="dueDate_asc"
+                            sortDescValue="dueDate_desc"
+                            sortAscLabel="Earliest First"
+                            sortDescLabel="Latest First"
+                            currentSort={taskSort}
+                            onSortChange={setTaskSort}
+                          />
+                        </th>
+                      )}
+                      {/* + Column Visibility Picker */}
+                      <th className="px-4 py-3 w-10 text-center relative select-none">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setShowColumnDropdown(!showColumnDropdown); }}
+                          className="inline-flex items-center justify-center h-6 w-6 rounded-md text-[#9CA3AF] hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
+                          title="Toggle visible columns"
+                        >
+                          +
+                        </button>
+                        <AnimatePresence>
+                          {showColumnDropdown && (
+                            <>
+                              <div className="fixed inset-0 z-40" onClick={() => setShowColumnDropdown(false)} />
+                              <motion.div
+                                initial={{ opacity: 0, y: 5 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: 5 }}
+                                className="absolute right-0 top-full mt-2 w-48 bg-white border border-border rounded-xl shadow-lg z-50 overflow-hidden py-1"
+                              >
+                                <div className="px-3 py-2 border-b border-[#F3F4F6] text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
+                                  Visible Columns
+                                </div>
+                                {ALL_TASK_COLUMNS.map(col => (
+                                  <button
+                                    key={col.id}
+                                    onClick={() => {
+                                      setVisibleTaskColumns(prev =>
+                                        prev.includes(col.id)
+                                          ? prev.filter(c => c !== col.id)
+                                          : [...prev, col.id]
+                                      );
+                                    }}
+                                    className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#F9FAFB] transition-colors"
+                                  >
+                                    <span className="text-[#374151]">{col.label}</span>
+                                    {visibleTaskColumns.includes(col.id) && <Check className="w-4 h-4 text-primary" />}
+                                  </button>
+                                ))}
+                              </motion.div>
+                            </>
+                          )}
+                        </AnimatePresence>
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#F3F4F6]">
@@ -837,7 +1002,16 @@ export default function ProjectDetailPage() {
                           )}
                           {visibleTaskColumns.includes('type') && (
                             <td className="px-6 py-3">
-                              <span className="text-xs text-secondary capitalize">{(t.type || 'other').toLowerCase().replace(/_/g, ' ')}</span>
+                              {(() => {
+                                const people = t.assignees && t.assignees.length ? t.assignees : (t.assignee ? [t.assignee] : []);
+                                const tIds = people.map((p: any) => p.teamId).filter(Boolean);
+                                const tNames = Array.from(new Set(tIds.map((tid: any) => teams.find((team: any) => team.id === tid)?.name).filter(Boolean)));
+                                return (
+                                  <span className="text-xs text-secondary">
+                                    {tNames.length > 0 ? tNames.join(', ') : '—'}
+                                  </span>
+                                );
+                              })()}
                             </td>
                           )}
                           {visibleTaskColumns.includes('assignee') && (
@@ -850,11 +1024,41 @@ export default function ProjectDetailPage() {
                               ) : <span className="text-sm text-[#9CA3AF]">—</span>}
                             </td>
                           )}
+                          {visibleTaskColumns.includes('priority') && (
+                            <td className="px-6 py-3">
+                              <span className={`text-xs font-medium capitalize ${
+                                t.priority === 'URGENT' || t.priority === 'CRITICAL' ? 'text-red-600' :
+                                t.priority === 'HIGH' ? 'text-orange-500' :
+                                t.priority === 'MEDIUM' ? 'text-blue-500' : 'text-gray-400'
+                              }`}>
+                                {(t.priority || 'medium').toLowerCase()}
+                              </span>
+                            </td>
+                          )}
                           {visibleTaskColumns.includes('status') && (
-                            <td className="px-6 py-3"><span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${TASK_STATUS_COLORS[t.status]}`}>{t.status.replace('_', ' ')}</span></td>
+                            <td className="px-6 py-3" onClick={(e) => e.stopPropagation()}>
+                              <div className="w-36">
+                                <Select
+                                  value={t.status}
+                                  onChange={(val) => updateTaskStatus(t.id, val)}
+                                  options={TASK_STATUS_OPTIONS}
+                                  buttonClassName={`py-1 px-2.5 text-xs font-medium border-transparent shadow-none ${TASK_STATUS_COLORS[t.status] || ''}`}
+                                />
+                              </div>
+                            </td>
                           )}
                           {visibleTaskColumns.includes('dueDate') && (
-                            <td className="px-6 py-3 text-sm text-secondary">{formatShortDate(t.dueDate)}</td>
+                            <td className="px-6 py-3 text-sm">
+                              {t.dueDate ? (
+                                <span className={isTaskOverdue(t) ? 'text-red-500 font-medium' : 'text-secondary'}>
+                                  {isTaskOverdue(t)
+                                    ? `Overdue (${getDaysLate(t)} ${getDaysLate(t) === 1 ? 'day' : 'days'} late)`
+                                    : formatShortDate(t.dueDate)}
+                                </span>
+                              ) : (
+                                <span className="text-[#9CA3AF]">—</span>
+                              )}
+                            </td>
                           )}
                           <td className="px-6 py-3 text-right">
                             {(user?.role !== 'TEAM_MEMBER' || t.assignee?.id === user?.id) && (
@@ -896,7 +1100,11 @@ export default function ProjectDetailPage() {
                           <div>
                             <p className="text-sm font-medium text-primary leading-tight">{t.title}</p>
                             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                              <span className="text-xs font-medium text-secondary">{formatShortDate(t.dueDate)}</span>
+                              <span className={`text-xs font-medium ${isTaskOverdue(t) ? 'text-red-500' : 'text-secondary'}`}>
+                                {isTaskOverdue(t)
+                                  ? `Overdue (${getDaysLate(t)} ${getDaysLate(t) === 1 ? 'day' : 'days'} late)`
+                                  : formatShortDate(t.dueDate)}
+                              </span>
                               {(t.loggedHours ?? 0) > 0 && (
                                 <span className="text-[10px] text-secondary bg-[#F3F4F6] px-1.5 py-0.5 rounded-md font-medium tabular-nums border border-border">
                                   ⏱ {t.loggedHours || 0}h
@@ -957,7 +1165,7 @@ export default function ProjectDetailPage() {
  <div className={`h-10 w-10 rounded-xl text-sm font-semibold flex items-center justify-center ${getAvatarColor(m.name)}`}>{getInitials(m.name)}</div>
               <div>
                 <p className="text-sm font-medium text-primary">{m.name}</p>
-                <p className="text-xs text-[#9CA3AF]">{m.role?.replace('_', ' ')}</p>
+                <p className="text-xs text-[#9CA3AF]">{(m as any).role?.replace('_', ' ') || 'Project Owner'}</p>
               </div>
             </div>
           ))}
@@ -1026,141 +1234,19 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {/* Create Task Modal */}
-      <AnimatePresence>
-        {showCreateTask && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setShowCreateTask(false)} />
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
-                <h2 className="text-lg font-semibold text-primary">{isEditingTask ? 'Edit Task' : 'New Task'}</h2>
-                <button onClick={() => setShowCreateTask(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
-              </div>
-              <form onSubmit={handleSaveTask} className="p-6 pb-24 md:pb-6 space-y-4">
-                <div>
-                  <label htmlFor="pt-title" className="block text-sm font-medium text-[#374151] mb-1.5">Title *</label>
-                  <input id="pt-title" value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                </div>
-                <div>
-                  <label htmlFor="pt-dueDate" className="block text-sm font-medium text-[#374151] mb-1.5">Due Date and Time</label>
-                  <input id="pt-dueDate" type="datetime-local" value={taskForm.dueDate} onChange={(e) => setTaskForm({ ...taskForm, dueDate: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                </div>
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={taskForm.isRecurring} onChange={(e) => setTaskForm({ ...taskForm, isRecurring: e.target.checked })} className="rounded border-border text-primary focus:ring-primary w-4 h-4" />
-                    <span className="text-sm font-medium text-[#374151]">Repeat Task</span>
-                  </label>
-                </div>
-                {taskForm.isRecurring && (
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Repeat Frequency</label>
-                    <Select
-                      ariaLabel="Repeat Frequency"
-                      value={taskForm.recurrenceFrequency || 'WEEKLY'}
-                      onChange={(val) => setTaskForm({ ...taskForm, recurrenceFrequency: val })}
-                      options={[{ label: 'Daily', value: 'DAILY' }, { label: 'Weekly', value: 'WEEKLY' }, { label: 'Monthly', value: 'MONTHLY' }, { label: 'Yearly', value: 'YEARLY' }]}
-                    />
-                  </div>
-                )}
-                <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
-                  <RichTextEditor value={taskForm.description} onChange={(val) => setTaskForm({ ...taskForm, description: val })} placeholder="Add task details..." />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Task Type</label>
-                    <Select
-                      ariaLabel="Task Type"
-                      value={taskForm.type as any}
-                      onChange={(val) => setTaskForm({ ...taskForm, type: val })}
-                      options={[
-                        { label: 'Design', value: 'DESIGN' },
-                        { label: 'Content', value: 'CONTENT' },
-                        { label: 'Video', value: 'VIDEO' },
-                        { label: 'Digital Marketing', value: 'DIGITAL_MARKETING' },
-                        { label: 'Social Media', value: 'SOCIAL_MEDIA' },
-                        { label: 'Development', value: 'DEVELOPMENT' },
-                        { label: 'Strategy', value: 'STRATEGY' },
-                        { label: 'Business', value: 'BUSINESS' },
-                        { label: 'Other', value: 'OTHER' },
-                      ]}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Reviewer</label>
-                    <Select
-                      ariaLabel="Reviewer"
-                      value={taskForm.reviewerId}
-                      onChange={(val) => setTaskForm({ ...taskForm, reviewerId: val })}
-                      options={[{ label: 'No Reviewer', value: '' }, ...allProjectMembers.map((m) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Assigned By</label>
-                    <Select
-                      ariaLabel="Assigned By"
-                      value={taskForm.assignedById}
-                      onChange={(val) => setTaskForm({ ...taskForm, assignedById: val })}
-                      options={[{ label: 'Self (Default)', value: '' }, ...allProjectMembers.map((m) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))]}
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignees</label>
-                    <MultiSelect
-                      compact={false}
-                      value={taskForm.assigneeIds}
-                      onChange={(vals) => setTaskForm({ ...taskForm, assigneeIds: vals })}
-                      placeholder="Add assignees..."
-                      options={allProjectMembers.map((m) => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name) }))}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority</label>
-                    <Select
-                      ariaLabel="Priority"
-                      value={taskForm.priority}
-                      onChange={(val) => setTaskForm({ ...taskForm, priority: val })}
-                      options={[
-                        { label: 'Low', value: 'LOW' },
-                        { label: 'Medium', value: 'MEDIUM' },
-                        { label: 'High', value: 'HIGH' },
-                        { label: 'Urgent', value: 'URGENT' },
-                      ]}
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="pt-assignedDate" className="block text-sm font-medium text-[#374151] mb-1.5">Assigned Date</label>
-                    <input id="pt-assignedDate" type="date" value={taskForm.assignedDate} onChange={(e) => setTaskForm({ ...taskForm, assignedDate: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                  </div>
-                  <div>
-                    <label htmlFor="pt-loggedHours" className="block text-sm font-medium text-[#374151] mb-1.5">Time Spent (hours)</label>
-                    <input id="pt-loggedHours" type="number" step="0.5" min="0" value={taskForm.loggedHours} onChange={(e) => setTaskForm({ ...taskForm, loggedHours: parseFloat(e.target.value) || 0 })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                  </div>
-                </div>
-                <div>
-                  <label htmlFor="pt-driveLink" className="block text-sm font-medium text-[#374151] mb-1.5">Drive Link (Uploads, Drafts)</label>
-                  <input id="pt-driveLink" type="url" value={taskForm.driveLink} onChange={(e) => setTaskForm({ ...taskForm, driveLink: e.target.value })} placeholder="https://drive.google.com/..." className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                </div>
-                {isEditingTask && (
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Status</label>
-                    <Select
-                      ariaLabel="Status"
-                      value={taskForm.status}
-                      onChange={(val) => setTaskForm({ ...taskForm, status: val })}
-                      options={TASK_STATUS_OPTIONS}
-                    />
-                  </div>
-                )}
-                <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setShowCreateTask(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
-                  <button type="submit" disabled={submittingTask} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submittingTask ? 'Saving...' : isEditingTask ? 'Save Changes' : 'Create Task'}</button>
-                </div>
-              </form>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      {/* Shared Task Form Drawer */}
+      <TaskFormDrawer
+        isOpen={showCreateTask}
+        taskToEdit={editingTask}
+        projectId={project?.id}
+        onClose={() => {
+          setShowCreateTask(false);
+          setEditingTask(null);
+        }}
+        onSuccess={() => {
+          fetchProject();
+        }}
+      />
 
       {/* Edit Project Modal */}
       <AnimatePresence>

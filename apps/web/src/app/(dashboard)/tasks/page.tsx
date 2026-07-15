@@ -3,20 +3,14 @@
 import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { z } from 'zod';
-import { useForm, Controller } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatDate, formatShortDate, getInitials, getAvatarColor, triggerHaptic } from '@/lib/utils';
 import { TASK_STATUSES, TASK_STATUS_LABELS, TASK_STATUS_COLORS, TASK_STATUS_OPTIONS } from '@/lib/task-status';
-import { Search, Plus, Filter, MessageSquare, ChevronDown, ChevronRight, AlertCircle, X, ChevronUp, ChevronLeft, Calendar, ListChecks, Trash2, Check, Settings } from 'lucide-react';
+import { Search, Plus, Filter, MessageSquare, X, Trash2, Settings, Check, ChevronRight, LayoutList, Kanban } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
-import { Drawer } from '@/components/ui/drawer';
-import { SwipeableCard } from '@/components/ui/swipeable-card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { ViewSettingsPanel } from '@/components/ui/view-settings-panel';
 import toast from 'react-hot-toast';
 import { useAuthStore, useConfirmStore, useTimeTrackingStore } from '@/stores';
@@ -24,7 +18,9 @@ import { useTasks, useProjects, useMembers, useTeams } from '@/hooks/useQueries'
 import { useQueryClient } from '@tanstack/react-query';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { TaskDetailDrawer } from '@/components/tasks/task-detail-drawer';
+import { TaskFormDrawer } from '@/components/tasks/task-form-drawer';
 import { ColumnDropdown } from '@/components/ui/column-dropdown';
+import { SwipeableCard } from '@/components/ui/swipeable-card';
 
 interface Task {
   id: string; title: string; description?: string | null; priority: string; status: string;
@@ -46,7 +42,7 @@ interface Project { id: string; name: string; members?: { user: { id: string; na
 interface Member { id: string; name: string; }
 
 const isTaskOverdue = (task: Task) => {
-  if (!task.dueDate || task.status === 'COMPLETED') return false;
+  if (!task.dueDate || task.status === 'COMPLETED' || task.status === 'ON_HOLD') return false;
   const due = new Date(task.dueDate);
   due.setHours(23, 59, 59, 999);
   return due < new Date();
@@ -94,50 +90,6 @@ function AssigneeAvatars({ task, size = 26 }: { task: { assignees?: AssigneePers
   );
 }
 
-const taskSchema = z.object({
-  title: z.string().min(1, 'Title is required'),
-  description: z.string().optional(),
-  type: z.string().optional(),
-  projectId: z.string().min(1, 'Project is required'),
-  assigneeId: z.string().optional(),
-  assigneeIds: z.array(z.string()).optional(),
-  reviewerId: z.string().optional(),
-  assignedById: z.string().optional(),
-  priority: z.string(),
-  status: z.string(),
-  dueDate: z.string().optional(),
-  dueDateOnly: z.string().optional(),
-  dueTimeOnly: z.string().optional(),
-  assignedDate: z.string().optional(),
-  loggedHours: z.number().min(0).optional(),
-  driveLink: z.string().url('Must be a valid URL').optional().or(z.literal('')),
-  isRecurring: z.boolean().optional(),
-  recurrenceFrequency: z.string().optional(),
-});
-type TaskFormValues = z.infer<typeof taskSchema>;
-
-const formatForDateTimeLocal = (dateString?: string | null) => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  if (isNaN(date.getTime())) return '';
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
-};
-
-// Fresh blank task form values (function so assignedDate is always "today").
-const blankTaskValues = (): TaskFormValues => ({
-  title: '', description: '', type: 'OTHER', projectId: '', assigneeId: '', assigneeIds: [], assignedById: '',
-  reviewerId: '', priority: 'MEDIUM', status: 'TODO',
-  dueDate: '',
-  dueDateOnly: new Date().toISOString().split('T')[0],
-  dueTimeOnly: '23:59',
-  assignedDate: new Date().toISOString().split('T')[0], loggedHours: 0, driveLink: '', isRecurring: false, recurrenceFrequency: 'WEEKLY'
-});
-
 function TasksContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -145,13 +97,62 @@ function TasksContent() {
   const { confirm } = useConfirmStore();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string[]>([]);
-  const [projectFilter, setProjectFilter] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string[]>(() => {
+    const val = searchParams.get('statuses');
+    if (val) return val.split(',');
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('flowzen_tasks_filters');
+      if (saved) {
+        try {
+          return JSON.parse(saved).statuses || [];
+        } catch { /* ignore */ }
+      }
+    }
+    return [];
+  });
+  const [projectFilter, setProjectFilter] = useState<string[]>(() => {
+    const val = searchParams.get('projects');
+    if (val) return val.split(',');
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('flowzen_tasks_filters');
+      if (saved) {
+        try {
+          return JSON.parse(saved).projects || [];
+        } catch { /* ignore */ }
+      }
+    }
+    return [];
+  });
   // Default to all tasks. Team members are scoped to their own tasks by the API
   // (the assignee filter isn't shown to them); admins/managers see everyone and
   // can narrow with the people filter.
-  const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
-  const [hasSetDefaultAssignee, setHasSetDefaultAssignee] = useState(false);
+  const [assigneeFilter, setAssigneeFilter] = useState<string[]>(() => {
+    const val = searchParams.get('assignees');
+    if (val) return val.split(',');
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('flowzen_tasks_filters');
+      if (saved) {
+        try {
+          return JSON.parse(saved).assignees || [];
+        } catch { /* ignore */ }
+      }
+    }
+    return [];
+  });
+  const [hasSetDefaultAssignee, setHasSetDefaultAssignee] = useState(() => {
+    const hasUrl = !!searchParams.get('assignees');
+    if (hasUrl) return true;
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('flowzen_tasks_filters');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          return !!(parsed.assignees && parsed.assignees.length > 0);
+        } catch { /* ignore */ }
+      }
+    }
+    return false;
+  });
 
   useEffect(() => {
     if (user?.id && user.role !== 'TEAM_MEMBER' && !hasSetDefaultAssignee) {
@@ -159,15 +160,61 @@ function TasksContent() {
       setHasSetDefaultAssignee(true);
     }
   }, [user, hasSetDefaultAssignee]);
+
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
-  const [teamFilter, setTeamFilter] = useState<string[]>([]);
+  const [teamFilter, setTeamFilter] = useState<string[]>(() => {
+    const val = searchParams.get('teams');
+    if (val) return val.split(',');
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('flowzen_tasks_filters');
+      if (saved) {
+        try {
+          return JSON.parse(saved).teams || [];
+        } catch { /* ignore */ }
+      }
+    }
+    return [];
+  });
+  const [showCompleted, setShowCompleted] = useState(false);
   const [sort, setSort] = useState<string>('createdAt_desc');
   const [dueDateFrom, setDueDateFrom] = useState('');
   const [dueDateTo, setDueDateTo] = useState('');
 
+  // Sync filter states with URL query parameters and localStorage
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+
+    if (projectFilter.length > 0) params.set('projects', projectFilter.join(','));
+    else params.delete('projects');
+
+    if (statusFilter.length > 0) params.set('statuses', statusFilter.join(','));
+    else params.delete('statuses');
+
+    if (assigneeFilter.length > 0) params.set('assignees', assigneeFilter.join(','));
+    else params.delete('assignees');
+
+    if (teamFilter.length > 0) params.set('teams', teamFilter.join(','));
+    else params.delete('teams');
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('flowzen_tasks_filters', JSON.stringify({
+        projects: projectFilter,
+        statuses: statusFilter,
+        assignees: assigneeFilter,
+        teams: teamFilter
+      }));
+    }
+
+    const currentQuery = searchParams.toString();
+    const newQuery = params.toString();
+    if (currentQuery !== newQuery) {
+      router.replace(`?${newQuery}`, { scroll: false });
+    }
+  }, [projectFilter, statusFilter, assigneeFilter, teamFilter, router, searchParams]);
+
   const ALL_TASK_COLUMNS = [
     { id: 'task', label: 'Task' },
-    { id: 'client', label: 'Client' },
+    { id: 'client', label: 'Company' },
     { id: 'project', label: 'Project' },
     { id: 'assignee', label: 'Assignee' },
     { id: 'priority', label: 'Priority' },
@@ -239,6 +286,12 @@ function TasksContent() {
     };
   }, [showCreate, selectedTask, isEditing]);
 
+  const statusParam = useMemo(() => {
+    if (statusFilter.length > 0) return statusFilter.join(',');
+    if (!showCompleted) return TASK_STATUSES.filter(s => s !== 'COMPLETED').join(',');
+    return '';
+  }, [statusFilter, showCompleted]);
+
   const {
     data,
     isLoading: isLoadingTasks,
@@ -246,7 +299,7 @@ function TasksContent() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage
-  } = useTasks(search, statusFilter.join(','), projectFilter.join(','), assigneeFilter.join(','), priorityFilter.join(','), teamFilter.join(','), searchParams.get('filter'), sort, dueDateFrom, dueDateTo);
+  } = useTasks(search, statusParam, projectFilter.join(','), assigneeFilter.join(','), priorityFilter.join(','), teamFilter.join(','), searchParams.get('filter'), sort, dueDateFrom, dueDateTo);
 
   const tasks = useMemo(() => {
     const rawTasks = data?.pages.flatMap((page) => page.tasks) || [];
@@ -321,201 +374,12 @@ function TasksContent() {
     }
   };
 
-  const { register, handleSubmit, control, reset, watch, formState: { errors } } = useForm<TaskFormValues>({
-    resolver: zodResolver(taskSchema),
-    defaultValues: blankTaskValues(),
-  });
-  const [submitting, setSubmitting] = useState(false);
-  const [commentContent, setCommentContent] = useState('');
-  const [submittingComment, setSubmittingComment] = useState(false);
-
-  // The create + edit screens share one form. Clear it whenever the create modal
-  // opens so leftover data from a previous edit doesn't show in "New Task".
-  useEffect(() => {
-    if (showCreate && !isEditing) reset(blankTaskValues());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showCreate]);
-
-  const selectedProjectId = watch('projectId');
-
-  const availableAssignees = useMemo(() => {
-    // Build a lookup from the enriched /api/team data (includes capacity, activeTasks, etc.)
-    const memberMap = new Map<string, any>();
-    members.forEach((m: any) => memberMap.set(m.id, m));
-
-    const addUser = (u: any, enrichedUsers: Map<string, any>) => {
-      if (!u?.id) return;
-      // Prefer the enriched team data (which has capacity) over raw project member data
-      const enriched = memberMap.get(u.id) ?? u;
-      enrichedUsers.set(u.id, enriched);
-    };
-
-    const users = new Map<string, any>();
-    if (selectedProjectId) {
-      const proj = projects.find(p => p.id === selectedProjectId);
-      if (proj) {
-        proj.members?.forEach((m: any) => { if (m.user) addUser(m.user, users); });
-        proj.teams?.forEach((t: any) => {
-          t.team?.members?.forEach((m: any) => { if (m.id) addUser(m, users); });
-        });
-        if (proj.owner?.id) addUser(proj.owner, users);
-      }
-    } else {
-      members.forEach((m: any) => users.set(m.id, m));
-    }
-    return Array.from(users.values());
-  }, [selectedProjectId, projects, members]);
-
-  async function handleAddComment() {
-    if (!selectedTask || !commentContent.trim()) return;
-    setSubmittingComment(true);
-    try {
-      await api.post(`/tasks/${selectedTask.id}/comments`, { content: commentContent });
-      setCommentContent('');
-      toast.success('Comment added');
-      // Refetch full task
-      const fullTask = await api.get<Task>(`/tasks/${selectedTask.id}`);
-      setSelectedTaskState(fullTask);
-      refetchTasks();
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to add comment');
-    } finally {
-      setSubmittingComment(false);
-    }
-  }
-
-  useEffect(() => {
-    const sse = getSSE();
-    if (sse) {
-      const handleTaskUpdated = (updatedTask: any) => {
-        refetchTasks();
-        if (selectedTask?.id && updatedTask?.id === selectedTask.id) {
-          api.get<Task>(`/tasks/${updatedTask.id}`).then((fullTask) => {
-            setSelectedTaskState(fullTask);
-          }).catch(() => { });
-        }
-      };
-
-      const handleTaskDeleted = (deletedTask: any) => {
-        refetchTasks();
-        if (selectedTask?.id && deletedTask?.id === selectedTask.id) {
-          setSelectedTaskState(null);
-          toast('The task you were viewing was deleted by another user.', { icon: '🗑️' });
-        }
-      };
-
-      sse.on('task:created', refetchTasks);
-      sse.on('task:updated', handleTaskUpdated);
-      sse.on('task:deleted', handleTaskDeleted);
-      sse.on('tasks:reordered', refetchTasks);
-
-      return () => {
-        sse.off('task:created', refetchTasks);
-        sse.off('task:updated', handleTaskUpdated);
-        sse.off('task:deleted', handleTaskDeleted);
-        sse.off('tasks:reordered', refetchTasks);
-      };
-    }
-  }, [refetchTasks, selectedTask?.id]);
-
-  const onInvalid = (errors: any) => {
-    console.log('Form validation failed:', errors);
-    const drawer = document.getElementById('create-task-drawer') || document.getElementById('edit-task-drawer');
-    if (drawer) {
-      drawer.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  };
-
-  async function handleCreate(data: TaskFormValues) {
-    setSubmitting(true);
-    let combinedDueDate: string | undefined = undefined;
-    if (data.dueDateOnly) {
-      combinedDueDate = data.dueTimeOnly
-        ? `${data.dueDateOnly}T${data.dueTimeOnly}`
-        : `${data.dueDateOnly}T23:59`;
-    }
-    try {
-      await api.post('/tasks', {
-        ...data,
-        assigneeIds: data.assigneeIds || [],
-        reviewerId: data.reviewerId || undefined,
-        dueDate: combinedDueDate,
-        assignedDate: data.assignedDate || undefined,
-        assignedById: data.assignedById || undefined,
-        driveLink: data.driveLink || undefined,
-      });
-      toast.success('Task created successfully');
-      setShowCreate(false);
-      reset();
-      refetchTasks();
-    } catch (err: any) { toast.error(err.message || 'Failed to create task'); } finally { setSubmitting(false); }
-  }
-
-  async function handleEdit(data: TaskFormValues) {
-    if (!selectedTask) return;
-    setSubmitting(true);
-    let combinedDueDate: string | undefined = undefined;
-    if (data.dueDateOnly) {
-      combinedDueDate = data.dueTimeOnly
-        ? `${data.dueDateOnly}T${data.dueTimeOnly}`
-        : `${data.dueDateOnly}T23:59`;
-    }
-    try {
-      await api.put(`/tasks/${selectedTask.id}`, {
-        ...data,
-        assigneeIds: data.assigneeIds || [],
-        reviewerId: data.reviewerId || undefined,
-        dueDate: combinedDueDate,
-        assignedDate: data.assignedDate || undefined,
-        assignedById: data.assignedById || undefined,
-        driveLink: data.driveLink || undefined,
-      });
-      toast.success('Task updated successfully');
-      setIsEditing(false);
-      setSelectedTask(null);
-      reset();
-      refetchTasks();
-    } catch (err: any) { toast.error(err.message || 'Failed to update task'); } finally { setSubmitting(false); }
-  }
-
   function startEditing(taskArg?: Task) {
     const t = taskArg || selectedTask;
     if (!t) return;
-
-    let dateStr = '';
-    let timeStr = '';
-    if (t.dueDate) {
-      const d = new Date(t.dueDate);
-      if (!isNaN(d.getTime())) {
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        const hours = String(d.getHours()).padStart(2, '0');
-        const minutes = String(d.getMinutes()).padStart(2, '0');
-        dateStr = `${year}-${month}-${day}`;
-        timeStr = `${hours}:${minutes}`;
-      }
+    if (taskArg) {
+      setSelectedTask(taskArg);
     }
-
-    reset({
-      title: t.title,
-      description: t.description || '',
-      type: t.type || 'OTHER',
-      projectId: t.project?.id || t.projectId || '',
-      assigneeIds: t.assignees?.length ? t.assignees.map((a) => a.id) : (t.assignee ? [t.assignee.id] : []),
-      reviewerId: t.reviewer?.id || '',
-      priority: t.priority,
-      status: t.status,
-      dueDate: t.dueDate ? formatForDateTimeLocal(t.dueDate) : '',
-      dueDateOnly: dateStr,
-      dueTimeOnly: timeStr,
-      assignedDate: t.assignedDate ? new Date(t.assignedDate).toISOString().split('T')[0] : '',
-      assignedById: t.assignedBy?.id || '',
-      loggedHours: t.loggedHours || 0,
-      driveLink: t.driveLink || '',
-      isRecurring: t.isRecurring || false,
-      recurrenceFrequency: t.recurrenceFrequency || 'WEEKLY',
-    });
     setIsEditing(true);
   }
 
@@ -607,6 +471,24 @@ function TasksContent() {
     }
   };
 
+  const isCustomSortActive = sort && sort !== 'createdAt_desc';
+  const isDefaultAssigneeActive = !!(user?.id && user.role !== 'TEAM_MEMBER' && assigneeFilter.length === 1 && assigneeFilter[0] === user.id);
+  const isAssigneeCustom = assigneeFilter.length > 0 && !isDefaultAssigneeActive;
+  const isAssigneeCleared = assigneeFilter.length === 0 && !!(user?.id && user.role !== 'TEAM_MEMBER');
+
+  const hasActiveFilters = !!(
+    search ||
+    projectFilter.length > 0 ||
+    statusFilter.length > 0 ||
+    priorityFilter.length > 0 ||
+    teamFilter.length > 0 ||
+    isCustomSortActive ||
+    showCompleted ||
+    searchParams.get('filter') ||
+    isAssigneeCustom ||
+    isAssigneeCleared
+  );
+
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="h-full flex flex-col space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -619,134 +501,210 @@ function TasksContent() {
           </h1>
           <p className="text-sm text-secondary mt-1">{tasks.length} tasks</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {(search || projectFilter.length || statusFilter.length || priorityFilter.length || teamFilter.length || sort || assigneeFilter.length > 0 || searchParams.get('filter')) && (
-            <button
-              onClick={() => {
-                setSearch('');
-                setProjectFilter([]);
-                setStatusFilter([]);
-                setPriorityFilter([]);
-                setTeamFilter([]);
-                setSort('');
-                setAssigneeFilter([]);
-                router.replace('/tasks', { scroll: false });
-              }}
-              className="flex items-center gap-1.5 rounded-xl bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors border border-red-100"
-            >
-              <X className="h-4 w-4" /> Clear Filters
-            </button>
-          )}
-
-          <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all">
-            <Plus className="h-4 w-4" /> New Task
-          </button>
-        </div>
       </div>
 
       {/* Redesigned Clean Tasks Toolbar */}
-      <div className="bg-[#F9FAFB]/50 border border-border rounded-2xl p-3.5 shadow-sm flex flex-col gap-3.5 w-full mb-6">
-        {/* Row 1: Search + Dropdowns */}
-        <div className="flex flex-wrap items-center justify-between gap-3 w-full">
+      <div className="bg-white border border-border rounded-2xl p-4 shadow-sm flex flex-col gap-4 w-full mb-6">
+        {/* Row 1: Search + Active Filter Pills */}
+        <div className="flex flex-wrap items-center gap-2 w-full">
           {/* Search Box */}
-          <div className="relative w-full sm:w-60 md:w-130 shrink-0">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
+          <div className="relative w-full sm:w-64 md:w-80 shrink-0">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search tasks..."
-              className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+              className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-[#9CA3AF]"
             />
           </div>
 
-          {/* Select Dropdowns */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Project Select */}
-            <div className="w-full sm:w-36">
+          {/* Filter Pills */}
+          <div className="shrink-0">
+            <MultiSelect
+              showSelectAll
+              value={projectFilter}
+              onChange={setProjectFilter}
+              placeholder="Projects"
+              triggerClassName={projectFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              options={projects.map((p) => ({ label: p.name, value: p.id }))}
+            />
+          </div>
+
+          <div className="shrink-0">
+            <MultiSelect
+              showSelectAll
+              value={statusFilter}
+              onChange={setStatusFilter}
+              placeholder="Status"
+              triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              options={TASK_STATUS_OPTIONS}
+            />
+          </div>
+
+          <div className="shrink-0">
+            <MultiSelect
+              showSelectAll
+              value={teamFilter}
+              onChange={setTeamFilter}
+              placeholder="Departments"
+              triggerClassName={teamFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              options={teams.map((t: any) => ({ label: t.name, value: t.id }))}
+            />
+          </div>
+
+          {user?.role !== 'TEAM_MEMBER' && (
+            <div className="shrink-0">
               <MultiSelect
                 showSelectAll
-                value={projectFilter}
-                onChange={setProjectFilter}
-                placeholder="Projects"
-                options={projects.map((p) => ({ label: p.name, value: p.id }))}
+                value={assigneeFilter}
+                onChange={setAssigneeFilter}
+                placeholder="Assignees"
+                triggerClassName={assigneeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+                options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
               />
             </div>
+          )}
 
-            {/* Status Select */}
-            <div className="w-full sm:w-36">
-              <MultiSelect
-                showSelectAll
-                value={statusFilter}
-                onChange={setStatusFilter}
-                placeholder="Status"
-                options={TASK_STATUS_OPTIONS}
+          <div className="shrink-0">
+            <MultiSelect
+              showSelectAll
+              value={priorityFilter}
+              onChange={setPriorityFilter}
+              placeholder="Priority"
+              triggerClassName={priorityFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              options={[
+                { label: 'Low', value: 'LOW' },
+                { label: 'Medium', value: 'MEDIUM' },
+                { label: 'High', value: 'HIGH' },
+                { label: 'Critical', value: 'CRITICAL' },
+                { label: 'Urgent', value: 'URGENT' },
+              ]}
+            />
+          </div>
+
+          {view === 'list' && (
+            <div className="shrink-0">
+              <Select
+                ariaLabel="Sort Tasks"
+                value={sort}
+                onChange={setSort}
+                buttonClassName="px-3 h-9 rounded-xl border border-border bg-white text-secondary text-xs font-medium focus:ring-1 focus:ring-primary shadow-none"
+                options={[
+                  { label: 'Sort: Created (New)', value: 'createdAt_desc' },
+                  { label: 'Sort: Project A-Z', value: 'project_asc' },
+                  { label: 'Sort: Project Z-A', value: 'project_desc' },
+                  { label: 'Sort: Priority (Low-High)', value: 'priority_asc' },
+                  { label: 'Sort: Priority (High-Low)', value: 'priority_desc' },
+                  { label: 'Sort: Status (To Do-Done)', value: 'status_asc' },
+                  { label: 'Sort: Status (Done-To Do)', value: 'status_desc' },
+                  { label: 'Sort: Name A-Z', value: 'title_asc' },
+                  { label: 'Sort: Name Z-A', value: 'title_desc' },
+                  { label: 'Sort: Created (Old)', value: 'createdAt_asc' },
+                  { label: 'Sort: Due Date', value: 'dueDate_desc' },
+                  { label: 'Sort: Updated', value: 'updatedAt_desc' },
+                ]}
               />
             </div>
+          )}
 
-            {/* Assignee Select (Admins/PMs only) */}
-            {user?.role !== 'TEAM_MEMBER' && (
-              <div className="w-full sm:w-36">
-                <MultiSelect
-                  showSelectAll
-                  value={assigneeFilter}
-                  onChange={setAssigneeFilter}
-                  placeholder="Assignees"
-                  options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
-                />
-              </div>
-            )}
-
-            {/* Sort Select */}
-            {view === 'list' && (
-              <div className="w-full sm:w-44">
-                <Select
-                  ariaLabel="Sort Tasks"
-                  value={sort}
-                  onChange={setSort}
-                  options={[
-                    { label: 'Created: Newest', value: 'createdAt_desc' },
-                    { label: 'Project: A-Z', value: 'project_asc' },
-                    { label: 'Project: Z-A', value: 'project_desc' },
-                    { label: 'Priority: Low to Urgent', value: 'priority_asc' },
-                    { label: 'Priority: Urgent to Low', value: 'priority_desc' },
-                    { label: 'Status: To Do to Done', value: 'status_asc' },
-                    { label: 'Status: Done to To Do', value: 'status_desc' },
-                    { label: 'Task Name: A-Z', value: 'title_asc' },
-                    { label: 'Task Name: Z-A', value: 'title_desc' },
-                    { label: 'Created: Oldest', value: 'createdAt_asc' },
-                    { label: 'Due Date: Earliest', value: 'dueDate_asc' },
-                    { label: 'Due Date: Latest', value: 'dueDate_desc' },
-                    { label: 'Updated: Newest', value: 'updatedAt_desc' },
-                  ]}
-                />
-              </div>
-            )}
+          <div className="flex items-center gap-1.5 border border-border rounded-xl px-3 h-9 bg-white shadow-sm shrink-0">
+            <label htmlFor="show-completed" className="text-xs font-semibold text-[#4B5563] cursor-pointer select-none">Show Done</label>
+            <button
+              id="show-completed"
+              type="button"
+              role="switch"
+              aria-checked={showCompleted}
+              onClick={() => setShowCompleted(!showCompleted)}
+              className={`relative inline-flex h-4.5 w-8 shrink-0 items-center rounded-full border transition-colors ${showCompleted ? 'bg-primary border-primary' : 'bg-gray-200 border-gray-300'}`}
+            >
+              <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform ${showCompleted ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+            </button>
           </div>
         </div>
 
         {/* Separator line */}
         <div className="h-px bg-border/60 w-full" />
 
-        {/* Row 2: Segmented Control tabs */}
-        <div className="flex bg-[#F3F4F6] p-1 rounded-xl gap-0.5 border border-border/50 self-start shrink-0 overflow-x-auto no-scrollbar">
-          {[
-            { id: '', label: 'All', activeColor: 'bg-white text-primary shadow-sm border border-black/5' },
-            { id: 'today', label: 'Today', activeColor: 'bg-white text-primary shadow-sm border border-black/5' },
-            { id: 'overdue', label: 'Overdue', activeColor: 'bg-red-500 text-white shadow-sm' },
-            { id: 'approval', label: 'Approval', activeColor: 'bg-amber-500 text-white shadow-sm' }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setQuickFilter(tab.id)}
-              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${currentFilter === tab.id
-                ? tab.activeColor
-                : 'text-secondary hover:text-primary'
-                }`}
-            >
-              {tab.label}
+        {/* Row 2: Tabs + Actions */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
+          {/* Left Side: Segmented tabs */}
+          <div className="flex bg-[#F3F4F6] p-1 rounded-xl gap-0.5 border border-border/50 self-start shrink-0 overflow-x-auto no-scrollbar">
+            {[
+              { id: '', label: 'All', activeColor: 'bg-white text-primary shadow-sm border border-black/5' },
+              { id: 'today', label: 'Today', activeColor: 'bg-white text-primary shadow-sm border border-black/5' },
+              { id: 'overdue', label: 'Overdue', activeColor: 'bg-red-500 text-white shadow-sm' },
+              { id: 'approval', label: 'Approval', activeColor: 'bg-amber-500 text-white shadow-sm' }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setQuickFilter(tab.id)}
+                className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${currentFilter === tab.id
+                  ? tab.activeColor
+                  : 'text-secondary hover:text-primary'
+                  }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Right Side: View toggle, settings, new task, and clear filters */}
+          <div className="flex items-center justify-end gap-2.5 ml-auto sm:ml-0">
+            {hasActiveFilters && (
+              <button
+                onClick={() => {
+                  setSearch('');
+                  setProjectFilter([]);
+                  setStatusFilter([]);
+                  setPriorityFilter([]);
+                  setTeamFilter([]);
+                  setSort('createdAt_desc');
+                  if (user?.id && user.role !== 'TEAM_MEMBER') {
+                    setAssigneeFilter([user.id]);
+                  } else {
+                    setAssigneeFilter([]);
+                  }
+                  setShowCompleted(false);
+                  if (typeof window !== 'undefined') {
+                    localStorage.removeItem('flowzen_tasks_filters');
+                  }
+                  router.replace('/tasks', { scroll: false });
+                }}
+                className="flex items-center gap-1.5 h-8.5 rounded-xl bg-red-50 px-3 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors border border-red-100"
+              >
+                <X className="h-3.5 w-3.5" /> Clear Filters
+              </button>
+            )}
+
+            {/* List / Board Toggle Buttons */}
+            <div className="flex bg-[#F3F4F6] p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-8.5 items-center">
+              <button
+                type="button"
+                onClick={() => setView('list')}
+                className={`p-1.5 rounded-lg transition-all ${view === 'list' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
+                title="List View"
+              >
+                <LayoutList className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setView('board')}
+                className={`p-1.5 rounded-lg transition-all ${view === 'board' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
+                title="Board View"
+              >
+                <Kanban className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <button onClick={() => setShowViewSettings(true)} className="p-2 rounded-xl border border-border bg-white hover:bg-gray-50 transition-colors text-secondary hover:text-primary h-8.5 w-8.5 flex items-center justify-center" title="View settings">
+              <Settings className="h-3.5 w-3.5" />
             </button>
-          ))}
+
+            <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-[#1F2937] transition-all h-8.5">
+              <Plus className="h-3.5 w-3.5" /> New Task
+            </button>
+          </div>
         </div>
       </div>
 
@@ -907,9 +865,7 @@ function TasksContent() {
                           <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
                             <ColumnDropdown
                               title="Due Date"
-                              sortAscValue="dueDate_asc"
                               sortDescValue="dueDate_desc"
-                              sortAscLabel="Earliest First"
                               sortDescLabel="Latest First"
                               currentSort={sort}
                               onSortChange={setSort}
@@ -971,7 +927,7 @@ function TasksContent() {
                               </div>
                             </td>
                           )}
-                          {visibleColumns.includes('client') && <td className="px-6 py-3.5 text-sm text-secondary">{t.project?.client?.name || '-'}</td>}
+                          {visibleColumns.includes('client') && <td className="px-6 py-3.5 text-sm text-secondary">{t.project?.client?.company || '-'}</td>}
                           {visibleColumns.includes('project') && <td className="px-6 py-3.5 text-sm text-secondary">{t.project?.name}</td>}
                           {visibleColumns.includes('assignee') && (
                             <td className="px-6 py-3.5">
@@ -1091,550 +1047,45 @@ function TasksContent() {
         )}
       </AnimatePresence>
 
-      {/* Edit Task Modal */}
-      <AnimatePresence>
-        {selectedTask && isEditing && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-100 bg-black/20 backdrop-blur-sm" onClick={() => { setSelectedTask(null); setIsEditing(false); }} />
-            <motion.div
-              id="edit-task-drawer"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              className="fixed right-0 top-0 bottom-0 z-101 w-full max-w-2xl bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto"
-            >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] sticky top-0 bg-white z-10">
-                <h2 className="text-lg font-semibold text-primary">Task Details</h2>
-                <button onClick={() => { setSelectedTask(null); setIsEditing(false); }} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
-                  <X className="h-4 w-4 text-secondary" />
-                </button>
-              </div>
-              <div className="p-6 pb-24 md:pb-6">
-                {selectedTask && (
-                  <div className="flex flex-col">
-                    <div className="flex items-center justify-between border-b border-[#F3F4F6] pb-4 mb-4">
-                      <div className="flex items-center gap-2">
-                        {!isEditing && (
-                          <>
-                            <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${TASK_STATUS_COLORS[selectedTask.status]}`}>{selectedTask.status.replace('_', ' ')}</span>
-                            <span className={`h-2 w-2 rounded-full ${priorityDots[selectedTask.priority]}`} />
-                          </>
-                        )}
-                        {isEditing && <h2 className="text-lg font-semibold text-primary">Edit Task</h2>}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {!isEditing && (user?.role !== 'TEAM_MEMBER' || selectedTask.assignee?.id === user?.id) && (
-                          <>
-                            <button onClick={() => startEditing()} className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
-                              Edit
-                            </button>
-                            <button onClick={deleteTask} className="rounded-xl border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 hover:border-red-300 transition-all flex items-center gap-1.5">
-                              <Trash2 className="h-3.5 w-3.5" /> Delete
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    {isEditing ? (
-                      <form onSubmit={handleSubmit(handleEdit, onInvalid)} className="space-y-4">
-                        <div>
-                          <label htmlFor="te-title" className="block text-sm font-medium text-[#374151] mb-1.5">Title *</label>
-                          <input id="te-title" {...register('title')} aria-invalid={!!errors.title} aria-describedby={errors.title ? 'te-title-error' : undefined} className={`w-full rounded-xl border ${errors.title ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
-                          {errors.title && <p id="te-title-error" aria-live="polite" className="mt-1 text-xs text-red-500">{errors.title.message}</p>}
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label htmlFor="te-dueDateOnly" className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
-                            <input id="te-dueDateOnly" type="date" {...register('dueDateOnly')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                          </div>
-                          <div>
-                            <label htmlFor="te-dueTimeOnly" className="block text-sm font-medium text-[#374151] mb-1.5">Due Time</label>
-                            <input id="te-dueTimeOnly" type="time" {...register('dueTimeOnly')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                          </div>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
-                          <Controller name="description" control={control} render={({ field }) => (
-                            <RichTextEditor value={field.value || ''} onChange={field.onChange} placeholder="Task details..." />
-                          )} />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-[#374151] mb-1.5">Project *</label>
-                          <Controller name="projectId" control={control} render={({ field }) => (
-                            <Select
-                              ariaLabel="Project"
-                              value={field.value}
-                              onChange={field.onChange}
-                              buttonClassName={errors.projectId ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}
-                              options={[{ label: 'Select project', value: '' }, ...projects.map((p) => ({ label: p.name, value: p.id }))]}
-                            />
-                          )} />
-                          {errors.projectId && <p aria-live="polite" className="mt-1 text-xs text-red-500">{errors.projectId.message}</p>}
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-[#374151] mb-1.5">Task Type</label>
-                            <Controller name="type" control={control} render={({ field }) => (
-                              <Select
-                                ariaLabel="Task Type"
-                                value={field.value || 'OTHER'}
-                                onChange={field.onChange}
-                                options={[
-                                  { label: 'Design', value: 'DESIGN' },
-                                  { label: 'Content', value: 'CONTENT' },
-                                  { label: 'Video', value: 'VIDEO' },
-                                  { label: 'Digital Marketing', value: 'DIGITAL_MARKETING' },
-                                  { label: 'Social Media', value: 'SOCIAL_MEDIA' },
-                                  { label: 'Development', value: 'DEVELOPMENT' },
-                                  { label: 'Strategy', value: 'STRATEGY' },
-                                  { label: 'Business', value: 'BUSINESS' },
-                                  { label: 'Other', value: 'OTHER' },
-                                ]}
-                              />
-                            )} />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-[#374151] mb-1.5">Reviewer</label>
-                            <Controller name="reviewerId" control={control} render={({ field }) => (
-                              <Select
-                                ariaLabel="Reviewer"
-                                value={field.value || ''}
-                                onChange={field.onChange}
-                                options={[{ label: 'No Reviewer', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))]}
-                              />
-                            )} />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-[#374151] mb-1.5">Assigned By</label>
-                            <Controller name="assignedById" control={control} render={({ field }) => (
-                              <Select
-                                ariaLabel="Assigned By"
-                                value={field.value || ''}
-                                onChange={field.onChange}
-                                options={[{ label: 'Self (Default)', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))]}
-                              />
-                            )} />
-                          </div>
-                          <div className="sm:col-span-2">
-                            <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignees</label>
-                            <Controller name="assigneeIds" control={control} render={({ field }) => (
-                              <MultiSelect
-                                showSelectAll
-                                compact={false}
-                                value={field.value || []}
-                                onChange={field.onChange}
-                                placeholder="Add assignees..."
-                                options={availableAssignees.map((m: any) => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
-                              />
-                            )} />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority</label>
-                            <Controller name="priority" control={control} render={({ field }) => (
-                              <Select
-                                ariaLabel="Priority"
-                                value={field.value}
-                                onChange={field.onChange}
-                                options={[{ label: 'Low', value: 'LOW' }, { label: 'Medium', value: 'MEDIUM' }, { label: 'High', value: 'HIGH' }, { label: 'Urgent', value: 'URGENT' }]}
-                              />
-                            )} />
-                          </div>
-                          <div>
-                            <label htmlFor="te-assignedDate" className="block text-sm font-medium text-[#374151] mb-1.5">Assigned Date</label>
-                            <input id="te-assignedDate" type="date" {...register('assignedDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                          </div>
-                          <div>
-                            <label htmlFor="te-loggedHours" className="block text-sm font-medium text-[#374151] mb-1.5">Time Spent (hours)</label>
-                            <input id="te-loggedHours" type="number" step="0.5" min="0" {...register('loggedHours', { valueAsNumber: true })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                          </div>
-                          <div className="flex flex-col justify-end">
-                            <label className="block text-sm font-medium text-[#374151] mb-1.5">Repeat Task</label>
-                            <Controller
-                              name="isRecurring"
-                              control={control}
-                              render={({ field }) => (
-                                <div className="flex items-center justify-between py-2 border border-border rounded-xl px-4 bg-white h-[46px] shadow-sm">
-                                  <span className="text-sm font-medium text-[#374151]">Repeat Task</span>
-                                  <button
-                                    type="button"
-                                    role="switch"
-                                    aria-checked={field.value}
-                                    onClick={() => field.onChange(!field.value)}
-                                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors ${field.value ? 'bg-primary border-primary' : 'bg-gray-200 border-gray-300'}`}
-                                  >
-                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${field.value ? 'translate-x-6' : 'translate-x-1'}`} />
-                                  </button>
-                                </div>
-                              )}
-                            />
-                          </div>
-                          {watch('isRecurring') && (
-                            <div className="sm:col-span-2">
-                              <label className="block text-sm font-medium text-[#374151] mb-1.5">Repeat Frequency</label>
-                              <Controller name="recurrenceFrequency" control={control} render={({ field }) => (
-                                <Select
-                                  ariaLabel="Repeat Frequency"
-                                  value={field.value || 'WEEKLY'}
-                                  onChange={field.onChange}
-                                  options={[{ label: 'Daily', value: 'DAILY' }, { label: 'Weekly', value: 'WEEKLY' }, { label: 'Monthly', value: 'MONTHLY' }, { label: 'Yearly', value: 'YEARLY' }]}
-                                />
-                              )} />
-                            </div>
-                          )}
-                        </div>
-                        <div>
-                          <label htmlFor="te-driveLink" className="block text-sm font-medium text-[#374151] mb-1.5">Drive Link (Uploads, Drafts)</label>
-                          <input id="te-driveLink" type="url" {...register('driveLink')} placeholder="https://drive.google.com/..." aria-invalid={!!errors.driveLink} aria-describedby={errors.driveLink ? 'te-driveLink-error' : undefined} className={`w-full rounded-xl border ${errors.driveLink ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
-                          {errors.driveLink && <p id="te-driveLink-error" aria-live="polite" className="mt-1 text-xs text-red-500">{errors.driveLink.message}</p>}
-                        </div>
-                        <div className="pt-4 flex gap-3">
-                          <button type="button" onClick={() => setIsEditing(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
-                          <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submitting ? 'Saving...' : 'Save Changes'}</button>
-                        </div>
-                      </form>
-                    ) : (
-                      <div>
-                        <h2 className="text-xl font-semibold text-primary mb-2">{selectedTask.title}</h2>
-                        {selectedTask.description && <div className="text-sm text-secondary mb-4 prose prose-sm prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: selectedTask.description }} />}
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                            <span className="text-sm text-secondary">Project</span>
-                            <span className="text-sm font-medium text-primary">{selectedTask.project?.name}</span>
-                          </div>
-                          <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6] gap-3">
-                            <span className="text-sm text-secondary shrink-0">Assignees</span>
-                            <span className="text-sm font-medium text-primary text-right">
-                              {taskAssignees(selectedTask).length ? taskAssignees(selectedTask).map((a) => a.name).join(', ') : 'Unassigned'}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                            <span className="text-sm text-secondary">Created</span>
-                            <span className="text-sm font-medium text-primary">{formatDate(selectedTask.createdAt)}</span>
-                          </div>
-                          {selectedTask.assignedBy && (
-                            <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                              <span className="text-sm text-secondary">Assigned By</span>
-                              <span className="text-sm font-medium text-primary">{selectedTask.assignedBy.name}</span>
-                            </div>
-                          )}
-                          <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                            <span className="text-sm text-secondary">Due Date</span>
-                            <span className="text-sm font-medium text-primary">{formatDate(selectedTask.dueDate)}</span>
-                          </div>
-                          {selectedTask.reviewer && (
-                            <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                              <span className="text-sm text-secondary">Reviewer</span>
-                              <span className="text-sm font-medium text-primary">{selectedTask.reviewer.name}</span>
-                            </div>
-                          )}
-                          {selectedTask.driveLink && (
-                            <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                              <span className="text-sm text-secondary">Drive Link</span>
-                              <a href={selectedTask.driveLink} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 hover:underline max-w-[200px] truncate">{selectedTask.driveLink}</a>
-                            </div>
-                          )}
-                          {selectedTask.completedAt && (
-                            <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                              <span className="text-sm text-secondary">Completed On</span>
-                              <span className="text-sm font-medium text-primary">{formatDate(selectedTask.completedAt)}</span>
-                            </div>
-                          )}
-                          <div className="flex items-center justify-between py-2">
-                            <span className="text-sm text-secondary">Priority</span>
-                            <span className="text-sm font-medium text-primary capitalize">{selectedTask.priority.toLowerCase()}</span>
-                          </div>
-                          {(selectedTask.loggedHours ?? 0) > 0 && (
-                            <div className="flex items-center justify-between py-2 border-t border-[#F3F4F6]">
-                              <span className="text-sm text-secondary">Time Spent</span>
-                              <span className="text-sm font-medium text-primary">⏱ {selectedTask.loggedHours}h</span>
-                            </div>
-                          )}
-                        </div>
-                        {(user?.role !== 'TEAM_MEMBER' || selectedTask.assignee?.id === user?.id) && (
-                          <div className="mt-6">
-                            <label className="block text-sm font-medium text-[#374151] mb-2">Update Status</label>
-                            <div className="flex flex-wrap gap-2">
-                              {TASK_STATUSES.map((s) => (
-                                <button
-                                  key={s}
-                                  onClick={() => updateTaskStatus(selectedTask.id, s)}
-                                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${selectedTask.status === s ? 'bg-primary text-white' : 'border border-border text-secondary hover:bg-[#F9FAFB]'}`}
-                                >
-                                  {TASK_STATUS_LABELS[s]}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {/* Comments Section */}
-                        <div className="mt-8 border-t border-[#F3F4F6] pt-6">
-                          <h3 className="text-sm font-semibold text-primary mb-4">Comments</h3>
+      {/* Shared Task Create/Edit Drawer */}
+      <TaskFormDrawer
+        isOpen={showCreate || (isEditing && !!selectedTask)}
+        taskToEdit={isEditing ? selectedTask : null}
+        onClose={() => {
+          if (showCreate) setShowCreate(false);
+          if (isEditing) {
+            setIsEditing(false);
+            setSelectedTask(null);
+          }
+        }}
+        onSuccess={() => {
+          refetchTasks();
+        }}
+      />
 
-                          {/* Add Comment */}
-                          <div className="mb-6 flex gap-3">
-                            <div className="flex-1">
-                              <textarea
-                                value={commentContent}
-                                onChange={(e) => setCommentContent(e.target.value)}
-                                placeholder="Ask a question or post an update..."
-                                className="w-full min-h-[80px] rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus:border-primary transition-all resize-none"
-                              />
-                              <div className="mt-2 flex justify-end">
-                                <button
-                                  onClick={handleAddComment}
-                                  disabled={submittingComment || !commentContent.trim()}
-                                  className="bg-primary text-white px-4 py-1.5 rounded-lg text-xs font-medium hover:bg-black transition-colors disabled:opacity-50"
-                                >
-                                  {submittingComment ? 'Posting...' : 'Post Comment'}
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Comments List */}
-                          <div className="space-y-4">
-                            {!selectedTask.comments || selectedTask.comments.length === 0 ? (
-                              <p className="text-sm text-secondary italic text-center py-4">No comments yet. Be the first to start the discussion!</p>
-                            ) : (
-                              selectedTask.comments.map((comment) => (
-                                <div key={comment.id} className="flex gap-3">
-                                  <div className="h-8 w-8 rounded-full bg-[#F3F4F6] text-primary text-xs font-medium flex items-center justify-center shrink-0 border border-border">
-                                    {comment.author.name.charAt(0).toUpperCase()}
-                                  </div>
-                                  <div className="flex-1 bg-surface border border-border rounded-xl p-3">
-                                    <div className="flex items-center justify-between mb-1">
-                                      <span className="font-semibold text-xs text-primary">{comment.author.name}</span>
-                                      <span className="text-[10px] text-[#9CA3AF]">{new Date(comment.createdAt).toLocaleDateString()}</span>
-                                    </div>
-                                    <p className="text-sm text-[#374151] whitespace-pre-wrap">{comment.content}</p>
-                                  </div>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        </div>
-
-
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* Create Modal */}
-      <AnimatePresence>
-        {showCreate && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-100 bg-black/20 backdrop-blur-sm" onClick={() => setShowCreate(false)} />
-            <motion.div
-              id="create-task-drawer"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              className="fixed right-0 top-0 bottom-0 z-101 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto"
-            >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] sticky top-0 bg-white z-10">
-                <h2 className="text-lg font-semibold text-primary">New Task</h2>
-                <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
-                  <X className="h-4 w-4 text-secondary" />
-                </button>
-              </div>
-              <div className="p-6 pb-24 md:pb-6">
-                <form onSubmit={handleSubmit(handleCreate, onInvalid)} className="space-y-4">
-                  <div>
-                    <label htmlFor="tn-title" className="block text-sm font-medium text-[#374151] mb-1.5">Title *</label>
-                    <input id="tn-title" {...register('title')} aria-invalid={!!errors.title} aria-describedby={errors.title ? 'tn-title-error' : undefined} className={`w-full rounded-xl border ${errors.title ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
-                    {errors.title && <p id="tn-title-error" aria-live="polite" className="mt-1 text-xs text-red-500">{errors.title.message}</p>}
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="tn-dueDateOnly" className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
-                      <input id="tn-dueDateOnly" type="date" {...register('dueDateOnly')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                    </div>
-                    <div>
-                      <label htmlFor="tn-dueTimeOnly" className="block text-sm font-medium text-[#374151] mb-1.5">Due Time</label>
-                      <input id="tn-dueTimeOnly" type="time" {...register('dueTimeOnly')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
-                    <Controller name="description" control={control} render={({ field }) => (
-                      <RichTextEditor value={field.value || ''} onChange={field.onChange} placeholder="Task details..." />
-                    )} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Project *</label>
-                    <Controller name="projectId" control={control} render={({ field }) => (
-                      <Select
-                        ariaLabel="Project"
-                        value={field.value}
-                        onChange={field.onChange}
-                        buttonClassName={errors.projectId ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}
-                        options={[{ label: 'Select project', value: '' }, ...projects.map((p) => ({ label: p.name, value: p.id }))]}
-                      />
-                    )} />
-                    {errors.projectId && <p aria-live="polite" className="mt-1 text-xs text-red-500">{errors.projectId.message}</p>}
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Task Type</label>
-                      <Controller name="type" control={control} render={({ field }) => (
-                        <Select
-                          ariaLabel="Task Type"
-                          value={field.value || 'OTHER'}
-                          onChange={field.onChange}
-                          options={[
-                            { label: 'Design', value: 'DESIGN' },
-                            { label: 'Content', value: 'CONTENT' },
-                            { label: 'Video', value: 'VIDEO' },
-                            { label: 'Digital Marketing', value: 'DIGITAL_MARKETING' },
-                            { label: 'Social Media', value: 'SOCIAL_MEDIA' },
-                            { label: 'Development', value: 'DEVELOPMENT' },
-                            { label: 'Strategy', value: 'STRATEGY' },
-                            { label: 'Business', value: 'BUSINESS' },
-                            { label: 'Other', value: 'OTHER' },
-                          ]}
-                        />
-                      )} />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Reviewer</label>
-                      <Controller name="reviewerId" control={control} render={({ field }) => (
-                        <Select
-                          ariaLabel="Reviewer"
-                          value={field.value || ''}
-                          onChange={field.onChange}
-                          options={[{ label: 'No Reviewer', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))]}
-                        />
-                      )} />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Assigned By</label>
-                      <Controller name="assignedById" control={control} render={({ field }) => (
-                        <Select
-                          ariaLabel="Assigned By"
-                          value={field.value || ''}
-                          onChange={field.onChange}
-                          options={[{ label: 'Self (Default)', value: '' }, ...availableAssignees.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))]}
-                        />
-                      )} />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignees</label>
-                      <Controller name="assigneeIds" control={control} render={({ field }) => (
-                        <MultiSelect
-                          compact={false}
-                          value={field.value || []}
-                          onChange={field.onChange}
-                          placeholder="Add assignees..."
-                          options={availableAssignees.map((m: any) => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
-                        />
-                      )} />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority</label>
-                      <Controller name="priority" control={control} render={({ field }) => (
-                        <Select
-                          ariaLabel="Priority"
-                          value={field.value}
-                          onChange={field.onChange}
-                          options={[{ label: 'Low', value: 'LOW' }, { label: 'Medium', value: 'MEDIUM' }, { label: 'High', value: 'HIGH' }, { label: 'Urgent', value: 'URGENT' }]}
-                        />
-                      )} />
-                    </div>
-                    <div>
-                      <label htmlFor="tn-assignedDate" className="block text-sm font-medium text-[#374151] mb-1.5">Assigned Date</label>
-                      <input id="tn-assignedDate" type="date" {...register('assignedDate')} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                    </div>
-                    <div>
-                      <label htmlFor="tn-loggedHours" className="block text-sm font-medium text-[#374151] mb-1.5">Time Spent (hours)</label>
-                      <input id="tn-loggedHours" type="number" step="0.5" min="0" {...register('loggedHours', { valueAsNumber: true })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                    </div>
-                    <div className="flex flex-col justify-end">
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Repeat Task</label>
-                      <Controller
-                        name="isRecurring"
-                        control={control}
-                        render={({ field }) => (
-                          <div className="flex items-center justify-between py-2 border border-border rounded-xl px-4 bg-white h-[46px] shadow-sm">
-                            <span className="text-sm font-medium text-[#374151]">Repeat Task</span>
-                            <button
-                              type="button"
-                              role="switch"
-                              aria-checked={field.value}
-                              onClick={() => field.onChange(!field.value)}
-                              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors ${field.value ? 'bg-primary border-primary' : 'bg-gray-200 border-gray-300'}`}
-                            >
-                              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${field.value ? 'translate-x-6' : 'translate-x-1'}`} />
-                            </button>
-                          </div>
-                        )}
-                      />
-                    </div>
-                    {watch('isRecurring') && (
-                      <div className="sm:col-span-2">
-                        <label className="block text-sm font-medium text-[#374151] mb-1.5">Repeat Frequency</label>
-                        <Controller name="recurrenceFrequency" control={control} render={({ field }) => (
-                          <Select
-                            ariaLabel="Repeat Frequency"
-                            value={field.value || 'WEEKLY'}
-                            onChange={field.onChange}
-                            options={[{ label: 'Daily', value: 'DAILY' }, { label: 'Weekly', value: 'WEEKLY' }, { label: 'Monthly', value: 'MONTHLY' }, { label: 'Yearly', value: 'YEARLY' }]}
-                          />
-                        )} />
-                      </div>
-                    )}
-                    <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Task Status</label>
-                      <Controller
-                        name="status"
-                        control={control}
-                        render={({ field }) => (
-                          <div className="flex gap-2">
-                            {[
-                              { value: 'BACKLOG', label: 'Backlog', activeClass: 'bg-red-100 text-red-700 border-red-300 ring-2 ring-red-400 ring-offset-1' },
-                              { value: 'TODO', label: 'To Do', activeClass: 'bg-grey-50 text-grey-700 border-grey-300 ring-2 ring-grey-400 ring-offset-1' },
-                              { value: 'IN_PROGRESS', label: 'In Progress', activeClass: 'bg-blue-50 text-blue-700 border-blue-300 ring-2 ring-blue-400 ring-offset-1' },
-                            ].map((opt) => (
-                              <button
-                                key={opt.value}
-                                type="button"
-                                onClick={() => field.onChange(opt.value)}
-                                className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-all shadow-sm
-                                  ${field.value === opt.value
-                                    ? opt.activeClass
-                                    : 'border-border bg-white text-secondary hover:bg-[#F9FAFB]'
-                                  }`}
-                              >
-                                {opt.label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label htmlFor="tn-driveLink" className="block text-sm font-medium text-[#374151] mb-1.5">Drive Link (Uploads, Drafts)</label>
-                    <input id="tn-driveLink" type="url" {...register('driveLink')} placeholder="https://drive.google.com/..." aria-invalid={!!errors.driveLink} aria-describedby={errors.driveLink ? 'tn-driveLink-error' : undefined} className={`w-full rounded-xl border ${errors.driveLink ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
-                    {errors.driveLink && <p id="tn-driveLink-error" aria-live="polite" className="mt-1 text-xs text-red-500">{errors.driveLink.message}</p>}
-                  </div>
-                  <div className="pt-4 flex gap-3">
-                    <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
-                    <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submitting ? 'Creating...' : 'Create Task'}</button>
-                  </div>
-                </form>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
+      <ViewSettingsPanel
+        isOpen={showViewSettings}
+        onClose={() => setShowViewSettings(false)}
+        viewName={viewName}
+        onViewNameChange={setViewName}
+        viewType={view}
+        onViewTypeChange={setView}
+        columns={ALL_TASK_COLUMNS}
+        visibleColumns={visibleColumns}
+        onVisibleColumnsChange={setVisibleColumns}
+        onSave={() => {
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ viewType: view, visibleColumns, name: viewName }));
+          setShowViewSettings(false);
+          toast.success('View saved successfully');
+        }}
+        onReset={() => {
+          setView('list');
+          setVisibleColumns(ALL_TASK_COLUMNS.map(c => c.id));
+          setViewName('All Tasks');
+          localStorage.removeItem(LOCAL_STORAGE_KEY);
+          toast.success('View reset to default');
+        }}
+      />
     </motion.div>
   );
 }

@@ -67,7 +67,7 @@ function SocialLink({ platform, input }: { platform: 'linkedin' | 'instagram' | 
 
 const PIPELINE_STAGES = [
   'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
-  'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED', 'CHURNED'
+  'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'CONTRACT', 'PROJECT_COMPLETED', 'CHURNED'
 ];
 
 export default function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
