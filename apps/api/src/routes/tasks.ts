@@ -69,9 +69,9 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
       if (dueDateTo) dateRange.lte = new Date(dueDateTo as string);
       where.dueDate = dateRange;
     }
-    
+
     const andConditions: any[] = [];
-    
+
     if (filter === 'overdue') {
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
@@ -102,8 +102,8 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     } else if (filter === 'approval') {
       where.status = 'REVIEW';
     }
-    
-    
+
+
     // Match either the primary assignee or any of the multi-assignees.
     const assigneeMatch = (uid: string) => ({ OR: [{ assigneeId: uid }, { assignees: { some: { id: uid } } }] });
     if (req.user!.role === 'TEAM_MEMBER') {
@@ -149,20 +149,20 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
           _count: { select: { subtasks: true, comments: true, checklist: true } },
         },
         orderBy: sort === 'dueDate_asc' ? [{ dueDate: 'asc' }]
-               : sort === 'dueDate_desc' ? [{ dueDate: 'desc' }]
-               : sort === 'createdAt_asc' ? [{ createdAt: 'asc' }]
-               : sort === 'createdAt_desc' ? [{ createdAt: 'desc' }]
-               : sort === 'updatedAt_asc' ? [{ updatedAt: 'asc' }]
-               : sort === 'updatedAt_desc' ? [{ updatedAt: 'desc' }]
-               : sort === 'project_asc' ? [{ project: { name: 'asc' } }]
-               : sort === 'project_desc' ? [{ project: { name: 'desc' } }]
-               : sort === 'priority_asc' ? [{ priority: 'asc' }]
-               : sort === 'priority_desc' ? [{ priority: 'desc' }]
-               : sort === 'status_asc' ? [{ status: 'asc' }]
-               : sort === 'status_desc' ? [{ status: 'desc' }]
-               : sort === 'title_asc' ? [{ title: 'asc' }]
-               : sort === 'title_desc' ? [{ title: 'desc' }]
-               : [{ createdAt: 'desc' }],
+          : sort === 'dueDate_desc' ? [{ dueDate: 'desc' }]
+            : sort === 'createdAt_asc' ? [{ createdAt: 'asc' }]
+              : sort === 'createdAt_desc' ? [{ createdAt: 'desc' }]
+                : sort === 'updatedAt_asc' ? [{ updatedAt: 'asc' }]
+                  : sort === 'updatedAt_desc' ? [{ updatedAt: 'desc' }]
+                    : sort === 'project_asc' ? [{ project: { name: 'asc' } }]
+                      : sort === 'project_desc' ? [{ project: { name: 'desc' } }]
+                        : sort === 'priority_asc' ? [{ priority: 'asc' }]
+                          : sort === 'priority_desc' ? [{ priority: 'desc' }]
+                            : sort === 'status_asc' ? [{ status: 'asc' }]
+                              : sort === 'status_desc' ? [{ status: 'desc' }]
+                                : sort === 'title_asc' ? [{ title: 'asc' }]
+                                  : sort === 'title_desc' ? [{ title: 'desc' }]
+                                    : [{ createdAt: 'desc' }],
         skip,
         take: parseInt(limit as string),
       }),
@@ -300,7 +300,7 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
       const isMember = await prisma.projectMember.findFirst({
         where: { projectId: req.body.projectId, userId: req.user!.userId }
       });
-      
+
       let isTeamMember = false;
       if (!isMember) {
         const projectTeams = await prisma.projectTeam.findMany({
@@ -402,34 +402,44 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
       return;
     }
 
-    // Keep assigneeIds out of the Prisma spread, and translate any assignee change
-    // into both the primary field (assigneeId) and the assignees relation.
-    const { assigneeIds: bodyAssigneeIds, dueDateOnly, dueTimeOnly, ...rest } = req.body;
-    let assigneeUpdate: any = {};
+    // Build the update from an explicit allowlist. The client also sends derived
+    // fields (dueDateOnly/dueTimeOnly, which aren't columns) and a raw projectId
+    // (project is a REQUIRED relation, so its FK can only change via `connect`) —
+    // spreading req.body blindly makes prisma.task.update() throw.
+    const b = req.body;
+    const data: Record<string, unknown> = {};
+    const SCALARS = ['title', 'description', 'type', 'priority', 'status', 'order',
+      'reviewerId', 'assignedById', 'parentId', 'loggedHours', 'estimatedHours',
+      'driveLink', 'isRecurring', 'recurrenceFrequency'] as const;
+    for (const f of SCALARS) if (f in b) data[f] = b[f];
+
+    if ('dueDate' in b) data.dueDate = b.dueDate ? new Date(b.dueDate) : null;
+    if ('assignedDate' in b) data.assignedDate = b.assignedDate ? new Date(b.assignedDate) : null;
+
+    // Assignee change → primary field (assigneeId) + the assignees relation.
     let newAssigneeIds: string[] | null = null;
-    if (Array.isArray(bodyAssigneeIds)) {
-      newAssigneeIds = Array.from(new Set((bodyAssigneeIds as string[]).filter(Boolean)));
-    } else if ('assigneeId' in rest) {
-      newAssigneeIds = rest.assigneeId ? [rest.assigneeId as string] : [];
+    if (Array.isArray(b.assigneeIds)) {
+      newAssigneeIds = Array.from(new Set((b.assigneeIds as string[]).filter(Boolean)));
+    } else if ('assigneeId' in b) {
+      newAssigneeIds = b.assigneeId ? [b.assigneeId as string] : [];
     }
     if (newAssigneeIds) {
-      assigneeUpdate = { assigneeId: newAssigneeIds[0] || null, assignees: { set: newAssigneeIds.map((id) => ({ id })) } };
-      delete rest.assigneeId;
+      data.assigneeId = newAssigneeIds[0] || null;
+      data.assignees = { set: newAssigneeIds.map((id) => ({ id })) };
     }
+
+    // project is a required relation — reassign via connect, and only when it changes.
+    if (b.projectId && b.projectId !== existing.projectId) {
+      data.project = { connect: { id: b.projectId as string } };
+    }
+
+    // completedAt tracks the COMPLETED transition in either direction.
+    if (b.status === 'COMPLETED' && existing.status !== 'COMPLETED') data.completedAt = new Date();
+    else if (b.status && b.status !== 'COMPLETED' && existing.status === 'COMPLETED') data.completedAt = null;
 
     const task = await prisma.task.update({
       where: { id: (req.params.id as string) },
-      data: {
-        ...rest,
-        ...assigneeUpdate,
-        dueDate: req.body.dueDate ? new Date(req.body.dueDate) : req.body.dueDate === null ? null : undefined,
-        assignedDate: req.body.assignedDate ? new Date(req.body.assignedDate) : req.body.assignedDate === null ? null : undefined,
-        ...(req.body.status === 'COMPLETED' && existing.status !== 'COMPLETED'
-             ? { completedAt: new Date() }
-             : req.body.status && req.body.status !== 'COMPLETED' && existing.status === 'COMPLETED'
-               ? { completedAt: null }
-               : {}),
-      },
+      data,
       include: {
         project: { select: { id: true, name: true, client: { select: { name: true } } } },
         assignee: { select: { id: true, name: true, avatar: true } },
@@ -475,7 +485,7 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
       });
 
       // Notify the project owner + reviewer when work is completed (not the completer).
-      
+
       if (task.status === 'COMPLETED' && existing.status !== 'COMPLETED') {
         if (task.isRecurring && task.recurrenceFrequency) {
           // Spawn the next task
@@ -500,14 +510,14 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
               order: task.order + 1,
             }
           });
-          
+
           if (existing.assignees && existing.assignees.length > 0) {
             await prisma.task.update({
               where: { id: nextTask.id },
               data: { assignees: { connect: existing.assignees.map(a => ({ id: a.id })) } }
             });
           }
-          
+
           await prisma.activity.create({
             data: {
               type: 'TASK_CREATED',

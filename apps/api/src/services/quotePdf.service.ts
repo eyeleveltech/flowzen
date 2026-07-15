@@ -6,7 +6,9 @@ import { resolveTaxType } from '../utils/taxCatalog.js';
 const BRAND = '#163027';     // primary brand colour (header / footer background)
 const ACCENT = '#E2FEA5';    // light accent (title / footer text)
 
-const inr = (n: any) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+// Whole-rupee display to match the app's formatCurrency (en-IN, 0 decimals) — the
+// on-screen quote and the amount-in-words both round to the nearest rupee.
+const inr = (n: any) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 const esc = (s: any) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
 const fmtDate = (d: any) => (d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
 
