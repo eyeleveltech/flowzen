@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
-import { formatDate, formatShortDate, getInitials, getAvatarColor, triggerHaptic } from '@/lib/utils';
+import { formatDate, formatShortDate, getInitials, getAvatarColor, triggerHaptic, getClientDisplayName } from '@/lib/utils';
 import { TASK_STATUSES, TASK_STATUS_LABELS, TASK_STATUS_COLORS, TASK_STATUS_OPTIONS } from '@/lib/task-status';
 import { Search, Plus, Filter, MessageSquare, X, Trash2, Settings, Check, ChevronRight, LayoutList, Kanban } from 'lucide-react';
 import { Select } from '@/components/ui/select';
@@ -14,7 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ViewSettingsPanel } from '@/components/ui/view-settings-panel';
 import toast from 'react-hot-toast';
 import { useAuthStore, useConfirmStore, useTimeTrackingStore } from '@/stores';
-import { useTasks, useProjects, useMembers, useTeams } from '@/hooks/useQueries';
+import { useTasks, useProjects, useMembers, useTeams, useClients } from '@/hooks/useQueries';
 import { useQueryClient } from '@tanstack/react-query';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { TaskDetailDrawer } from '@/components/tasks/task-detail-drawer';
@@ -110,6 +110,19 @@ function TasksContent() {
     }
     return [];
   });
+  const [clientFilter, setClientFilter] = useState<string[]>(() => {
+    const val = searchParams.get('clients');
+    if (val) return val.split(',');
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('flowzen_tasks_filters');
+      if (saved) {
+        try {
+          return JSON.parse(saved).clients || [];
+        } catch { /* ignore */ }
+      }
+    }
+    return [];
+  });
   const [projectFilter, setProjectFilter] = useState<string[]>(() => {
     const val = searchParams.get('projects');
     if (val) return val.split(',');
@@ -184,6 +197,9 @@ function TasksContent() {
   useEffect(() => {
     const params = new URLSearchParams(searchParams.toString());
 
+    if (clientFilter.length > 0) params.set('clients', clientFilter.join(','));
+    else params.delete('clients');
+
     if (projectFilter.length > 0) params.set('projects', projectFilter.join(','));
     else params.delete('projects');
 
@@ -198,6 +214,7 @@ function TasksContent() {
 
     if (typeof window !== 'undefined') {
       localStorage.setItem('flowzen_tasks_filters', JSON.stringify({
+        clients: clientFilter,
         projects: projectFilter,
         statuses: statusFilter,
         assignees: assigneeFilter,
@@ -210,7 +227,7 @@ function TasksContent() {
     if (currentQuery !== newQuery) {
       router.replace(`?${newQuery}`, { scroll: false });
     }
-  }, [projectFilter, statusFilter, assigneeFilter, teamFilter, router, searchParams]);
+  }, [clientFilter, projectFilter, statusFilter, assigneeFilter, teamFilter, router, searchParams]);
 
   const ALL_TASK_COLUMNS = [
     { id: 'task', label: 'Task' },
@@ -292,6 +309,8 @@ function TasksContent() {
     return '';
   }, [statusFilter, showCompleted]);
 
+  const { data: clients = [] } = useClients();
+
   const {
     data,
     isLoading: isLoadingTasks,
@@ -299,7 +318,7 @@ function TasksContent() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage
-  } = useTasks(search, statusParam, projectFilter.join(','), assigneeFilter.join(','), priorityFilter.join(','), teamFilter.join(','), searchParams.get('filter'), sort, dueDateFrom, dueDateTo);
+  } = useTasks(search, statusParam, projectFilter.join(','), assigneeFilter.join(','), priorityFilter.join(','), teamFilter.join(','), searchParams.get('filter'), sort, dueDateFrom, dueDateTo, clientFilter.join(','));
 
   const tasks = useMemo(() => {
     const rawTasks = data?.pages.flatMap((page) => page.tasks) || [];
@@ -327,6 +346,10 @@ function TasksContent() {
   }, [data, sort]);
   const { data: projectsData } = useProjects();
   const projects = useMemo(() => projectsData?.pages.flatMap((page) => page.projects) || [], [projectsData]);
+  const filteredProjectsForDropdown = useMemo(() => {
+    if (clientFilter.length === 0) return projects;
+    return projects.filter((p: any) => clientFilter.includes(p.client?.id || p.clientId));
+  }, [projects, clientFilter]);
   const { data: members = [] } = useMembers();
   const { data: teams = [] } = useTeams();
   const loading = isLoadingTasks;
@@ -402,15 +425,6 @@ function TasksContent() {
       toast.success('Task status updated');
       refetchTasks();
 
-      if (status === 'COMPLETED') {
-        const taskObj = tasks.find(t => t.id === taskId);
-        const hours = await useTimeTrackingStore.getState().prompt({ taskId, taskTitle: taskObj?.title || 'Task' });
-        if (hours) {
-          await api.put(`/tasks/${taskId}`, { loggedHours: hours });
-          toast.success('Time logged');
-          refetchTasks();
-        }
-      }
     } catch (err: any) {
       toast.error(err.message || 'Failed to update status');
       refetchTasks(); // revert optimistic change on failure
@@ -456,15 +470,6 @@ function TasksContent() {
       toast.success('Task moved successfully');
       refetchTasks();
 
-      if (newStatus === 'COMPLETED') {
-        const taskObj = tasks.find(t => t.id === draggableId);
-        const hours = await useTimeTrackingStore.getState().prompt({ taskId: draggableId, taskTitle: taskObj?.title || 'Task' });
-        if (hours) {
-          await api.put(`/tasks/${draggableId}`, { loggedHours: hours });
-          toast.success('Time logged');
-          refetchTasks();
-        }
-      }
     } catch (err: any) {
       toast.error(err.message || 'Failed to move task');
       setBoardTasks(tasks);
@@ -478,6 +483,7 @@ function TasksContent() {
 
   const hasActiveFilters = !!(
     search ||
+    clientFilter.length > 0 ||
     projectFilter.length > 0 ||
     statusFilter.length > 0 ||
     priorityFilter.length > 0 ||
@@ -522,11 +528,31 @@ function TasksContent() {
           <div className="shrink-0">
             <MultiSelect
               showSelectAll
+              value={clientFilter}
+              onChange={(val) => {
+                setClientFilter(val);
+                // Clear any selected projects that don't belong to the newly selected companies
+                if (val.length > 0) {
+                  setProjectFilter(prev => prev.filter(projId => {
+                    const p = projects.find(proj => proj.id === projId);
+                    return val.includes(p?.client?.id || p?.clientId);
+                  }));
+                }
+              }}
+              placeholder="Companies"
+              triggerClassName={clientFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              options={clients.map((c: any) => ({ label: getClientDisplayName(c), value: c.id }))}
+            />
+          </div>
+
+          <div className="shrink-0">
+            <MultiSelect
+              showSelectAll
               value={projectFilter}
               onChange={setProjectFilter}
               placeholder="Projects"
               triggerClassName={projectFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
-              options={projects.map((p) => ({ label: p.name, value: p.id }))}
+              options={filteredProjectsForDropdown.map((p) => ({ label: p.name, value: p.id }))}
             />
           </div>
 
@@ -655,6 +681,7 @@ function TasksContent() {
               <button
                 onClick={() => {
                   setSearch('');
+                  setClientFilter([]);
                   setProjectFilter([]);
                   setStatusFilter([]);
                   setPriorityFilter([]);
@@ -820,7 +847,7 @@ function TasksContent() {
                     <thead>
                       <tr className="border-b border-[#F3F4F6]">
                         {visibleColumns.includes('task') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Task</th>}
-                        {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>}
+                        {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Company</th>}
                         {visibleColumns.includes('project') && (
                           <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
                             <ColumnDropdown

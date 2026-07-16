@@ -31,10 +31,10 @@ type Tab = { label: string; href: string; icon: any; roles?: string[]; module?: 
 
 const primaryTabs: Tab[] = [
   { label: 'Home', href: '/dashboard', icon: LayoutDashboard, module: 'PM' },
+  { label: 'Clients', href: '/clients', icon: Building2, module: ['CRM', 'PM'] },
   { label: 'Pipeline', href: '/pipeline', icon: TrendingUp, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
   { label: 'Projects', href: '/projects', icon: FolderKanban, module: 'PM' },
   { label: 'Tasks', href: '/tasks', icon: CheckSquare, module: 'PM' },
-  { label: 'Clients', href: '/clients', icon: Building2, module: ['CRM', 'PM'] },
 ];
 
 const moreItems: Tab[] = [

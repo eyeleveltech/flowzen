@@ -66,6 +66,7 @@ clientRouter.get('/', async (req: AuthRequest, res: Response, next) => {
         where: where as any,
         include: {
           contacts: true,
+          lead: { select: { id: true, stage: true } },
           _count: { select: { projects: true } },
         },
         orderBy: { createdAt: 'desc' },
@@ -88,6 +89,7 @@ clientRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
       where: { id: (req.params.id as string), organizationId: req.user!.organizationId },
       include: {
         contacts: true,
+        lead: { select: { id: true, stage: true } },
         projects: {
           include: {
             owner: { select: { id: true, name: true, avatar: true } },

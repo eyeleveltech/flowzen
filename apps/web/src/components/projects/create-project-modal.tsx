@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -12,7 +12,7 @@ import { MultiSelect } from '@/components/ui/multi-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { TagsInput } from '@/components/ui/tags-input';
 import { useMembers, useClients } from '@/hooks/useQueries';
-import { getInitials, getAvatarColor, getClientDisplayName } from '@/lib/utils';
+import { getInitials, getAvatarColor, getClientDisplayName, getProjectStatusFromClient } from '@/lib/utils';
 import { projectSchema, type ProjectFormValues } from '@/lib/validations';
 
 interface CreateProjectModalProps {
@@ -52,6 +52,16 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
   });
 
   const formValues = watch();
+
+  const selectedClientId = watch('clientId');
+  useEffect(() => {
+    if (selectedClientId && clients.length > 0) {
+      const selectedClient = clients.find((c: any) => c.id === selectedClientId);
+      if (selectedClient) {
+        setValue('status', getProjectStatusFromClient(selectedClient) as any);
+      }
+    }
+  }, [selectedClientId, clients, setValue]);
 
   const onSubmit = handleSubmit(async (data) => {
     setFormError('');
@@ -194,45 +204,6 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
             </div>
           </div>
 
-          {/* Workflow */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Workflow</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">Reporting Cadence</label>
-                <Select ariaLabel="Reporting Cadence" value={formValues.reportingCadence} onChange={(val) => setValue('reportingCadence', val as any)} options={[
-                  { label: 'None', value: 'NONE' },
-                  { label: 'Weekly', value: 'WEEKLY' },
-                  { label: 'Fortnightly', value: 'FORTNIGHTLY' },
-                  { label: 'Monthly', value: 'MONTHLY' },
-                ]} />
-              </div>
-              <div className="flex items-center gap-3 h-full pt-6">
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" className="sr-only peer" checked={formValues.clientApprovalRequired} onChange={(e) => setValue('clientApprovalRequired', e.target.checked)} />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                  <span className="ml-3 text-sm font-medium text-[#374151]">Client approval required</span>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          {/* Reference */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Reference</h3>
-            <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Tags</label>
-              <TagsInput value={formValues.tags || []} onChange={(val) => setValue('tags', val)} placeholder="Type and press Enter to add tags..." />
-            </div>
-            <div>
-              <label htmlFor="cp-notes" className="block text-sm font-medium text-[#374151] mb-1.5">Notes</label>
-              <textarea id="cp-notes" value={formValues.projectNotes || ''} onChange={(e) => setValue('projectNotes', e.target.value)} className={`${inputClass} min-h-[80px]`} placeholder="Internal project notes..." />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Folder Link (URL)</label>
-              <input type="url" value={formValues.folderLink || ''} onChange={(e) => setValue('folderLink', e.target.value)} className={inputClass} />
-            </div>
-          </div>
 
           <div className="pt-4 flex gap-3">
             <button type="button" onClick={onClose} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>

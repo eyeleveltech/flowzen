@@ -22,7 +22,7 @@ export const MODULES: ModuleDef[] = [
     key: 'CRM',
     label: 'CRM',
     description: 'Sales pipeline & lead management.',
-    home: '/pipeline',
+    home: '/clients',
     allowedRoles: ['SUPER_ADMIN', 'ADMIN'], // admins only
   },
   {

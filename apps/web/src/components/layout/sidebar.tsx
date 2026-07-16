@@ -35,6 +35,7 @@ type NavItem = { label: string; href: string; icon: any; roles?: string[]; modul
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, module: 'PM' },
+  { label: 'Clients', href: '/clients', icon: Building2, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'], module: ['CRM', 'PM'] },
   { label: 'Pipeline', href: '/pipeline', icon: TrendingUp, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
   { label: 'Quotations', href: '/quotations', icon: FileText, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'], module: 'CRM' },
   { label: 'Revenue Overview', href: '/revenue', icon: DollarSign, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
@@ -47,7 +48,6 @@ const navItems: NavItem[] = [
   { label: 'Expenses', href: '/expenses', icon: Wallet, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
   { label: 'Renewals', href: '/renewals', icon: RefreshCw, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
   { label: 'Lost Deals', href: '/lost-deals', icon: TrendingDown, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
-  { label: 'Clients', href: '/clients', icon: Building2, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'], module: ['CRM', 'PM'] },
   { label: 'Projects', href: '/projects', icon: FolderKanban, module: 'PM' },
   { label: 'Tasks', href: '/tasks', icon: CheckSquare, module: 'PM' },
   { label: 'Calendar', href: '/calendar', icon: CalendarDays, module: 'PM' },

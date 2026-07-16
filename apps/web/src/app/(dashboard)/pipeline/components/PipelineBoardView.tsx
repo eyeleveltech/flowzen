@@ -375,12 +375,19 @@ export function PipelineBoardView() {
                                   snapshot.isDragging ? 'shadow-2xl shadow-black/10 scale-105 z-50 ring-2 ring-primary' : 'shadow-sm hover:shadow-md hover:border-gray-300'
                                 } transition-all relative`}
                               >
-                                {/* Stage Badge */}
-                                <div 
-                                  className="absolute top-3 right-3 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full z-10"
-                                  style={{ backgroundColor: badgeInfo.bg, color: badgeInfo.text }}
-                                >
-                                  {badgeInfo.label}
+                                {/* Top Header: ID & Stage Badge */}
+                                <div className="flex items-center justify-between gap-2 mb-3 select-none">
+                                  {lead.leadId ? (
+                                    <span className="text-[10px] font-mono text-gray-400 tracking-wide">{lead.leadId}</span>
+                                  ) : (
+                                    <span />
+                                  )}
+                                  <div 
+                                    className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0"
+                                    style={{ backgroundColor: badgeInfo.bg, color: badgeInfo.text }}
+                                  >
+                                    {badgeInfo.label}
+                                  </div>
                                 </div>
                                  {/* Content */}
                                  {(() => {
@@ -391,13 +398,10 @@ export function PipelineBoardView() {
                                      : (lead.contactEmail || '');
                                    return (
                                      <>
-                                       <div className="pr-16">
+                                       <div>
                                          <h4 className="text-[15px] font-bold text-primary truncate" title={displayTitle}>
                                            {displayTitle}
                                          </h4>
-                                         {lead.leadId && (
-                                           <span className="text-[10px] font-mono text-gray-400 tracking-wide">{lead.leadId}</span>
-                                         )}
                                        </div>
                                        <div className="mt-1">
                                          {displaySubtitle && (
