@@ -142,7 +142,7 @@ export default function LostDealsPage() {
             {data.reactivation.length === 0 ? <p className="text-sm text-secondary py-6 text-center">No leads flagged for reactivation.</p> : (
               <div className="overflow-x-auto w-full">
                 <table className="w-full text-sm min-w-[600px]">
-                  <thead><tr className="text-left text-[11px] uppercase text-secondary border-b border-border"><th className="py-2">Client</th><th className="py-2">Lost Date</th><th className="py-2">Reactivation Window</th><th className="py-2 text-right">Value</th><th className="py-2">Assigned To</th></tr></thead>
+                  <thead><tr className="text-left text-[11px] uppercase text-secondary border-b border-border"><th className="py-2">Company</th><th className="py-2">Lost Date</th><th className="py-2">Reactivation Window</th><th className="py-2 text-right">Value</th><th className="py-2">Assigned To</th></tr></thead>
                   <tbody>{data.reactivation.map((r: any) => (
                     <tr key={r.id} className="border-b border-gray-50"><td className="py-2 font-medium text-primary">{r.name}</td><td className="py-2 text-secondary">{fmtDate(r.lostDate)}</td><td className="py-2 text-amber-700 font-medium">{fmtDate(r.window)}</td><td className="py-2 text-right">{formatCurrency(r.value)}</td><td className="py-2 text-secondary">{r.assignedTo || '—'}</td></tr>
                   ))}</tbody>

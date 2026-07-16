@@ -61,6 +61,7 @@ interface ClientReport {
   totalClients: number; totalRevenue: number;
   clients: {
     id: string; name: string; company?: string | null; contractValue?: number | null;
+    contacts?: { name: string }[];
     totalProjects: number; completedProjects: number; completionRate: number;
     totalTasks: number; completedTasks: number; deliverablesRate: number;
     overdueTasks: number; nextDueDate: string | null
@@ -418,8 +419,8 @@ export default function ReportsPage() {
                     <tr key={c.id} className="hover:bg-[#F9FAFB] transition-colors">
                       <td className="px-6 py-4">
                         <p className="text-sm font-semibold text-primary">{getClientDisplayName(c)}</p>
-                        {c.name !== 'Internal' && c.company ? (
-                          <p className="text-xs text-secondary mt-0.5">{c.name}</p>
+                        {c.name !== 'Internal' && c.company && (c.contacts?.[0]?.name || c.name !== c.company) ? (
+                          <p className="text-xs text-secondary mt-0.5">{c.contacts?.[0]?.name || c.name}</p>
                         ) : null}
                       </td>
                       <td className="px-6 py-4 text-center">

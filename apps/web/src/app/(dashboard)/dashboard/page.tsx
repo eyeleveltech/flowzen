@@ -14,7 +14,8 @@ import { Select } from '@/components/ui/select';
 import { ActivityFeedWidget } from '@/components/dashboard/activity-feed';
 import {
   Users, FolderKanban, CheckSquare, CheckCircle2, Building2, Activity, Zap,
-  AlertTriangle, UsersRound, Clock, PieChart as PieIcon, BarChart as BarIcon, BellDot, ChevronRight, Calendar
+  AlertTriangle, UsersRound, Clock, PieChart as PieIcon, BarChart as BarIcon, BellDot, ChevronRight, Calendar,
+  Plus, FileText, Receipt
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -354,14 +355,6 @@ export default function DashboardPage() {
       await api.put(`/tasks/${taskId}`, { status });
       toast.success('Task status updated');
 
-      if (status === 'COMPLETED') {
-        const taskObj = data?.myTasks?.find((t: any) => t.id === taskId);
-        const hours = await useTimeTrackingStore.getState().prompt({ taskId, taskTitle: taskObj?.title || 'Task' });
-        if (hours) {
-          await api.put(`/tasks/${taskId}`, { loggedHours: hours });
-          toast.success('Time logged');
-        }
-      }
 
       fetchAll();
     } catch (err: any) {
@@ -701,7 +694,7 @@ export default function DashboardPage() {
                 <table className="w-full text-left min-w-150">
                   <thead>
                     <tr className="border-b border-border bg-surface">
-                      <th className="px-5 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Client</th>
+                      <th className="px-5 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Company Name</th>
                       <th className="px-5 py-3 text-xs font-semibold text-secondary uppercase tracking-wider text-center">Active Projects</th>
                       <th className="px-5 py-3 text-xs font-semibold text-secondary uppercase tracking-wider text-center">Overdue Tasks</th>
                       <th className="px-5 py-3 text-xs font-semibold text-secondary uppercase tracking-wider text-left">Next Deadline</th>
@@ -717,7 +710,7 @@ export default function DashboardPage() {
 
                       return (
                         <tr key={c.id} onClick={() => router.push('/reports')} className="hover:bg-surface cursor-pointer transition-colors">
-                          <td className="px-5 py-3 text-sm font-semibold text-primary">{c.name}</td>
+                          <td className="px-5 py-3 text-sm font-semibold text-primary">{c.company || c.name}</td>
                           <td className="px-5 py-3 text-sm text-primary text-center font-medium">{c.activeProjects}</td>
                           <td className="px-5 py-3 text-sm text-center text-primary">{c.overdueTasks > 0 ? c.overdueTasks : '-'}</td>
                           <td className="px-5 py-3 text-sm text-secondary">{c.nextDueDate ? formatDate(c.nextDueDate) : '-'}</td>
@@ -788,6 +781,45 @@ export default function DashboardPage() {
                 </button>
               </div>
             )}
+          </motion.div>
+
+          {/* OVERDUE TASKS */}
+          <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4"><AlertTriangle className="w-4 h-4 text-red-500" /> Overdue Tasks</h2>
+            <div className="space-y-3 max-h-62.5 overflow-y-auto custom-scrollbar pr-1 flex-1">
+              {(() => {
+                const list = myTasks.filter((t: any) => t.dueDate && new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED' && t.status !== 'APPROVED');
+                if (list.length === 0) {
+                  return (
+                    <div className="flex flex-col items-center justify-center py-6 text-center gap-2">
+                      <span className="text-2xl">🎉</span>
+                      <p className="text-xs font-semibold text-emerald-600">No overdue tasks. Great job!</p>
+                    </div>
+                  );
+                }
+                return list.map((t: any) => {
+                  const daysOverdue = Math.ceil((todayStart.getTime() - new Date(t.dueDate).getTime()) / (1000 * 60 * 60 * 24));
+                  return (
+                    <div
+                      key={t.id}
+                      onClick={() => handleOpenTask(t.id, null)}
+                      className="flex justify-between items-start p-2.5 hover:bg-surface rounded-xl cursor-pointer border border-border group transition-all"
+                    >
+                      <div className="min-w-0 pr-3 flex gap-2.5 items-start">
+                        <span className="flex h-1.5 w-1.5 rounded-full bg-red-500 mt-2 shrink-0 animate-pulse" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-primary truncate group-hover:text-black transition-colors">{t.title}</p>
+                          <p className="text-xs text-secondary truncate">{t.project?.name || 'No project'}</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-sm shrink-0 bg-red-50 text-red-600 border border-red-200">
+                        {daysOverdue <= 0 ? 'Overdue' : `${daysOverdue}d overdue`}
+                      </span>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
           </motion.div>
 
           {/* MY PROJECTS (TEAM_MEMBER ONLY) */}

@@ -198,7 +198,11 @@ export default function ClientDetailPage() {
               {getClientDisplayName(client)}
             </h1>
             <div className="flex items-center gap-3 mt-1">
-              {client.name !== 'Internal' && client.company && <span className="text-sm text-secondary">{client.name}</span>}
+              {client.name !== 'Internal' && client.company && (client.contacts?.[0]?.name || client.name !== client.company) && (
+                <span className="text-sm text-secondary font-medium">
+                  {client.contacts?.[0]?.name || client.name}
+                </span>
+              )}
               {client.name === 'Internal' && <span className="text-sm font-medium text-secondary">(Internal)</span>}
               <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[client.status]}`}>
                 {activeModule === 'PM' ? (
@@ -222,13 +226,17 @@ export default function ClientDetailPage() {
                 <Plus className="h-4 w-4" /> Create Project
               </button>
             )}
-            <button onClick={openEdit} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-[#374151] hover:bg-gray-50 transition-colors shadow-sm whitespace-nowrap">
-              Edit Client
-            </button>
-            <button onClick={handleDelete} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-red-200 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap">
-              <Trash2 className="h-4 w-4" />
-              Delete
-            </button>
+            {activeModule !== 'PM' && (
+              <>
+                <button onClick={openEdit} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-[#374151] hover:bg-gray-50 transition-colors shadow-sm whitespace-nowrap">
+                  Edit Client
+                </button>
+                <button onClick={handleDelete} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-red-200 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap">
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -267,7 +275,6 @@ export default function ClientDetailPage() {
                   <div className="grid grid-cols-2 gap-y-4 gap-x-2">
                     <InfoRow icon={Building2} label="Industry" value={client.industry || '—'} />
                     <InfoRow icon={Globe} label="Website" value={client.website || '—'} />
-                    <InfoRow icon={Globe} label="Asset Links" value={client.assetLinks || '—'} />
                     <InfoRow icon={Users} label="Account Manager" value={client.accountManager?.name || '—'} />
                   </div>
                 </div>
@@ -277,9 +284,6 @@ export default function ClientDetailPage() {
                   <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-[#F3F4F6]">Billing & Address</h4>
                   <div className="grid grid-cols-2 gap-y-4 gap-x-2 mb-4">
                     <InfoRow icon={MapPin} label="City" value={client.city || '—'} />
-                    <InfoRow icon={MapPin} label="State" value={client.state || '—'} />
-                    <InfoRow icon={DollarSign} label="GST Number" value={client.gstNumber || '—'} />
-                    <InfoRow icon={MapPin} label="Address" value={client.address || '—'} />
                   </div>
                   {client.billingAddress && (
                     <div className="text-sm text-[#374151] bg-gray-50 p-3 rounded-xl border border-gray-100">
@@ -491,9 +495,6 @@ export default function ClientDetailPage() {
 
                 <Field label="Website" value={editForm.website} onChange={(v) => setEditForm({ ...editForm, website: v })} />
                 <Field label="City" value={editForm.city} onChange={(v) => setEditForm({ ...editForm, city: v })} />
-                <Field label="State (for GST split)" value={editForm.state} onChange={(v) => setEditForm({ ...editForm, state: v })} />
-                <Field label="GST Number" value={editForm.gstNumber} onChange={(v) => setEditForm({ ...editForm, gstNumber: v })} />
-                <Field label="Address" value={editForm.address} onChange={(v) => setEditForm({ ...editForm, address: v })} />
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Billing Address</label>
                   <textarea value={editForm.billingAddress} onChange={(e) => setEditForm({ ...editForm, billingAddress: e.target.value })} rows={2} placeholder="Used to auto-fill quotations" className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary resize-none" />
@@ -521,7 +522,6 @@ export default function ClientDetailPage() {
                   />
                 </div>
 
-                <Field label="Asset Links" value={editForm.assetLinks} onChange={(v) => setEditForm({ ...editForm, assetLinks: v })} />
 
 
                 <div className="space-y-3 pt-2 pb-2 border-y border-[#F3F4F6]">

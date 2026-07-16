@@ -6,15 +6,29 @@ import toast from 'react-hot-toast';
 import { Save } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 
+interface CompanyBilling {
+  state?: string;
+  gst?: string;
+  pan?: string;
+  email?: string;
+  bankName?: string;
+  bankAccount?: string;
+  bankIfsc?: string;
+  bankHolder?: string;
+  bankBranch?: string;
+  standardTerms?: string;
+  quotationTemplate?: string;
+}
+
 // Company billing details used by the Quotation / Proforma generator.
 export function BillingTab() {
-  const [form, setForm] = useState({ state: '', gst: '', pan: '', email: '', bankName: '', bankAccount: '', bankIfsc: '', standardTerms: '', quotationTemplate: 'CLASSIC' });
+  const [form, setForm] = useState({ state: '', gst: '', pan: '', email: '', bankName: '', bankAccount: '', bankIfsc: '', bankHolder: '', bankBranch: '', standardTerms: '', quotationTemplate: 'CLASSIC' });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    api.get<any>('/settings/company').then((c) => {
-      setForm((f) => ({ ...f, state: c.state || '', gst: c.gst || '', pan: c.pan || '', email: c.email || '', bankName: c.bankName || '', bankAccount: c.bankAccount || '', bankIfsc: c.bankIfsc || '', standardTerms: c.standardTerms || '', quotationTemplate: c.quotationTemplate || 'CLASSIC' }));
+    api.get<CompanyBilling>('/settings/company').then((c) => {
+      setForm((f) => ({ ...f, state: c.state || '', gst: c.gst || '', pan: c.pan || '', email: c.email || '', bankName: c.bankName || '', bankAccount: c.bankAccount || '', bankIfsc: c.bankIfsc || '', bankHolder: c.bankHolder || '', bankBranch: c.bankBranch || '', standardTerms: c.standardTerms || '', quotationTemplate: c.quotationTemplate || 'CLASSIC' }));
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
@@ -23,8 +37,9 @@ export function BillingTab() {
     try {
       await api.put('/settings/company', form);
       toast.success('Billing details saved');
-    } catch (e: any) {
-      toast.error(e.message || 'Failed to save');
+    } catch (e: unknown) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      toast.error(errMsg || 'Failed to save');
     } finally {
       setSaving(false);
     }
@@ -48,8 +63,12 @@ export function BillingTab() {
 
       <div>
         <h3 className="text-sm font-semibold text-primary mb-3">Bank Details (printed on documents)</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+          <Field label="Account Holder Name" value={form.bankHolder} onChange={(v) => setForm({ ...form, bankHolder: v })} />
           <Field label="Bank Name" value={form.bankName} onChange={(v) => setForm({ ...form, bankName: v })} />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <Field label="Branch" value={form.bankBranch} onChange={(v) => setForm({ ...form, bankBranch: v })} />
           <Field label="Account Number" value={form.bankAccount} onChange={(v) => setForm({ ...form, bankAccount: v })} />
           <Field label="IFSC" value={form.bankIfsc} onChange={(v) => setForm({ ...form, bankIfsc: v })} />
         </div>

@@ -109,3 +109,29 @@ export function toProperCase(str: string): string {
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(' ');
 }
+
+export function getProjectStatusFromClient(client: any): 'PLANNING' | 'IN_PROGRESS' | 'COMPLETED' | 'ON_HOLD' | 'CANCELLED' {
+  if (!client) return 'PLANNING';
+  // Use lead.stage first if available, otherwise fallback to client.status
+  const stageOrStatus = client.lead?.stage || client.status;
+  if (!stageOrStatus) return 'PLANNING';
+  
+  const normalized = stageOrStatus.toUpperCase();
+  
+  switch (normalized) {
+    case 'ACTIVE':
+    case 'ACTIVE_RETAINER':
+    case 'ACTIVE_PROJECT':
+      return 'IN_PROGRESS';
+    case 'ONHOLD':
+    case 'ON_HOLD':
+      return 'ON_HOLD';
+    case 'PROJECT_COMPLETED':
+      return 'COMPLETED';
+    case 'CHURNED':
+      return 'CANCELLED';
+    case 'PROSPECT':
+    default:
+      return 'PLANNING';
+  }
+}

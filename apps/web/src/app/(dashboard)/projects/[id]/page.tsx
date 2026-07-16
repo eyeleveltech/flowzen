@@ -26,7 +26,7 @@ interface ProjectDetail {
   type: string; scope?: string | null; reportingCadence: string; clientApprovalRequired: boolean;
   tags: string[]; projectNotes?: string | null; folderLink?: string | null;
   startDate?: string | null; endDate?: string | null; budget?: number | null;
-  client?: { id: string; name: string; company?: string | null; lead?: { id: string } | null };
+  client?: { id: string; name: string; company?: string | null; contacts?: { name: string }[]; lead?: { id: string } | null };
   owner?: { id: string; name: string; avatar?: string | null; email?: string | null };
   members?: { id: string; user: { id: string; name: string; avatar?: string | null; role?: string } }[];
   teams?: { id: string; team: { id: string; name: string; members: { id: string; name: string; avatar?: string | null; role?: string }[] } }[];
@@ -108,12 +108,12 @@ export default function ProjectDetailPage() {
   const [showCompleted, setShowCompleted] = useState(false);
 
   const ALL_TASK_COLUMNS = [
-    { id: 'task',     label: 'Task' },
-    { id: 'type',     label: 'Department' },
+    { id: 'task', label: 'Task' },
+    { id: 'type', label: 'Department' },
     { id: 'assignee', label: 'Assignee' },
     { id: 'priority', label: 'Priority' },
-    { id: 'status',   label: 'Status' },
-    { id: 'dueDate',  label: 'Due Date' },
+    { id: 'status', label: 'Status' },
+    { id: 'dueDate', label: 'Due Date' },
   ];
 
   const [showViewSettings, setShowViewSettings] = useState(false);
@@ -144,13 +144,13 @@ export default function ProjectDetailPage() {
   const [showEditProject, setShowEditProject] = useState(false);
   const [editForm, setEditForm] = useState<{
     name: string; description: string; clientId: string; ownerId: string;
-    type: string; platform: string; scope: string; reportingCadence: string; clientApprovalRequired: boolean; tags: string[]; projectNotes: string; folderLink: string;
+    type: string; scope: string; reportingCadence: string; clientApprovalRequired: boolean; tags: string[]; projectNotes: string; folderLink: string;
     startDate: string; endDate: string; priority: string; budget: string; status: string; memberIds: string[]; teamIds: string[];
-  }>({ name: '', description: '', clientId: '', ownerId: '', type: 'ONE_TIME', platform: '', scope: '', reportingCadence: 'NONE', clientApprovalRequired: false, tags: [], projectNotes: '', folderLink: '', startDate: '', endDate: '', priority: 'MEDIUM', budget: '', status: 'PLANNING', memberIds: [], teamIds: [] });
+  }>({ name: '', description: '', clientId: '', ownerId: '', type: 'ONE_TIME', scope: '', reportingCadence: 'NONE', clientApprovalRequired: false, tags: [], projectNotes: '', folderLink: '', startDate: '', endDate: '', priority: 'MEDIUM', budget: '', status: 'PLANNING', memberIds: [], teamIds: [] });
   const [submittingEdit, setSubmittingEdit] = useState(false);
-  const [clients, setClients] = useState<{id: string, name: string, company?: string | null}[]>([]);
-  const [members, setMembers] = useState<{id: string, name: string}[]>([]);
-  const [teams, setTeams] = useState<{id: string, name: string}[]>([]);
+  const [clients, setClients] = useState<{ id: string, name: string, company?: string | null }[]>([]);
+  const [members, setMembers] = useState<{ id: string, name: string }[]>([]);
+  const [teams, setTeams] = useState<{ id: string, name: string }[]>([]);
 
   // Milestone States
   const [showMilestoneModal, setShowMilestoneModal] = useState(false);
@@ -169,9 +169,9 @@ export default function ProjectDetailPage() {
 
   useEffect(() => {
     fetchProject();
-    api.get<{ clients: {id: string, name: string, company?: string | null}[] }>('/clients?limit=100').then((res) => setClients(res.clients)).catch(() => {});
-    api.get<{id: string, name: string}[]>('/team').then(setMembers).catch(() => {});
-    api.get<{ teams: {id: string, name: string}[] }>('/teams').then((res) => setTeams(res.teams)).catch(() => {});
+    api.get<{ clients: { id: string, name: string, company?: string | null }[] }>('/clients?limit=100').then((res) => setClients(res.clients)).catch(() => { });
+    api.get<{ id: string, name: string }[]>('/team').then(setMembers).catch(() => { });
+    api.get<{ teams: { id: string, name: string }[] }>('/teams').then((res) => setTeams(res.teams)).catch(() => { });
   }, [fetchProject]);
 
   // Lock body scroll when any drawer is open
@@ -206,7 +206,6 @@ export default function ProjectDetailPage() {
       clientId: project.client?.id || '',
       ownerId: project.owner?.id || '',
       type: project.type || 'ONE_TIME',
-      platform: (project as any).platform || '',
       scope: project.scope || '',
       reportingCadence: project.reportingCadence || 'NONE',
       clientApprovalRequired: project.clientApprovalRequired || false,
@@ -276,7 +275,7 @@ export default function ProjectDetailPage() {
 
   async function updateTaskStatus(taskId: string, status: string) {
     if (!project) return;
-    
+
     const previousTasks = project.tasks;
     // Optimistic UI Update
     setProject(prev => {
@@ -294,17 +293,6 @@ export default function ProjectDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
 
-      if (status === 'COMPLETED') {
-        const taskObj = project.tasks?.find(t => t.id === taskId);
-        const hours = await useTimeTrackingStore.getState().prompt({ taskId, taskTitle: taskObj?.title || 'Task' });
-        if (hours) {
-          await api.put(`/tasks/${taskId}`, { loggedHours: hours });
-          toast.success('Time logged');
-          fetchProject();
-          queryClient.invalidateQueries({ queryKey: ['tasks'] });
-          queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-        }
-      }
     } catch (err: any) {
       toast.error(err.message || 'Failed to update status');
       // Revert optimistic update
@@ -539,7 +527,7 @@ export default function ProjectDetailPage() {
   } else if (overdueTasksCount >= 1) {
     projectHealth = 'AMBER';
   }
-  
+
   const healthConfig = {
     GREEN: { color: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'On Track' },
     AMBER: { color: 'bg-amber-50 text-amber-700 border-amber-200', label: 'At Risk' },
@@ -625,10 +613,10 @@ export default function ProjectDetailPage() {
               <span className="text-secondary">Client</span>
               <span className="font-medium text-primary">{project.client ? getClientDisplayName(project.client) : 'Internal'}</span>
             </div>
-            {project.client?.name !== 'Internal' && project.client?.company && (
+            {project.client?.name !== 'Internal' && project.client?.company && (project.client.contacts?.[0]?.name || project.client.name !== project.client.company) && (
               <div className="flex justify-between text-sm">
                 <span className="text-secondary">Contact</span>
-                <span className="font-medium text-primary">{project.client.name}</span>
+                <span className="font-medium text-primary">{project.client.contacts?.[0]?.name || project.client.name}</span>
               </div>
             )}
           </div>
@@ -672,41 +660,62 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      {/* Scope & Notes Cards */}
-      {(project.scope || project.projectNotes) && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          {project.scope && (
-            <div className="bg-white rounded-2xl border border-border p-6 relative">
-              <span className="block text-xs font-medium text-secondary uppercase tracking-wide mb-3">Scope of Work</span>
-              <div 
+      {/* Description, Scope & Notes Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-8">
+        <div className="bg-white rounded-2xl border border-border p-6 relative">
+          <span className="block text-xs font-medium text-secondary uppercase tracking-wide mb-3">Description</span>
+          {project.description ? (
+            <>
+              <div
+                className="text-sm text-[#374151] line-clamp-2 prose prose-sm max-w-none"
+                dangerouslySetInnerHTML={{ __html: project.description }}
+              />
+              <button
+                onClick={() => setViewModalContent({ title: 'Description', content: project.description || '' })}
+                className="mt-3 text-xs font-medium text-[#2563EB] hover:text-[#1D4ED8]"
+              >
+                View full description
+              </button>
+            </>
+          ) : (
+            <p className="text-sm text-[#9CA3AF] italic">No description defined.</p>
+          )}
+        </div>
+        <div className="bg-white rounded-2xl border border-border p-6 relative">
+          <span className="block text-xs font-medium text-secondary uppercase tracking-wide mb-3">Scope of Work</span>
+          {project.scope ? (
+            <>
+              <div
                 className="text-sm text-[#374151] line-clamp-2 prose prose-sm max-w-none"
                 dangerouslySetInnerHTML={{ __html: project.scope }}
               />
-              <button 
+              <button
                 onClick={() => setViewModalContent({ title: 'Scope of Work', content: project.scope || '' })}
                 className="mt-3 text-xs font-medium text-[#2563EB] hover:text-[#1D4ED8]"
               >
                 View full scope
               </button>
-            </div>
-          )}
-          {project.projectNotes && (
-            <div className="bg-white rounded-2xl border border-border p-6 relative">
-              <span className="block text-xs font-medium text-secondary uppercase tracking-wide mb-3">Internal Notes</span>
-              <div 
-                className="text-sm text-[#374151] line-clamp-2 prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: project.projectNotes }}
-              />
-              <button 
-                onClick={() => setViewModalContent({ title: 'Internal Notes', content: project.projectNotes || '' })}
-                className="mt-3 text-xs font-medium text-[#2563EB] hover:text-[#1D4ED8]"
-              >
-                View full notes
-              </button>
-            </div>
+            </>
+          ) : (
+            <p className="text-sm text-[#9CA3AF] italic">No scope of work defined.</p>
           )}
         </div>
-      )}
+        {project.projectNotes && (
+          <div className="bg-white rounded-2xl border border-border p-6 relative">
+            <span className="block text-xs font-medium text-secondary uppercase tracking-wide mb-3">Internal Notes</span>
+            <div
+              className="text-sm text-[#374151] line-clamp-2 prose prose-sm max-w-none"
+              dangerouslySetInnerHTML={{ __html: project.projectNotes }}
+            />
+            <button
+              onClick={() => setViewModalContent({ title: 'Internal Notes', content: project.projectNotes || '' })}
+              className="mt-3 text-xs font-medium text-[#2563EB] hover:text-[#1D4ED8]"
+            >
+              View full notes
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto scrollbar-hide whitespace-nowrap">
@@ -865,12 +874,12 @@ export default function ProjectDetailPage() {
           </div>
 
           {taskView === 'board' ? (
-            <TaskBoardView 
-              tasks={finalTasks} 
+            <TaskBoardView
+              tasks={finalTasks}
               onUpdateTask={() => {
                 queryClient.invalidateQueries({ queryKey: ['project', id] });
-              }} 
-              onTaskClick={(t) => setDetailTaskId(t.id)} 
+              }}
+              onTaskClick={(t) => setDetailTaskId(t.id)}
             />
           ) : (
             <>
@@ -924,9 +933,7 @@ export default function ProjectDetailPage() {
                         <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">
                           <ColumnDropdown
                             title="Due Date"
-                            sortAscValue="dueDate_asc"
                             sortDescValue="dueDate_desc"
-                            sortAscLabel="Earliest First"
                             sortDescLabel="Latest First"
                             currentSort={taskSort}
                             onSortChange={setTaskSort}
@@ -1026,11 +1033,10 @@ export default function ProjectDetailPage() {
                           )}
                           {visibleTaskColumns.includes('priority') && (
                             <td className="px-6 py-3">
-                              <span className={`text-xs font-medium capitalize ${
-                                t.priority === 'URGENT' || t.priority === 'CRITICAL' ? 'text-red-600' :
-                                t.priority === 'HIGH' ? 'text-orange-500' :
-                                t.priority === 'MEDIUM' ? 'text-blue-500' : 'text-gray-400'
-                              }`}>
+                              <span className={`text-xs font-medium capitalize ${t.priority === 'URGENT' || t.priority === 'CRITICAL' ? 'text-red-600' :
+                                  t.priority === 'HIGH' ? 'text-orange-500' :
+                                    t.priority === 'MEDIUM' ? 'text-blue-500' : 'text-gray-400'
+                                }`}>
                                 {(t.priority || 'medium').toLowerCase()}
                               </span>
                             </td>
@@ -1123,7 +1129,7 @@ export default function ProjectDetailPage() {
                           {t.status.replace('_', ' ')}
                         </span>
                       </div>
-                      
+
                       <div className="flex items-center justify-between mt-4">
                         <div className="flex items-center gap-2">
                           {t.assignee ? (
@@ -1137,7 +1143,7 @@ export default function ProjectDetailPage() {
                             <span className="text-xs text-[#9CA3AF]">Unassigned</span>
                           )}
                         </div>
-                        
+
                         {(user?.role !== 'TEAM_MEMBER' || t.assignee?.id === user?.id) && (
                           <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                             <button onClick={(e) => startEditingTask(t, e)} className="text-xs font-medium text-secondary hover:text-primary transition-colors bg-white border border-border rounded-lg px-2.5 py-1">
@@ -1162,7 +1168,7 @@ export default function ProjectDetailPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {allProjectMembers.map((m) => (
             <div key={m.id} className="flex items-center gap-3 rounded-2xl border border-border bg-white p-4">
- <div className={`h-10 w-10 rounded-xl text-sm font-semibold flex items-center justify-center ${getAvatarColor(m.name)}`}>{getInitials(m.name)}</div>
+              <div className={`h-10 w-10 rounded-xl text-sm font-semibold flex items-center justify-center ${getAvatarColor(m.name)}`}>{getInitials(m.name)}</div>
               <div>
                 <p className="text-sm font-medium text-primary">{m.name}</p>
                 <p className="text-xs text-[#9CA3AF]">{(m as any).role?.replace('_', ' ') || 'Project Owner'}</p>
@@ -1203,7 +1209,7 @@ export default function ProjectDetailPage() {
             ) : (
               project.comments?.map((comment) => (
                 <div key={comment.id} className="flex gap-4">
- <div className={`h-8 w-8 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 mt-1 ${getAvatarColor(comment.author.name)}`}>
+                  <div className={`h-8 w-8 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 mt-1 ${getAvatarColor(comment.author.name)}`}>
                     {getInitials(comment.author.name)}
                   </div>
                   <div className="flex-1 bg-white rounded-2xl border border-border p-4">
@@ -1224,7 +1230,7 @@ export default function ProjectDetailPage() {
         <div className="space-y-3">
           {project.activities?.map((a) => (
             <div key={a.id} className="flex items-start gap-3 py-2">
- <div className={`h-7 w-7 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(a.user.name)}`}>{getInitials(a.user.name)}</div>
+              <div className={`h-7 w-7 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(a.user.name)}`}>{getInitials(a.user.name)}</div>
               <div>
                 <p className="text-sm text-[#374151]"><span className="font-medium">{a.user.name}</span> {a.message}</p>
                 <p className="text-xs text-[#9CA3AF]">{formatRelativeDate(a.createdAt)}</p>
@@ -1315,29 +1321,6 @@ export default function ProjectDetailPage() {
                         ]}
                       />
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Platform</label>
-                      <Select
-                        ariaLabel="Platform"
-                        value={editForm.platform}
-                        onChange={(val) => setEditForm({ ...editForm, platform: val })}
-                        options={[
-                          { label: 'None', value: '' },
-                          { label: 'Instagram', value: 'INSTAGRAM' },
-                          { label: 'Facebook', value: 'FACEBOOK' },
-                          { label: 'LinkedIn', value: 'LINKEDIN' },
-                          { label: 'X (Twitter)', value: 'X_TWITTER' },
-                          { label: 'TikTok', value: 'TIKTOK' },
-                          { label: 'YouTube', value: 'YOUTUBE' },
-                          { label: 'Google Ads', value: 'GOOGLE_ADS' },
-                          { label: 'Website', value: 'WEBSITE' },
-                          { label: 'Mobile App', value: 'MOBILE_APP' },
-                          { label: 'E-Commerce', value: 'E_COMMERCE' },
-                          { label: 'Cross Platform', value: 'CROSS_PLATFORM' },
-                          { label: 'Other', value: 'OTHER' },
-                        ]}
-                      />
-                    </div>
                   </div>
                 </div>
 
@@ -1368,7 +1351,7 @@ export default function ProjectDetailPage() {
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Team Members</label>
                     <MultiSelect
                       compact={false}
- options={members.filter(m => m.id !== editForm.ownerId).map(m => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name) }))}
+                      options={members.filter(m => m.id !== editForm.ownerId).map(m => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name) }))}
                       value={editForm.memberIds}
                       onChange={(val) => setEditForm({ ...editForm, memberIds: val })}
                       placeholder="Search and select team members..."
@@ -1396,9 +1379,9 @@ export default function ProjectDetailPage() {
                   <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Scope</h3>
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Scope of Work</label>
-                    <RichTextEditor 
-                      value={editForm.scope} 
-                      onChange={(val) => setEditForm({ ...editForm, scope: val })} 
+                    <RichTextEditor
+                      value={editForm.scope}
+                      onChange={(val) => setEditForm({ ...editForm, scope: val })}
                       placeholder="Enter the scope of work..."
                     />
                   </div>
@@ -1407,65 +1390,6 @@ export default function ProjectDetailPage() {
                   </div>
                 </div>
 
-                {/* Workflow */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Workflow</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Reporting Cadence</label>
-                      <Select
-                        ariaLabel="Reporting Cadence"
-                        value={editForm.reportingCadence}
-                        onChange={(val) => setEditForm({ ...editForm, reportingCadence: val })}
-                        options={[
-                          { label: 'None', value: 'NONE' },
-                          { label: 'Weekly', value: 'WEEKLY' },
-                          { label: 'Fortnightly', value: 'FORTNIGHTLY' },
-                          { label: 'Monthly', value: 'MONTHLY' },
-                        ]}
-                      />
-                    </div>
-                    <div className="flex items-center gap-3 h-full pt-6">
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input 
-                          type="checkbox" 
-                          className="sr-only peer" 
-                          checked={editForm.clientApprovalRequired} 
-                          onChange={(e) => setEditForm({ ...editForm, clientApprovalRequired: e.target.checked })} 
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                        <span className="ml-3 text-sm font-medium text-[#374151]">Client approval required</span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Reference */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Reference</h3>
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Tags</label>
-                    <TagsInput 
-                      value={editForm.tags} 
-                      onChange={(val) => setEditForm({ ...editForm, tags: val })} 
-                      placeholder="Type and press Enter to add tags..."
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="pe-notes" className="block text-sm font-medium text-[#374151] mb-1.5">Notes</label>
-                    <textarea
-                      id="pe-notes"
-                      value={editForm.projectNotes}
-                      onChange={(e) => setEditForm({ ...editForm, projectNotes: e.target.value })}
-                      className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all min-h-[80px]"
-                      placeholder="Internal project notes..."
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="pe-folderLink" className="block text-sm font-medium text-[#374151] mb-1.5">Folder Link (URL)</label>
-                    <input id="pe-folderLink" type="url" value={editForm.folderLink} onChange={(e) => setEditForm({ ...editForm, folderLink: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                  </div>
-                </div>
 
                 <div className="pt-4 flex gap-3">
                   <button type="button" onClick={() => setShowEditProject(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
@@ -1489,7 +1413,7 @@ export default function ProjectDetailPage() {
                 <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
               </div>
               <div className="p-6 pb-24 md:pb-6 overflow-y-auto flex-1">
-                <div 
+                <div
                   className="prose prose-sm max-w-none text-[#374151]"
                   dangerouslySetInnerHTML={{ __html: viewModalContent.content }}
                 />

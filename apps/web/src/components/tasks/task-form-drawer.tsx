@@ -13,14 +13,16 @@ import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { useAuthStore, useTimeTrackingStore } from '@/stores';
-import { useProjects, useMembers } from '@/hooks/useQueries';
+import { useProjects, useMembers, useClients } from '@/hooks/useQueries';
 import { useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import { getClientDisplayName } from '@/lib/utils';
 
 const taskSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   description: z.string().optional(),
   type: z.string().optional(),
+  clientId: z.string().optional(),
   projectId: z.string().min(1, 'Project is required'),
   assigneeId: z.string().optional(),
   assigneeIds: z.array(z.string()).optional(),
@@ -32,8 +34,6 @@ const taskSchema = z.object({
   dueDateOnly: z.string().optional(),
   dueTimeOnly: z.string().optional(),
   assignedDate: z.string().optional(),
-  loggedHours: z.number().min(0).optional(),
-  driveLink: z.string().url('Must be a valid URL').optional().or(z.literal('')),
   isRecurring: z.boolean().optional(),
   recurrenceFrequency: z.string().optional(),
 });
@@ -56,6 +56,7 @@ const blankTaskValues = (defaultProjectId = ''): TaskFormValues => ({
   title: '',
   description: '',
   type: 'OTHER',
+  clientId: '',
   projectId: defaultProjectId,
   assigneeId: '',
   assigneeIds: [],
@@ -67,8 +68,6 @@ const blankTaskValues = (defaultProjectId = ''): TaskFormValues => ({
   dueDateOnly: new Date().toISOString().split('T')[0],
   dueTimeOnly: '',
   assignedDate: new Date().toISOString().split('T')[0],
-  loggedHours: 0,
-  driveLink: '',
   isRecurring: false,
   recurrenceFrequency: 'WEEKLY',
 });
@@ -89,6 +88,13 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
   const { data: projectsData } = useProjects();
   const projects = useMemo(() => projectsData?.pages.flatMap((page) => page.projects) || [], [projectsData]);
   const { data: members = [] } = useMembers();
+  const { data: clients = [] } = useClients();
+
+  const clientOptions = useMemo(() => {
+    return clients
+      .filter((c: any) => c.status !== 'CHURNED')
+      .map((c: any) => ({ label: getClientDisplayName(c), value: c.id }));
+  }, [clients]);
 
   const isEditing = !!taskToEdit;
 
@@ -98,6 +104,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
     control,
     reset,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<TaskFormValues>({
     resolver: zodResolver(taskSchema),
@@ -105,6 +112,43 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
   });
 
   const selectedProjectId = watch('projectId') || propProjectId;
+  const selectedClientId = watch('clientId');
+
+  const filteredProjectOptions = useMemo(() => {
+    let filtered = projects;
+    if (selectedClientId) {
+      filtered = projects.filter((p: any) => (p.client?.id || p.clientId) === selectedClientId);
+    }
+    return filtered.map((p: any) => ({ label: p.name, value: p.id }));
+  }, [projects, selectedClientId]);
+
+  const handleCompanyChange = (val: string, onChange: (v: string) => void) => {
+    onChange(val);
+    
+    // If selected Project doesn't belong to the newly selected Company, clear it
+    if (val) {
+      const currentProjId = watch('projectId');
+      if (currentProjId) {
+        const proj = projects.find((p: any) => p.id === currentProjId);
+        const projClientId = proj?.client?.id || proj?.clientId;
+        if (projClientId !== val) {
+          setValue('projectId', '');
+        }
+      }
+    } else {
+      setValue('projectId', '');
+    }
+  };
+
+  const handleProjectChange = (val: string, onChange: (v: string) => void) => {
+    onChange(val);
+    
+    if (val) {
+      const proj = projects.find((p: any) => p.id === val);
+      const projClientId = proj?.client?.id || proj?.clientId || '';
+      setValue('clientId', projClientId);
+    }
+  };
 
   // Initialize/Reset form on open or taskToEdit change
   useEffect(() => {
@@ -124,11 +168,16 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
             timeStr = (hours === '23' && minutes === '59') ? '' : `${hours}:${minutes}`;
           }
         }
+        const tProjId = taskToEdit.project?.id || taskToEdit.projectId || propProjectId || '';
+        const tProj = projects.find((p: any) => p.id === tProjId);
+        const tClientId = tProj?.client?.id || tProj?.clientId || taskToEdit.project?.client?.id || taskToEdit.project?.clientId || '';
+
         reset({
           title: taskToEdit.title,
           description: taskToEdit.description || '',
           type: taskToEdit.type || 'OTHER',
-          projectId: taskToEdit.project?.id || taskToEdit.projectId || propProjectId || '',
+          clientId: tClientId,
+          projectId: tProjId,
           assigneeIds: taskToEdit.assignees?.length
             ? taskToEdit.assignees.map((a: any) => a.id)
             : taskToEdit.assignee
@@ -142,16 +191,18 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
           dueTimeOnly: timeStr,
           assignedDate: taskToEdit.assignedDate ? new Date(taskToEdit.assignedDate).toISOString().split('T')[0] : '',
           assignedById: taskToEdit.assignedBy?.id || '',
-          loggedHours: taskToEdit.loggedHours || 0,
-          driveLink: taskToEdit.driveLink || '',
           isRecurring: taskToEdit.isRecurring || false,
           recurrenceFrequency: taskToEdit.recurrenceFrequency || 'WEEKLY',
         });
       } else {
-        reset(blankTaskValues(propProjectId || ''));
+        const defaultClientId = propProjectId ? (projects.find((p: any) => p.id === propProjectId)?.client?.id || projects.find((p: any) => p.id === propProjectId)?.clientId || '') : '';
+        reset({
+          ...blankTaskValues(propProjectId || ''),
+          clientId: defaultClientId,
+        });
       }
     }
-  }, [isOpen, taskToEdit, propProjectId, reset]);
+  }, [isOpen, taskToEdit, propProjectId, reset, projects]);
 
   const availableAssignees = useMemo(() => {
     const addUser = (u: any, enrichedUsers: Map<string, any>) => {
@@ -210,32 +261,21 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
     }
 
     try {
+      const { clientId, ...rest } = data;
       const payload = {
-        ...data,
+        ...rest,
         projectId: propProjectId || data.projectId,
         assigneeIds: data.assigneeIds || [],
         reviewerId: data.reviewerId || undefined,
         dueDate: combinedDueDate,
         assignedDate: data.assignedDate || undefined,
         assignedById: data.assignedById || undefined,
-        driveLink: data.driveLink || undefined,
       };
 
       let result;
       if (isEditing) {
         result = await api.put(`/tasks/${taskToEdit.id}`, payload);
         toast.success('Task updated successfully');
-
-        // Handle time logging trigger if status was changed to COMPLETED
-        if (data.status === 'COMPLETED' && taskToEdit.status !== 'COMPLETED') {
-          const hours = await useTimeTrackingStore
-            .getState()
-            .prompt({ taskId: taskToEdit.id, taskTitle: data.title });
-          if (hours) {
-            await api.put(`/tasks/${taskToEdit.id}`, { loggedHours: hours });
-            toast.success('Time logged');
-          }
-        }
       } else {
         result = await api.post('/tasks', payload);
         toast.success('Task created successfully');
@@ -350,31 +390,51 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
                   />
                 </div>
 
-                {/* Project Selection (Hidden/Disabled if propProjectId is supplied) */}
+                {/* Company & Project Selection (Hidden/Disabled if propProjectId is supplied) */}
                 {!propProjectId && (
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Project *</label>
-                    <Controller
-                      name="projectId"
-                      control={control}
-                      render={({ field }) => (
-                        <Select
-                          ariaLabel="Project"
-                          value={field.value}
-                          onChange={field.onChange}
-                          buttonClassName={errors.projectId ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}
-                          options={[
-                            { label: 'Select project', value: '' },
-                            ...projects.map((p) => ({ label: p.name, value: p.id })),
-                          ]}
-                        />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Company</label>
+                      <Controller
+                        name="clientId"
+                        control={control}
+                        render={({ field }) => (
+                          <Select
+                            ariaLabel="Company"
+                            value={field.value || ''}
+                            onChange={(val) => handleCompanyChange(val, field.onChange)}
+                            options={[
+                              { label: 'Select company', value: '' },
+                              ...clientOptions,
+                            ]}
+                          />
+                        )}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Project *</label>
+                      <Controller
+                        name="projectId"
+                        control={control}
+                        render={({ field }) => (
+                          <Select
+                            ariaLabel="Project"
+                            value={field.value || ''}
+                            onChange={(val) => handleProjectChange(val, field.onChange)}
+                            buttonClassName={errors.projectId ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}
+                            options={[
+                              { label: 'Select project', value: '' },
+                              ...filteredProjectOptions,
+                            ]}
+                          />
+                        )}
+                      />
+                      {errors.projectId && (
+                        <p aria-live="polite" className="mt-1 text-xs text-red-500">
+                          {errors.projectId.message}
+                        </p>
                       )}
-                    />
-                    {errors.projectId && (
-                      <p aria-live="polite" className="mt-1 text-xs text-red-500">
-                        {errors.projectId.message}
-                      </p>
-                    )}
+                    </div>
                   </div>
                 )}
 
@@ -509,19 +569,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
                       className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
                     />
                   </div>
-                  <div>
-                    <label htmlFor="tfd-loggedHours" className="block text-sm font-medium text-[#374151] mb-1.5">
-                      Time Spent (hours)
-                    </label>
-                    <input
-                      id="tfd-loggedHours"
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      {...register('loggedHours', { valueAsNumber: true })}
-                      className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
-                    />
-                  </div>
+
 
                   {/* Recurring options */}
                   <div className="flex flex-col justify-end">
@@ -575,90 +623,22 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
                     </div>
                   )}
 
-                  {/* Status selection (Create vs Edit) */}
+                  {/* Status selection */}
                   <div className="sm:col-span-2">
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Task Status</label>
-                    {isEditing ? (
-                      <Controller
-                        name="status"
-                        control={control}
-                        render={({ field }) => (
-                          <Select
-                            ariaLabel="Status"
-                            value={field.value}
-                            onChange={field.onChange}
-                            options={TASK_STATUS_OPTIONS}
-                          />
-                        )}
-                      />
-                    ) : (
-                      <Controller
-                        name="status"
-                        control={control}
-                        render={({ field }) => (
-                          <div className="flex gap-2">
-                            {[
-                              {
-                                value: 'BACKLOG',
-                                label: 'Backlog',
-                                activeClass:
-                                  'bg-red-100 text-red-700 border-red-300 ring-2 ring-red-400 ring-offset-1',
-                              },
-                              {
-                                value: 'TODO',
-                                label: 'To Do',
-                                activeClass:
-                                  'bg-grey-50 text-grey-700 border-grey-300 ring-2 ring-grey-400 ring-offset-1',
-                              },
-                              {
-                                value: 'IN_PROGRESS',
-                                label: 'In Progress',
-                                activeClass:
-                                  'bg-blue-50 text-blue-700 border-blue-300 ring-2 ring-blue-400 ring-offset-1',
-                              },
-                            ].map((opt) => (
-                              <button
-                                key={opt.value}
-                                type="button"
-                                onClick={() => field.onChange(opt.value)}
-                                className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-all shadow-sm
-                                  ${
-                                    field.value === opt.value
-                                      ? opt.activeClass
-                                      : 'border-border bg-white text-secondary hover:bg-[#F9FAFB]'
-                                  }`}
-                              >
-                                {opt.label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      />
-                    )}
+                    <Controller
+                      name="status"
+                      control={control}
+                      render={({ field }) => (
+                        <Select
+                          ariaLabel="Status"
+                          value={field.value}
+                          onChange={field.onChange}
+                          options={TASK_STATUS_OPTIONS}
+                        />
+                      )}
+                    />
                   </div>
-                </div>
-
-                {/* Drive Link */}
-                <div>
-                  <label htmlFor="tfd-driveLink" className="block text-sm font-medium text-[#374151] mb-1.5">
-                    Drive Link (Uploads, Drafts)
-                  </label>
-                  <input
-                    id="tfd-driveLink"
-                    type="url"
-                    {...register('driveLink')}
-                    placeholder="https://drive.google.com/..."
-                    aria-invalid={!!errors.driveLink}
-                    aria-describedby={errors.driveLink ? 'tfd-driveLink-error' : undefined}
-                    className={`w-full rounded-xl border ${
-                      errors.driveLink ? 'border-red-500' : 'border-border'
-                    } bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`}
-                  />
-                  {errors.driveLink && (
-                    <p id="tfd-driveLink-error" aria-live="polite" className="mt-1 text-xs text-red-500">
-                      {errors.driveLink.message}
-                    </p>
-                  )}
                 </div>
 
                 {/* Submit Buttons */}
