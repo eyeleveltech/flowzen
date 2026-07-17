@@ -214,6 +214,7 @@ reportRouter.get('/clients', async (req: AuthRequest, res: Response, next) => {
         company: true,
         contractValue: true,
         status: true,
+        contacts: { select: { name: true } },
         projects: {
           select: { 
             status: true, 

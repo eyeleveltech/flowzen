@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
-import { formatDate, formatShortDate, getInitials, getAvatarColor, getClientDisplayName } from '@/lib/utils';
+import { formatDate, formatShortDate, getInitials, getAvatarColor, getClientDisplayName, getProjectStatusFromClient } from '@/lib/utils';
 import { Plus, LayoutList, GanttChartSquare, Calendar, ChevronRight, BarChart3, Clock, LayoutGrid, Search, X, Check, Settings, Kanban, Filter } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '@/stores';
@@ -66,7 +66,7 @@ function ProjectsContent() {
 
   const ALL_PROJECT_COLUMNS = [
     { id: 'project', label: 'Project' },
-    { id: 'client', label: 'Client' },
+    { id: 'client', label: 'Company' },
     { id: 'progress', label: 'Progress' },
     { id: 'status', label: 'Status' },
     { id: 'owner', label: 'Owner' },
@@ -111,7 +111,7 @@ function ProjectsContent() {
     defaultValues: {
       name: '', description: '', clientId: '', ownerId: '',
       type: 'ONE_TIME', scope: '', reportingCadence: 'NONE', clientApprovalRequired: false, tags: [], projectNotes: '', folderLink: '',
-      startDate: '', endDate: '', priority: 'MEDIUM', status: 'PLANNING', platform: undefined, memberIds: [], teamIds: [],
+      startDate: '', endDate: '', priority: 'MEDIUM', status: 'PLANNING', memberIds: [], teamIds: [],
     }
   });
   const formValues = watch();
@@ -152,6 +152,16 @@ function ProjectsContent() {
   const { data: teams = [] } = useTeams();
   const { data: templates = [] } = useTemplates();
   const loading = isLoadingProjects;
+
+  const selectedClientId = watch('clientId');
+  useEffect(() => {
+    if (selectedClientId && clients.length > 0) {
+      const selectedClient = clients.find((c: any) => c.id === selectedClientId);
+      if (selectedClient) {
+        setValue('status', getProjectStatusFromClient(selectedClient) as any);
+      }
+    }
+  }, [selectedClientId, clients, setValue]);
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [formError, setFormError] = useState('');
@@ -391,7 +401,7 @@ function ProjectsContent() {
                   <thead>
                     <tr className="border-b border-[#F3F4F6]">
                       {visibleColumns.includes('project') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Project</th>}
-                      {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>}
+                      {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Company</th>}
                       {visibleColumns.includes('progress') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Progress</th>}
                       {visibleColumns.includes('status') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Status</th>}
                       {visibleColumns.includes('owner') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Owner</th>}
@@ -700,6 +710,7 @@ function ProjectsContent() {
                       />
                     </div>
                     <div>
+                      {/* Project Priority */}
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority</label>
                       <Select
                         value={formValues.priority}
@@ -709,28 +720,6 @@ function ProjectsContent() {
                           { label: 'Medium', value: 'MEDIUM' },
                           { label: 'High', value: 'HIGH' },
                           { label: 'Urgent', value: 'CRITICAL' },
-                        ]}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Platform</label>
-                      <Select
-                        value={formValues.platform || ''}
-                        onChange={(val) => setValue('platform', val as any)}
-                        options={[
-                          { label: 'None', value: '' },
-                          { label: 'Instagram', value: 'INSTAGRAM' },
-                          { label: 'Facebook', value: 'FACEBOOK' },
-                          { label: 'LinkedIn', value: 'LINKEDIN' },
-                          { label: 'X (Twitter)', value: 'X_TWITTER' },
-                          { label: 'TikTok', value: 'TIKTOK' },
-                          { label: 'YouTube', value: 'YOUTUBE' },
-                          { label: 'Google Ads', value: 'GOOGLE_ADS' },
-                          { label: 'Website', value: 'WEBSITE' },
-                          { label: 'Mobile App', value: 'MOBILE_APP' },
-                          { label: 'E-Commerce', value: 'E_COMMERCE' },
-                          { label: 'Cross Platform', value: 'CROSS_PLATFORM' },
-                          { label: 'Other', value: 'OTHER' },
                         ]}
                       />
                     </div>
@@ -815,62 +804,6 @@ function ProjectsContent() {
 
                 </div>
 
-                {/* Workflow */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Workflow</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Reporting Cadence</label>
-                      <Select
-                        value={formValues.reportingCadence}
-                        onChange={(val) => setValue('reportingCadence', val as any)}
-                        options={[
-                          { label: 'None', value: 'NONE' },
-                          { label: 'Weekly', value: 'WEEKLY' },
-                          { label: 'Fortnightly', value: 'FORTNIGHTLY' },
-                          { label: 'Monthly', value: 'MONTHLY' },
-                        ]}
-                      />
-                    </div>
-                    <div className="flex items-center gap-3 h-full pt-6">
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input 
-                          type="checkbox" 
-                          className="sr-only peer" 
-                          checked={formValues.clientApprovalRequired} 
-                          onChange={(e) => setValue('clientApprovalRequired', e.target.checked)} 
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                        <span className="ml-3 text-sm font-medium text-[#374151]">Client approval required</span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Reference */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Reference</h3>
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Tags</label>
-                    <TagsInput 
-                      value={formValues.tags || []} 
-                      onChange={(val) => setValue('tags', val)} 
-                      placeholder="Type and press Enter to add tags..."
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Notes</label>
-                    <textarea
-                      value={formValues.projectNotes || ''}
-                      onChange={(e) => setValue('projectNotes', e.target.value)}
-                      className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all min-h-[80px]"
-                      placeholder="Internal project notes..."
-                    />
-                  </div>
-                  <div>
-                    <Field label="Folder Link (URL)" type="url" value={formValues.folderLink || ''} onChange={(v) => setValue('folderLink', v)} />
-                  </div>
-                </div>
 
                 <div className="pt-4 flex gap-3">
                   <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>

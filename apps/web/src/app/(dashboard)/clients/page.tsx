@@ -479,23 +479,27 @@ function ClientsContent() {
               <Settings className="h-3.5 w-3.5" />
             </button>
 
-            <button
-              onClick={handleExport}
-              disabled={isExporting}
-              className="flex items-center gap-2 rounded-xl border border-border bg-white px-3 text-xs font-semibold text-[#374151] hover:bg-[#F9FAFB] transition-all disabled:opacity-50 h-9 shrink-0 whitespace-nowrap"
-            >
-              <Download className="h-3.5 w-3.5" /> Export CSV
-            </button>
+            {activeModule !== 'PM' && (
+              <button
+                onClick={handleExport}
+                disabled={isExporting}
+                className="flex items-center gap-2 rounded-xl border border-border bg-white px-3 text-xs font-semibold text-[#374151] hover:bg-[#F9FAFB] transition-all disabled:opacity-50 h-9 shrink-0 whitespace-nowrap"
+              >
+                <Download className="h-3.5 w-3.5" /> Export CSV
+              </button>
+            )}
 
-            <button
-              onClick={() => {
-                setShowCreate(true);
-                setCreationMode('MANUAL');
-              }}
-              className="flex items-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-semibold text-white hover:bg-[#1F2937] transition-all h-9 shrink-0 whitespace-nowrap"
-            >
-              <Plus className="h-3.5 w-3.5" /> Add Client
-            </button>
+            {activeModule !== 'PM' && (
+              <button
+                onClick={() => {
+                  setShowCreate(true);
+                  setCreationMode('MANUAL');
+                }}
+                className="flex items-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-semibold text-white hover:bg-[#1F2937] transition-all h-9 shrink-0 whitespace-nowrap"
+              >
+                <Plus className="h-3.5 w-3.5" /> Add Client
+              </button>
+            )}
           </div>
         </div>
 
@@ -648,7 +652,9 @@ function ClientsContent() {
                           <p className="text-sm font-medium text-primary">
                             {getClientDisplayName(client)}
                           </p>
-                          {client.name !== 'Internal' && client.company && client.name !== client.company && <p className="text-xs text-[#9CA3AF]">{client.name}</p>}
+                          {client.name !== 'Internal' && client.company && (client.contacts?.[0]?.name || client.name !== client.company) && (
+                            <p className="text-xs text-[#9CA3AF]">{client.contacts?.[0]?.name || client.name}</p>
+                          )}
                           {client.name === 'Internal' && <p className="text-xs font-medium text-[#9CA3AF]">(Internal)</p>}
                         </div>
                       </div>
@@ -860,9 +866,6 @@ function ClientsContent() {
 
                   <Field label="Website" value={form.website} onChange={(v) => setForm({ ...form, website: v })} />
                   <Field label="City" value={form.city} onChange={(v) => setForm({ ...form, city: v })} />
-                  <Field label="State (for GST split)" value={form.state} onChange={(v) => setForm({ ...form, state: v })} />
-                  <Field label="GST Number" value={form.gstNumber} onChange={(v) => setForm({ ...form, gstNumber: v })} />
-                  <Field label="Address" value={form.address} onChange={(v) => setForm({ ...form, address: v })} />
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Billing Address</label>
                     <textarea value={form.billingAddress} onChange={(e) => setForm({ ...form, billingAddress: e.target.value })} rows={2} placeholder="Used to auto-fill quotations" className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary resize-none" />
@@ -890,7 +893,6 @@ function ClientsContent() {
                     />
                   </div>
 
-                  <Field label="Asset Links" value={form.assetLinks} onChange={(v) => setForm({ ...form, assetLinks: v })} />
 
                   <div className="space-y-3 pt-2 pb-2 border-y border-[#F3F4F6]">
                     <div className="flex items-center justify-between">

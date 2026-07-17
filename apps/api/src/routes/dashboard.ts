@@ -446,8 +446,11 @@ dashboardRouter.get('/my-tasks', async (req: AuthRequest, res: Response, next) =
     const tasks = await prisma.task.findMany({
       where: {
         assigneeId: userId,
-        project: { client: { organizationId: orgId } },
-        status: { notIn: ['COMPLETED'] }
+        project: {
+          client: { organizationId: orgId },
+          status: { notIn: ['COMPLETED', 'CANCELLED', 'ON_HOLD'] }
+        },
+        status: { notIn: ['COMPLETED', 'ON_HOLD'] }
       },
       include: {
         project: { select: { id: true, name: true } }
@@ -516,6 +519,7 @@ dashboardRouter.get('/client-health', async (req: AuthRequest, res: Response, ne
       select: {
         id: true,
         name: true,
+        company: true,
         projects: {
           where: { status: { notIn: ['COMPLETED', 'CANCELLED'] } },
           select: {
@@ -550,6 +554,7 @@ dashboardRouter.get('/client-health', async (req: AuthRequest, res: Response, ne
       return {
         id: c.id,
         name: c.name,
+        company: c.company,
         activeProjects: c.projects.length,
         overdueTasks,
         nextDueDate,

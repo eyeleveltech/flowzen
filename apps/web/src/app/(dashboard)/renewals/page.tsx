@@ -78,7 +78,7 @@ export default function RenewalsPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[920px]">
             <thead><tr className="text-left text-[11px] uppercase tracking-wider text-secondary border-b border-border bg-gray-50/50">
-              <th className="px-4 py-3">Client</th><th className="px-4 py-3 text-right">Monthly Value</th><th className="px-4 py-3">Contract Start</th>
+              <th className="px-4 py-3">Company</th><th className="px-4 py-3 text-right">Monthly Value</th><th className="px-4 py-3">Contract Start</th>
               <th className="px-4 py-3">Contract End</th><th className="px-4 py-3 text-right">Days to Renewal</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Salesperson</th><th className="px-4 py-3"></th>
             </tr></thead>
             <tbody>

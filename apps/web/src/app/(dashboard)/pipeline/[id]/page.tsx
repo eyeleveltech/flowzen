@@ -67,7 +67,7 @@ function SocialLink({ platform, input }: { platform: 'linkedin' | 'instagram' | 
 
 const PIPELINE_STAGES = [
   'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
-  'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'CONTRACT', 'PROJECT_COMPLETED', 'CHURNED'
+  'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'CONTRACT', 'ON_HOLD', 'PROJECT_COMPLETED', 'CHURNED'
 ];
 
 export default function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -111,15 +111,6 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
     }
   });
 
-  const holdMutation = useMutation({
-    mutationFn: () => api.post(`/crm/leads/${leadId}/hold`, {}),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lead', leadId] });
-      queryClient.invalidateQueries({ queryKey: ['leads'] });
-      toast.success('Lead put on hold');
-    },
-    onError: (e: any) => toast.error(e.message || 'Failed to put on hold'),
-  });
 
   if (isLoading) {
     return <div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>;
@@ -291,11 +282,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                     }))}
                     className="w-40 sm:w-48 text-sm"
                   />
-                  {lead.client?.status !== 'ONHOLD' && !['PROJECT_COMPLETED', 'CHURNED'].includes(lead.stage) && (
-                    <button onClick={() => holdMutation.mutate()} disabled={holdMutation.isPending} className="px-3 py-2 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap">
-                      Hold
-                    </button>
-                  )}
+
                 </div>
               </div>
             </div>

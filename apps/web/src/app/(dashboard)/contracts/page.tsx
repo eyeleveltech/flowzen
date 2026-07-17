@@ -48,7 +48,7 @@ export default function ContractsPage() {
             <thead>
               <tr className="border-b border-border text-left text-xs font-semibold text-secondary uppercase tracking-wider">
                 <th className="px-6 py-3">Title</th>
-                <th className="px-6 py-3">Client</th>
+                <th className="px-6 py-3">Company</th>
                 <th className="px-6 py-3">Start Date</th>
                 <th className="px-6 py-3 text-right">Value</th>
                 <th className="px-6 py-3">Status</th>

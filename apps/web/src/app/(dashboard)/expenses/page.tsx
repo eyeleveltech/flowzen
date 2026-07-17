@@ -50,7 +50,7 @@ export default function ExpensesPage() {
                 <th className="px-6 py-3">Vendor / Desc</th>
                 <th className="px-6 py-3">Category</th>
                 <th className="px-6 py-3">Date</th>
-                <th className="px-6 py-3">Project / Client</th>
+                <th className="px-6 py-3">Project / Company</th>
                 <th className="px-6 py-3 text-right">Amount</th>
               </tr>
             </thead>

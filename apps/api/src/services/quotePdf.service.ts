@@ -80,6 +80,10 @@ function buildClassicHtml(quote: any, org: any, logoUri: string): string {
     .summary .grand td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px; }
     .words { margin-top: 8px; font-style: italic; color: #374151; font-size: 11px; }
     .tc { margin-top: 24px; } .tc h3, .bank h3, .sign h3 { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: ${BRAND}; margin: 0 0 6px; }
+    .bank-details-grid { margin-top: 6px; }
+    .bank-row { display: flex; margin-bottom: 4px; font-size: 10px; }
+    .bank-lbl { width: 130px; color: #4B5563; font-weight: 600; flex-shrink: 0; }
+    .bank-val { color: #1F2937; }
     .tc p { white-space: pre-wrap; color: #374151; font-size: 11px; line-height: 1.55; }
     .scope-block { margin-top: 24px; color: #374151; font-size: 11px; line-height: 1.55; }
     .scope-block h3 { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: ${BRAND}; margin: 0 0 6px; }
@@ -149,10 +153,15 @@ function buildClassicHtml(quote: any, org: any, logoUri: string): string {
       <div class="bottom">
         <div class="bank">
           <h3>Bank Details</h3>
-          ${c.bankName ? `<div>${esc(c.bankName)}</div>` : ''}
-          ${c.bankAccount ? `<div>A/C: ${esc(c.bankAccount)}</div>` : ''}
-          ${c.bankIfsc ? `<div>IFSC: ${esc(c.bankIfsc)}</div>` : ''}
-          ${!c.bankName && !c.bankAccount ? '<div style="color:#9CA3AF">Set bank details in company settings</div>' : ''}
+          ${c.bankHolder || c.bankName || c.bankBranch || c.bankAccount || c.bankIfsc ? `
+            <div class="bank-details-grid">
+              ${c.bankHolder ? `<div class="bank-row"><span class="bank-lbl">Account Holder Name:</span><span class="bank-val">${esc(c.bankHolder)}</span></div>` : ''}
+              ${c.bankName ? `<div class="bank-row"><span class="bank-lbl">Bank Name:</span><span class="bank-val">${esc(c.bankName)}</span></div>` : ''}
+              ${c.bankBranch ? `<div class="bank-row"><span class="bank-lbl">Branch:</span><span class="bank-val">${esc(c.bankBranch)}</span></div>` : ''}
+              ${c.bankAccount ? `<div class="bank-row"><span class="bank-lbl">Account Number:</span><span class="bank-val">${esc(c.bankAccount)}</span></div>` : ''}
+              ${c.bankIfsc ? `<div class="bank-row"><span class="bank-lbl">IFSC Code:</span><span class="bank-val">${esc(c.bankIfsc)}</span></div>` : ''}
+            </div>
+          ` : '<div style="color:#9CA3AF">Set bank details in company settings</div>'}
         </div>
         ${quote.onlineSignature ? `<div class="sign"><h3>Authorised Signature</h3><div class="line">Sign here</div></div>` : `<div class="sign"><h3>For ${esc(companyName)}</h3><div class="line">Authorised Signatory</div></div>`}
       </div>
@@ -164,7 +173,9 @@ function buildClassicHtml(quote: any, org: any, logoUri: string): string {
 function buildMinimalHtml(quote: any, org: any, logoUri: string): string {
   const c = (org?.settings as any)?.company || {};
   const companyName = c.name || org?.name || 'EyeLevel Growth Studio';
-  const title = quote.documentType === 'QUOTATION' ? 'QUOTATION' : 'PROFORMA INVOICE';
+  let title = 'PROFORMA INVOICE';
+  if (quote.documentType === 'QUOTATION') title = 'QUOTATION';
+  if (quote.documentType === 'INVOICE') title = 'INVOICE';
   const taxRows = Number(quote.totalTax) > 0 ? `<tr><td>Total Tax</td><td class="r">${inr(quote.totalTax)}</td></tr>` : '';
   const hasRcm = (quote.lineItems || []).some((li: any) => resolveTaxType(li.taxType).mode === 'RC');
 
@@ -205,6 +216,10 @@ function buildMinimalHtml(quote: any, org: any, logoUri: string): string {
     .summary .grand td { color: #000; font-weight: 700; font-size: 14px; padding: 12px 10px; border-bottom: 2px solid #000; }
     .words { margin-top: 12px; font-style: italic; color: #666; font-size: 10px; }
     .tc { margin-top: 40px; } .tc h3, .bank h3, .sign h3 { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin: 0 0 8px; }
+    .bank-details-grid { margin-top: 6px; }
+    .bank-row { display: flex; margin-bottom: 4px; font-size: 10px; }
+    .bank-lbl { width: 130px; color: #666; font-weight: 600; flex-shrink: 0; }
+    .bank-val { color: #000; }
     .tc p { white-space: pre-wrap; color: #444; font-size: 10px; line-height: 1.6; }
     .scope-block { margin-top: 40px; color: #444; font-size: 10px; line-height: 1.6; }
     .scope-block h3 { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin: 0 0 8px; }
@@ -274,10 +289,15 @@ function buildMinimalHtml(quote: any, org: any, logoUri: string): string {
       <div class="bottom">
         <div class="bank">
           <h3>Bank Details</h3>
-          ${c.bankName ? `<div>${esc(c.bankName)}</div>` : ''}
-          ${c.bankAccount ? `<div>A/C: ${esc(c.bankAccount)}</div>` : ''}
-          ${c.bankIfsc ? `<div>IFSC: ${esc(c.bankIfsc)}</div>` : ''}
-          ${!c.bankName && !c.bankAccount ? '<div style="color:#888">Set bank details in company settings</div>' : ''}
+          ${c.bankHolder || c.bankName || c.bankBranch || c.bankAccount || c.bankIfsc ? `
+            <div class="bank-details-grid">
+              ${c.bankHolder ? `<div class="bank-row"><span class="bank-lbl">Account Holder Name:</span><span class="bank-val">${esc(c.bankHolder)}</span></div>` : ''}
+              ${c.bankName ? `<div class="bank-row"><span class="bank-lbl">Bank Name:</span><span class="bank-val">${esc(c.bankName)}</span></div>` : ''}
+              ${c.bankBranch ? `<div class="bank-row"><span class="bank-lbl">Branch:</span><span class="bank-val">${esc(c.bankBranch)}</span></div>` : ''}
+              ${c.bankAccount ? `<div class="bank-row"><span class="bank-lbl">Account Number:</span><span class="bank-val">${esc(c.bankAccount)}</span></div>` : ''}
+              ${c.bankIfsc ? `<div class="bank-row"><span class="bank-lbl">IFSC Code:</span><span class="bank-val">${esc(c.bankIfsc)}</span></div>` : ''}
+            </div>
+          ` : '<div style="color:#888">Set bank details in company settings</div>'}
         </div>
         ${quote.onlineSignature ? `<div class="sign"><h3>Authorised Signature</h3><div class="line">Sign here</div></div>` : `<div class="sign"><h3>For ${esc(companyName)}</h3><div class="line">Authorised Signatory</div></div>`}
       </div>
@@ -288,7 +308,9 @@ function buildMinimalHtml(quote: any, org: any, logoUri: string): string {
 function buildModernHtml(quote: any, org: any, logoUri: string): string {
   const c = (org?.settings as any)?.company || {};
   const companyName = c.name || org?.name || 'EyeLevel Growth Studio';
-  const title = quote.documentType === 'QUOTATION' ? 'QUOTATION' : 'PROFORMA INVOICE';
+  let title = 'PROFORMA INVOICE';
+  if (quote.documentType === 'QUOTATION') title = 'QUOTATION';
+  if (quote.documentType === 'INVOICE') title = 'INVOICE';
   const taxRows = Number(quote.totalTax) > 0 ? `<tr><td>Total Tax</td><td class="r">${inr(quote.totalTax)}</td></tr>` : '';
   const hasRcm = (quote.lineItems || []).some((li: any) => resolveTaxType(li.taxType).mode === 'RC');
 
@@ -331,6 +353,10 @@ function buildModernHtml(quote: any, org: any, logoUri: string): string {
     .summary .grand td { background: #111827; color: #fff; font-weight: 700; font-size: 15px; padding: 14px 16px; }
     .words { margin-top: 12px; color: #6B7280; font-size: 10px; text-align: right; }
     .tc { margin-top: 30px; } .tc h3, .bank h3, .sign h3 { font-size: 9px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; color: #9CA3AF; margin: 0 0 8px; }
+    .bank-details-grid { margin-top: 6px; }
+    .bank-row { display: flex; margin-bottom: 5px; font-size: 11px; }
+    .bank-lbl { width: 130px; color: #6B7280; font-weight: 500; flex-shrink: 0; }
+    .bank-val { color: #111827; font-weight: 600; }
     .tc p { white-space: pre-wrap; color: #4B5563; font-size: 11px; line-height: 1.6; }
     .scope-block { margin-top: 30px; background: #F9FAFB; padding: 16px 20px; border-radius: 12px; color: #4B5563; font-size: 11px; line-height: 1.6; }
     .scope-block h3 { font-size: 9px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; color: #9CA3AF; margin: 0 0 8px; }
@@ -401,10 +427,15 @@ function buildModernHtml(quote: any, org: any, logoUri: string): string {
       <div class="bottom">
         <div class="bank">
           <h3>Bank Details</h3>
-          ${c.bankName ? `<div><b style="color:#111827;">${esc(c.bankName)}</b></div>` : ''}
-          ${c.bankAccount ? `<div>A/C: ${esc(c.bankAccount)}</div>` : ''}
-          ${c.bankIfsc ? `<div>IFSC: ${esc(c.bankIfsc)}</div>` : ''}
-          ${!c.bankName && !c.bankAccount ? '<div style="color:#9CA3AF">Set bank details in company settings</div>' : ''}
+          ${c.bankHolder || c.bankName || c.bankBranch || c.bankAccount || c.bankIfsc ? `
+            <div class="bank-details-grid">
+              ${c.bankHolder ? `<div class="bank-row"><span class="bank-lbl">Account Holder Name:</span><span class="bank-val">${esc(c.bankHolder)}</span></div>` : ''}
+              ${c.bankName ? `<div class="bank-row"><span class="bank-lbl">Bank Name:</span><span class="bank-val">${esc(c.bankName)}</span></div>` : ''}
+              ${c.bankBranch ? `<div class="bank-row"><span class="bank-lbl">Branch:</span><span class="bank-val">${esc(c.bankBranch)}</span></div>` : ''}
+              ${c.bankAccount ? `<div class="bank-row"><span class="bank-lbl">Account Number:</span><span class="bank-val">${esc(c.bankAccount)}</span></div>` : ''}
+              ${c.bankIfsc ? `<div class="bank-row"><span class="bank-lbl">IFSC Code:</span><span class="bank-val">${esc(c.bankIfsc)}</span></div>` : ''}
+            </div>
+          ` : '<div style="color:#9CA3AF">Set bank details in company settings</div>'}
         </div>
         ${quote.onlineSignature ? `<div class="sign"><h3>Authorised Signature</h3><div class="line">Sign here</div></div>` : `<div class="sign"><h3>For ${esc(companyName)}</h3><div class="line">Authorised Signatory</div></div>`}
       </div>

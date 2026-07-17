@@ -106,12 +106,6 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
       
       if (status === 'COMPLETED') {
         onClose();
-        const hours = await useTimeTrackingStore.getState().prompt({ taskId, taskTitle: task?.title || 'Task' });
-        if (hours) {
-          await api.put(`/tasks/${taskId}`, { loggedHours: hours });
-          toast.success('Time logged');
-          onChanged?.();
-        }
         return;
       }
     } catch (err: any) {
@@ -187,13 +181,7 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
               <Row label="Assigned Date" value={formatDate(task.assignedDate)} />
               <Row label="Due Date" value={formatDate(task.dueDate)} highlight danger={dueOverdue} />
               {task.completedAt && <Row label="Completed On" value={formatDate(task.completedAt)} />}
-              {(task.loggedHours ?? 0) > 0 && <Row label="Time Spent" value={`⏱ ${task.loggedHours}h`} />}
-              {task.driveLink && (
-                <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
-                  <span className="text-sm text-secondary">Drive Link</span>
-                  <a href={task.driveLink} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 hover:underline max-w-[220px] truncate">{task.driveLink}</a>
-                </div>
-              )}
+
               <Row label="Created" value={formatDate(task.createdAt)} />
             </div>
 

@@ -32,7 +32,7 @@ export default function SubscriptionsPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border text-left text-xs font-semibold text-secondary uppercase tracking-wider">
-                <th className="px-6 py-3">Client</th>
+                <th className="px-6 py-3">Company</th>
                 <th className="px-6 py-3">Contract</th>
                 <th className="px-6 py-3 text-right">Amount</th>
                 <th className="px-6 py-3">Frequency</th>

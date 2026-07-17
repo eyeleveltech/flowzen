@@ -96,7 +96,7 @@ settingsRouter.put('/company', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Au
   try {
     const org = await prisma.organization.findUnique({ where: { id: req.user!.organizationId }, select: { settings: true } });
     const settings = (org?.settings as any) || {};
-    const allowed = ['state', 'gst', 'pan', 'bankName', 'bankAccount', 'bankIfsc', 'email', 'standardTerms', 'quotationTemplate'];
+    const allowed = ['state', 'gst', 'pan', 'bankName', 'bankAccount', 'bankIfsc', 'bankHolder', 'bankBranch', 'email', 'standardTerms', 'quotationTemplate'];
     const company = { ...(settings.company || {}) };
     for (const k of allowed) if (req.body[k] !== undefined) company[k] = req.body[k];
     const updated = await prisma.organization.update({

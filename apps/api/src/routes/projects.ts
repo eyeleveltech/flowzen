@@ -93,7 +93,7 @@ projectRouter.get('/', async (req: AuthRequest, res: Response, next) => {
       prisma.project.findMany({
         where: where as any,
         include: {
-          client: { select: { id: true, name: true, company: true } },
+          client: { select: { id: true, name: true, company: true, contacts: { select: { name: true } } } },
           owner: { select: { id: true, name: true, avatar: true } },
           members: { include: { user: { select: { id: true, name: true, avatar: true } } } },
           teams: { include: { team: { include: { members: { select: { id: true, name: true, avatar: true } } } } } },
@@ -129,7 +129,7 @@ projectRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
     const project = await prisma.project.findFirst({
       where: where as any,
       include: {
-        client: { select: { id: true, name: true, company: true, lead: { select: { id: true } } } },
+        client: { select: { id: true, name: true, company: true, contacts: { select: { name: true } }, lead: { select: { id: true } } } },
         owner: { select: { id: true, name: true, avatar: true, email: true } },
         members: { include: { user: { select: { id: true, name: true, avatar: true, role: true, designation: true } } } },
         teams: { include: { team: { include: { members: { select: { id: true, name: true, avatar: true, role: true, designation: true } } } } } },

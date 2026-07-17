@@ -72,7 +72,7 @@ export default function RevenueOverviewPage() {
           <table className="w-full text-left text-sm">
             <thead className="bg-[#F9FAFB] text-secondary">
               <tr>
-                <th className="px-6 py-4 font-medium">Client</th>
+                <th className="px-6 py-4 font-medium">Company</th>
                 <th className="px-6 py-4 font-medium">Amount</th>
                 <th className="px-6 py-4 font-medium">Date</th>
                 <th className="px-6 py-4 font-medium">Method</th>
