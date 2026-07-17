@@ -53,8 +53,8 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
       <div className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-secondary uppercase tracking-wide flex items-center gap-2">
-              <Building2 className="h-3.5 w-3.5" /> Organization Name
+            <label className="text-sm font-medium text-[#374151] flex items-center gap-2">
+              <Building2 className="h-3.5 w-3.5 text-secondary" /> Organization Name
             </label>
             <input
               type="text"
@@ -64,8 +64,8 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-secondary uppercase tracking-wide flex items-center gap-2">
-              <Globe className="h-3.5 w-3.5" /> Website
+            <label className="text-sm font-medium text-[#374151] flex items-center gap-2">
+              <Globe className="h-3.5 w-3.5 text-secondary" /> Website
             </label>
             <input
               type="url"
@@ -79,8 +79,8 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-secondary uppercase tracking-wide flex items-center gap-2">
-              <Briefcase className="h-3.5 w-3.5" /> Industry
+            <label className="text-sm font-medium text-[#374151] flex items-center gap-2">
+              <Briefcase className="h-3.5 w-3.5 text-secondary" /> Industry
             </label>
             <input
               type="text"
@@ -91,8 +91,8 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
             />
           </div>
           <div className="space-y-1.5 z-20">
-            <label className="text-xs font-medium text-secondary uppercase tracking-wide flex items-center gap-2">
-              <Users className="h-3.5 w-3.5" /> Company Size
+            <label className="text-sm font-medium text-[#374151] flex items-center gap-2">
+              <Users className="h-3.5 w-3.5 text-secondary" /> Company Size
             </label>
             <Select
               value={data.companySize}
@@ -105,8 +105,8 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-secondary uppercase tracking-wide flex items-center gap-2">
-              <Phone className="h-3.5 w-3.5" /> Phone Number
+            <label className="text-sm font-medium text-[#374151] flex items-center gap-2">
+              <Phone className="h-3.5 w-3.5 text-secondary" /> Phone Number
             </label>
             <input
               type="tel"
@@ -118,8 +118,8 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-secondary uppercase tracking-wide flex items-center gap-2">
-            <MapPin className="h-3.5 w-3.5" /> Headquarter Address
+          <label className="text-sm font-medium text-[#374151] flex items-center gap-2">
+            <MapPin className="h-3.5 w-3.5 text-secondary" /> Headquarter Address
           </label>
           <textarea
             value={data.address}
@@ -130,8 +130,8 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-secondary uppercase tracking-wide flex items-center gap-2">
-            <Building2 className="h-3.5 w-3.5" /> Description
+          <label className="text-sm font-medium text-[#374151] flex items-center gap-2">
+            <Building2 className="h-3.5 w-3.5 text-secondary" /> Description
           </label>
           <textarea
             value={data.description}

@@ -749,7 +749,7 @@ export default function ProjectDetailPage() {
                   value={taskStatusFilter}
                   onChange={setTaskStatusFilter}
                   placeholder="Status"
-                  triggerClassName={taskStatusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+                  triggerClassName={taskStatusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
                   options={TASK_STATUS_OPTIONS}
                 />
               </div>
@@ -759,7 +759,7 @@ export default function ProjectDetailPage() {
                   value={taskTypeFilter}
                   onChange={setTaskTypeFilter}
                   placeholder="Department"
-                  triggerClassName={taskTypeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+                  triggerClassName={taskTypeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
                   options={teams.map((t: any) => ({ label: t.name, value: t.id }))}
                 />
               </div>
@@ -769,7 +769,7 @@ export default function ProjectDetailPage() {
                   value={taskPriorityFilter}
                   onChange={setTaskPriorityFilter}
                   placeholder="Priority"
-                  triggerClassName={taskPriorityFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+                  triggerClassName={taskPriorityFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
                   options={[
                     { label: 'Low', value: 'LOW' },
                     { label: 'Medium', value: 'MEDIUM' },
@@ -785,7 +785,7 @@ export default function ProjectDetailPage() {
                   value={taskAssigneeFilter}
                   onChange={setTaskAssigneeFilter}
                   placeholder="Assignee"
-                  triggerClassName={taskAssigneeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+                  triggerClassName={taskAssigneeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
                   options={allProjectMembers.map((a: any) => ({ value: a.id, label: a.name, image: getInitials(a.name), colorClass: getAvatarColor(a.name) }))}
                 />
               </div>
@@ -795,7 +795,7 @@ export default function ProjectDetailPage() {
                   type="date"
                   value={taskDueDateFilter}
                   onChange={(e) => setTaskDueDateFilter(e.target.value)}
-                  className="h-9 rounded-xl border border-dashed border-gray-300 bg-white hover:bg-gray-50 text-secondary px-3 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer"
+                  className="h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer"
                   title="Filter by due date"
                 />
               </div>

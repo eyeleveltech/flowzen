@@ -15,7 +15,7 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'Flowzen — Premium Project Management',
   description: 'Premium agency project management platform for digital teams',
-  icons: { icon: '/logo_flowzen.png' },
+  icons: { icon: '/icon.png' },
   manifest: '/manifest.json',
 };
 

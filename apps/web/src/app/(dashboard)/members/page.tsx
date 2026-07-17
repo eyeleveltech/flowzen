@@ -425,7 +425,7 @@ export default function TeamPage() {
                 value={selectedDept}
                 onChange={setSelectedDept}
                 placeholder="Departments"
-                triggerClassName={selectedDept.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+                triggerClassName={selectedDept.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
                 options={departments.map((d) => ({ label: d, value: d }))}
               />
             </div>
@@ -436,7 +436,7 @@ export default function TeamPage() {
                 value={selectedRole}
                 onChange={setSelectedRole}
                 placeholder="Roles"
-                triggerClassName={selectedRole.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+                triggerClassName={selectedRole.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
                 options={Object.entries(roleLabels).map(([val, label]) => ({ label, value: val }))}
               />
             </div>

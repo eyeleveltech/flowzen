@@ -201,19 +201,19 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
               </div>
               <form onSubmit={handleInvite} className="p-6 space-y-4 flex-1">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-secondary uppercase tracking-wide">Full Name</label>
+                  <label className="text-sm font-medium text-[#374151]">Full Name</label>
                   <input required value={inviteForm.name} onChange={(e) => setInviteForm({ ...inviteForm, name: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-secondary uppercase tracking-wide">Email Address</label>
+                  <label className="text-sm font-medium text-[#374151]">Email Address</label>
                   <input required type="email" value={inviteForm.email} onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
                 </div>
                 <div className="space-y-1.5 z-20 relative">
-                  <label className="text-xs font-medium text-secondary uppercase tracking-wide">Role</label>
+                  <label className="text-sm font-medium text-[#374151]">Role</label>
                   <Select value={inviteForm.role} onChange={(val) => setInviteForm({ ...inviteForm, role: val })} options={roleOptions} />
                 </div>
                 <div className="space-y-1.5 z-10 relative">
-                  <label className="text-xs font-medium text-secondary uppercase tracking-wide">Department (Optional)</label>
+                  <label className="text-sm font-medium text-[#374151]">Department (Optional)</label>
                   <Select 
                     value={inviteForm.department || ''} 
                     onChange={(val) => setInviteForm({ ...inviteForm, department: val })} 
@@ -221,7 +221,7 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
                   />
                 </div>
                 <div className="space-y-1.5 relative">
-                  <label className="text-xs font-medium text-secondary uppercase tracking-wide">Designation (Optional)</label>
+                  <label className="text-sm font-medium text-[#374151]">Designation (Optional)</label>
                   <input list="designation-options" placeholder="Select or type a designation…" value={inviteForm.designation || ''} onChange={(e) => setInviteForm({ ...inviteForm, designation: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
                 </div>
                 <div className="pt-8 flex gap-3">
@@ -247,15 +247,15 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
               </div>
               <form onSubmit={handleUpdateUser} className="p-6 space-y-4 flex-1">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-secondary uppercase tracking-wide">Full Name</label>
+                  <label className="text-sm font-medium text-[#374151]">Full Name</label>
                   <input required value={editingUser.name} onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
                 </div>
                 <div className="space-y-1.5 z-30 relative">
-                  <label className="text-xs font-medium text-secondary uppercase tracking-wide">Role</label>
+                  <label className="text-sm font-medium text-[#374151]">Role</label>
                   <Select value={editingUser.role} onChange={(val) => setEditingUser({ ...editingUser, role: val })} options={roleOptions} disabled={editingUser.role === 'SUPER_ADMIN'} />
                 </div>
                 <div className="space-y-1.5 z-20 relative">
-                  <label className="text-xs font-medium text-secondary uppercase tracking-wide">Department (Optional)</label>
+                  <label className="text-sm font-medium text-[#374151]">Department (Optional)</label>
                   <Select 
                     value={editingUser.department || ''} 
                     onChange={(val) => setEditingUser({ ...editingUser, department: val })} 
@@ -263,11 +263,11 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
                   />
                 </div>
                 <div className="space-y-1.5 relative">
-                  <label className="text-xs font-medium text-secondary uppercase tracking-wide">Designation (Optional)</label>
+                  <label className="text-sm font-medium text-[#374151]">Designation (Optional)</label>
                   <input list="designation-options" placeholder="Select or type a designation…" value={editingUser.designation || ''} onChange={(e) => setEditingUser({ ...editingUser, designation: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
                 </div>
                 <div className="space-y-1.5 relative">
-                  <label className="text-xs font-medium text-secondary uppercase tracking-wide">Status</label>
+                  <label className="text-sm font-medium text-[#374151]">Status</label>
                   <Select value={editingUser.status} onChange={(val) => setEditingUser({ ...editingUser, status: val })} options={[{label: 'Active', value: 'ACTIVE'}, {label: 'Pending', value: 'PENDING'}, {label: 'Inactive', value: 'INACTIVE'}]} />
                 </div>
                 <div className="pt-8 flex gap-3">

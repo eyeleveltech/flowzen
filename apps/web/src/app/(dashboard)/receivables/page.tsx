@@ -45,11 +45,11 @@ export default function ReceivablesPage() {
           <table className="w-full text-left text-sm">
             <thead className="bg-[#F9FAFB] text-secondary">
               <tr>
-                <th className="px-6 py-4 font-medium">Contract Title</th>
-                <th className="px-6 py-4 font-medium">Company</th>
-                <th className="px-6 py-4 font-medium text-right">Total Value</th>
-                <th className="px-6 py-4 font-medium text-right">Paid</th>
-                <th className="px-6 py-4 font-medium text-right">Remaining</th>
+                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Contract Title</th>
+                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Company</th>
+                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider text-right">Total Value</th>
+                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider text-right">Paid</th>
+                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider text-right">Remaining</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
