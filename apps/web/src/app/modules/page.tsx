@@ -63,7 +63,7 @@ export default function ModulePickerPage() {
         <h1 className="text-center text-2xl font-semibold text-primary tracking-tight">Choose a workspace</h1>
         <p className="mt-1 text-center text-sm text-secondary">Hi {user.name?.split(' ')[0]} — pick a module to get started. You can switch anytime.</p>
 
-        <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-5 max-w-4xl mx-auto">
           {mods.map((m, i) => {
             const Icon = moduleIcons[m.key];
             return (

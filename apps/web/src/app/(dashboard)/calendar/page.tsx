@@ -165,7 +165,7 @@ export default function CalendarPage() {
             onClick={() => setAssigneeFilter(assigneeFilter.length === 1 && assigneeFilter[0] === user?.id ? [] : (user?.id ? [user.id] : []))}
             className={assigneeFilter.length === 1 && assigneeFilter[0] === user?.id 
               ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" 
-              : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"
+              : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"
             }
           >
             My Tasks
@@ -176,7 +176,7 @@ export default function CalendarPage() {
               value={projectIdFilter}
               onChange={setProjectIdFilter}
               placeholder="Projects"
-              triggerClassName={projectIdFilter.length > 0 ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              triggerClassName={projectIdFilter.length > 0 ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
               options={projects.map(p => ({ label: p.name, value: p.id }))}
             />
           </div>
@@ -186,7 +186,7 @@ export default function CalendarPage() {
               value={clientIdFilter}
               onChange={setClientIdFilter}
               placeholder="Clients/Owners"
-              triggerClassName={clientIdFilter.length > 0 ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              triggerClassName={clientIdFilter.length > 0 ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
               options={clients.map(c => ({ label: getClientDisplayName(c), value: c.id }))}
             />
           </div>
@@ -196,7 +196,7 @@ export default function CalendarPage() {
               value={departmentFilter}
               onChange={setDepartmentFilter}
               placeholder="Departments"
-              triggerClassName={departmentFilter.length > 0 ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              triggerClassName={departmentFilter.length > 0 ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
               options={teams.map((t: any) => ({ label: t.name, value: t.id }))}
             />
           </div>
@@ -207,7 +207,7 @@ export default function CalendarPage() {
                 value={assigneeFilter}
                 onChange={setAssigneeFilter}
                 placeholder="Assignees"
-                triggerClassName={assigneeFilter.length > 0 ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+                triggerClassName={assigneeFilter.length > 0 ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
                 options={members.map(m => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
               />
             </div>

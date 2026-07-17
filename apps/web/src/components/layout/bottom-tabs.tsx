@@ -86,7 +86,7 @@ export function BottomTabs() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+              className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
               onClick={() => setShowMore(false)}
             />
             <motion.div
@@ -94,7 +94,7 @@ export function BottomTabs() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 z-40 rounded-t-3xl bg-white shadow-2xl"
+              className="fixed bottom-0 left-0 right-0 z-50 rounded-t-3xl bg-white shadow-2xl"
             >
               {/* Handle */}
               <div className="flex justify-center pt-3 pb-1">
@@ -148,7 +148,7 @@ export function BottomTabs() {
               </nav>
 
               {/* Sign Out */}
-              <div className="border-t border-[#F3F4F6] px-3 py-2 pb-safe">
+              <div className="border-t border-[#F3F4F6] px-3 py-2 pb-20">
                 <button
                   onClick={() => {
                     logout();

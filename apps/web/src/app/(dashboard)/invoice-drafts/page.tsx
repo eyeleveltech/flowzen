@@ -63,12 +63,12 @@ export default function InvoiceDraftsPage() {
           <table className="w-full text-left text-sm">
             <thead className="bg-[#F9FAFB] text-secondary">
               <tr>
-                <th className="px-6 py-4 font-medium">Draft #</th>
-                <th className="px-6 py-4 font-medium">Company</th>
-                <th className="px-6 py-4 font-medium">Quote Ref</th>
-                <th className="px-6 py-4 font-medium text-right">Grand Total</th>
-                <th className="px-6 py-4 font-medium">Status</th>
-                <th className="px-6 py-4 font-medium text-right">Actions</th>
+                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Draft #</th>
+                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Company</th>
+                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Quote Ref</th>
+                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider text-right">Grand Total</th>
+                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, FileText, Download, Copy, Ban, Search, Eye, Trash2 } from 'lucide-react';
+import { Plus, FileText, Download, Copy, Ban, Search, Eye, Trash2, MoreHorizontal } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
@@ -29,6 +29,7 @@ export default function QuotationsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [duplicateOf, setDuplicateOf] = useState<any>(null);
+  const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
   const router = useRouter();
 
   const { data, isLoading } = useQuery({
@@ -161,7 +162,8 @@ export default function QuotationsPage() {
                     <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md border ${STATUS_STYLES[q.status]}`}>{q.status[0] + q.status.slice(1).toLowerCase()}</span>
                   </td>
                   <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center justify-end gap-1.5 text-secondary">
+                    {/* Desktop Viewport — icon row */}
+                    <div className="hidden md:flex items-center justify-end gap-1.5 text-secondary">
                       <button title="View / Edit" onClick={() => openEdit(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Eye className="h-4 w-4" /></button>
                       <button title="Generate / Download PDF" onClick={() => q.pdfUrl ? window.open(fileUrl(q.pdfUrl), '_blank') : generatePdf(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Download className="h-4 w-4" /></button>
                       <button title="Duplicate" onClick={() => duplicate(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Copy className="h-4 w-4" /></button>
@@ -174,6 +176,63 @@ export default function QuotationsPage() {
                         <button title="Cancel" onClick={async () => { if (await confirm({ title: 'Cancel Document', message: 'Are you sure you want to cancel this document?', confirmText: 'Cancel Document', cancelText: 'Keep', variant: 'warning' })) statusMutation.mutate({ id: q.id, status: 'CANCELLED' }); }} className="p-1.5 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors"><Ban className="h-4 w-4" /></button>
                       )}
                       <button title="Delete" onClick={async () => { if (await confirm({ title: 'Delete Document', message: 'Are you sure you want to delete this document? This cannot be undone.', confirmText: 'Delete', cancelText: 'Cancel', variant: 'danger' })) deleteMutation.mutate(q.id); }} className="p-1.5 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+
+                    {/* Mobile Viewport — ⋯ menu with text labels */}
+                    <div className="relative md:hidden flex justify-end">
+                      <button 
+                        className="p-1.5 rounded-lg hover:bg-[#F3F4F6] text-secondary hover:text-primary transition-colors"
+                        onClick={() => setActiveDropdownId(activeDropdownId === q.id ? null : q.id)}
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </button>
+                      {activeDropdownId === q.id && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setActiveDropdownId(null)} />
+                          <div className="absolute right-0 top-8 z-50 w-52 rounded-xl bg-white shadow-2xl border border-border py-1 flex flex-col text-left">
+                            <button 
+                              onClick={() => { setActiveDropdownId(null); openEdit(q.id); }}
+                              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
+                            >
+                              <Eye className="h-4 w-4" /> View / Edit
+                            </button>
+                            <button 
+                              onClick={() => { setActiveDropdownId(null); q.pdfUrl ? window.open(fileUrl(q.pdfUrl), '_blank') : generatePdf(q.id); }}
+                              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
+                            >
+                              <Download className="h-4 w-4" /> Download PDF
+                            </button>
+                            <button 
+                              onClick={() => { setActiveDropdownId(null); duplicate(q.id); }}
+                              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
+                            >
+                              <Copy className="h-4 w-4" /> Duplicate
+                            </button>
+                            {q.status === 'ACCEPTED' && (
+                              <button 
+                                onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Create Invoice', message: 'Move this quote to an Invoice Draft?', confirmText: 'Create Invoice', cancelText: 'Cancel' })) createInvoiceDraft(q); }}
+                                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-emerald-600 hover:bg-emerald-50 transition-colors text-left"
+                              >
+                                <FileText className="h-4 w-4" /> Move to Invoice Draft
+                              </button>
+                            )}
+                            {q.status !== 'CANCELLED' && (
+                              <button 
+                                onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Cancel Document', message: 'Are you sure you want to cancel this document?', confirmText: 'Cancel Document', cancelText: 'Keep', variant: 'warning' })) statusMutation.mutate({ id: q.id, status: 'CANCELLED' }); }}
+                                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-amber-600 hover:bg-amber-50 transition-colors text-left"
+                              >
+                                <Ban className="h-4 w-4" /> Cancel
+                              </button>
+                            )}
+                            <button 
+                              onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Delete Document', message: 'Are you sure you want to delete this document? This cannot be undone.', confirmText: 'Delete', cancelText: 'Cancel', variant: 'danger' })) deleteMutation.mutate(q.id); }}
+                              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors text-left"
+                            >
+                              <Trash2 className="h-4 w-4" /> Delete
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -214,19 +273,60 @@ export default function QuotationsPage() {
             <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-50">
               <p className="text-sm font-bold text-primary">{formatCurrency(Number(q.grandTotal))}</p>
               
-              <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                <button title="View / Edit" onClick={() => openEdit(q.id)} className="p-1.5 rounded-lg text-secondary hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Eye className="h-3.5 w-3.5" /></button>
-                <button title="Generate / Download PDF" onClick={() => q.pdfUrl ? window.open(fileUrl(q.pdfUrl), '_blank') : generatePdf(q.id)} className="p-1.5 rounded-lg text-secondary hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Download className="h-3.5 w-3.5" /></button>
-                <button title="Duplicate" onClick={() => duplicate(q.id)} className="p-1.5 rounded-lg text-secondary hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Copy className="h-3.5 w-3.5" /></button>
-                {q.status === 'ACCEPTED' && (
-                  <button title="Move to Invoice Draft" onClick={async () => { if (await confirm({ title: 'Create Invoice', message: 'Move this quote to an Invoice Draft?', confirmText: 'Create Invoice', cancelText: 'Cancel' })) createInvoiceDraft(q); }} className="p-1.5 rounded-lg text-secondary hover:bg-emerald-50 hover:text-emerald-600 transition-colors">
-                    <FileText className="h-3.5 w-3.5" />
-                  </button>
+              <div className="relative" onClick={e => e.stopPropagation()}>
+                <button 
+                  className="p-1.5 rounded-lg hover:bg-[#F3F4F6] text-secondary hover:text-primary transition-colors"
+                  onClick={() => setActiveDropdownId(activeDropdownId === q.id ? null : q.id)}
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </button>
+                {activeDropdownId === q.id && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setActiveDropdownId(null)} />
+                    <div className="absolute right-0 bottom-8 z-50 w-52 rounded-xl bg-white shadow-2xl border border-border py-1 flex flex-col text-left">
+                      <button 
+                        onClick={() => { setActiveDropdownId(null); openEdit(q.id); }}
+                        className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
+                      >
+                        <Eye className="h-4 w-4" /> View / Edit
+                      </button>
+                      <button 
+                        onClick={() => { setActiveDropdownId(null); q.pdfUrl ? window.open(fileUrl(q.pdfUrl), '_blank') : generatePdf(q.id); }}
+                        className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
+                      >
+                        <Download className="h-4 w-4" /> Download PDF
+                      </button>
+                      <button 
+                        onClick={() => { setActiveDropdownId(null); duplicate(q.id); }}
+                        className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
+                      >
+                        <Copy className="h-4 w-4" /> Duplicate
+                      </button>
+                      {q.status === 'ACCEPTED' && (
+                        <button 
+                          onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Create Invoice', message: 'Move this quote to an Invoice Draft?', confirmText: 'Create Invoice', cancelText: 'Cancel' })) createInvoiceDraft(q); }}
+                          className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-emerald-600 hover:bg-emerald-50 transition-colors text-left"
+                        >
+                          <FileText className="h-4 w-4" /> Move to Invoice Draft
+                        </button>
+                      )}
+                      {q.status !== 'CANCELLED' && (
+                        <button 
+                          onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Cancel Document', message: 'Are you sure you want to cancel this document?', confirmText: 'Cancel Document', cancelText: 'Keep', variant: 'warning' })) statusMutation.mutate({ id: q.id, status: 'CANCELLED' }); }}
+                          className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-amber-600 hover:bg-amber-50 transition-colors text-left"
+                        >
+                          <Ban className="h-4 w-4" /> Cancel
+                        </button>
+                      )}
+                      <button 
+                        onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Delete Document', message: 'Are you sure you want to delete this document? This cannot be undone.', confirmText: 'Delete', cancelText: 'Cancel', variant: 'danger' })) deleteMutation.mutate(q.id); }}
+                        className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors text-left"
+                      >
+                        <Trash2 className="h-4 w-4" /> Delete
+                      </button>
+                    </div>
+                  </>
                 )}
-                {q.status !== 'CANCELLED' && (
-                  <button title="Cancel" onClick={async () => { if (await confirm({ title: 'Cancel Document', message: 'Are you sure you want to cancel this document?', confirmText: 'Cancel Document', cancelText: 'Keep', variant: 'warning' })) statusMutation.mutate({ id: q.id, status: 'CANCELLED' }); }} className="p-1.5 rounded-lg text-secondary hover:bg-red-50 hover:text-red-600 transition-colors"><Ban className="h-3.5 w-3.5" /></button>
-                )}
-                <button title="Delete" onClick={async () => { if (await confirm({ title: 'Delete Document', message: 'Are you sure you want to delete this document? This cannot be undone.', confirmText: 'Delete', cancelText: 'Cancel', variant: 'danger' })) deleteMutation.mutate(q.id); }} className="p-1.5 rounded-lg text-secondary hover:bg-red-50 hover:text-red-600 transition-colors"><Trash2 className="h-3.5 w-3.5" /></button>
               </div>
             </div>
           </div>
