@@ -540,7 +540,7 @@ function TasksContent() {
                 }
               }}
               placeholder="Companies"
-              triggerClassName={clientFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              triggerClassName={clientFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
               options={clients.map((c: any) => ({ label: getClientDisplayName(c), value: c.id }))}
             />
           </div>
@@ -551,7 +551,7 @@ function TasksContent() {
               value={projectFilter}
               onChange={setProjectFilter}
               placeholder="Projects"
-              triggerClassName={projectFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              triggerClassName={projectFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
               options={filteredProjectsForDropdown.map((p) => ({ label: p.name, value: p.id }))}
             />
           </div>
@@ -562,7 +562,7 @@ function TasksContent() {
               value={statusFilter}
               onChange={setStatusFilter}
               placeholder="Status"
-              triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
               options={TASK_STATUS_OPTIONS}
             />
           </div>
@@ -573,7 +573,7 @@ function TasksContent() {
               value={teamFilter}
               onChange={setTeamFilter}
               placeholder="Departments"
-              triggerClassName={teamFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              triggerClassName={teamFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
               options={teams.map((t: any) => ({ label: t.name, value: t.id }))}
             />
           </div>
@@ -585,7 +585,7 @@ function TasksContent() {
                 value={assigneeFilter}
                 onChange={setAssigneeFilter}
                 placeholder="Assignees"
-                triggerClassName={assigneeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+                triggerClassName={assigneeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
                 options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
               />
             </div>
@@ -597,7 +597,7 @@ function TasksContent() {
               value={priorityFilter}
               onChange={setPriorityFilter}
               placeholder="Priority"
-              triggerClassName={priorityFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              triggerClassName={priorityFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
               options={[
                 { label: 'Low', value: 'LOW' },
                 { label: 'Medium', value: 'MEDIUM' },

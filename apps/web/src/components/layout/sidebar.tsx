@@ -39,6 +39,7 @@ const navItems: NavItem[] = [
   { label: 'Pipeline', href: '/pipeline', icon: TrendingUp, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
   { label: 'Quotations', href: '/quotations', icon: FileText, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'], module: 'CRM' },
   { label: 'Revenue Overview', href: '/revenue', icon: DollarSign, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
+  { label: 'Per-Project P&L', href: '/revenue/pnl', icon: FileText, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
   { label: 'Contracts', href: '/contracts', icon: FileText, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
   { label: 'Invoice Drafts', href: '/invoice-drafts', icon: FileText, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
   { label: 'Invoices', href: '/invoices', icon: Receipt, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
@@ -114,7 +115,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
               <ArrowLeftRight className="h-[18px] w-[18px] shrink-0 text-[#9CA3AF] group-hover:text-primary" />
               <AnimatePresence>
                 {!sidebarCollapsed && (
-                  <motion.span initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: 'auto' }} exit={{ opacity: 0, width: 0 }} className="whitespace-nowrap overflow-hidden flex-1">
+                  <motion.span initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: 'auto' }} exit={{ opacity: 0, width: 0 }} className="truncate flex-1 min-w-0">
                     {activeLabel}
                   </motion.span>
                 )}
@@ -124,7 +125,9 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
           </Link>
         )}
         {visibleNav.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+          const isActive = item.href === '/revenue'
+            ? pathname === item.href
+            : (pathname === item.href || pathname.startsWith(item.href + '/'));
           return (
             <Link key={item.href} href={item.href}>
               <div

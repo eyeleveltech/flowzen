@@ -99,8 +99,8 @@ export function ColumnDropdown({
         ref={triggerRef}
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          "flex items-center gap-1.5 hover:text-primary transition-colors focus:outline-none rounded-md px-1 -ml-1",
-          (isSorted || isFiltered) ? "text-primary font-semibold" : ""
+          "flex items-center gap-1.5 hover:text-primary transition-colors focus:outline-none rounded-md px-1 -ml-1 uppercase text-xs font-semibold tracking-wider",
+          (isSorted || isFiltered) ? "text-primary font-bold" : "text-secondary font-semibold"
         )}
       >
         {title}

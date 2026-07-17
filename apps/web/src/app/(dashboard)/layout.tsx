@@ -27,7 +27,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     // Refresh the session (incl. enabledModules) so module gating reflects the server.
     api.get('/auth/me').then((fresh: any) => setAuth(fresh)).catch(() => {});
 
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    const checkMobile = () => setIsMobile(window.innerWidth <= 768);
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);

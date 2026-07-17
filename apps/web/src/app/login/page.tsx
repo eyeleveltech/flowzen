@@ -54,7 +54,7 @@ export default function LoginPage() {
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
-                className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-[#EF4444]"
+                className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-danger"
               >
                 {error}
               </motion.div>

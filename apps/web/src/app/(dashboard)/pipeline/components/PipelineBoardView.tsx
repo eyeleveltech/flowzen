@@ -28,30 +28,30 @@ const STAGE_WEIGHTS: Record<string, number> = {
 };
 
 const GROUPS = [
-  { id: 'New', title: 'New Lead', color: '#7c3aed', stages: ['NEW_LEAD'] },
-  { id: 'Outreach', title: 'Outreach', color: '#0891b2', stages: ['OUTREACH'] },
-  { id: 'Meeting', title: 'Meeting', color: '#d97706', stages: ['MEETING'] },
-  { id: 'Proposal', title: 'Proposal', color: '#2563eb', stages: ['PROPOSAL'] },
-  { id: 'Negotiation', title: 'Negotiation', color: '#0369a1', stages: ['NEGOTIATION'] },
-  { id: 'Active', title: 'Active', color: '#0f766e', stages: ['ACTIVE_RETAINER', 'ACTIVE_PROJECT'] },
-  { id: 'WonClosed', title: 'Won & Closed', color: '#15803d', stages: ['CONTRACT'] },
-  { id: 'OnHold', title: 'On Hold', color: '#9ca3af', stages: ['ON_HOLD'] },
-  { id: 'Completed', title: 'Project Completed', color: '#475569', stages: ['PROJECT_COMPLETED'] },
-  { id: 'Lost', title: 'Lost & Closed', color: '#dc2626', stages: ['CHURNED'] },
+  { id: 'New', title: 'New Lead', color: '#6B7280', stages: ['NEW_LEAD'] },
+  { id: 'Outreach', title: 'Outreach', color: '#6B7280', stages: ['OUTREACH'] },
+  { id: 'Meeting', title: 'Meeting', color: '#6B7280', stages: ['MEETING'] },
+  { id: 'Proposal', title: 'Proposal', color: '#2563EB', stages: ['PROPOSAL'] },
+  { id: 'Negotiation', title: 'Negotiation', color: '#2563EB', stages: ['NEGOTIATION'] },
+  { id: 'Active', title: 'Active', color: '#2563EB', stages: ['ACTIVE_RETAINER', 'ACTIVE_PROJECT'] },
+  { id: 'WonClosed', title: 'Won & Closed', color: '#16A34A', stages: ['CONTRACT'] },
+  { id: 'OnHold', title: 'On Hold', color: '#6B7280', stages: ['ON_HOLD'] },
+  { id: 'Completed', title: 'Project Completed', color: '#16A34A', stages: ['PROJECT_COMPLETED'] },
+  { id: 'Lost', title: 'Lost & Closed', color: '#DC2626', stages: ['CHURNED'] },
 ];
 
 const STAGE_BADGES: Record<string, { label: string, bg: string, text: string }> = {
-  'NEW_LEAD': { label: 'NEW LEAD', bg: '#7c3aed', text: '#ffffff' },
-  'OUTREACH': { label: 'OUTREACH', bg: '#0891b2', text: '#ffffff' },
-  'MEETING': { label: 'MEETING', bg: '#d97706', text: '#ffffff' },
-  'PROPOSAL': { label: 'PROPOSAL', bg: '#2563eb', text: '#ffffff' },
-  'NEGOTIATION': { label: 'NEGOTIATION', bg: '#0369a1', text: '#ffffff' },
-  'CONTRACT': { label: 'WON & CLOSED', bg: '#15803d', text: '#ffffff' },
-  'ACTIVE_RETAINER': { label: 'ACTIVE (RETAINER)', bg: '#0f766e', text: '#ffffff' },
-  'ACTIVE_PROJECT': { label: 'ACTIVE (PROJECT)', bg: '#1d4ed8', text: '#ffffff' },
-  'ON_HOLD': { label: 'ON HOLD', bg: '#9ca3af', text: '#ffffff' },
-  'PROJECT_COMPLETED': { label: 'COMPLETED', bg: '#166534', text: '#ffffff' },
-  'CHURNED': { label: 'LOST & CLOSED', bg: '#dc2626', text: '#ffffff' },
+  'NEW_LEAD': { label: 'NEW LEAD', bg: '#6B7280', text: '#ffffff' },
+  'OUTREACH': { label: 'OUTREACH', bg: '#6B7280', text: '#ffffff' },
+  'MEETING': { label: 'MEETING', bg: '#6B7280', text: '#ffffff' },
+  'PROPOSAL': { label: 'PROPOSAL', bg: '#2563EB', text: '#ffffff' },
+  'NEGOTIATION': { label: 'NEGOTIATION', bg: '#2563EB', text: '#ffffff' },
+  'CONTRACT': { label: 'WON & CLOSED', bg: '#16A34A', text: '#ffffff' },
+  'ACTIVE_RETAINER': { label: 'ACTIVE (RETAINER)', bg: '#2563EB', text: '#ffffff' },
+  'ACTIVE_PROJECT': { label: 'ACTIVE (PROJECT)', bg: '#2563EB', text: '#ffffff' },
+  'ON_HOLD': { label: 'ON HOLD', bg: '#6B7280', text: '#ffffff' },
+  'PROJECT_COMPLETED': { label: 'COMPLETED', bg: '#16A34A', text: '#ffffff' },
+  'CHURNED': { label: 'LOST & CLOSED', bg: '#DC2626', text: '#ffffff' },
 };
 
 export function PipelineBoardView() {
@@ -78,7 +78,7 @@ export function PipelineBoardView() {
       if (saved) {
         setCollapsedColumns(JSON.parse(saved));
       }
-    } catch (e) {}
+    } catch (e) { }
   }, []);
 
   const toggleCollapse = (columnId: string) => {
@@ -136,7 +136,7 @@ export function PipelineBoardView() {
   useEffect(() => {
     setIsMounted(true);
     fetchLeads();
-    
+
     const sse = getSSE();
     if (sse) {
       sse.on('lead:updated', fetchLeads);
@@ -159,7 +159,7 @@ export function PipelineBoardView() {
   const columns = useMemo(() => {
     const cols: Record<string, any[]> = {};
     GROUPS.forEach(g => cols[g.id] = []);
-    
+
     leads.forEach(lead => {
       const group = GROUPS.find(g => g.stages.includes(lead.stage));
       if (group) {
@@ -292,7 +292,7 @@ export function PipelineBoardView() {
                   key={group.id}
                   onClick={() => toggleCollapse(group.id)}
                   className="flex flex-col w-12 h-full shrink-0 border border-gray-200 rounded-xl cursor-pointer py-4 justify-between items-center transition-all select-none group/col shadow-sm hover:shadow"
-                  style={{ 
+                  style={{
                     borderLeft: `4px solid ${group.color}`,
                     backgroundColor: `${group.color}08` // 3% opacity tint of stage color
                   }}
@@ -306,7 +306,7 @@ export function PipelineBoardView() {
                   </button>
 
                   <div className="flex flex-col items-center justify-center flex-1">
-                    <span 
+                    <span
                       className="rotate-90 origin-center whitespace-nowrap text-xs font-bold uppercase tracking-wider select-none transform"
                       style={{ color: group.color }}
                     >
@@ -327,7 +327,7 @@ export function PipelineBoardView() {
             return (
               <div key={group.id} className="flex flex-col flex-1 min-w-[260px] max-w-[340px] h-full shrink-0 border border-gray-200 bg-gray-50/80 rounded-xl overflow-hidden shadow-sm">
                 {/* Column Header */}
-                <div 
+                <div
                   className="px-4 py-3 flex items-center justify-between shrink-0 animate-fade-in"
                   style={{ backgroundColor: group.color }}
                 >
@@ -356,13 +356,10 @@ export function PipelineBoardView() {
                     <div
                       ref={provided.innerRef}
                       {...provided.droppableProps}
-                      className={`flex-1 p-3 overflow-y-auto space-y-3 transition-colors custom-scrollbar min-h-0 ${
-                        snapshot.isDraggingOver ? 'bg-gray-100/50' : 'bg-transparent'
-                      }`}
+                      className={`flex-1 p-3 overflow-y-auto space-y-3 transition-colors custom-scrollbar min-h-0 ${snapshot.isDraggingOver ? 'bg-gray-100/50' : 'bg-transparent'
+                        }`}
                     >
                       {columnLeads.map((lead, index) => {
-                        const badgeInfo = STAGE_BADGES[lead.stage] || { label: lead.stage, bg: '#ccc', text: '#000' };
-
                         return (
                           <Draggable key={lead.id} draggableId={lead.id} index={index}>
                             {(provided, snapshot) => (
@@ -371,9 +368,8 @@ export function PipelineBoardView() {
                                 {...provided.draggableProps}
                                 {...provided.dragHandleProps}
                                 onClick={() => router.push(`/pipeline/${lead.id}`)}
-                                className={`bg-white rounded-xl p-4 border border-gray-200 cursor-pointer group ${
-                                  snapshot.isDragging ? 'shadow-2xl shadow-black/10 scale-105 z-50 ring-2 ring-primary' : 'shadow-sm hover:shadow-md hover:border-gray-300'
-                                } transition-all relative`}
+                                className={`bg-white rounded-xl p-4 border border-gray-200 cursor-pointer group ${snapshot.isDragging ? 'shadow-2xl shadow-black/10 scale-105 z-50 ring-2 ring-primary' : 'shadow-sm hover:shadow-md hover:border-gray-300'
+                                  } transition-all relative`}
                               >
                                 {/* Top Header: ID & Stage Badge */}
                                 <div className="flex items-center justify-between gap-2 mb-3 select-none">
@@ -382,42 +378,46 @@ export function PipelineBoardView() {
                                   ) : (
                                     <span />
                                   )}
-                                  <div 
-                                    className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0"
-                                    style={{ backgroundColor: badgeInfo.bg, color: badgeInfo.text }}
-                                  >
-                                    {badgeInfo.label}
-                                  </div>
+                                  {/* Distinctive active stage badges for Retainer vs. Project */}
+                                  {(lead.stage === 'ACTIVE_RETAINER' || lead.stage === 'ACTIVE_PROJECT') && (
+                                    <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-md border uppercase tracking-wider ${lead.stage === 'ACTIVE_RETAINER'
+                                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                        : 'bg-green-50 text-green-700 border-green-200'
+                                      }`}>
+                                      {lead.stage === 'ACTIVE_RETAINER' ? 'Retainer' : 'Project'}
+                                    </span>
+                                  )}
                                 </div>
-                                 {/* Content */}
-                                 {(() => {
-                                   const displayTitle = lead.companyName || lead.client?.company || lead.contactName || lead.client?.name || 'Unknown';
-                                   const hasCompany = !!(lead.companyName || lead.client?.company);
-                                   const displaySubtitle = hasCompany 
-                                     ? (lead.contactName || lead.client?.name || lead.contactEmail || '')
-                                     : (lead.contactEmail || '');
-                                   return (
-                                     <>
-                                       <div>
-                                         <h4 className="text-[15px] font-bold text-primary truncate" title={displayTitle}>
-                                           {displayTitle}
-                                         </h4>
-                                       </div>
-                                       <div className="mt-1">
-                                         {displaySubtitle && (
-                                           <p className="text-sm font-medium text-secondary truncate" title={displaySubtitle}>
-                                             {displaySubtitle}
-                                           </p>
-                                         )}
-                                         {lead.jobTitle && (
-                                           <p className="text-[11px] text-gray-400 truncate mt-0.5" title={lead.jobTitle}>
-                                             {lead.jobTitle}
-                                           </p>
-                                         )}
-                                       </div>
-                                     </>
-                                   );
-                                 })()}
+
+                                {/* Content */}
+                                {(() => {
+                                  const displayTitle = lead.companyName || lead.client?.company || lead.contactName || lead.client?.name || 'Unknown';
+                                  const hasCompany = !!(lead.companyName || lead.client?.company);
+                                  const displaySubtitle = hasCompany
+                                    ? (lead.contactName || lead.client?.name || lead.contactEmail || '')
+                                    : (lead.contactEmail || '');
+                                  return (
+                                    <>
+                                      <div>
+                                        <h4 className="text-[15px] font-bold text-primary truncate" title={displayTitle}>
+                                          {displayTitle}
+                                        </h4>
+                                      </div>
+                                      <div className="mt-1">
+                                        {displaySubtitle && (
+                                          <p className="text-sm font-medium text-secondary truncate" title={displaySubtitle}>
+                                            {displaySubtitle}
+                                          </p>
+                                        )}
+                                        {lead.jobTitle && (
+                                          <p className="text-[11px] text-gray-400 truncate mt-0.5" title={lead.jobTitle}>
+                                            {lead.jobTitle}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </>
+                                  );
+                                })()}
 
                                 <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
                                   <p className="text-sm font-bold text-primary">
@@ -522,9 +522,8 @@ export function PipelineBoardView() {
                       setStageMenu(null);
                     }
                   }}
-                  className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left transition-colors ${
-                    isCurrent ? 'text-gray-300 cursor-default bg-gray-50/50' : 'text-primary hover:bg-gray-50'
-                  }`}
+                  className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left transition-colors ${isCurrent ? 'text-gray-300 cursor-default bg-gray-50/50' : 'text-primary hover:bg-gray-50'
+                    }`}
                 >
                   <span><span className="text-gray-400">{idx + 1}.</span> {stage.replace('_', ' ')}</span>
                   {isCurrent && <Check className="w-4 h-4 text-gray-400 shrink-0" />}

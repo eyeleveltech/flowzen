@@ -419,7 +419,7 @@ function ClientsContent() {
               onChange={setStatusFilter}
               placeholder="Status"
               showSelectAll={true}
-              triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
               options={[
                 { label: 'Prospect', value: 'PROSPECT' },
                 { label: 'Active', value: 'ACTIVE' },
@@ -436,7 +436,7 @@ function ClientsContent() {
               onChange={setEngagementTypeFilter}
               placeholder="Engagements"
               showSelectAll={true}
-              triggerClassName={engagementTypeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              triggerClassName={engagementTypeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
               options={[
                 { label: 'Retainer', value: 'Retainer' },
                 { label: 'Project', value: 'Project' },
@@ -452,7 +452,7 @@ function ClientsContent() {
               onChange={setAccountManagerFilter}
               placeholder="Account Manager"
               showSelectAll={true}
-              triggerClassName={accountManagerFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              triggerClassName={accountManagerFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
               options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
             />
           </div>
@@ -463,7 +463,7 @@ function ClientsContent() {
               onChange={setIndustryFilter}
               placeholder="Industries"
               showSelectAll={true}
-              triggerClassName={industryFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              triggerClassName={industryFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
               options={INDUSTRY_OPTIONS.map((i) => ({ label: i, value: i }))}
             />
           </div>

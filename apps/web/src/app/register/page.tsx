@@ -57,7 +57,7 @@ export default function RegisterPage() {
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-[#EF4444]"
+                className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-danger"
               >
                 {error}
               </motion.div>

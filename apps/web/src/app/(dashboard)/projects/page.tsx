@@ -260,7 +260,7 @@ function ProjectsContent() {
               onChange={setStatusFilter}
               placeholder="Status"
               showSelectAll
-              triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
               options={[
                 { label: 'Active', value: 'ACTIVE' },
                 { label: 'Delayed', value: 'DELAYED' },
@@ -280,7 +280,7 @@ function ProjectsContent() {
               onChange={setClientFilter}
               placeholder="Clients"
               showSelectAll
-              triggerClassName={clientFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+              triggerClassName={clientFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
               options={clients.filter(c => c._count?.projects > 0).map(c => ({ label: getClientDisplayName(c), value: c.id }))}
             />
           </div>
@@ -292,7 +292,7 @@ function ProjectsContent() {
                 onChange={setOwnerFilter}
                 placeholder="Project Managers"
                 showSelectAll
-                triggerClassName={ownerFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-dashed border-gray-300 text-secondary px-3 text-xs"}
+                triggerClassName={ownerFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
                 options={members.filter(m => m.totalProjects > 0).map(m => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
               />
             </div>
@@ -303,7 +303,7 @@ function ProjectsContent() {
               type="date"
               value={dueDateFilter}
               onChange={(e) => setDueDateFilter(e.target.value)}
-              className="h-9 rounded-xl border border-dashed border-gray-300 bg-white hover:bg-gray-50 text-secondary px-3 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer"
+              className="h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer"
               title="Due Date Filter"
             />
           </div>

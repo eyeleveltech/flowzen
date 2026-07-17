@@ -141,12 +141,12 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
         {/* Search */}
         <button
           onClick={() => setCommandPaletteOpen(true)}
-          className="flex items-center gap-2.5 rounded-xl border border-border bg-surface px-3 sm:px-4 py-2 text-sm text-[#9CA3AF] hover:bg-white hover:border-[#D1D5DB] transition-all duration-150 w-auto sm:w-80"
+          className="flex items-center gap-2.5 rounded-xl border border-border bg-surface px-3 sm:px-4 py-2 text-sm text-secondary hover:bg-white hover:border-[#D1D5DB] transition-all duration-150 w-auto sm:w-80"
         >
           <Search className="h-4 w-4 shrink-0" />
           <span className="hidden sm:inline">Search everything...</span>
           <span className="sm:hidden">Search...</span>
-          <kbd className="ml-auto hidden sm:inline-flex items-center gap-0.5 rounded-md border border-border bg-white px-1.5 py-0.5 text-[10px] font-medium text-[#9CA3AF]">
+          <kbd className="ml-auto hidden sm:inline-flex items-center gap-0.5 rounded-md border border-border bg-white px-1.5 py-0.5 text-[10px] font-medium text-secondary">
             ⌘K
           </kbd>
         </button>

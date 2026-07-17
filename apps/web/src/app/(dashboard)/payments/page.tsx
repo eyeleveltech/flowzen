@@ -37,13 +37,13 @@ export default function PaymentsPage() {
           <table className="w-full text-left text-sm">
             <thead className="bg-[#F9FAFB] text-secondary">
               <tr>
-                <th className="px-6 py-4 font-medium">Payment ID</th>
-                <th className="px-6 py-4 font-medium">Company</th>
-                <th className="px-6 py-4 font-medium">Contract Ref</th>
-                <th className="px-6 py-4 font-medium">Date</th>
-                <th className="px-6 py-4 font-medium">Method</th>
-                <th className="px-6 py-4 font-medium text-right">Amount</th>
-                <th className="px-6 py-4 font-medium">Status</th>
+                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Payment ID</th>
+                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Company</th>
+                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Contract Ref</th>
+                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Date</th>
+                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Method</th>
+                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider text-right">Amount</th>
+                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
