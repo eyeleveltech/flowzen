@@ -21,11 +21,29 @@ import crypto from 'crypto';
 export const settingsRouter = Router();
 settingsRouter.use(authenticate);
 
+const isOrgAdmin = (req: AuthRequest) => req.user!.role === 'SUPER_ADMIN' || req.user!.role === 'ADMIN';
+
+// The `settings` blob nests company billing (bank/GST/PAN), so it is never selected for non-admins.
+const ORG_PUBLIC_SELECT = {
+  id: true,
+  name: true,
+  logo: true,
+  website: true,
+  industry: true,
+  companySize: true,
+  phone: true,
+  address: true,
+  description: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
 // GET /api/settings/organization
 settingsRouter.get('/organization', async (req: AuthRequest, res: Response, next) => {
   try {
     const org = await prisma.organization.findUnique({
       where: { id: req.user!.organizationId },
+      select: isOrgAdmin(req) ? { ...ORG_PUBLIC_SELECT, settings: true } : ORG_PUBLIC_SELECT,
     });
 
     res.json(org);
@@ -81,11 +99,18 @@ settingsRouter.put('/organization', authorize('SUPER_ADMIN', 'ADMIN'), async (re
 });
 
 // GET /api/settings/company — company billing details (GST/PAN/bank/state/standard T&C) used by quotations.
+// The quote and invoice-draft forms need `state` (IGST vs CGST/SGST) and `standardTerms`, so the route stays
+// open to every role — but bank/GST/PAN are admin-only and must not travel to a TEAM_MEMBER.
+const COMPANY_NON_ADMIN_FIELDS = ['state', 'standardTerms'] as const;
+
 settingsRouter.get('/company', async (req: AuthRequest, res: Response, next) => {
   try {
     const org = await prisma.organization.findUnique({ where: { id: req.user!.organizationId }, select: { name: true, address: true, phone: true, settings: true } });
     const company = ((org?.settings as any)?.company) || {};
-    res.json({ name: org?.name, address: org?.address, phone: org?.phone, ...company });
+    const visible = isOrgAdmin(req)
+      ? company
+      : Object.fromEntries(COMPANY_NON_ADMIN_FIELDS.filter((k) => k in company).map((k) => [k, company[k]]));
+    res.json({ name: org?.name, address: org?.address, phone: org?.phone, ...visible });
   } catch (error) {
     next(error);
   }
@@ -414,6 +439,7 @@ settingsRouter.delete('/users/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (re
 settingsRouter.get('/templates', async (req: AuthRequest, res: Response, next) => {
   try {
     const templates = await prisma.projectTemplate.findMany({
+      where: { organizationId: req.user!.organizationId },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -432,6 +458,7 @@ settingsRouter.post('/templates', authorize('SUPER_ADMIN', 'ADMIN'), async (req:
         description: req.body.description,
         type: req.body.type || 'RETAINER',
         structure: req.body.structure,
+        organizationId: req.user!.organizationId,
       },
     });
 

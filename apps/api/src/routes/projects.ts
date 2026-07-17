@@ -449,7 +449,12 @@ projectRouter.post('/from-template', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_
   try {
     const { templateId, clientId, ownerId, name, startDate, endDate } = req.body;
 
-    const template = await prisma.projectTemplate.findUnique({ where: { id: templateId } });
+    // Templates are org-scoped, so the template must belong to the caller's org —
+    // an unscoped lookup would let one tenant instantiate another's template
+    // (and read its `structure` playbook JSON) by guessing an id.
+    const template = await prisma.projectTemplate.findFirst({
+      where: { id: templateId, organizationId: req.user!.organizationId },
+    });
     if (!template) {
       res.status(404).json({ error: 'Template not found' });
       return;

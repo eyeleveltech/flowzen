@@ -1,8 +1,8 @@
+import './lib/env.js'; // must stay first: loads .env before modules that read process.env at import time
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import dotenv from 'dotenv';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authenticate, authorize, requireModule } from './middleware/auth.js';
 import { authRouter } from './routes/auth.js';
@@ -28,11 +28,6 @@ import './workers/emailWorker.js'; // Initialize BullMQ email worker
 import { startScheduler } from './services/scheduler.js';
 import { morganMiddleware } from './middleware/logger.js';
 import { logger } from './utils/logger.js';
-
-import path from 'path';
-
-dotenv.config();
-dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
 
 // Startup diagnostic (masked) — confirms whether AI keys actually loaded into this process.
 console.log(`[env] cwd=${process.cwd()} | APIFY_TOKEN=${process.env.APIFY_TOKEN ? 'loaded' : 'MISSING'} | OPENAI_API_KEY=${process.env.OPENAI_API_KEY ? 'loaded' : 'MISSING'}`);

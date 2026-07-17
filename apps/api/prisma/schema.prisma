@@ -240,6 +240,7 @@ model Organization {
   leads   Lead[]
   modules OrganizationModule[]
   quotes  QuoteDocument[]
+  templates ProjectTemplate[]
   auditLogs     AuditLog[]      @relation("OrganizationAuditLogs")
   // Revenue
   invoiceDrafts InvoiceDraft[]
@@ -613,11 +614,14 @@ model ProjectTemplate {
   description String?
   type        ProjectType @default(RETAINER)
   structure   Json
+  organizationId String
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   projects Project[]
 
+  @@index([organizationId])
   @@map("project_templates")
 }
 

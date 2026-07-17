@@ -7,7 +7,9 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-elitepm}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-elitepm_secret}
+      # No default: a committed fallback password is a public secret. `:?` makes
+      # `docker compose up` fail loudly instead of silently using a known value.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set (see .env.example)}
       POSTGRES_DB: ${POSTGRES_DB:-elitepm}
     ports:
       - "5433:5432"
@@ -40,10 +42,14 @@ services:
     container_name: flowzen-api
     restart: unless-stopped
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-elitepm}:${POSTGRES_PASSWORD:-elitepm_secret}@postgres:5432/${POSTGRES_DB:-elitepm}?schema=public
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-elitepm}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-elitepm}?schema=public
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - NODE_ENV=production
-      - JWT_SECRET=${JWT_SECRET:-super_secret_jwt_key_change_me_in_prod}
+      # No default: the old `:-super_secret_jwt_key_change_me_in_prod` fallback was a
+      # committed, publicly-known signing key — anyone could forge a SUPER_ADMIN token.
+      # It also defeated the fail-fast in utils/jwt.ts (which only throws when the var is
+      # UNSET — compose always supplied a value). Fail at compose, where it actually works.
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set (32+ random chars)}
       - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_PORT=${SMTP_PORT}
