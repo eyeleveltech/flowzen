@@ -57,9 +57,17 @@ workflowRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
       return;
     }
 
+    // Explicit allowlist — never spread req.body (would allow reassigning
+    // organizationId/creatorId, moving the rule into another tenant).
+    const b = req.body ?? {};
+    const data: Record<string, unknown> = {};
+    for (const f of ['name', 'trigger', 'condition', 'action', 'targets', 'isActive'] as const) {
+      if (f in b) data[f] = b[f];
+    }
+
     const rule = await prisma.workflowRule.update({
       where: { id: req.params.id as string },
-      data: req.body,
+      data,
     });
 
     res.json(rule);

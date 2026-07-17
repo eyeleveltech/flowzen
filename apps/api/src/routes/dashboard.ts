@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
 import { cacheMiddleware } from '../middleware/cache.js';
+import { istStartOfDay } from '../utils/istDay.js';
 
 export const dashboardRouter = Router();
 dashboardRouter.use(authenticate);
@@ -16,8 +17,7 @@ dashboardRouter.get('/stats', async (req: AuthRequest, res: Response, next) => {
     const role = req.user!.role;
     const userId = req.user!.userId;
 
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const todayStart = istStartOfDay();
 
     const { startDate, endDate } = req.query;
     let dateFilter = {};
@@ -131,8 +131,7 @@ dashboardRouter.get('/project-health', async (req: AuthRequest, res: Response, n
     const role = req.user!.role;
     const userId = req.user!.userId;
     const now = new Date();
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const todayStart = istStartOfDay();
 
     const projects = await prisma.project.findMany({
       where: {
@@ -235,8 +234,7 @@ dashboardRouter.get('/deadlines', async (req: AuthRequest, res: Response, next) 
     const role = req.user!.role;
     const userId = req.user!.userId;
     const now = new Date();
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const todayStart = istStartOfDay();
     const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
     const tasks = await prisma.task.findMany({
@@ -323,12 +321,9 @@ dashboardRouter.get('/velocity', async (req: AuthRequest, res: Response, next) =
     
     const { startDate, endDate } = req.query;
 
-    let start = new Date();
-    start.setDate(start.getDate() - 29);
-    start.setHours(0, 0, 0, 0);
-    
-    let end = new Date();
-    end.setHours(23, 59, 59, 999);
+    // 30-day window anchored on IST day boundaries.
+    let start = istStartOfDay(new Date(Date.now() - 29 * 86400000));
+    let end = new Date(istStartOfDay().getTime() + 86400000 - 1);
 
     if (startDate && endDate) {
       start = new Date(startDate as string);
@@ -403,8 +398,7 @@ dashboardRouter.get('/status-distribution', async (req: AuthRequest, res: Respon
       select: { status: true, dueDate: true }
     });
 
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const todayStart = istStartOfDay();
 
     let buckets = {
       TODO: 0,
@@ -417,7 +411,7 @@ dashboardRouter.get('/status-distribution', async (req: AuthRequest, res: Respon
 
     tasks.forEach(t => {
       // Overdue takes precedence
-      if (t.dueDate && new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED') {
+      if (t.dueDate && new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED' && t.status !== 'ON_HOLD') {
         buckets.OVERDUE++;
       } else {
         if (t.status === 'TODO' || t.status === 'BACKLOG' || t.status === 'BLOCKED') buckets.TODO++;
@@ -505,8 +499,7 @@ dashboardRouter.get('/client-health', async (req: AuthRequest, res: Response, ne
   try {
     const orgId = req.user!.organizationId;
     const { startDate, endDate } = req.query;
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const todayStart = istStartOfDay();
 
     let dateFilter = {};
     if (startDate && endDate) {
@@ -541,7 +534,7 @@ dashboardRouter.get('/client-health', async (req: AuthRequest, res: Response, ne
       c.projects.forEach(p => {
         if (p.endDate && new Date(p.endDate) < todayStart) projectPastEndDate = true;
         p.tasks.forEach(t => {
-          if (t.status !== 'COMPLETED') {
+          if (t.status !== 'COMPLETED' && t.status !== 'ON_HOLD') {
             if (t.dueDate && new Date(t.dueDate) < todayStart) overdueTasks++;
             if (t.dueDate && new Date(t.dueDate) >= todayStart) {
               if (!nextDueDate || new Date(t.dueDate) < nextDueDate) nextDueDate = new Date(t.dueDate);

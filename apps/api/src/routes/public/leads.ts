@@ -261,6 +261,14 @@ leadRouter.post('/', async (req: Request, res: Response) => {
     const dbStage = mapStageToEnum(stage);
     const dbSource = mapSourceToEnum(source);
 
+    // Only accept an assignee that belongs to the caller's org; else assign to the caller.
+    let assignedToId = (req as any).user.userId as string;
+    if (assigned_to_id) {
+      const member = await prisma.user.findFirst({ where: { id: assigned_to_id, organizationId: orgId }, select: { id: true } });
+      if (!member) return res.status(400).json({ success: false, error: 'assigned_to_id does not belong to your organization', code: 400 });
+      assignedToId = assigned_to_id;
+    }
+
     // Create client wrapper first
     const client = await prisma.client.create({
       data: {
@@ -281,7 +289,7 @@ leadRouter.post('/', async (req: Request, res: Response) => {
         source: dbSource,
         stage: dbStage,
         dealValue: monthly_value,
-        assignedToId: assigned_to_id || (req as any).user.userId,
+        assignedToId,
         expectedCloseDate: next_followup_date ? new Date(next_followup_date) : undefined,
         notes: notes ? {
           create: {
@@ -344,7 +352,11 @@ leadRouter.patch('/:id', async (req: Request, res: Response) => {
     if (finalValue !== undefined) updateData.dealValue = Number(finalValue);
 
     const finalAssignee = assigned_to_id || assigned_user_id;
-    if (finalAssignee) updateData.assignedToId = finalAssignee;
+    if (finalAssignee) {
+      const member = await prisma.user.findFirst({ where: { id: finalAssignee, organizationId: (req as any).user.organizationId }, select: { id: true } });
+      if (!member) return res.status(400).json({ success: false, error: 'assignee does not belong to your organization', code: 400 });
+      updateData.assignedToId = finalAssignee;
+    }
 
     // If stage is dead, set lost reason
     if (stage === '10. Dead / No Response') {
@@ -385,7 +397,19 @@ leadRouter.patch('/:id', async (req: Request, res: Response) => {
 leadRouter.post('/:id/activities', async (req: Request, res: Response) => {
   try {
     const { type, direction, summary, done_by_id, activity_date } = req.body;
-    
+    const orgId = (req as any).user.organizationId as string;
+
+    // The lead must belong to the caller's organization.
+    const lead = await prisma.lead.findFirst({ where: { id: req.params.id as string, organizationId: orgId }, select: { id: true } });
+    if (!lead) return res.status(404).json({ success: false, error: 'Lead not found', code: 404 });
+
+    // Only allow attributing the activity to a user in the same org; otherwise use the caller.
+    let userId = (req as any).user.userId as string;
+    if (done_by_id) {
+      const member = await prisma.user.findFirst({ where: { id: done_by_id, organizationId: orgId }, select: { id: true } });
+      if (member) userId = done_by_id;
+    }
+
     const activity = await prisma.activity.create({
       data: {
         type: type,
@@ -394,7 +418,7 @@ leadRouter.post('/:id/activities', async (req: Request, res: Response) => {
         entityType: 'LEAD',
         entityId: req.params.id as string,
         leadId: req.params.id as string,
-        userId: done_by_id || (req as any).user.userId,
+        userId,
         createdAt: activity_date ? new Date(activity_date) : new Date()
       },
       include: { user: true }

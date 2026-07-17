@@ -6,6 +6,24 @@ import { generateQuotePdf } from '../services/quotePdf.service.js';
 
 export const revenueRouter = Router();
 
+// Normalize any billing frequency (a free-form string) to a monthly figure so MRR
+// is comparable across cadences. Unknown values fall back to monthly.
+const toMonthlyAmount = (amount: number, freq: string | null | undefined): number => {
+  switch ((freq || 'MONTHLY').toUpperCase()) {
+    case 'YEARLY':
+    case 'ANNUAL':
+    case 'ANNUALLY': return amount / 12;
+    case 'HALF_YEARLY':
+    case 'SEMI_ANNUAL':
+    case 'BIANNUAL': return amount / 6;
+    case 'QUARTERLY': return amount / 3;
+    case 'WEEKLY': return amount * 4.33;
+    case 'DAILY': return amount * 30;
+    case 'MONTHLY':
+    default: return amount;
+  }
+};
+
 // ============================================================================
 // Overview & Dashboards
 // ============================================================================
@@ -15,12 +33,14 @@ revenueRouter.get('/overview', async (req: AuthRequest, res: Response) => {
     const orgId = req.user!.organizationId;
     const now = new Date();
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    // Exclusive upper bound = start of next month, so payments made on the last
+    // calendar day of the month are included (a `lte last-day-midnight` drops them).
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
     const payments = await prisma.payment.findMany({
       where: {
         organizationId: orgId,
-        paidOn: { gte: firstDay, lte: lastDay },
+        paidOn: { gte: firstDay, lt: nextMonth },
         status: 'PAID'
       },
       include: { client: { select: { name: true, company: true } } },
@@ -31,12 +51,7 @@ revenueRouter.get('/overview', async (req: AuthRequest, res: Response) => {
     const subs = await prisma.subscription.findMany({
       where: { organizationId: orgId, status: 'ACTIVE' }
     });
-    const mrr = subs.reduce((acc, s) => {
-      let monthly = Number(s.amount);
-      if (s.billingFrequency === 'YEARLY') monthly /= 12;
-      if (s.billingFrequency === 'WEEKLY') monthly *= 4.33;
-      return acc + monthly;
-    }, 0);
+    const mrr = subs.reduce((acc, s) => acc + toMonthlyAmount(Number(s.amount), s.billingFrequency), 0);
 
     const activeContracts = await prisma.contract.findMany({
       where: { organizationId: orgId, status: 'ACTIVE' },
@@ -56,13 +71,12 @@ revenueRouter.get('/overview', async (req: AuthRequest, res: Response) => {
     };
 
     const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
 
-    // 1. Paid Trend
+    // 1. Paid Trend  (last month = [firstDayLastMonth, firstDay) — exclusive upper bound)
     const paymentsLastMonth = await prisma.payment.findMany({
       where: {
         organizationId: orgId,
-        paidOn: { gte: firstDayLastMonth, lte: lastDayLastMonth },
+        paidOn: { gte: firstDayLastMonth, lt: firstDay },
         status: 'PAID'
       }
     });
@@ -70,12 +84,8 @@ revenueRouter.get('/overview', async (req: AuthRequest, res: Response) => {
     const paidTrend = calculateTrend(paidThisMonth, paidLastMonth);
 
     // 2. MRR Trend (approx. using Subscriptions created before this month)
-    const mrrLastMonth = subs.filter(s => s.createdAt < firstDay).reduce((acc, s) => {
-      let monthly = Number(s.amount);
-      if (s.billingFrequency === 'YEARLY') monthly /= 12;
-      if (s.billingFrequency === 'WEEKLY') monthly *= 4.33;
-      return acc + monthly;
-    }, 0);
+    const mrrLastMonth = subs.filter(s => s.createdAt < firstDay)
+      .reduce((acc, s) => acc + toMonthlyAmount(Number(s.amount), s.billingFrequency), 0);
     const mrrTrend = calculateTrend(mrr, mrrLastMonth);
 
     // 3. Receivables Trend
@@ -131,14 +141,24 @@ revenueRouter.get('/pnl', async (req: AuthRequest, res: Response) => {
       include: { payments: { where: { status: 'PAID' } } }
     });
 
+    // Contracts are per-client (no projectId), so a client's paid revenue is split
+    // EVENLY across that client's projects — otherwise each project would be credited
+    // the client's full total and revenue would be multiplied by the project count.
+    const projectCountByClient = new Map<string, number>();
+    for (const p of projects) {
+      if (p.clientId) projectCountByClient.set(p.clientId, (projectCountByClient.get(p.clientId) || 0) + 1);
+    }
+
     const result = projects.map(p => {
       const projExpenses = expenses.filter(e => e.projectId === p.id);
       const totalExpenses = projExpenses.reduce((acc: number, e: any) => acc + Number(e.amount), 0);
-      
-      // approximate project revenue from client's contracts
+
+      // approximate project revenue as an even share of the client's paid contract revenue
       const projectContracts = contracts.filter(c => c.clientId === p.clientId);
-      const revenue = projectContracts.reduce((acc: number, c: any) => acc + c.payments.reduce((pAcc: number, pmt: any) => pAcc + Number(pmt.amount), 0), 0);
-      
+      const clientRevenue = projectContracts.reduce((acc: number, c: any) => acc + c.payments.reduce((pAcc: number, pmt: any) => pAcc + Number(pmt.amount), 0), 0);
+      const projectsForClient = projectCountByClient.get(p.clientId) || 1;
+      const revenue = clientRevenue / projectsForClient;
+
       const client = clientMap.get(p.clientId);
       return {
         projectId: p.id,
@@ -180,14 +200,19 @@ revenueRouter.post('/invoice-drafts', async (req: AuthRequest, res: Response) =>
   try {
     const { quoteId, draftNumber, clientId, clientName, lineItems, grandTotal, notes } = req.body;
     
-    // Check if the quote exists and is ACCEPTED
-    const quote = await prisma.quoteDocument.findUnique({ where: { id: quoteId } });
+    const orgId = req.user!.organizationId;
+    // Check the quote exists IN THIS ORG and is ACCEPTED (no cross-tenant quote read).
+    const quote = await prisma.quoteDocument.findFirst({ where: { id: quoteId, organizationId: orgId } });
     if (!quote) return res.status(404).json({ error: 'Quote not found' });
     if (quote.status !== 'ACCEPTED') return res.status(400).json({ error: 'Quote must be ACCEPTED to generate an invoice draft' });
 
+    // The client must belong to the caller's org.
+    const clientOk = await prisma.client.findFirst({ where: { id: clientId, organizationId: orgId }, select: { id: true } });
+    if (!clientOk) return res.status(400).json({ error: 'Client not found in your organization' });
+
     const draft = await prisma.invoiceDraft.create({
       data: {
-        organizationId: req.user!.organizationId,
+        organizationId: orgId,
         quoteId,
         draftNumber,
         clientId,
@@ -281,12 +306,20 @@ revenueRouter.post('/invoice-drafts/:id/generate-pdf', async (req: AuthRequest, 
     const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { name: true, logo: true, address: true, phone: true, website: true, settings: true } });
     
     // Map invoice to quote shape for PDF generator
+    const parsedItems: any[] = (typeof draft.lineItems === 'string' ? JSON.parse(draft.lineItems) : (draft.lineItems as any[])) || [];
+    const computedUntaxed = parsedItems.reduce((acc: number, item: any) => acc + Number(item.amount || 0), 0);
+    const computedTax = parsedItems.reduce((acc: number, item: any) => acc + (Number(item.taxPct) > 0 ? (Number(item.amount) * Number(item.taxPct) / 100) : 0), 0);
+
     const fakeQuote = {
       ...draft,
       documentType: 'INVOICE',
       documentNumber: draft.draftNumber,
-      lineItems: typeof draft.lineItems === 'string' ? JSON.parse(draft.lineItems) : draft.lineItems,
-      totalTax: (typeof draft.lineItems === 'string' ? JSON.parse(draft.lineItems) : (draft.lineItems as any[]) || []).reduce((acc: number, item: any) => acc + (Number(item.taxPct) > 0 ? (Number(item.amount) * Number(item.taxPct) / 100) : 0), 0)
+      lineItems: parsedItems,
+      // The line-201 draft endpoint doesn't persist untaxedAmount/totalDiscount, so
+      // fall back to values computed from the line items (else the PDF Sub Total is ₹0).
+      untaxedAmount: Number(draft.untaxedAmount) > 0 ? draft.untaxedAmount : computedUntaxed,
+      totalDiscount: (draft as any).totalDiscount ?? 0,
+      totalTax: Number(draft.totalTax) > 0 ? draft.totalTax : computedTax,
     };
     
     // We need to import generateQuotePdf dynamically or add it to the top.

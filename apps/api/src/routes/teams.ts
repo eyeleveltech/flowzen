@@ -62,6 +62,12 @@ teamRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN'), validate(teamSchema), as
       ...(req.body.leaderId ? [req.body.leaderId] : [])
     ]));
 
+    // Members/leader must belong to the caller's org (no cross-tenant user hijack).
+    if (allMembers.length) {
+      const cnt = await prisma.user.count({ where: { id: { in: allMembers as string[] }, organizationId: req.user!.organizationId } });
+      if (cnt !== allMembers.length) { res.status(400).json({ error: 'One or more members are outside your organization' }); return; }
+    }
+
     const team = await prisma.team.create({
       data: {
         name: req.body.name,
@@ -101,6 +107,12 @@ teamRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN'), validate(teamSchema), 
       ...(req.body.memberIds || []),
       ...(req.body.leaderId ? [req.body.leaderId] : [])
     ]));
+
+    // Members/leader must belong to the caller's org (no cross-tenant user hijack).
+    if (allMembers.length) {
+      const cnt = await prisma.user.count({ where: { id: { in: allMembers as string[] }, organizationId: req.user!.organizationId } });
+      if (cnt !== allMembers.length) { res.status(400).json({ error: 'One or more members are outside your organization' }); return; }
+    }
 
     const team = await prisma.team.update({
       where: { id: req.params.id as string },

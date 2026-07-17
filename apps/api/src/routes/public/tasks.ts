@@ -4,6 +4,17 @@ import { PrismaClient, TaskStatus, TaskPriority } from '@prisma/client';
 const prisma = new PrismaClient();
 const taskRouter = Router();
 
+// Tasks have no organizationId column; a task belongs to the caller's org if any
+// of its links (project→client, lead, client, assignee) resolve to that org.
+const orgScopeForTask = (orgId: string) => ({
+  OR: [
+    { project: { client: { organizationId: orgId } } },
+    { lead: { organizationId: orgId } },
+    { client: { organizationId: orgId } },
+    { assignee: { organizationId: orgId } },
+  ],
+});
+
 // --- Translators ---
 const mapAiStatusToEnum = (status: string): TaskStatus => {
   switch (status) {
@@ -80,8 +91,9 @@ taskRouter.get('/', async (req: Request, res: Response) => {
   try {
     const { linked_to, linked_id, assignee_id, status, priority, due_before, due_on, unassigned, overdue, limit, page } = req.query;
 
-    const where: any = {};
-    
+    const orgId = (req as any).user.organizationId as string;
+    const where: any = { AND: [orgScopeForTask(orgId)] };
+
     if (linked_to === 'lead' && linked_id) {
       where.leadId = linked_id;
     } else if (linked_to === 'project' && linked_id) {
@@ -150,19 +162,31 @@ taskRouter.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Expected an array of tasks under "tasks" key', code: 400 });
     }
 
+    const orgId = (req as any).user.organizationId as string;
     const createdTasks = [];
     for (const taskData of tasks) {
+      // Validate the assignee (if provided) belongs to the caller's org.
+      const assigneeId = taskData.assignee_id || (req as any).user.userId;
+      if (taskData.assignee_id) {
+        const member = await prisma.user.findFirst({ where: { id: taskData.assignee_id, organizationId: orgId }, select: { id: true } });
+        if (!member) return res.status(400).json({ success: false, error: 'assignee_id does not belong to your organization', code: 400 });
+      }
+
       const data: any = {
         title: taskData.title,
         description: taskData.notes || taskData.description || '',
         priority: mapAiPriorityToEnum(taskData.priority || 'medium'),
-        assigneeId: taskData.assignee_id || (req as any).user.userId,
+        assigneeId,
         dueDate: taskData.due_date ? new Date(taskData.due_date) : null,
       };
 
       if (taskData.linked_to === 'lead') {
+        const lead = await prisma.lead.findFirst({ where: { id: taskData.linked_id, organizationId: orgId }, select: { id: true } });
+        if (!lead) return res.status(400).json({ success: false, error: 'linked_id (lead) not found in your organization', code: 400 });
         data.leadId = taskData.linked_id;
       } else if (taskData.linked_to === 'project') {
+        const project = await prisma.project.findFirst({ where: { id: taskData.linked_id, client: { organizationId: orgId } }, select: { id: true } });
+        if (!project) return res.status(400).json({ success: false, error: 'linked_id (project) not found in your organization', code: 400 });
         data.projectId = taskData.linked_id;
       }
 
@@ -201,7 +225,10 @@ taskRouter.patch('/:id', async (req: Request, res: Response) => {
   try {
     const { status, notes } = req.body;
     
-    const existing = await prisma.task.findFirst({ where: { id: req.params.id as string } });
+    const orgId = (req as any).user.organizationId as string;
+    const existing = await prisma.task.findFirst({
+      where: { AND: [{ id: req.params.id as string }, orgScopeForTask(orgId)] },
+    });
     if (!existing) return res.status(404).json({ success: false, error: 'Task not found', code: 404 });
 
     const updateData: any = {};

@@ -385,6 +385,16 @@ clientRouter.delete('/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthR
 // POST /api/clients/:id/notes
 clientRouter.post('/:id/notes', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
+    // The client must belong to the caller's org (else this writes a note onto another org's client).
+    const client = await prisma.client.findFirst({
+      where: { id: req.params.id as string, organizationId: req.user!.organizationId },
+      select: { id: true },
+    });
+    if (!client) {
+      res.status(404).json({ error: 'Client not found' });
+      return;
+    }
+
     const note = await prisma.note.create({
       data: {
         content: req.body.content,

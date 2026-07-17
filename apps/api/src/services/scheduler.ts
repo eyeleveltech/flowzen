@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { NotificationService } from './notifications.js';
 import { runDailyNotificationJobs } from './notificationScanners.js';
 import { logger } from '../utils/logger.js';
+import { istStartOfDay } from '../utils/istDay.js';
 
 const CHECK_INTERVAL_MS = 60 * 60 * 1000;      // run hourly
 const LOOKAHEAD_MS = 24 * 60 * 60 * 1000;       // notify for tasks due within 24h
@@ -21,7 +22,7 @@ async function runDeadlineCheck() {
     const tasks = await prisma.task.findMany({
       where: {
         dueDate: { gte: now, lte: soon },
-        status: { notIn: ['COMPLETED'] },
+        status: { notIn: ['COMPLETED', 'ON_HOLD'] },
         assigneeId: { not: null },
       },
       select: { id: true, title: true, assigneeId: true, projectId: true },
@@ -64,11 +65,14 @@ async function runDeadlineCheck() {
 async function runOverdueCheck() {
   try {
     const now = new Date();
+    // A task is overdue only once its due DAY has fully passed in IST — comparing against
+    // `now` on a UTC server flags day-granular due dates as overdue 5h30m early.
+    const overdueCutoff = istStartOfDay(now);
 
     const tasks = await prisma.task.findMany({
       where: {
-        dueDate: { lt: now },
-        status: { notIn: ['COMPLETED'] },
+        dueDate: { lt: overdueCutoff },
+        status: { notIn: ['COMPLETED', 'ON_HOLD'] },
         assigneeId: { not: null },
       },
       select: { id: true, title: true, assigneeId: true, projectId: true },

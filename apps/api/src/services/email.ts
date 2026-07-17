@@ -16,11 +16,22 @@ async function getTransporter() {
 
   if (user && pass) {
     logger.info('Using real SMTP credentials for email service.');
-    // Default to Gmail settings if using a normal email address
-    transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user, pass },
-    });
+    // Honor an explicit SMTP_HOST (SendGrid/SES/etc.); fall back to Gmail only when
+    // no host is configured, so password-reset/setup mail isn't forced through Gmail.
+    if (process.env.SMTP_HOST) {
+      const smtpPort = parseInt(process.env.SMTP_PORT || '465');
+      transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: smtpPort,
+        secure: smtpPort === 465,
+        auth: { user, pass },
+      });
+    } else {
+      transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: { user, pass },
+      });
+    }
   } else {
     logger.info('No EMAIL_USER/EMAIL_PASS found in .env. Creating temporary Ethereal account for testing...');
     const testAccount = await nodemailer.createTestAccount();

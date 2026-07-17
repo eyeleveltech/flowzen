@@ -564,7 +564,7 @@ export default function ProjectDetailPage() {
             <span className="inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 capitalize">
               {project.type?.replace('_', ' ') || 'One Time'}
             </span>
-            <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium border ${statusColors[project.status]} border-opacity-20`}>
+            <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium border ${statusColors[project.status] || 'bg-gray-50 text-gray-500'} border-opacity-20`}>
               {project.status.replace('_', ' ')}
             </span>
           </div>
@@ -1016,11 +1016,16 @@ export default function ProjectDetailPage() {
                           )}
                           {visibleTaskColumns.includes('assignee') && (
                             <td className="px-6 py-3">
-                              {t.assignee ? (
-                                <div className="flex items-center gap-1.5">
-                                  <div className={`h-5 w-5 rounded-full text-[8px] font-semibold flex items-center justify-center ${getAvatarColor(t.assignee.name)}`}>{getInitials(t.assignee.name)}</div>
-                                  <span className="text-sm text-[#374151]">{t.assignee.name}{(t.assignees?.length || 0) > 1 ? ` +${t.assignees!.length - 1}` : ''}</span>
-                                </div>
+                              {(t.assignees?.length || t.assignee) ? (
+                                (() => {
+                                  const people = t.assignees?.length ? t.assignees : (t.assignee ? [t.assignee] : []);
+                                  return (
+                                    <div className="flex items-center gap-1.5">
+                                      <div className={`h-5 w-5 rounded-full text-[8px] font-semibold flex items-center justify-center ${getAvatarColor(people[0].name)}`}>{getInitials(people[0].name)}</div>
+                                      <span className="text-sm text-[#374151]">{people.map((a: any) => a.name).join(', ')}</span>
+                                    </div>
+                                  );
+                                })()
                               ) : <span className="text-sm text-[#9CA3AF]">—</span>}
                             </td>
                           )}
@@ -1061,7 +1066,7 @@ export default function ProjectDetailPage() {
                             </td>
                           )}
                           <td className="px-6 py-3 text-right">
-                            {(user?.role !== 'TEAM_MEMBER' || t.assignee?.id === user?.id) && (
+                            {(user?.role !== 'TEAM_MEMBER' || t.assignee?.id === user?.id || t.assignees?.some((a: any) => a.id === user?.id)) && (
                               <div className="flex items-center justify-end gap-2">
                                 <button onClick={(e) => startEditingTask(t, e)} className="text-xs font-medium text-secondary hover:text-primary transition-colors bg-white border border-border rounded-lg px-2.5 py-1">
                                   Edit
@@ -1126,19 +1131,24 @@ export default function ProjectDetailPage() {
                       
                       <div className="flex items-center justify-between mt-4">
                         <div className="flex items-center gap-2">
-                          {t.assignee ? (
-                            <>
-                              <div className={`h-6 w-6 rounded-full text-[10px] font-semibold flex items-center justify-center ${getAvatarColor(t.assignee.name)}`}>
-                                {getInitials(t.assignee.name)}
-                              </div>
-                              <span className="text-xs font-medium text-[#374151]">{t.assignee.name}{(t.assignees?.length || 0) > 1 ? ` +${t.assignees!.length - 1}` : ''}</span>
-                            </>
+                          {(t.assignees?.length || t.assignee) ? (
+                            (() => {
+                              const people = t.assignees?.length ? t.assignees : (t.assignee ? [t.assignee] : []);
+                              return (
+                                <>
+                                  <div className={`h-6 w-6 rounded-full text-[10px] font-semibold flex items-center justify-center ${getAvatarColor(people[0].name)}`}>
+                                    {getInitials(people[0].name)}
+                                  </div>
+                                  <span className="text-xs font-medium text-[#374151]">{people.map((a: any) => a.name).join(', ')}</span>
+                                </>
+                              );
+                            })()
                           ) : (
                             <span className="text-xs text-[#9CA3AF]">Unassigned</span>
                           )}
                         </div>
                         
-                        {(user?.role !== 'TEAM_MEMBER' || t.assignee?.id === user?.id) && (
+                        {(user?.role !== 'TEAM_MEMBER' || t.assignee?.id === user?.id || t.assignees?.some((a: any) => a.id === user?.id)) && (
                           <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                             <button onClick={(e) => startEditingTask(t, e)} className="text-xs font-medium text-secondary hover:text-primary transition-colors bg-white border border-border rounded-lg px-2.5 py-1">
                               Edit

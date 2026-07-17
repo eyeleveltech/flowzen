@@ -18,7 +18,7 @@ export function idempotency(req: Request, res: Response, next: NextFunction): vo
   }
 
   // Scope the key to the user and the path to prevent collisions
-  const userId = (req as any).user?.id || 'anonymous';
+  const userId = (req as any).user?.userId || 'anonymous';
   const idempotencyKey = `idempotency:${userId}:${req.path}:${key}`;
 
   // Use an async IIFE to handle the logic without blocking the synchronous middleware return

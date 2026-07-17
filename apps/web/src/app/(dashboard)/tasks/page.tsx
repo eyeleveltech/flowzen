@@ -417,8 +417,9 @@ function TasksContent() {
     }
   }
 
-  async function deleteTask() {
-    if (!selectedTask) return;
+  async function deleteTask(target?: Task) {
+    const t = target ?? selectedTask;
+    if (!t) return;
 
     const isConfirmed = await confirm({
       title: 'Delete Task',
@@ -429,7 +430,7 @@ function TasksContent() {
 
     if (isConfirmed) {
       try {
-        await api.delete(`/tasks/${selectedTask.id}`);
+        await api.delete(`/tasks/${t.id}`);
         toast.success('Task deleted successfully');
         setSelectedTask(null);
         refetchTasks();
@@ -985,8 +986,7 @@ function TasksContent() {
                   <SwipeableCard
                     key={t.id}
                     onSwipeLeft={() => {
-                      setSelectedTask(t);
-                      deleteTask();
+                      deleteTask(t);
                     }}
                     onSwipeRight={() => updateTaskStatus(t.id, 'COMPLETED')}
                   >

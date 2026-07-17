@@ -21,10 +21,16 @@ export const apiKeyAuth = async (req: Request, res: Response, next: NextFunction
 
     const apiKey = await prisma.apiKey.findUnique({
       where: { key: token },
+      include: { user: { select: { id: true, role: true, email: true, status: true } } },
     });
 
     if (!apiKey) {
       res.status(401).json({ success: false, error: 'Invalid API key', code: 401 });
+      return;
+    }
+
+    if (!apiKey.user || apiKey.user.status === 'INACTIVE') {
+      res.status(401).json({ success: false, error: 'API key owner is inactive', code: 401 });
       return;
     }
 
@@ -34,12 +40,13 @@ export const apiKeyAuth = async (req: Request, res: Response, next: NextFunction
       data: { lastUsedAt: new Date() },
     }).catch(console.error);
 
-    // Mock req.user so that existing scoped logic works flawlessly
+    // Mock req.user so that existing scoped logic works flawlessly.
+    // Authorization uses the KEY OWNER's real role — never a blanket ADMIN.
     (req as any).user = {
       userId: apiKey.userId,
       organizationId: apiKey.organizationId,
-      role: 'ADMIN', // Elevated role to allow API actions, scoped by organization
-      email: 'api@flowzen.in',
+      role: apiKey.user.role,
+      email: apiKey.user.email,
     } as any;
 
     next();

@@ -163,7 +163,7 @@ function ProjectsContent() {
       sse.on('project:created', refetchProjects);
       sse.on('project:updated', refetchProjects);
       sse.on('project:deleted', refetchProjects);
-      return () => { sse.off('project:created'); sse.off('project:updated'); sse.off('project:deleted'); };
+      return () => { sse.off('project:created', refetchProjects); sse.off('project:updated', refetchProjects); sse.off('project:deleted', refetchProjects); };
     }
   }, [refetchProjects]);
 

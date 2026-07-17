@@ -242,14 +242,17 @@ quoteRouter.patch('/:id/status', async (req: AuthRequest, res: Response, next) =
     if (!existing) { res.status(404).json({ error: 'Quotation not found' }); return; }
     const updated = await prisma.quoteDocument.update({ where: { id }, data: { status: status as any } });
     
-    // Auto-create subscription when a quote is accepted
+    // When a quote is accepted, record it as a ONE-TIME contract (money owed).
+    // A quotation is a one-off sale — creating a recurring MONTHLY subscription from
+    // its tax-inclusive grandTotal permanently and wrongly inflates MRR.
     if (status === 'ACCEPTED' && existing.status !== 'ACCEPTED') {
-      await prisma.subscription.create({
+      await prisma.contract.create({
         data: {
           organizationId: orgId,
           clientId: existing.clientId,
-          amount: existing.grandTotal,
-          billingFrequency: 'MONTHLY',
+          title: 'Quote ' + existing.documentNumber,
+          value: existing.grandTotal,
+          billingFrequency: 'ONE_TIME',
           startDate: new Date(),
           status: 'ACTIVE',
           notes: 'Auto-created from Quote ' + existing.documentNumber,

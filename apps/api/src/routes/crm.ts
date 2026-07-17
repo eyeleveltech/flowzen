@@ -718,11 +718,22 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
         updated.clientId = currentClientId;
       } else if (stage === 'NEW_LEAD' && currentClientId && existingLead.client?.status === 'PROSPECT') {
         await tx.lead.update({ where: { id: leadId }, data: { clientId: null } });
-        try {
+        // Only remove the auto-created PROSPECT client if nothing real depends on it.
+        // A raw delete would FK-fail on its LEAD_CREATED activities and abort the whole
+        // transaction, so pre-check hard dependents and clear soft ones first.
+        const hardDeps =
+          (await tx.project.count({ where: { clientId: currentClientId } })) +
+          (await tx.quoteDocument.count({ where: { clientId: currentClientId } })) +
+          (await tx.contract.count({ where: { clientId: currentClientId } })) +
+          (await tx.subscription.count({ where: { clientId: currentClientId } })) +
+          (await tx.payment.count({ where: { clientId: currentClientId } })) +
+          (await tx.invoiceDraft.count({ where: { clientId: currentClientId } })) +
+          (await tx.expense.count({ where: { clientId: currentClientId } }));
+        if (hardDeps === 0) {
+          await tx.activity.deleteMany({ where: { clientId: currentClientId } });
+          await tx.clientContact.deleteMany({ where: { clientId: currentClientId } });
           await tx.client.delete({ where: { id: currentClientId } });
           outDeletedClientId = currentClientId;
-        } catch (err) {
-          console.warn(`Could not delete client ${currentClientId} during backward pipeline transition. It may have dependent records.`, err);
         }
         currentClientId = null;
         updated.clientId = null;
@@ -1069,8 +1080,23 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
           updateData.clientId = currentClientId;
         } else if (stage === 'NEW_LEAD' && currentClientId && existingLead.client?.status === 'PROSPECT') {
           updateData.clientId = null;
-          await tx.client.delete({ where: { id: currentClientId } });
-          outDeletedClientId = currentClientId;
+          // Only remove the auto-created PROSPECT client if nothing real depends on it.
+          // A raw delete would FK-fail on its LEAD_CREATED activities and abort the whole
+          // transaction, so pre-check hard dependents and clear soft ones first.
+          const hardDeps =
+            (await tx.project.count({ where: { clientId: currentClientId } })) +
+            (await tx.quoteDocument.count({ where: { clientId: currentClientId } })) +
+            (await tx.contract.count({ where: { clientId: currentClientId } })) +
+            (await tx.subscription.count({ where: { clientId: currentClientId } })) +
+            (await tx.payment.count({ where: { clientId: currentClientId } })) +
+            (await tx.invoiceDraft.count({ where: { clientId: currentClientId } })) +
+            (await tx.expense.count({ where: { clientId: currentClientId } }));
+          if (hardDeps === 0) {
+            await tx.activity.deleteMany({ where: { clientId: currentClientId } });
+            await tx.clientContact.deleteMany({ where: { clientId: currentClientId } });
+            await tx.client.delete({ where: { id: currentClientId } });
+            outDeletedClientId = currentClientId;
+          }
           currentClientId = null;
         }
 

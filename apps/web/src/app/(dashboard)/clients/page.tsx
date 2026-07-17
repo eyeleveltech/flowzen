@@ -182,9 +182,9 @@ function ClientsContent() {
       sse.on('client:updated', fetchClients);
       sse.on('client:deleted', fetchClients);
       return () => {
-        sse.off('client:created');
-        sse.off('client:updated');
-        sse.off('client:deleted');
+        sse.off('client:created', fetchClients);
+        sse.off('client:updated', fetchClients);
+        sse.off('client:deleted', fetchClients);
       };
     }
   }, [filtersHydrated, search, statusFilter, accountManagerFilter, engagementTypeFilter, industryFilter, page]);

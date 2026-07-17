@@ -123,7 +123,9 @@ export function PipelineDashboard() {
 
   const metrics = useMemo(() => {
     const activeLeads = filteredLeads.filter(l => !['PROJECT_COMPLETED', 'CHURNED'].includes(l.stage));
-    const totalPipelineValue = activeLeads.reduce((sum, l) => sum + (l.dealValue || 0), 0);
+    // Open pipeline only — exclude won/active/closed stages so this doesn't double-count value already in wonValue.
+    const openLeads = filteredLeads.filter(l => !['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED', 'CHURNED'].includes(l.stage));
+    const totalPipelineValue = openLeads.reduce((sum, l) => sum + (l.dealValue || 0), 0);
     const wonValue = filteredLeads.filter(l => ['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED'].includes(l.stage)).reduce((sum, l) => sum + (l.dealValue || 0), 0);
     
     // Stage Distribution for Bar Chart

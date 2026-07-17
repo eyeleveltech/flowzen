@@ -19,10 +19,13 @@ export async function processEmailJob(data: { to: string; subject: string; html:
     return;
   }
 
+  const smtpPort = parseInt(process.env.SMTP_PORT || '465');
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT || '465'),
-    secure: process.env.SMTP_PORT === '465',
+    port: smtpPort,
+    // Derive `secure` from the ACTUAL resolved port (implicit TLS on 465), not from
+    // the raw env var — otherwise an unset SMTP_PORT gives port 465 + secure:false.
+    secure: smtpPort === 465,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,

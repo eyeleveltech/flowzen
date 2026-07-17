@@ -29,7 +29,7 @@ export interface Organization {
 // Client
 // ──────────────────────────────────────────────
 
-export type ClientStatus = 'LEAD' | 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ARCHIVED';
+export type ClientStatus = 'PROSPECT' | 'ACTIVE' | 'ONHOLD' | 'CHURNED' | 'PROJECT_COMPLETED';
 
 export interface Client {
   id: string;
@@ -98,7 +98,7 @@ export interface Milestone {
 // Task
 // ──────────────────────────────────────────────
 
-export type TaskStatus = 'BACKLOG' | 'TODO' | 'IN_PROGRESS' | 'REVIEW' | 'BLOCKED' | 'COMPLETED';
+export type TaskStatus = 'BACKLOG' | 'TODO' | 'IN_PROGRESS' | 'REVIEW' | 'APPROVED' | 'BLOCKED' | 'ON_HOLD' | 'COMPLETED';
 export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 
 export interface Task {
@@ -154,11 +154,21 @@ export interface Activity {
 export type NotificationType =
   | 'TASK_ASSIGNED'
   | 'TASK_COMPLETED'
+  | 'TASK_REVIEW'
   | 'DEADLINE_APPROACHING'
+  | 'TASK_OVERDUE'
   | 'COMMENT_ADDED'
   | 'PROJECT_STATUS_CHANGED'
   | 'CLIENT_ADDED'
-  | 'MENTION';
+  | 'MENTION'
+  | 'FOLLOW_UP_DUE'
+  | 'FOLLOW_UP_OVERDUE'
+  | 'STALE_LEAD'
+  | 'PAYMENT_DUE'
+  | 'PAYMENT_OVERDUE'
+  | 'RENEWAL_DUE'
+  | 'REACTIVATION_DUE'
+  | 'DAILY_DIGEST';
 
 export interface Notification {
   id: string;

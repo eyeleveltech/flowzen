@@ -67,7 +67,7 @@ export default function ContractsPage() {
                       <span className="text-sm font-medium text-primary">{c.title}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-primary">{c.client.company || c.client.name}</td>
+                  <td className="px-6 py-4 text-sm text-primary">{c.client?.company || c.client?.name || '—'}</td>
                   <td className="px-6 py-4 text-sm text-secondary">{formatDate(c.startDate)}</td>
                   <td className="px-6 py-4 text-sm font-medium text-primary text-right">{formatCurrency(Number(c.value))}</td>
                   <td className="px-6 py-4">

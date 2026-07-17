@@ -22,7 +22,9 @@ sseRouter.get('/', authenticate, (req: AuthRequest, res: Response) => {
     'Content-Type': 'text/event-stream',
     'Connection': 'keep-alive',
     'Cache-Control': 'no-cache',
-    'Access-Control-Allow-Origin': req.headers.origin || '*', // Allow frontend domain
+    // Fixed trusted origin (matches the global CORS policy). Never reflect the
+    // request Origin while credentials are allowed — that lets any site read the stream.
+    'Access-Control-Allow-Origin': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
     'Access-Control-Allow-Credentials': 'true'
   };
   

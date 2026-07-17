@@ -317,7 +317,7 @@ export default function DashboardPage() {
       if (sse) {
         const events = ['client:created', 'project:created', 'task:created', 'task:updated', 'project:updated'];
         events.forEach((e) => sse.on(e, fetchAll));
-        return () => { events.forEach((e) => sse.off(e)); };
+        return () => { events.forEach((e) => sse.off(e, fetchAll)); };
       }
     }
   }, [user, fetchAll]);
@@ -481,7 +481,7 @@ export default function DashboardPage() {
 
           {/* PENDING TASKS */}
           {(() => {
-            const overdueCount = myTasks.filter((t: any) => t.dueDate && new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED').length;
+            const overdueCount = myTasks.filter((t: any) => t.dueDate && new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED' && t.status !== 'ON_HOLD').length;
             const hasOverdue = overdueCount > 0;
             const hasTasks = myTasks.length > 0;
             // Sort: overdue first, then by priority weight, then by dueDate
@@ -534,7 +534,7 @@ export default function DashboardPage() {
                   ) : (
                     <div className="space-y-2">
                       {sortedTasks.map((t: any) => {
-                        const isOverdue = t.dueDate && new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED';
+                        const isOverdue = t.dueDate && new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED' && t.status !== 'ON_HOLD';
                         const priorityBgColor =
                           t.priority === 'URGENT' ? 'bg-red-500' :
                             t.priority === 'HIGH' ? 'bg-orange-500' :

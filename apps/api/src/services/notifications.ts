@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { emitToUser, emitToOrganization } from '../sse.js';
 import { NotificationType } from '@prisma/client';
 import { enqueueEmail } from '../lib/queue.js';
+import { escapeHtml } from '../utils/html.js';
 
 // Transporter will be initialized lazily to ensure env vars are loaded
 
@@ -62,8 +63,8 @@ export class NotificationService {
               subject,
               html: `
                 <div style="font-family: sans-serif; padding: 20px;">
-                  <h2>Hello ${user.name.split(' ')[0]},</h2>
-                  <p>${payload.message}</p>
+                  <h2>Hello ${escapeHtml(user.name.split(' ')[0])},</h2>
+                  <p>${escapeHtml(payload.message)}</p>
                   <br />
                   <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/dashboard" style="background: #111827; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 8px;">View in Dashboard</a>
                 </div>

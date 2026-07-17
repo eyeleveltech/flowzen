@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import { NotificationService } from './notifications.js';
 import { logger } from '../utils/logger.js';
+import { escapeHtml } from '../utils/html.js';
 
 interface WorkflowContext {
   task: any;
@@ -57,10 +58,10 @@ export async function executeWorkflowRules(
             html: `
               <div style="font-family: 'Inter', sans-serif; padding: 24px; max-width: 480px;">
                 <h2 style="color: #111827; font-size: 18px; margin-bottom: 8px;">Workflow Automation</h2>
-                <p style="color: #374151; font-size: 14px; line-height: 1.6;">${message}</p>
+                <p style="color: #374151; font-size: 14px; line-height: 1.6;">${escapeHtml(message)}</p>
                 <p style="color: #6B7280; font-size: 13px; margin-top: 16px;">
-                  Task: <strong>${context.task.title}</strong><br/>
-                  Project: <strong>${context.task.project?.name || 'N/A'}</strong>
+                  Task: <strong>${escapeHtml(context.task.title)}</strong><br/>
+                  Project: <strong>${escapeHtml(context.task.project?.name || 'N/A')}</strong>
                 </p>
                 <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/tasks?taskId=${context.task.id}" 
                    style="display: inline-block; margin-top: 16px; background: #111827; color: #fff; padding: 10px 24px; border-radius: 12px; text-decoration: none; font-size: 14px;">

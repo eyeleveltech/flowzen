@@ -57,7 +57,7 @@ function PipelineContent() {
     const sse = getSSE();
     if (sse) {
       sse.on('lead:updated', fetchTotal);
-      return () => { sse.off('lead:updated'); };
+      return () => { sse.off('lead:updated', fetchTotal); };
     }
   }, []);
 

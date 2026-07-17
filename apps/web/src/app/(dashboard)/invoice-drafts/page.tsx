@@ -35,7 +35,7 @@ export default function InvoiceDraftsPage() {
         fetchDrafts(); // Refresh to show SENT status
       }
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to generate PDF');
+      toast.error(err.message || 'Failed to generate PDF');
     } finally {
       setGenerating(null);
     }

@@ -642,7 +642,7 @@ model ClientContact {
 
 model Lead {
   id                String       @id @default(cuid())
-  leadId            String?      @unique // FL-YYYYMM-XXXXXX, auto-generated on creation, never editable
+  leadId            String?      // FL-YYYYMM-XXXXXX, auto-generated on creation, never editable (unique PER ORG)
   clientId          String?      @unique
   organizationId    String
   source            LeadSource   @default(MANUAL)
@@ -697,7 +697,9 @@ model Lead {
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
-  client            Client?      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  // SetNull (not Cascade): deleting a client must NOT wipe the originating lead and
+  // its stage history / deal fields — the CRM conversion audit trail is preserved.
+  client            Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
   organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignedTo        User?        @relation("LeadAssignee", fields: [assignedToId], references: [id])
   stageHistory      StageHistory[]
@@ -707,6 +709,7 @@ model Lead {
   notes             Note[]
   contacts          LeadContact[]
 
+  @@unique([organizationId, leadId])
   @@index([organizationId, stage])
   @@index([organizationId, contactPhone])
   @@map("leads")
@@ -776,7 +779,7 @@ model QuoteDocument {
   id               String       @id @default(cuid())
   organizationId   String
   documentType     DocumentType
-  documentNumber   String       @unique // EL/QT/YYYY/NNN or EL/PI/YYYY/NNN
+  documentNumber   String       // EL/QT/YYYY/NNN or EL/PI/YYYY/NNN (unique PER ORG)
   documentDate     DateTime     @default(now())
   expirationDate   DateTime
   clientId         String       // FK -> Client.id (quotes are raised for clients-page clients)
@@ -820,6 +823,7 @@ model QuoteDocument {
   salesperson      User?        @relation("QuoteSalesperson", fields: [salespersonId], references: [id])
   invoiceDraft     InvoiceDraft?
 
+  @@unique([organizationId, documentNumber])
   @@index([clientId])
   @@index([organizationId, status])
   @@map("quote_documents")
@@ -975,7 +979,7 @@ model InvoiceDraft {
   id             String        @id @default(cuid())
   organizationId String
   quoteId        String        @unique
-  draftNumber    String        @unique
+  draftNumber    String        // unique PER ORG
   clientId       String
   clientName     String
   status         InvoiceStatus @default(DRAFT)
@@ -995,6 +999,8 @@ model InvoiceDraft {
   quote          QuoteDocument @relation(fields: [quoteId], references: [id])
   client         Client        @relation("ClientInvoiceDrafts", fields: [clientId], references: [id])
 
+  @@unique([organizationId, draftNumber])
+  @@index([organizationId])
   @@map("invoice_drafts")
 }
 
@@ -1023,6 +1029,7 @@ model Contract {
   payments         Payment[]
   subscriptions    Subscription[]
 
+  @@index([organizationId])
   @@map("contracts")
 }
 
@@ -1045,6 +1052,7 @@ model Payment {
   contract       Contract?     @relation(fields: [contractId], references: [id])
 
   @@index([clientId])
+  @@index([organizationId])
   @@map("payments")
 }
 
@@ -1067,6 +1075,7 @@ model Subscription {
   client           Client             @relation("ClientSubscriptions", fields: [clientId], references: [id])
   contract         Contract?          @relation(fields: [contractId], references: [id])
 
+  @@index([organizationId])
   @@map("subscriptions")
 }
 
@@ -1089,5 +1098,6 @@ model Expense {
   client         Client?         @relation("ClientExpenses", fields: [clientId], references: [id])
 
   @@index([projectId])
+  @@index([organizationId])
   @@map("expenses")
 }

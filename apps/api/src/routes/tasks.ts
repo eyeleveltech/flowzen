@@ -598,12 +598,25 @@ taskRouter.put('/:id/status', idempotency, async (req: AuthRequest, res: Respons
       return;
     }
 
+    const VALID_STATUSES = ['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'APPROVED', 'BLOCKED', 'ON_HOLD', 'COMPLETED'];
     const { status } = req.body;
+    if (!VALID_STATUSES.includes(status)) {
+      res.status(400).json({ error: 'Invalid status' });
+      return;
+    }
+
+    // Only stamp completedAt on the transition INTO completed; preserve it if the
+    // task was already completed; clear it only when moving out of completed.
+    const completedAt =
+      status === 'COMPLETED'
+        ? (existing.status === 'COMPLETED' ? existing.completedAt : new Date())
+        : null;
+
     const task = await prisma.task.update({
       where: { id: (req.params.id as string) },
       data: {
         status: status,
-        completedAt: status === 'COMPLETED' ? new Date() : null,
+        completedAt,
       },
     });
 
@@ -790,6 +803,33 @@ taskRouter.put('/:id/checklist', async (req: AuthRequest, res: Response, next) =
 taskRouter.patch('/reorder', async (req: AuthRequest, res: Response, next) => {
   try {
     const { tasks } = req.body as { tasks: { id: string; order: number; status?: string }[] };
+
+    // Every submitted task must belong to the caller's organization — otherwise a
+    // crafted payload could rewrite order/status/completedAt on another org's tasks.
+    const ids = tasks.map((t) => t.id);
+    const owned = await prisma.task.findMany({
+      where: {
+        id: { in: ids },
+        OR: [
+          { project: { client: { organizationId: req.user!.organizationId } } },
+          { lead: { organizationId: req.user!.organizationId } },
+          { client: { organizationId: req.user!.organizationId } },
+          { assignee: { organizationId: req.user!.organizationId } },
+        ],
+      },
+      select: { id: true },
+    });
+    const ownedIds = new Set(owned.map((t) => t.id));
+    if (ownedIds.size !== new Set(ids).size) {
+      res.status(403).json({ error: 'One or more tasks are outside your organization' });
+      return;
+    }
+
+    const VALID_STATUSES = ['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'APPROVED', 'BLOCKED', 'ON_HOLD', 'COMPLETED'];
+    if (tasks.some((t) => t.status !== undefined && !VALID_STATUSES.includes(t.status))) {
+      res.status(400).json({ error: 'Invalid status in reorder payload' });
+      return;
+    }
 
     if (tasks.length > 0 && req.user!.role === 'TEAM_MEMBER') {
       const firstTask = await prisma.task.findUnique({ where: { id: tasks[0].id } });

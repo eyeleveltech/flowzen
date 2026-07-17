@@ -143,7 +143,7 @@ function buildClassicHtml(quote: any, org: any, logoUri: string): string {
       <div class="words r">${esc(quote.amountInWords || '')}</div>
       ${hasRcm ? `<div class="r" style="margin-top:4px; font-size:10px; font-weight:600; color:${BRAND};">Tax payable under reverse charge (RCM).</div>` : ''}
 
-      ${quote.scope ? `<div class="scope-block"><h3>Scope of Work</h3><div>${quote.scope}</div></div>` : ''}
+      ${quote.scope ? `<div class="scope-block"><h3>Scope of Work</h3><div style="white-space:pre-line;">${esc(quote.scope)}</div></div>` : ''}
       <div class="tc"><h3>Terms &amp; Conditions</h3><p>${esc(quote.termsConditions)}</p></div>
 
       <div class="bottom">
@@ -268,7 +268,7 @@ function buildMinimalHtml(quote: any, org: any, logoUri: string): string {
       <div class="words r">${esc(quote.amountInWords || '')}</div>
       ${hasRcm ? `<div class="r" style="margin-top:4px; font-size:9px; font-weight:600; color:#000;">Tax payable under reverse charge (RCM).</div>` : ''}
 
-      ${quote.scope ? `<div class="scope-block"><h3>Scope of Work</h3><div>${quote.scope}</div></div>` : ''}
+      ${quote.scope ? `<div class="scope-block"><h3>Scope of Work</h3><div style="white-space:pre-line;">${esc(quote.scope)}</div></div>` : ''}
       <div class="tc"><h3>Terms &amp; Conditions</h3><p>${esc(quote.termsConditions)}</p></div>
 
       <div class="bottom">
@@ -395,7 +395,7 @@ function buildModernHtml(quote: any, org: any, logoUri: string): string {
       <div class="words">${esc(quote.amountInWords || '')}</div>
       ${hasRcm ? `<div class="r" style="margin-top:8px; font-size:10px; font-weight:700; color:#111827;">Tax payable under reverse charge (RCM).</div>` : ''}
 
-      ${quote.scope ? `<div class="scope-block"><h3>Scope of Work</h3><div>${quote.scope}</div></div>` : ''}
+      ${quote.scope ? `<div class="scope-block"><h3>Scope of Work</h3><div style="white-space:pre-line;">${esc(quote.scope)}</div></div>` : ''}
       <div class="tc"><h3>Terms &amp; Conditions</h3><p>${esc(quote.termsConditions)}</p></div>
 
       <div class="bottom">

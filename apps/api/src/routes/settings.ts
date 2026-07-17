@@ -301,7 +301,7 @@ settingsRouter.post('/users', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimiter
 settingsRouter.put('/users/:id', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimiter, async (req: AuthRequest, res: Response, next) => {
   try {
     const targetUserId = req.params.id as string;
-    const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
+    const targetUser = await prisma.user.findFirst({ where: { id: targetUserId, organizationId: req.user!.organizationId } });
     if (!targetUser) {
       res.status(404).json({ error: 'User not found' });
       return;
@@ -539,9 +539,18 @@ settingsRouter.post('/workflows', authorize('SUPER_ADMIN', 'ADMIN'), async (req:
 settingsRouter.put('/workflows/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     const { name, trigger, condition, action, targets, isActive } = req.body;
-    
+
+    const existing = await prisma.workflowRule.findFirst({
+      where: { id: req.params.id as string, organizationId: req.user!.organizationId },
+      select: { id: true },
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'Workflow rule not found' });
+      return;
+    }
+
     const workflow = await prisma.workflowRule.update({
-      where: { id: req.params.id as string },
+      where: { id: existing.id },
       data: {
         name,
         trigger,
@@ -554,7 +563,7 @@ settingsRouter.put('/workflows/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (r
         creator: { select: { id: true, name: true, role: true } }
       }
     });
-    
+
     res.json(workflow);
   } catch (error) {
     next(error);
@@ -564,9 +573,13 @@ settingsRouter.put('/workflows/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (r
 // DELETE /api/settings/workflows/:id
 settingsRouter.delete('/workflows/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
-    await prisma.workflowRule.delete({
-      where: { id: req.params.id as string }
+    const { count } = await prisma.workflowRule.deleteMany({
+      where: { id: req.params.id as string, organizationId: req.user!.organizationId }
     });
+    if (count === 0) {
+      res.status(404).json({ error: 'Workflow rule not found' });
+      return;
+    }
     res.json({ success: true });
   } catch (error) {
     next(error);

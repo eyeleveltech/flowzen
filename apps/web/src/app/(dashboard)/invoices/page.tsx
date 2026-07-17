@@ -58,7 +58,7 @@ export default function InvoicesPage() {
                       <FileText className="h-4 w-4 text-[#9CA3AF] shrink-0" />
                       <div>
                         <p className="text-sm font-medium text-primary font-mono">{inv.draftNumber}</p>
-                        <p className="text-[11px] text-secondary">Quote: {inv.quote.documentNumber}</p>
+                        <p className="text-[11px] text-secondary">Quote: {inv.quote?.documentNumber ?? '—'}</p>
                       </div>
                     </div>
                   </td>
