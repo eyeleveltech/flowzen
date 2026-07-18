@@ -774,7 +774,6 @@ export default function ProjectDetailPage() {
                     { label: 'Low', value: 'LOW' },
                     { label: 'Medium', value: 'MEDIUM' },
                     { label: 'High', value: 'HIGH' },
-                    { label: 'Critical', value: 'CRITICAL' },
                     { label: 'Urgent', value: 'URGENT' },
                   ]}
                 />
@@ -905,7 +904,6 @@ export default function ProjectDetailPage() {
                               { label: 'Low', value: 'LOW' },
                               { label: 'Medium', value: 'MEDIUM' },
                               { label: 'High', value: 'HIGH' },
-                              { label: 'Critical', value: 'CRITICAL' },
                               { label: 'Urgent', value: 'URGENT' },
                             ]}
                             selectedFilters={taskPriorityFilter}
@@ -1038,7 +1036,7 @@ export default function ProjectDetailPage() {
                           )}
                           {visibleTaskColumns.includes('priority') && (
                             <td className="px-6 py-3">
-                              <span className={`text-xs font-medium capitalize ${t.priority === 'URGENT' || t.priority === 'CRITICAL' ? 'text-red-600' :
+                              <span className={`text-xs font-medium capitalize ${t.priority === 'URGENT' ? 'text-red-600' :
                                   t.priority === 'HIGH' ? 'text-orange-500' :
                                     t.priority === 'MEDIUM' ? 'text-blue-500' : 'text-gray-400'
                                 }`}>
@@ -1327,7 +1325,7 @@ export default function ProjectDetailPage() {
                           { label: 'Low', value: 'LOW' },
                           { label: 'Medium', value: 'MEDIUM' },
                           { label: 'High', value: 'HIGH' },
-                          { label: 'Urgent', value: 'CRITICAL' },
+                          { label: 'Urgent', value: 'URGENT' },
                         ]}
                       />
                     </div>

@@ -12,6 +12,8 @@ import {
   Activity, FileText, Sparkles, AlertCircle, Folder, User, Zap, Leaf
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useAuthStore } from '@/stores';
+import toast from 'react-hot-toast';
 
 interface TeamMember {
   id: string; name: string; email: string; avatar?: string | null;
@@ -74,8 +76,28 @@ const statusColors: Record<string, string> = {
 };
 
 export default function TeamPage() {
+  const { user: currentUser } = useAuthStore();
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [promoting, setPromoting] = useState(false);
+
+  const handlePromoteToSuperAdmin = async (memberId: string) => {
+    if (!window.confirm('Are you sure you want to promote this member to Super Admin? This action cannot be undone.')) {
+      return;
+    }
+    setPromoting(true);
+    try {
+      await api.put(`/settings/users/${memberId}`, { role: 'SUPER_ADMIN' });
+      toast.success('Member promoted to Super Admin successfully');
+      fetchTeam();
+      const freshDetail = await api.get<MemberDetail>(`/team/${memberId}`);
+      setMemberDetail(freshDetail);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to promote member');
+    } finally {
+      setPromoting(false);
+    }
+  };
   
   // Search and Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -178,6 +200,15 @@ export default function TeamPage() {
                 <Shield className="h-3 w-3" />
                 {roleLabels[role] || role}
               </span>
+              {currentUser?.role === 'SUPER_ADMIN' && role === 'ADMIN' && (
+                <button
+                  disabled={promoting}
+                  onClick={() => handlePromoteToSuperAdmin(memberDetail.id)}
+                  className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-colors disabled:opacity-50"
+                >
+                  Promote to Super Admin
+                </button>
+              )}
               {designation && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-100">
                   <Briefcase className="h-3 w-3" />

@@ -16,7 +16,7 @@ const GROUPS = [
   { id: 'Planning', title: 'Planning', color: '#8b5cf6', stages: ['PLANNING'] },
   { id: 'InProgress', title: 'In Progress', color: '#3b82f6', stages: ['IN_PROGRESS'] },
   { id: 'Review', title: 'Review', color: '#f59e0b', stages: ['REVIEW'] },
-  { id: 'OnHold', title: 'On Hold', color: '#9ca3af', stages: ['ON_HOLD'] },
+  { id: 'OnHold', title: 'On Hold', color: '#f97316', stages: ['ON_HOLD'] },
   { id: 'Cancelled', title: 'Cancelled', color: '#ef4444', stages: ['CANCELLED'] },
   { id: 'Completed', title: 'Completed', color: '#10b981', stages: ['COMPLETED'] },
 ];
@@ -25,7 +25,7 @@ const STAGE_BADGES: Record<string, { label: string, bg: string, text: string }> 
   'PLANNING': { label: 'PLANNING', bg: '#8b5cf6', text: '#ffffff' },
   'IN_PROGRESS': { label: 'IN PROGRESS', bg: '#3b82f6', text: '#ffffff' },
   'REVIEW': { label: 'REVIEW', bg: '#f59e0b', text: '#ffffff' },
-  'ON_HOLD': { label: 'ON HOLD', bg: '#9ca3af', text: '#ffffff' },
+  'ON_HOLD': { label: 'ON HOLD', bg: '#ffedd5', text: '#c2410c' },
   'CANCELLED': { label: 'CANCELLED', bg: '#ef4444', text: '#ffffff' },
   'COMPLETED': { label: 'COMPLETED', bg: '#10b981', text: '#ffffff' },
 };

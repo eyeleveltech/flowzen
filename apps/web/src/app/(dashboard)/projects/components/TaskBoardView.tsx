@@ -16,7 +16,8 @@ const GROUPS = [
   { id: 'Todo', title: 'To Do', color: '#8b5cf6', stages: ['TODO'] },
   { id: 'InProgress', title: 'In Progress', color: '#3b82f6', stages: ['IN_PROGRESS'] },
   { id: 'Review', title: 'Review', color: '#f59e0b', stages: ['REVIEW', 'APPROVED'] },
-  { id: 'Blocked', title: 'Blocked', color: '#ef4444', stages: ['BLOCKED', 'ON_HOLD'] },
+  { id: 'Blocked', title: 'Blocked', color: '#ef4444', stages: ['BLOCKED'] },
+  { id: 'OnHold', title: 'On Hold', color: '#a855f7', stages: ['ON_HOLD'] },
   { id: 'Completed', title: 'Completed', color: '#10b981', stages: ['COMPLETED'] },
 ];
 
@@ -24,7 +25,7 @@ const PRIORITY_COLORS: Record<string, string> = {
   LOW: 'bg-gray-100 text-gray-700',
   MEDIUM: 'bg-blue-100 text-blue-700',
   HIGH: 'bg-orange-100 text-orange-700',
-  CRITICAL: 'bg-red-100 text-red-700'
+  URGENT: 'bg-red-100 text-red-700'
 };
 
 export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any[]; onUpdateTask?: () => void; onTaskClick?: (task: any) => void }) {
@@ -168,7 +169,7 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
                               <div className="flex justify-between items-start mb-2 gap-2">
                                 <h4 className="text-sm font-medium text-primary leading-tight line-clamp-2">{task.title}</h4>
                                 <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${PRIORITY_COLORS[task.priority] || 'bg-gray-100 text-gray-600'}`}>
-                                  {task.priority === 'CRITICAL' ? 'URGENT' : task.priority}
+                                  {task.priority}
                                </span>
                               </div>
                               

@@ -62,6 +62,13 @@ const priorityDots: Record<string, string> = {
   LOW: 'bg-gray-300', MEDIUM: 'bg-blue-400', HIGH: 'bg-orange-500', URGENT: 'bg-red-500',
 };
 
+const PRIORITY_BADGES: Record<string, string> = {
+  LOW: 'bg-gray-100 text-gray-700',
+  MEDIUM: 'bg-blue-100 text-blue-700',
+  HIGH: 'bg-orange-100 text-orange-700',
+  URGENT: 'bg-red-100 text-red-700'
+};
+
 type AssigneePerson = { id: string; name: string; avatar?: string | null };
 function taskAssignees(task: { assignees?: AssigneePerson[]; assignee?: AssigneePerson | null }): AssigneePerson[] {
   return task.assignees && task.assignees.length ? task.assignees : (task.assignee ? [task.assignee] : []);
@@ -603,7 +610,6 @@ function TasksContent() {
                 { label: 'Low', value: 'LOW' },
                 { label: 'Medium', value: 'MEDIUM' },
                 { label: 'High', value: 'HIGH' },
-                { label: 'Critical', value: 'CRITICAL' },
                 { label: 'Urgent', value: 'URGENT' },
               ]}
             />
@@ -795,7 +801,9 @@ function TasksContent() {
                                     onClick={() => setSelectedTask(t)}
                                   >
                                     <div className="flex items-start gap-2 mb-2">
-                                      <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${priorityDots[t.priority]}`} />
+                                      <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${PRIORITY_BADGES[t.priority] || 'bg-gray-100 text-gray-600'}`}>
+                                        {t.priority}
+                                      </span>
                                       <p className="text-sm font-medium text-primary leading-snug">{t.title}</p>
                                     </div>
                                     <div className="flex items-center justify-between">

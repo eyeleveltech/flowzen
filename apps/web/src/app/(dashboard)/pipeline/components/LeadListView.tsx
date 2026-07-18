@@ -15,7 +15,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 
 const STAGES = [
   'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
-  'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED', 'CHURNED'
+  'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED', 'CHURNED', 'ON_HOLD'
 ];
 
 const LEAD_SOURCES = [
@@ -152,7 +152,24 @@ export function LeadListView() {
               />
             </div>
             
-            <div className="w-full sm:w-[160px] md:w-[180px]">
+            <div className="w-full sm:hidden">
+              <Select
+                ariaLabel="Sort Leads"
+                value={sort}
+                onChange={setSort}
+                buttonClassName="w-full h-[42px] rounded-xl border border-border bg-white text-secondary text-sm font-medium focus:ring-1 focus:ring-primary shadow-none"
+                options={[
+                  { label: 'Sort: Client A-Z', value: 'client_asc' },
+                  { label: 'Sort: Client Z-A', value: 'client_desc' },
+                  { label: 'Sort: Stage Ascending', value: 'stage_asc' },
+                  { label: 'Sort: Stage Descending', value: 'stage_desc' },
+                  { label: 'Sort: Value (High-Low)', value: 'value_desc' },
+                  { label: 'Sort: Value (Low-High)', value: 'value_asc' },
+                ]}
+              />
+            </div>
+
+            <div className="flex-1 min-w-[140px] sm:w-[160px] md:w-[180px] sm:flex-initial">
               <MultiSelect
                 value={stageFilter}
                 onChange={setStageFilter}
@@ -161,7 +178,7 @@ export function LeadListView() {
               />
             </div>
 
-            <div className="w-full sm:w-[160px] md:w-[180px]">
+            <div className="flex-1 min-w-[140px] sm:w-[160px] md:w-[180px] sm:flex-initial">
               <MultiSelect
                 value={ownerFilter}
                 onChange={setOwnerFilter}
@@ -197,16 +214,16 @@ export function LeadListView() {
             )}
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+          <div className="flex flex-row items-center gap-3 w-full sm:w-auto">
             <button
               onClick={() => { setModalMode('BULK'); setIsModalOpen(true); }}
-              className="flex items-center gap-2 rounded-xl bg-white border border-border px-4 py-2.5 text-sm font-medium text-secondary hover:text-primary hover:bg-gray-50 transition-all w-full sm:w-auto justify-center shrink-0"
+              className="flex items-center gap-2 rounded-xl bg-white border border-border px-4 py-2.5 text-sm font-medium text-secondary hover:text-primary hover:bg-gray-50 transition-all flex-1 sm:flex-none justify-center shrink-0"
             >
               <Upload className="h-4 w-4" /> Import
             </button>
             <button
               onClick={() => { setModalMode('MANUAL'); setIsModalOpen(true); }}
-              className="flex items-center justify-center rounded-xl bg-primary h-[44px] w-[44px] text-white hover:bg-[#1F2937] transition-all shrink-0"
+              className="flex items-center justify-center rounded-xl bg-primary h-[42px] w-[42px] text-white hover:bg-[#1F2937] transition-all shrink-0"
               title="Add Lead"
             >
               <Plus className="h-4 w-4" />
@@ -491,6 +508,29 @@ export function LeadListView() {
                 </span>
               </div>
 
+              <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#F3F4F6]">
+                <div className="flex items-center gap-3 text-xs text-secondary">
+                  {lead.dealValue ? (
+                    <span className="font-semibold text-primary">
+                      {formatCurrency(lead.dealValue)}
+                    </span>
+                  ) : (
+                    <span className="text-[#9CA3AF]">—</span>
+                  )}
+                  {lead.expectedCloseDate && (
+                    <span className={new Date(lead.expectedCloseDate) < new Date() && !['PROJECT_COMPLETED', 'CHURNED'].includes(lead.stage) ? 'text-red-600 font-medium' : ''}>
+                      📅 {new Date(lead.expectedCloseDate).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+                {lead.assignedTo ? (
+                  <div className="flex items-center gap-1 text-[11px] text-secondary bg-[#F3F4F6] px-2 py-0.5 rounded border border-border">
+                    <span className="font-medium">{lead.assignedTo.name}</span>
+                  </div>
+                ) : (
+                  <span className="text-[11px] text-[#9CA3AF]">Unassigned</span>
+                )}
+              </div>
             </motion.div>
           ))
         )}

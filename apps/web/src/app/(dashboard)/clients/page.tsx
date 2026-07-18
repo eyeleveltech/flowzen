@@ -245,7 +245,7 @@ function ClientsContent() {
     try {
       const data = await api.get<{ clients: Client[] }>('/clients?limit=10000');
       const csvData = data.clients.map(c => ({
-        Name: c.name,
+        ContactName: c.contacts?.[0]?.name || '',
         Company: c.company || '',
         Industry: c.industry || '',
         Status: c.status,
@@ -258,7 +258,6 @@ function ClientsContent() {
         StartDate: c.startDate ? new Date(c.startDate).toISOString().split('T')[0] : '',
         AccountManagerId: c.accountManagerId || '',
         Website: c.website || '',
-        ContactName: c.contacts?.[0]?.name || '',
         ContactDesignation: c.contacts?.[0]?.designation || '',
         ContactEmail: c.contacts?.[0]?.email || '',
         ContactPhone: c.contacts?.[0]?.phone || ''
@@ -322,7 +321,7 @@ function ClientsContent() {
     setImporting(true);
     try {
       const payload = importPreview.map((row: any) => ({
-        name: row.Name || row.name,
+        name: row.Name || row.name || row.ContactName || row.contactName || row.Company || row.company,
         company: row.Company || row.company,
         industry: row.Industry || row.industry,
         status: row.Status || row.status || 'PROSPECT',
@@ -357,7 +356,7 @@ function ClientsContent() {
 
   function downloadTemplate() {
     const csv = Papa.unparse([{
-      Name: 'Example Corp',
+      ContactName: 'John Doe',
       Company: 'Example LLC',
       Industry: 'Technology',
       Status: 'PROSPECT',
@@ -370,7 +369,6 @@ function ClientsContent() {
       StartDate: '2026-06-01',
       AccountManagerId: '',
       Website: 'https://example.com',
-      ContactName: 'John Doe',
       ContactDesignation: 'CEO',
       ContactEmail: 'john@example.com',
       ContactPhone: '+1-555-0100'

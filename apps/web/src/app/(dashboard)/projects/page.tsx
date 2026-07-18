@@ -719,7 +719,7 @@ function ProjectsContent() {
                           { label: 'Low', value: 'LOW' },
                           { label: 'Medium', value: 'MEDIUM' },
                           { label: 'High', value: 'HIGH' },
-                          { label: 'Urgent', value: 'CRITICAL' },
+                          { label: 'Urgent', value: 'URGENT' },
                         ]}
                       />
                     </div>
