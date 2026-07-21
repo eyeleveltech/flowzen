@@ -6,11 +6,10 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveCo
 import { TrendingDown, Download } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
-import { formatCurrency } from '@/lib/utils';
-import { format } from 'date-fns';
+import { formatCurrency, formatDate } from '@/lib/utils';
 
 const COLORS = ['#163027', '#2f6b53', '#5a9e7f', '#9ccdb4', '#cfe8db', '#E2FEA5'];
-const fmtDate = (d: any) => (d ? format(new Date(d), 'dd MMM yyyy') : '—');
+const fmtDate = formatDate;
 const label = (s: string) => (s || '—').replace(/_/g, ' ');
 
 export default function LostDealsPage() {
@@ -111,7 +110,7 @@ export default function LostDealsPage() {
             <h2 className="text-sm font-semibold text-primary mb-4">Competitor Tracker</h2>
             {data.competitors.length === 0 ? <p className="text-sm text-secondary py-6 text-center">No competitors recorded.</p> : (
               <div className="overflow-x-auto w-full">
-                <table className="w-full text-sm min-w-[400px]">
+                <table className="w-full text-sm min-w-100">
                   <thead><tr className="text-left text-[11px] uppercase text-secondary border-b border-border"><th className="py-2">Competitor</th><th className="py-2 text-right">Times</th><th className="py-2 text-right">Avg Lost</th><th className="py-2">Verticals</th></tr></thead>
                   <tbody>{data.competitors.map((c: any) => (
                     <tr key={c.competitor} className="border-b border-gray-50"><td className="py-2 font-medium text-primary">{c.competitor}</td><td className="py-2 text-right">{c.count}</td><td className="py-2 text-right">{formatCurrency(c.avgValue)}</td><td className="py-2 text-secondary text-xs">{c.verticals.join(', ') || '—'}</td></tr>
@@ -141,7 +140,7 @@ export default function LostDealsPage() {
             <h2 className="text-sm font-semibold text-primary mb-4">Reactivation Pipeline</h2>
             {data.reactivation.length === 0 ? <p className="text-sm text-secondary py-6 text-center">No leads flagged for reactivation.</p> : (
               <div className="overflow-x-auto w-full">
-                <table className="w-full text-sm min-w-[600px]">
+                <table className="w-full text-sm min-w-150">
                   <thead><tr className="text-left text-[11px] uppercase text-secondary border-b border-border"><th className="py-2">Company</th><th className="py-2">Lost Date</th><th className="py-2">Reactivation Window</th><th className="py-2 text-right">Value</th><th className="py-2">Assigned To</th></tr></thead>
                   <tbody>{data.reactivation.map((r: any) => (
                     <tr key={r.id} className="border-b border-gray-50"><td className="py-2 font-medium text-primary">{r.name}</td><td className="py-2 text-secondary">{fmtDate(r.lostDate)}</td><td className="py-2 text-amber-700 font-medium">{fmtDate(r.window)}</td><td className="py-2 text-right">{formatCurrency(r.value)}</td><td className="py-2 text-secondary">{r.assignedTo || '—'}</td></tr>

@@ -7,24 +7,12 @@ import { Select } from '@/components/ui/select';
 import { STAGE_FIELDS, StageField } from '../lib/stage-config';
 import toast from 'react-hot-toast';
 
+import { getStatusLabel } from '@/lib/status';
+
 const PIPELINE_STAGES = [
   'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
   'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'CONTRACT', 'ON_HOLD', 'PROJECT_COMPLETED', 'CHURNED'
 ];
-
-const STAGE_LABELS: Record<string, string> = {
-  NEW_LEAD: 'New Lead',
-  OUTREACH: 'Outreach',
-  MEETING: 'Meeting',
-  PROPOSAL: 'Proposal',
-  NEGOTIATION: 'Negotiation',
-  CONTRACT: 'Won & Closed',
-  ACTIVE_RETAINER: 'Active (Retainer)',
-  ACTIVE_PROJECT: 'Active (Project)',
-  ON_HOLD: 'On Hold',
-  PROJECT_COMPLETED: 'Project Completed',
-  CHURNED: 'Lost & Closed',
-};
 
 // The exact Lost Reason options per §3.6
 const LOST_REASONS = [
@@ -147,8 +135,8 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
     });
   };
 
-  const fromLabel = STAGE_LABELS[currentStage] ?? currentStage.replace(/_/g, ' ');
-  const toLabel = STAGE_LABELS[targetStage] ?? targetStage.replace(/_/g, ' ');
+  const fromLabel = getStatusLabel(currentStage);
+  const toLabel = getStatusLabel(targetStage);
 
   return (
     <>
@@ -259,7 +247,7 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
                     required={field.required}
                     value={formData[field.key] || ''}
                     onChange={(e) => handleFieldChange(field.key, e.target.value)}
-                    className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary min-h-[80px]"
+                    className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary min-h-20"
                   />
                 ) : field.type === 'select' ? (
                   <Select

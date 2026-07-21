@@ -97,7 +97,7 @@ export function ProjectBoardView({ projects, onUpdateProject, userRole }: { proj
   };
 
   return (
-    <div className="w-full flex flex-col h-[calc(100vh-210px)] min-h-[550px] overflow-hidden">
+    <div className="w-full flex flex-col h-[calc(100vh-210px)] min-h-137.5 overflow-hidden">
       <div className="flex flex-1 w-full overflow-x-auto overflow-y-hidden gap-4 pb-2 px-1 custom-scrollbar min-h-0">
         <DragDropContext onDragEnd={handleDragEnd}>
           {GROUPS.map((group) => {
@@ -128,7 +128,7 @@ export function ProjectBoardView({ projects, onUpdateProject, userRole }: { proj
             }
 
             return (
-              <div key={group.id} className="flex flex-col flex-1 min-w-[280px] max-w-[340px] h-full shrink-0 border border-border bg-[#F9FAFB] rounded-xl overflow-hidden shadow-sm">
+              <div key={group.id} className="flex flex-col flex-1 min-w-70 max-w-85 h-full shrink-0 border border-border bg-[#F9FAFB] rounded-xl overflow-hidden shadow-sm">
                 {/* Column Header */}
                 <div className="px-4 py-3 flex items-center justify-between shrink-0 bg-white border-b border-border" style={{ borderTop: `3px solid ${group.color}` }}>
                   <div className="flex items-center gap-2">
@@ -200,7 +200,7 @@ export function ProjectBoardView({ projects, onUpdateProject, userRole }: { proj
                                           {project.owner.name.charAt(0)}
                                         </div>
                                       )}
-                                      <span className="text-xs font-medium text-secondary truncate max-w-[100px]">{project.owner.name}</span>
+                                      <span className="text-xs font-medium text-secondary truncate max-w-25">{project.owner.name}</span>
                                     </div>
                                   )}
                                   

@@ -13,6 +13,7 @@ import toast from 'react-hot-toast';
 import { useMembers } from '@/hooks/useQueries';
 import { useConfirmStore, useModuleStore } from '@/stores';
 import { CreateProjectModal } from '@/components/projects/create-project-modal';
+import { StatusBadge } from '@/components/ui/status-badge';
 
 interface ClientContact {
   id: string; name: string; designation?: string | null; email?: string | null; phone?: string | null;
@@ -31,12 +32,6 @@ interface ClientDetail {
 }
 
 type Tab = 'overview' | 'projects' | 'activity' | 'notes';
-
-const statusColors: Record<string, string> = {
-  PROSPECT: 'bg-blue-50 text-blue-700', ACTIVE: 'bg-emerald-50 text-emerald-700',
-  ONHOLD: 'bg-amber-50 text-amber-700', CHURNED: 'bg-gray-50 text-gray-400',
-  PROJECT_COMPLETED: 'bg-slate-100 text-slate-500',
-};
 
 const projectStatusColors: Record<string, string> = {
   PLANNING: 'bg-violet-50 text-violet-700',
@@ -204,15 +199,7 @@ export default function ClientDetailPage() {
                 </span>
               )}
               {client.name === 'Internal' && <span className="text-sm font-medium text-secondary">(Internal)</span>}
-              <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[client.status]}`}>
-                {activeModule === 'PM' ? (
-                  client.status === 'PROSPECT' ? 'Prospect' :
-                  client.status === 'ACTIVE' ? 'Active' :
-                  client.status === 'ONHOLD' ? 'On Hold' :
-                  client.status === 'PROJECT_COMPLETED' ? 'Completed' :
-                  client.status === 'CHURNED' ? 'Churned' : client.status
-                ) : client.status}
-              </span>
+              <StatusBadge status={client.status} />
             </div>
           </div>
         </div>

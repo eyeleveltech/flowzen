@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { UserRole } from '@flowzen/shared';
 import { verifyToken, JwtPayload } from '../utils/jwt.js';
 import { prisma } from '../lib/prisma.js';
 
@@ -27,14 +28,14 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
   }
 }
 
-export function authorize(...roles: string[]) {
+export function authorize(...roles: UserRole[]) {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({ error: 'Authentication required' });
       return;
     }
 
-    if (roles.length > 0 && !roles.includes(req.user.role)) {
+    if (roles.length > 0 && !roles.includes(req.user.role as UserRole)) {
       res.status(403).json({ error: 'Insufficient permissions' });
       return;
     }

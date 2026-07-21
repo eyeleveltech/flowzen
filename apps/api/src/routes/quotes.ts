@@ -7,6 +7,7 @@ import { emitToOrganization } from '../sse.js';
 import { generateDocNumber, computeQuoteFinancials } from '../utils/quote.js';
 import { generateQuotePdf } from '../services/quotePdf.service.js';
 import { logActivity, ActivityType } from '../services/activity.service.js';
+import { buildSearchFilter } from '../utils/search-utils.js';
 
 export const quoteRouter = Router();
 quoteRouter.use(authenticate);
@@ -146,10 +147,7 @@ quoteRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     if (status) where.status = status as string;
     if (clientId) where.clientId = clientId as string;
     if (search) {
-      where.OR = [
-        { documentNumber: { contains: search as string, mode: 'insensitive' } },
-        { clientName: { contains: search as string, mode: 'insensitive' } },
-      ];
+      where.OR = buildSearchFilter(['documentNumber', 'clientName'], search as string).OR;
     }
     const quotes = await prisma.quoteDocument.findMany({
       where,

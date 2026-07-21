@@ -4,7 +4,7 @@ import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { Plus, X, Edit2, Shield, Trash2, Mail, Building2, UserCircle, UserX } from 'lucide-react';
 import { Select } from '@/components/ui/select';
-import { getInitials, getAvatarColor, toProperCase } from '@/lib/utils';
+import { getInitials, getAvatarColor, toProperCase, getRoleLabel } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useConfirmStore } from '@/stores';
 
@@ -105,9 +105,7 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
     }
   };
 
-  const roleLabels: Record<string, string> = {
-    SUPER_ADMIN: 'Super Admin', ADMIN: 'Admin', PROJECT_MANAGER: 'Project Manager', TEAM_MEMBER: 'Team Member',
-  };
+
 
   const designationOptions = Array.from(new Set((users || []).map((u: any) => u.designation).filter(Boolean))) as string[];
 
@@ -156,7 +154,7 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
                   </div>
                 </td>
                 <td className="px-5 py-3 text-primary font-medium">
-                  {roleLabels[u.role] || u.role}
+                  {getRoleLabel(u.role)}
                 </td>
                 <td className="px-5 py-3 text-secondary">
                   {u.department || '—'}

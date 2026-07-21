@@ -21,12 +21,7 @@ const GROUPS = [
   { id: 'Completed', title: 'Completed', color: '#10b981', stages: ['COMPLETED'] },
 ];
 
-const PRIORITY_COLORS: Record<string, string> = {
-  LOW: 'bg-gray-100 text-gray-700',
-  MEDIUM: 'bg-blue-100 text-blue-700',
-  HIGH: 'bg-orange-100 text-orange-700',
-  URGENT: 'bg-red-100 text-red-700'
-};
+import { getPriorityBadge } from '@/lib/priority';
 
 export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any[]; onUpdateTask?: () => void; onTaskClick?: (task: any) => void }) {
   const [localTasks, setLocalTasks] = useState<any[]>(tasks);
@@ -93,7 +88,7 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
   };
 
   return (
-    <div className="w-full flex flex-col h-[calc(100vh-250px)] min-h-[500px] overflow-hidden">
+    <div className="w-full flex flex-col h-[calc(100vh-250px)] min-h-125 overflow-hidden">
       <div className="flex flex-1 w-full overflow-x-auto overflow-y-hidden gap-4 pb-2 px-1 custom-scrollbar min-h-0">
         <DragDropContext onDragEnd={handleDragEnd}>
           {GROUPS.map((group) => {
@@ -124,7 +119,7 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
             }
 
             return (
-              <div key={group.id} className="flex flex-col flex-1 min-w-[280px] max-w-[340px] h-full shrink-0 border border-border bg-[#F9FAFB] rounded-xl overflow-hidden shadow-sm">
+              <div key={group.id} className="flex flex-col flex-1 min-w-70 max-w-85 h-full shrink-0 border border-border bg-[#F9FAFB] rounded-xl overflow-hidden shadow-sm">
                 {/* Column Header */}
                 <div className="px-4 py-3 flex items-center justify-between shrink-0 bg-white border-b border-border" style={{ borderTop: `3px solid ${group.color}` }}>
                   <div className="flex items-center gap-2">
@@ -168,7 +163,7 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
                             >
                               <div className="flex justify-between items-start mb-2 gap-2">
                                 <h4 className="text-sm font-medium text-primary leading-tight line-clamp-2">{task.title}</h4>
-                                <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${PRIORITY_COLORS[task.priority] || 'bg-gray-100 text-gray-600'}`}>
+                                <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${getPriorityBadge(task.priority)}`}>
                                   {task.priority}
                                </span>
                               </div>

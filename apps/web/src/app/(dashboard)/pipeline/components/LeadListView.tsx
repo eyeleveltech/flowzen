@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
-import { formatCurrency, getAvatarColor, getInitials, getClientDisplayName } from '@/lib/utils';
+import { formatCurrency, formatDate, getAvatarColor, getInitials, getClientDisplayName } from '@/lib/utils';
 import { Plus, Search, Filter, ChevronRight, TrendingUp, Upload } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
@@ -142,7 +142,7 @@ export function LeadListView() {
       <div className="bg-white border border-border rounded-2xl p-4 md:p-5 flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto flex-1">
-            <div className="relative w-full sm:max-w-[240px] md:max-w-xs">
+            <div className="relative w-full sm:max-w-60 md:max-w-xs">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
               <input
                 value={search}
@@ -157,7 +157,7 @@ export function LeadListView() {
                 ariaLabel="Sort Leads"
                 value={sort}
                 onChange={setSort}
-                buttonClassName="w-full h-[42px] rounded-xl border border-border bg-white text-secondary text-sm font-medium focus:ring-1 focus:ring-primary shadow-none"
+                buttonClassName="w-full h-10.5 rounded-xl border border-border bg-white text-secondary text-sm font-medium focus:ring-1 focus:ring-primary shadow-none"
                 options={[
                   { label: 'Sort: Client A-Z', value: 'client_asc' },
                   { label: 'Sort: Client Z-A', value: 'client_desc' },
@@ -169,7 +169,7 @@ export function LeadListView() {
               />
             </div>
 
-            <div className="flex-1 min-w-[140px] sm:w-[160px] md:w-[180px] sm:flex-initial">
+            <div className="flex-1 min-w-35 sm:w-40 md:w-45 sm:flex-initial">
               <MultiSelect
                 value={stageFilter}
                 onChange={setStageFilter}
@@ -178,7 +178,7 @@ export function LeadListView() {
               />
             </div>
 
-            <div className="flex-1 min-w-[140px] sm:w-[160px] md:w-[180px] sm:flex-initial">
+            <div className="flex-1 min-w-35 sm:w-40 md:w-45 sm:flex-initial">
               <MultiSelect
                 value={ownerFilter}
                 onChange={setOwnerFilter}
@@ -223,7 +223,7 @@ export function LeadListView() {
             </button>
             <button
               onClick={() => { setModalMode('MANUAL'); setIsModalOpen(true); }}
-              className="flex items-center justify-center rounded-xl bg-primary h-[42px] w-[42px] text-white hover:bg-[#1F2937] transition-all shrink-0"
+              className="flex items-center justify-center rounded-xl bg-primary h-10.5 w-10.5 text-white hover:bg-[#1F2937] transition-all shrink-0"
               title="Add Lead"
             >
               <Plus className="h-4 w-4" />
@@ -242,7 +242,7 @@ export function LeadListView() {
             >
               <div className="pt-5 mt-1 border-t border-border flex flex-wrap gap-6">
                 {/* Priority */}
-                <div className="space-y-1.5 w-full sm:w-[180px]">
+                <div className="space-y-1.5 w-full sm:w-45">
                   <label className="text-xs font-semibold text-secondary uppercase tracking-wider">Priority</label>
                   <MultiSelect
                     value={priority}
@@ -253,7 +253,7 @@ export function LeadListView() {
                 </div>
 
                 {/* Lead Source */}
-                <div className="space-y-1.5 w-full sm:w-[180px]">
+                <div className="space-y-1.5 w-full sm:w-45">
                   <label className="text-xs font-semibold text-secondary uppercase tracking-wider">Lead Source</label>
                   <MultiSelect
                     value={leadSource}
@@ -264,7 +264,7 @@ export function LeadListView() {
                 </div>
 
                 {/* Close Date */}
-                <div className="space-y-1.5 w-full sm:w-auto min-w-[280px]">
+                <div className="space-y-1.5 w-full sm:w-auto min-w-70">
                   <label className="text-xs font-semibold text-secondary uppercase tracking-wider">Close Date Range</label>
                   <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
                     <input type="date" value={closeDateFrom} onChange={(e) => setCloseDateFrom(e.target.value)} className="w-full rounded-lg border border-border p-2 text-sm focus:border-primary outline-none text-[#374151]" />
@@ -274,7 +274,7 @@ export function LeadListView() {
                 </div>
 
                 {/* Deal Value */}
-                <div className="space-y-1.5 w-full sm:w-auto min-w-[280px]">
+                <div className="space-y-1.5 w-full sm:w-auto min-w-70">
                   <label className="text-xs font-semibold text-secondary uppercase tracking-wider">Deal Value Range</label>
                   <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
                     <div className="relative w-full">
@@ -290,7 +290,7 @@ export function LeadListView() {
                 </div>
 
                 {/* Date Added */}
-                <div className="space-y-1.5 w-full sm:w-auto min-w-[280px]">
+                <div className="space-y-1.5 w-full sm:w-auto min-w-70">
                   <label className="text-xs font-semibold text-secondary uppercase tracking-wider">Date Added Range</label>
                   <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
                     <input type="date" value={dateAddedFrom} onChange={(e) => setDateAddedFrom(e.target.value)} className="w-full rounded-lg border border-border p-2 text-sm focus:border-primary outline-none text-[#374151]" />
@@ -315,7 +315,7 @@ export function LeadListView() {
       {/* Data Table */}
       <div className="hidden md:block rounded-2xl border border-border bg-white overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px]">
+          <table className="w-full min-w-225">
             <thead>
               <tr className="border-b border-[#F3F4F6] bg-white">
                 <th className="px-6 py-3.5 text-left text-xs font-semibold text-secondary uppercase tracking-wider">
@@ -519,7 +519,7 @@ export function LeadListView() {
                   )}
                   {lead.expectedCloseDate && (
                     <span className={new Date(lead.expectedCloseDate) < new Date() && !['PROJECT_COMPLETED', 'CHURNED'].includes(lead.stage) ? 'text-red-600 font-medium' : ''}>
-                      📅 {new Date(lead.expectedCloseDate).toLocaleDateString()}
+                      📅 {formatDate(lead.expectedCloseDate)}
                     </span>
                   )}
                 </div>

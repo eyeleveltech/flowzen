@@ -8,6 +8,7 @@ import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
 import { NotificationService } from '../services/notifications.js';
 import { whereIn } from '../utils/query.js';
 import { createAuditLog } from '../utils/audit.js';
+import { buildSearchFilter } from '../utils/search-utils.js';
 
 export const clientRouter = Router();
 clientRouter.use(authenticate);
@@ -53,11 +54,10 @@ clientRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     if (engagementType) where.engagementType = whereIn(engagementType);
     if (industry) where.industry = whereIn(industry);
     if (search) {
-      where.OR = [
-        { name: { contains: search as string, mode: 'insensitive' } },
-        { company: { contains: search as string, mode: 'insensitive' } },
-        { contacts: { some: { name: { contains: search as string, mode: 'insensitive' } } } },
-      ];
+      where.OR = buildSearchFilter(
+        ['name', 'company', { contacts: { some: { name: { contains: search as string, mode: 'insensitive' } } } }],
+        search as string
+      ).OR;
     }
 
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);

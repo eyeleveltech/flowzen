@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatDate, formatShortDate, getInitials, getAvatarColor, triggerHaptic, getClientDisplayName } from '@/lib/utils';
 import { TASK_STATUSES, TASK_STATUS_LABELS, TASK_STATUS_COLORS, TASK_STATUS_OPTIONS } from '@/lib/task-status';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { Search, Plus, Filter, MessageSquare, X, Trash2, Settings, Check, ChevronRight, LayoutList, Kanban } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
@@ -58,16 +59,7 @@ const getDaysLate = (task: Task) => {
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
-const priorityDots: Record<string, string> = {
-  LOW: 'bg-gray-300', MEDIUM: 'bg-blue-400', HIGH: 'bg-orange-500', URGENT: 'bg-red-500',
-};
-
-const PRIORITY_BADGES: Record<string, string> = {
-  LOW: 'bg-gray-100 text-gray-700',
-  MEDIUM: 'bg-blue-100 text-blue-700',
-  HIGH: 'bg-orange-100 text-orange-700',
-  URGENT: 'bg-red-100 text-red-700'
-};
+import { getPriorityDot, getPriorityBadge } from '@/lib/priority';
 
 type AssigneePerson = { id: string; name: string; avatar?: string | null };
 function taskAssignees(task: { assignees?: AssigneePerson[]; assignee?: AssigneePerson | null }): AssigneePerson[] {
@@ -745,7 +737,7 @@ function TasksContent() {
       {loading ? (
         <div className="flex gap-4 overflow-x-auto pb-4 h-full">
           {TASK_STATUSES.map((col) => (
-            <div key={col} className="min-w-[260px] flex-1 flex flex-col">
+            <div key={col} className="min-w-65 flex-1 flex flex-col">
               <div className="flex items-center gap-2 mb-3 px-1">
                 <Skeleton className="h-4 w-20" />
                 <Skeleton className="h-4 w-6 rounded-full ml-auto" />
@@ -775,7 +767,7 @@ function TasksContent() {
                 {TASK_STATUSES.map((col) => {
                   const colTasks = boardTasks.filter((t) => t.status === col);
                   return (
-                    <div key={col} className="min-w-[260px] flex-1 flex flex-col">
+                    <div key={col} className="min-w-65 flex-1 flex flex-col">
                       <div className="flex items-center gap-2 mb-3 px-1">
                         <div className={`h-2 w-2 rounded-full ${TASK_STATUS_COLORS[col]?.split(' ')[0] || 'bg-gray-200'}`} />
                         <span className="text-xs font-medium text-[#374151] uppercase tracking-wide">{TASK_STATUS_LABELS[col]}</span>
@@ -801,7 +793,7 @@ function TasksContent() {
                                     onClick={() => setSelectedTask(t)}
                                   >
                                     <div className="flex items-start gap-2 mb-2">
-                                      <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${PRIORITY_BADGES[t.priority] || 'bg-gray-100 text-gray-600'}`}>
+                                      <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${getPriorityBadge(t.priority)}`}>
                                         {t.priority}
                                       </span>
                                       <p className="text-sm font-medium text-primary leading-snug">{t.title}</p>
@@ -852,7 +844,7 @@ function TasksContent() {
               {/* Desktop Table View */}
               <div className="hidden md:block rounded-2xl border border-border bg-white overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[800px]">
+                  <table className="w-full min-w-200">
                     <thead>
                       <tr className="border-b border-[#F3F4F6]">
                         {visibleColumns.includes('task') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Task</th>}
@@ -958,7 +950,7 @@ function TasksContent() {
                           {visibleColumns.includes('task') && (
                             <td className="px-6 py-3.5">
                               <div className="flex items-center gap-2">
-                                <div className={`h-2 w-2 rounded-full shrink-0 ${priorityDots[t.priority]}`} />
+                                <div className={`h-2 w-2 rounded-full shrink-0 ${getPriorityDot(t.priority)}`} />
                                 <span className="text-sm font-medium text-primary">{t.title}</span>
                               </div>
                             </td>
@@ -1030,13 +1022,11 @@ function TasksContent() {
                       className="p-4 cursor-pointer"
                     >
                       <div className="flex items-start gap-2 mb-2">
-                        <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${priorityDots[t.priority]}`} />
+                        <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${getPriorityDot(t.priority)}`} />
                         <p className="text-sm font-medium text-primary leading-snug">{t.title}</p>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className={`inline-flex items-center rounded-lg px-2 py-0.5 text-[10px] font-medium ${TASK_STATUS_COLORS[t.status]}`}>
-                          {t.status.replace('_', ' ')}
-                        </span>
+                        <StatusBadge status={t.status} size="xs" />
                         <div className="flex items-center gap-2">
                           <span className="text-[11px] font-medium text-[#4B5563]">{assigneeLabel(t)}</span>
                         </div>

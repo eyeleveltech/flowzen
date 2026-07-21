@@ -1328,7 +1328,7 @@ crmRouter.post('/leads/:id/fields', authorize('SUPER_ADMIN', 'ADMIN'), async (re
 });
 
 // POST /api/crm/leads/:id/prepare-project
-crmRouter.post('/leads/:id/prepare-project', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), async (req: AuthRequest, res: Response, next) => {
+crmRouter.post('/leads/:id/prepare-project', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
     const leadId = req.params.id as string;

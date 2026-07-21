@@ -24,6 +24,7 @@ import { CalendarView } from '@/components/projects/calendar-view';
 import { ProjectGanttView } from '@/components/projects/project-gantt-view';
 import { ViewSettingsPanel } from '@/components/ui/view-settings-panel';
 import { ProjectBoardView } from './components/ProjectBoardView';
+import { StatusBadge } from '@/components/ui/status-badge';
 
 interface Project {
   id: string; name: string; description?: string | null; status: string; priority: string; progress: number;
@@ -41,15 +42,7 @@ interface Team { id: string; name: string; }
 
 type ViewMode = 'list' | 'board' | 'timeline' | 'calendar' | 'gantt';
 
-const statusColors: Record<string, string> = {
-  PLANNING: 'bg-violet-50 text-violet-700', IN_PROGRESS: 'bg-blue-50 text-blue-700',
-  REVIEW: 'bg-amber-50 text-amber-700', COMPLETED: 'bg-emerald-50 text-emerald-700',
-  ON_HOLD: 'bg-orange-50 text-orange-700', CANCELLED: 'bg-red-50 text-red-700',
-};
 
-const priorityColors: Record<string, string> = {
-  LOW: 'text-gray-400', MEDIUM: 'text-blue-500', HIGH: 'text-orange-500', CRITICAL: 'text-red-500',
-};
 
 
 
@@ -397,7 +390,7 @@ function ProjectsContent() {
               {/* Desktop Table View */}
               <div className="hidden md:block rounded-2xl border border-border bg-white overflow-hidden">
                 <div className="overflow-x-auto">
-                <table className="w-full min-w-[800px]">
+                <table className="w-full min-w-200">
                   <thead>
                     <tr className="border-b border-[#F3F4F6]">
                       {visibleColumns.includes('project') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Project</th>}
@@ -472,9 +465,7 @@ function ProjectsContent() {
                         )}
                         {visibleColumns.includes('status') && (
                           <td className="px-6 py-4">
-                            <span className={`inline-flex items-center whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[p.status] || 'bg-gray-50 text-gray-500'}`}>
-                              {p.status.replace('_', ' ')}
-                            </span>
+                            <StatusBadge status={p.status} />
                           </td>
                         )}
                         {visibleColumns.includes('owner') && (
@@ -518,9 +509,7 @@ function ProjectsContent() {
                         <p className="text-sm font-medium text-primary leading-tight">{p.name}</p>
                         <p className="text-xs text-secondary mt-0.5">{p.client ? getClientDisplayName(p.client) : 'Internal Project'}</p>
                       </div>
-                      <span className={`shrink-0 inline-flex items-center whitespace-nowrap rounded-lg px-2 py-0.5 text-[10px] font-medium ${statusColors[p.status] || 'bg-gray-50 text-gray-500'}`}>
-                        {p.status.replace('_', ' ')}
-                      </span>
+                      <StatusBadge status={p.status} size="xs" />
                     </div>
 
                     <div className="mb-4">
