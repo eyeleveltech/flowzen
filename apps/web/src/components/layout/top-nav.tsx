@@ -144,7 +144,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
           className="flex items-center gap-2.5 rounded-xl border border-border bg-surface px-3 sm:px-4 py-2 text-sm text-secondary hover:bg-white hover:border-[#D1D5DB] transition-all duration-150 w-auto sm:w-80"
         >
           <Search className="h-4 w-4 shrink-0" />
-          <span className="hidden sm:inline">Search everything...</span>
+          <span className="hidden sm:inline truncate">Search clients, projects, tasks, team...</span>
           <span className="sm:hidden">Search...</span>
           <kbd className="ml-auto hidden sm:inline-flex items-center gap-0.5 rounded-md border border-border bg-white px-1.5 py-0.5 text-[10px] font-medium text-secondary">
             ⌘K
@@ -217,7 +217,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
               <motion.span
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                className="absolute -right-1 -top-1 flex h-4.5 min-w-[18px] items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-white"
+                className="absolute -right-1 -top-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-white"
               >
                 {unreadCount > 9 ? '9+' : unreadCount}
               </motion.span>

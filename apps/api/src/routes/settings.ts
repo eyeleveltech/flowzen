@@ -340,8 +340,8 @@ settingsRouter.put('/users/:id', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimi
     let roleToSet = req.body.role;
     if (targetUser.role === 'SUPER_ADMIN') {
       roleToSet = 'SUPER_ADMIN'; // Cannot be demoted here
-    } else if (req.body.role === 'SUPER_ADMIN') {
-      res.status(400).json({ error: 'Cannot promote to Super Admin directly' });
+    } else if (req.body.role === 'SUPER_ADMIN' && req.user!.role !== 'SUPER_ADMIN') {
+      res.status(403).json({ error: 'Only Super Admins can promote to Super Admin' });
       return;
     }
 

@@ -6,48 +6,13 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore, useModuleStore } from '@/stores';
 import { moduleForPath, accessibleModules, ModuleKey } from '@/lib/modules';
+import { NAV_ITEMS, BOTTOM_NAV_ITEMS, NavItem } from '@/config/navigation';
 import {
-  LayoutDashboard,
-  FolderKanban,
-  CheckSquare,
-  Building2,
   MoreHorizontal,
-  CalendarDays,
-  UsersRound,
-  Network,
-  BarChart3,
-  Settings,
-  TrendingUp,
   ArrowLeftRight,
-  User as UserIcon,
   LogOut,
   X,
-  FileText,
-  RefreshCw,
-  TrendingDown,
 } from 'lucide-react';
-
-type Tab = { label: string; href: string; icon: any; roles?: string[]; module?: ModuleKey | ModuleKey[] };
-
-const primaryTabs: Tab[] = [
-  { label: 'Home', href: '/dashboard', icon: LayoutDashboard, module: 'PM' },
-  { label: 'Clients', href: '/clients', icon: Building2, module: ['CRM', 'PM'] },
-  { label: 'Pipeline', href: '/pipeline', icon: TrendingUp, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
-  { label: 'Projects', href: '/projects', icon: FolderKanban, module: 'PM' },
-  { label: 'Tasks', href: '/tasks', icon: CheckSquare, module: 'PM' },
-];
-
-const moreItems: Tab[] = [
-  { label: 'Quotations', href: '/quotations', icon: FileText, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
-  { label: 'Renewals', href: '/renewals', icon: RefreshCw, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
-  { label: 'Lost Deals', href: '/lost-deals', icon: TrendingDown, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
-  { label: 'Calendar', href: '/calendar', icon: CalendarDays, module: 'PM' },
-  { label: 'Members', href: '/members', icon: UsersRound, module: 'PM' },
-  { label: 'Departments', href: '/departments', icon: Network, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'PM' },
-  { label: 'Reports', href: '/reports', icon: BarChart3, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'], module: ['CRM', 'PM'] },
-  { label: 'Settings', href: '/settings', icon: Settings, roles: ['SUPER_ADMIN', 'ADMIN'] },
-  { label: 'Profile', href: '/profile', icon: UserIcon },
-];
 
 export function BottomTabs() {
   const pathname = usePathname();
@@ -60,20 +25,25 @@ export function BottomTabs() {
   const activeModule: ModuleKey = routeModule ?? storeModule;
   const canSwitch = accessibleModules(user).length > 1;
 
-  const inModule = (item: Tab) => {
+  const inModule = (item: NavItem) => {
     if (!item.module) return true; // core (Settings, Profile)
     const mods = Array.isArray(item.module) ? item.module : [item.module];
     return mods.includes(activeModule);
   };
-  const allowed = (item: Tab) => (!item.roles || item.roles.includes(user?.role || '')) && inModule(item);
+  const allowed = (item: NavItem) => (!item.roles || item.roles.includes(user?.role || '')) && inModule(item);
 
-  const visiblePrimary = primaryTabs.filter(allowed);
+  const primaryNavItems = NAV_ITEMS.filter((item) => item.isPrimaryMobile);
+  const moreNavItems = [
+    ...NAV_ITEMS.filter((item) => !item.isPrimaryMobile),
+    ...BOTTOM_NAV_ITEMS,
+  ];
 
-  const isMoreActive = moreItems.some(
+  const visiblePrimary = primaryNavItems.filter(allowed);
+  const filteredMoreItems = moreNavItems.filter(allowed);
+
+  const isMoreActive = filteredMoreItems.some(
     (item) => pathname === item.href || pathname.startsWith(item.href + '/')
   );
-
-  const filteredMoreItems = moreItems.filter(allowed);
 
   return (
     <>

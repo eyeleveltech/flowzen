@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
-import { formatDate, formatShortDate, getInitials, formatRelativeDate, getAvatarColor, getClientDisplayName } from '@/lib/utils';
+import { formatDate, formatShortDate, getInitials, formatRelativeDate, getAvatarColor, getClientDisplayName, computeProjectHealth, PROJECT_HEALTH_CONFIG } from '@/lib/utils';
 import { TASK_STATUS_COLORS, TASK_STATUS_OPTIONS } from '@/lib/task-status';
 import { ArrowLeft, Edit2, Plus, Calendar as CalendarIcon, Flag, Clock, Users, Link2, CheckCircle2, Circle, MoreVertical, Trash2, Mail, FileText, ChevronDown, Check, X, File, AlertCircle, TrendingUp, DollarSign, Briefcase, MessageSquare, MoreHorizontal, ChevronRight, Filter, ArrowUpRight, Settings, Kanban, LayoutList, Search } from 'lucide-react';
 import { Select } from '@/components/ui/select';
@@ -43,18 +43,10 @@ interface ProjectDetail {
   comments?: { id: string; content: string; createdAt: string; author: { id: string; name: string; avatar?: string | null } }[];
 }
 
+import { StatusBadge } from '@/components/ui/status-badge';
+import { getPriorityDot } from '@/lib/priority';
+
 type Tab = 'tasks' | 'team' | 'activity' | 'comments';
-
-// Project statuses only — task badges use TASK_STATUS_COLORS.
-const statusColors: Record<string, string> = {
-  PLANNING: 'bg-violet-50 text-violet-700', IN_PROGRESS: 'bg-blue-50 text-blue-700',
-  REVIEW: 'bg-amber-50 text-amber-700', COMPLETED: 'bg-emerald-50 text-emerald-700',
-  ON_HOLD: 'bg-orange-50 text-orange-700', CANCELLED: 'bg-red-50 text-red-700',
-};
-
-const priorityDots: Record<string, string> = {
-  LOW: 'bg-gray-300', MEDIUM: 'bg-blue-400', HIGH: 'bg-orange-500', CRITICAL: 'bg-red-500', URGENT: 'bg-red-500',
-};
 
 const isTaskOverdue = (task: { dueDate?: string | null; status: string }) => {
   if (!task.dueDate || task.status === 'COMPLETED' || task.status === 'ON_HOLD') return false;
@@ -521,18 +513,8 @@ export default function ProjectDetailPage() {
   }
 
   const hasTaskFilters = !!(taskSearch || taskStatusFilter.length || taskAssigneeFilter.length || taskTypeFilter.length || taskDueDateFilter || showCompleted || taskPriorityFilter.length || taskSort);
-  let projectHealth: 'GREEN' | 'AMBER' | 'RED' = 'GREEN';
-  if (overdueTasksCount >= 3 || (project.endDate && new Date(project.endDate) < todayStart && project.status !== 'COMPLETED')) {
-    projectHealth = 'RED';
-  } else if (overdueTasksCount >= 1) {
-    projectHealth = 'AMBER';
-  }
-
-  const healthConfig = {
-    GREEN: { color: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'On Track' },
-    AMBER: { color: 'bg-amber-50 text-amber-700 border-amber-200', label: 'At Risk' },
-    RED: { color: 'bg-red-50 text-red-700 border-red-200', label: 'Off Track' },
-  };
+  const projectHealth = computeProjectHealth(overdueTasksCount, project.endDate, project.status);
+  const healthConfig = PROJECT_HEALTH_CONFIG;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -552,9 +534,7 @@ export default function ProjectDetailPage() {
             <span className="inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 capitalize">
               {project.type?.replace('_', ' ') || 'One Time'}
             </span>
-            <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium border ${statusColors[project.status] || 'bg-gray-50 text-gray-500'} border-opacity-20`}>
-              {project.status.replace('_', ' ')}
-            </span>
+            <StatusBadge status={project.status} />
           </div>
           <p className="text-base font-medium text-secondary">{project.client ? getClientDisplayName(project.client) : 'Internal Project'}</p>
         </div>
@@ -774,7 +754,6 @@ export default function ProjectDetailPage() {
                     { label: 'Low', value: 'LOW' },
                     { label: 'Medium', value: 'MEDIUM' },
                     { label: 'High', value: 'HIGH' },
-                    { label: 'Critical', value: 'CRITICAL' },
                     { label: 'Urgent', value: 'URGENT' },
                   ]}
                 />
@@ -905,7 +884,6 @@ export default function ProjectDetailPage() {
                               { label: 'Low', value: 'LOW' },
                               { label: 'Medium', value: 'MEDIUM' },
                               { label: 'High', value: 'HIGH' },
-                              { label: 'Critical', value: 'CRITICAL' },
                               { label: 'Urgent', value: 'URGENT' },
                             ]}
                             selectedFilters={taskPriorityFilter}
@@ -994,7 +972,7 @@ export default function ProjectDetailPage() {
                           {visibleTaskColumns.includes('task') && (
                             <td className="px-6 py-3">
                               <div className="flex items-center gap-2">
-                                <div className={`h-2 w-2 rounded-full shrink-0 ${priorityDots[t.priority]}`} />
+                                <div className={`h-2 w-2 rounded-full shrink-0 ${getPriorityDot(t.priority)}`} />
                                 <span className="text-sm font-medium text-primary">{t.title}</span>
                                 {(t.loggedHours ?? 0) > 0 && (
                                   <div className="flex flex-col gap-1 ml-2">
@@ -1038,7 +1016,7 @@ export default function ProjectDetailPage() {
                           )}
                           {visibleTaskColumns.includes('priority') && (
                             <td className="px-6 py-3">
-                              <span className={`text-xs font-medium capitalize ${t.priority === 'URGENT' || t.priority === 'CRITICAL' ? 'text-red-600' :
+                              <span className={`text-xs font-medium capitalize ${t.priority === 'URGENT' ? 'text-red-600' :
                                   t.priority === 'HIGH' ? 'text-orange-500' :
                                     t.priority === 'MEDIUM' ? 'text-blue-500' : 'text-gray-400'
                                 }`}>
@@ -1107,7 +1085,7 @@ export default function ProjectDetailPage() {
                     >
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex items-start gap-2 flex-1 pr-3">
-                          <div className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${priorityDots[t.priority]}`} />
+                          <div className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${getPriorityDot(t.priority)}`} />
                           <div>
                             <p className="text-sm font-medium text-primary leading-tight">{t.title}</p>
                             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
@@ -1327,7 +1305,7 @@ export default function ProjectDetailPage() {
                           { label: 'Low', value: 'LOW' },
                           { label: 'Medium', value: 'MEDIUM' },
                           { label: 'High', value: 'HIGH' },
-                          { label: 'Urgent', value: 'CRITICAL' },
+                          { label: 'Urgent', value: 'URGENT' },
                         ]}
                       />
                     </div>

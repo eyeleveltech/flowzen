@@ -7,59 +7,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore, useAuthStore, useModuleStore } from '@/stores';
 import { moduleForPath, accessibleModules, ModuleKey, MODULES } from '@/lib/modules';
 import { cn, getInitials, getAvatarColor } from '@/lib/utils';
+import { NAV_ITEMS, BOTTOM_NAV_ITEMS, NavItem } from '@/config/navigation';
 import {
-  LayoutDashboard,
-  Users,
-  FolderKanban,
-  CheckSquare,
-  CalendarDays,
-  UsersRound,
-  BarChart3,
-  Settings,
   ChevronLeft,
   LogOut,
-  Zap,
-  Building2,
-  Network,
-  TrendingUp,
-  TrendingDown,
   ArrowLeftRight,
-  FileText,
-  RefreshCw,
-  DollarSign,
-  Wallet,
-  Receipt
 } from 'lucide-react';
-
-type NavItem = { label: string; href: string; icon: any; roles?: string[]; module: ModuleKey | ModuleKey[] };
-
-const navItems: NavItem[] = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, module: 'PM' },
-  { label: 'Clients', href: '/clients', icon: Building2, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'], module: ['CRM', 'PM'] },
-  { label: 'Pipeline', href: '/pipeline', icon: TrendingUp, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
-  { label: 'Quotations', href: '/quotations', icon: FileText, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'], module: 'CRM' },
-  { label: 'Revenue Overview', href: '/revenue', icon: DollarSign, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
-  { label: 'Per-Project P&L', href: '/revenue/pnl', icon: FileText, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
-  { label: 'Contracts', href: '/contracts', icon: FileText, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
-  { label: 'Invoice Drafts', href: '/invoice-drafts', icon: FileText, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
-  { label: 'Invoices', href: '/invoices', icon: Receipt, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
-  { label: 'Payments', href: '/payments', icon: DollarSign, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
-  { label: 'Subscriptions', href: '/subscriptions', icon: RefreshCw, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
-  { label: 'Receivables', href: '/receivables', icon: Wallet, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
-  { label: 'Expenses', href: '/expenses', icon: Wallet, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
-  { label: 'Renewals', href: '/renewals', icon: RefreshCw, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
-  { label: 'Lost Deals', href: '/lost-deals', icon: TrendingDown, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
-  { label: 'Projects', href: '/projects', icon: FolderKanban, module: 'PM' },
-  { label: 'Tasks', href: '/tasks', icon: CheckSquare, module: 'PM' },
-  { label: 'Calendar', href: '/calendar', icon: CalendarDays, module: 'PM' },
-  { label: 'Members', href: '/members', icon: UsersRound, module: 'PM' },
-  { label: 'Departments', href: '/departments', icon: Network, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'PM' },
-  { label: 'Reports', href: '/reports', icon: BarChart3, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'], module: ['CRM', 'PM'] },
-];
-
-const bottomItems = [
-  { label: 'Settings', href: '/settings', icon: Settings, roles: ['SUPER_ADMIN', 'ADMIN'] },
-];
 
 export function Sidebar({ isMobile }: { isMobile?: boolean }) {
   const pathname = usePathname();
@@ -78,7 +31,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
     const mods = Array.isArray(item.module) ? item.module : [item.module];
     return mods.includes(activeModule);
   };
-  const visibleNav = navItems.filter(
+  const visibleNav = NAV_ITEMS.filter(
     (item) => (!item.roles || item.roles.includes(user?.role || '')) && inActiveModule(item),
   );
   const activeLabel = MODULES.find((m) => m.key === activeModule)?.label ?? '';
@@ -112,7 +65,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
         {canSwitch && (
           <Link href="/modules">
             <div className={cn('group flex items-center gap-3 rounded-xl px-3 py-2.5 mb-2 text-sm font-medium border border-border bg-[#F9FAFB] text-secondary hover:text-primary hover:border-[#D1D5DB] transition-all', sidebarCollapsed && 'justify-center px-0')}>
-              <ArrowLeftRight className="h-[18px] w-[18px] shrink-0 text-[#9CA3AF] group-hover:text-primary" />
+              <ArrowLeftRight className="h-4.5 w-4.5 shrink-0 text-[#9CA3AF] group-hover:text-primary" />
               <AnimatePresence>
                 {!sidebarCollapsed && (
                   <motion.span initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: 'auto' }} exit={{ opacity: 0, width: 0 }} className="truncate flex-1 min-w-0">
@@ -138,7 +91,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
                     : 'text-secondary hover:bg-[#F9FAFB] hover:text-primary'
                 )}
               >
-                <item.icon className={cn('h-[18px] w-[18px] shrink-0', isActive ? 'text-white' : 'text-[#9CA3AF] group-hover:text-primary')} />
+                <item.icon className={cn('h-4.5 w-4.5 shrink-0', isActive ? 'text-white' : 'text-[#9CA3AF] group-hover:text-primary')} />
                 <AnimatePresence>
                   {!sidebarCollapsed && (
                     <motion.span
@@ -167,7 +120,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
 
       {/* Bottom */}
       <div className="px-3 py-3 space-y-1 border-t border-border">
-        {bottomItems.filter(item => !item.roles || item.roles.includes(user?.role || '')).map((item) => {
+        {BOTTOM_NAV_ITEMS.filter(item => item.href !== '/profile' && (!item.roles || item.roles.includes(user?.role || ''))).map((item) => {
           const isActive = pathname.startsWith(item.href);
           return (
             <Link key={item.href} href={item.href}>
@@ -179,7 +132,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
                     : 'text-secondary hover:bg-[#F9FAFB] hover:text-primary'
                 )}
               >
-                <item.icon className="h-[18px] w-[18px] shrink-0 text-[#9CA3AF] group-hover:text-primary" />
+                <item.icon className="h-4.5 w-4.5 shrink-0 text-[#9CA3AF] group-hover:text-primary" />
                 <AnimatePresence>
                   {!sidebarCollapsed && (
                     <motion.span
@@ -204,7 +157,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
             className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-secondary hover:bg-[#F9FAFB] hover:text-primary transition-all duration-150"
           >
             <motion.div animate={{ rotate: sidebarCollapsed ? 180 : 0 }} transition={{ duration: 0.2 }}>
-              <ChevronLeft className="h-[18px] w-[18px] text-[#9CA3AF]" />
+              <ChevronLeft className="h-4.5 w-4.5 text-[#9CA3AF]" />
             </motion.div>
             <AnimatePresence>
               {!sidebarCollapsed && (

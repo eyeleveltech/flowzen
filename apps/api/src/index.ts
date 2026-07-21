@@ -83,7 +83,7 @@ app.use('/api/stream', sseRouter);
 // CRM module (Admins only):
 app.use('/api/crm/quotes', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), requireModule('CRM'), quoteRouter);
 app.use('/api/crm', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), requireModule('CRM'), crmRouter);
-app.use('/api/revenue', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), revenueRouter);
+app.use('/api/revenue', authenticate, authorize('SUPER_ADMIN'), requireModule('REVENUE'), revenueRouter);
 app.use('/api/analytics', analyticsRouter);
 
 // Shared infrastructure — available whenever CRM or PM is on (both use clients + the members list):

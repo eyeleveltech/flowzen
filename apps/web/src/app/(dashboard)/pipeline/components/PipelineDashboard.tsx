@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { api } from '@/lib/api';
-import { formatCurrency, getInitials } from '@/lib/utils';
+import { formatCurrency, formatShortDate, getInitials } from '@/lib/utils';
 import { TrendingUp, IndianRupee, Target, Briefcase, Clock, ChevronRight, Filter, Calendar, CheckSquare, Square, ChevronDown } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Select } from '@/components/ui/select';
@@ -366,7 +366,7 @@ export function PipelineDashboard() {
         
         <div className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-6">Leads by Stage</h2>
-          <div className="h-[280px] w-full">
+          <div className="h-70 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={metrics.barData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
@@ -385,7 +385,7 @@ export function PipelineDashboard() {
 
         <div className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-6">Value Distribution</h2>
-          <div className="h-[280px] w-full flex flex-col justify-center">
+          <div className="h-70 w-full flex flex-col justify-center">
             {metrics.pieData.length > 0 ? (
               <>
                 <ResponsiveContainer width="100%" height="80%">
@@ -461,7 +461,7 @@ export function PipelineDashboard() {
           </div>
           <p className="text-xs font-semibold text-secondary uppercase tracking-wider mb-2">Reason for Loss</p>
           {metrics.lostReasonData.length > 0 ? (
-            <div className="h-[160px] w-full">
+            <div className="h-40 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={metrics.lostReasonData} layout="vertical" margin={{ top: 0, right: 12, left: 10, bottom: 0 }}>
                   <XAxis type="number" hide />
@@ -472,7 +472,7 @@ export function PipelineDashboard() {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-[160px] flex items-center justify-center text-sm text-secondary">No lost deals in range</div>
+            <div className="h-40 flex items-center justify-center text-sm text-secondary">No lost deals in range</div>
           )}
         </div>
       </div>
@@ -519,7 +519,7 @@ export function PipelineDashboard() {
                   </td>
                   <td className="px-5 py-3">
                     <span className="text-sm text-secondary">
-                      {new Date(lead.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                      {formatShortDate(lead.createdAt)}
                     </span>
                   </td>
                 </tr>

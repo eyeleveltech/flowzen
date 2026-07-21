@@ -1,12 +1,7 @@
+import { getStatusColor, getStatusLabel } from './status';
+
 /**
  * Single source of truth for the task-status vocabulary.
- *
- * Mirrors `enum TaskStatus` in apps/api/prisma/schema.prisma and the `status`
- * enum in apps/api/src/routes/tasks.ts — all three must list the same values.
- * This list previously lived in four separate files, each missing different
- * values, which made some statuses unselectable and others render unstyled or
- * disappear from the Kanban board entirely.
- *
  * Order matters: it is the left-to-right Kanban column order.
  */
 export const TASK_STATUSES = [
@@ -23,29 +18,29 @@ export const TASK_STATUSES = [
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
 export const TASK_STATUS_LABELS: Record<string, string> = {
-  BACKLOG: 'Backlog',
-  TODO: 'To Do',
-  IN_PROGRESS: 'In Progress',
+  BACKLOG: getStatusLabel('BACKLOG'),
+  TODO: getStatusLabel('TODO'),
+  IN_PROGRESS: getStatusLabel('IN_PROGRESS'),
   REVIEW: 'In Review',
-  APPROVED: 'Approved',
-  BLOCKED: 'Blocked',
-  ON_HOLD: 'On Hold',
+  APPROVED: getStatusLabel('APPROVED'),
+  BLOCKED: getStatusLabel('BLOCKED'),
+  ON_HOLD: getStatusLabel('ON_HOLD'),
   COMPLETED: 'Done',
 };
 
 export const TASK_STATUS_COLORS: Record<string, string> = {
-  BACKLOG: 'bg-gray-100 text-gray-600',
-  TODO: 'bg-slate-100 text-slate-600',
-  IN_PROGRESS: 'bg-blue-50 text-blue-700',
-  REVIEW: 'bg-amber-50 text-amber-700',
-  APPROVED: 'bg-teal-50 text-teal-700',
-  BLOCKED: 'bg-red-50 text-red-700',
-  ON_HOLD: 'bg-purple-50 text-purple-700',
-  COMPLETED: 'bg-emerald-50 text-emerald-700',
+  BACKLOG: `${getStatusColor('BACKLOG').bg} ${getStatusColor('BACKLOG').text}`,
+  TODO: `${getStatusColor('TODO').bg} ${getStatusColor('TODO').text}`,
+  IN_PROGRESS: `${getStatusColor('IN_PROGRESS').bg} ${getStatusColor('IN_PROGRESS').text}`,
+  REVIEW: `${getStatusColor('REVIEW').bg} ${getStatusColor('REVIEW').text}`,
+  APPROVED: `${getStatusColor('APPROVED').bg} ${getStatusColor('APPROVED').text}`,
+  BLOCKED: `${getStatusColor('BLOCKED').bg} ${getStatusColor('BLOCKED').text}`,
+  ON_HOLD: `${getStatusColor('ON_HOLD').bg} ${getStatusColor('ON_HOLD').text}`,
+  COMPLETED: `${getStatusColor('COMPLETED').bg} ${getStatusColor('COMPLETED').text}`,
 };
 
 /** Ready-made options for <Select> / <MultiSelect>. */
 export const TASK_STATUS_OPTIONS: { label: string; value: string }[] = TASK_STATUSES.map((value) => ({
-  label: TASK_STATUS_LABELS[value],
+  label: TASK_STATUS_LABELS[value] || getStatusLabel(value),
   value,
 }));

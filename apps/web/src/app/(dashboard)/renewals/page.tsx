@@ -7,8 +7,7 @@ import Link from 'next/link';
 import { X, RefreshCw } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
-import { formatCurrency, getInitials, getAvatarColor } from '@/lib/utils';
-import { format } from 'date-fns';
+import { formatCurrency, formatDate, getInitials, getAvatarColor } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
 const STATUSES = ['UPCOMING', 'IN_DISCUSSION', 'RENEWED', 'AT_RISK', 'CHURNED'] as const;
@@ -19,7 +18,7 @@ const STATUS_BADGE: Record<string, string> = {
   AT_RISK: 'bg-red-50 text-red-700 border-red-200',
   CHURNED: 'bg-gray-100 text-gray-600 border-gray-200',
 };
-const fmtDate = (d: any) => (d ? format(new Date(d), 'dd MMM yyyy') : '—');
+const fmtDate = formatDate;
 const daysTo = (end: any) => (end ? Math.ceil((new Date(end).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000) : null);
 const name = (l: any) => l.companyName || l.contactName || 'Client';
 
@@ -76,7 +75,7 @@ export default function RenewalsPage() {
       {/* Table */}
       <div className="bg-white rounded-2xl border border-border overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[920px]">
+          <table className="w-full text-sm min-w-230">
             <thead><tr className="text-left text-[11px] uppercase tracking-wider text-secondary border-b border-border bg-gray-50/50">
               <th className="px-4 py-3">Company</th><th className="px-4 py-3 text-right">Monthly Value</th><th className="px-4 py-3">Contract Start</th>
               <th className="px-4 py-3">Contract End</th><th className="px-4 py-3 text-right">Days to Renewal</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Salesperson</th><th className="px-4 py-3"></th>
