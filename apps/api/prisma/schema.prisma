@@ -275,7 +275,6 @@ model User {
   name           String
   avatar         String?
   role           UserRole @default(TEAM_MEMBER)
-  department     String?
   designation    String?
   phone          String?
   joiningDate    DateTime @default(now())
@@ -302,7 +301,7 @@ model User {
   notifications  Notification[]
   notes          Note[]
   projectMembers ProjectMember[]
-  ledTeam        Team?           @relation("TeamLeader")
+  managedTeams   TeamManager[]
   managedClients Client[]        @relation("ClientAccountManager")
   createdWorkflows WorkflowRule[] @relation("WorkflowCreator")
   assignedLeads  Lead[]          @relation("LeadAssignee")
@@ -437,17 +436,29 @@ model Team {
   id             String   @id @default(cuid())
   name           String
   description    String?
-  leaderId       String?  @unique
   organizationId String
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  leader   User?         @relation("TeamLeader", fields: [leaderId], references: [id])
+  managers TeamManager[]
   members  User[]        @relation("TeamMembers")
   projects ProjectTeam[]
 
+  @@unique([organizationId, name])
   @@index([organizationId])
   @@map("teams")
+}
+
+model TeamManager {
+  id     String @id @default(cuid())
+  teamId String
+  userId String
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@map("team_managers")
 }
 
 model ProjectTeam {

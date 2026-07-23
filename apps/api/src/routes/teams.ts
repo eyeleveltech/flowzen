@@ -12,18 +12,24 @@ const teamSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   memberIds: z.array(z.string()).optional(),
-  leaderId: z.string().optional().nullable(),
+  managerIds: z.array(z.string()).optional(),
 });
+
+const teamInclude = {
+  managers: {
+    include: {
+      user: { select: { id: true, name: true, avatar: true, email: true, role: true } },
+    },
+  },
+  members: { select: { id: true, name: true, avatar: true, email: true, role: true } },
+};
 
 // GET /api/teams
 teamRouter.get('/', async (req: AuthRequest, res: Response, next) => {
   try {
     const teams = await prisma.team.findMany({
       where: { organizationId: req.user!.organizationId },
-      include: {
-        leader: { select: { id: true, name: true, avatar: true } },
-        members: { select: { id: true, name: true, avatar: true, email: true, role: true } },
-      },
+      include: teamInclude,
       orderBy: { createdAt: 'desc' },
     });
     res.json({ teams });
@@ -37,10 +43,7 @@ teamRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
   try {
     const team = await prisma.team.findFirst({
       where: { id: req.params.id as string, organizationId: req.user!.organizationId },
-      include: {
-        leader: { select: { id: true, name: true, avatar: true } },
-        members: { select: { id: true, name: true, avatar: true, email: true, role: true } },
-      },
+      include: teamInclude,
     });
 
     if (!team) {
@@ -57,14 +60,13 @@ teamRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
 // POST /api/teams
 teamRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN'), validate(teamSchema), async (req: AuthRequest, res: Response, next) => {
   try {
-    const allMembers = Array.from(new Set([
-      ...(req.body.memberIds || []),
-      ...(req.body.leaderId ? [req.body.leaderId] : [])
-    ]));
+    const memberIds: string[] = req.body.memberIds || [];
+    const managerIds: string[] = req.body.managerIds || [];
+    const allMembers = Array.from(new Set([...memberIds, ...managerIds]));
 
-    // Members/leader must belong to the caller's org (no cross-tenant user hijack).
+    // Members/managers must belong to the caller's org (no cross-tenant user hijack).
     if (allMembers.length) {
-      const cnt = await prisma.user.count({ where: { id: { in: allMembers as string[] }, organizationId: req.user!.organizationId } });
+      const cnt = await prisma.user.count({ where: { id: { in: allMembers }, organizationId: req.user!.organizationId } });
       if (cnt !== allMembers.length) { res.status(400).json({ error: 'One or more members are outside your organization' }); return; }
     }
 
@@ -73,20 +75,19 @@ teamRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN'), validate(teamSchema), as
         name: req.body.name,
         description: req.body.description,
         organizationId: req.user!.organizationId,
-        leaderId: req.body.leaderId || undefined,
         members: {
           connect: allMembers.map((id: string) => ({ id }))
         },
+        managers: {
+          create: managerIds.map((id: string) => ({ userId: id }))
+        },
       },
-      include: {
-        leader: { select: { id: true, name: true, avatar: true } },
-        members: { select: { id: true, name: true, avatar: true, email: true, role: true } },
-      },
+      include: teamInclude,
     });
 
     emitToOrganization(req.app.get('io'), req.user!.organizationId, 'team:changed', { id: team.id });
     res.status(201).json(team);
-  } catch (error) {
+  } catch (error: any) {
     next(error);
   }
 });
@@ -103,14 +104,13 @@ teamRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN'), validate(teamSchema), 
       return;
     }
 
-    const allMembers = Array.from(new Set([
-      ...(req.body.memberIds || []),
-      ...(req.body.leaderId ? [req.body.leaderId] : [])
-    ]));
+    const memberIds: string[] = req.body.memberIds || [];
+    const managerIds: string[] = req.body.managerIds || [];
+    const allMembers = Array.from(new Set([...memberIds, ...managerIds]));
 
-    // Members/leader must belong to the caller's org (no cross-tenant user hijack).
+    // Members/managers must belong to the caller's org (no cross-tenant user hijack).
     if (allMembers.length) {
-      const cnt = await prisma.user.count({ where: { id: { in: allMembers as string[] }, organizationId: req.user!.organizationId } });
+      const cnt = await prisma.user.count({ where: { id: { in: allMembers }, organizationId: req.user!.organizationId } });
       if (cnt !== allMembers.length) { res.status(400).json({ error: 'One or more members are outside your organization' }); return; }
     }
 
@@ -119,20 +119,20 @@ teamRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN'), validate(teamSchema), 
       data: {
         name: req.body.name,
         description: req.body.description,
-        leaderId: req.body.leaderId || null,
         members: {
           set: allMembers.map((id: string) => ({ id })),
         },
+        managers: {
+          deleteMany: {},
+          create: managerIds.map((id: string) => ({ userId: id }))
+        },
       },
-      include: {
-        leader: { select: { id: true, name: true, avatar: true } },
-        members: { select: { id: true, name: true, avatar: true, email: true, role: true } },
-      },
+      include: teamInclude,
     });
 
     emitToOrganization(req.app.get('io'), req.user!.organizationId, 'team:changed', { id: team.id });
     res.json(team);
-  } catch (error) {
+  } catch (error: any) {
     next(error);
   }
 });

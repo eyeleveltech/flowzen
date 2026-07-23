@@ -18,6 +18,7 @@ export interface Option {
 }
 
 export interface SelectProps {
+  id?: string;
   value: string;
   onChange: (value: string) => void;
   options: Option[];
@@ -30,7 +31,7 @@ export interface SelectProps {
   buttonClassName?: string; // override trigger styling (e.g. compact padding in a dense table)
 }
 
-export function Select({ value, onChange, options, placeholder = 'Select...', className = '', disabled = false, required = false, rounded = 'rounded-xl', ariaLabel, buttonClassName }: SelectProps) {
+export function Select({ id, value, onChange, options, placeholder = 'Select...', className = '', disabled = false, required = false, rounded = 'rounded-xl', ariaLabel, buttonClassName }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -129,6 +130,7 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
       ref={containerRef}
     >
       <button
+        id={id}
         type="button"
         role="combobox"
         aria-haspopup="listbox"

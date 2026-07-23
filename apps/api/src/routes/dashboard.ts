@@ -280,7 +280,7 @@ dashboardRouter.get('/team-workload', async (req: AuthRequest, res: Response, ne
         name: true,
         avatar: true,
         role: true,
-        department: true,
+        team: { select: { name: true } },
         assignedTasks: {
           where: dateFilter,
           select: { status: true }
@@ -299,7 +299,7 @@ dashboardRouter.get('/team-workload', async (req: AuthRequest, res: Response, ne
         name: m.name,
         avatar: m.avatar,
         role: m.role,
-        department: m.department,
+        department: m.team?.name || null,
         activeTasks,
         capacity: Math.min(100, Math.round((activeTasks / 10) * 100)),
         completionRate
