@@ -8,7 +8,7 @@ interface User {
   email: string;
   role: string;
   avatar?: string | null;
-  department?: string | null;
+  team?: { id: string; name: string } | null;
   designation?: string | null;
   organization?: {
     id: string;

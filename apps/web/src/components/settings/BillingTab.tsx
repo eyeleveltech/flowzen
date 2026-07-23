@@ -55,35 +55,37 @@ export function BillingTab() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Registered State" value={form.state} onChange={(v) => setForm({ ...form, state: v })} placeholder="e.g. Tamil Nadu" hint="Same state as client → CGST+SGST; different → IGST" />
-        <Field label="Billing Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} placeholder="accounts@eyelevel.in" />
-        <Field label="GSTIN" value={form.gst} onChange={(v) => setForm({ ...form, gst: v })} />
-        <Field label="PAN" value={form.pan} onChange={(v) => setForm({ ...form, pan: v })} />
+        <Field id="billing-state" label="Registered State" value={form.state} onChange={(v) => setForm({ ...form, state: v })} placeholder="e.g. Tamil Nadu" hint="Same state as client → CGST+SGST; different → IGST" />
+        <Field id="billing-email" label="Billing Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} placeholder="accounts@eyelevel.in" />
+        <Field id="billing-gst" label="GSTIN" value={form.gst} onChange={(v) => setForm({ ...form, gst: v })} />
+        <Field id="billing-pan" label="PAN" value={form.pan} onChange={(v) => setForm({ ...form, pan: v })} />
       </div>
 
       <div>
         <h3 className="text-sm font-semibold text-primary mb-3">Bank Details (printed on documents)</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-          <Field label="Account Holder Name" value={form.bankHolder} onChange={(v) => setForm({ ...form, bankHolder: v })} />
-          <Field label="Bank Name" value={form.bankName} onChange={(v) => setForm({ ...form, bankName: v })} />
+          <Field id="billing-bank-holder" label="Account Holder Name" value={form.bankHolder} onChange={(v) => setForm({ ...form, bankHolder: v })} />
+          <Field id="billing-bank-name" label="Bank Name" value={form.bankName} onChange={(v) => setForm({ ...form, bankName: v })} />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Field label="Branch" value={form.bankBranch} onChange={(v) => setForm({ ...form, bankBranch: v })} />
-          <Field label="Account Number" value={form.bankAccount} onChange={(v) => setForm({ ...form, bankAccount: v })} />
-          <Field label="IFSC" value={form.bankIfsc} onChange={(v) => setForm({ ...form, bankIfsc: v })} />
+          <Field id="billing-bank-branch" label="Branch" value={form.bankBranch} onChange={(v) => setForm({ ...form, bankBranch: v })} />
+          <Field id="billing-bank-account" label="Account Number" value={form.bankAccount} onChange={(v) => setForm({ ...form, bankAccount: v })} />
+          <Field id="billing-bank-ifsc" label="IFSC" value={form.bankIfsc} onChange={(v) => setForm({ ...form, bankIfsc: v })} />
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-[#374151] mb-1.5">Standard Terms &amp; Conditions</label>
-        <textarea value={form.standardTerms} onChange={(e) => setForm({ ...form, standardTerms: e.target.value })} rows={5} placeholder="Pre-filled on every new quotation…" className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus:border-primary resize-none" />
+        <label htmlFor="billing-standard-terms" className="block text-sm font-medium text-[#374151] mb-1.5">Standard Terms &amp; Conditions</label>
+        <textarea id="billing-standard-terms" value={form.standardTerms} onChange={(e) => setForm({ ...form, standardTerms: e.target.value })} rows={5} placeholder="Pre-filled on every new quotation…" className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus:border-primary resize-none" />
       </div>
 
       <div>
         <h3 className="text-sm font-semibold text-primary mb-3">Document Styling</h3>
         <div className="w-full sm:w-1/2">
-          <label className="block text-sm font-medium text-[#374151] mb-1.5">Quotation &amp; Proforma Template</label>
+          <label htmlFor="billing-quotation-template" className="block text-sm font-medium text-[#374151] mb-1.5">Quotation &amp; Proforma Template</label>
           <Select
+            id="billing-quotation-template"
+            ariaLabel="Quotation & Proforma Template"
             value={form.quotationTemplate}
             onChange={(v) => setForm({ ...form, quotationTemplate: v })}
             options={[
@@ -105,11 +107,11 @@ export function BillingTab() {
   );
 }
 
-function Field({ label, value, onChange, placeholder, hint }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; hint?: string }) {
+function Field({ id, label, value, onChange, placeholder, hint }: { id?: string; label: string; value: string; onChange: (v: string) => void; placeholder?: string; hint?: string }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-[#374151] mb-1.5">{label}</label>
-      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary" />
+      <label htmlFor={id} className="block text-sm font-medium text-[#374151] mb-1.5">{label}</label>
+      <input id={id} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary" />
       {hint && <p className="mt-1 text-[11px] text-secondary">{hint}</p>}
     </div>
   );

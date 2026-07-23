@@ -128,7 +128,7 @@ export default function SettingsPage() {
         {tab === 'organization' && <OrganizationTab initialData={orgData} onSaved={fetchOrg} />}
         {tab === 'modules' && <ModulesTab modules={modules} fetchModules={fetchModules} />}
         {tab === 'billing' && <BillingTab />}
-        {tab === 'users' && <UsersTab users={users} fetchUsers={fetchUsers} teams={teams} />}
+        {tab === 'users' && <UsersTab users={users} fetchUsers={fetchUsers} teams={teams} currentUser={user} />}
         {tab === 'workflows' && <WorkflowsTab workflows={workflows} fetchWorkflows={fetchWorkflows} users={users} />}
         {tab === 'templates' && <TemplatesTab templates={templates} fetchTemplates={fetchTemplates} />}
         {tab === 'notifications' && <NotificationsTab />}

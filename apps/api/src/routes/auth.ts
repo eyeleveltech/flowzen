@@ -150,7 +150,6 @@ authRouter.post('/login', authLimiter, validate(loginSchema), async (req, res: R
         email: user.email,
         role: user.role,
         avatar: user.avatar,
-        department: user.department,
         organization: {
           id: user.organization.id,
           name: user.organization.name,
@@ -187,7 +186,6 @@ authRouter.get('/me', authenticate, async (req: AuthRequest, res: Response, next
       email: user.email,
       role: user.role,
       avatar: user.avatar,
-      department: user.department,
       designation: user.designation,
       phone: user.phone,
       joiningDate: user.joiningDate,

@@ -53,10 +53,11 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
       <div className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-[#374151] flex items-center gap-2">
+            <label htmlFor="org-name" className="text-sm font-medium text-[#374151] flex items-center gap-2">
               <Building2 className="h-3.5 w-3.5 text-secondary" /> Organization Name
             </label>
             <input
+              id="org-name"
               type="text"
               value={data.name}
               onChange={(e) => setData({ ...data, name: e.target.value })}
@@ -64,10 +65,11 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-[#374151] flex items-center gap-2">
+            <label htmlFor="org-website" className="text-sm font-medium text-[#374151] flex items-center gap-2">
               <Globe className="h-3.5 w-3.5 text-secondary" /> Website
             </label>
             <input
+              id="org-website"
               type="url"
               value={data.website}
               onChange={(e) => setData({ ...data, website: e.target.value })}
@@ -79,10 +81,11 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-[#374151] flex items-center gap-2">
+            <label htmlFor="org-industry" className="text-sm font-medium text-[#374151] flex items-center gap-2">
               <Briefcase className="h-3.5 w-3.5 text-secondary" /> Industry
             </label>
             <input
+              id="org-industry"
               type="text"
               value={data.industry}
               onChange={(e) => setData({ ...data, industry: e.target.value })}
@@ -91,10 +94,12 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
             />
           </div>
           <div className="space-y-1.5 z-20">
-            <label className="text-sm font-medium text-[#374151] flex items-center gap-2">
+            <label htmlFor="org-size" className="text-sm font-medium text-[#374151] flex items-center gap-2">
               <Users className="h-3.5 w-3.5 text-secondary" /> Company Size
             </label>
             <Select
+              id="org-size"
+              ariaLabel="Company Size"
               value={data.companySize}
               onChange={(val) => setData({ ...data, companySize: val })}
               options={sizeOptions}
@@ -105,10 +110,11 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-[#374151] flex items-center gap-2">
+            <label htmlFor="org-phone" className="text-sm font-medium text-[#374151] flex items-center gap-2">
               <Phone className="h-3.5 w-3.5 text-secondary" /> Phone Number
             </label>
             <input
+              id="org-phone"
               type="tel"
               value={data.phone}
               onChange={(e) => setData({ ...data, phone: e.target.value })}
@@ -118,10 +124,11 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-[#374151] flex items-center gap-2">
+          <label htmlFor="org-address" className="text-sm font-medium text-[#374151] flex items-center gap-2">
             <MapPin className="h-3.5 w-3.5 text-secondary" /> Headquarter Address
           </label>
           <textarea
+            id="org-address"
             value={data.address}
             onChange={(e) => setData({ ...data, address: e.target.value })}
             rows={2}
@@ -130,10 +137,11 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-[#374151] flex items-center gap-2">
+          <label htmlFor="org-description" className="text-sm font-medium text-[#374151] flex items-center gap-2">
             <Building2 className="h-3.5 w-3.5 text-secondary" /> Description
           </label>
           <textarea
+            id="org-description"
             value={data.description}
             onChange={(e) => setData({ ...data, description: e.target.value })}
             rows={3}

@@ -117,14 +117,14 @@ export function TemplatesTab({ templates, fetchTemplates }: { templates: any[], 
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-primary">Project Templates</h2>
           <p className="text-sm text-secondary">Create reusable project structures with predefined tasks.</p>
         </div>
         <button
           onClick={() => openModal()}
-          className="bg-primary text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-black transition-colors flex items-center gap-2"
+          className="bg-primary text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-black transition-colors flex items-center justify-center gap-2 shrink-0 self-start sm:self-auto"
         >
           <Plus className="h-4 w-4" /> Create Template
         </button>
@@ -155,28 +155,28 @@ export function TemplatesTab({ templates, fetchTemplates }: { templates: any[], 
 
       <AnimatePresence>
         {showModal && (
-          <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-2xl shadow-2xl shadow-black/10 w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface shrink-0">
+              <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-border bg-surface shrink-0">
                 <h3 className="text-base font-semibold text-primary">{editingTemplate ? 'Edit Template' : 'Create Template'}</h3>
                 <button onClick={() => setShowModal(false)} className="text-secondary hover:text-primary"><X className="h-5 w-5" /></button>
               </div>
-              <div className="p-6 overflow-y-auto">
+              <div className="p-4 sm:p-6 overflow-y-auto">
                 <form id="template-form" onSubmit={handleSave} className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-secondary uppercase tracking-wide">Template Name</label>
-                      <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
+                      <label htmlFor="tpl-name" className="text-xs font-medium text-secondary uppercase tracking-wide">Template Name</label>
+                      <input id="tpl-name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
                     </div>
                     <div className="space-y-1.5 z-40">
-                      <label className="text-xs font-medium text-secondary uppercase tracking-wide">Project Type</label>
-                      <Select value={form.type} onChange={(val) => setForm({ ...form, type: val })} options={typeOptions} />
+                      <label htmlFor="tpl-type" className="text-xs font-medium text-secondary uppercase tracking-wide">Project Type</label>
+                      <Select id="tpl-type" ariaLabel="Project Type" value={form.type} onChange={(val) => setForm({ ...form, type: val })} options={typeOptions} />
                     </div>
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-secondary uppercase tracking-wide">Description</label>
-                    <textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all resize-none" />
+                    <label htmlFor="tpl-description" className="text-xs font-medium text-secondary uppercase tracking-wide">Description</label>
+                    <textarea id="tpl-description" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all resize-none" />
                   </div>
 
                   <div className="space-y-4">
@@ -188,28 +188,28 @@ export function TemplatesTab({ templates, fetchTemplates }: { templates: any[], 
                     </div>
                     
                     {form.structure.tasks.map((task, index) => (
-                      <div key={index} className="bg-surface p-4 rounded-xl border border-border space-y-4 relative">
+                      <div key={index} className="bg-surface p-3.5 sm:p-4 rounded-xl border border-border space-y-4 relative">
                         <button type="button" onClick={() => removeTask(index)} className="absolute top-4 right-4 text-[#9CA3AF] hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
-                        <div className="space-y-1.5 w-[90%]">
-                          <label className="text-[10px] font-medium text-secondary uppercase tracking-wide">Task Title</label>
-                          <input required value={task.title} onChange={(e) => updateTask(index, 'title', e.target.value)} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none" />
+                        <div className="space-y-1.5 w-[85%] sm:w-[90%]">
+                          <label htmlFor={`task-${index}-title`} className="text-[10px] font-medium text-secondary uppercase tracking-wide">Task Title</label>
+                          <input id={`task-${index}-title`} required value={task.title} onChange={(e) => updateTask(index, 'title', e.target.value)} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none" />
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                           <div className="space-y-1.5 relative z-30">
-                            <label className="text-[10px] font-medium text-secondary uppercase tracking-wide">Task Type</label>
-                            <Select value={task.type} onChange={(val) => updateTask(index, 'type', val)} options={taskTypeOptions} />
+                            <label htmlFor={`task-${index}-type`} className="text-[10px] font-medium text-secondary uppercase tracking-wide">Task Type</label>
+                            <Select id={`task-${index}-type`} ariaLabel="Task Type" value={task.type} onChange={(val) => updateTask(index, 'type', val)} options={taskTypeOptions} />
                           </div>
                           <div className="space-y-1.5 relative z-20">
-                            <label className="text-[10px] font-medium text-secondary uppercase tracking-wide">Assignee Role</label>
-                            <Select value={task.assigneeRole} onChange={(val) => updateTask(index, 'assigneeRole', val)} options={roleOptions} />
+                            <label htmlFor={`task-${index}-assigneeRole`} className="text-[10px] font-medium text-secondary uppercase tracking-wide">Assignee Role</label>
+                            <Select id={`task-${index}-assigneeRole`} ariaLabel="Assignee Role" value={task.assigneeRole} onChange={(val) => updateTask(index, 'assigneeRole', val)} options={roleOptions} />
                           </div>
                           <div className="space-y-1.5 relative z-10">
-                            <label className="text-[10px] font-medium text-secondary uppercase tracking-wide">Priority</label>
-                            <Select value={task.priority} onChange={(val) => updateTask(index, 'priority', val)} options={priorityOptions} />
+                            <label htmlFor={`task-${index}-priority`} className="text-[10px] font-medium text-secondary uppercase tracking-wide">Priority</label>
+                            <Select id={`task-${index}-priority`} ariaLabel="Priority" value={task.priority} onChange={(val) => updateTask(index, 'priority', val)} options={priorityOptions} />
                           </div>
                           <div className="space-y-1.5">
-                            <label className="text-[10px] font-medium text-secondary uppercase tracking-wide">Due Date Offset (Days)</label>
-                            <input type="number" min="0" value={task.offsetDays} onChange={(e) => updateTask(index, 'offsetDays', parseInt(e.target.value))} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none" />
+                            <label htmlFor={`task-${index}-offsetDays`} className="text-[10px] font-medium text-secondary uppercase tracking-wide">Due Date Offset (Days)</label>
+                            <input id={`task-${index}-offsetDays`} type="number" min="0" value={isNaN(Number(task.offsetDays)) ? 0 : task.offsetDays} onChange={(e) => updateTask(index, 'offsetDays', parseInt(e.target.value, 10) || 0)} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none" />
                           </div>
                         </div>
                       </div>
@@ -217,7 +217,7 @@ export function TemplatesTab({ templates, fetchTemplates }: { templates: any[], 
                   </div>
                 </form>
               </div>
-              <div className="p-6 pt-4 border-t border-border bg-surface shrink-0 flex gap-3">
+              <div className="p-4 sm:p-6 pt-4 border-t border-border bg-surface shrink-0 flex gap-3">
                 <button type="button" onClick={() => setShowModal(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-border text-[#374151] font-medium hover:bg-surface transition-colors">Cancel</button>
                 <button type="submit" form="template-form" disabled={saving} className="flex-1 bg-primary text-white px-4 py-2.5 rounded-xl font-medium hover:bg-black transition-colors disabled:opacity-50">
                   {saving ? 'Saving...' : 'Save Template'}
