@@ -277,7 +277,7 @@ export default function CalendarPage() {
             {/* Desktop Grid Headers */}
             <div className="hidden md:grid grid-cols-7 border-b border-[#F3F4F6]">
               {(view === 'month' ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] : weekDays).map((d, i) => (
-                <div key={i} className="px-2 py-2.5 text-center text-xs font-medium text-[#9CA3AF] uppercase tracking-wide">
+                <div key={i} className="px-2 py-2.5 text-center text-xs font-medium text-secondary uppercase tracking-wide">
                   {view === 'month' ? d as string : (d as Date).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })}
                 </div>
               ))}
@@ -301,7 +301,7 @@ export default function CalendarPage() {
                       <div className="space-y-1">
                         {dayTasks.slice(0, 3).map((t) => renderTaskPill(t, true))}
                         {dayTasks.length > 3 && (
-                          <span className="text-[10px] text-[#9CA3AF] px-1 font-medium block mt-1">+{dayTasks.length - 3} more</span>
+                          <span className="text-xs text-secondary px-1 font-medium block mt-1">+{dayTasks.length - 3} more</span>
                         )}
                       </div>
                     </div>
@@ -341,7 +341,7 @@ export default function CalendarPage() {
                 })).filter(day => day.tasks.length > 0);
 
                 if (agendaDays.length === 0) {
-                  return <div className="text-center text-sm text-[#9CA3AF] py-8 bg-white rounded-xl border border-border">No tasks scheduled for this period.</div>;
+                  return <div className="text-center text-sm text-secondary py-8 bg-white rounded-xl border border-border">No tasks scheduled for this period.</div>;
                 }
 
                 return agendaDays.map((day, i) => (

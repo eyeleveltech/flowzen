@@ -65,7 +65,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
         {canSwitch && (
           <Link href="/modules">
             <div className={cn('group flex items-center gap-3 rounded-xl px-3 py-2.5 mb-2 text-sm font-medium border border-border bg-[#F9FAFB] text-secondary hover:text-primary hover:border-[#D1D5DB] transition-all', sidebarCollapsed && 'justify-center px-0')}>
-              <ArrowLeftRight className="h-4.5 w-4.5 shrink-0 text-[#9CA3AF] group-hover:text-primary" />
+              <ArrowLeftRight className="h-4.5 w-4.5 shrink-0 text-secondary group-hover:text-primary" />
               <AnimatePresence>
                 {!sidebarCollapsed && (
                   <motion.span initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: 'auto' }} exit={{ opacity: 0, width: 0 }} className="truncate flex-1 min-w-0">
@@ -73,7 +73,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
                   </motion.span>
                 )}
               </AnimatePresence>
-              {!sidebarCollapsed && <span className="text-[10px] font-semibold uppercase tracking-wide text-[#9CA3AF] group-hover:text-primary">Switch</span>}
+              {!sidebarCollapsed && <span className="text-xs font-semibold uppercase tracking-wide text-secondary group-hover:text-primary">Switch</span>}
             </div>
           </Link>
         )}
@@ -91,7 +91,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
                     : 'text-secondary hover:bg-[#F9FAFB] hover:text-primary'
                 )}
               >
-                <item.icon className={cn('h-4.5 w-4.5 shrink-0', isActive ? 'text-white' : 'text-[#9CA3AF] group-hover:text-primary')} />
+                <item.icon className={cn('h-4.5 w-4.5 shrink-0', isActive ? 'text-white' : 'text-secondary group-hover:text-primary')} />
                 <AnimatePresence>
                   {!sidebarCollapsed && (
                     <motion.span
@@ -132,7 +132,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
                     : 'text-secondary hover:bg-[#F9FAFB] hover:text-primary'
                 )}
               >
-                <item.icon className="h-4.5 w-4.5 shrink-0 text-[#9CA3AF] group-hover:text-primary" />
+                <item.icon className="h-4.5 w-4.5 shrink-0 text-secondary group-hover:text-primary" />
                 <AnimatePresence>
                   {!sidebarCollapsed && (
                     <motion.span
@@ -157,7 +157,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
             className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-secondary hover:bg-[#F9FAFB] hover:text-primary transition-all duration-150"
           >
             <motion.div animate={{ rotate: sidebarCollapsed ? 180 : 0 }} transition={{ duration: 0.2 }}>
-              <ChevronLeft className="h-4.5 w-4.5 text-[#9CA3AF]" />
+              <ChevronLeft className="h-4.5 w-4.5 text-secondary" />
             </motion.div>
             <AnimatePresence>
               {!sidebarCollapsed && (
@@ -183,7 +183,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
                 className="flex-1 min-w-0"
               >
                 <p className="text-sm font-medium text-primary truncate">{user?.name}</p>
-                <p className="text-xs text-[#9CA3AF] truncate">{user?.email}</p>
+                <p className="text-xs text-secondary truncate">{user?.email}</p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -197,7 +197,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
                   logout();
                   window.location.href = '/login';
                 }}
-                className="p-1.5 rounded-lg text-[#9CA3AF] hover:text-danger hover:bg-red-50 transition-colors"
+                className="p-1.5 rounded-lg text-secondary hover:text-danger hover:bg-red-50 transition-colors"
               >
                 <LogOut className="h-4 w-4" />
               </motion.button>

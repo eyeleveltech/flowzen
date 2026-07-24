@@ -56,7 +56,7 @@ function ResetPasswordForm() {
   };
 
   return (
-      <div className="w-full max-w-md space-y-8 rounded-2xl bg-white p-8 shadow-xl shadow-black/5 ring-1 ring-[#E5E7EB]">
+      <div className="w-full max-w-md space-y-8 rounded-2xl bg-white p-8 shadow-xl shadow-black/5 ring-1 ring-border">
         
         <div className="text-center">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#F3F4F6] mb-4">
@@ -103,13 +103,13 @@ function ResetPasswordForm() {
                     disabled={!token}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full appearance-none rounded-xl border border-border bg-[#F9FAFB] px-4 py-3 pr-10 text-primary placeholder-[#9CA3AF] focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-all sm:text-sm disabled:opacity-50"
+                    className="block w-full appearance-none rounded-xl border border-border bg-[#F9FAFB] px-4 py-3 pr-10 text-primary placeholder:text-secondary focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-all sm:text-sm disabled:opacity-50"
                     placeholder="••••••••"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] hover:text-secondary"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-secondary hover:text-primary"
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -129,7 +129,7 @@ function ResetPasswordForm() {
                     disabled={!token}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="block w-full appearance-none rounded-xl border border-border bg-[#F9FAFB] px-4 py-3 pr-10 text-primary placeholder-[#9CA3AF] focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-all sm:text-sm disabled:opacity-50"
+                    className="block w-full appearance-none rounded-xl border border-border bg-[#F9FAFB] px-4 py-3 pr-10 text-primary placeholder:text-secondary focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-all sm:text-sm disabled:opacity-50"
                     placeholder="••••••••"
                   />
                 </div>
@@ -153,7 +153,7 @@ export default function ResetPasswordPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface p-4">
       <Suspense fallback={
-        <div className="w-full max-w-md space-y-8 rounded-2xl bg-white p-8 shadow-xl shadow-black/5 ring-1 ring-[#E5E7EB] flex items-center justify-center min-h-100">
+        <div className="w-full max-w-md space-y-8 rounded-2xl bg-white p-8 shadow-xl shadow-black/5 ring-1 ring-border flex items-center justify-center min-h-100">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         </div>
       }>

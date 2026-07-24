@@ -11,8 +11,8 @@ teamRouter.use(authenticate);
 const teamSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
-  memberIds: z.array(z.string()).optional(),
-  managerIds: z.array(z.string()).optional(),
+  memberIds: z.array(z.string()).min(1, 'Select at least one member'),
+  managerIds: z.array(z.string()).min(1, 'Select at least one manager'),
 });
 
 const teamInclude = {
@@ -93,15 +93,24 @@ teamRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN'), validate(teamSchema), as
 });
 
 // PUT /api/teams/:id
-teamRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN'), validate(teamSchema), async (req: AuthRequest, res: Response, next) => {
+teamRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), validate(teamSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const existing = await prisma.team.findFirst({
       where: { id: req.params.id as string, organizationId: req.user!.organizationId },
+      include: { managers: true },
     });
 
     if (!existing) {
       res.status(404).json({ error: 'Team not found' });
       return;
+    }
+
+    if (req.user!.role === 'PROJECT_MANAGER') {
+      const isAssigned = existing.managers.some((m) => m.userId === req.user!.userId);
+      if (!isAssigned) {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+      }
     }
 
     const memberIds: string[] = req.body.memberIds || [];

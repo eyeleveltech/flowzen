@@ -567,7 +567,7 @@ export default function ProjectDetailPage() {
         {/* Key Dates Card */}
         <div className="bg-white rounded-2xl border border-border p-5">
           <div className="flex items-center gap-2 mb-4">
-            <Clock className="h-4 w-4 text-[#9CA3AF]" />
+            <Clock className="h-4 w-4 text-secondary" />
             <span className="text-xs font-medium text-secondary uppercase tracking-wide">Key Dates</span>
           </div>
           <div className="space-y-3">
@@ -585,7 +585,7 @@ export default function ProjectDetailPage() {
         {/* Client Details Card */}
         <div className="bg-white rounded-2xl border border-border p-5">
           <div className="flex items-center gap-2 mb-4">
-            <Briefcase className="h-4 w-4 text-[#9CA3AF]" />
+            <Briefcase className="h-4 w-4 text-secondary" />
             <span className="text-xs font-medium text-secondary uppercase tracking-wide">Client Details</span>
           </div>
           <div className="space-y-3">
@@ -605,7 +605,7 @@ export default function ProjectDetailPage() {
         {/* Progress Card */}
         <div className="bg-white rounded-2xl border border-border p-5">
           <div className="flex items-center gap-2 mb-4">
-            <CheckCircle2 className="h-4 w-4 text-[#9CA3AF]" />
+            <CheckCircle2 className="h-4 w-4 text-secondary" />
             <span className="text-xs font-medium text-secondary uppercase tracking-wide">Progress</span>
           </div>
           <div className="mt-1">
@@ -622,7 +622,7 @@ export default function ProjectDetailPage() {
         {/* Assigned Team Card */}
         <div className="bg-white rounded-2xl border border-border p-5">
           <div className="flex items-center gap-2 mb-4">
-            <Users className="h-4 w-4 text-[#9CA3AF]" />
+            <Users className="h-4 w-4 text-secondary" />
             <span className="text-xs font-medium text-secondary uppercase tracking-wide">Assigned Team</span>
           </div>
           <div className="flex items-center gap-1 -space-x-2 mt-2">
@@ -658,7 +658,7 @@ export default function ProjectDetailPage() {
               </button>
             </>
           ) : (
-            <p className="text-sm text-[#9CA3AF] italic">No description defined.</p>
+            <p className="text-sm text-secondary italic">No description defined.</p>
           )}
         </div>
         <div className="bg-white rounded-2xl border border-border p-6 relative">
@@ -677,7 +677,7 @@ export default function ProjectDetailPage() {
               </button>
             </>
           ) : (
-            <p className="text-sm text-[#9CA3AF] italic">No scope of work defined.</p>
+            <p className="text-sm text-secondary italic">No scope of work defined.</p>
           )}
         </div>
         {project.projectNotes && (
@@ -714,12 +714,12 @@ export default function ProjectDetailPage() {
             <div className="flex flex-wrap items-center gap-2 w-full">
               {/* Search Box */}
               <div className="relative w-full sm:w-64 md:w-80 shrink-0">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
                 <input
                   value={taskSearch}
                   onChange={(e) => setTaskSearch(e.target.value)}
                   placeholder="Search tasks..."
-                  className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-[#9CA3AF]"
+                  className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-secondary"
                 />
               </div>
 
@@ -922,7 +922,7 @@ export default function ProjectDetailPage() {
                       <th className="px-4 py-3 w-10 text-center relative select-none">
                         <button
                           onClick={(e) => { e.stopPropagation(); setShowColumnDropdown(!showColumnDropdown); }}
-                          className="inline-flex items-center justify-center h-6 w-6 rounded-md text-[#9CA3AF] hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
+                          className="inline-flex items-center justify-center h-6 w-6 rounded-md text-secondary hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
                           title="Toggle visible columns"
                         >
                           +
@@ -965,7 +965,7 @@ export default function ProjectDetailPage() {
                   </thead>
                   <tbody className="divide-y divide-[#F3F4F6]">
                     {finalTasks.length === 0 ? (
-                      <tr><td colSpan={visibleTaskColumns.length + 1} className="px-6 py-8 text-center text-sm text-[#9CA3AF]">{hasTaskFilters ? 'No tasks match your filters' : 'No tasks yet'}</td></tr>
+                      <tr><td colSpan={visibleTaskColumns.length + 1} className="px-6 py-8 text-center text-sm text-secondary">{hasTaskFilters ? 'No tasks match your filters' : 'No tasks yet'}</td></tr>
                     ) : (
                       finalTasks.map((t) => (
                         <tr key={t.id} className="hover:bg-surface transition-colors cursor-pointer" onClick={() => setDetailTaskId(t.id)}>
@@ -980,7 +980,7 @@ export default function ProjectDetailPage() {
                                   </div>
                                 )}
                                 {(t._count?.comments ?? 0) > 0 && (
-                                  <span className="flex items-center gap-0.5 text-[10px] text-[#9CA3AF] ml-1"><MessageSquare className="h-3 w-3" />{t._count?.comments}</span>
+                                  <span className="flex items-center gap-0.5 text-xs text-secondary ml-1"><MessageSquare className="h-3 w-3" />{t._count?.comments}</span>
                                 )}
                               </div>
                             </td>
@@ -1011,7 +1011,7 @@ export default function ProjectDetailPage() {
                                     </div>
                                   );
                                 })()
-                              ) : <span className="text-sm text-[#9CA3AF]">—</span>}
+                              ) : <span className="text-sm text-secondary">—</span>}
                             </td>
                           )}
                           {visibleTaskColumns.includes('priority') && (
@@ -1045,7 +1045,7 @@ export default function ProjectDetailPage() {
                                     : formatShortDate(t.dueDate)}
                                 </span>
                               ) : (
-                                <span className="text-[#9CA3AF]">—</span>
+                                <span className="text-secondary">—</span>
                               )}
                             </td>
                           )}
@@ -1071,7 +1071,7 @@ export default function ProjectDetailPage() {
               {/* Mobile Card View */}
               <div className="md:hidden flex flex-col gap-3">
                 {finalTasks.length === 0 ? (
-                  <div className="p-8 text-center text-sm text-[#9CA3AF] bg-white rounded-xl border border-border">
+                  <div className="p-8 text-center text-sm text-secondary bg-white rounded-xl border border-border">
                     {hasTaskFilters ? 'No tasks match your filters' : 'No tasks yet'}
                   </div>
                 ) : (
@@ -1100,7 +1100,7 @@ export default function ProjectDetailPage() {
                                 </span>
                               )}
                               {(t._count?.comments ?? 0) > 0 && (
-                                <span className="flex items-center gap-0.5 text-[10px] text-[#9CA3AF]">
+                                <span className="flex items-center gap-0.5 text-xs text-secondary">
                                   <MessageSquare className="h-3 w-3" />
                                   {t._count?.comments}
                                 </span>
@@ -1128,7 +1128,7 @@ export default function ProjectDetailPage() {
                               );
                             })()
                           ) : (
-                            <span className="text-xs text-[#9CA3AF]">Unassigned</span>
+                            <span className="text-xs text-secondary">Unassigned</span>
                           )}
                         </div>
 
@@ -1159,7 +1159,7 @@ export default function ProjectDetailPage() {
               <div className={`h-10 w-10 rounded-xl text-sm font-semibold flex items-center justify-center ${getAvatarColor(m.name)}`}>{getInitials(m.name)}</div>
               <div>
                 <p className="text-sm font-medium text-primary">{m.name}</p>
-                <p className="text-xs text-[#9CA3AF]">{(m as any).role?.replace('_', ' ') || 'Project Owner'}</p>
+                <p className="text-xs text-secondary">{(m as any).role?.replace('_', ' ') || 'Project Owner'}</p>
               </div>
             </div>
           ))}
@@ -1191,7 +1191,7 @@ export default function ProjectDetailPage() {
 
           <div className="space-y-4">
             {project.comments?.length === 0 ? (
-              <div className="py-8 text-center text-sm text-[#9CA3AF] bg-white rounded-2xl border border-dashed border-border">
+              <div className="py-8 text-center text-sm text-secondary bg-white rounded-2xl border border-dashed border-border">
                 No comments yet. Be the first to start the discussion!
               </div>
             ) : (
@@ -1203,7 +1203,7 @@ export default function ProjectDetailPage() {
                   <div className="flex-1 bg-white rounded-2xl border border-border p-4">
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-semibold text-sm text-primary">{comment.author.name}</span>
-                      <span className="text-xs text-[#9CA3AF]">{formatRelativeDate(comment.createdAt)}</span>
+                      <span className="text-xs text-secondary">{formatRelativeDate(comment.createdAt)}</span>
                     </div>
                     <p className="text-sm text-[#374151] whitespace-pre-wrap">{comment.content}</p>
                   </div>
@@ -1221,7 +1221,7 @@ export default function ProjectDetailPage() {
               <div className={`h-7 w-7 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(a.user.name)}`}>{getInitials(a.user.name)}</div>
               <div>
                 <p className="text-sm text-[#374151]"><span className="font-medium">{a.user.name}</span> {a.message}</p>
-                <p className="text-xs text-[#9CA3AF]">{formatRelativeDate(a.createdAt)}</p>
+                <p className="text-xs text-secondary">{formatRelativeDate(a.createdAt)}</p>
               </div>
             </div>
           ))}

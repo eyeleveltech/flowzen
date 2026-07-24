@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { Save } from 'lucide-react';
 import { Select } from '@/components/ui/select';
+import { ErrorPanel } from '@/components/ui/error-panel';
 
 interface CompanyBilling {
   state?: string;
@@ -25,11 +26,23 @@ export function BillingTab() {
   const [form, setForm] = useState({ state: '', gst: '', pan: '', email: '', bankName: '', bankAccount: '', bankIfsc: '', bankHolder: '', bankBranch: '', standardTerms: '', quotationTemplate: 'CLASSIC' });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  async function loadData() {
+    setLoading(true);
+    setFetchError(null);
+    try {
+      const c = await api.get<CompanyBilling>('/settings/company');
+      setForm((f) => ({ ...f, state: c.state || '', gst: c.gst || '', pan: c.pan || '', email: c.email || '', bankName: c.bankName || '', bankAccount: c.bankAccount || '', bankIfsc: c.bankIfsc || '', bankHolder: c.bankHolder || '', bankBranch: c.bankBranch || '', standardTerms: c.standardTerms || '', quotationTemplate: c.quotationTemplate || 'CLASSIC' }));
+    } catch (e: any) {
+      setFetchError(e.message || 'Failed to load billing details');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    api.get<CompanyBilling>('/settings/company').then((c) => {
-      setForm((f) => ({ ...f, state: c.state || '', gst: c.gst || '', pan: c.pan || '', email: c.email || '', bankName: c.bankName || '', bankAccount: c.bankAccount || '', bankIfsc: c.bankIfsc || '', bankHolder: c.bankHolder || '', bankBranch: c.bankBranch || '', standardTerms: c.standardTerms || '', quotationTemplate: c.quotationTemplate || 'CLASSIC' }));
-    }).catch(() => {}).finally(() => setLoading(false));
+    loadData();
   }, []);
 
   async function save() {
@@ -46,6 +59,7 @@ export function BillingTab() {
   }
 
   if (loading) return <p className="text-sm text-secondary">Loading…</p>;
+  if (fetchError) return <ErrorPanel message={fetchError} onRetry={loadData} />;
 
   return (
     <div className="space-y-6 max-w-3xl">

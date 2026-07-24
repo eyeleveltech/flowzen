@@ -41,7 +41,7 @@ const ORG_PUBLIC_SELECT = {
 } as const;
 
 // GET /api/settings/organization
-settingsRouter.get('/organization', async (req: AuthRequest, res: Response, next) => {
+settingsRouter.get('/organization', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     const org = await prisma.organization.findUnique({
       where: { id: req.user!.organizationId },
@@ -54,8 +54,19 @@ settingsRouter.get('/organization', async (req: AuthRequest, res: Response, next
   }
 });
 
+const updateOrgSchema = z.object({
+  name: z.string({ required_error: 'Organization name is required' }).trim().min(2, 'Organization name must be at least 2 characters'),
+  logo: z.string().optional().nullable(),
+  website: z.string().optional().nullable(),
+  industry: z.string().optional().nullable(),
+  companySize: z.string().optional().nullable(),
+  phone: z.string().optional().nullable(),
+  address: z.string().optional().nullable(),
+  description: z.string().optional().nullable(),
+});
+
 // PUT /api/settings/organization
-settingsRouter.put('/organization', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+settingsRouter.put('/organization', authorize('SUPER_ADMIN', 'ADMIN'), validate(updateOrgSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const org = await prisma.organization.update({
       where: { id: req.user!.organizationId },
@@ -68,13 +79,12 @@ settingsRouter.put('/organization', authorize('SUPER_ADMIN', 'ADMIN'), async (re
         phone: req.body.phone,
         address: req.body.address,
         description: req.body.description,
-        settings: req.body.settings,
       },
     });
 
-    // Sync or create the Internal client
+    // Sync or create the Internal client (G-23: lookup by engagementType: 'INTERNAL')
     const existingInternalClient = await prisma.client.findFirst({
-      where: { organizationId: req.user!.organizationId, name: 'Internal' }
+      where: { organizationId: req.user!.organizationId, engagementType: 'INTERNAL' }
     });
 
     if (existingInternalClient) {
@@ -184,8 +194,14 @@ settingsRouter.get('/notification-thresholds', authorize('SUPER_ADMIN', 'ADMIN')
   } catch (error) { next(error); }
 });
 
+const updateThresholdsSchema = z.object({
+  thresholds: z.record(z.string(), z.number().int().min(1, 'Threshold must be at least 1 day')).optional(),
+  crmNotificationEmail: z.string().optional(),
+  overloadThreshold: z.number().int().min(1, 'Overload threshold must be at least 1').optional(),
+});
+
 // PATCH /api/settings/notification-thresholds (Admin) — body: { thresholds?, crmNotificationEmail?, overloadThreshold? }
-settingsRouter.patch('/notification-thresholds', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+settingsRouter.patch('/notification-thresholds', authorize('SUPER_ADMIN', 'ADMIN'), validate(updateThresholdsSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const org = await prisma.organization.findUnique({ where: { id: req.user!.organizationId }, select: { settings: true } });
     const settings = (org?.settings as any) || {};
@@ -210,7 +226,7 @@ settingsRouter.patch('/notification-thresholds', authorize('SUPER_ADMIN', 'ADMIN
 });
 
 // GET /api/settings/modules — list this org's modules (ensures CRM + PM rows exist)
-settingsRouter.get('/modules', async (req: AuthRequest, res: Response, next) => {
+settingsRouter.get('/modules', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
     await seedDefaultModules(orgId); // idempotent — covers any org missing rows
@@ -241,6 +257,14 @@ settingsRouter.put('/modules/:key', authorize('SUPER_ADMIN', 'ADMIN'), async (re
       create: { organizationId: orgId, key, enabled },
       select: { key: true, enabled: true },
     });
+    await createAuditLog({
+      organizationId: orgId,
+      userId: req.user!.userId,
+      action: 'TOGGLE_MODULE',
+      entityType: 'MODULE',
+      entityId: key,
+      details: { enabled },
+    });
     res.json(module);
   } catch (error) {
     next(error);
@@ -263,6 +287,23 @@ settingsRouter.get('/users', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Auth
         team: { select: { id: true, name: true } },
         status: true,
         joiningDate: true,
+        _count: {
+          select: {
+            assignedTasks: true,
+            comments: true,
+            projectMembers: true,
+            assignedLeads: true,
+            stageChanges: true,
+            quotesAsSalesperson: true,
+            activities: true,
+            notes: true,
+            ownedProjects: true,
+            assignedTasksBy: true,
+            reviewedTasks: true,
+            managedClients: true,
+            createdWorkflows: true,
+          },
+        },
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -546,7 +587,7 @@ settingsRouter.post('/users/:id/transfer-super-admin', authorize('SUPER_ADMIN'),
 });
 
 // GET /api/settings/workflows
-settingsRouter.get('/workflows', async (req: AuthRequest, res: Response, next) => {
+settingsRouter.get('/workflows', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     const workflows = await prisma.workflowRule.findMany({
       where: { organizationId: req.user!.organizationId },

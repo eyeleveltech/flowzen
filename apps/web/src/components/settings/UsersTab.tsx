@@ -4,6 +4,7 @@ import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { Plus, X, Edit2, Shield, Trash2, Mail, Building2, UserCircle, UserX } from 'lucide-react';
 import { Select } from '@/components/ui/select';
+import { Drawer } from '@/components/ui/drawer';
 import { getInitials, getAvatarColor, toProperCase, getRoleLabel } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useConfirmStore, useAuthStore } from '@/stores';
@@ -22,6 +23,33 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
 
   const confirm = useConfirmStore(state => state.confirm);
   const queryClient = useQueryClient();
+
+  const getRecordCountsSummary = (u: any) => {
+    if (!u._count) return null;
+    const parts: string[] = [];
+    if (u._count.assignedTasks > 0) parts.push(`${u._count.assignedTasks} task${u._count.assignedTasks > 1 ? 's' : ''}`);
+    if (u._count.comments > 0) parts.push(`${u._count.comments} comment${u._count.comments > 1 ? 's' : ''}`);
+    if (u._count.projectMembers > 0) parts.push(`${u._count.projectMembers} project${u._count.projectMembers > 1 ? 's' : ''}`);
+    if (u._count.assignedLeads > 0) parts.push(`${u._count.assignedLeads} lead${u._count.assignedLeads > 1 ? 's' : ''}`);
+    if (u._count.stageChanges > 0) parts.push(`${u._count.stageChanges} stage change${u._count.stageChanges > 1 ? 's' : ''}`);
+    if (u._count.quotesAsSalesperson > 0) parts.push(`${u._count.quotesAsSalesperson} quote${u._count.quotesAsSalesperson > 1 ? 's' : ''}`);
+    if (u._count.activities > 0) parts.push(`${u._count.activities} activit${u._count.activities > 1 ? 'ies' : 'y'}`);
+    if (u._count.notes > 0) parts.push(`${u._count.notes} note${u._count.notes > 1 ? 's' : ''}`);
+    if (u._count.ownedProjects > 0) parts.push(`${u._count.ownedProjects} project${u._count.ownedProjects > 1 ? 's' : ''}`);
+    if (u._count.assignedTasksBy > 0) parts.push(`${u._count.assignedTasksBy} assigned task${u._count.assignedTasksBy > 1 ? 's' : ''}`);
+    if (u._count.reviewedTasks > 0) parts.push(`${u._count.reviewedTasks} review${u._count.reviewedTasks > 1 ? 's' : ''}`);
+    if (u._count.managedClients > 0) parts.push(`${u._count.managedClients} client${u._count.managedClients > 1 ? 's' : ''}`);
+    if (u._count.createdWorkflows > 0) parts.push(`${u._count.createdWorkflows} workflow${u._count.createdWorkflows > 1 ? 's' : ''}`);
+    return parts.length > 0 ? parts.join(', ') : null;
+  };
+
+  const getDeleteDisabledReason = (u: any, currentUser: any) => {
+    if (u.role === 'SUPER_ADMIN') return 'Super Admin cannot be deleted';
+    if (currentUser && u.id === currentUser.id) return 'You cannot delete your own account';
+    const summary = getRecordCountsSummary(u);
+    if (summary) return `Deactivate this user instead (${summary})`;
+    return null;
+  };
 
   // Refresh the Settings table + the shared ['members'] cache that feeds assignee
   // dropdowns across Tasks/Projects/Pipeline/Clients.
@@ -187,7 +215,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                   <td className="px-5 py-3">
                     {u.status === 'ACTIVE' && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[#F3F4F6] text-primary border border-border uppercase tracking-wide">Active</span>}
                     {u.status === 'PENDING' && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[#F3F4F6] text-secondary border border-border uppercase tracking-wide">Pending</span>}
-                    {u.status === 'INACTIVE' && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[#F9FAFB] text-[#9CA3AF] border border-border uppercase tracking-wide">Inactive</span>}
+                    {u.status === 'INACTIVE' && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[#F9FAFB] text-secondary border border-border uppercase tracking-wide">Inactive</span>}
                   </td>
                   <td className="px-5 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
@@ -200,17 +228,46 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                           <Shield className="h-4 w-4" />
                         </button>
                       )}
-                      <button onClick={() => setEditingUser(u)} className="p-1.5 text-secondary hover:text-primary hover:bg-[#F3F4F6] rounded-md transition-colors">
+                      <button
+                        onClick={() => setEditingUser(u)}
+                        title="Edit user"
+                        className="p-1.5 text-secondary hover:text-primary hover:bg-[#F3F4F6] rounded-md transition-colors"
+                      >
                         <Edit2 className="h-4 w-4" />
                       </button>
                       {u.status !== 'INACTIVE' && (
-                        <button onClick={() => handleDeactivate(u.id)} title="Deactivate" className="p-1.5 text-secondary hover:text-primary hover:bg-[#F3F4F6] rounded-md transition-colors">
-                          <UserX className="h-4 w-4" />
+                        <button
+                          onClick={() => handleDeactivate(u.id)}
+                          title="Deactivate user"
+                          className="px-2.5 py-1 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 rounded-lg transition-colors flex items-center gap-1.5 shrink-0"
+                        >
+                          <UserX className="h-3.5 w-3.5" />
+
                         </button>
                       )}
-                      <button onClick={() => handleDelete(u.id)} title="Permanently Delete" className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {(() => {
+                        const disabledReason = getDeleteDisabledReason(u, effectiveCurrentUser);
+                        if (disabledReason) {
+                          return (
+                            <button
+                              disabled
+                              title={disabledReason}
+                              className="p-1.5 text-gray-300 bg-gray-50 border border-gray-100 rounded-md cursor-not-allowed opacity-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          );
+                        }
+                        return (
+                          <button
+                            onClick={() => handleDelete(u.id)}
+                            title="Permanently Delete"
+                            className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        );
+                      })()}
                     </div>
                   </td>
                 </tr>
@@ -233,7 +290,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                     <p className="text-xs text-secondary truncate max-w-35 sm:max-w-none">{u.email}</p>
                   </div>
                 </div>
-                <div className="flex gap-1.5 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
                   {effectiveCurrentUser?.role === 'SUPER_ADMIN' && u.id !== effectiveCurrentUser.id && (
                     <button
                       onClick={() => { setTransferTarget(u); setConfirmOrgInput(''); }}
@@ -243,17 +300,45 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                       <Shield className="h-4 w-4" />
                     </button>
                   )}
-                  <button onClick={() => setEditingUser(u)} className="p-1.5 text-secondary hover:text-primary bg-white border border-border hover:bg-[#F3F4F6] rounded-xl transition-all">
+                  <button
+                    onClick={() => setEditingUser(u)}
+                    title="Edit user"
+                    className="p-1.5 text-secondary hover:text-primary bg-white border border-border hover:bg-[#F3F4F6] rounded-xl transition-all"
+                  >
                     <Edit2 className="h-4 w-4" />
                   </button>
                   {u.status !== 'INACTIVE' && (
-                    <button onClick={() => handleDeactivate(u.id)} title="Deactivate" className="p-1.5 text-secondary hover:text-primary bg-white border border-border hover:bg-[#F3F4F6] rounded-xl transition-all">
-                      <UserX className="h-4 w-4" />
+                    <button
+                      onClick={() => handleDeactivate(u.id)}
+                      title="Deactivate user"
+                      className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 rounded-xl transition-all flex items-center gap-1 shrink-0"
+                    >
+                      <UserX className="h-3.5 w-3.5" />
                     </button>
                   )}
-                  <button onClick={() => handleDelete(u.id)} title="Permanently Delete" className="p-1.5 text-red-500 hover:text-red-700 bg-white border border-border hover:bg-red-50 rounded-xl transition-all">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  {(() => {
+                    const disabledReason = getDeleteDisabledReason(u, effectiveCurrentUser);
+                    if (disabledReason) {
+                      return (
+                        <button
+                          disabled
+                          title={disabledReason}
+                          className="p-1.5 text-gray-300 bg-gray-50 border border-gray-200 rounded-xl cursor-not-allowed opacity-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      );
+                    }
+                    return (
+                      <button
+                        onClick={() => handleDelete(u.id)}
+                        title="Permanently Delete"
+                        className="p-1.5 text-red-500 hover:text-red-700 bg-white border border-border hover:bg-red-50 rounded-xl transition-all"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -274,7 +359,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                   <span className="text-[10px] font-medium text-secondary uppercase tracking-wide block mb-0.5">Status</span>
                   {u.status === 'ACTIVE' && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-white text-primary border border-border uppercase">Active</span>}
                   {u.status === 'PENDING' && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-white text-secondary border border-border uppercase">Pending</span>}
-                  {u.status === 'INACTIVE' && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-white text-[#9CA3AF] border border-border uppercase">Inactive</span>}
+                  {u.status === 'INACTIVE' && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-white text-secondary border border-border uppercase">Inactive</span>}
                 </div>
               </div>
             </div>
@@ -285,101 +370,81 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
         </div>
       </div>
 
-      <AnimatePresence>
-        {showInvite && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-100 bg-black/20 backdrop-blur-sm" onClick={() => setShowInvite(false)} />
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-101 w-full max-w-md bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto flex flex-col">
-              <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-border bg-surface sticky top-0 z-10 shrink-0">
-                <h3 className="text-base font-semibold text-primary">Invite Member</h3>
-                <button type="button" onClick={() => setShowInvite(false)} className="text-secondary hover:text-primary p-1 rounded-md hover:bg-border transition-colors"><X className="h-5 w-5" /></button>
-              </div>
-              <form onSubmit={handleInvite} className="p-4 sm:p-6 space-y-4 flex-1">
-                <div className="space-y-1.5">
-                  <label htmlFor="invite-name" className="text-sm font-medium text-[#374151]">Full Name</label>
-                  <input id="invite-name" required value={inviteForm.name} onChange={(e) => setInviteForm({ ...inviteForm, name: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
-                </div>
-                <div className="space-y-1.5">
-                  <label htmlFor="invite-email" className="text-sm font-medium text-[#374151]">Email Address</label>
-                  <input id="invite-email" required type="email" value={inviteForm.email} onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
-                </div>
-                <div className="space-y-1.5 z-30 relative">
-                  <label htmlFor="invite-role" className="text-sm font-medium text-[#374151]">Role</label>
-                  <Select id="invite-role" ariaLabel="Role" value={inviteForm.role} onChange={(val) => setInviteForm({ ...inviteForm, role: val })} options={roleOptions} />
-                </div>
-                <div className="space-y-1.5 z-20 relative">
-                  <label htmlFor="invite-team" className="text-sm font-medium text-[#374151]">Team (Optional)</label>
-                  <Select 
-                    id="invite-team"
-                    ariaLabel="Team"
-                    value={inviteForm.teamId || ''} 
-                    onChange={(val) => setInviteForm({ ...inviteForm, teamId: val || '' })} 
-                    options={[{ label: 'No Team', value: '' }, ...(teams?.map(t => ({ label: t.name, value: t.id })) || [])]} 
-                  />
-                </div>
-                <div className="space-y-1.5 relative">
-                  <label htmlFor="invite-designation" className="text-sm font-medium text-[#374151]">Designation (Optional)</label>
-                  <input id="invite-designation" list="designation-options" placeholder="Select or type a designation…" value={inviteForm.designation || ''} onChange={(e) => setInviteForm({ ...inviteForm, designation: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
-                </div>
-                <div className="pt-8 flex gap-3">
-                  <button type="button" onClick={() => setShowInvite(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-border text-[#374151] font-medium hover:bg-surface transition-colors">Cancel</button>
-                  <button type="submit" disabled={saving} className="flex-1 bg-primary text-white px-4 py-2.5 rounded-xl font-medium hover:bg-black transition-colors disabled:opacity-50">
-                    {saving ? 'Sending...' : 'Send Invite'}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      <Drawer variant="slideover" isOpen={showInvite} onClose={() => setShowInvite(false)} title="Invite Member">
+        <form onSubmit={handleInvite} className="space-y-4">
+          <div className="space-y-1.5">
+            <label htmlFor="invite-name" className="text-sm font-medium text-[#374151]">Full Name</label>
+            <input id="invite-name" required value={inviteForm.name} onChange={(e) => setInviteForm({ ...inviteForm, name: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="invite-email" className="text-sm font-medium text-[#374151]">Email Address</label>
+            <input id="invite-email" required type="email" value={inviteForm.email} onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
+          </div>
+          <div className="space-y-1.5 z-30 relative">
+            <label htmlFor="invite-role" className="text-sm font-medium text-[#374151]">Role</label>
+            <Select id="invite-role" ariaLabel="Role" value={inviteForm.role} onChange={(val) => setInviteForm({ ...inviteForm, role: val })} options={roleOptions} />
+          </div>
+          <div className="space-y-1.5 z-20 relative">
+            <label htmlFor="invite-team" className="text-sm font-medium text-[#374151]">Team (Optional)</label>
+            <Select
+              id="invite-team"
+              ariaLabel="Team"
+              value={inviteForm.teamId || ''}
+              onChange={(val) => setInviteForm({ ...inviteForm, teamId: val || '' })}
+              options={[{ label: 'No Team', value: '' }, ...(teams?.map(t => ({ label: t.name, value: t.id })) || [])]}
+            />
+          </div>
+          <div className="space-y-1.5 relative">
+            <label htmlFor="invite-designation" className="text-sm font-medium text-[#374151]">Designation (Optional)</label>
+            <input id="invite-designation" list="designation-options" placeholder="Select or type a designation…" value={inviteForm.designation || ''} onChange={(e) => setInviteForm({ ...inviteForm, designation: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
+          </div>
+          <div className="pt-8 flex gap-3">
+            <button type="button" onClick={() => setShowInvite(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-border text-[#374151] font-medium hover:bg-surface transition-colors">Cancel</button>
+            <button type="submit" disabled={saving} className="flex-1 bg-primary text-white px-4 py-2.5 rounded-xl font-medium hover:bg-black transition-colors disabled:opacity-50">
+              {saving ? 'Sending...' : 'Send Invite'}
+            </button>
+          </div>
+        </form>
+      </Drawer>
 
-      <AnimatePresence>
+      <Drawer variant="slideover" isOpen={!!editingUser} onClose={() => setEditingUser(null)} title="Edit User">
         {editingUser && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-100 bg-black/20 backdrop-blur-sm" onClick={() => setEditingUser(null)} />
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-101 w-full max-w-md bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto flex flex-col">
-              <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-border bg-surface sticky top-0 z-10 shrink-0">
-                <h3 className="text-base font-semibold text-primary">Edit User</h3>
-                <button type="button" onClick={() => setEditingUser(null)} className="text-secondary hover:text-primary p-1 rounded-md hover:bg-border transition-colors"><X className="h-5 w-5" /></button>
-              </div>
-              <form onSubmit={handleUpdateUser} className="p-4 sm:p-6 space-y-4 flex-1">
-                <div className="space-y-1.5">
-                  <label htmlFor="edit-name" className="text-sm font-medium text-[#374151]">Full Name</label>
-                  <input id="edit-name" required value={editingUser.name} onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
-                </div>
-                <div className="space-y-1.5 z-40 relative">
-                  <label htmlFor="edit-role" className="text-sm font-medium text-[#374151]">Role</label>
-                  <Select id="edit-role" ariaLabel="Role" value={editingUser.role} onChange={(val) => setEditingUser({ ...editingUser, role: val })} options={roleOptions} disabled={editingUser.role === 'SUPER_ADMIN'} />
-                </div>
-                <div className="space-y-1.5 z-30 relative">
-                  <label htmlFor="edit-team" className="text-sm font-medium text-[#374151]">Team (Optional)</label>
-                  <Select 
-                    id="edit-team"
-                    ariaLabel="Team"
-                    value={editingUser.teamId || ''} 
-                    onChange={(val) => setEditingUser({ ...editingUser, teamId: val ? val : null })} 
-                    options={[{ label: 'No Team', value: '' }, ...(teams?.map(t => ({ label: t.name, value: t.id })) || [])]} 
-                  />
-                </div>
-                <div className="space-y-1.5 relative">
-                  <label htmlFor="edit-designation" className="text-sm font-medium text-[#374151]">Designation (Optional)</label>
-                  <input id="edit-designation" list="designation-options" placeholder="Select or type a designation…" value={editingUser.designation || ''} onChange={(e) => setEditingUser({ ...editingUser, designation: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
-                </div>
-                <div className="space-y-1.5 z-10 relative">
-                  <label htmlFor="edit-status" className="text-sm font-medium text-[#374151]">Status</label>
-                  <Select id="edit-status" ariaLabel="Status" value={editingUser.status} onChange={(val) => setEditingUser({ ...editingUser, status: val })} options={[{label: 'Active', value: 'ACTIVE'}, {label: 'Pending', value: 'PENDING'}, {label: 'Inactive', value: 'INACTIVE'}]} />
-                </div>
-                <div className="pt-8 flex gap-3">
-                  <button type="button" onClick={() => setEditingUser(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-border text-[#374151] font-medium hover:bg-surface transition-colors">Cancel</button>
-                  <button type="submit" disabled={saving} className="flex-1 bg-primary text-white px-4 py-2.5 rounded-xl font-medium hover:bg-black transition-colors disabled:opacity-50">
-                    {saving ? 'Saving...' : 'Save Changes'}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </>
+          <form onSubmit={handleUpdateUser} className="space-y-4">
+            <div className="space-y-1.5">
+              <label htmlFor="edit-name" className="text-sm font-medium text-[#374151]">Full Name</label>
+              <input id="edit-name" required value={editingUser.name} onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
+            </div>
+            <div className="space-y-1.5 z-40 relative">
+              <label htmlFor="edit-role" className="text-sm font-medium text-[#374151]">Role</label>
+              <Select id="edit-role" ariaLabel="Role" value={editingUser.role} onChange={(val) => setEditingUser({ ...editingUser, role: val })} options={roleOptions} disabled={editingUser.role === 'SUPER_ADMIN'} />
+            </div>
+            <div className="space-y-1.5 z-30 relative">
+              <label htmlFor="edit-team" className="text-sm font-medium text-[#374151]">Team (Optional)</label>
+              <Select
+                id="edit-team"
+                ariaLabel="Team"
+                value={editingUser.teamId || ''}
+                onChange={(val) => setEditingUser({ ...editingUser, teamId: val ? val : null })}
+                options={[{ label: 'No Team', value: '' }, ...(teams?.map(t => ({ label: t.name, value: t.id })) || [])]}
+              />
+            </div>
+            <div className="space-y-1.5 relative">
+              <label htmlFor="edit-designation" className="text-sm font-medium text-[#374151]">Designation (Optional)</label>
+              <input id="edit-designation" list="designation-options" placeholder="Select or type a designation…" value={editingUser.designation || ''} onChange={(e) => setEditingUser({ ...editingUser, designation: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
+            </div>
+            <div className="space-y-1.5 z-10 relative">
+              <label htmlFor="edit-status" className="text-sm font-medium text-[#374151]">Status</label>
+              <Select id="edit-status" ariaLabel="Status" value={editingUser.status} onChange={(val) => setEditingUser({ ...editingUser, status: val })} options={[{ label: 'Active', value: 'ACTIVE' }, { label: 'Pending', value: 'PENDING' }, { label: 'Inactive', value: 'INACTIVE' }]} />
+            </div>
+            <div className="pt-8 flex gap-3">
+              <button type="button" onClick={() => setEditingUser(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-border text-[#374151] font-medium hover:bg-surface transition-colors">Cancel</button>
+              <button type="submit" disabled={saving} className="flex-1 bg-primary text-white px-4 py-2.5 rounded-xl font-medium hover:bg-black transition-colors disabled:opacity-50">
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </form>
         )}
-      </AnimatePresence>
+      </Drawer>
 
       {/* Transfer Super Admin Modal */}
       <AnimatePresence>

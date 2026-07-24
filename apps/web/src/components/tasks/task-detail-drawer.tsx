@@ -222,7 +222,7 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
                       <div className="flex-1 bg-surface border border-border rounded-xl p-3">
                         <div className="flex items-center justify-between mb-1">
                           <span className="font-semibold text-xs text-primary">{c.author.name}</span>
-                          <span className="text-[10px] text-[#9CA3AF]">{formatDate(c.createdAt)}</span>
+                          <span className="text-xs text-secondary">{formatDate(c.createdAt)}</span>
                         </div>
                         <p className="text-sm text-[#374151] whitespace-pre-wrap">{c.content}</p>
                       </div>

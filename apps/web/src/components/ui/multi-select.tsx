@@ -121,14 +121,14 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
             triggerClassName
           )}
         >
-          <span className={`min-w-0 truncate ${selectedOptions.length === 0 ? 'text-[#9CA3AF]' : 'text-primary'}`}>
+          <span className={`min-w-0 truncate ${selectedOptions.length === 0 ? 'text-secondary' : 'text-primary'}`}>
             {selectedOptions.length === 0
               ? placeholder
               : selectedOptions.length === 1
                 ? selectedOptions[0].label
                 : `${selectedOptions.length} selected`}
           </span>
-          <ChevronsUpDown className="h-4 w-4 shrink-0 text-[#9CA3AF] ml-2" />
+          <ChevronsUpDown className="h-4 w-4 shrink-0 text-secondary ml-2" />
         </button>
       ) : (
       <div
@@ -137,7 +137,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
         onClick={() => setIsOpen(true)}
       >
         {selectedOptions.length === 0 && (
-          <span className="text-[#9CA3AF] px-1">{placeholder}</span>
+          <span className="text-secondary px-1">{placeholder}</span>
         )}
 
         {selectedOptions.map(opt => (
@@ -162,7 +162,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
           role="combobox"
           aria-expanded={isOpen}
           aria-haspopup="listbox"
-          className="flex-1 min-w-12.5 bg-transparent outline-none text-sm placeholder:text-[#9CA3AF]"
+          className="flex-1 min-w-12.5 bg-transparent outline-none text-sm placeholder:text-secondary"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={selectedOptions.length === 0 ? "" : "Search..."}
@@ -180,7 +180,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
         />
 
         <div className="ml-auto flex items-center shrink-0">
-          <ChevronsUpDown className="h-4 w-4 text-[#9CA3AF]" />
+          <ChevronsUpDown className="h-4 w-4 text-secondary" />
         </div>
       </div>
       )}
@@ -240,7 +240,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
                     {opt.capacity !== undefined && (
                       <span className="flex items-center gap-1.5 shrink-0 ml-2" title={`Capacity: ${opt.capacity}%`}>
                         <span className={`w-2 h-2 rounded-full ${opt.isOverloaded || opt.capacity > 80 ? 'bg-red-500' : opt.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                        <span className="text-[11px] font-medium text-[#86868B]">{opt.capacity}%</span>
+                        <span className="text-xs font-medium text-secondary">{opt.capacity}%</span>
                       </span>
                     )}
                   </button>
@@ -342,7 +342,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
                   {opt.capacity !== undefined && (
                     <span className="flex items-center gap-1.5 shrink-0 ml-2" title={`Capacity: ${opt.capacity}%`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${opt.isOverloaded || opt.capacity > 80 ? 'bg-red-500' : opt.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                      <span className="text-[10px] font-medium text-[#86868B]">{opt.capacity}%</span>
+                      <span className="text-xs font-medium text-secondary">{opt.capacity}%</span>
                     </span>
                   )}
                 </div>

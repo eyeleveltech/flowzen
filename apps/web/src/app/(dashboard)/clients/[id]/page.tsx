@@ -167,7 +167,7 @@ export default function ClientDetailPage() {
     }
   }
 
-  if (!client) return <div className="py-20 text-center text-sm text-[#9CA3AF]">Loading...</div>;
+  if (!client) return <div className="py-20 text-center text-sm text-secondary">Loading...</div>;
 
   const tabs = [
     { id: 'overview' as Tab, label: 'Overview' },
@@ -303,7 +303,7 @@ export default function ClientDetailPage() {
                       </button>
                     </div>
                   ) : (
-                    <p className="text-sm text-[#9CA3AF]">No scope defined.</p>
+                    <p className="text-sm text-secondary">No scope defined.</p>
                   )}
                 </div>
               </div>
@@ -318,8 +318,8 @@ export default function ClientDetailPage() {
                       <p className="text-sm font-semibold text-primary">{c.name}</p>
                       {c.designation && <p className="text-xs text-secondary mb-2">{c.designation}</p>}
                       <div className="space-y-1 mt-2">
-                        {c.email && <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5 text-[#9CA3AF]" /><span className="text-xs text-[#374151]">{c.email}</span></div>}
-                        {c.phone && <div className="flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-[#9CA3AF]" /><span className="text-xs text-[#374151]">{c.phone}</span></div>}
+                        {c.email && <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5 text-secondary" /><span className="text-xs text-[#374151]">{c.email}</span></div>}
+                        {c.phone && <div className="flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-secondary" /><span className="text-xs text-[#374151]">{c.phone}</span></div>}
                       </div>
                     </div>
                   ))}
@@ -386,12 +386,12 @@ export default function ClientDetailPage() {
                           <span className="text-[#374151] font-medium">{p.owner.name}</span>
                         </>
                       ) : (
-                        <span className="text-[#9CA3AF]">Unassigned</span>
+                        <span className="text-secondary">Unassigned</span>
                       )}
                     </span>
-                    <span className="flex items-center gap-1.5"><Briefcase className="h-3.5 w-3.5 text-[#9CA3AF]" /> {p._count?.tasks ?? 0} tasks</span>
+                    <span className="flex items-center gap-1.5"><Briefcase className="h-3.5 w-3.5 text-secondary" /> {p._count?.tasks ?? 0} tasks</span>
                     <span className={`flex items-center gap-1.5 ${overdue ? 'text-red-600 font-medium' : ''}`}>
-                      <Calendar className="h-3.5 w-3.5 text-[#9CA3AF]" /> {p.endDate ? formatDate(p.endDate) : 'No due date'}{overdue ? ' · Overdue' : ''}
+                      <Calendar className="h-3.5 w-3.5 text-secondary" /> {p.endDate ? formatDate(p.endDate) : 'No due date'}{overdue ? ' · Overdue' : ''}
                     </span>
                   </div>
 
@@ -419,7 +419,7 @@ export default function ClientDetailPage() {
  <div className={`h-7 w-7 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(a.user.name)}`}>{getInitials(a.user.name)}</div>
               <div>
                 <p className="text-sm text-[#374151]"><span className="font-medium">{a.user.name}</span> {a.message}</p>
-                <p className="text-xs text-[#9CA3AF]">{formatRelativeDate(a.createdAt)}</p>
+                <p className="text-xs text-secondary">{formatRelativeDate(a.createdAt)}</p>
               </div>
             </div>
           ))}
@@ -436,7 +436,7 @@ export default function ClientDetailPage() {
             {client.notes.map((n) => (
               <div key={n.id} className="rounded-2xl border border-border bg-white p-4">
                 <p className="text-sm text-[#374151]">{n.content}</p>
-                <p className="text-xs text-[#9CA3AF] mt-2">{n.author.name} · {formatRelativeDate(n.createdAt)}</p>
+                <p className="text-xs text-secondary mt-2">{n.author.name} · {formatRelativeDate(n.createdAt)}</p>
               </div>
             ))}
           </div>
@@ -523,7 +523,7 @@ export default function ClientDetailPage() {
                   {editForm.contacts.map((contact, i) => (
                     <div key={i} className="p-4 border border-border rounded-xl bg-surface relative">
                       {editForm.contacts.length > 1 && (
-                        <button type="button" onClick={() => setEditForm({ ...editForm, contacts: editForm.contacts.filter((_, idx) => idx !== i) })} className="absolute top-2 right-2 p-1.5 text-[#9CA3AF] hover:text-red-500 rounded-lg hover:bg-white transition-colors border border-transparent hover:border-red-100 shadow-sm hover:shadow">
+                        <button type="button" onClick={() => setEditForm({ ...editForm, contacts: editForm.contacts.filter((_, idx) => idx !== i) })} className="absolute top-2 right-2 p-1.5 text-secondary hover:text-red-500 rounded-lg hover:bg-white transition-colors border border-transparent hover:border-red-100 shadow-sm hover:shadow">
                           <X className="h-3.5 w-3.5" />
                         </button>
                       )}
@@ -542,7 +542,7 @@ export default function ClientDetailPage() {
                     {activeModule === 'PM' ? 'Lifecycle Stage' : 'Status'}
                   </label>
                   {activeModule === 'PM' ? (
-                    <div className="w-full rounded-xl border border-border bg-gray-50 px-4 py-2.5 text-sm text-[#9CA3AF] cursor-not-allowed select-none">
+                    <div className="w-full rounded-xl border border-border bg-gray-50 px-4 py-2.5 text-sm text-secondary cursor-not-allowed select-none">
                       {editForm.status === 'PROSPECT' ? 'Prospect' :
                        editForm.status === 'ACTIVE' ? 'Active' :
                        editForm.status === 'ONHOLD' ? 'On Hold' :
@@ -619,9 +619,9 @@ export default function ClientDetailPage() {
 function InfoRow({ icon: Icon, label, value }: { icon: typeof Mail; label: string; value: string }) {
   return (
     <div className="flex items-center gap-3">
-      <Icon className="h-4 w-4 text-[#9CA3AF]" />
+      <Icon className="h-4 w-4 text-secondary" />
       <div>
-        <p className="text-xs text-[#9CA3AF]">{label}</p>
+        <p className="text-xs text-secondary">{label}</p>
         <p className="text-sm text-[#374151]">{value}</p>
       </div>
     </div>

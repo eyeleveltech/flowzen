@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/stores';
 import { api } from '@/lib/api';
-import { User, KeyRound, Save, Eye, EyeOff } from 'lucide-react';
+import { User, KeyRound, Save, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Select } from '@/components/ui/select';
 import { useTeams, useMembers } from '@/hooks/useQueries';
@@ -30,6 +30,7 @@ export default function ProfilePage() {
   const [showPassword, setShowPassword] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -44,13 +45,16 @@ export default function ProfilePage() {
   // Settings → Users), so pull the latest profile from the server on open and
   // sync it back into the auth store.
   useEffect(() => {
+    setProfileError(null);
     api.get('/profile').then((fresh: any) => {
       setProfileForm({
         name: fresh.name || '',
         designation: fresh.designation || '',
       });
       setAuth(fresh);
-    }).catch(() => {});
+    }).catch((e: any) => {
+      setProfileError(e.message || 'Failed to sync latest profile data');
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -115,6 +119,13 @@ export default function ProfilePage() {
         </p>
       </div>
 
+      {profileError && (
+        <div className="flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+          <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
+          <span>Could not refresh latest profile data: {profileError}. Showing cached profile information.</span>
+        </div>
+      )}
+
       <div className="space-y-6">
         {/* Personal Information Section */}
         <section className="rounded-2xl border border-border bg-white shadow-sm">
@@ -148,7 +159,7 @@ export default function ProfilePage() {
                     type="email"
                     disabled
                     value={user.email}
-                    className="w-full rounded-xl border border-border bg-[#F9FAFB] px-4 py-2.5 text-sm text-[#9CA3AF] cursor-not-allowed"
+                    className="w-full rounded-xl border border-border bg-[#F9FAFB] px-4 py-2.5 text-sm text-secondary cursor-not-allowed"
                     title="Email cannot be changed"
                   />
                 </div>
@@ -172,6 +183,7 @@ export default function ProfilePage() {
                   <p className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary">
                     {user.team?.name || '—'}
                   </p>
+                  <p className="text-xs text-muted-foreground mt-1">Contact an admin to change your department.</p>
                 </div>
               </div>
               <div className="flex justify-end pt-2">
@@ -215,7 +227,7 @@ export default function ProfilePage() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] hover:text-secondary"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-secondary hover:text-primary"
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>

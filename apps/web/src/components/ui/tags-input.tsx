@@ -28,14 +28,14 @@ export function TagsInput({ value = [], onChange, placeholder = "Type and press 
   };
 
   return (
-    <div className="w-full rounded-xl border border-border bg-white px-3 py-2 flex flex-wrap gap-2 focus-within:border-primary focus-within:ring-1 focus-within:ring-primary transition-all min-h-[46px]">
+    <div className="w-full rounded-xl border border-border bg-white px-3 py-2 flex flex-wrap gap-2 focus-within:border-primary focus-within:ring-1 focus-within:ring-primary transition-all min-h-11.5">
       {value.map(tag => (
         <div key={tag} className="flex items-center gap-1.5 bg-[#F3F4F6] text-[#374151] px-2.5 py-1 rounded-lg text-sm font-medium">
           <span>{tag}</span>
           <button
             type="button"
             onClick={() => removeTag(tag)}
-            className="text-[#9CA3AF] hover:text-[#4B5563] transition-colors focus:outline-none"
+            className="text-secondary hover:text-[#4B5563] transition-colors focus:outline-none"
           >
             <X className="h-3 w-3" />
           </button>
@@ -47,7 +47,7 @@ export function TagsInput({ value = [], onChange, placeholder = "Type and press 
         onChange={(e) => setInputValue(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={value.length === 0 ? placeholder : ''}
-        className="flex-1 min-w-30 bg-transparent outline-none text-sm text-primary placeholder:text-[#9CA3AF] py-1"
+        className="flex-1 min-w-30 bg-transparent outline-none text-sm text-primary placeholder:text-secondary py-1"
       />
     </div>
   );
