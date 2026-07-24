@@ -149,7 +149,7 @@ export default function ProfilePage() {
                     type="email"
                     disabled
                     value={user.email}
-                    className="w-full rounded-xl border border-border bg-[#F9FAFB] px-4 py-2.5 text-sm text-[#9CA3AF] cursor-not-allowed"
+                    className="w-full rounded-xl border border-border bg-[#F9FAFB] px-4 py-2.5 text-sm text-muted cursor-not-allowed"
                     title="Email cannot be changed"
                   />
                 </div>
@@ -219,7 +219,7 @@ export default function ProfilePage() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] hover:text-secondary"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-secondary"
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>

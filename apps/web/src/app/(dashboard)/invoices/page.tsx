@@ -55,7 +55,7 @@ export default function InvoicesPage() {
                 <tr key={inv.id} className="hover:bg-surface transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-[#9CA3AF] shrink-0" />
+                      <FileText className="h-4 w-4 text-muted shrink-0" />
                       <div>
                         <p className="text-sm font-medium text-primary font-mono">{inv.draftNumber}</p>
                         <p className="text-[11px] text-secondary">Quote: {inv.quote?.documentNumber ?? '—'}</p>

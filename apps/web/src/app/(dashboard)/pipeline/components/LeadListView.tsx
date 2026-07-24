@@ -143,7 +143,7 @@ export function LeadListView() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto flex-1">
             <div className="relative w-full sm:max-w-[240px] md:max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -426,7 +426,7 @@ export function LeadListView() {
                           <span className="text-sm text-[#374151]">{lead.assignedTo.name}</span>
                         </div>
                       ) : (
-                        <span className="text-sm text-[#9CA3AF]">—</span>
+                        <span className="text-sm text-muted">—</span>
                       )}
                     </td>
                     <td className="px-6 py-4 text-right">
@@ -456,7 +456,7 @@ export function LeadListView() {
             </div>
           ))
         ) : filteredLeads.length === 0 ? (
-          <div className="p-8 text-center text-sm text-[#9CA3AF] bg-white rounded-xl border border-border">
+          <div className="p-8 text-center text-sm text-muted bg-white rounded-xl border border-border">
             No leads found.
           </div>
         ) : (

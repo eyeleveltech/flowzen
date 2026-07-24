@@ -121,7 +121,7 @@ export function CalendarView({ projects }: CalendarViewProps) {
                     {format(date, 'd')}
                   </span>
                   {dayEvents.length > 0 && (
-                    <span className="text-[10px] text-[#9CA3AF] font-medium">{dayEvents.length} items</span>
+                    <span className="text-[10px] text-muted font-medium">{dayEvents.length} items</span>
                   )}
                 </div>
                 
@@ -156,7 +156,7 @@ export function CalendarView({ projects }: CalendarViewProps) {
         {/* Mobile Agenda View */}
         <div className="md:hidden flex flex-col p-4 gap-4">
           {days.filter(d => getEventsForDay(d).length > 0).length === 0 ? (
-            <div className="text-center text-sm text-[#9CA3AF] py-8">No scheduled events this month</div>
+            <div className="text-center text-sm text-muted py-8">No scheduled events this month</div>
           ) : (
             days.filter(d => isSameMonth(d, monthStart) && getEventsForDay(d).length > 0).map(date => {
               const dayEvents = getEventsForDay(date);

@@ -329,7 +329,7 @@ export function PipelineDashboard() {
         <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full relative overflow-hidden">
           <div className="flex items-start justify-between gap-2 mb-3">
             <p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Total Pipeline Value</p>
-            <IndianRupee className="w-4 h-4 shrink-0 text-[#9CA3AF]" />
+            <IndianRupee className="w-4 h-4 shrink-0 text-muted" />
           </div>
           <p className="text-3xl font-semibold text-primary">{formatCurrency(metrics.pipelineValue)}</p>
         </div>
@@ -337,7 +337,7 @@ export function PipelineDashboard() {
         <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full">
           <div className="flex items-start justify-between gap-2 mb-3">
             <p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Closed / Won Value</p>
-            <TrendingUp className="w-4 h-4 shrink-0 text-[#9CA3AF]" />
+            <TrendingUp className="w-4 h-4 shrink-0 text-muted" />
           </div>
           <p className="text-3xl font-semibold text-primary">{formatCurrency(metrics.wonValue)}</p>
         </div>
@@ -345,7 +345,7 @@ export function PipelineDashboard() {
         <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full">
           <div className="flex items-start justify-between gap-2 mb-3">
             <p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Active Deals</p>
-            <Target className="w-4 h-4 shrink-0 text-[#9CA3AF]" />
+            <Target className="w-4 h-4 shrink-0 text-muted" />
           </div>
           <p className="text-3xl font-semibold text-primary">{metrics.activeLeads}</p>
         </div>
@@ -353,7 +353,7 @@ export function PipelineDashboard() {
         <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full">
           <div className="flex items-start justify-between gap-2 mb-3">
             <p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Total Leads Tracked</p>
-            <Briefcase className="w-4 h-4 shrink-0 text-[#9CA3AF]" />
+            <Briefcase className="w-4 h-4 shrink-0 text-muted" />
           </div>
           <p className="text-3xl font-semibold text-primary">{metrics.totalLeads}</p>
         </div>

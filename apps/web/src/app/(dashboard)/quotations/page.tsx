@@ -114,7 +114,7 @@ export default function QuotationsPage() {
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <div className="relative w-full sm:max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search number or client..." className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
         </div>
         <div className="w-full sm:w-48">
@@ -148,7 +148,7 @@ export default function QuotationsPage() {
                 <tr key={q.id} onClick={() => openEdit(q.id)} className="hover:bg-surface transition-colors cursor-pointer">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-[#9CA3AF] shrink-0" />
+                      <FileText className="h-4 w-4 text-muted shrink-0" />
                       <div>
                         <p className="text-sm font-medium text-primary font-mono">{q.documentNumber}</p>
                         <p className="text-[11px] text-secondary">{q.documentType === 'QUOTATION' ? 'Quotation' : 'Proforma Invoice'}</p>

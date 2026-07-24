@@ -264,7 +264,7 @@ export default function ReportsPage() {
                       {t.type.replace('_', ' ')}: <span className="text-primary ml-1 font-semibold">{t.count}</span>
                     </div>
                   ))}
-                  {projectReport.projectsByType.length === 0 && <span className="text-sm text-[#9CA3AF]">No data available.</span>}
+                  {projectReport.projectsByType.length === 0 && <span className="text-sm text-muted">No data available.</span>}
                 </div>
               </div>
 
@@ -277,7 +277,7 @@ export default function ReportsPage() {
                       <span className="text-sm font-semibold text-primary px-2 py-0.5 bg-[#F3F4F6] rounded-md">{c.count}</span>
                     </div>
                   ))}
-                  {projectReport.projectsByClient.length === 0 && <span className="text-sm text-[#9CA3AF]">No active projects.</span>}
+                  {projectReport.projectsByClient.length === 0 && <span className="text-sm text-muted">No active projects.</span>}
                 </div>
               </div>
             </motion.div>
@@ -314,7 +314,7 @@ export default function ReportsPage() {
                     <span className="text-sm font-semibold text-primary tabular-nums w-8 text-right">{a.count}</span>
                   </div>
                 ))}
-                {taskReport.tasksByAssignee.length === 0 && <span className="text-sm text-[#9CA3AF]">No open assigned tasks.</span>}
+                {taskReport.tasksByAssignee.length === 0 && <span className="text-sm text-muted">No open assigned tasks.</span>}
               </div>
             </motion.div>
 
@@ -327,7 +327,7 @@ export default function ReportsPage() {
                     <span className="bg-primary text-white text-[10px] px-1.5 py-0.5 rounded-md font-semibold">{t.count}</span>
                   </div>
                 ))}
-                {taskReport.tasksByType.length === 0 && <span className="text-sm text-[#9CA3AF]">No open tasks.</span>}
+                {taskReport.tasksByType.length === 0 && <span className="text-sm text-muted">No open tasks.</span>}
               </div>
             </motion.div>
           </div>
@@ -426,7 +426,7 @@ export default function ReportsPage() {
                       <td className="px-6 py-4 text-center">
                         <div className="flex flex-col items-center">
                           <span className="text-sm font-semibold text-primary">{c.completedProjects} / {c.totalProjects}</span>
-                          <span className="text-[10px] font-medium text-[#9CA3AF] uppercase">Completed</span>
+                          <span className="text-[10px] font-medium text-muted uppercase">Completed</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -446,14 +446,14 @@ export default function ReportsPage() {
                             {c.overdueTasks} Overdue
                           </span>
                         ) : (
-                          <span className="text-sm text-[#9CA3AF]">-</span>
+                          <span className="text-sm text-muted">-</span>
                         )}
                       </td>
                       <td className="px-6 py-4 text-left">
                         {c.nextDueDate ? (
                           <span className="text-sm font-medium text-primary">{formatDate(c.nextDueDate)}</span>
                         ) : (
-                          <span className="text-sm text-[#9CA3AF] italic">No upcoming</span>
+                          <span className="text-sm text-muted italic">No upcoming</span>
                         )}
                       </td>
                     </tr>
@@ -476,11 +476,11 @@ function MetricCard({ label, value, suffix, danger, icon: Icon }: { label: strin
     <div className={`flex flex-col p-4 sm:p-5 rounded-2xl border ${danger ? 'border-red-200 bg-red-50' : 'border-border bg-white'} hover:shadow-sm transition-shadow`}>
       <div className="flex items-start justify-between gap-2 mb-3">
         <p className={`text-[11px] sm:text-xs font-medium uppercase tracking-wide ${danger ? 'text-red-600' : 'text-secondary'}`}>{label}</p>
-        {Icon && <Icon className={`w-4 h-4 shrink-0 ${danger ? 'text-red-500' : 'text-[#9CA3AF]'}`} />}
+        {Icon && <Icon className={`w-4 h-4 shrink-0 ${danger ? 'text-red-500' : 'text-muted'}`} />}
       </div>
       <p title={String(value)} className={`${String(value).length > 12 ? 'text-lg sm:text-xl' : String(value).length > 8 ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-3xl'} font-semibold tabular-nums tracking-tight ${danger ? 'text-red-600' : 'text-primary'}`}>
         {value}
-        {suffix && <span className={`text-sm font-medium ml-2 ${danger ? 'text-red-400' : 'text-[#9CA3AF]'}`}>{suffix}</span>}
+        {suffix && <span className={`text-sm font-medium ml-2 ${danger ? 'text-red-400' : 'text-muted'}`}>{suffix}</span>}
       </p>
     </div>
   );
@@ -539,7 +539,7 @@ function StatRow({ label, value, sub, tone }: { label: string; value: string; su
     <div className="rounded-2xl border border-border bg-white p-4 flex items-center justify-between">
       <div>
         <p className="text-xs font-medium text-secondary uppercase tracking-wide">{label}</p>
-        {sub && <p className="text-[11px] text-[#9CA3AF] mt-0.5">{sub}</p>}
+        {sub && <p className="text-[11px] text-muted mt-0.5">{sub}</p>}
       </div>
       <p className={`text-lg font-semibold tabular-nums ${color}`}>{value}</p>
     </div>

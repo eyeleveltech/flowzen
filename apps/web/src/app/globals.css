@@ -7,6 +7,10 @@
   --color-border: #E5E7EB;
   --color-primary: #111827;
   --color-secondary: #6B7280;
+  /* Placeholder / hint / de-emphasised icon text. Must stay >= 4.5:1 on white
+     (WCAG AA for normal text). The previous inline #9CA3AF measured 2.54:1 and
+     failed; #6B7280 measures 4.84:1. Change it here, not per-usage. */
+  --color-muted: #6B7280;
   --color-accent: #000000;
   --color-success: #22C55E;
   --color-warning: #F59E0B;

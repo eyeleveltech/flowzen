@@ -403,12 +403,12 @@ function ClientsContent() {
         <div className="flex flex-wrap items-center gap-2 w-full">
           {/* Search Box */}
           <div className="relative w-full sm:w-64 md:w-80 shrink-0">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search clients..."
-              className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-[#9CA3AF]"
+              className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-muted"
             />
           </div>
 
@@ -577,7 +577,7 @@ function ClientsContent() {
               <th className="px-6 py-3.5 w-10 text-center relative select-none">
                 <button 
                   onClick={(e) => { e.stopPropagation(); setShowColumnDropdown(!showColumnDropdown); }}
-                  className="inline-flex items-center justify-center h-6 w-6 rounded-md text-[#9CA3AF] hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
+                  className="inline-flex items-center justify-center h-6 w-6 rounded-md text-muted hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
                   title="Toggle visible columns"
                 >
                   +
@@ -629,7 +629,7 @@ function ClientsContent() {
               ))
             ) : clients.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-12 text-center text-sm text-[#9CA3AF]">
+                <td colSpan={7} className="px-6 py-12 text-center text-sm text-muted">
                   No clients found. Add your first client to get started.
                 </td>
               </tr>
@@ -653,9 +653,9 @@ function ClientsContent() {
                             {getClientDisplayName(client)}
                           </p>
                           {client.name !== 'Internal' && client.company && (client.contacts?.[0]?.name || client.name !== client.company) && (
-                            <p className="text-xs text-[#9CA3AF]">{client.contacts?.[0]?.name || client.name}</p>
+                            <p className="text-xs text-muted">{client.contacts?.[0]?.name || client.name}</p>
                           )}
-                          {client.name === 'Internal' && <p className="text-xs font-medium text-[#9CA3AF]">(Internal)</p>}
+                          {client.name === 'Internal' && <p className="text-xs font-medium text-muted">(Internal)</p>}
                         </div>
                       </div>
                     </td>
@@ -683,7 +683,7 @@ function ClientsContent() {
                           )}
                         </div>
                       ) : (
-                        <span className="text-sm text-[#9CA3AF]">—</span>
+                        <span className="text-sm text-muted">—</span>
                       )}
                     </td>
                   )}
@@ -728,7 +728,7 @@ function ClientsContent() {
             </div>
           ))
         ) : clients.length === 0 ? (
-          <div className="p-8 text-center text-sm text-[#9CA3AF] bg-white rounded-xl border border-border">
+          <div className="p-8 text-center text-sm text-muted bg-white rounded-xl border border-border">
             No clients found.
           </div>
         ) : (
@@ -773,7 +773,7 @@ function ClientsContent() {
                       )}
                     </>
                   ) : (
-                    <p className="text-[11px] text-[#9CA3AF]">No contacts</p>
+                    <p className="text-[11px] text-muted">No contacts</p>
                   )}
                 </div>
                 <div className="flex items-center gap-1.5 text-xs font-medium text-secondary bg-[#F3F4F6] px-2 py-1 rounded-md">
@@ -906,7 +906,7 @@ function ClientsContent() {
                     {form.contacts.map((contact, i) => (
                       <div key={i} className="p-4 border border-border rounded-xl bg-surface relative">
                         {form.contacts.length > 1 && (
-                          <button type="button" onClick={() => setForm({ ...form, contacts: form.contacts.filter((_, idx) => idx !== i) })} className="absolute top-2 right-2 p-1.5 text-[#9CA3AF] hover:text-red-500 rounded-lg hover:bg-white transition-colors border border-transparent hover:border-red-100 shadow-sm hover:shadow">
+                          <button type="button" onClick={() => setForm({ ...form, contacts: form.contacts.filter((_, idx) => idx !== i) })} className="absolute top-2 right-2 p-1.5 text-muted hover:text-red-500 rounded-lg hover:bg-white transition-colors border border-transparent hover:border-red-100 shadow-sm hover:shadow">
                             <X className="h-3.5 w-3.5" />
                           </button>
                         )}
@@ -963,11 +963,11 @@ function ClientsContent() {
                       className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed transition-colors rounded-xl cursor-pointer ${isDragging ? 'border-primary bg-gray-50' : 'border-[#D1D5DB] hover:border-primary hover:bg-gray-50'}`}
                     >
                       <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                        <Upload className="w-8 h-8 mb-3 text-[#9CA3AF]" />
+                        <Upload className="w-8 h-8 mb-3 text-muted" />
                         <p className="mb-2 text-sm text-[#4B5563]">
                           <span className="font-semibold">Click to upload</span> or drag and drop
                         </p>
-                        <p className="text-xs text-[#9CA3AF]">CSV files only</p>
+                        <p className="text-xs text-muted">CSV files only</p>
                       </div>
                       <input type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
                     </label>

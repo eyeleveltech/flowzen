@@ -167,7 +167,7 @@ export function ActivityFeedWidget({ itemVariants }: { itemVariants?: any }) {
                 <p className={`text-xs leading-snug ${isUnread ? 'text-primary' : 'text-[#4B5563]'}`}>
                   {getReadableMessage(item)}
                 </p>
-                <p className="text-[10px] text-[#9CA3AF] mt-1 font-medium">{formatRelativeDate(item.createdAt)}</p>
+                <p className="text-[10px] text-muted mt-1 font-medium">{formatRelativeDate(item.createdAt)}</p>
               </div>
             </div>
           );

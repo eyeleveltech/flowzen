@@ -70,7 +70,7 @@ export default function RegisterPage() {
                 onChange={(e) => setOrganizationName(e.target.value)}
                 placeholder="Your company name"
                 required
-                className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary placeholder:text-[#9CA3AF] outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary placeholder:text-muted outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
               />
             </div>
 
@@ -81,7 +81,7 @@ export default function RegisterPage() {
                 onChange={(e) => setName(e.target.value)}
                 placeholder="John Doe"
                 required
-                className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary placeholder:text-[#9CA3AF] outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary placeholder:text-muted outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
               />
             </div>
 
@@ -93,7 +93,7 @@ export default function RegisterPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com"
                 required
-                className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary placeholder:text-[#9CA3AF] outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary placeholder:text-muted outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
               />
             </div>
 
@@ -107,12 +107,12 @@ export default function RegisterPage() {
                   placeholder="Min. 8 characters"
                   required
                   minLength={8}
-                  className="w-full rounded-xl border border-border bg-white px-4 py-2.5 pr-10 text-sm text-primary placeholder:text-[#9CA3AF] outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  className="w-full rounded-xl border border-border bg-white px-4 py-2.5 pr-10 text-sm text-primary placeholder:text-muted outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] hover:text-secondary"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-secondary"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -128,7 +128,7 @@ export default function RegisterPage() {
             </button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-[#9CA3AF]">
+          <p className="mt-6 text-center text-sm text-muted">
             Already have an account?{' '}
             <a href="/login" className="text-primary font-medium hover:underline">
               Sign in

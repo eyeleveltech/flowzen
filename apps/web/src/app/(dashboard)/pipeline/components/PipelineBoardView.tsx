@@ -40,19 +40,9 @@ const GROUPS = [
   { id: 'Lost', title: 'Lost & Closed', color: '#DC2626', stages: ['CHURNED'] },
 ];
 
-const STAGE_BADGES: Record<string, { label: string, bg: string, text: string }> = {
-  'NEW_LEAD': { label: 'NEW LEAD', bg: '#6B7280', text: '#ffffff' },
-  'OUTREACH': { label: 'OUTREACH', bg: '#6B7280', text: '#ffffff' },
-  'MEETING': { label: 'MEETING', bg: '#6B7280', text: '#ffffff' },
-  'PROPOSAL': { label: 'PROPOSAL', bg: '#2563EB', text: '#ffffff' },
-  'NEGOTIATION': { label: 'NEGOTIATION', bg: '#2563EB', text: '#ffffff' },
-  'CONTRACT': { label: 'WON & CLOSED', bg: '#16A34A', text: '#ffffff' },
-  'ACTIVE_RETAINER': { label: 'ACTIVE (RETAINER)', bg: '#2563EB', text: '#ffffff' },
-  'ACTIVE_PROJECT': { label: 'ACTIVE (PROJECT)', bg: '#2563EB', text: '#ffffff' },
-  'ON_HOLD': { label: 'ON HOLD', bg: '#6B7280', text: '#ffffff' },
-  'PROJECT_COMPLETED': { label: 'COMPLETED', bg: '#16A34A', text: '#ffffff' },
-  'CHURNED': { label: 'LOST & CLOSED', bg: '#DC2626', text: '#ffffff' },
-};
+// NOTE: the per-card stage badge was removed (UI audit F-3) — the column the card
+// sits in already conveys its stage, so the badge was redundant. Column colours live
+// in GROUPS above and are limited to 4 semantic hues (neutral / active / won / lost).
 
 export function PipelineBoardView() {
   const router = useRouter();

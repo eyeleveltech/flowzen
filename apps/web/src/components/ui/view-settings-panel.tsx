@@ -175,7 +175,7 @@ export function ViewSettingsPanel({
                     className="w-full flex items-center justify-between p-2.5 rounded-xl border border-border text-sm text-secondary hover:text-primary hover:bg-gray-50 transition-all font-medium text-left"
                   >
                     <span className="flex items-center gap-2">
-                      <Link2 className="w-4 h-4 text-[#9CA3AF]" />
+                      <Link2 className="w-4 h-4 text-muted" />
                       Copy Link to View
                     </span>
                   </button>
@@ -186,7 +186,7 @@ export function ViewSettingsPanel({
                       className="w-full flex items-center justify-between p-2.5 rounded-xl border border-border text-sm text-secondary hover:text-primary hover:bg-gray-50 transition-all font-medium text-left"
                     >
                       <span className="flex items-center gap-2">
-                        <Download className="w-4 h-4 text-[#9CA3AF]" />
+                        <Download className="w-4 h-4 text-muted" />
                         Export Data (⌘Shift X)
                       </span>
                     </button>

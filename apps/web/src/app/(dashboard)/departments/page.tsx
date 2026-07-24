@@ -215,7 +215,7 @@ export default function TeamsPage() {
                       <span className="text-sm font-medium text-primary">{team.leader.name}</span>
                     </div>
                   ) : (
-                    <span className="text-sm text-[#9CA3AF] italic">No Manager</span>
+                    <span className="text-sm text-muted italic">No Manager</span>
                   )}
                 </td>
                 <td className="px-6 py-5">
@@ -299,7 +299,7 @@ export default function TeamsPage() {
                       <span className="text-xs font-medium text-primary truncate">{team.leader.name}</span>
                     </div>
                   ) : (
-                    <span className="text-xs text-[#9CA3AF] italic">No Manager</span>
+                    <span className="text-xs text-muted italic">No Manager</span>
                   )}
                 </div>
                 

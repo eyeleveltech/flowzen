@@ -49,7 +49,7 @@ export default function SubscriptionsPage() {
                 <tr key={s.id} className="hover:bg-surface transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <RefreshCw className="h-4 w-4 text-[#9CA3AF] shrink-0" />
+                      <RefreshCw className="h-4 w-4 text-muted shrink-0" />
                       <div>
                         <span className="text-sm font-medium text-primary block">{s.client?.company || s.client?.name || '-'}</span>
                       </div>

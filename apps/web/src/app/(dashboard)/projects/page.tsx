@@ -244,12 +244,12 @@ function ProjectsContent() {
         <div className="flex flex-wrap items-center gap-2 w-full">
           {/* Search Box */}
           <div className="relative w-full sm:w-64 md:w-80 shrink-0">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search projects..."
-              className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-[#9CA3AF]"
+              className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-muted"
             />
           </div>
 
@@ -409,7 +409,7 @@ function ProjectsContent() {
                       <th className="px-6 py-3.5 w-10 text-center relative select-none">
                         <button 
                           onClick={(e) => { e.stopPropagation(); setShowColumnDropdown(!showColumnDropdown); }}
-                          className="inline-flex items-center justify-center h-6 w-6 rounded-md text-[#9CA3AF] hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
+                          className="inline-flex items-center justify-center h-6 w-6 rounded-md text-muted hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
                           title="Toggle visible columns"
                         >
                           +
@@ -456,7 +456,7 @@ function ProjectsContent() {
                         {visibleColumns.includes('project') && (
                           <td className="px-6 py-4">
                             <p className="text-sm font-medium text-primary">{p.name}</p>
-                            <p className="text-xs text-[#9CA3AF]">{p._count?.tasks ?? 0} tasks</p>
+                            <p className="text-xs text-muted">{p._count?.tasks ?? 0} tasks</p>
                           </td>
                         )}
                         {visibleColumns.includes('client') && <td className="px-6 py-4 text-sm text-secondary">{p.client ? getClientDisplayName(p.client) : '—'}</td>}
@@ -501,7 +501,7 @@ function ProjectsContent() {
             {/* Mobile Card View */}
             <div className="md:hidden flex flex-col gap-3">
               {projects.length === 0 ? (
-                <div className="p-8 text-center text-sm text-[#9CA3AF] bg-white rounded-xl border border-border">
+                <div className="p-8 text-center text-sm text-muted bg-white rounded-xl border border-border">
                   No projects found.
                 </div>
               ) : (
@@ -542,7 +542,7 @@ function ProjectsContent() {
                             <span className="text-xs font-medium text-[#374151]">{p.owner.name}</span>
                           </>
                         ) : (
-                          <span className="text-xs text-[#9CA3AF]">Unassigned</span>
+                          <span className="text-xs text-muted">Unassigned</span>
                         )}
                       </div>
                       
@@ -587,7 +587,7 @@ function ProjectsContent() {
                 <div key={p.id} className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4 py-3 md:py-2 cursor-pointer hover:bg-surface rounded-xl px-3 -mx-3 transition-colors border-b border-[#F3F4F6] last:border-0 md:border-0" onClick={() => router.push(`/projects/${p.id}`)}>
                   <div className="w-full md:w-48 shrink-0">
                     <p className="text-sm font-medium text-primary truncate">{p.name}</p>
-                    <p className="text-xs text-[#9CA3AF]">{p.client ? getClientDisplayName(p.client) : 'Internal Project'}</p>
+                    <p className="text-xs text-muted">{p.client ? getClientDisplayName(p.client) : 'Internal Project'}</p>
                   </div>
                   <div className="flex-1 w-full">
                     <div className="relative h-8 rounded-lg bg-[#F3F4F6] overflow-hidden">
@@ -598,8 +598,8 @@ function ProjectsContent() {
                       </div>
                     </div>
                     <div className="flex justify-between mt-1.5">
-                      <span className="text-[10px] text-[#9CA3AF]">{formatDate(p.startDate)}</span>
-                      <span className="text-[10px] text-[#9CA3AF]">{formatShortDate(p.endDate)}</span>
+                      <span className="text-[10px] text-muted">{formatDate(p.startDate)}</span>
+                      <span className="text-[10px] text-muted">{formatShortDate(p.endDate)}</span>
                     </div>
                   </div>
                 </div>

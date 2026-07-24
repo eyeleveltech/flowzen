@@ -102,7 +102,7 @@ export function ConfirmDialog() {
             {/* Close Button */}
             <button
               onClick={onCancel}
-              className="absolute right-4 top-4 rounded-lg p-1.5 text-[#9CA3AF] hover:bg-[#F3F4F6] hover:text-[#4B5563] transition-colors"
+              className="absolute right-4 top-4 rounded-lg p-1.5 text-muted hover:bg-[#F3F4F6] hover:text-[#4B5563] transition-colors"
             >
               <X className="h-4 w-4" />
             </button>
@@ -136,7 +136,7 @@ export function ConfirmDialog() {
                       placeholder={requireText}
                       autoComplete="off"
                       spellCheck={false}
-                      className="w-full rounded-xl border border-border px-3 py-2 text-sm text-primary outline-none transition-colors focus:border-red-400 focus:ring-2 focus:ring-red-100 placeholder:text-[#9CA3AF]"
+                      className="w-full rounded-xl border border-border px-3 py-2 text-sm text-primary outline-none transition-colors focus:border-red-400 focus:ring-2 focus:ring-red-100 placeholder:text-muted"
                     />
                   </div>
                 )}

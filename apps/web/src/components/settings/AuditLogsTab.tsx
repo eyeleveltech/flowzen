@@ -159,7 +159,7 @@ export function AuditLogsTab() {
           <div className="text-center py-12 text-sm text-secondary">Loading audit logs...</div>
         ) : filteredLogs.length === 0 ? (
           <div className="text-center py-12 text-sm text-secondary flex flex-col items-center gap-2">
-            <FileText className="h-8 w-8 text-[#9CA3AF] stroke-[1.5]" />
+            <FileText className="h-8 w-8 text-muted stroke-[1.5]" />
             No audit logs found matching the filter.
           </div>
         ) : (

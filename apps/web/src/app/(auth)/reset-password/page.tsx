@@ -103,13 +103,13 @@ function ResetPasswordForm() {
                     disabled={!token}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full appearance-none rounded-xl border border-border bg-[#F9FAFB] px-4 py-3 pr-10 text-primary placeholder-[#9CA3AF] focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-all sm:text-sm disabled:opacity-50"
+                    className="block w-full appearance-none rounded-xl border border-border bg-[#F9FAFB] px-4 py-3 pr-10 text-primary placeholder-muted focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-all sm:text-sm disabled:opacity-50"
                     placeholder="••••••••"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] hover:text-secondary"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-secondary"
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -129,7 +129,7 @@ function ResetPasswordForm() {
                     disabled={!token}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="block w-full appearance-none rounded-xl border border-border bg-[#F9FAFB] px-4 py-3 pr-10 text-primary placeholder-[#9CA3AF] focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-all sm:text-sm disabled:opacity-50"
+                    className="block w-full appearance-none rounded-xl border border-border bg-[#F9FAFB] px-4 py-3 pr-10 text-primary placeholder-muted focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-all sm:text-sm disabled:opacity-50"
                     placeholder="••••••••"
                   />
                 </div>

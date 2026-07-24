@@ -96,7 +96,7 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
             <h2 className="text-lg font-semibold text-primary">Edit Lead Details</h2>
             <p className="text-sm text-secondary">Update information for {leadLabel}</p>
           </div>
-          <button onClick={onClose} className="p-2 text-[#9CA3AF] hover:text-primary rounded-lg hover:bg-[#F3F4F6] transition-colors">
+          <button onClick={onClose} className="p-2 text-muted hover:text-primary rounded-lg hover:bg-[#F3F4F6] transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>

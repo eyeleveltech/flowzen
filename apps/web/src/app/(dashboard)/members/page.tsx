@@ -149,7 +149,7 @@ export default function TeamPage() {
     if (!memberDetail) {
       return (
         <div className="h-[550px] flex flex-col items-center justify-center text-center p-8 bg-gray-50/50 rounded-3xl border border-dashed border-border">
-          <div className="h-14 w-14 rounded-2xl bg-white flex items-center justify-center border border-border text-[#9CA3AF] mb-5">
+          <div className="h-14 w-14 rounded-2xl bg-white flex items-center justify-center border border-border text-muted mb-5">
             <Sparkles className="h-6 w-6 text-indigo-500" />
           </div>
           <h3 className="text-sm font-semibold text-primary">Workload Inspector</h3>
@@ -281,7 +281,7 @@ export default function TeamPage() {
                           {t.status.replace('_', ' ')}
                         </span>
                       </div>
-                      <div className="flex justify-between items-center text-[10px] text-[#9CA3AF]">
+                      <div className="flex justify-between items-center text-[10px] text-muted">
                         <span className="truncate max-w-[170px] font-semibold text-secondary flex items-center gap-1.5">
                           <Folder className="h-3 w-3" />
                           {t.project?.name || 'No project'}
@@ -296,7 +296,7 @@ export default function TeamPage() {
                     </div>
                   ))}
                   {activeTasks.length === 0 && (
-                    <p className="text-xs text-[#9CA3AF] italic text-center py-6 bg-gray-50/50 rounded-xl border border-dashed border-border">
+                    <p className="text-xs text-muted italic text-center py-6 bg-gray-50/50 rounded-xl border border-dashed border-border">
                       No active tasks assigned
                     </p>
                   )}
@@ -316,7 +316,7 @@ export default function TeamPage() {
                       className="p-3.5 bg-white border border-border rounded-xl hover:border-gray-300 transition-colors shadow-xs"
                     >
                       <h4 className="text-xs font-semibold text-primary line-clamp-1">{p.name}</h4>
-                      <div className="flex justify-between items-center text-[10px] text-[#9CA3AF] mt-2">
+                      <div className="flex justify-between items-center text-[10px] text-muted mt-2">
                         <span className="truncate max-w-[170px] font-medium flex items-center gap-1.5">
                           <User className="h-3 w-3" />
                           {p.client ? getClientDisplayName(p.client) : 'Internal'}
@@ -328,7 +328,7 @@ export default function TeamPage() {
                     </div>
                   ))}
                   {ownedProjects.length === 0 && (
-                    <p className="text-xs text-[#9CA3AF] italic text-center py-6 bg-gray-50/50 rounded-xl border border-dashed border-border">
+                    <p className="text-xs text-muted italic text-center py-6 bg-gray-50/50 rounded-xl border border-dashed border-border">
                       No led projects assigned
                     </p>
                   )}
@@ -348,18 +348,18 @@ export default function TeamPage() {
               <div className="bg-surface rounded-2xl p-5 border border-border/80 space-y-3.5 text-xs text-[#4B5563]">
                 <h4 className="text-[10px] text-[#86868B] font-medium uppercase tracking-wide mb-1">Contact Information</h4>
                 <div className="flex items-center gap-3">
-                  <Mail className="h-4 w-4 text-[#9CA3AF]" />
+                  <Mail className="h-4 w-4 text-muted" />
                   <a href={`mailto:${email}`} className="hover:underline hover:text-primary font-medium truncate">{email}</a>
                 </div>
                 {phone && (
                   <div className="flex items-center gap-3">
-                    <Phone className="h-4 w-4 text-[#9CA3AF]" />
+                    <Phone className="h-4 w-4 text-muted" />
                     <span className="tabular-nums font-medium">{phone}</span>
                   </div>
                 )}
                 {joiningDate && (
                   <div className="flex items-center gap-3">
-                    <Calendar className="h-4 w-4 text-[#9CA3AF]" />
+                    <Calendar className="h-4 w-4 text-muted" />
                     <span className="font-medium">Joined {new Date(joiningDate).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</span>
                   </div>
                 )}
@@ -409,13 +409,13 @@ export default function TeamPage() {
           <div className="bg-white border border-border rounded-2xl p-4 shadow-sm flex flex-wrap items-center gap-2 w-full">
             {/* Search Input */}
             <div className="relative w-full sm:w-64 md:w-80 shrink-0">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
               <input
                 type="text"
                 placeholder="Search team by name, email..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-[#9CA3AF]"
+                className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-muted"
               />
             </div>
 
@@ -531,7 +531,7 @@ export default function TeamPage() {
               {/* Empty State Grid */}
               {filteredTeam.length === 0 && (
                 <div className="col-span-full py-20 text-center bg-white rounded-3xl border border-dashed border-border">
-                  <AlertCircle className="h-10 w-10 text-[#9CA3AF] mx-auto mb-4" />
+                  <AlertCircle className="h-10 w-10 text-muted mx-auto mb-4" />
                   <p className="text-sm font-semibold text-primary">No members match search query</p>
                   <p className="text-xs text-[#86868B] mt-1.5">Try resetting the department or role filters.</p>
                 </div>
@@ -565,7 +565,7 @@ export default function TeamPage() {
               {/* Close Button overlay */}
               <button 
                 onClick={() => setSelectedId(null)}
-                className="absolute right-4 top-4 p-2 text-[#9CA3AF] hover:bg-[#F3F4F6] rounded-xl transition-colors"
+                className="absolute right-4 top-4 p-2 text-muted hover:bg-[#F3F4F6] rounded-xl transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>

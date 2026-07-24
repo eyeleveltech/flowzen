@@ -118,14 +118,14 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
             triggerClassName
           )}
         >
-          <span className={`min-w-0 truncate ${selectedOptions.length === 0 ? 'text-[#9CA3AF]' : 'text-primary'}`}>
+          <span className={`min-w-0 truncate ${selectedOptions.length === 0 ? 'text-muted' : 'text-primary'}`}>
             {selectedOptions.length === 0
               ? placeholder
               : selectedOptions.length === 1
                 ? selectedOptions[0].label
                 : `${selectedOptions.length} selected`}
           </span>
-          <ChevronsUpDown className="h-4 w-4 shrink-0 text-[#9CA3AF] ml-2" />
+          <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted ml-2" />
         </button>
       ) : (
       <div
@@ -133,7 +133,7 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
         onClick={() => setIsOpen(true)}
       >
         {selectedOptions.length === 0 && (
-          <span className="text-[#9CA3AF] px-1">{placeholder}</span>
+          <span className="text-muted px-1">{placeholder}</span>
         )}
 
         {selectedOptions.map(opt => (
@@ -158,7 +158,7 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
           role="combobox"
           aria-expanded={isOpen}
           aria-haspopup="listbox"
-          className="flex-1 min-w-[50px] bg-transparent outline-none text-sm placeholder:text-[#9CA3AF]"
+          className="flex-1 min-w-[50px] bg-transparent outline-none text-sm placeholder:text-muted"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={selectedOptions.length === 0 ? "" : "Search..."}
@@ -176,7 +176,7 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
         />
 
         <div className="ml-auto flex items-center shrink-0">
-          <ChevronsUpDown className="h-4 w-4 text-[#9CA3AF]" />
+          <ChevronsUpDown className="h-4 w-4 text-muted" />
         </div>
       </div>
       )}

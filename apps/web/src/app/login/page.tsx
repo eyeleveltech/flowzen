@@ -68,7 +68,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com"
                 required
-                className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary placeholder:text-[#9CA3AF] outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary placeholder:text-muted outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
               />
             </div>
 
@@ -86,12 +86,12 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  className="w-full rounded-xl border border-border bg-white px-4 py-2.5 pr-10 text-sm text-primary placeholder:text-[#9CA3AF] outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  className="w-full rounded-xl border border-border bg-white px-4 py-2.5 pr-10 text-sm text-primary placeholder:text-muted outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] hover:text-secondary"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-secondary"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -114,7 +114,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-[#9CA3AF]">
+          <p className="mt-6 text-center text-sm text-muted">
             Don&apos;t have an account?{' '}
             <a href="/register" className="text-primary font-medium hover:underline">
               Create workspace

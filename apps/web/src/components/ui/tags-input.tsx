@@ -35,7 +35,7 @@ export function TagsInput({ value = [], onChange, placeholder = "Type and press 
           <button
             type="button"
             onClick={() => removeTag(tag)}
-            className="text-[#9CA3AF] hover:text-[#4B5563] transition-colors focus:outline-none"
+            className="text-muted hover:text-[#4B5563] transition-colors focus:outline-none"
           >
             <X className="h-3 w-3" />
           </button>
@@ -47,7 +47,7 @@ export function TagsInput({ value = [], onChange, placeholder = "Type and press 
         onChange={(e) => setInputValue(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={value.length === 0 ? placeholder : ''}
-        className="flex-1 min-w-30 bg-transparent outline-none text-sm text-primary placeholder:text-[#9CA3AF] py-1"
+        className="flex-1 min-w-30 bg-transparent outline-none text-sm text-primary placeholder:text-muted py-1"
       />
     </div>
   );

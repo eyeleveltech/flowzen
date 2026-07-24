@@ -94,17 +94,17 @@ export function CommandPalette() {
           >
             {/* Search input */}
             <div className="flex items-center gap-3 px-5 py-4 border-b border-[#F3F4F6]">
-              <Search className="h-5 w-5 text-[#9CA3AF]" />
+              <Search className="h-5 w-5 text-muted" />
               <input
                 autoFocus
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search clients, projects, tasks, team..."
-                className="flex-1 text-sm text-primary placeholder:text-[#9CA3AF] outline-none bg-transparent"
+                className="flex-1 text-sm text-primary placeholder:text-muted outline-none bg-transparent"
               />
               {query && (
                 <button onClick={() => { setQuery(''); setResults(null); }} className="p-1 rounded-lg hover:bg-[#F3F4F6]">
-                  <X className="h-4 w-4 text-[#9CA3AF]" />
+                  <X className="h-4 w-4 text-muted" />
                 </button>
               )}
             </div>
@@ -112,15 +112,15 @@ export function CommandPalette() {
             {/* Results */}
             <div className="max-h-96 overflow-y-auto p-2">
               {loading && (
-                <div className="py-8 text-center text-sm text-[#9CA3AF]">Searching...</div>
+                <div className="py-8 text-center text-sm text-muted">Searching...</div>
               )}
 
               {!loading && query.length >= 2 && !hasResults && (
-                <div className="py-8 text-center text-sm text-[#9CA3AF]">No results found</div>
+                <div className="py-8 text-center text-sm text-muted">No results found</div>
               )}
 
               {!loading && query.length < 2 && (
-                <div className="py-8 text-center text-sm text-[#9CA3AF]">Type at least 2 characters to search</div>
+                <div className="py-8 text-center text-sm text-muted">Type at least 2 characters to search</div>
               )}
 
               {hasResults && (
@@ -182,7 +182,7 @@ export function CommandPalette() {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between px-4 py-2.5 border-t border-[#F3F4F6] text-[10px] text-[#9CA3AF]">
+            <div className="flex items-center justify-between px-4 py-2.5 border-t border-[#F3F4F6] text-[10px] text-muted">
               <span>↑↓ Navigate</span>
               <span>↵ Open</span>
               <span>ESC Close</span>
@@ -207,7 +207,7 @@ function ResultSection({
 }) {
   return (
     <div>
-      <div className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-[#9CA3AF] uppercase tracking-wider">
+      <div className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-muted uppercase tracking-wider">
         <Icon className="h-3.5 w-3.5" />
         {title}
       </div>
@@ -218,7 +218,7 @@ function ResultSection({
           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm hover:bg-[#F9FAFB] transition-colors group"
         >
           <span className="text-primary font-medium">{item.label}</span>
-          <span className="text-[#9CA3AF] text-xs">{item.sub}</span>
+          <span className="text-muted text-xs">{item.sub}</span>
           <ArrowRight className="h-3.5 w-3.5 ml-auto text-[#D1D5DB] opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
       ))}

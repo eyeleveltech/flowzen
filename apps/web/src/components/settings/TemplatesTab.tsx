@@ -189,7 +189,7 @@ export function TemplatesTab({ templates, fetchTemplates }: { templates: any[], 
                     
                     {form.structure.tasks.map((task, index) => (
                       <div key={index} className="bg-surface p-4 rounded-xl border border-border space-y-4 relative">
-                        <button type="button" onClick={() => removeTask(index)} className="absolute top-4 right-4 text-[#9CA3AF] hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                        <button type="button" onClick={() => removeTask(index)} className="absolute top-4 right-4 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                         <div className="space-y-1.5 w-[90%]">
                           <label className="text-[10px] font-medium text-secondary uppercase tracking-wide">Task Title</label>
                           <input required value={task.title} onChange={(e) => updateTask(index, 'title', e.target.value)} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none" />

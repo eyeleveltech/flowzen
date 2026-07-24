@@ -167,7 +167,7 @@ export function UsersTab({ users, fetchUsers, teams }: { users: any[], fetchUser
                 <td className="px-5 py-3">
                   {u.status === 'ACTIVE' && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[#F3F4F6] text-primary border border-border uppercase tracking-wide">Active</span>}
                   {u.status === 'PENDING' && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[#F3F4F6] text-secondary border border-border uppercase tracking-wide">Pending</span>}
-                  {u.status === 'INACTIVE' && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[#F9FAFB] text-[#9CA3AF] border border-border uppercase tracking-wide">Inactive</span>}
+                  {u.status === 'INACTIVE' && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[#F9FAFB] text-muted border border-border uppercase tracking-wide">Inactive</span>}
                 </td>
                 <td className="px-5 py-3 text-right">
                   <div className="flex items-center justify-end gap-2">

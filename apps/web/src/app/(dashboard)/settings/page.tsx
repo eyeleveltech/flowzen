@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ChevronRight } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { useAuthStore } from '@/stores';
@@ -26,6 +27,24 @@ export default function SettingsPage() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('organization');
   const [loading, setLoading] = useState(true);
+
+  // The tab strip scrolls horizontally on narrow screens. Without a visible cue,
+  // the 6 off-screen tabs are undiscoverable on touch (scrollbars are hidden there).
+  const tabStripRef = useRef<HTMLDivElement>(null);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateTabScroll = useCallback(() => {
+    const el = tabStripRef.current;
+    if (!el) return;
+    // 1px tolerance for sub-pixel widths
+    setCanScrollRight(el.scrollWidth - el.clientWidth - el.scrollLeft > 1);
+  }, []);
+
+  useEffect(() => {
+    updateTabScroll();
+    window.addEventListener('resize', updateTabScroll);
+    return () => window.removeEventListener('resize', updateTabScroll);
+  }, [updateTabScroll]);
 
   // Data
   const [orgData, setOrgData] = useState<any>({});
@@ -101,7 +120,12 @@ export default function SettingsPage() {
         <p className="text-sm text-secondary mt-1">Manage your organization, team, and preferences.</p>
       </div>
 
-      <div className="flex gap-2 p-1 bg-[#F3F4F6] rounded-xl overflow-x-auto w-max max-w-full">
+      <div className="relative w-max max-w-full">
+        <div
+          ref={tabStripRef}
+          onScroll={updateTabScroll}
+          className="flex gap-2 p-1 bg-[#F3F4F6] rounded-xl overflow-x-auto"
+        >
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -116,6 +140,23 @@ export default function SettingsPage() {
             {t.label}
           </button>
         ))}
+        </div>
+
+        {/* Scroll affordance: only rendered when there are tabs still off-screen. */}
+        {canScrollRight && (
+          <>
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 right-0 w-12 rounded-r-xl bg-linear-to-l from-[#F3F4F6] to-transparent"
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 shadow-sm"
+            >
+              <ChevronRight className="h-3.5 w-3.5 text-secondary" />
+            </div>
+          </>
+        )}
       </div>
 
       <motion.div

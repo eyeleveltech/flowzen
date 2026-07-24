@@ -414,23 +414,23 @@ export default function DashboardPage() {
       {isManager ? (
         <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
           <div onClick={() => router.push('/clients?status=ACTIVE')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Active Clients</p><Building2 className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors" /></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Active Clients</p><Building2 className="w-4 h-4 shrink-0 text-muted group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.activeClients}</p>
           </div>
           <div onClick={() => router.push('/projects?status=ACTIVE')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Active Projects</p><FolderKanban className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors" /></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Active Projects</p><FolderKanban className="w-4 h-4 shrink-0 text-muted group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.activeProjects}</p>
           </div>
           <div onClick={() => router.push('/projects?status=DELAYED')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Delayed Projects</p><AlertTriangle className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors" /></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Delayed Projects</p><AlertTriangle className="w-4 h-4 shrink-0 text-muted group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.delayedProjects}</p>
           </div>
           <div onClick={() => router.push('/members')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Team Members</p><UsersRound className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors" /></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Team Members</p><UsersRound className="w-4 h-4 shrink-0 text-muted group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.totalMembers}</p>
           </div>
           <div onClick={() => router.push('/tasks?filter=overdue')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow cursor-pointer hover:bg-surface group h-full">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Overdue Tasks</p><Clock className="w-4 h-4 shrink-0 text-[#9CA3AF]" /></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Overdue Tasks</p><Clock className="w-4 h-4 shrink-0 text-muted" /></div>
             <div className="flex items-center gap-2">
               <span className={`h-2.5 w-2.5 rounded-full ${stats.overdueTasks > 0 ? 'bg-red-500' : 'bg-border'}`} />
               <p className={`text-3xl font-semibold ${stats.overdueTasks > 0 ? 'text-red-500' : 'text-primary'}`}>{stats.overdueTasks || 0}</p>
@@ -440,26 +440,26 @@ export default function DashboardPage() {
       ) : (
         <motion.div variants={item} className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <div onClick={() => router.push('/projects')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Projects</p><FolderKanban className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors" /></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Projects</p><FolderKanban className="w-4 h-4 shrink-0 text-muted group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.activeProjects || 0}</p>
           </div>
           <div onClick={() => router.push('/tasks')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Open Tasks</p><CheckSquare className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors" /></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Open Tasks</p><CheckSquare className="w-4 h-4 shrink-0 text-muted group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.openTasks || 0}</p>
           </div>
           <div onClick={() => router.push('/tasks?filter=completed')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Completed Tasks</p><CheckCircle2 className="w-4 h-4 shrink-0 text-[#9CA3AF] group-hover:text-primary transition-colors" /></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Completed Tasks</p><CheckCircle2 className="w-4 h-4 shrink-0 text-muted group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.completedTasks || 0}</p>
           </div>
           <div onClick={() => router.push('/tasks?filter=overdue')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Overdue Tasks</p><Clock className="w-4 h-4 shrink-0 text-[#9CA3AF]" /></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Overdue Tasks</p><Clock className="w-4 h-4 shrink-0 text-muted" /></div>
             <div className="flex items-center gap-2">
               <span className={`h-2.5 w-2.5 rounded-full ${stats.overdueTasks > 0 ? 'bg-red-500' : 'bg-border'}`} />
               <p className={`text-3xl font-semibold ${stats.overdueTasks > 0 ? 'text-red-500' : 'text-primary'}`}>{stats.overdueTasks || 0}</p>
             </div>
           </div>
           <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">My Completion Rate</p><Zap className="w-4 h-4 shrink-0 text-[#9CA3AF]" /></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">My Completion Rate</p><Zap className="w-4 h-4 shrink-0 text-muted" /></div>
             <p className="text-3xl font-semibold text-primary">
               {stats.openTasks + stats.completedTasks > 0 ? Math.round((stats.completedTasks / (stats.openTasks + stats.completedTasks)) * 100) : 0}%
             </p>
@@ -556,12 +556,12 @@ export default function DashboardPage() {
                                 <p className="text-sm font-semibold text-primary truncate mb-0.5">{t.title}</p>
                                 <div className="flex flex-wrap items-center gap-2.5 text-xs text-secondary">
                                   <span className="flex items-center gap-1">
-                                    <FolderKanban className="w-3.5 h-3.5 text-[#9CA3AF]" />
+                                    <FolderKanban className="w-3.5 h-3.5 text-muted" />
                                     {t.project?.name || 'No project'}
                                   </span>
                                   {t.dueDate && (
                                     <span className={`flex items-center gap-1 ${isOverdue ? 'text-red-500 font-medium' : ''}`}>
-                                      <Calendar className="w-3.5 h-3.5 text-[#9CA3AF] shrink-0" />
+                                      <Calendar className="w-3.5 h-3.5 text-muted shrink-0" />
                                       {formatShortDate(t.dueDate)}
                                     </span>
                                   )}

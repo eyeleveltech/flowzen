@@ -196,7 +196,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                       onClick={() => { router.push(item.href); setShowQuickCreate(false); }}
                       className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-[#374151] hover:bg-[#F9FAFB] transition-colors"
                     >
-                      <item.icon className="h-4 w-4 text-[#9CA3AF]" />
+                      <item.icon className="h-4 w-4 text-muted" />
                       {item.label}
                     </button>
                   ))}
@@ -235,7 +235,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
               )}
               <div className="max-h-[60vh] overflow-y-auto divide-y divide-[#F3F4F6] -mx-6 border-t border-[#F3F4F6]">
                 {notifications.length === 0 ? (
-                  <div className="py-8 text-center text-sm text-[#9CA3AF]">No notifications yet</div>
+                  <div className="py-8 text-center text-sm text-muted">No notifications yet</div>
                 ) : (
                   notifications.slice(0, 10).map((n) => {
                     const Icon = notificationIcons[n.type] || AlertCircle;
@@ -258,7 +258,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-[15px] text-[#374151] leading-snug">{n.message}</p>
-                          <p className="text-xs text-[#9CA3AF] mt-1">{formatRelativeDate(n.createdAt)}</p>
+                          <p className="text-xs text-muted mt-1">{formatRelativeDate(n.createdAt)}</p>
                         </div>
                         {!n.read && <div className="mt-2 h-2.5 w-2.5 shrink-0 rounded-full bg-[#3B82F6]" />}
                       </div>
@@ -290,7 +290,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                   </div>
                   <div className="max-h-80 overflow-y-auto divide-y divide-[#F3F4F6]">
                     {notifications.length === 0 ? (
-                      <div className="py-8 text-center text-sm text-[#9CA3AF]">No notifications yet</div>
+                      <div className="py-8 text-center text-sm text-muted">No notifications yet</div>
                     ) : (
                       notifications.slice(0, 10).map((n) => {
                         const Icon = notificationIcons[n.type] || AlertCircle;
@@ -313,7 +313,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                             </div>
                             <div className="min-w-0 flex-1">
                               <p className="text-sm text-[#374151] leading-snug">{n.message}</p>
-                              <p className="text-xs text-[#9CA3AF] mt-0.5">{formatRelativeDate(n.createdAt)}</p>
+                              <p className="text-xs text-muted mt-0.5">{formatRelativeDate(n.createdAt)}</p>
                             </div>
                             {!n.read && <div className="mt-2 h-2 w-2 shrink-0 rounded-full bg-[#3B82F6]" />}
                           </div>
@@ -336,7 +336,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
             <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${user ? getAvatarColor(user.name) : 'bg-primary text-white'}`}>
               {user ? getInitials(user.name) : '??'}
             </div>
-            <ChevronDown className="h-3.5 w-3.5 text-[#9CA3AF]" />
+            <ChevronDown className="h-3.5 w-3.5 text-muted" />
           </button>
 
           {isMobile ? (
@@ -394,14 +394,14 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                 >
                   <div className="px-3 py-2 mb-1">
                     <p className="text-sm font-medium text-primary">{user?.name}</p>
-                    <p className="text-xs text-[#9CA3AF]">{user?.email}</p>
+                    <p className="text-xs text-muted">{user?.email}</p>
                   </div>
                   <div className="border-t border-[#F3F4F6] pt-1">
                     <button
                       onClick={() => { router.push('/profile'); setShowUserMenu(false); }}
                       className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-[#374151] hover:bg-[#F9FAFB] transition-colors"
                     >
-                      <UserIcon className="h-4 w-4 text-[#9CA3AF]" />
+                      <UserIcon className="h-4 w-4 text-muted" />
                       My Profile
                     </button>
                     {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
@@ -409,7 +409,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                         onClick={() => { router.push('/settings'); setShowUserMenu(false); }}
                         className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-[#374151] hover:bg-[#F9FAFB] transition-colors"
                       >
-                        <Settings className="h-4 w-4 text-[#9CA3AF]" />
+                        <Settings className="h-4 w-4 text-muted" />
                         Settings
                       </button>
                     )}

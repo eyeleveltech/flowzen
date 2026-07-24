@@ -117,7 +117,7 @@ export function BottomTabs() {
                 {canSwitch && (
                   <Link href="/modules" onClick={() => setShowMore(false)}>
                     <div className="flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all border border-border mb-1">
-                      <ArrowLeftRight className="h-5 w-5 text-[#9CA3AF]" />
+                      <ArrowLeftRight className="h-5 w-5 text-muted" />
                       Switch module
                     </div>
                   </Link>
@@ -137,7 +137,7 @@ export function BottomTabs() {
                           }`}
                       >
                         <item.icon
-                          className={`h-5 w-5 ${isActive ? 'text-white' : 'text-[#9CA3AF]'
+                          className={`h-5 w-5 ${isActive ? 'text-white' : 'text-muted'
                             }`}
                         />
                         {item.label}
@@ -187,11 +187,11 @@ export function BottomTabs() {
                   />
                 )}
                 <tab.icon
-                  className={`h-5 w-5 transition-colors duration-150 ${isActive ? 'text-primary' : 'text-[#9CA3AF]'
+                  className={`h-5 w-5 transition-colors duration-150 ${isActive ? 'text-primary' : 'text-muted'
                     }`}
                 />
                 <span
-                  className={`text-[10px] font-medium transition-colors duration-150 ${isActive ? 'text-primary' : 'text-[#9CA3AF]'
+                  className={`text-[10px] font-medium transition-colors duration-150 ${isActive ? 'text-primary' : 'text-muted'
                     }`}
                 >
                   {tab.label}
@@ -213,11 +213,11 @@ export function BottomTabs() {
               />
             )}
             <MoreHorizontal
-              className={`h-5 w-5 transition-colors duration-150 ${isMoreActive ? 'text-primary' : 'text-[#9CA3AF]'
+              className={`h-5 w-5 transition-colors duration-150 ${isMoreActive ? 'text-primary' : 'text-muted'
                 }`}
             />
             <span
-              className={`text-[10px] font-medium transition-colors duration-150 ${isMoreActive ? 'text-primary' : 'text-[#9CA3AF]'
+              className={`text-[10px] font-medium transition-colors duration-150 ${isMoreActive ? 'text-primary' : 'text-muted'
                 }`}
             >
               More
