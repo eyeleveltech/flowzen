@@ -55,6 +55,11 @@ authRouter.post('/register', authLimiter, validate(registerSchema), async (req, 
             email,
             password: hashedPassword,
             role: 'SUPER_ADMIN',
+            // The org creator sets their own password here, so activate immediately.
+            // Without this the user defaults to PENDING and login (which requires
+            // ACTIVE) rejects them once the initial session cookie expires — the
+            // only path to ACTIVE otherwise is the email-based password reset.
+            status: 'ACTIVE',
           },
         },
         clients: {

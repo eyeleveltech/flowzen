@@ -130,7 +130,7 @@ function ClientsContent() {
       }
     } catch { /* ignore */ }
     setFiltersHydrated(true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Persist the filters whenever they change (after the initial restore).
@@ -172,7 +172,7 @@ function ClientsContent() {
     }
     if (!filtersHydrated) return; // wait until saved filters are restored
     fetchClients();
-    api.get('/settings/organization').then(setOrgProfile).catch(() => {});
+    api.get('/settings/organization').then(setOrgProfile).catch(() => { });
     const sse = getSSE();
     if (sse) {
       sse.on('client:created', fetchClients);
@@ -189,7 +189,7 @@ function ClientsContent() {
   // Any filter change resets back to the first page.
   useEffect(() => {
     setPage(1);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, statusFilter, accountManagerFilter, engagementTypeFilter, industryFilter]);
 
   async function fetchClients() {
@@ -528,24 +528,24 @@ function ClientsContent() {
 
             {/* Segmented View Switcher */}
             <div className="flex bg-[#F3F4F6] p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center overflow-x-auto no-scrollbar max-w-full">
-              <button 
+              <button
                 type="button"
                 onClick={() => {
                   setCurrentView('table');
                   localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ name: viewName, visibleColumns, viewType: 'table' }));
-                }} 
+                }}
                 className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${currentView === 'table' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
                 title="Table View"
               >
                 <List className="w-3.5 h-3.5 shrink-0" />
                 <span>Table</span>
               </button>
-              <button 
+              <button
                 type="button"
                 onClick={() => {
                   setCurrentView('timeline');
                   localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ name: viewName, visibleColumns, viewType: 'timeline' }));
-                }} 
+                }}
                 className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${currentView === 'timeline' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
                 title="Timeline View"
               >
@@ -559,166 +559,166 @@ function ClientsContent() {
 
       {/* Desktop Table View */}
       {currentView === 'table' && (
-      <div className="hidden md:block rounded-2xl border border-border bg-white overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-200">
-            <thead>
-            <tr className="border-b border-[#F3F4F6]">
-              {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>}
-              {visibleColumns.includes('industry') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Industry</th>}
-              {visibleColumns.includes('contact') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Contact</th>}
-              {visibleColumns.includes('projects') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Projects</th>}
-              {visibleColumns.includes('status') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">{activeModule === 'PM' ? 'Lifecycle Stage' : 'Status'}</th>}
-              <th className="px-6 py-3.5 w-10 text-center relative select-none">
-                <button 
-                  onClick={(e) => { e.stopPropagation(); setShowColumnDropdown(!showColumnDropdown); }}
-                  className="inline-flex items-center justify-center h-6 w-6 rounded-md text-secondary hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
-                  title="Toggle visible columns"
-                >
-                  +
-                </button>
-                <AnimatePresence>
-                  {showColumnDropdown && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setShowColumnDropdown(false)} />
-                      <motion.div 
-                        initial={{ opacity: 0, y: 5 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 5 }}
-                        className="absolute right-0 top-full mt-2 w-48 bg-white border border-border rounded-xl shadow-lg z-50 overflow-hidden py-1"
-                      >
-                        <div className="px-3 py-2 border-b border-[#F3F4F6] text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
-                          Visible Columns
-                        </div>
-                        {ALL_COLUMNS.map(col => (
-                          <button
-                            key={col.id}
-                            onClick={() => {
-                              setVisibleColumns(prev => 
-                                prev.includes(col.id) 
-                                  ? prev.filter(c => c !== col.id)
-                                  : [...prev, col.id]
-                              )
-                            }}
-                            className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#F9FAFB] transition-colors"
-                          >
-                            <span className="text-[#374151]">{col.label}</span>
-                            {visibleColumns.includes(col.id) && <Check className="w-4 h-4 text-primary" />}
-                          </button>
-                        ))}
-                      </motion.div>
-                    </>
-                  )}
-                </AnimatePresence>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#F3F4F6]">
-            {loading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i}>
-                  {Array.from({ length: 7 }).map((_, j) => (
-                    <td key={j} className="px-6 py-4"><div className="h-4 w-24 rounded skeleton" /></td>
-                  ))}
-                </tr>
-              ))
-            ) : clients.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-6 py-16 text-center">
-                  <Briefcase className="h-12 w-12 text-secondary/40 mx-auto mb-3" />
-                  <h3 className="text-sm font-semibold text-primary mb-1">No clients yet</h3>
-                  <p className="text-sm text-secondary mb-6 max-w-sm mx-auto">
-                    Add your first client to start tracking projects, contracts, and revenue.
-                  </p>
-                  <div className="flex items-center justify-center gap-3">
+        <div className="hidden md:block rounded-2xl border border-border bg-white overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-200">
+              <thead>
+                <tr className="border-b border-[#F3F4F6]">
+                  {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>}
+                  {visibleColumns.includes('industry') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Industry</th>}
+                  {visibleColumns.includes('contact') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Contact</th>}
+                  {visibleColumns.includes('projects') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Projects</th>}
+                  {visibleColumns.includes('status') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">{activeModule === 'PM' ? 'Lifecycle Stage' : 'Status'}</th>}
+                  <th className="px-6 py-3.5 w-10 text-center relative select-none">
                     <button
-                      onClick={() => setShowCreate(true)}
-                      className="bg-primary text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-black transition-colors"
+                      onClick={(e) => { e.stopPropagation(); setShowColumnDropdown(!showColumnDropdown); }}
+                      className="inline-flex items-center justify-center h-6 w-6 rounded-md text-secondary hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
+                      title="Toggle visible columns"
                     >
-                      + Add Client
+                      +
                     </button>
-                    <Link
-                      href="/pipeline?create=true"
-                      className="border border-border text-primary text-xs font-semibold px-4 py-2 rounded-xl hover:bg-gray-50 transition-colors"
-                    >
-                      + Add Lead Instead
-                    </Link>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              clients.map((client) => (
-                <motion.tr
-                  key={client.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="hover:bg-surface cursor-pointer transition-colors"
-                  onClick={() => router.push(`/clients/${client.id}`)}
-                >
-                  {visibleColumns.includes('client') && (
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className={`h-8 w-8 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(getClientDisplayName(client))}`}>
-                          {getInitials(getClientDisplayName(client))}
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-primary">
-                            {getClientDisplayName(client)}
-                          </p>
-                          {client.name !== 'Internal' && client.company && (client.contacts?.[0]?.name || client.name !== client.company) && (
-                            <p className="text-xs text-secondary">{client.contacts?.[0]?.name || client.name}</p>
-                          )}
-                          {client.name === 'Internal' && <p className="text-xs font-medium text-secondary">(Internal)</p>}
-                        </div>
+                    <AnimatePresence>
+                      {showColumnDropdown && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setShowColumnDropdown(false)} />
+                          <motion.div
+                            initial={{ opacity: 0, y: 5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 5 }}
+                            className="absolute right-0 top-full mt-2 w-48 bg-white border border-border rounded-xl shadow-lg z-50 overflow-hidden py-1"
+                          >
+                            <div className="px-3 py-2 border-b border-[#F3F4F6] text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
+                              Visible Columns
+                            </div>
+                            {ALL_COLUMNS.map(col => (
+                              <button
+                                key={col.id}
+                                onClick={() => {
+                                  setVisibleColumns(prev =>
+                                    prev.includes(col.id)
+                                      ? prev.filter(c => c !== col.id)
+                                      : [...prev, col.id]
+                                  )
+                                }}
+                                className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#F9FAFB] transition-colors"
+                              >
+                                <span className="text-[#374151]">{col.label}</span>
+                                {visibleColumns.includes(col.id) && <Check className="w-4 h-4 text-primary" />}
+                              </button>
+                            ))}
+                          </motion.div>
+                        </>
+                      )}
+                    </AnimatePresence>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#F3F4F6]">
+                {loading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <tr key={i}>
+                      {Array.from({ length: 7 }).map((_, j) => (
+                        <td key={j} className="px-6 py-4"><div className="h-4 w-24 rounded skeleton" /></td>
+                      ))}
+                    </tr>
+                  ))
+                ) : clients.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-16 text-center">
+                      <Briefcase className="h-12 w-12 text-secondary/40 mx-auto mb-3" />
+                      <h3 className="text-sm font-semibold text-primary mb-1">No clients yet</h3>
+                      <p className="text-sm text-secondary mb-6 max-w-sm mx-auto">
+                        Add your first client to start tracking projects, contracts, and revenue.
+                      </p>
+                      <div className="flex items-center justify-center gap-3">
+                        <button
+                          onClick={() => setShowCreate(true)}
+                          className="bg-primary text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-black transition-colors"
+                        >
+                          + Add Client
+                        </button>
+                        <Link
+                          href="/pipeline?create=true"
+                          className="border border-border text-primary text-xs font-semibold px-4 py-2 rounded-xl hover:bg-gray-50 transition-colors"
+                        >
+                          + Add Lead Instead
+                        </Link>
                       </div>
                     </td>
-                  )}
-                  {visibleColumns.includes('industry') && (
-                    <td className="px-6 py-4 text-sm text-secondary">
-                      {client.name === 'Internal' && orgProfile?.industry ? orgProfile.industry : client.industry || '—'}
-                    </td>
-                  )}
-                  {visibleColumns.includes('contact') && (
-                    <td className="px-6 py-4">
-                      {client.name === 'Internal' ? (
-                        <div>
-                          <p className="text-sm text-[#374151] font-medium">Internal Contact</p>
-                          {orgProfile?.phone && <p className="text-[11px] text-secondary">{orgProfile.phone}</p>}
-                        </div>
-                      ) : client.contacts && client.contacts.length > 0 ? (
-                        <div>
-                          <p className="text-sm text-[#374151] font-medium">{client.contacts[0].name}</p>
-                          {client.contacts[0].designation && <p className="text-[11px] text-secondary">{client.contacts[0].designation}</p>}
-                          {client.contacts.length > 1 && (
-                            <span className="text-[10px] font-medium bg-[#F3F4F6] text-[#4B5563] px-1.5 py-0.5 rounded mt-1 inline-block">
-                              +{client.contacts.length - 1} more
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-sm text-secondary">—</span>
+                  </tr>
+                ) : (
+                  clients.map((client) => (
+                    <motion.tr
+                      key={client.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="hover:bg-surface cursor-pointer transition-colors"
+                      onClick={() => router.push(`/clients/${client.id}`)}
+                    >
+                      {visibleColumns.includes('client') && (
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className={`h-8 w-8 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(getClientDisplayName(client))}`}>
+                              {getInitials(getClientDisplayName(client))}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-primary">
+                                {getClientDisplayName(client)}
+                              </p>
+                              {client.name !== 'Internal' && client.company && (client.contacts?.[0]?.name || client.name !== client.company) && (
+                                <p className="text-xs text-secondary">{client.contacts?.[0]?.name || client.name}</p>
+                              )}
+                              {client.name === 'Internal' && <p className="text-xs font-medium text-secondary">(Internal)</p>}
+                            </div>
+                          </div>
+                        </td>
                       )}
-                    </td>
-                  )}
+                      {visibleColumns.includes('industry') && (
+                        <td className="px-6 py-4 text-sm text-secondary">
+                          {client.name === 'Internal' && orgProfile?.industry ? orgProfile.industry : client.industry || '—'}
+                        </td>
+                      )}
+                      {visibleColumns.includes('contact') && (
+                        <td className="px-6 py-4">
+                          {client.name === 'Internal' ? (
+                            <div>
+                              <p className="text-sm text-[#374151] font-medium">Internal Contact</p>
+                              {orgProfile?.phone && <p className="text-[11px] text-secondary">{orgProfile.phone}</p>}
+                            </div>
+                          ) : client.contacts && client.contacts.length > 0 ? (
+                            <div>
+                              <p className="text-sm text-[#374151] font-medium">{client.contacts[0].name}</p>
+                              {client.contacts[0].designation && <p className="text-[11px] text-secondary">{client.contacts[0].designation}</p>}
+                              {client.contacts.length > 1 && (
+                                <span className="text-[10px] font-medium bg-[#F3F4F6] text-[#4B5563] px-1.5 py-0.5 rounded mt-1 inline-block">
+                                  +{client.contacts.length - 1} more
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-sm text-secondary">—</span>
+                          )}
+                        </td>
+                      )}
 
-                  {visibleColumns.includes('projects') && (
-                    <td className="px-6 py-4 text-sm text-secondary tabular-nums">{client._count?.projects ?? 0}</td>
-                  )}
-                  {visibleColumns.includes('status') && (
-                    <td className="px-6 py-4">
-                      <StatusBadge status={client.status} />
-                    </td>
-                  )}
-                  <td className="px-6 py-4">
-                    <ChevronRight className="h-4 w-4 text-[#D1D5DB]" />
-                  </td>
-                </motion.tr>
-              ))
-            )}
-          </tbody>
-        </table>
+                      {visibleColumns.includes('projects') && (
+                        <td className="px-6 py-4 text-sm text-secondary tabular-nums">{client._count?.projects ?? 0}</td>
+                      )}
+                      {visibleColumns.includes('status') && (
+                        <td className="px-6 py-4">
+                          <StatusBadge status={client.status} />
+                        </td>
+                      )}
+                      <td className="px-6 py-4">
+                        <ChevronRight className="h-4 w-4 text-[#D1D5DB]" />
+                      </td>
+                    </motion.tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
       )}
 
       {currentView === 'timeline' && <ClientTimelineView clients={clients} loading={loading} />}
@@ -789,7 +789,7 @@ function ClientsContent() {
                 </div>
                 <StatusBadge status={client.status} size="xs" />
               </div>
-              
+
               <div className="flex items-center justify-between mt-4">
                 <div className="flex flex-col">
                   {client.contacts && client.contacts.length > 0 ? (
@@ -898,7 +898,7 @@ function ClientsContent() {
                     <textarea value={form.billingAddress} onChange={(e) => setForm({ ...form, billingAddress: e.target.value })} rows={2} placeholder="Used to auto-fill quotations" className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary resize-none" />
                   </div>
                   <Field label="Start Date" type="date" value={form.startDate} onChange={(v) => setForm({ ...form, startDate: v })} />
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Scope</label>
                     <RichTextEditor
@@ -983,7 +983,7 @@ function ClientsContent() {
                   </div>
 
                   <div>
-                    <label 
+                    <label
                       onDragOver={handleDragOver}
                       onDragLeave={handleDragLeave}
                       onDrop={handleDrop}
@@ -1016,9 +1016,9 @@ function ClientsContent() {
                     <button type="button" onClick={() => { setShowCreate(false); setImportFile(null); setImportPreview([]); }} className="flex-1 w-full sm:flex-1 rounded-xl border border-border px-2 sm:px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
                       Cancel
                     </button>
-                    <button 
-                      onClick={handleBulkImport} 
-                      disabled={importing || importPreview.length === 0} 
+                    <button
+                      onClick={handleBulkImport}
+                      disabled={importing || importPreview.length === 0}
                       className="flex-1 w-full sm:flex-1 rounded-xl bg-primary px-2 sm:px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all flex items-center justify-center"
                     >
                       {importing ? 'Importing...' : <><span className="hidden sm:inline">Import Clients</span><span className="inline sm:hidden">Import</span></>}

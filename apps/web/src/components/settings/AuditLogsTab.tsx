@@ -27,7 +27,7 @@ export function AuditLogsTab() {
     setLoading(true);
     api.get<AuditLog[]>('/settings/audit-logs')
       .then(setLogs)
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   };
 
@@ -84,10 +84,10 @@ export function AuditLogsTab() {
 
     if (log.action.startsWith('CLIENT_') || log.action.startsWith('LEAD_')) {
       const type = log.action.startsWith('CLIENT_') ? 'Client' : 'Lead';
-      const entityName = details.companyName 
-        ? `${details.contactName || ''} (${details.companyName})` 
+      const entityName = details.companyName
+        ? `${details.contactName || ''} (${details.companyName})`
         : (details.contactName || details.name || 'Unknown');
-      
+
       const changeList = details.changes && Array.isArray(details.changes) && details.changes.length > 0
         ? `: ${details.changes.join(', ')}`
         : '';

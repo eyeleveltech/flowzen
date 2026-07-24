@@ -101,7 +101,7 @@ export default function ClientDetailPage() {
 
   useEffect(() => {
     if (client && client.name === 'Internal') {
-      api.get('/settings/organization').then(setOrgProfile).catch(() => {});
+      api.get('/settings/organization').then(setOrgProfile).catch(() => { });
     }
   }, [client]);
 
@@ -265,7 +265,7 @@ export default function ClientDetailPage() {
             <h3 className="text-sm font-semibold text-primary">
               {client.name === 'Internal' ? 'Organization Profile' : 'Company Details'}
             </h3>
-            
+
             {client.name === 'Internal' && orgProfile ? (
               <div className="space-y-4 pt-1">
                 <p className="text-sm text-[#374151] leading-relaxed">
@@ -308,15 +308,15 @@ export default function ClientDetailPage() {
                     <InfoRow icon={Briefcase} label="Engagement Type" value={client.engagementType || '—'} />
                     <InfoRow icon={Calendar} label="Start Date" value={client.startDate ? formatDate(client.startDate) : '—'} />
                   </div>
-                  
+
                   {client.scope ? (
                     <div className="mt-2 bg-blue-50/50 p-4 rounded-xl border border-blue-100/50">
                       <span className="block text-xs font-semibold text-blue-900 mb-2">Scope of Work</span>
-                      <div 
+                      <div
                         className="text-sm text-[#374151] line-clamp-3 prose prose-sm max-w-none"
                         dangerouslySetInnerHTML={{ __html: client.scope }}
                       />
-                      <button 
+                      <button
                         onClick={() => setViewModalContent({ title: 'Scope', content: client.scope || '' })}
                         className="mt-3 text-xs font-medium text-[#2563EB] hover:text-[#1D4ED8]"
                       >
@@ -437,7 +437,7 @@ export default function ClientDetailPage() {
         <div className="space-y-3">
           {client.activities.map((a) => (
             <div key={a.id} className="flex items-start gap-3 py-2">
- <div className={`h-7 w-7 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(a.user.name)}`}>{getInitials(a.user.name)}</div>
+              <div className={`h-7 w-7 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(a.user.name)}`}>{getInitials(a.user.name)}</div>
               <div>
                 <p className="text-sm text-[#374151]"><span className="font-medium">{a.user.name}</span> {a.message}</p>
                 <p className="text-xs text-secondary">{formatRelativeDate(a.createdAt)}</p>
@@ -485,7 +485,7 @@ export default function ClientDetailPage() {
                 {editError && <div className="absolute top-0 left-6 right-6 -mt-2 z-10 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 shadow-sm border border-red-100">{editError}</div>}
                 <Field label="Company Name *" value={editForm.company || editForm.name} onChange={(v) => setEditForm({ ...editForm, name: v, company: v })} required />
                 <Field label="Industry" value={editForm.industry} onChange={(v) => setEditForm({ ...editForm, industry: v })} />
-                
+
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Engagement Type</label>
                   <Select
@@ -565,10 +565,10 @@ export default function ClientDetailPage() {
                   {activeModule === 'PM' ? (
                     <div className="w-full rounded-xl border border-border bg-gray-50 px-4 py-2.5 text-sm text-secondary cursor-not-allowed select-none">
                       {editForm.status === 'PROSPECT' ? 'Prospect' :
-                       editForm.status === 'ACTIVE' ? 'Active' :
-                       editForm.status === 'ONHOLD' ? 'On Hold' :
-                       editForm.status === 'PROJECT_COMPLETED' ? 'Completed' :
-                       editForm.status === 'CHURNED' ? 'Churned' : editForm.status}
+                        editForm.status === 'ACTIVE' ? 'Active' :
+                          editForm.status === 'ONHOLD' ? 'On Hold' :
+                            editForm.status === 'PROJECT_COMPLETED' ? 'Completed' :
+                              editForm.status === 'CHURNED' ? 'Churned' : editForm.status}
                       <span className="ml-2 text-xs text-amber-500 font-medium">(Managed via CRM)</span>
                     </div>
                   ) : (
@@ -609,7 +609,7 @@ export default function ClientDetailPage() {
                 <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
               </div>
               <div className="p-6 overflow-y-auto flex-1">
-                <div 
+                <div
                   className="prose prose-sm max-w-none text-[#374151]"
                   dangerouslySetInnerHTML={{ __html: viewModalContent.content }}
                 />

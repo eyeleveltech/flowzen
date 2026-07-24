@@ -23,7 +23,7 @@ export default function ProfilePage() {
     name: '',
     designation: '',
   });
-  
+
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
     newPassword: '',
@@ -86,7 +86,7 @@ export default function ProfilePage() {
       toast.error('New passwords do not match');
       return;
     }
-    
+
     if (passwordForm.newPassword.length < 8) {
       toast.error('New password must be at least 8 characters');
       return;

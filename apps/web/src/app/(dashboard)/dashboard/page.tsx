@@ -507,8 +507,8 @@ export default function DashboardPage() {
                   <div className="flex items-center gap-3">
                     {hasTasks && (
                       <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-lg border ${hasOverdue
-                          ? 'bg-red-50 text-red-600 border-red-100'
-                          : 'bg-[#F3F4F6] text-secondary border-border'
+                        ? 'bg-red-50 text-red-600 border-red-100'
+                        : 'bg-[#F3F4F6] text-secondary border-border'
                         }`}>
                         {hasOverdue ? `${overdueCount} overdue` : `${myTasks.length} pending`}
                       </span>

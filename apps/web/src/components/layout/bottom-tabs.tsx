@@ -102,8 +102,8 @@ export function BottomTabs() {
                     >
                       <div
                         className={`flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-medium transition-all duration-150 ${isActive
-                            ? 'bg-primary text-white'
-                            : 'text-[#374151] hover:bg-[#F9FAFB]'
+                          ? 'bg-primary text-white'
+                          : 'text-[#374151] hover:bg-[#F9FAFB]'
                           }`}
                       >
                         <item.icon

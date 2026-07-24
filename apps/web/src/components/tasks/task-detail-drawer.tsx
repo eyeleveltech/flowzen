@@ -102,7 +102,7 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
       await api.put(`/tasks/${taskId}`, { status });
       toast.success('Status updated');
       onChanged?.();
-      
+
       if (status === 'COMPLETED') {
         onClose();
         return;

@@ -32,7 +32,7 @@ export function TemplatesTab({ templates, fetchTemplates }: { templates: any[], 
     { label: 'Social Media', value: 'SOCIAL_MEDIA' },
     { label: 'Development', value: 'DEVELOPMENT' },
     { label: 'Strategy', value: 'STRATEGY' },
-                    { label: 'Business', value: 'BUSINESS' },
+    { label: 'Business', value: 'BUSINESS' },
     { label: 'Other', value: 'OTHER' },
   ];
 
@@ -144,7 +144,7 @@ export function TemplatesTab({ templates, fetchTemplates }: { templates: any[], 
             </div>
             <h3 className="font-medium text-primary text-base mb-1">{t.name}</h3>
             <p className="text-sm text-secondary line-clamp-2 mb-4 h-10">{t.description || 'No description provided.'}</p>
-            
+
             <div className="flex items-center justify-between pt-4 border-t border-[#F3F4F6]">
               <span className="text-xs font-semibold text-primary bg-[#F3F4F6] px-2.5 py-1 rounded-md">{t.type}</span>
               <span className="text-xs text-secondary font-medium">{t.structure?.tasks?.length || 0} tasks</span>
@@ -186,7 +186,7 @@ export function TemplatesTab({ templates, fetchTemplates }: { templates: any[], 
                         <Plus className="h-3 w-3" /> Add Task
                       </button>
                     </div>
-                    
+
                     {form.structure.tasks.map((task, index) => (
                       <div key={index} className="bg-surface p-3.5 sm:p-4 rounded-xl border border-border space-y-4 relative">
                         <button type="button" onClick={() => removeTask(index)} className="absolute top-4 right-4 text-secondary hover:text-red-600"><Trash2 className="h-4 w-4" /></button>

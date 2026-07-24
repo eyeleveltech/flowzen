@@ -1039,8 +1039,8 @@ export default function ProjectDetailPage() {
                           {visibleTaskColumns.includes('priority') && (
                             <td className="px-6 py-3">
                               <span className={`text-xs font-medium capitalize ${t.priority === 'URGENT' ? 'text-red-600' :
-                                  t.priority === 'HIGH' ? 'text-orange-500' :
-                                    t.priority === 'MEDIUM' ? 'text-blue-500' : 'text-gray-400'
+                                t.priority === 'HIGH' ? 'text-orange-500' :
+                                  t.priority === 'MEDIUM' ? 'text-blue-500' : 'text-gray-400'
                                 }`}>
                                 {(t.priority || 'medium').toLowerCase()}
                               </span>

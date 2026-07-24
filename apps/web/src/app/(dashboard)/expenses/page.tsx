@@ -33,12 +33,12 @@ export default function ExpensesPage() {
       </div>
 
       {showModal && (
-        <ExpenseFormModal 
-          onClose={() => setShowModal(false)} 
+        <ExpenseFormModal
+          onClose={() => setShowModal(false)}
           onSaved={() => {
             setShowModal(false);
             refetch();
-          }} 
+          }}
         />
       )}
 

@@ -7,9 +7,9 @@ import { formatDate, formatShortDate, getInitials, getAvatarColor, getClientDisp
 import { ROLE_LABELS } from '@flowzen/shared';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
-import { 
-  Search, Mail, Phone, Calendar, Briefcase, 
-  CheckCircle2, Clock, X, ChevronRight, Shield, 
+import {
+  Search, Mail, Phone, Calendar, Briefcase,
+  CheckCircle2, Clock, X, ChevronRight, Shield,
   Activity, FileText, Sparkles, AlertCircle, Folder, User, Zap, Leaf
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -93,7 +93,7 @@ export default function TeamPage() {
       setPromoting(false);
     }
   };
-  
+
   // Search and Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRole, setSelectedRole] = useState<string[]>([]);
@@ -148,9 +148,9 @@ export default function TeamPage() {
 
   // Filtered members list
   const filteredTeam = team.filter((m) => {
-    const matchesSearch = m.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          m.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (m.department && m.department.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesSearch = m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      m.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (m.department && m.department.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesRole = selectedRole.length === 0 || selectedRole.includes(m.role);
     const matchesDept = selectedDept.length === 0 || (m.department ? selectedDept.includes(m.department) : false);
     return matchesSearch && matchesRole && matchesDept;
@@ -225,21 +225,19 @@ export default function TeamPage() {
         <div className="flex bg-[#F3F4F6] p-1 rounded-xl">
           <button
             onClick={() => setActiveTab('tasks')}
-            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
-              activeTab === 'tasks' 
-                ? 'bg-white text-primary shadow-xs' 
+            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${activeTab === 'tasks'
+                ? 'bg-white text-primary shadow-xs'
                 : 'text-secondary hover:text-primary'
-            }`}
+              }`}
           >
             Tasks & Projects ({activeTasks.length + ownedProjects.length})
           </button>
           <button
             onClick={() => setActiveTab('profile')}
-            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
-              activeTab === 'profile' 
-                ? 'bg-white text-primary shadow-xs' 
+            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${activeTab === 'profile'
+                ? 'bg-white text-primary shadow-xs'
                 : 'text-secondary hover:text-primary'
-            }`}
+              }`}
           >
             Bio & Statistics
           </button>
@@ -271,9 +269,8 @@ export default function TeamPage() {
                 </div>
                 <div className="h-2 w-full rounded-full bg-border overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      isOverloaded ? 'bg-red-500' : stats.capacity > 80 ? 'bg-red-500' : stats.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'
-                    }`}
+                    className={`h-full rounded-full transition-all duration-500 ${isOverloaded ? 'bg-red-500' : stats.capacity > 80 ? 'bg-red-500' : stats.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                      }`}
                     style={{ width: `${stats.capacity}%` }}
                   />
                 </div>
@@ -298,8 +295,8 @@ export default function TeamPage() {
                 </div>
                 <div className="space-y-2.5 max-h-55 overflow-y-auto pr-1">
                   {activeTasks.map((t) => (
-                    <div 
-                      key={t.id} 
+                    <div
+                      key={t.id}
                       className="p-3.5 bg-white border border-border rounded-xl hover:border-gray-300 transition-colors shadow-xs"
                     >
                       <div className="flex justify-between items-start gap-2 mb-2">
@@ -336,7 +333,7 @@ export default function TeamPage() {
                 </div>
                 <div className="space-y-2.5 max-h-45 overflow-y-auto pr-1">
                   {ownedProjects.map((p) => (
-                    <div 
+                    <div
                       key={p.id}
                       className="p-3.5 bg-white border border-border rounded-xl hover:border-gray-300 transition-colors shadow-xs"
                     >
@@ -506,11 +503,10 @@ export default function TeamPage() {
                     type="button"
                     onClick={() => setSelectedId(m.id)}
                     aria-label={`View ${m.name}'s workload`}
-                    className={`group relative flex flex-col p-6 rounded-3xl bg-white text-left w-full transition-all duration-300 border focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
-                      isSelected 
-                        ? 'border-primary ring-1 ring-primary' 
+                    className={`group relative flex flex-col p-6 rounded-3xl bg-white text-left w-full transition-all duration-300 border focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${isSelected
+                        ? 'border-primary ring-1 ring-primary'
                         : 'border-border hover:shadow-sm'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center gap-4 mb-5">
                       {/* Avatar */}
@@ -537,21 +533,20 @@ export default function TeamPage() {
                     <div className="mt-auto pt-4 border-t border-[#F3F4F6] flex items-center justify-between text-xs">
                       <div className="flex items-center gap-3 text-secondary">
                         <span className="flex items-center gap-1">
-                           <span className="font-semibold text-primary">{m.activeTasks}</span> 
-                           <span className="opacity-80">tasks</span>
+                          <span className="font-semibold text-primary">{m.activeTasks}</span>
+                          <span className="opacity-80">tasks</span>
                         </span>
                         <span className="w-0.5 h-0.5 rounded-full bg-[#D1D5DB]"></span>
                         <span className="flex items-center gap-1">
-                           <span className="font-semibold text-primary">{m.totalProjects}</span> 
-                           <span className="opacity-80">projects</span>
+                          <span className="font-semibold text-primary">{m.totalProjects}</span>
+                          <span className="opacity-80">projects</span>
                         </span>
                       </div>
-                      
+
                       {/* Minimal Capacity Dot */}
                       <div className="flex items-center gap-1.5" title={`Capacity: ${m.capacity}%`}>
-                        <div className={`w-2 h-2 rounded-full ${
-                          m.capacity > 80 ? 'bg-red-500' : m.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'
-                        }`} />
+                        <div className={`w-2 h-2 rounded-full ${m.capacity > 80 ? 'bg-red-500' : m.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                          }`} />
                         <span className="text-secondary font-medium">{m.capacity}%</span>
                       </div>
                     </div>

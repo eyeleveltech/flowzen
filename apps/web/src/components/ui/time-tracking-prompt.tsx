@@ -78,7 +78,7 @@ export function TimeTrackingPrompt() {
                 <p className="mt-1 text-sm text-secondary leading-relaxed line-clamp-2">
                   <span className="font-semibold text-primary">{options.taskTitle}</span>
                 </p>
-                
+
                 <p className="mt-5 text-sm text-[#4B5563] mb-2 font-medium">
                   How long did this take?
                 </p>

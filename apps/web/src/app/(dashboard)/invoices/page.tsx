@@ -80,8 +80,8 @@ export default function InvoicesPage() {
                           <Download className="h-4 w-4" />
                         </a>
                       ) : (
-                        <button 
-                          title="Generate PDF" 
+                        <button
+                          title="Generate PDF"
                           onClick={async () => {
                             try {
                               toast.loading('Generating Invoice...', { id: 'pdf' });

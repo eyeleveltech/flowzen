@@ -51,7 +51,7 @@ export default function TeamsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState('');
-  
+
   const [form, setForm] = useState({ name: '', description: '', managerIds: [] as string[], memberIds: [] as string[] });
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -215,100 +215,100 @@ export default function TeamsPage() {
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left border-collapse min-w-200">
                 <thead>
-                <tr className="bg-[#F9FAFB] border-b border-border">
-                  <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide">Department Name</th>
-                  <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide">Managers</th>
-                  <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide">Members</th>
-                  <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {teams.map(team => (
-                  <tr key={team.id} className="hover:bg-[#F9FAFB] transition-colors group">
-                    <td className="px-6 py-5">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-xl bg-[#F3F4F6] text-primary flex items-center justify-center border border-border shrink-0">
-                          <Users className="h-5 w-5" />
+                  <tr className="bg-[#F9FAFB] border-b border-border">
+                    <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide">Department Name</th>
+                    <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide">Managers</th>
+                    <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide">Members</th>
+                    <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {teams.map(team => (
+                    <tr key={team.id} className="hover:bg-[#F9FAFB] transition-colors group">
+                      <td className="px-6 py-5">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-xl bg-[#F3F4F6] text-primary flex items-center justify-center border border-border shrink-0">
+                            <Users className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-primary">{team.name}</h3>
+                            <p className="text-xs text-secondary line-clamp-1 max-w-62.5">{team.description || 'No description'}</p>
+                          </div>
                         </div>
-                        <div>
-                          <h3 className="font-semibold text-primary">{team.name}</h3>
-                          <p className="text-xs text-secondary line-clamp-1 max-w-62.5">{team.description || 'No description'}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-5">
-                      {team.managers && team.managers.length > 0 ? (
-                        <div className="flex items-center gap-2">
-                          <div className="flex -space-x-1.5">
-                            {team.managers.slice(0, 3).map((mgr, i) => (
-                              <div 
-                                key={mgr.user.id} 
-                                className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-2 ring-white text-[10px] font-bold ${getAvatarColor(mgr.user.name)}`} 
-                                style={{ zIndex: 3 - i }}
-                                title={mgr.user.name}
+                      </td>
+                      <td className="px-6 py-5">
+                        {team.managers && team.managers.length > 0 ? (
+                          <div className="flex items-center gap-2">
+                            <div className="flex -space-x-1.5">
+                              {team.managers.slice(0, 3).map((mgr, i) => (
+                                <div
+                                  key={mgr.user.id}
+                                  className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-2 ring-white text-[10px] font-bold ${getAvatarColor(mgr.user.name)}`}
+                                  style={{ zIndex: 3 - i }}
+                                  title={mgr.user.name}
+                                >
+                                  {getInitials(mgr.user.name)}
+                                </div>
+                              ))}
+                            </div>
+                            <span className="text-xs font-medium text-primary">
+                              {team.managers.map(m => m.user.name).join(', ')}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-secondary italic">No Managers</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-5">
+                        <div className="flex items-center gap-3">
+                          <div className="flex -space-x-2">
+                            {team.members.slice(0, 5).map((m, i) => (
+                              <div
+                                key={m.id}
+                                className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-2 ring-white text-[10px] font-bold ${getAvatarColor(m.name)}`}
+                                style={{ zIndex: 5 - i }}
+                                title={m.name}
                               >
-                                {getInitials(mgr.user.name)}
+                                {getInitials(m.name)}
                               </div>
                             ))}
+                            {team.members.length > 5 && (
+                              <div
+                                className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-2 ring-white bg-[#F3F4F6] text-primary border border-border text-[10px] font-semibold"
+                                style={{ zIndex: 0 }}
+                              >
+                                +{team.members.length - 5}
+                              </div>
+                            )}
                           </div>
-                          <span className="text-xs font-medium text-primary">
-                            {team.managers.map(m => m.user.name).join(', ')}
-                          </span>
+                          <span className="text-xs font-medium text-secondary">{team.members.length} members</span>
                         </div>
-                      ) : (
-                        <span className="text-sm text-secondary italic">No Managers</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-5">
-                      <div className="flex items-center gap-3">
-                        <div className="flex -space-x-2">
-                          {team.members.slice(0, 5).map((m, i) => (
-                            <div 
-                              key={m.id} 
-                              className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-2 ring-white text-[10px] font-bold ${getAvatarColor(m.name)}`} 
-                              style={{ zIndex: 5 - i }}
-                              title={m.name}
-                            >
-                              {getInitials(m.name)}
-                            </div>
-                          ))}
-                          {team.members.length > 5 && (
-                            <div 
-                              className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-2 ring-white bg-[#F3F4F6] text-primary border border-border text-[10px] font-semibold" 
-                              style={{ zIndex: 0 }}
-                            >
-                              +{team.members.length - 5}
-                            </div>
-                          )}
-                        </div>
-                        <span className="text-xs font-medium text-secondary">{team.members.length} members</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-5 text-right">
-                      {(canEdit(team) || canDelete) && (
-                        <div className="flex gap-2 justify-end opacity-100 lg:opacity-0 lg:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                          {canEdit(team) && (
-                            <button onClick={() => openEdit(team)} className="p-2 text-secondary hover:text-primary bg-white border border-border hover:bg-[#F3F4F6] rounded-xl transition-all hover:shadow-sm">
-                              <Edit2 className="h-4 w-4" />
-                            </button>
-                          )}
-                          {canDelete && (
-                            <button onClick={() => handleDelete(team.id)} className="p-2 text-secondary hover:text-red-600 bg-white border border-border hover:bg-red-50 hover:border-red-100 rounded-xl transition-all hover:shadow-sm">
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {teams.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-8 text-center text-sm text-secondary">No departments found.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                      </td>
+                      <td className="px-6 py-5 text-right">
+                        {(canEdit(team) || canDelete) && (
+                          <div className="flex gap-2 justify-end opacity-100 lg:opacity-0 lg:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                            {canEdit(team) && (
+                              <button onClick={() => openEdit(team)} className="p-2 text-secondary hover:text-primary bg-white border border-border hover:bg-[#F3F4F6] rounded-xl transition-all hover:shadow-sm">
+                                <Edit2 className="h-4 w-4" />
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button onClick={() => handleDelete(team.id)} className="p-2 text-secondary hover:text-red-600 bg-white border border-border hover:bg-red-50 hover:border-red-100 rounded-xl transition-all hover:shadow-sm">
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {teams.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-8 text-center text-sm text-secondary">No departments found.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
 
             {/* Mobile Card View (Optimized for 320px+) */}
@@ -352,14 +352,14 @@ export default function TeamsPage() {
                         <span className="text-xs text-secondary italic">No Managers</span>
                       )}
                     </div>
-                    
+
                     <div className="min-w-0">
                       <span className="text-[10px] font-medium text-secondary uppercase tracking-wide block mb-1">Members ({team.members.length})</span>
                       <div className="flex -space-x-1.5">
                         {team.members.slice(0, 4).map((m, i) => (
-                          <div 
-                            key={m.id} 
-                            className={`relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-2 ring-[#F9FAFB] text-[8px] font-bold ${getAvatarColor(m.name)}`} 
+                          <div
+                            key={m.id}
+                            className={`relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-2 ring-[#F9FAFB] text-[8px] font-bold ${getAvatarColor(m.name)}`}
                             style={{ zIndex: 4 - i }}
                             title={m.name}
                           >
@@ -367,8 +367,8 @@ export default function TeamsPage() {
                           </div>
                         ))}
                         {team.members.length > 4 && (
-                          <div 
-                            className="relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-2 ring-[#F9FAFB] bg-[#F3F4F6] text-primary border border-border text-[7px] font-semibold" 
+                          <div
+                            className="relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-2 ring-[#F9FAFB] bg-[#F3F4F6] text-primary border border-border text-[7px] font-semibold"
                             style={{ zIndex: 0 }}
                           >
                             +{team.members.length - 4}
@@ -395,17 +395,17 @@ export default function TeamsPage() {
       >
         <form onSubmit={handleSubmit} className="relative space-y-4">
           {formError && <div className="absolute top-0 left-0 right-0 -mt-2 z-10 rounded-xl bg-red-50 p-3 text-sm text-red-600 shadow-sm border border-red-100">{formError}</div>}
-          
+
           <div>
             <label className="block text-sm font-medium text-[#374151] mb-1.5">Department Name *</label>
             <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
             <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all resize-none" />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-[#374151] mb-1.5">Department Members *</label>
             <MultiSelect
@@ -444,7 +444,7 @@ export default function TeamsPage() {
               <p className="text-xs text-secondary mt-1">Please add members first before assigning managers.</p>
             )}
           </div>
-          
+
           <div className="pt-4 flex gap-3">
             <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
             <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submitting ? 'Saving...' : 'Save Department'}</button>

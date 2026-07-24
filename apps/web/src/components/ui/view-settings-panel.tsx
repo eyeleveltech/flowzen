@@ -109,22 +109,20 @@ export function ViewSettingsPanel({
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => onViewTypeChange('list')}
-                    className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-sm font-medium transition-all ${
-                      viewType === 'list'
+                    className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-sm font-medium transition-all ${viewType === 'list'
                         ? 'border-primary bg-primary/5 text-primary'
                         : 'border-border text-secondary hover:bg-gray-50'
-                    }`}
+                      }`}
                   >
                     <List className="w-4 h-4" />
                     List (Table)
                   </button>
                   <button
                     onClick={() => onViewTypeChange('board')}
-                    className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-sm font-medium transition-all ${
-                      viewType === 'board'
+                    className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-sm font-medium transition-all ${viewType === 'board'
                         ? 'border-primary bg-primary/5 text-primary'
                         : 'border-border text-secondary hover:bg-gray-50'
-                    }`}
+                      }`}
                   >
                     <LayoutGrid className="w-4 h-4" />
                     Board (Cards)

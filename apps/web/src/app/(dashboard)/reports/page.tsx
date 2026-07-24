@@ -188,11 +188,10 @@ export default function ReportsPage() {
           {user?.teamId && (
             <button
               onClick={() => setSelectedDepartment(user.teamId || '')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all flex items-center gap-1.5 ${
-                selectedDepartment === user.teamId
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all flex items-center gap-1.5 ${selectedDepartment === user.teamId
                   ? 'bg-primary text-white border-primary shadow-sm'
                   : 'bg-white text-secondary border-border hover:text-primary hover:bg-[#F9FAFB]'
-              }`}
+                }`}
             >
               <Users className="w-3.5 h-3.5" />
               My Department

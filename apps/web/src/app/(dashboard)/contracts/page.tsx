@@ -36,12 +36,12 @@ export default function ContractsPage() {
       </div>
 
       {showModal && (
-        <ContractFormModal 
-          onClose={() => setShowModal(false)} 
+        <ContractFormModal
+          onClose={() => setShowModal(false)}
           onSaved={() => {
             setShowModal(false);
             refetch();
-          }} 
+          }}
         />
       )}
 

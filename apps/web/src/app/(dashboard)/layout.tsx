@@ -25,7 +25,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     loadFromStorage();
     hydrateModule();
     // Refresh the session (incl. enabledModules) so module gating reflects the server.
-    api.get('/auth/me').then((fresh: any) => setAuth(fresh)).catch(() => {});
+    api.get('/auth/me').then((fresh: any) => setAuth(fresh)).catch(() => { });
 
     const checkMobile = () => setIsMobile(window.innerWidth <= 768);
     checkMobile();
@@ -58,7 +58,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-screen bg-white">
       {/* Desktop Sidebar only — hidden on mobile */}
       {!isMobile && <Sidebar isMobile={false} />}
-      
+
       <motion.main
         animate={{ marginLeft: isMobile ? 0 : (sidebarCollapsed ? 72 : 260) }}
         transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}

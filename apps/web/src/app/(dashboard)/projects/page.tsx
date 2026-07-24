@@ -208,9 +208,9 @@ function ProjectsContent() {
       reset();
       setSelectedTemplateId('');
       refetchProjects();
-    } catch (err: any) { 
+    } catch (err: any) {
       toast.error(err.message || 'Failed to create project');
-      setFormError(err.message); 
+      setFormError(err.message);
     } finally { setSubmitting(false); }
   });
 
@@ -395,221 +395,221 @@ function ProjectsContent() {
               {/* Desktop Table View */}
               <div className="hidden md:block rounded-2xl border border-border bg-white overflow-hidden">
                 <div className="overflow-x-auto">
-                <table className="w-full min-w-200">
-                  <thead>
-                    <tr className="border-b border-[#F3F4F6]">
-                      {visibleColumns.includes('project') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Project</th>}
-                      {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Company</th>}
-                      {visibleColumns.includes('progress') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Progress</th>}
-                      {visibleColumns.includes('status') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Status</th>}
-                      {visibleColumns.includes('owner') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Owner</th>}
-                      {visibleColumns.includes('dueDate') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Due Date</th>}
-                      <th className="px-6 py-3.5 w-10 text-center relative select-none">
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); setShowColumnDropdown(!showColumnDropdown); }}
-                          className="inline-flex items-center justify-center h-6 w-6 rounded-md text-secondary hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
-                          title="Toggle visible columns"
-                        >
-                          +
-                        </button>
-                        <AnimatePresence>
-                          {showColumnDropdown && (
-                            <>
-                              <div className="fixed inset-0 z-40" onClick={() => setShowColumnDropdown(false)} />
-                              <motion.div 
-                                initial={{ opacity: 0, y: 5 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: 5 }}
-                                className="absolute right-0 top-full mt-2 w-48 bg-white border border-border rounded-xl shadow-lg z-50 overflow-hidden py-1"
-                              >
-                                <div className="px-3 py-2 border-b border-[#F3F4F6] text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
-                                  Visible Columns
-                                </div>
-                                {ALL_PROJECT_COLUMNS.map(col => (
-                                  <button
-                                    key={col.id}
-                                    onClick={() => {
-                                      setVisibleColumns(prev => 
-                                        prev.includes(col.id) 
-                                          ? prev.filter(c => c !== col.id)
-                                          : [...prev, col.id]
-                                      )
-                                    }}
-                                    className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#F9FAFB] transition-colors"
-                                  >
-                                    <span className="text-[#374151]">{col.label}</span>
-                                    {visibleColumns.includes(col.id) && <Check className="w-4 h-4 text-primary" />}
-                                  </button>
-                                ))}
-                              </motion.div>
-                            </>
-                          )}
-                        </AnimatePresence>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#F3F4F6]">
-                    {projects.map((p) => (
-                      <motion.tr key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="hover:bg-surface cursor-pointer transition-colors" onClick={() => router.push(`/projects/${p.id}`)}>
-                        {visibleColumns.includes('project') && (
-                          <td className="px-6 py-4">
-                            <p className="text-sm font-medium text-primary">{p.name}</p>
-                            <p className="text-xs text-secondary">{p._count?.tasks ?? 0} tasks</p>
-                          </td>
-                        )}
-                        {visibleColumns.includes('client') && <td className="px-6 py-4 text-sm text-secondary">{p.client ? getClientDisplayName(p.client) : '—'}</td>}
-                        {visibleColumns.includes('progress') && (
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <div className="h-1.5 w-20 rounded-full bg-[#F3F4F6] overflow-hidden">
-                                <div className="h-full rounded-full bg-primary" style={{ width: `${p.progress}%` }} />
-                              </div>
-                              <span className="text-xs text-secondary tabular-nums">{p.progress}%</span>
-                            </div>
-                          </td>
-                        )}
-                        {visibleColumns.includes('status') && (
-                          <td className="px-6 py-4">
-                            <StatusBadge status={p.status} />
-                          </td>
-                        )}
-                        {visibleColumns.includes('owner') && (
-                          <td className="px-6 py-4">
-                            {p.owner && (
-                              <div className="flex items-center gap-2">
-                                <div className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold ${getAvatarColor(p.owner.name)}`}>
-                                  {getInitials(p.owner.name)}
-                                </div>
-                                <span className="text-sm text-[#374151]">{p.owner.name}</span>
-                              </div>
+                  <table className="w-full min-w-200">
+                    <thead>
+                      <tr className="border-b border-[#F3F4F6]">
+                        {visibleColumns.includes('project') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Project</th>}
+                        {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Company</th>}
+                        {visibleColumns.includes('progress') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Progress</th>}
+                        {visibleColumns.includes('status') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Status</th>}
+                        {visibleColumns.includes('owner') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Owner</th>}
+                        {visibleColumns.includes('dueDate') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Due Date</th>}
+                        <th className="px-6 py-3.5 w-10 text-center relative select-none">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setShowColumnDropdown(!showColumnDropdown); }}
+                            className="inline-flex items-center justify-center h-6 w-6 rounded-md text-secondary hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
+                            title="Toggle visible columns"
+                          >
+                            +
+                          </button>
+                          <AnimatePresence>
+                            {showColumnDropdown && (
+                              <>
+                                <div className="fixed inset-0 z-40" onClick={() => setShowColumnDropdown(false)} />
+                                <motion.div
+                                  initial={{ opacity: 0, y: 5 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  exit={{ opacity: 0, y: 5 }}
+                                  className="absolute right-0 top-full mt-2 w-48 bg-white border border-border rounded-xl shadow-lg z-50 overflow-hidden py-1"
+                                >
+                                  <div className="px-3 py-2 border-b border-[#F3F4F6] text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
+                                    Visible Columns
+                                  </div>
+                                  {ALL_PROJECT_COLUMNS.map(col => (
+                                    <button
+                                      key={col.id}
+                                      onClick={() => {
+                                        setVisibleColumns(prev =>
+                                          prev.includes(col.id)
+                                            ? prev.filter(c => c !== col.id)
+                                            : [...prev, col.id]
+                                        )
+                                      }}
+                                      className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#F9FAFB] transition-colors"
+                                    >
+                                      <span className="text-[#374151]">{col.label}</span>
+                                      {visibleColumns.includes(col.id) && <Check className="w-4 h-4 text-primary" />}
+                                    </button>
+                                  ))}
+                                </motion.div>
+                              </>
                             )}
-                          </td>
-                        )}
-                        {visibleColumns.includes('dueDate') && <td className="px-6 py-4 text-sm text-secondary">{formatShortDate(p.endDate)}</td>}
-                        <td className="px-6 py-4 text-right w-10 text-secondary"><ChevronRight className="h-4 w-4 inline-block" /></td>
-                      </motion.tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Mobile Card View */}
-            <div className="md:hidden flex flex-col gap-3">
-              {projects.length === 0 ? (
-                <div className="p-8 text-center text-sm text-secondary bg-white rounded-xl border border-border">
-                  No projects found.
+                          </AnimatePresence>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#F3F4F6]">
+                      {projects.map((p) => (
+                        <motion.tr key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="hover:bg-surface cursor-pointer transition-colors" onClick={() => router.push(`/projects/${p.id}`)}>
+                          {visibleColumns.includes('project') && (
+                            <td className="px-6 py-4">
+                              <p className="text-sm font-medium text-primary">{p.name}</p>
+                              <p className="text-xs text-secondary">{p._count?.tasks ?? 0} tasks</p>
+                            </td>
+                          )}
+                          {visibleColumns.includes('client') && <td className="px-6 py-4 text-sm text-secondary">{p.client ? getClientDisplayName(p.client) : '—'}</td>}
+                          {visibleColumns.includes('progress') && (
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-2">
+                                <div className="h-1.5 w-20 rounded-full bg-[#F3F4F6] overflow-hidden">
+                                  <div className="h-full rounded-full bg-primary" style={{ width: `${p.progress}%` }} />
+                                </div>
+                                <span className="text-xs text-secondary tabular-nums">{p.progress}%</span>
+                              </div>
+                            </td>
+                          )}
+                          {visibleColumns.includes('status') && (
+                            <td className="px-6 py-4">
+                              <StatusBadge status={p.status} />
+                            </td>
+                          )}
+                          {visibleColumns.includes('owner') && (
+                            <td className="px-6 py-4">
+                              {p.owner && (
+                                <div className="flex items-center gap-2">
+                                  <div className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold ${getAvatarColor(p.owner.name)}`}>
+                                    {getInitials(p.owner.name)}
+                                  </div>
+                                  <span className="text-sm text-[#374151]">{p.owner.name}</span>
+                                </div>
+                              )}
+                            </td>
+                          )}
+                          {visibleColumns.includes('dueDate') && <td className="px-6 py-4 text-sm text-secondary">{formatShortDate(p.endDate)}</td>}
+                          <td className="px-6 py-4 text-right w-10 text-secondary"><ChevronRight className="h-4 w-4 inline-block" /></td>
+                        </motion.tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              ) : (
-                projects.map((p) => (
-                  <motion.div
-                    key={p.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    onClick={() => router.push(`/projects/${p.id}`)}
-                    className="p-4 rounded-xl border border-border bg-white hover:shadow-sm cursor-pointer transition-all"
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <p className="text-sm font-medium text-primary leading-tight">{p.name}</p>
-                        <p className="text-xs text-secondary mt-0.5">{p.client ? getClientDisplayName(p.client) : 'Internal Project'}</p>
-                      </div>
-                      <StatusBadge status={p.status} size="xs" />
-                    </div>
+              </div>
 
-                    <div className="mb-4">
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 flex-1 rounded-full bg-[#F3F4F6] overflow-hidden">
-                          <div className="h-full rounded-full bg-primary" style={{ width: `${p.progress}%` }} />
+              {/* Mobile Card View */}
+              <div className="md:hidden flex flex-col gap-3">
+                {projects.length === 0 ? (
+                  <div className="p-8 text-center text-sm text-secondary bg-white rounded-xl border border-border">
+                    No projects found.
+                  </div>
+                ) : (
+                  projects.map((p) => (
+                    <motion.div
+                      key={p.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      onClick={() => router.push(`/projects/${p.id}`)}
+                      className="p-4 rounded-xl border border-border bg-white hover:shadow-sm cursor-pointer transition-all"
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <p className="text-sm font-medium text-primary leading-tight">{p.name}</p>
+                          <p className="text-xs text-secondary mt-0.5">{p.client ? getClientDisplayName(p.client) : 'Internal Project'}</p>
                         </div>
-                        <span className="text-xs text-secondary tabular-nums shrink-0">{p.progress}%</span>
+                        <StatusBadge status={p.status} size="xs" />
                       </div>
-                    </div>
 
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {p.owner ? (
-                          <>
- <div className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold ${getAvatarColor(p.owner.name)}`}>
-                              {getInitials(p.owner.name)}
-                            </div>
-                            <span className="text-xs font-medium text-[#374151]">{p.owner.name}</span>
-                          </>
-                        ) : (
-                          <span className="text-xs text-secondary">Unassigned</span>
-                        )}
+                      <div className="mb-4">
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 flex-1 rounded-full bg-[#F3F4F6] overflow-hidden">
+                            <div className="h-full rounded-full bg-primary" style={{ width: `${p.progress}%` }} />
+                          </div>
+                          <span className="text-xs text-secondary tabular-nums shrink-0">{p.progress}%</span>
+                        </div>
                       </div>
-                      
-                      <div className="flex items-center gap-2 text-xs font-medium text-secondary">
-                        <span className="bg-[#F3F4F6] px-1.5 py-0.5 rounded">
-                          {p._count?.tasks ?? 0} tasks
-                        </span>
-                        {p.endDate && (
+
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {p.owner ? (
+                            <>
+                              <div className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold ${getAvatarColor(p.owner.name)}`}>
+                                {getInitials(p.owner.name)}
+                              </div>
+                              <span className="text-xs font-medium text-[#374151]">{p.owner.name}</span>
+                            </>
+                          ) : (
+                            <span className="text-xs text-secondary">Unassigned</span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 text-xs font-medium text-secondary">
                           <span className="bg-[#F3F4F6] px-1.5 py-0.5 rounded">
-                            {formatShortDate(p.endDate)}
+                            {p._count?.tasks ?? 0} tasks
                           </span>
-                        )}
+                          {p.endDate && (
+                            <span className="bg-[#F3F4F6] px-1.5 py-0.5 rounded">
+                              {formatShortDate(p.endDate)}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </motion.div>
-                ))
-              )}
-            </div>
+                    </motion.div>
+                  ))
+                )}
+              </div>
             </>
           )}
 
 
 
-        {view === 'board' && (
-          <div className="mt-4">
-            <ProjectBoardView projects={projects} onUpdateProject={refetchProjects} userRole={user?.role} />
-          </div>
-        )}
+          {view === 'board' && (
+            <div className="mt-4">
+              <ProjectBoardView projects={projects} onUpdateProject={refetchProjects} userRole={user?.role} />
+            </div>
+          )}
 
-      {view === 'timeline' && (
-        <div className="rounded-2xl border border-border bg-white p-6">
-          <div className="space-y-3">
-            {projects.filter((p) => p.startDate && p.endDate).map((p) => {
-              const start = new Date(p.startDate!);
-              const end = new Date(p.endDate!);
-              const now = new Date();
-              const totalDays = Math.max(1, (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-              const elapsed = Math.max(0, (now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-              const pct = Math.min(100, (elapsed / totalDays) * 100);
+          {view === 'timeline' && (
+            <div className="rounded-2xl border border-border bg-white p-6">
+              <div className="space-y-3">
+                {projects.filter((p) => p.startDate && p.endDate).map((p) => {
+                  const start = new Date(p.startDate!);
+                  const end = new Date(p.endDate!);
+                  const now = new Date();
+                  const totalDays = Math.max(1, (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+                  const elapsed = Math.max(0, (now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+                  const pct = Math.min(100, (elapsed / totalDays) * 100);
 
-              return (
-                <div key={p.id} className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4 py-3 md:py-2 cursor-pointer hover:bg-surface rounded-xl px-3 -mx-3 transition-colors border-b border-[#F3F4F6] last:border-0 md:border-0" onClick={() => router.push(`/projects/${p.id}`)}>
-                  <div className="w-full md:w-48 shrink-0">
-                    <p className="text-sm font-medium text-primary truncate">{p.name}</p>
-                    <p className="text-xs text-secondary">{p.client ? getClientDisplayName(p.client) : 'Internal Project'}</p>
-                  </div>
-                  <div className="flex-1 w-full">
-                    <div className="relative h-8 rounded-lg bg-[#F3F4F6] overflow-hidden">
-                      <div className="absolute inset-y-0 left-0 rounded-lg bg-primary/10" style={{ width: `${pct}%` }} />
-                      <div className="absolute inset-y-0 left-0 rounded-lg bg-primary" style={{ width: `${p.progress}%`, maxWidth: `${pct}%` }} />
-                      <div className="absolute inset-0 flex items-center px-3">
-                        <span className="text-xs font-medium text-white mix-blend-difference">{p.progress}%</span>
+                  return (
+                    <div key={p.id} className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4 py-3 md:py-2 cursor-pointer hover:bg-surface rounded-xl px-3 -mx-3 transition-colors border-b border-[#F3F4F6] last:border-0 md:border-0" onClick={() => router.push(`/projects/${p.id}`)}>
+                      <div className="w-full md:w-48 shrink-0">
+                        <p className="text-sm font-medium text-primary truncate">{p.name}</p>
+                        <p className="text-xs text-secondary">{p.client ? getClientDisplayName(p.client) : 'Internal Project'}</p>
+                      </div>
+                      <div className="flex-1 w-full">
+                        <div className="relative h-8 rounded-lg bg-[#F3F4F6] overflow-hidden">
+                          <div className="absolute inset-y-0 left-0 rounded-lg bg-primary/10" style={{ width: `${pct}%` }} />
+                          <div className="absolute inset-y-0 left-0 rounded-lg bg-primary" style={{ width: `${p.progress}%`, maxWidth: `${pct}%` }} />
+                          <div className="absolute inset-0 flex items-center px-3">
+                            <span className="text-xs font-medium text-white mix-blend-difference">{p.progress}%</span>
+                          </div>
+                        </div>
+                        <div className="flex justify-between mt-1.5">
+                          <span className="text-xs text-secondary">{formatDate(p.startDate)}</span>
+                          <span className="text-xs text-secondary">{formatShortDate(p.endDate)}</span>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex justify-between mt-1.5">
-                      <span className="text-xs text-secondary">{formatDate(p.startDate)}</span>
-                      <span className="text-xs text-secondary">{formatShortDate(p.endDate)}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
-      {view === 'calendar' && (
-        <CalendarView projects={projects} />
-      )}
+          {view === 'calendar' && (
+            <CalendarView projects={projects} />
+          )}
 
-      {view === 'gantt' && (
-        <ProjectGanttView projects={projects} loading={loading} />
-      )}
+          {view === 'gantt' && (
+            <ProjectGanttView projects={projects} loading={loading} />
+          )}
 
           {/* Load More Button */}
           {hasNextPage && (
@@ -638,7 +638,7 @@ function ProjectsContent() {
               </div>
               <form onSubmit={handleCreate} className="relative p-6 pb-24 md:pb-6 space-y-8">
                 {formError && <div className="absolute top-0 left-6 right-6 -mt-2 z-10 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 border border-red-100">{formError}</div>}
-                
+
                 {templates.length > 0 && (
                   <div className="mb-2 pb-4 border-b border-[#F3F4F6]">
                     <label className="flex text-sm font-medium text-[#374151] mb-1.5 items-center gap-2">
@@ -649,8 +649,8 @@ function ProjectsContent() {
                       onChange={(val) => {
                         setSelectedTemplateId(val);
                         if (val) {
-                           const t = templates.find(x => x.id === val);
-                           if (t && !formValues.name) setValue('name', t.name, { shouldValidate: true });
+                          const t = templates.find(x => x.id === val);
+                          if (t && !formValues.name) setValue('name', t.name, { shouldValidate: true });
                         }
                       }}
                       options={[
@@ -719,7 +719,7 @@ function ProjectsContent() {
                     </div>
                   </div>
                 </div>
-                
+
                 {/* Client & Ownership */}
                 <div className="space-y-4">
                   <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Client & Ownership</h3>
@@ -757,7 +757,7 @@ function ProjectsContent() {
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Team Members</label>
                     <MultiSelect
                       compact={false}
- options={members.filter(m => m.id !== formValues.ownerId).map(m => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name) }))}
+                      options={members.filter(m => m.id !== formValues.ownerId).map(m => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name) }))}
                       value={formValues.memberIds || []}
                       onChange={(val) => setValue('memberIds', val)}
                       placeholder="Search and select team members..."
@@ -773,11 +773,11 @@ function ProjectsContent() {
                       <Field label="Start Date" type="date" value={formValues.startDate || ''} onChange={(v) => setValue('startDate', v, { shouldValidate: true })} />
                     </div>
                     <div>
-                      <Field 
-                        label="End Date" 
-                        type="date" 
-                        value={formValues.endDate || ''} 
-                        onChange={(v) => setValue('endDate', v, { shouldValidate: true })} 
+                      <Field
+                        label="End Date"
+                        type="date"
+                        value={formValues.endDate || ''}
+                        onChange={(v) => setValue('endDate', v, { shouldValidate: true })}
                       />
                       {errors.endDate && <p className="mt-1 text-xs text-red-500">{errors.endDate.message}</p>}
                     </div>
