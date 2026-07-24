@@ -7,9 +7,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Building2, User, Phone, Mail, Calendar, MapPin, Tag, Clock, Globe, Pencil, Trash2, FolderPlus, Briefcase, Receipt, StickyNote, History } from 'lucide-react';
 import { api } from '@/lib/api';
-import { getInitials, getAvatarColor, formatCurrency } from '@/lib/utils';
+import { getInitials, getAvatarColor, formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
 import toast from 'react-hot-toast';
-import { format } from 'date-fns';
 import { STAGE_FIELDS } from '../lib/stage-config';
 import { StageTransitionModal } from '../components/StageTransitionModal';
 import { WonCelebrationModal } from '../components/WonCelebrationModal';
@@ -261,7 +260,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
               <div className="flex flex-col sm:items-end justify-center">
                 <span className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-1">Next Follow-up Date</span>
                 <span className="text-sm font-bold text-primary leading-none">
-                  {lead.followUpDate ? format(new Date(lead.followUpDate), 'PP') : '—'}
+                  {formatDate(lead.followUpDate)}
                 </span>
               </div>
               <div className="w-px bg-border hidden sm:block"></div>
@@ -294,7 +293,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
               const isCompleted = PIPELINE_STAGES.indexOf(lead.stage) >= idx;
               const isCurrent = lead.stage === stage;
               return (
-                <div key={stage} className="flex flex-col items-center gap-2.5 relative min-w-[120px] shrink-0">
+                <div key={stage} className="flex flex-col items-center gap-2.5 relative min-w-30 shrink-0">
                   <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold z-10 transition-colors ${isCurrent ? 'bg-primary text-white ring-4 ring-primary/10' : isCompleted ? 'bg-blue-50 text-blue-600 ring-4 ring-white' : 'bg-gray-50 text-gray-400 ring-4 ring-white border border-border'}`}>
                     {idx + 1}
                   </div>
@@ -302,7 +301,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                     {stage.replace(/_/g, ' ')}
                   </span>
                   {idx < 7 && (
-                    <div className={`absolute top-3.5 left-1/2 w-full h-[2px] z-0 ${isCompleted && !isCurrent ? 'bg-blue-100' : 'bg-gray-100'}`} />
+                    <div className={`absolute top-3.5 left-1/2 w-full h-0.5 z-0 ${isCompleted && !isCurrent ? 'bg-blue-100' : 'bg-gray-100'}`} />
                   )}
                 </div>
               );
@@ -320,7 +319,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
         const overdue = fud < today;
         return (
           <div className={`px-5 md:px-8 py-3 text-sm font-medium flex items-center gap-2 ${overdue ? 'bg-red-50 text-red-700 border-b border-red-100' : 'bg-amber-50 text-amber-800 border-b border-amber-100'}`}>
-            <Clock className="w-4 h-4 shrink-0" /> Follow-up {overdue ? 'overdue since' : 'due'} {format(new Date(lead.followUpDate), 'PP')}. Update the follow-up date to clear this.
+            <Clock className="w-4 h-4 shrink-0" /> Follow-up {overdue ? 'overdue since' : 'due'} {formatDate(lead.followUpDate)}. Update the follow-up date to clear this.
           </div>
         );
       })()}
@@ -377,22 +376,22 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                       <Detail label="Expected Close">
                         <p className="text-sm font-medium text-primary flex items-center gap-1.5">
                           <Calendar className="w-3.5 h-3.5 text-gray-400" />
-                          {lead.expectedCloseDate ? format(new Date(lead.expectedCloseDate), 'PP') : '—'}
+                          {formatDate(lead.expectedCloseDate)}
                         </p>
                       </Detail>
                       <Detail label="Next Follow-up Date">
                         <p className="text-sm font-medium text-primary flex items-center gap-1.5">
                           <Clock className="w-3.5 h-3.5 text-gray-400" />
-                          {lead.followUpDate ? format(new Date(lead.followUpDate), 'PP') : '—'}
+                          {formatDate(lead.followUpDate)}
                         </p>
                       </Detail>
                       <Detail label="Last Contacted Date">
                         <p className="text-sm font-medium text-primary flex items-center gap-1.5">
                           <Calendar className="w-3.5 h-3.5 text-gray-400" />
-                          {lead.lastContactedDate ? format(new Date(lead.lastContactedDate), 'PP') : '—'}
+                          {formatDate(lead.lastContactedDate)}
                         </p>
                       </Detail>
-                      <Detail label="Created" value={lead.createdAt ? format(new Date(lead.createdAt), 'PP') : null} />
+                      <Detail label="Created" value={formatDate(lead.createdAt)} />
                     </div>
                   </div>
 
@@ -459,7 +458,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                       </div>
                       <div className="flex items-center justify-between py-2.5 border-b border-gray-50">
                         <span className="text-sm text-secondary font-medium">Expected Close</span>
-                        <span className="text-sm font-bold text-primary">{lead.expectedCloseDate ? format(new Date(lead.expectedCloseDate), 'PP') : '—'}</span>
+                        <span className="text-sm font-bold text-primary">{formatDate(lead.expectedCloseDate)}</span>
                       </div>
                       <div className="flex items-center justify-between py-2.5">
                         <span className="text-sm text-secondary font-medium">Priority</span>
@@ -481,11 +480,11 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                       <div className="relative border-l-2 border-gray-100 ml-2 space-y-6">
                         {lead.stageHistory.map((history: any, index: number) => (
                           <div key={history.id || index} className="relative pl-5">
-                            <div className="absolute left-[-9px] top-1.5 w-4 h-4 rounded-full bg-blue-50 border-2 border-blue-500 ring-2 ring-white"></div>
+                            <div className="absolute -left-2.25 top-1.5 w-4 h-4 rounded-full bg-blue-50 border-2 border-blue-500 ring-2 ring-white"></div>
                             <div className="flex flex-col">
                               <span className="text-sm font-bold text-primary">{history.toStage.replace(/_/g, ' ')}</span>
                               <div className="flex items-center gap-1.5 mt-0.5">
-                                <span className="text-[11px] font-medium text-secondary">{format(new Date(history.changedAt), 'PPp')}</span>
+                                <span className="text-[11px] font-medium text-secondary">{formatDateTime(history.changedAt)}</span>
                                 <span className="text-[11px] text-gray-300">•</span>
                                 <span className="text-[11px] font-medium text-secondary">by {history.changedBy?.name || 'System'}</span>
                               </div>
@@ -501,7 +500,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
 
                   {/* Notes Card */}
                   {lead.notes && lead.notes.length > 0 && (
-                    <div className="bg-white rounded-2xl border border-border p-6 shadow-sm max-h-[500px] overflow-y-auto">
+                    <div className="bg-white rounded-2xl border border-border p-6 shadow-sm max-h-125 overflow-y-auto">
                       <h2 className="text-xs font-bold text-secondary flex items-center gap-2 mb-6 uppercase tracking-wider">
                         <StickyNote className="w-4 h-4" /> Notes
                       </h2>
@@ -513,7 +512,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                                 {note.author ? getInitials(note.author.name) : 'S'}
                               </div>
                               <span className="text-xs font-bold text-primary">{note.author?.name || 'System'}</span>
-                              <span className="text-[10px] text-secondary font-medium ml-auto">{format(new Date(note.createdAt), 'MMM d, yyyy')}</span>
+                              <span className="text-[10px] text-secondary font-medium ml-auto">{formatDate(note.createdAt)}</span>
                             </div>
                             <p className="text-sm text-primary whitespace-pre-wrap leading-relaxed">{note.body || note.content || '—'}</p>
                           </div>

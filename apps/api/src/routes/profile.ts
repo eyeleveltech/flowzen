@@ -13,7 +13,6 @@ profileRouter.use(authenticate);
 // Validation schemas
 const updateProfileSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
-  department: z.string().optional().nullable(),
   designation: z.string().optional().nullable(),
 });
 
@@ -32,11 +31,11 @@ profileRouter.get('/', async (req: AuthRequest, res: Response, next) => {
         name: true,
         email: true,
         role: true,
-        department: true,
         designation: true,
         avatar: true,
         organizationId: true,
         teamId: true,
+        team: { select: { id: true, name: true } },
         status: true,
       },
     });
@@ -61,7 +60,6 @@ profileRouter.put('/', async (req: AuthRequest, res: Response, next) => {
       where: { id: req.user!.userId },
       data: {
         name: data.name,
-        department: data.department,
         designation: data.designation,
       },
       select: {
@@ -69,11 +67,11 @@ profileRouter.put('/', async (req: AuthRequest, res: Response, next) => {
         name: true,
         email: true,
         role: true,
-        department: true,
         designation: true,
         avatar: true,
         organizationId: true,
         teamId: true,
+        team: { select: { id: true, name: true } },
         status: true,
       },
     });

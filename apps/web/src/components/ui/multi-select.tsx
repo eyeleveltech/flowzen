@@ -15,6 +15,7 @@ interface Option {
 }
 
 interface MultiSelectProps {
+  id?: string;
   options: Option[];
   value: string[];
   onChange: (value: string[]) => void;
@@ -26,7 +27,7 @@ interface MultiSelectProps {
   triggerClassName?: string;
 }
 
-export function MultiSelect({ options, value, onChange, placeholder = 'Select...', compact = true, showSelectAll = true, triggerClassName }: MultiSelectProps) {
+export function MultiSelect({ id, options, value, onChange, placeholder = 'Select...', compact = true, showSelectAll = true, triggerClassName }: MultiSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -103,7 +104,9 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
       {compact ? (
         // Fixed-height summary trigger — keeps filter bars aligned regardless of selection.
         <button
+          id={id}
           type="button"
+          role="combobox"
           aria-haspopup="listbox"
           aria-expanded={isOpen}
           aria-label={placeholder}
@@ -113,7 +116,7 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
             if (e.key === 'Escape') setIsOpen(false);
           }}
           className={cn(
-            "flex h-[42px] w-full items-center justify-between rounded-xl border border-border bg-white px-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all text-left",
+            "flex h-10.5 w-full items-center justify-between rounded-xl border border-border bg-white px-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all text-left",
             triggerClassName ? "h-auto border-transparent focus:ring-0 focus:border-transparent px-0 rounded-none shadow-none" : "",
             triggerClassName
           )}
@@ -129,7 +132,8 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
         </button>
       ) : (
       <div
-        className="min-h-[42px] w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary cursor-pointer flex flex-wrap gap-2 items-center transition-all focus-within:border-primary focus-within:ring-1 focus-within:ring-primary"
+        id={id}
+        className="min-h-10.5 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary cursor-pointer flex flex-wrap gap-2 items-center transition-all focus-within:border-primary focus-within:ring-1 focus-within:ring-primary"
         onClick={() => setIsOpen(true)}
       >
         {selectedOptions.length === 0 && (
@@ -158,7 +162,7 @@ export function MultiSelect({ options, value, onChange, placeholder = 'Select...
           role="combobox"
           aria-expanded={isOpen}
           aria-haspopup="listbox"
-          className="flex-1 min-w-[50px] bg-transparent outline-none text-sm placeholder:text-muted"
+          className="flex-1 min-w-12.5 bg-transparent outline-none text-sm placeholder:text-muted"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={selectedOptions.length === 0 ? "" : "Search..."}

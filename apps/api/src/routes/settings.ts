@@ -1,6 +1,8 @@
 import { Router, Response } from 'express';
+import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
 import { hashPassword } from '../utils/password.js';
 import { EmailService } from '../services/email.js';
 import { emitToOrganization } from '../sse.js';
@@ -256,9 +258,9 @@ settingsRouter.get('/users', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Auth
         email: true,
         avatar: true,
         role: true,
-        department: true,
         designation: true,
-        team: { select: { name: true } },
+        teamId: true,
+        team: { select: { id: true, name: true } },
         status: true,
         joiningDate: true,
       },
@@ -271,10 +273,18 @@ settingsRouter.get('/users', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Auth
   }
 });
 
+const inviteUserSchema = z.object({
+  name: z.string().trim().min(2),
+  email: z.string().trim().toLowerCase().email(),
+  role: z.enum(['ADMIN', 'PROJECT_MANAGER', 'TEAM_MEMBER']).default('TEAM_MEMBER'),
+  designation: z.string().optional(),
+  teamId: z.string().optional(),
+}).strict();
+
 // POST /api/settings/users (invite)
-settingsRouter.post('/users', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimiter, async (req: AuthRequest, res: Response, next) => {
+settingsRouter.post('/users', authorize('SUPER_ADMIN', 'ADMIN'), validate(inviteUserSchema), settingsLimiter, async (req: AuthRequest, res: Response, next) => {
   try {
-    const { name, email, role, department, designation, password, teamId } = req.body;
+    const { name, email, role, designation, teamId } = req.body;
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
@@ -292,8 +302,7 @@ settingsRouter.post('/users', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimiter
         name: toProperCase(name),
         email,
         password: hashedPassword,
-        role: role || 'TEAM_MEMBER',
-        department,
+        role,
         designation,
         resetToken,
         resetTokenExpiry,
@@ -307,7 +316,6 @@ settingsRouter.post('/users', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimiter
         name: true,
         email: true,
         role: true,
-        department: true,
         designation: true,
         status: true,
       },
@@ -337,40 +345,58 @@ settingsRouter.put('/users/:id', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimi
       return;
     }
 
-    let roleToSet = req.body.role;
-    if (targetUser.role === 'SUPER_ADMIN') {
-      roleToSet = 'SUPER_ADMIN'; // Cannot be demoted here
-    } else if (req.body.role === 'SUPER_ADMIN') {
-      res.status(400).json({ error: 'Cannot promote to Super Admin directly' });
+    if (req.body.role === 'SUPER_ADMIN' && req.user!.role !== 'SUPER_ADMIN') {
+      res.status(403).json({ error: 'Only Super Admins can promote to Super Admin' });
       return;
     }
 
-    const dataToUpdate: any = {
-      name: req.body.name ? toProperCase(req.body.name) : undefined,
-      role: roleToSet,
-      department: req.body.department,
-      designation: req.body.designation,
-      teamId: req.body.teamId || null,
-      status: req.body.status,
-    };
+    const updateUserSchema = z.object({
+      name: z.string().trim().min(2).optional(),
+      role: z.enum(['ADMIN', 'PROJECT_MANAGER', 'TEAM_MEMBER']).optional(),
+      designation: z.string().nullable().optional(),
+      teamId: z.string().nullable().optional(),
+      status: z.enum(['ACTIVE', 'PENDING', 'INACTIVE']).optional(),
+    }).strict();
+
+    let body: any;
+    try {
+      body = updateUserSchema.parse(req.body);
+    } catch (err: any) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({
+          error: 'Validation failed',
+          details: err.errors.map((e) => ({ field: e.path.join('.'), message: e.message })),
+        });
+        return;
+      }
+      throw err;
+    }
+
+    if (body.name) {
+      body.name = toProperCase(body.name);
+    }
+
+    if (targetUser.role === 'SUPER_ADMIN') {
+      delete body.role; // Cannot be demoted here
+    }
 
     const user = await prisma.user.update({
       where: { id: targetUserId },
-      data: dataToUpdate,
+      data: body,
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
-        department: true,
         designation: true,
-        team: { select: { name: true } },
+        teamId: true,
+        team: { select: { id: true, name: true } },
         status: true,
       },
     });
 
     const oldRole = targetUser.role;
-    const isRoleChanged = roleToSet && roleToSet !== oldRole;
+    const isRoleChanged = body.role && body.role !== oldRole;
     if (isRoleChanged) {
       await createAuditLog({
         organizationId: req.user!.organizationId,
@@ -382,7 +408,7 @@ settingsRouter.put('/users/:id', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimi
           userName: targetUser.name,
           userEmail: targetUser.email,
           previousRole: oldRole,
-          newRole: roleToSet
+          newRole: body.role
         }
       });
     }
@@ -436,7 +462,7 @@ settingsRouter.delete('/users/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (re
 });
 
 // GET /api/settings/templates
-settingsRouter.get('/templates', async (req: AuthRequest, res: Response, next) => {
+settingsRouter.get('/templates', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     const templates = await prisma.projectTemplate.findMany({
       where: { organizationId: req.user!.organizationId },

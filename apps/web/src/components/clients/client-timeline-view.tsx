@@ -3,16 +3,10 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import { getClientDisplayName, getInitials, getAvatarColor } from '@/lib/utils';
+import { getClientDisplayName, getInitials, getAvatarColor, formatDate } from '@/lib/utils';
 import { CalendarDays } from 'lucide-react';
 
-const statusConfig: Record<string, { bg: string; dot: string; label: string }> = {
-  PROSPECT:          { bg: 'bg-blue-50 border-blue-200',     dot: 'bg-blue-500',    label: 'Prospect' },
-  ACTIVE:            { bg: 'bg-emerald-50 border-emerald-200', dot: 'bg-emerald-500', label: 'Active' },
-  ONHOLD:            { bg: 'bg-amber-50 border-amber-200',   dot: 'bg-amber-500',   label: 'On Hold' },
-  CHURNED:           { bg: 'bg-gray-100 border-gray-200',    dot: 'bg-gray-400',    label: 'Churned' },
-  PROJECT_COMPLETED: { bg: 'bg-slate-50 border-slate-200',   dot: 'bg-slate-400',   label: 'Completed' },
-};
+import { getStatusColor } from '@/lib/status';
 
 export function ClientTimelineView({ clients, loading }: { clients: any[]; loading: boolean }) {
   const router = useRouter();
@@ -110,7 +104,7 @@ export function ClientTimelineView({ clients, loading }: { clients: any[]; loadi
                 return (
                   <div
                     key={i}
-                    className={`flex-1 min-w-[100px] px-3 flex items-center border-r border-border text-[11px] font-semibold uppercase tracking-wider ${isCurrentMonth ? 'text-blue-600 bg-blue-50/60' : 'text-secondary'}`}
+                    className={`flex-1 min-w-25 px-3 flex items-center border-r border-border text-[11px] font-semibold uppercase tracking-wider ${isCurrentMonth ? 'text-blue-600 bg-blue-50/60' : 'text-secondary'}`}
                   >
                     {m.toLocaleString('default', { month: 'short' })}
                     <span className="ml-1 opacity-60 font-normal">{m.getFullYear()}</span>
@@ -128,7 +122,7 @@ export function ClientTimelineView({ clients, loading }: { clients: any[]; loadi
                   return (
                     <div
                       key={i}
-                      className={`flex-1 min-w-[100px] border-r ${isCurrentMonth ? 'bg-blue-50/30 border-blue-100' : 'border-gray-100'}`}
+                      className={`flex-1 min-w-25 border-r ${isCurrentMonth ? 'bg-blue-50/30 border-blue-100' : 'border-gray-100'}`}
                     />
                   );
                 })}
@@ -137,10 +131,10 @@ export function ClientTimelineView({ clients, loading }: { clients: any[]; loadi
               {/* Today indicator */}
               {todayPct >= 0 && todayPct <= 100 && (
                 <div
-                  className="absolute top-0 bottom-0 w-[2px] bg-blue-500/70 z-10 pointer-events-none"
+                  className="absolute top-0 bottom-0 w-0.5 bg-blue-500/70 z-10 pointer-events-none"
                   style={{ left: `${todayPct}%` }}
                 >
-                  <div className="absolute top-2 left-[-18px] text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-md shadow-sm whitespace-nowrap z-10">
+                  <div className="absolute top-2 -left-4.5 text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-md shadow-sm whitespace-nowrap z-10">
                     Today
                   </div>
                 </div>
@@ -152,7 +146,7 @@ export function ClientTimelineView({ clients, loading }: { clients: any[]; loadi
                 if (!dateStr) return <div key={client.id} className="h-16 border-b border-[#F3F4F6]" />;
                 const d = new Date(dateStr);
                 const pct = ((d.getTime() - minDate.getTime()) / totalDuration) * 100;
-                const cfg = statusConfig[client.status] || statusConfig['ACTIVE'];
+                const cfg = getStatusColor(client.status);
 
                 return (
                   <motion.div
@@ -187,7 +181,7 @@ export function ClientTimelineView({ clients, loading }: { clients: any[]; loadi
                     >
                       <div className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
                       <span className="text-xs font-medium text-primary whitespace-nowrap">
-                        {d.toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {formatDate(d)}
                       </span>
                       <span className={`text-[10px] font-semibold`}>{cfg.label}</span>
                     </motion.div>

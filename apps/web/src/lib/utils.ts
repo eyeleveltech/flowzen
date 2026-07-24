@@ -1,31 +1,68 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
+import { ROLE_LABELS } from '@flowzen/shared';
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatDate(date: string | Date | null | undefined): string {
-  if (!date) return '—';
+export function getRoleLabel(role?: string | null): string {
+  if (!role) return '—';
+  return ROLE_LABELS[role] || role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+export function safeDate(date: string | Date | number | null | undefined): Date | null {
+  if (!date) return null;
+  const d = new Date(date);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+export function formatDate(date: string | Date | number | null | undefined): string {
+  const d = safeDate(date);
+  if (!d) return '—';
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-  }).format(new Date(date));
+  }).format(d);
 }
 
-// Short date with no year, e.g. "20 Jun" (day + short month name). Used for compact due-date display.
-export function formatShortDate(date: string | Date | null | undefined): string {
-  if (!date) return '—';
-  return new Intl.DateTimeFormat('en-GB', {
-    day: 'numeric',
+// Short date with no year, e.g. "Jun 20" (short month + day). Used for compact due-date display.
+export function formatShortDate(date: string | Date | number | null | undefined): string {
+  const d = safeDate(date);
+  if (!d) return '—';
+  return new Intl.DateTimeFormat('en-US', {
     month: 'short',
-  }).format(new Date(date));
+    day: 'numeric',
+  }).format(d);
 }
 
-export function formatRelativeDate(date: string | Date): string {
+export function formatDateTime(date: string | Date | number | null | undefined): string {
+  const d = safeDate(date);
+  if (!d) return '—';
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(d);
+}
+
+export function formatTime(date: string | Date | number | null | undefined): string {
+  const d = safeDate(date);
+  if (!d) return '—';
+  return new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(d);
+}
+
+export function formatRelativeDate(date: string | Date | number | null | undefined): string {
+  const d = safeDate(date);
+  if (!d) return '—';
   const now = new Date();
-  const d = new Date(date);
   const diff = now.getTime() - d.getTime();
   const seconds = Math.floor(diff / 1000);
   const minutes = Math.floor(seconds / 60);
@@ -36,7 +73,7 @@ export function formatRelativeDate(date: string | Date): string {
   if (minutes < 60) return `${minutes}m ago`;
   if (hours < 24) return `${hours}h ago`;
   if (days < 7) return `${days}d ago`;
-  return formatDate(date);
+  return formatDate(d);
 }
 
 export function formatCurrency(value: number | null | undefined): string {
@@ -134,4 +171,27 @@ export function getProjectStatusFromClient(client: any): 'PLANNING' | 'IN_PROGRE
     default:
       return 'PLANNING';
   }
+}
+
+export type ProjectHealth = 'GREEN' | 'AMBER' | 'RED';
+
+export const PROJECT_HEALTH_CONFIG: Record<ProjectHealth, { color: string; label: string }> = {
+  GREEN: { color: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'On Track' },
+  AMBER: { color: 'bg-amber-50 text-amber-700 border-amber-200', label: 'At Risk' },
+  RED: { color: 'bg-red-50 text-red-700 border-red-200', label: 'Off Track' },
+};
+
+export function computeProjectHealth(
+  overdueTasksCount: number,
+  endDate: string | Date | null | undefined,
+  status: string
+): ProjectHealth {
+  const todayStart = new Date();
+  if (overdueTasksCount >= 3 || (endDate && new Date(endDate) < todayStart && status !== 'COMPLETED')) {
+    return 'RED';
+  }
+  if (overdueTasksCount >= 1) {
+    return 'AMBER';
+  }
+  return 'GREEN';
 }

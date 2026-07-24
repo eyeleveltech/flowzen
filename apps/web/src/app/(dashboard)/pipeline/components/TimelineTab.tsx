@@ -5,8 +5,8 @@ import { AnimatePresence } from 'framer-motion';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
-import { format, formatDistanceToNow } from 'date-fns';
-import { getInitials, getAvatarColor } from '@/lib/utils';
+import { formatDistanceToNow } from 'date-fns';
+import { getInitials, getAvatarColor, formatDateTime } from '@/lib/utils';
 import {
   ArrowRight, Phone, Calendar, Pencil, Mail, Send, IndianRupee, FileText, CheckSquare,
   Brain, UserPlus, Clock, Sparkles, Plus, Activity as ActivityIcon,
@@ -103,7 +103,7 @@ export function TimelineTab({ leadId }: { leadId: string }) {
                   <div className={`hidden md:flex w-5 h-5 rounded-full items-center justify-center text-[9px] font-bold ${a.user ? getAvatarColor(a.user.name) : 'bg-gray-100 text-gray-400'}`}>{a.user ? getInitials(a.user.name) : '•'}</div>
                   <p className="text-sm text-primary"><span className="font-medium">{a.user?.name || 'System'}</span> <span className="text-[#4B5563]">{a.message}</span></p>
                 </div>
-                <p className="text-xs text-secondary ml-7" title={format(new Date(a.createdAt), 'PPpp')}>{formatDistanceToNow(new Date(a.createdAt), { addSuffix: true })}</p>
+                <p className="text-xs text-secondary ml-7" title={formatDateTime(a.createdAt)}>{formatDistanceToNow(new Date(a.createdAt), { addSuffix: true })}</p>
                 {extras.length > 0 && <p className="ml-7 mt-1 text-xs text-secondary">{extras.join(' · ')}</p>}
                 {body && <div className="ml-7 mt-2 p-3 bg-gray-50 rounded-xl text-sm text-[#4B5563] border border-gray-100 whitespace-pre-wrap">{body}</div>}
               </div>

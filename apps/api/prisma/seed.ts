@@ -39,7 +39,6 @@ async function main() {
       email: 'harish@eyelevel.digital',
       password,
       role: 'SUPER_ADMIN',
-      department: 'Management',
       organizationId: org.id,
     },
   });
@@ -50,7 +49,6 @@ async function main() {
       email: 'sarah@eyelevel.digital',
       password,
       role: 'PROJECT_MANAGER',
-      department: 'Project Management',
       organizationId: org.id,
     },
   });
@@ -61,7 +59,6 @@ async function main() {
       email: 'alex@eyelevel.digital',
       password,
       role: 'TEAM_MEMBER',
-      department: 'Engineering',
       organizationId: org.id,
     },
   });
@@ -72,7 +69,6 @@ async function main() {
       email: 'maya@eyelevel.digital',
       password,
       role: 'TEAM_MEMBER',
-      department: 'Design',
       organizationId: org.id,
     },
   });
@@ -83,7 +79,6 @@ async function main() {
       email: 'james@eyelevel.digital',
       password,
       role: 'ADMIN',
-      department: 'Operations',
       organizationId: org.id,
     },
   });

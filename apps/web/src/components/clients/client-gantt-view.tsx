@@ -9,13 +9,7 @@ import { BarChart2 } from 'lucide-react';
 const ROW_HEIGHT = 56;
 const SIDEBAR_WIDTH = 192; // w-48
 
-const statusConfig: Record<string, { bar: string; text: string; dot: string; label: string }> = {
-  PROSPECT:          { bar: 'bg-blue-100 border-blue-300',       text: 'text-blue-800',    dot: 'bg-blue-500',    label: 'Prospect' },
-  ACTIVE:            { bar: 'bg-emerald-100 border-emerald-300', text: 'text-emerald-800', dot: 'bg-emerald-500', label: 'Active' },
-  ONHOLD:            { bar: 'bg-amber-100 border-amber-300',     text: 'text-amber-800',   dot: 'bg-amber-500',   label: 'On Hold' },
-  CHURNED:           { bar: 'bg-gray-100 border-gray-300',       text: 'text-gray-600',    dot: 'bg-gray-400',    label: 'Churned' },
-  PROJECT_COMPLETED: { bar: 'bg-slate-100 border-slate-300',     text: 'text-slate-700',   dot: 'bg-slate-500',   label: 'Completed' },
-};
+import { getStatusColor, getStatusLabel } from '@/lib/status';
 
 export function ClientGanttView({ clients, loading }: { clients: any[]; loading: boolean }) {
   const router = useRouter();
@@ -97,7 +91,7 @@ export function ClientGanttView({ clients, loading }: { clients: any[]; loading:
               return (
                 <div
                   key={i}
-                  className={`flex-1 min-w-[100px] px-3 flex items-center border-r text-[11px] font-semibold uppercase tracking-wider ${isNow ? 'text-blue-600 bg-blue-50 border-blue-100' : 'text-secondary border-border'}`}
+                  className={`flex-1 min-w-25 px-3 flex items-center border-r text-[11px] font-semibold uppercase tracking-wider ${isNow ? 'text-blue-600 bg-blue-50 border-blue-100' : 'text-secondary border-border'}`}
                 >
                   {m.toLocaleString('default', { month: 'short' })}
                   <span className="ml-1 font-normal opacity-60">{m.getFullYear()}</span>
@@ -115,7 +109,7 @@ export function ClientGanttView({ clients, loading }: { clients: any[]; loading:
                 return (
                   <div
                     key={i}
-                    className={`flex-1 min-w-[100px] border-r ${isNow ? 'bg-blue-50/30 border-blue-100' : 'border-gray-100'}`}
+                    className={`flex-1 min-w-25 border-r ${isNow ? 'bg-blue-50/30 border-blue-100' : 'border-gray-100'}`}
                   />
                 );
               })}
@@ -126,7 +120,7 @@ export function ClientGanttView({ clients, loading }: { clients: any[]; loading:
               className="absolute top-0 bottom-0 pointer-events-none z-10"
               style={{ left: `calc(${SIDEBAR_WIDTH}px + ${todayPct}% * (100% - ${SIDEBAR_WIDTH}px) / 100)` }}
             >
-              <div className="absolute inset-y-0 w-[2px] bg-blue-500/60" />
+              <div className="absolute inset-y-0 w-0.5 bg-blue-500/60" />
               <div className="absolute top-2 left-2 text-[10px] font-bold text-blue-600 bg-white border border-blue-200 px-1.5 py-0.5 rounded shadow-sm whitespace-nowrap">
                 Today
               </div>
@@ -134,7 +128,8 @@ export function ClientGanttView({ clients, loading }: { clients: any[]; loading:
 
             {/* Client rows */}
             {sortedClients.map((client, idx) => {
-              const cfg = statusConfig[client.status] || statusConfig['ACTIVE'];
+              const cfg = getStatusColor(client.status);
+              const label = getStatusLabel(client.status);
               const dateStr = client.startDate || client.createdAt;
               const start = dateStr ? new Date(dateStr) : null;
               const end = client.status === 'CHURNED' ? new Date(client.updatedAt || today) : today;
@@ -164,7 +159,7 @@ export function ClientGanttView({ clients, loading }: { clients: any[]; loading:
                         <p className="text-sm font-medium text-primary truncate group-hover:text-blue-600 transition-colors leading-tight">
                           {getClientDisplayName(client)}
                         </p>
-                        <p className="text-[10px] text-secondary">{cfg.label}</p>
+                        <p className="text-[10px] text-secondary">{label}</p>
                       </div>
                     </div>
                   </div>

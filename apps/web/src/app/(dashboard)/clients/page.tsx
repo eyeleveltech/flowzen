@@ -18,6 +18,7 @@ import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { useMembers } from '@/hooks/useQueries';
 import { ViewSettingsPanel } from '@/components/ui/view-settings-panel';
 import Papa from 'papaparse';
+import { StatusBadge } from '@/components/ui/status-badge';
 
 interface ClientContact {
   id: string;
@@ -55,14 +56,6 @@ const INDUSTRY_OPTIONS = [
   'Retail', 'Hospitality', 'Finance', 'Manufacturing', 'Media & Entertainment',
   'Food & Beverage', 'Automotive', 'Non-Profit', 'Professional Services', 'Other',
 ];
-
-const statusColors: Record<string, string> = {
-  PROSPECT: 'bg-blue-50 text-blue-700',
-  ACTIVE: 'bg-emerald-50 text-emerald-700',
-  ONHOLD: 'bg-amber-50 text-amber-700',
-  CHURNED: 'bg-gray-50 text-gray-400',
-  PROJECT_COMPLETED: 'bg-slate-100 text-slate-500',
-};
 
 function ClientsContent() {
   const router = useRouter();
@@ -245,7 +238,7 @@ function ClientsContent() {
     try {
       const data = await api.get<{ clients: Client[] }>('/clients?limit=10000');
       const csvData = data.clients.map(c => ({
-        Name: c.name,
+        ContactName: c.contacts?.[0]?.name || '',
         Company: c.company || '',
         Industry: c.industry || '',
         Status: c.status,
@@ -258,7 +251,6 @@ function ClientsContent() {
         StartDate: c.startDate ? new Date(c.startDate).toISOString().split('T')[0] : '',
         AccountManagerId: c.accountManagerId || '',
         Website: c.website || '',
-        ContactName: c.contacts?.[0]?.name || '',
         ContactDesignation: c.contacts?.[0]?.designation || '',
         ContactEmail: c.contacts?.[0]?.email || '',
         ContactPhone: c.contacts?.[0]?.phone || ''
@@ -322,7 +314,7 @@ function ClientsContent() {
     setImporting(true);
     try {
       const payload = importPreview.map((row: any) => ({
-        name: row.Name || row.name,
+        name: row.Name || row.name || row.ContactName || row.contactName || row.Company || row.company,
         company: row.Company || row.company,
         industry: row.Industry || row.industry,
         status: row.Status || row.status || 'PROSPECT',
@@ -357,7 +349,7 @@ function ClientsContent() {
 
   function downloadTemplate() {
     const csv = Papa.unparse([{
-      Name: 'Example Corp',
+      ContactName: 'John Doe',
       Company: 'Example LLC',
       Industry: 'Technology',
       Status: 'PROSPECT',
@@ -370,7 +362,6 @@ function ClientsContent() {
       StartDate: '2026-06-01',
       AccountManagerId: '',
       Website: 'https://example.com',
-      ContactName: 'John Doe',
       ContactDesignation: 'CEO',
       ContactEmail: 'john@example.com',
       ContactPhone: '+1-555-0100'
@@ -566,7 +557,7 @@ function ClientsContent() {
       {currentView === 'table' && (
       <div className="hidden md:block rounded-2xl border border-border bg-white overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[800px]">
+          <table className="w-full min-w-200">
             <thead>
             <tr className="border-b border-[#F3F4F6]">
               {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>}
@@ -693,9 +684,7 @@ function ClientsContent() {
                   )}
                   {visibleColumns.includes('status') && (
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${statusColors[client.status] || 'bg-gray-50 text-gray-500'}`}>
-                        {client.status.replace('_', ' ')}
-                      </span>
+                      <StatusBadge status={client.status} />
                     </td>
                   )}
                   <td className="px-6 py-4">
@@ -758,9 +747,7 @@ function ClientsContent() {
                     )}
                   </div>
                 </div>
-                <span className={`inline-flex items-center rounded-lg px-2 py-0.5 text-[10px] font-medium ${statusColors[client.status] || 'bg-gray-50 text-gray-500'}`}>
-                  {client.status.replace('_', ' ')}
-                </span>
+                <StatusBadge status={client.status} size="xs" />
               </div>
               
               <div className="flex items-center justify-between mt-4">

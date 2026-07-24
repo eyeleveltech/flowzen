@@ -21,11 +21,15 @@ interface User {
   avatar?: string | null;
 }
 
+interface TeamManagerItem {
+  user: User;
+}
+
 interface Team {
   id: string;
   name: string;
   description?: string | null;
-  leader?: User | null;
+  managers: TeamManagerItem[];
   members: User[];
 }
 
@@ -41,7 +45,7 @@ export default function TeamsPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState('');
   
-  const [form, setForm] = useState({ name: '', description: '', leaderId: '', memberIds: [] as string[] });
+  const [form, setForm] = useState({ name: '', description: '', managerIds: [] as string[], memberIds: [] as string[] });
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -79,7 +83,7 @@ export default function TeamsPage() {
 
   function openCreate() {
     setIsEditing(false);
-    setForm({ name: '', description: '', leaderId: '', memberIds: [] });
+    setForm({ name: '', description: '', managerIds: [], memberIds: [] });
     setShowCreate(true);
   }
 
@@ -89,7 +93,7 @@ export default function TeamsPage() {
     setForm({
       name: team.name,
       description: team.description || '',
-      leaderId: team.leader?.id || '',
+      managerIds: team.managers?.map(m => m.user.id) || [],
       memberIds: team.members.map(m => m.id),
     });
     setShowCreate(true);
@@ -139,13 +143,10 @@ export default function TeamsPage() {
 
   if (loading) {
     return (
-      <div className="p-8 max-w-7xl mx-auto space-y-8">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-          <div>
-            <Skeleton className="h-8 w-40 mb-2" />
-            <Skeleton className="h-4 w-64" />
-          </div>
-          <Skeleton className="h-10 w-40 rounded-xl" />
+      <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-10 w-36 rounded-xl" />
         </div>
         <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden p-6 space-y-4">
           {[1, 2, 3].map(i => (
@@ -166,15 +167,15 @@ export default function TeamsPage() {
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+    <div className="p-4 sm:p-8 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
         <div>
-          <h1 className="text-2xl font-semibold text-primary">Departments</h1>
-          <p className="text-secondary mt-1 text-sm">Manage departments and groups within your organization.</p>
+          <h1 className="text-xl sm:text-2xl font-semibold text-primary">Departments</h1>
+          <p className="text-secondary mt-1 text-xs sm:text-sm">Manage departments and groups within your organization.</p>
         </div>
         <button
           onClick={openCreate}
-          className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-[#1F2937] transition-all hover:shadow-sm"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-[#1F2937] transition-all hover:shadow-sm self-start sm:self-auto"
         >
           <Plus className="h-4 w-4" />
           Create Department
@@ -183,11 +184,11 @@ export default function TeamsPage() {
 
       <div className="bg-white rounded-2xl border border-border overflow-hidden">
         <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[800px]">
+          <table className="w-full text-left border-collapse min-w-200">
             <thead>
             <tr className="bg-[#F9FAFB] border-b border-border">
               <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide">Department Name</th>
-              <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide">Manager</th>
+              <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide">Managers</th>
               <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide">Members</th>
               <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide text-right">Actions</th>
             </tr>
@@ -202,20 +203,31 @@ export default function TeamsPage() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-primary">{team.name}</h3>
-                      <p className="text-xs text-secondary line-clamp-1 max-w-[250px]">{team.description || 'No description'}</p>
+                      <p className="text-xs text-secondary line-clamp-1 max-w-62.5">{team.description || 'No description'}</p>
                     </div>
                   </div>
                 </td>
                 <td className="px-6 py-5">
-                  {team.leader ? (
+                  {team.managers && team.managers.length > 0 ? (
                     <div className="flex items-center gap-2">
- <div className={`h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold ${getAvatarColor(team.leader.name)}`}>
-                        {getInitials(team.leader.name)}
+                      <div className="flex -space-x-1.5">
+                        {team.managers.slice(0, 3).map((mgr, i) => (
+                          <div 
+                            key={mgr.user.id} 
+                            className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-2 ring-white text-[10px] font-bold ${getAvatarColor(mgr.user.name)}`} 
+                            style={{ zIndex: 3 - i }}
+                            title={mgr.user.name}
+                          >
+                            {getInitials(mgr.user.name)}
+                          </div>
+                        ))}
                       </div>
-                      <span className="text-sm font-medium text-primary">{team.leader.name}</span>
+                      <span className="text-xs font-medium text-primary">
+                        {team.managers.map(m => m.user.name).join(', ')}
+                      </span>
                     </div>
                   ) : (
-                    <span className="text-sm text-muted italic">No Manager</span>
+                    <span className="text-sm text-muted italic">No Managers</span>
                   )}
                 </td>
                 <td className="px-6 py-5">
@@ -224,7 +236,7 @@ export default function TeamsPage() {
                       {team.members.slice(0, 5).map((m, i) => (
                         <div 
                           key={m.id} 
- className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-2 ring-white text-[10px] font-bold ${getAvatarColor(m.name)}`} 
+                          className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-2 ring-white text-[10px] font-bold ${getAvatarColor(m.name)}`} 
                           style={{ zIndex: 5 - i }}
                           title={m.name}
                         >
@@ -264,21 +276,21 @@ export default function TeamsPage() {
         </table>
         </div>
 
-        {/* Mobile Card View */}
+        {/* Mobile Card View (Optimized for 320px+) */}
         <div className="md:hidden flex flex-col divide-y divide-border">
           {teams.map((team) => (
-            <div key={team.id} className="p-4 hover:bg-[#F9FAFB] transition-colors relative">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-linear-to-br from-blue-50 to-indigo-50 text-blue-600 flex items-center justify-center border border-blue-100/50 shrink-0">
-                    <Users className="h-5 w-5" />
+            <div key={team.id} className="p-3.5 sm:p-4 hover:bg-[#F9FAFB] transition-colors relative">
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="h-9 w-9 rounded-xl bg-linear-to-br from-blue-50 to-indigo-50 text-blue-600 flex items-center justify-center border border-blue-100/50 shrink-0">
+                    <Users className="h-4 w-4" />
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-primary">{team.name}</h3>
-                    <p className="text-xs text-secondary line-clamp-1">{team.description || 'No description'}</p>
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-primary text-sm truncate">{team.name}</h3>
+                    <p className="text-xs text-secondary truncate max-w-37.5 sm:max-w-none">{team.description || 'No description'}</p>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-1.5 shrink-0">
                   <button onClick={() => openEdit(team)} className="p-1.5 text-secondary hover:text-primary bg-white border border-border hover:bg-[#F3F4F6] rounded-xl transition-all hover:shadow-sm">
                     <Edit2 className="h-4 w-4" />
                   </button>
@@ -288,28 +300,25 @@ export default function TeamsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mt-4 bg-[#F9FAFB] p-3 rounded-xl border border-border">
-                <div>
-                  <span className="text-[10px] font-medium text-secondary uppercase tracking-wide block mb-1">Manager</span>
-                  {team.leader ? (
-                    <div className="flex items-center gap-2">
- <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${getAvatarColor(team.leader.name)}`}>
-                        {getInitials(team.leader.name)}
-                      </div>
-                      <span className="text-xs font-medium text-primary truncate">{team.leader.name}</span>
-                    </div>
+              <div className="grid grid-cols-2 gap-3 mt-3 bg-[#F9FAFB] p-2.5 rounded-xl border border-border">
+                <div className="min-w-0">
+                  <span className="text-[10px] font-medium text-secondary uppercase tracking-wide block mb-1">Managers</span>
+                  {team.managers && team.managers.length > 0 ? (
+                    <span className="text-xs font-medium text-primary block truncate">
+                      {team.managers.map(m => m.user.name).join(', ')}
+                    </span>
                   ) : (
-                    <span className="text-xs text-muted italic">No Manager</span>
+                    <span className="text-xs text-muted italic">No Managers</span>
                   )}
                 </div>
                 
-                <div>
+                <div className="min-w-0">
                   <span className="text-[10px] font-medium text-secondary uppercase tracking-wide block mb-1">Members ({team.members.length})</span>
                   <div className="flex -space-x-1.5">
                     {team.members.slice(0, 4).map((m, i) => (
                       <div 
                         key={m.id} 
- className={`relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full ring-2 ring-[#F9FAFB] text-[8px] font-bold ${getAvatarColor(m.name)}`} 
+                        className={`relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-2 ring-[#F9FAFB] text-[8px] font-bold ${getAvatarColor(m.name)}`} 
                         style={{ zIndex: 4 - i }}
                         title={m.name}
                       >
@@ -318,7 +327,7 @@ export default function TeamsPage() {
                     ))}
                     {team.members.length > 4 && (
                       <div 
-                        className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full ring-2 ring-[#F9FAFB] bg-[#F3F4F6] text-primary border border-border text-[8px] font-semibold" 
+                        className="relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-2 ring-[#F9FAFB] bg-[#F3F4F6] text-primary border border-border text-[7px] font-semibold" 
                         style={{ zIndex: 0 }}
                       >
                         +{team.members.length - 4}
@@ -346,7 +355,7 @@ export default function TeamsPage() {
               className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto"
             >
               <div className="flex flex-col border-b border-[#F3F4F6]">
-                <div className="flex items-center justify-between px-6 py-4">
+                <div className="flex items-center justify-between px-4 sm:px-6 py-4">
                   <h2 className="text-lg font-semibold text-primary">{isEditing ? 'Edit Department' : 'Create Department'}</h2>
                   <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
                     <X className="h-4 w-4 text-secondary" />
@@ -354,7 +363,7 @@ export default function TeamsPage() {
                 </div>
               </div>
               
-              <form onSubmit={handleSubmit} className="relative space-y-4 p-6">
+              <form onSubmit={handleSubmit} className="relative space-y-4 p-4 sm:p-6">
                 {formError && <div className="absolute top-0 left-0 right-0 -mt-2 z-10 rounded-xl bg-red-50 p-3 text-sm text-red-600 shadow-sm border border-red-100">{formError}</div>}
                 
                 <div>
@@ -375,26 +384,33 @@ export default function TeamsPage() {
                       label: u.name,
                       value: u.id,
                       image: getInitials(u.name),
- colorClass: getAvatarColor(u.name)
+                      colorClass: getAvatarColor(u.name)
                     }))}
                     value={form.memberIds}
                     onChange={(val) => {
-                      const newLeaderId = val.includes(form.leaderId) ? form.leaderId : '';
-                      setForm({ ...form, memberIds: val, leaderId: newLeaderId });
+                      const validManagerIds = form.managerIds.filter(id => val.includes(id));
+                      setForm({ ...form, memberIds: val, managerIds: validManagerIds });
                     }}
                     placeholder="Search and select members..."
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Manager</label>
-                  <Select
-                    value={form.leaderId}
-                    onChange={(val) => setForm({ ...form, leaderId: val })}
-                    options={[{ label: 'Select a manager (optional)', value: '' }, ...users.filter(u => form.memberIds.includes(u.id)).map(u => ({ label: u.name, value: u.id }))]}
+                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Managers</label>
+                  <MultiSelect
+                    compact={false}
+                    options={users.filter(u => form.memberIds.includes(u.id)).map(u => ({
+                      label: u.name,
+                      value: u.id,
+                      image: getInitials(u.name),
+                      colorClass: getAvatarColor(u.name)
+                    }))}
+                    value={form.managerIds}
+                    onChange={(val) => setForm({ ...form, managerIds: val })}
+                    placeholder="Search and select managers..."
                   />
                   {form.memberIds.length === 0 && (
-                    <p className="text-xs text-secondary mt-1">Please add members first before assigning a manager.</p>
+                    <p className="text-xs text-secondary mt-1">Please add members first before assigning managers.</p>
                   )}
                 </div>
                 

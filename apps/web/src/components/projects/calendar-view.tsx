@@ -23,16 +23,7 @@ interface CalendarEvent {
   completed?: boolean;
 }
 
-const statusColors: Record<string, string> = {
-  PLANNING: 'bg-violet-100 text-violet-700 border-violet-200',
-  IN_PROGRESS: 'bg-blue-100 text-blue-700 border-blue-200',
-  REVIEW: 'bg-amber-100 text-amber-700 border-amber-200',
-  COMPLETED: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  ON_HOLD: 'bg-orange-100 text-orange-700 border-orange-200',
-  CANCELLED: 'bg-red-100 text-red-700 border-red-200',
-  TODO: 'bg-slate-100 text-slate-700 border-slate-200',
-  BLOCKED: 'bg-red-100 text-red-700 border-red-200',
-};
+import { getStatusColor } from '@/lib/status';
 
 export function CalendarView({ projects }: CalendarViewProps) {
   const router = useRouter();
@@ -79,7 +70,7 @@ export function CalendarView({ projects }: CalendarViewProps) {
   const getEventsForDay = (date: Date) => events.filter(e => isSameDay(e.date, date));
 
   return (
-    <div className="rounded-2xl border border-border bg-white overflow-hidden flex flex-col h-[800px]">
+    <div className="rounded-2xl border border-border bg-white overflow-hidden flex flex-col h-200">
       <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] bg-white">
         <h2 className="text-lg font-bold text-primary">{format(currentDate, 'MMMM yyyy')}</h2>
         <div className="flex items-center gap-2">
@@ -125,7 +116,7 @@ export function CalendarView({ projects }: CalendarViewProps) {
                   )}
                 </div>
                 
-                <div className="space-y-1.5 overflow-y-auto max-h-[140px] pr-1 custom-scrollbar">
+                <div className="space-y-1.5 overflow-y-auto max-h-35 pr-1 custom-scrollbar">
                   {dayEvents.map(event => {
                     const isProject = event.type === 'PROJECT_START' || event.type === 'PROJECT_DUE';
                     const Icon = event.type === 'PROJECT_START' ? PlayCircle : event.type === 'PROJECT_DUE' ? Flag : MapPin;
@@ -137,7 +128,7 @@ export function CalendarView({ projects }: CalendarViewProps) {
                       onClick={() => router.push(`/projects/${event.projectId}`)}
                       className={`px-2.5 py-1.5 text-xs rounded-lg border cursor-pointer hover:shadow-md transition-all truncate group
                         ${event.type === 'MILESTONE' ? (event.completed ? 'bg-emerald-50 text-emerald-700 border-emerald-100 opacity-70 line-through' : 'bg-emerald-100 text-emerald-800 border-emerald-200 shadow-sm') : ''}
-                        ${isProject ? (statusColors[event.status || ''] || 'bg-gray-100 text-gray-700 border-gray-200 shadow-sm') : ''}
+                        ${isProject ? `${getStatusColor(event.status).bg} ${getStatusColor(event.status).text} ${getStatusColor(event.status).border} shadow-sm` : ''}
                       `}
                       title={event.title}
                     >
@@ -170,7 +161,7 @@ export function CalendarView({ projects }: CalendarViewProps) {
                     </div>
                     <div className="h-px bg-border flex-1" />
                   </div>
-                  <div className="flex flex-col gap-2 pl-[3.25rem]">
+                  <div className="flex flex-col gap-2 pl-13">
                     {dayEvents.map(event => {
                       const isProject = event.type === 'PROJECT_START' || event.type === 'PROJECT_DUE';
                       const Icon = event.type === 'PROJECT_START' ? PlayCircle : event.type === 'PROJECT_DUE' ? Flag : MapPin;
@@ -180,7 +171,7 @@ export function CalendarView({ projects }: CalendarViewProps) {
                           onClick={() => router.push(`/projects/${event.projectId}`)}
                           className={`p-3 text-sm rounded-xl border cursor-pointer active:scale-[0.98] transition-all
                             ${event.type === 'MILESTONE' ? (event.completed ? 'bg-emerald-50 text-emerald-700 border-emerald-100 opacity-70 line-through' : 'bg-emerald-100 text-emerald-800 border-emerald-200 shadow-sm') : ''}
-                            ${isProject ? (statusColors[event.status || ''] || 'bg-gray-100 text-gray-700 border-gray-200 shadow-sm') : ''}
+                            ${isProject ? `${getStatusColor(event.status).bg} ${getStatusColor(event.status).text} ${getStatusColor(event.status).border} shadow-sm` : ''}
                           `}
                         >
                           <div className="flex items-center gap-2">

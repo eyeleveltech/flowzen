@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
-import { formatDate, getInitials, getAvatarColor, getClientDisplayName } from '@/lib/utils';
+import { formatDate, formatShortDate, getInitials, getAvatarColor, getClientDisplayName, getRoleLabel } from '@/lib/utils';
+import { ROLE_LABELS } from '@flowzen/shared';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { 
@@ -12,6 +13,8 @@ import {
   Activity, FileText, Sparkles, AlertCircle, Folder, User, Zap, Leaf
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useAuthStore } from '@/stores';
+import toast from 'react-hot-toast';
 
 interface TeamMember {
   id: string; name: string; email: string; avatar?: string | null;
@@ -59,23 +62,33 @@ interface MemberDetail {
   };
 }
 
-const roleLabels: Record<string, string> = {
-  SUPER_ADMIN: 'Super Admin', 
-  ADMIN: 'Admin', 
-  PROJECT_MANAGER: 'Project Manager', 
-  TEAM_MEMBER: 'Team Member',
-};
 
-const statusColors: Record<string, string> = {
-  TODO: 'bg-slate-100 text-slate-700',
-  IN_PROGRESS: 'bg-blue-50 text-blue-700 border-blue-100',
-  REVIEW: 'bg-amber-50 text-amber-700 border-amber-100',
-  COMPLETED: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-};
+
+import { StatusBadge } from '@/components/ui/status-badge';
 
 export default function TeamPage() {
+  const { user: currentUser } = useAuthStore();
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [promoting, setPromoting] = useState(false);
+
+  const handlePromoteToSuperAdmin = async (memberId: string) => {
+    if (!window.confirm('Are you sure you want to promote this member to Super Admin? This action cannot be undone.')) {
+      return;
+    }
+    setPromoting(true);
+    try {
+      await api.put(`/settings/users/${memberId}`, { role: 'SUPER_ADMIN' });
+      toast.success('Member promoted to Super Admin successfully');
+      fetchTeam();
+      const freshDetail = await api.get<MemberDetail>(`/team/${memberId}`);
+      setMemberDetail(freshDetail);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to promote member');
+    } finally {
+      setPromoting(false);
+    }
+  };
   
   // Search and Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -148,12 +161,12 @@ export default function TeamPage() {
     if (detailLoading) return <SidebarSkeleton />;
     if (!memberDetail) {
       return (
-        <div className="h-[550px] flex flex-col items-center justify-center text-center p-8 bg-gray-50/50 rounded-3xl border border-dashed border-border">
+        <div className="h-137.5 flex flex-col items-center justify-center text-center p-8 bg-gray-50/50 rounded-3xl border border-dashed border-border">
           <div className="h-14 w-14 rounded-2xl bg-white flex items-center justify-center border border-border text-muted mb-5">
             <Sparkles className="h-6 w-6 text-indigo-500" />
           </div>
           <h3 className="text-sm font-semibold text-primary">Workload Inspector</h3>
-          <p className="text-xs text-[#86868B] max-w-[260px] mt-2 leading-relaxed">
+          <p className="text-xs text-[#86868B] max-w-65 mt-2 leading-relaxed">
             Select a team member from the dashboard to inspect their active assignments, led projects, and performance statistics.
           </p>
         </div>
@@ -176,8 +189,17 @@ export default function TeamPage() {
             <div className="flex flex-wrap items-center gap-2 mt-2">
               <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-md bg-gray-100 text-gray-800 border border-gray-200">
                 <Shield className="h-3 w-3" />
-                {roleLabels[role] || role}
+                {getRoleLabel(role)}
               </span>
+              {currentUser?.role === 'SUPER_ADMIN' && role === 'ADMIN' && (
+                <button
+                  disabled={promoting}
+                  onClick={() => handlePromoteToSuperAdmin(memberDetail.id)}
+                  className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-colors disabled:opacity-50"
+                >
+                  Promote to Super Admin
+                </button>
+              )}
               {designation && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-100">
                   <Briefcase className="h-3 w-3" />
@@ -269,7 +291,7 @@ export default function TeamPage() {
                   <Activity className="h-4 w-4 text-primary" />
                   <h3 className="text-xs font-bold text-primary uppercase tracking-wider">Active Tasks ({activeTasks.length})</h3>
                 </div>
-                <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
+                <div className="space-y-2.5 max-h-55 overflow-y-auto pr-1">
                   {activeTasks.map((t) => (
                     <div 
                       key={t.id} 
@@ -277,19 +299,17 @@ export default function TeamPage() {
                     >
                       <div className="flex justify-between items-start gap-2 mb-2">
                         <h4 className="text-xs font-semibold text-primary line-clamp-1">{t.title}</h4>
-                        <span className={`shrink-0 text-[9px] font-bold px-2 py-0.5 rounded-sm border ${statusColors[t.status] || ''}`}>
-                          {t.status.replace('_', ' ')}
-                        </span>
+                        <StatusBadge status={t.status} size="xs" />
                       </div>
                       <div className="flex justify-between items-center text-[10px] text-muted">
-                        <span className="truncate max-w-[170px] font-semibold text-secondary flex items-center gap-1.5">
+                        <span className="truncate max-w-42.5 font-semibold text-secondary flex items-center gap-1.5">
                           <Folder className="h-3 w-3" />
                           {t.project?.name || 'No project'}
                         </span>
                         {t.dueDate && (
                           <span className="tabular-nums font-medium text-[#86868B] flex items-center gap-1.5">
                             <Calendar className="h-3 w-3" />
-                            {new Date(t.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                            {formatShortDate(t.dueDate)}
                           </span>
                         )}
                       </div>
@@ -309,7 +329,7 @@ export default function TeamPage() {
                   <FileText className="h-4 w-4 text-primary" />
                   <h3 className="text-xs font-bold text-primary uppercase tracking-wider">Led Projects ({ownedProjects.length})</h3>
                 </div>
-                <div className="space-y-2.5 max-h-[180px] overflow-y-auto pr-1">
+                <div className="space-y-2.5 max-h-45 overflow-y-auto pr-1">
                   {ownedProjects.map((p) => (
                     <div 
                       key={p.id}
@@ -317,7 +337,7 @@ export default function TeamPage() {
                     >
                       <h4 className="text-xs font-semibold text-primary line-clamp-1">{p.name}</h4>
                       <div className="flex justify-between items-center text-[10px] text-muted mt-2">
-                        <span className="truncate max-w-[170px] font-medium flex items-center gap-1.5">
+                        <span className="truncate max-w-42.5 font-medium flex items-center gap-1.5">
                           <User className="h-3 w-3" />
                           {p.client ? getClientDisplayName(p.client) : 'Internal'}
                         </span>
@@ -360,7 +380,7 @@ export default function TeamPage() {
                 {joiningDate && (
                   <div className="flex items-center gap-3">
                     <Calendar className="h-4 w-4 text-muted" />
-                    <span className="font-medium">Joined {new Date(joiningDate).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                    <span className="font-medium">Joined {formatDate(joiningDate)}</span>
                   </div>
                 )}
               </div>
@@ -437,7 +457,7 @@ export default function TeamPage() {
                 onChange={setSelectedRole}
                 placeholder="Roles"
                 triggerClassName={selectedRole.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
-                options={Object.entries(roleLabels).map(([val, label]) => ({ label, value: val }))}
+                options={Object.entries(ROLE_LABELS).map(([val, label]) => ({ label: label as string, value: val }))}
               />
             </div>
 
@@ -496,7 +516,7 @@ export default function TeamPage() {
                           )}
                         </div>
                         <p className="text-[13px] text-[#86868B] truncate mt-0.5">
-                          {m.designation || roleLabels[m.role] || m.role}
+                          {m.designation || getRoleLabel(m.role)}
                           {m.department && <span className="mx-1.5 opacity-50">·</span>}
                           {m.department && m.department}
                         </p>

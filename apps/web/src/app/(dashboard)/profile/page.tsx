@@ -18,7 +18,6 @@ export default function ProfilePage() {
 
   const [profileForm, setProfileForm] = useState({
     name: '',
-    department: '',
     designation: '',
   });
   
@@ -36,7 +35,6 @@ export default function ProfilePage() {
     if (user) {
       setProfileForm({
         name: user.name || '',
-        department: user.department || '',
         designation: user.designation || '',
       });
     }
@@ -49,7 +47,6 @@ export default function ProfilePage() {
     api.get('/profile').then((fresh: any) => {
       setProfileForm({
         name: fresh.name || '',
-        department: fresh.department || '',
         designation: fresh.designation || '',
       });
       setAuth(fresh);
@@ -64,7 +61,7 @@ export default function ProfilePage() {
       const updatedUser = await api.put('/profile', profileForm);
       // Update local store with new data
       setAuth(updatedUser as any);
-      // Refresh the shared member/team caches so the new designation/department
+      // Refresh the shared member/team caches so the new designation
       // shows in assignee dropdowns and member lists everywhere.
       queryClient.invalidateQueries({ queryKey: ['members'] });
       queryClient.invalidateQueries({ queryKey: ['teams'] });
@@ -110,10 +107,10 @@ export default function ProfilePage() {
   if (!user) return null;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8 p-4 sm:p-6 lg:p-8">
+    <div className="mx-auto max-w-3xl space-y-6 sm:space-y-8 p-3 sm:p-6 lg:p-8">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-primary">My Profile</h1>
-        <p className="mt-2 text-sm text-secondary">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-primary">My Profile</h1>
+        <p className="mt-1 sm:mt-2 text-xs sm:text-sm text-secondary">
           Manage your personal information and security settings.
         </p>
       </div>
@@ -121,21 +118,22 @@ export default function ProfilePage() {
       <div className="space-y-6">
         {/* Personal Information Section */}
         <section className="rounded-2xl border border-border bg-white shadow-sm">
-          <div className="border-b border-border px-6 py-5 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F3F4F6]">
+          <div className="border-b border-border px-4 sm:px-6 py-4 sm:py-5 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F3F4F6] shrink-0">
               <User className="h-5 w-5 text-secondary" />
             </div>
             <div>
               <h2 className="text-base font-semibold text-primary">Personal Information</h2>
-              <p className="text-sm text-secondary">Update your name and department details.</p>
+              <p className="text-xs sm:text-sm text-secondary">Update your name and department details.</p>
             </div>
           </div>
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             <form onSubmit={handleProfileSubmit} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-[#374151]">Full Name</label>
+                  <label htmlFor="profile-name" className="text-sm font-medium text-[#374151]">Full Name</label>
                   <input
+                    id="profile-name"
                     type="text"
                     required
                     value={profileForm.name}
@@ -144,8 +142,9 @@ export default function ProfilePage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-[#374151]">Email Address</label>
+                  <label htmlFor="profile-email" className="text-sm font-medium text-[#374151]">Email Address</label>
                   <input
+                    id="profile-email"
                     type="email"
                     disabled
                     value={user.email}
@@ -154,8 +153,9 @@ export default function ProfilePage() {
                   />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <label className="text-sm font-medium text-[#374151]">Designation (Job Title)</label>
+                  <label htmlFor="profile-designation" className="text-sm font-medium text-[#374151]">Designation (Job Title)</label>
                   <input
+                    id="profile-designation"
                     type="text"
                     list="designation-options"
                     placeholder="Select or type a designation…"
@@ -168,15 +168,10 @@ export default function ProfilePage() {
                   </datalist>
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <label className="text-sm font-medium text-[#374151]">Department (Optional)</label>
-                  <Select
-                    value={profileForm.department}
-                    onChange={(value) => setProfileForm({ ...profileForm, department: value })}
-                    options={[
-                      { label: 'Select a department...', value: '' },
-                      ...teams.map((t: any) => ({ label: t.name, value: t.name }))
-                    ]}
-                  />
+                  <label className="text-sm font-medium text-[#374151]">Department</label>
+                  <p className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary">
+                    {user.team?.name || '—'}
+                  </p>
                 </div>
               </div>
               <div className="flex justify-end pt-2">
@@ -186,7 +181,7 @@ export default function ProfilePage() {
                   className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all"
                 >
                   <Save className="h-4 w-4" />
-                  {savingProfile ? 'Saving...' : 'Save Changes'}
+                  {savingProfile ? 'Saving...' : 'Save Profile'}
                 </button>
               </div>
             </form>
@@ -195,21 +190,22 @@ export default function ProfilePage() {
 
         {/* Security Section */}
         <section className="rounded-2xl border border-border bg-white shadow-sm overflow-hidden">
-          <div className="border-b border-border px-6 py-5 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F3F4F6]">
+          <div className="border-b border-border px-4 sm:px-6 py-4 sm:py-5 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F3F4F6] shrink-0">
               <KeyRound className="h-5 w-5 text-secondary" />
             </div>
             <div>
               <h2 className="text-base font-semibold text-primary">Security & Password</h2>
-              <p className="text-sm text-secondary">Update your password to keep your account secure.</p>
+              <p className="text-xs sm:text-sm text-secondary">Update your password to keep your account secure.</p>
             </div>
           </div>
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             <form onSubmit={handlePasswordSubmit} className="space-y-4 max-w-md">
               <div className="space-y-1.5 relative">
-                <label className="text-sm font-medium text-[#374151]">Current Password</label>
+                <label htmlFor="profile-current-password" className="text-sm font-medium text-[#374151]">Current Password</label>
                 <div className="relative">
                   <input
+                    id="profile-current-password"
                     type={showPassword ? 'text' : 'password'}
                     required
                     value={passwordForm.currentPassword}
@@ -226,9 +222,10 @@ export default function ProfilePage() {
                 </div>
               </div>
               <div className="space-y-1.5 relative">
-                <label className="text-sm font-medium text-[#374151]">New Password</label>
+                <label htmlFor="profile-new-password" className="text-sm font-medium text-[#374151]">New Password</label>
                 <div className="relative">
                   <input
+                    id="profile-new-password"
                     type={showPassword ? 'text' : 'password'}
                     required
                     value={passwordForm.newPassword}
@@ -238,9 +235,10 @@ export default function ProfilePage() {
                 </div>
               </div>
               <div className="space-y-1.5 relative">
-                <label className="text-sm font-medium text-[#374151]">Confirm New Password</label>
+                <label htmlFor="profile-confirm-password" className="text-sm font-medium text-[#374151]">Confirm New Password</label>
                 <div className="relative">
                   <input
+                    id="profile-confirm-password"
                     type={showPassword ? 'text' : 'password'}
                     required
                     value={passwordForm.confirmNewPassword}

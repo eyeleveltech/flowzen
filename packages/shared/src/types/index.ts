@@ -10,8 +10,9 @@ export interface User {
   email: string;
   avatar?: string | null;
   role: UserRole;
-  department?: string | null;
   designation?: string | null;
+  teamId?: string | null;
+  team?: { id: string; name: string } | null;
   phone?: string | null;
   joiningDate: string;
   isActive: boolean;

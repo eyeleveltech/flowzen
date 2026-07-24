@@ -9,6 +9,7 @@ import { executeWorkflowRules } from '../services/workflowEngine.js';
 import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
 import { idempotency } from '../middleware/idempotency.js';
 import { toList, whereIn } from '../utils/query.js';
+import { buildSearchFilter } from '../utils/search-utils.js';
 
 
 function calculateNextDueDate(date: Date | string | null, freq: string) {
@@ -127,12 +128,7 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
       }
     }
     if (search) {
-      andConditions.push({
-        OR: [
-          { title: { contains: search as string, mode: 'insensitive' } },
-          { description: { contains: search as string, mode: 'insensitive' } },
-        ],
-      });
+      andConditions.push(buildSearchFilter(['title', 'description'], search as string));
     }
     if (andConditions.length) where.AND = andConditions;
 

@@ -7,15 +7,14 @@ import { X, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { formatDate } from '@/lib/utils';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { TASK_STATUSES, TASK_STATUS_LABELS, TASK_STATUS_COLORS } from '@/lib/task-status';
 import { useConfirmStore, useTimeTrackingStore } from '@/stores';
 
 const titleCase = (s?: string | null) =>
   s ? s.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '—';
 
-const priorityDots: Record<string, string> = {
-  LOW: 'bg-gray-300', MEDIUM: 'bg-blue-400', HIGH: 'bg-orange-500', URGENT: 'bg-red-500',
-};
+import { getPriorityDot } from '@/lib/priority';
 
 interface TaskDetailDrawerProps {
   taskId: string;
@@ -152,8 +151,8 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
           <div className="p-6 pb-24 md:pb-6">
             <div className="flex items-center justify-between border-b border-[#F3F4F6] pb-4 mb-4">
               <div className="flex items-center gap-2">
-                <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium ${TASK_STATUS_COLORS[task.status]}`}>{task.status.replace('_', ' ')}</span>
-                <span className={`h-2 w-2 rounded-full ${priorityDots[task.priority]}`} />
+                <StatusBadge status={task.status} />
+                <span className={`h-2 w-2 rounded-full ${getPriorityDot(task.priority)}`} />
               </div>
               {manage && (
                 <div className="flex items-center gap-2">
@@ -207,7 +206,7 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
                   onChange={(e) => setComment(e.target.value)}
                   placeholder="Post an update or question..."
                   aria-label="Comment"
-                  className="w-full min-h-[80px] rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus:border-primary transition-all resize-none"
+                  className="w-full min-h-20 rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus:border-primary transition-all resize-none"
                 />
                 <div className="mt-2 flex justify-end">
                   <button onClick={addComment} disabled={posting || !comment.trim()} className="bg-primary text-white px-4 py-1.5 rounded-lg text-xs font-medium hover:bg-black transition-colors disabled:opacity-50">{posting ? 'Posting...' : 'Post Comment'}</button>
@@ -223,7 +222,7 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
                       <div className="flex-1 bg-surface border border-border rounded-xl p-3">
                         <div className="flex items-center justify-between mb-1">
                           <span className="font-semibold text-xs text-primary">{c.author.name}</span>
-                          <span className="text-[10px] text-muted">{new Date(c.createdAt).toLocaleDateString()}</span>
+                          <span className="text-[10px] text-muted">{formatDate(c.createdAt)}</span>
                         </div>
                         <p className="text-sm text-[#374151] whitespace-pre-wrap">{c.content}</p>
                       </div>

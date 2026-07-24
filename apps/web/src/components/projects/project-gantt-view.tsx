@@ -10,14 +10,7 @@ import { format } from 'date-fns';
 const ROW_HEIGHT = 56;
 const SIDEBAR_WIDTH = 220;
 
-const statusConfig: Record<string, { bar: string; text: string; dot: string; label: string }> = {
-  PLANNING:    { bar: 'bg-violet-50 border-violet-200 hover:bg-violet-100', text: 'text-violet-700', dot: 'bg-violet-500', label: 'Planning' },
-  IN_PROGRESS: { bar: 'bg-blue-50 border-blue-200 hover:bg-blue-100', text: 'text-blue-700', dot: 'bg-blue-500', label: 'In Progress' },
-  REVIEW:      { bar: 'bg-amber-50 border-amber-200 hover:bg-amber-100', text: 'text-amber-700', dot: 'bg-amber-500', label: 'Review' },
-  ON_HOLD:     { bar: 'bg-orange-50 border-orange-200 hover:bg-orange-100', text: 'text-orange-700', dot: 'bg-orange-500', label: 'On Hold' },
-  COMPLETED:   { bar: 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500', label: 'Completed' },
-  CANCELLED:   { bar: 'bg-red-50 border-red-200 hover:bg-red-100', text: 'text-red-700', dot: 'bg-red-500', label: 'Cancelled' },
-};
+import { getStatusColor, getStatusLabel } from '@/lib/status';
 
 interface ProjectGanttViewProps {
   projects: any[];
@@ -100,7 +93,7 @@ export function ProjectGanttView({ projects, loading = false }: ProjectGanttView
               return (
                 <div
                   key={i}
-                  className={`flex-1 min-w-[100px] px-3 flex items-center border-r text-[11px] font-semibold uppercase tracking-wider ${isNow ? 'text-primary bg-primary/5 border-primary/20' : 'text-secondary border-border'}`}
+                  className={`flex-1 min-w-25 px-3 flex items-center border-r text-[11px] font-semibold uppercase tracking-wider ${isNow ? 'text-primary bg-primary/5 border-primary/20' : 'text-secondary border-border'}`}
                 >
                   {m.toLocaleString('default', { month: 'short' })}
                   <span className="ml-1 font-normal opacity-60">{m.getFullYear()}</span>
@@ -118,7 +111,7 @@ export function ProjectGanttView({ projects, loading = false }: ProjectGanttView
                 return (
                   <div
                     key={i}
-                    className={`flex-1 min-w-[100px] border-r ${isNow ? 'bg-primary/5 border-primary/10' : 'border-gray-100'}`}
+                    className={`flex-1 min-w-25 border-r ${isNow ? 'bg-primary/5 border-primary/10' : 'border-gray-100'}`}
                   />
                 );
               })}
@@ -129,7 +122,7 @@ export function ProjectGanttView({ projects, loading = false }: ProjectGanttView
               className="absolute top-0 bottom-0 pointer-events-none z-10"
               style={{ left: `calc(${SIDEBAR_WIDTH}px + ${todayPct}% * (100% - ${SIDEBAR_WIDTH}px) / 100)` }}
             >
-              <div className="absolute inset-y-0 w-[2px] bg-primary/60" />
+              <div className="absolute inset-y-0 w-0.5 bg-primary/60" />
               <div className="absolute top-2 left-2 text-[10px] font-bold text-primary bg-white border border-primary/20 px-1.5 py-0.5 rounded shadow-sm whitespace-nowrap">
                 Today
               </div>
@@ -137,7 +130,8 @@ export function ProjectGanttView({ projects, loading = false }: ProjectGanttView
 
             {/* Project rows */}
             {sortedProjects.map((project, idx) => {
-              const cfg = statusConfig[project.status] || statusConfig['IN_PROGRESS'];
+              const cfg = getStatusColor(project.status);
+              const label = getStatusLabel(project.status);
               const dateStr = project.startDate || project.createdAt;
               const start = dateStr ? new Date(dateStr) : null;
               // If project completed/cancelled, end date is the actual updatedAt. Otherwise default to endDate or today + 1 month.
@@ -175,7 +169,7 @@ export function ProjectGanttView({ projects, loading = false }: ProjectGanttView
                         <p className="text-sm font-semibold text-primary truncate group-hover:text-primary/80 transition-colors leading-tight">
                           {project.name}
                         </p>
-                        <p className="text-[10px] text-secondary truncate">{cfg.label}</p>
+                        <p className="text-[10px] text-secondary truncate">{label}</p>
                       </div>
                     </div>
                   </div>

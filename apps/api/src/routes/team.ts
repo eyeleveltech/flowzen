@@ -19,7 +19,6 @@ teamRouter.get('/', async (req: AuthRequest, res: Response, next) => {
           email: true,
           avatar: true,
           role: true,
-          department: true,
           designation: true,
           team: { select: { name: true } },
           phone: true,
@@ -51,7 +50,7 @@ teamRouter.get('/', async (req: AuthRequest, res: Response, next) => {
       email: m.email,
       avatar: m.avatar,
       role: m.role,
-      department: m.team?.name || m.department,
+      department: m.team?.name || null,
       designation: m.designation,
       phone: m.phone,
       joiningDate: m.joiningDate,
@@ -82,7 +81,6 @@ teamRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
           email: true,
           avatar: true,
           role: true,
-          department: true,
           designation: true,
           team: { select: { name: true } },
           phone: true,
@@ -119,7 +117,7 @@ teamRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
 
     res.json({
       ...member,
-      department: member.team?.name || member.department,
+      department: member.team?.name || null,
       overloadThreshold,
       stats: {
         totalTasks: member.assignedTasks.length,

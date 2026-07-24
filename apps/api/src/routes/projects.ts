@@ -8,6 +8,7 @@ import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
 import { NotificationService } from '../services/notifications.js';
 import { toList, whereIn } from '../utils/query.js';
 import { createAuditLog } from '../utils/audit.js';
+import { buildSearchFilter } from '../utils/search-utils.js';
 
 export const projectRouter = Router();
 projectRouter.use(authenticate);
@@ -71,12 +72,7 @@ projectRouter.get('/', async (req: AuthRequest, res: Response, next) => {
       where.endDate = { lte: new Date(endDate as string) };
     }
     if (search) {
-      const searchCondition = {
-        OR: [
-          { name: { contains: search as string, mode: 'insensitive' } },
-          { description: { contains: search as string, mode: 'insensitive' } },
-        ],
-      };
+      const searchCondition = buildSearchFilter(['name', 'description'], search as string);
       if (where.OR) {
         where.AND = [
           { OR: where.OR },

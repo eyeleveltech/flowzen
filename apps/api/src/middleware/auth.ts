@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { UserRole } from '@flowzen/shared';
 import { verifyToken, JwtPayload } from '../utils/jwt.js';
 import { prisma } from '../lib/prisma.js';
 
@@ -6,7 +7,7 @@ export interface AuthRequest extends Request {
   user?: JwtPayload;
 }
 
-export function authenticate(req: AuthRequest, res: Response, next: NextFunction): void {
+export async function authenticate(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   let token = req.cookies?.token;
 
   if (!token && req.headers.authorization?.startsWith('Bearer ')) {
@@ -18,23 +19,46 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
     return;
   }
 
+  let decoded: JwtPayload;
   try {
-    const decoded = verifyToken(token);
-    req.user = decoded;
-    next();
+    decoded = verifyToken(token);
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' });
+    return;
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: { id: true, role: true, status: true, organizationId: true },
+    });
+
+    if (!user || user.status !== 'ACTIVE') {
+      res.status(401).json({ error: 'Account is inactive' });
+      return;
+    }
+
+    req.user = {
+      userId: user.id,
+      email: decoded.email,
+      role: user.role,               // live from DB
+      organizationId: user.organizationId,  // live from DB
+    };
+
+    next();
+  } catch (error) {
+    next(error);
   }
 }
 
-export function authorize(...roles: string[]) {
+export function authorize(...roles: UserRole[]) {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({ error: 'Authentication required' });
       return;
     }
 
-    if (roles.length > 0 && !roles.includes(req.user.role)) {
+    if (roles.length > 0 && !roles.includes(req.user.role as UserRole)) {
       res.status(403).json({ error: 'Insufficient permissions' });
       return;
     }

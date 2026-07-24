@@ -24,9 +24,7 @@ interface Member { id: string; name: string; }
 interface Project { id: string; name: string; }
 interface Client { id: string; name: string; }
 
-const priorityDots: Record<string, string> = {
-  LOW: 'bg-gray-300', MEDIUM: 'bg-blue-400', HIGH: 'bg-orange-500', URGENT: 'bg-red-500',
-};
+import { getPriorityDot } from '@/lib/priority';
 
 export default function CalendarPage() {
   const { user } = useAuthStore();
@@ -125,7 +123,7 @@ export default function CalendarPage() {
     if (compact) {
       return (
         <div key={t.id} className="flex items-center gap-1.5 rounded-md px-1.5 py-0.5 border" style={{ backgroundColor: `${pColor}15`, borderColor: `${pColor}30` }}>
-          <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${priorityDots[t.priority] || 'bg-gray-300'}`} />
+          <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${getPriorityDot(t.priority)}`} />
           <span className="text-[10px] truncate font-medium" style={{ color: pColor }}>{t.title}</span>
         </div>
       );
@@ -139,7 +137,7 @@ export default function CalendarPage() {
       >
         <div className="flex items-center justify-between gap-1">
           <span className="font-semibold truncate" style={{ color: pColor }}>{t.title}</span>
-          <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${priorityDots[t.priority] || 'bg-gray-300'}`} />
+          <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${getPriorityDot(t.priority)}`} />
         </div>
         <div className="flex items-center justify-between text-secondary">
            <span className="truncate max-w-[80%]">{t.project.name}</span>
@@ -219,7 +217,7 @@ export default function CalendarPage() {
             onClick={() => setHideDone(!hideDone)}
             className="flex items-center gap-2 text-xs font-semibold text-secondary ml-auto cursor-pointer select-none focus:outline-none h-9 hover:text-primary transition-colors shrink-0"
           >
-            <div className={`flex items-center justify-center w-4 h-4 rounded-[4px] border transition-colors ${hideDone ? 'bg-primary border-primary' : 'border-[#D1D5DB] bg-white'}`}>
+            <div className={`flex items-center justify-center w-4 h-4 rounded-sm border transition-colors ${hideDone ? 'bg-primary border-primary' : 'border-[#D1D5DB] bg-white'}`}>
               {hideDone && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
             </div>
             Hide Done Tasks
@@ -274,7 +272,7 @@ export default function CalendarPage() {
 
       <div className="rounded-2xl border border-border bg-white overflow-hidden">
         <div className="overflow-x-auto md:overflow-x-visible">
-          <div className="min-w-full md:min-w-[700px]">
+          <div className="min-w-full md:min-w-175">
 
             {/* Desktop Grid Headers */}
             <div className="hidden md:grid grid-cols-7 border-b border-[#F3F4F6]">
@@ -289,14 +287,14 @@ export default function CalendarPage() {
             {view === 'month' && (
               <div className="hidden md:grid grid-cols-7">
                 {days.map((day, i) => {
-                  if (day === null) return <div key={i} className="min-h-[110px] border-b border-r border-[#F3F4F6] bg-surface" />;
+                  if (day === null) return <div key={i} className="min-h-27.5 border-b border-r border-[#F3F4F6] bg-surface" />;
 
                   const dObj = new Date(year, month, day);
                   const isToday = today.toDateString() === dObj.toDateString();
                   const dayTasks = getTasksForDate(dObj);
 
                   return (
-                    <div key={i} className="min-h-[110px] border-b border-r border-[#F3F4F6] p-2 hover:bg-[#F9FAFB] transition-colors">
+                    <div key={i} className="min-h-27.5 border-b border-r border-[#F3F4F6] p-2 hover:bg-[#F9FAFB] transition-colors">
                       <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium mb-1.5 ${isToday ? 'bg-primary text-white' : 'text-[#374151]'}`}>
                         {day}
                       </span>
@@ -360,7 +358,7 @@ export default function CalendarPage() {
                         >
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-medium truncate" style={{ color: t.project.color || '#3B82F6' }}>{t.title}</span>
-                            <div className={`h-2 w-2 rounded-full shrink-0 ${priorityDots[t.priority] || 'bg-gray-300'}`} />
+                            <div className={`h-2 w-2 rounded-full shrink-0 ${getPriorityDot(t.priority)}`} />
                           </div>
                           <span className="text-secondary truncate">{t.project.name}</span>
                         </div>
