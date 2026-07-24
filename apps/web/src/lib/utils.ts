@@ -149,8 +149,9 @@ export function toProperCase(str: string): string {
 
 export function getProjectStatusFromClient(client: any): 'PLANNING' | 'IN_PROGRESS' | 'COMPLETED' | 'ON_HOLD' | 'CANCELLED' {
   if (!client) return 'PLANNING';
-  // Use lead.stage first if available, otherwise fallback to client.status
-  const stageOrStatus = client.lead?.stage || client.status;
+  // Use the most recent deal's stage if available, otherwise fall back to client.status.
+  // `leads` is an array now — one account can have been won more than once.
+  const stageOrStatus = client.leads?.[0]?.stage || client.lead?.stage || client.status;
   if (!stageOrStatus) return 'PLANNING';
   
   const normalized = stageOrStatus.toUpperCase();

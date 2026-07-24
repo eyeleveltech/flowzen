@@ -7,6 +7,7 @@ import { emitToOrganization } from '../sse.js';
 import { whereIn } from '../utils/query.js';
 import { generateLeadId, normalizePhone } from '../utils/leadId.js';
 import { runIntelligence } from '../services/intelligence.service.js';
+import { ensureClientForLead, LEAD_IDENTITY_FIELDS } from '../services/clientConversion.service.js';
 import { logActivity, ActivityType, ACTIVITY_CATEGORIES } from '../services/activity.service.js';
 import { createAuditLog } from '../utils/audit.js';
 
@@ -608,9 +609,13 @@ crmRouter.post('/leads/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
   }
 });
 
-// Stages at which the team has decided to pursue the lead — a PROSPECT client is
-// created on entering any of these (normally OUTREACH; later ones cover forward-skips).
-const PURSUED_STAGES = ['OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION', 'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'ON_HOLD', 'PROJECT_COMPLETED'];
+// Stages at which the deal is won and delivery/billing begins — the Client account is
+// created on entering any of these. Everything before CONTRACT stays lead-only: no Client
+// record exists while the deal is still being chased, so there is nothing to duplicate.
+//
+// A stage change never deletes a Client. Dragging a card backwards only moves the card;
+// the account, its contacts, notes, tasks and billing data are left untouched.
+const CONVERSION_STAGES = ['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT'];
 
 const stageUpdateSchema = z.object({
   stage: z.enum(['NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION', 'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'ON_HOLD', 'PROJECT_COMPLETED', 'CHURNED']),
@@ -661,7 +666,7 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
     if (stage === 'CHURNED') updateData.renewalStatus = 'CHURNED'; // keep renewal state coherent with churn
     if (lostReason !== undefined) updateData.lostReason = lostReason;
 
-    const { updatedLead, finalClientId, newClientId, deletedClientId } = await prisma.$transaction(async (tx) => {
+    const { updatedLead, finalClientId, newClientId } = await prisma.$transaction(async (tx) => {
       const updated = await tx.lead.update({
         where: { id: leadId },
         data: updateData,
@@ -696,53 +701,20 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
 
       let currentClientId = existingLead.clientId;
       let outNewClientId = null;
-      let outDeletedClientId = null;
 
-      if (PURSUED_STAGES.includes(stage) && !currentClientId) {
-        const newClient = await tx.client.create({
-          data: {
-            name: existingLead.companyName || existingLead.contactName || 'Unknown',
-            company: existingLead.companyName || null,
-            email: existingLead.contactEmail || null,
-            phone: existingLead.contactPhone || null,
-            status: 'PROSPECT',
-            organizationId: orgId,
-            ...(existingLead.contactName ? {
-              contacts: { create: { name: existingLead.contactName, designation: existingLead.jobTitle || null, email: existingLead.contactEmail || null, phone: existingLead.contactPhone || null } }
-            } : {})
-          }
-        });
-        currentClientId = newClient.id;
-        outNewClientId = newClient.id;
-        await tx.lead.update({ where: { id: leadId }, data: { clientId: currentClientId } });
-        updated.clientId = currentClientId;
-      } else if (stage === 'NEW_LEAD' && currentClientId && existingLead.client?.status === 'PROSPECT') {
-        await tx.lead.update({ where: { id: leadId }, data: { clientId: null } });
-        // Only remove the auto-created PROSPECT client if nothing real depends on it.
-        // A raw delete would FK-fail on its LEAD_CREATED activities and abort the whole
-        // transaction, so pre-check hard dependents and clear soft ones first.
-        const hardDeps =
-          (await tx.project.count({ where: { clientId: currentClientId } })) +
-          (await tx.quoteDocument.count({ where: { clientId: currentClientId } })) +
-          (await tx.contract.count({ where: { clientId: currentClientId } })) +
-          (await tx.subscription.count({ where: { clientId: currentClientId } })) +
-          (await tx.payment.count({ where: { clientId: currentClientId } })) +
-          (await tx.invoiceDraft.count({ where: { clientId: currentClientId } })) +
-          (await tx.expense.count({ where: { clientId: currentClientId } }));
-        if (hardDeps === 0) {
-          await tx.activity.deleteMany({ where: { clientId: currentClientId } });
-          await tx.clientContact.deleteMany({ where: { clientId: currentClientId } });
-          await tx.client.delete({ where: { id: currentClientId } });
-          outDeletedClientId = currentClientId;
-        }
-        currentClientId = null;
-        updated.clientId = null;
+      if (CONVERSION_STAGES.includes(stage) && !currentClientId) {
+        const { clientId, created } = await ensureClientForLead(tx, existingLead, orgId);
+        currentClientId = clientId;
+        if (created) outNewClientId = clientId;
+        updated.clientId = clientId;
       }
 
       if (currentClientId) {
-        let newStatus: 'PROSPECT' | 'ACTIVE' | 'PROJECT_COMPLETED' | 'CHURNED' | 'ONHOLD' | null = null;
-        if (['NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION', 'CONTRACT'].includes(stage)) newStatus = 'PROSPECT';
-        else if (['ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(stage)) newStatus = 'ACTIVE';
+        // Only ever move the account forward. Dragging a won deal back to an earlier stage
+        // must not demote a real customer to PROSPECT — the account has already been billed
+        // and delivered against, and its lifecycle is no longer the pipeline's to rewind.
+        let newStatus: 'ACTIVE' | 'PROJECT_COMPLETED' | 'CHURNED' | 'ONHOLD' | null = null;
+        if (['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(stage)) newStatus = 'ACTIVE';
         else if (stage === 'ON_HOLD') newStatus = 'ONHOLD';
         else if (stage === 'PROJECT_COMPLETED') newStatus = 'PROJECT_COMPLETED';
         else if (stage === 'CHURNED') newStatus = 'CHURNED';
@@ -805,7 +777,7 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
         }
       });
 
-      return { updatedLead: updated, finalClientId: currentClientId, newClientId: outNewClientId, deletedClientId: outDeletedClientId };
+      return { updatedLead: updated, finalClientId: currentClientId, newClientId: outNewClientId };
     }, {
       isolationLevel: 'ReadCommitted' // Keeps transaction short while preventing dirty reads
     });
@@ -820,7 +792,6 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
     emitToOrganization(io, orgId, 'lead:updated', updatedLead);
     if (finalClientId) emitToOrganization(io, orgId, 'client:updated', { id: finalClientId });
     if (newClientId) emitToOrganization(io, orgId, 'client:created', { id: newClientId });
-    if (deletedClientId) emitToOrganization(io, orgId, 'client:deleted', { id: deletedClientId });
 
     res.json(updatedLead);
   } catch (error) {
@@ -883,31 +854,16 @@ crmRouter.post('/leads/:id/hold', authorize('SUPER_ADMIN', 'ADMIN'), async (req:
       return;
     }
 
-    // Ensure a client record exists (create one from the lead's identity if needed), then park it.
-    let clientId = existingLead.clientId;
-    if (!clientId) {
-      const newClient = await prisma.client.create({
-        data: {
-          name: existingLead.companyName || existingLead.contactName || 'Unknown',
-          company: existingLead.companyName || null,
-          email: existingLead.contactEmail || null,
-          phone: existingLead.contactPhone || null,
-          status: 'ONHOLD',
-          organizationId: orgId,
-          ...(existingLead.contactName ? {
-            contacts: { create: { name: existingLead.contactName, designation: existingLead.jobTitle || null, email: existingLead.contactEmail || null, phone: existingLead.contactPhone || null } }
-          } : {})
-        },
-      });
-      clientId = newClient.id;
-    } else {
+    // Parking a lead is a pipeline action, not a conversion — it never creates an account.
+    // If the deal was already won and has a Client, park that account too.
+    const clientId = existingLead.clientId;
+    if (clientId) {
       await prisma.client.update({ where: { id: clientId }, data: { status: 'ONHOLD' } });
     }
 
     const updatedLead = await prisma.lead.update({
       where: { id: leadId },
       data: {
-        clientId,
         stage: 'ON_HOLD',
         followUpDate: followUpDate ? new Date(followUpDate) : existingLead.followUpDate,
       },
@@ -927,7 +883,7 @@ crmRouter.post('/leads/:id/hold', authorize('SUPER_ADMIN', 'ADMIN'), async (req:
 
     const io = req.app.get('io');
     emitToOrganization(io, orgId, 'lead:updated', updatedLead);
-    emitToOrganization(io, orgId, 'client:updated', { id: clientId });
+    if (clientId) emitToOrganization(io, orgId, 'client:updated', { id: clientId });
 
     res.json(updatedLead);
   } catch (error) {
@@ -957,12 +913,16 @@ crmRouter.post('/leads/:id/unhold', authorize('SUPER_ADMIN', 'ADMIN'), async (re
       : 'NEW_LEAD';
 
     if (existingLead.clientId) {
-      let clientStatus: 'PROSPECT' | 'ACTIVE' | 'PROJECT_COMPLETED' | 'CHURNED' | 'ONHOLD' = 'PROSPECT';
-      if (['ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(targetStage)) clientStatus = 'ACTIVE';
+      // A Client only exists once the deal was won, so unparking never demotes it back to
+      // PROSPECT — if the restored stage says nothing about the account, leave it as it was.
+      let clientStatus: 'ACTIVE' | 'PROJECT_COMPLETED' | 'CHURNED' | null = null;
+      if (['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(targetStage)) clientStatus = 'ACTIVE';
       else if (targetStage === 'PROJECT_COMPLETED') clientStatus = 'PROJECT_COMPLETED';
       else if (targetStage === 'CHURNED') clientStatus = 'CHURNED';
-      
-      await prisma.client.update({ where: { id: existingLead.clientId }, data: { status: clientStatus } });
+
+      if (clientStatus) {
+        await prisma.client.update({ where: { id: existingLead.clientId }, data: { status: clientStatus } });
+      }
     }
 
     const updatedLead = await prisma.lead.update({
@@ -1045,59 +1005,46 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
     if (healthStatus !== undefined && existingLead.healthStatus !== healthStatus) { updateData.healthStatus = healthStatus; changes.push(`changed Health Status to ${healthStatus}`); }
     if (lostReason !== undefined && existingLead.lostReason !== lostReason) { updateData.lostReason = lostReason; changes.push(`changed Lost Reason`); }
     if (priority !== undefined && existingLead.priority !== priority) { updateData.priority = priority; changes.push(`changed Priority to ${priority}`); }
+    // Once the lead has converted, the Client is the single master for identity and billing
+    // data. Freezing the lead's copies here is what stops the two records from drifting into
+    // disagreeing about a company's address or GST number.
+    const frozen = existingLead.clientId
+      ? new Set<string>(LEAD_IDENTITY_FIELDS as readonly string[])
+      : new Set<string>();
+    const rejected: string[] = [];
+
     for (const f of EDITABLE_TEXT_FIELDS) {
       if (req.body[f] !== undefined && (existingLead as any)[f] !== req.body[f]) {
+        if (frozen.has(f)) {
+          rejected.push(f);
+          continue;
+        }
         updateData[f] = req.body[f] || null;
         changes.push(`updated ${f}`);
       }
     }
-    const { updatedLead, finalClientId, newClientId, deletedClientId } = await prisma.$transaction(async (tx) => {
+
+    if (rejected.length) {
+      res.status(409).json({
+        error: 'This lead has been converted — edit these details on the client record instead.',
+        clientId: existingLead.clientId,
+        fields: rejected,
+      });
+      return;
+    }
+    const { updatedLead, finalClientId, newClientId } = await prisma.$transaction(async (tx) => {
       let currentClientId = existingLead.clientId;
       let outNewClientId = null;
-      let outDeletedClientId = null;
 
       if (stage !== undefined && existingLead.stage !== stage) {
         updateData.stage = stage;
         if (stage === 'CHURNED') updateData.renewalStatus = 'CHURNED';
         
-        if (PURSUED_STAGES.includes(stage) && !currentClientId) {
-          const newClient = await tx.client.create({
-            data: {
-              name: existingLead.companyName || existingLead.contactName || 'Unknown',
-              company: existingLead.companyName || null,
-              email: existingLead.contactEmail || null,
-              phone: existingLead.contactPhone || null,
-              status: 'PROSPECT',
-              contractValue: existingLead.dealValue || null,
-              organizationId: orgId,
-              ...(existingLead.contactName ? {
-                contacts: { create: { name: existingLead.contactName, designation: existingLead.jobTitle || null, email: existingLead.contactEmail || null, phone: existingLead.contactPhone || null } }
-              } : {})
-            }
-          });
-          currentClientId = newClient.id;
-          outNewClientId = newClient.id;
-          updateData.clientId = currentClientId;
-        } else if (stage === 'NEW_LEAD' && currentClientId && existingLead.client?.status === 'PROSPECT') {
-          updateData.clientId = null;
-          // Only remove the auto-created PROSPECT client if nothing real depends on it.
-          // A raw delete would FK-fail on its LEAD_CREATED activities and abort the whole
-          // transaction, so pre-check hard dependents and clear soft ones first.
-          const hardDeps =
-            (await tx.project.count({ where: { clientId: currentClientId } })) +
-            (await tx.quoteDocument.count({ where: { clientId: currentClientId } })) +
-            (await tx.contract.count({ where: { clientId: currentClientId } })) +
-            (await tx.subscription.count({ where: { clientId: currentClientId } })) +
-            (await tx.payment.count({ where: { clientId: currentClientId } })) +
-            (await tx.invoiceDraft.count({ where: { clientId: currentClientId } })) +
-            (await tx.expense.count({ where: { clientId: currentClientId } }));
-          if (hardDeps === 0) {
-            await tx.activity.deleteMany({ where: { clientId: currentClientId } });
-            await tx.clientContact.deleteMany({ where: { clientId: currentClientId } });
-            await tx.client.delete({ where: { id: currentClientId } });
-            outDeletedClientId = currentClientId;
-          }
-          currentClientId = null;
+        if (CONVERSION_STAGES.includes(stage) && !currentClientId) {
+          const { clientId, created } = await ensureClientForLead(tx, existingLead, orgId);
+          currentClientId = clientId;
+          if (created) outNewClientId = clientId;
+          // ensureClientForLead already linked the lead; don't fight it in this update.
         }
 
         if (currentClientId) {
@@ -1194,7 +1141,7 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
         });
       }
 
-      return { updatedLead: updated, finalClientId: currentClientId, newClientId: outNewClientId, deletedClientId: outDeletedClientId };
+      return { updatedLead: updated, finalClientId: currentClientId, newClientId: outNewClientId };
     }, {
       isolationLevel: 'ReadCommitted' // Keeps transaction short while preventing dirty reads
     });
@@ -1343,25 +1290,15 @@ crmRouter.post('/leads/:id/prepare-project', authorize('SUPER_ADMIN', 'ADMIN'), 
       return;
     }
 
-    let clientId = lead.clientId;
+    // Starting delivery is one of the two moments an account is born. Conversion copies the
+    // lead's identity, billing details and contacts across, and re-points any quotations
+    // raised while it was still a lead.
+    const { clientId, created } = await prisma.$transaction((tx) =>
+      ensureClientForLead(tx, lead, orgId)
+    );
 
-    if (!clientId) {
-      // Create a PROSPECT client first if it doesn't exist
-      const newClient = await prisma.client.create({
-        data: {
-          name: lead.companyName || lead.contactName || 'Unknown',
-          company: lead.companyName || null,
-          email: lead.contactEmail || null,
-          phone: lead.contactPhone || null,
-          status: 'PROSPECT',
-          organizationId: orgId,
-          ...(lead.contactName ? {
-            contacts: { create: { name: lead.contactName, designation: lead.jobTitle || null, email: lead.contactEmail || null, phone: lead.contactPhone || null } }
-          } : {})
-        }
-      });
-      clientId = newClient.id;
-      await prisma.lead.update({ where: { id: leadId }, data: { clientId } });
+    if (created) {
+      emitToOrganization(req.app.get('io'), orgId, 'client:created', { id: clientId });
     }
 
     const ownerId = lead.assignedToId || req.user!.userId;
@@ -1392,24 +1329,15 @@ crmRouter.delete('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Au
       return;
     }
 
-    const client = existingLead.clientId ? await prisma.client.findUnique({ where: { id: existingLead.clientId } }) : null;
-
-    // Delete associated records first
-    await prisma.stageHistory.deleteMany({ where: { leadId } });
-    await prisma.dealField.deleteMany({ where: { leadId } });
-    await prisma.activity.deleteMany({ where: { leadId } });
-
-    // Delete the lead
-    await prisma.lead.delete({
-      where: { id: leadId }
+    // Deleting a lead removes the sales record only. Any Client it converted into is a real
+    // account — it may carry contacts, notes, billing details, projects and payments — so it
+    // is left alone; Lead.client is SetNull, which unlinks it cleanly.
+    await prisma.$transaction(async (tx) => {
+      await tx.stageHistory.deleteMany({ where: { leadId } });
+      await tx.dealField.deleteMany({ where: { leadId } });
+      await tx.activity.deleteMany({ where: { leadId } });
+      await tx.lead.delete({ where: { id: leadId } });
     });
-
-    // Clean up orphaned PROSPECT clients so they don't pollute the Reports page
-    if (client && client.status === 'PROSPECT') {
-      await prisma.activity.deleteMany({ where: { clientId: client.id } });
-      await prisma.clientContact.deleteMany({ where: { clientId: client.id } });
-      await prisma.client.delete({ where: { id: client.id } });
-    }
 
     // Emit real-time event
     const io = req.app.get('io');

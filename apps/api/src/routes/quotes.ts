@@ -8,6 +8,7 @@ import { generateDocNumber, computeQuoteFinancials } from '../utils/quote.js';
 import { generateQuotePdf } from '../services/quotePdf.service.js';
 import { logActivity, ActivityType } from '../services/activity.service.js';
 import { buildSearchFilter } from '../utils/search-utils.js';
+import { ensureClientForLead } from '../services/clientConversion.service.js';
 
 export const quoteRouter = Router();
 quoteRouter.use(authenticate);
@@ -22,11 +23,15 @@ const lineItemSchema = z.object({
   taxType: z.string().optional(),
 });
 
-const quoteSchema = z.object({
+// Base shape kept separate from the one-party refinement below, because PATCH needs
+// `.partial()` — which only exists on a ZodObject, not on a refined schema.
+const quoteBaseSchema = z.object({
   documentType: z.enum(['QUOTATION', 'PROFORMA_INVOICE']),
   documentDate: z.string().optional(),
   expirationDate: z.string().min(1, 'Expiration date is required'),
-  clientId: z.string().min(1, 'Client is required'),
+  // Raised against a Client (won) or a Lead (still being chased — no account exists yet).
+  clientId: z.string().optional(),
+  leadId: z.string().optional(),
   contactPerson: z.string().min(1, 'Contact person is required'),
   clientEmail: z.string().optional(),
   clientPhone: z.string().optional(),
@@ -46,6 +51,28 @@ const quoteSchema = z.object({
   scope: z.string().optional(),
   termsConditions: z.string().min(1, 'Terms & conditions are required'),
   lineItems: z.array(lineItemSchema).min(1, 'At least one line item is required'),
+});
+
+const quoteSchema = quoteBaseSchema.refine((d) => Boolean(d.clientId) !== Boolean(d.leadId), {
+  message: 'A quote must be raised for either a client or a lead, but not both',
+  path: ['clientId'],
+});
+
+/**
+ * Quotes snapshot the billing party at save time, so they only need a common shape rather
+ * than a Client row. This normalizes a Lead into that shape, letting a quotation go out
+ * before the deal is won — which is what keeps an account from being created prematurely.
+ */
+const leadAsParty = (lead: any) => ({
+  name: lead.companyName || lead.contactName || 'Lead',
+  company: lead.companyName || null,
+  contactPerson: lead.contactName || null,
+  email: lead.contactEmail || null,
+  phone: lead.contactPhone || null,
+  billingAddress: lead.billingAddress || null,
+  address: lead.address || null,
+  state: lead.state || null,
+  gstNumber: lead.gstNumber || null,
 });
 
 // Read EyeLevel's company state (for the CGST/SGST vs IGST split) from org settings.
@@ -95,10 +122,21 @@ quoteRouter.post('/', validate(quoteSchema), async (req: AuthRequest, res: Respo
     const orgId = req.user!.organizationId;
     const body = req.body as z.infer<typeof quoteSchema>;
 
-    const client = await prisma.client.findFirst({ where: { id: body.clientId, organizationId: orgId } });
-    if (!client) {
-      res.status(404).json({ error: 'Client not found.' });
-      return;
+    let party: any;
+    if (body.leadId) {
+      const lead = await prisma.lead.findFirst({ where: { id: body.leadId, organizationId: orgId } });
+      if (!lead) {
+        res.status(404).json({ error: 'Lead not found.' });
+        return;
+      }
+      party = leadAsParty(lead);
+    } else {
+      const client = await prisma.client.findFirst({ where: { id: body.clientId, organizationId: orgId } });
+      if (!client) {
+        res.status(404).json({ error: 'Client not found.' });
+        return;
+      }
+      party = client;
     }
 
     const orgState = await getOrgState(orgId);
@@ -111,8 +149,9 @@ quoteRouter.post('/', validate(quoteSchema), async (req: AuthRequest, res: Respo
         organizationId: orgId,
         documentType: body.documentType,
         documentNumber,
-        clientId: body.clientId,
-        ...buildDocData(body, client, orgState, fin),
+        clientId: body.clientId || null,
+        leadId: body.leadId || null,
+        ...buildDocData(body, party, orgState, fin),
         lineItems: {
           create: body.lineItems.map((li, i) => ({
             sortOrder: i + 1,
@@ -180,7 +219,7 @@ quoteRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
 
 // PATCH /api/crm/quotes/:id — update. Editable in any state except CANCELLED,
 // so a SENT quote can be revised and its PDF re-generated.
-quoteRouter.patch('/:id', validate(quoteSchema.partial().extend({ lineItems: z.array(lineItemSchema).min(1).optional() })), async (req: AuthRequest, res: Response, next) => {
+quoteRouter.patch('/:id', validate(quoteBaseSchema.partial().extend({ lineItems: z.array(lineItemSchema).min(1).optional() })), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
     const id = req.params.id as string;
@@ -189,7 +228,6 @@ quoteRouter.patch('/:id', validate(quoteSchema.partial().extend({ lineItems: z.a
     if (existing.status === 'CANCELLED') { res.status(400).json({ error: 'Cancelled documents cannot be edited.' }); return; }
 
     const body = req.body as any;
-    const client = await prisma.client.findFirst({ where: { id: existing.clientId, organizationId: orgId } });
     const orgState = await getOrgState(orgId);
 
     let fin = null as ReturnType<typeof computeQuoteFinancials> | null;
@@ -244,10 +282,27 @@ quoteRouter.patch('/:id/status', async (req: AuthRequest, res: Response, next) =
     // A quotation is a one-off sale — creating a recurring MONTHLY subscription from
     // its tax-inclusive grandTotal permanently and wrongly inflates MRR.
     if (status === 'ACCEPTED' && existing.status !== 'ACCEPTED') {
+      // Accepting a quotation is a commitment to pay, so this is one of the moments an
+      // account is born. A quote raised against a lead converts that lead first — the
+      // contract has to hang off a real Client.
+      let contractClientId = existing.clientId;
+      if (!contractClientId && existing.leadId) {
+        const lead = await prisma.lead.findFirst({ where: { id: existing.leadId, organizationId: orgId } });
+        if (lead) {
+          const { clientId, created } = await prisma.$transaction((tx) => ensureClientForLead(tx, lead, orgId));
+          contractClientId = clientId;
+          if (created) emitToOrganization(req.app.get('io'), orgId, 'client:created', { id: clientId });
+        }
+      }
+      if (!contractClientId) {
+        res.status(409).json({ error: 'This quotation is not linked to a client or a lead, so it cannot be accepted.' });
+        return;
+      }
+
       await prisma.contract.create({
         data: {
           organizationId: orgId,
-          clientId: existing.clientId,
+          clientId: contractClientId,
           title: 'Quote ' + existing.documentNumber,
           value: existing.grandTotal,
           billingFrequency: 'ONE_TIME',
@@ -284,8 +339,13 @@ quoteRouter.post('/:id/generate-pdf', async (req: AuthRequest, res: Response, ne
     const pdfUrl = await generateQuotePdf(quote, org);
     await prisma.quoteDocument.update({ where: { id }, data: { pdfUrl, status: 'SENT' } });
 
-    // Log to the originating lead's timeline, if this client came from a lead (Module E).
-    const lead = await prisma.lead.findFirst({ where: { clientId: quote.clientId, organizationId: orgId }, select: { id: true } });
+    // Log to the originating lead's timeline — either the lead the quote was raised against
+    // directly (pre-conversion), or the lead this client came from (Module E).
+    const lead = quote.leadId
+      ? await prisma.lead.findFirst({ where: { id: quote.leadId, organizationId: orgId }, select: { id: true } })
+      : quote.clientId
+        ? await prisma.lead.findFirst({ where: { clientId: quote.clientId, organizationId: orgId }, select: { id: true } })
+        : null;
     if (lead) {
       await logActivity({
         leadId: lead.id, type: ActivityType.QUOTE_GENERATED,

@@ -31,7 +31,11 @@ const taskSchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
   type: z.enum(['DESIGN', 'CONTENT', 'VIDEO', 'DIGITAL_MARKETING', 'SOCIAL_MEDIA', 'DEVELOPMENT', 'STRATEGY', 'BUSINESS', 'OTHER']).optional(),
-  projectId: z.string(),
+  // A task hangs off exactly one parent: a Project (delivery work) or a Lead
+  // (pre-sales work such as an audit, done before the deal is won and before any
+  // Client account exists). Enforced by the refinement below.
+  projectId: z.string().optional(),
+  leadId: z.string().optional(),
   assigneeId: z.string().optional().nullable(),
   assigneeIds: z.array(z.string()).optional(),
   reviewerId: z.string().optional().nullable(),
@@ -47,22 +51,41 @@ const taskSchema = z.object({
   isRecurring: z.boolean().optional(),
   recurrenceFrequency: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY']).optional().nullable(),
   driveLink: z.string().optional().nullable(),
+}).refine((d) => Boolean(d.projectId) !== Boolean(d.leadId), {
+  message: 'A task must belong to either a project or a lead, but not both',
+  path: ['projectId'],
+});
+
+// A task reaches its organization through whichever parent it hangs off. Project tasks go
+// via project → client; lead tasks go via lead. Scoping on `project` alone would make every
+// lead task invisible (and, worse, unguarded) — so every lookup must use this.
+const taskOrgScope = (orgId: string) => ({
+  OR: [
+    { project: { client: { organizationId: orgId } } },
+    { lead: { organizationId: orgId } },
+    { client: { organizationId: orgId } },
+  ],
 });
 
 // GET /api/tasks
 taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const { search, status, priority, projectId, assigneeId, type, clientId, filter, teamId, sort, dueDateFrom, dueDateTo, page = '1', limit = '50' } = req.query;
+    const { search, status, priority, projectId, leadId, assigneeId, type, clientId, filter, teamId, sort, dueDateFrom, dueDateTo, page = '1', limit = '50' } = req.query;
 
     const projectFilter: any = { client: { organizationId: orgId } };
     if (clientId) projectFilter.clientId = whereIn(clientId);
 
-    const where: Record<string, unknown> = { project: projectFilter };
+    // Filtering by client is inherently about delivery work, so it stays project-only.
+    // Otherwise include pre-sales tasks that hang off a Lead and have no project.
+    const where: Record<string, unknown> = clientId
+      ? { project: projectFilter }
+      : { OR: [{ project: projectFilter }, { lead: { organizationId: orgId } }] };
     if (status) where.status = whereIn(status);
     if (priority) where.priority = whereIn(priority);
     if (type) where.type = whereIn(type);
     if (projectId) where.projectId = whereIn(projectId);
+    if (leadId) where.leadId = whereIn(leadId);
 
     if (dueDateFrom || dueDateTo) {
       const dateRange: any = {};
@@ -138,6 +161,7 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
         where: where as any,
         include: {
           project: { select: { id: true, name: true, color: true, client: { select: { name: true, company: true } } } },
+          lead: { select: { id: true, leadId: true, companyName: true, contactName: true, stage: true } },
           assignee: { select: { id: true, name: true, avatar: true } },
           assignees: { select: { id: true, name: true, avatar: true } },
           assignedBy: { select: { id: true, name: true, avatar: true } },
@@ -175,7 +199,7 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
 taskRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
   try {
     const task = await prisma.task.findFirst({
-      where: { id: (req.params.id as string), project: { client: { organizationId: req.user!.organizationId } } },
+      where: { id: (req.params.id as string), ...taskOrgScope(req.user!.organizationId) },
       include: {
         project: { select: { id: true, name: true, color: true, client: { select: { id: true, name: true, company: true } } } },
         client: { select: { id: true, name: true, company: true } },
@@ -230,7 +254,7 @@ taskRouter.post('/bulk-approve', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANA
       where: {
         id: { in: taskIds },
         status: 'REVIEW',
-        project: { client: { organizationId: req.user!.organizationId } }
+        ...taskOrgScope(req.user!.organizationId),
       }
     });
 
@@ -292,7 +316,22 @@ taskRouter.post('/bulk-approve', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANA
 // POST /api/tasks — Create a task (Idempotent)
 taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest, res: Response, next) => {
   try {
-    if (req.user!.role === 'TEAM_MEMBER') {
+    if (req.body.leadId) {
+      // Pre-sales tasks belong to the pipeline, which team members can't see — and the lead
+      // must be in the caller's org, or this becomes a cross-tenant write.
+      if (req.user!.role === 'TEAM_MEMBER') {
+        res.status(403).json({ error: 'You do not have permission to create tasks on a lead' });
+        return;
+      }
+      const lead = await prisma.lead.findFirst({
+        where: { id: req.body.leadId, organizationId: req.user!.organizationId },
+        select: { id: true },
+      });
+      if (!lead) {
+        res.status(404).json({ error: 'Lead not found' });
+        return;
+      }
+    } else if (req.user!.role === 'TEAM_MEMBER') {
       const isMember = await prisma.projectMember.findFirst({
         where: { projectId: req.body.projectId, userId: req.user!.userId }
       });
@@ -312,7 +351,7 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
       }
     }
 
-    const { title, description, type, projectId, assigneeId, assigneeIds, reviewerId, assignedById, priority, status, dueDate, assignedDate, parentId, estimatedHours, driveLink, isRecurring, recurrenceFrequency } = req.body;
+    const { title, description, type, projectId, leadId, assigneeId, assigneeIds, reviewerId, assignedById, priority, status, dueDate, assignedDate, parentId, estimatedHours, driveLink, isRecurring, recurrenceFrequency } = req.body;
 
     // Multi-assignee: the first of the list is the "primary" assignee (kept in
     // assigneeId for back-compat); the full set lives in the assignees relation.
@@ -324,7 +363,8 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
         title,
         description,
         type: type || 'OTHER',
-        projectId,
+        projectId: projectId || null,
+        leadId: leadId || null,
         assigneeId: primaryAssigneeId,
         ...(ids.length ? { assignees: { connect: ids.map((id) => ({ id })) } } : {}),
         reviewerId,
@@ -338,10 +378,13 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
         driveLink,
         isRecurring: isRecurring ?? false,
         recurrenceFrequency: recurrenceFrequency || null,
-        order: await prisma.task.count({ where: { projectId, parentId: parentId || null } }),
+        order: await prisma.task.count({
+          where: { ...(leadId ? { leadId } : { projectId }), parentId: parentId || null },
+        }),
       },
       include: {
         project: { select: { id: true, name: true, client: { select: { name: true } } } },
+        lead: { select: { id: true, leadId: true, companyName: true, contactName: true, stage: true } },
         assignee: { select: { id: true, name: true, avatar: true } },
         assignees: { select: { id: true, name: true, avatar: true } },
         assignedBy: { select: { id: true, name: true } },
@@ -358,6 +401,7 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
         userId: req.user!.userId,
         taskId: task.id,
         projectId: task.projectId,
+        leadId: task.leadId, // surfaces pre-sales tasks on the lead's timeline
       },
     });
 
@@ -383,7 +427,7 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
 taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
   try {
     const existing = await prisma.task.findFirst({
-      where: { id: (req.params.id as string), project: { client: { organizationId: req.user!.organizationId } } },
+      where: { id: (req.params.id as string), ...taskOrgScope(req.user!.organizationId) },
       include: { assignees: { select: { id: true } } },
     });
 
@@ -579,7 +623,7 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
 taskRouter.put('/:id/status', idempotency, async (req: AuthRequest, res: Response, next) => {
   try {
     const existing = await prisma.task.findFirst({
-      where: { id: (req.params.id as string), project: { client: { organizationId: req.user!.organizationId } } },
+      where: { id: (req.params.id as string), ...taskOrgScope(req.user!.organizationId) },
       include: { assignees: { select: { id: true } } },
     });
 
@@ -656,7 +700,7 @@ taskRouter.put('/:id/status', idempotency, async (req: AuthRequest, res: Respons
 taskRouter.delete('/:id', async (req: AuthRequest, res: Response, next) => {
   try {
     const task = await prisma.task.findFirst({
-      where: { id: (req.params.id as string), project: { client: { organizationId: req.user!.organizationId } } },
+      where: { id: (req.params.id as string), ...taskOrgScope(req.user!.organizationId) },
       include: { assignees: { select: { id: true } } },
     });
 
@@ -687,7 +731,7 @@ taskRouter.delete('/:id', async (req: AuthRequest, res: Response, next) => {
 taskRouter.post('/:id/comments', async (req: AuthRequest, res: Response, next) => {
   try {
     const existing = await prisma.task.findFirst({
-      where: { id: (req.params.id as string), project: { client: { organizationId: req.user!.organizationId } } },
+      where: { id: (req.params.id as string), ...taskOrgScope(req.user!.organizationId) },
     });
 
     if (!existing) {
@@ -756,7 +800,7 @@ taskRouter.post('/:id/comments', async (req: AuthRequest, res: Response, next) =
 taskRouter.put('/:id/checklist', async (req: AuthRequest, res: Response, next) => {
   try {
     const existing = await prisma.task.findFirst({
-      where: { id: (req.params.id as string), project: { client: { organizationId: req.user!.organizationId } } },
+      where: { id: (req.params.id as string), ...taskOrgScope(req.user!.organizationId) },
       include: { assignees: { select: { id: true } } },
     });
 

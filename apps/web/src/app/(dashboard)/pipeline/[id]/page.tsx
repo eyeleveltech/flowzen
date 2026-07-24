@@ -18,6 +18,7 @@ import { Select } from '@/components/ui/select';
 import { IntelligenceTab } from '../components/IntelligenceTab';
 import { TimelineTab } from '../components/TimelineTab';
 import { ContactsTab } from '../components/ContactsTab';
+import { LeadTasksTab } from '../components/LeadTasksTab';
 import { OverflowMarquee } from '@/components/ui/overflow-marquee';
 import { useConfirmStore } from '@/stores';
 
@@ -76,7 +77,8 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const [targetStage, setTargetStage] = useState('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isPipelineDetailsModalOpen, setIsPipelineDetailsModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'details' | 'timeline' | 'contacts'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'tasks' | 'timeline' | 'contacts'>('details');
+  const [preparingProject, setPreparingProject] = useState(false);
   const [wonModalLead, setWonModalLead] = useState<any>(null);
   const confirm = useConfirmStore((s) => s.confirm);
 
@@ -159,20 +161,41 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               {lead.stage !== 'NEW_LEAD' && (
                 <button
-                  onClick={() => {
-                    const params = new URLSearchParams({ create: 'true' });
-                    params.set('prefillName', `${displayName} Project`);
-                    const clientId = lead.clientId || lead.client?.id;
-                    if (clientId) params.set('prefillClientId', clientId);
-                    if (lead.dealValue) params.set('prefillBudget', String(lead.dealValue));
-                    if (lead.assignedToId) params.set('prefillOwnerId', lead.assignedToId);
-                    router.push(`/projects?${params.toString()}`);
+                  disabled={preparingProject}
+                  onClick={async () => {
+                    // Starting delivery is the moment this lead becomes a client account.
+                    // prepare-project performs that conversion (copying identity, billing
+                    // details and contacts across) and hands back what the project form needs.
+                    setPreparingProject(true);
+                    try {
+                      const prep = await api.post<{ clientId: string; ownerId: string; suggestedName: string }>(
+                        `/crm/leads/${leadId}/prepare-project`, {}
+                      );
+                      const params = new URLSearchParams({ create: 'true' });
+                      params.set('prefillName', prep.suggestedName || `${displayName} Project`);
+                      params.set('prefillClientId', prep.clientId);
+                      if (lead.dealValue) params.set('prefillBudget', String(lead.dealValue));
+                      params.set('prefillOwnerId', prep.ownerId || lead.assignedToId || '');
+                      router.push(`/projects?${params.toString()}`);
+                    } catch (e: any) {
+                      toast.error(e?.message || 'Could not start a project for this lead');
+                      setPreparingProject(false);
+                    }
                   }}
-                  className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-[#1F2937] transition-colors"
+                  className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-[#1F2937] disabled:opacity-60 transition-colors"
                 >
-                  <FolderPlus className="w-4 h-4" /> <span className="hidden sm:inline">Create Project</span>
+                  <FolderPlus className="w-4 h-4" />
+                  <span className="hidden sm:inline">{preparingProject ? 'Preparing…' : 'Create Project'}</span>
                 </button>
               )}
+              {/* Quote straight from the lead — no client account needed, so a quotation
+                  never forces a company to exist twice. */}
+              <button
+                onClick={() => router.push(`/quotations?create=true&leadId=${leadId}`)}
+                className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-[#4B5563] bg-white border border-border rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <Receipt className="w-4 h-4" /> <span className="hidden sm:inline">Raise Quotation</span>
+              </button>
               <button
                 onClick={() => setIsPipelineDetailsModalOpen(true)}
                 className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-[#4B5563] bg-white border border-border rounded-lg hover:bg-gray-50 transition-colors"
@@ -327,7 +350,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
       {/* Tabs */}
       <div className="border-b border-border bg-white px-5 md:px-8 sticky top-0 z-20">
         <div className="max-w-7xl mx-auto flex gap-8 overflow-x-auto scrollbar-hide">
-          {([['details', 'Details'], ['timeline', 'Timeline'], ['contacts', 'Contacts']] as const).map(([k, label]) => (
+          {([['details', 'Details'], ['tasks', 'Tasks'], ['timeline', 'Timeline'], ['contacts', 'Contacts']] as const).map(([k, label]) => (
             <button key={k} onClick={() => setActiveTab(k)} className={`py-4 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${activeTab === k ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-primary'}`}>
               {label}
             </button>
@@ -551,6 +574,12 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {activeTab === 'tasks' && (
+            <div className="w-full">
+              <LeadTasksTab leadId={leadId} />
             </div>
           )}
 

@@ -28,7 +28,12 @@ async function main() {
       website: 'https://eyelevel.digital',
     },
   });
-  console.log('  ✅ Organization created');
+  // Without these, every CRM / PM / Revenue route 403s behind requireModule().
+  await prisma.organizationModule.createMany({
+    data: ['CRM', 'PM', 'REVENUE'].map((key) => ({ organizationId: org.id, key })),
+    skipDuplicates: true,
+  });
+  console.log('  ✅ Organization created (CRM, PM, REVENUE enabled)');
 
   // Users
   const password = await bcrypt.hash('Password@123', 12);
@@ -38,6 +43,7 @@ async function main() {
       name: 'Harish Kumar',
       email: 'harish@eyelevel.digital',
       password,
+      status: 'ACTIVE', // login rejects PENDING accounts, so seeded users must be active
       role: 'SUPER_ADMIN',
       organizationId: org.id,
     },
@@ -48,6 +54,7 @@ async function main() {
       name: 'Sarah Chen',
       email: 'sarah@eyelevel.digital',
       password,
+      status: 'ACTIVE', // login rejects PENDING accounts, so seeded users must be active
       role: 'PROJECT_MANAGER',
       organizationId: org.id,
     },
@@ -58,6 +65,7 @@ async function main() {
       name: 'Alex Rivera',
       email: 'alex@eyelevel.digital',
       password,
+      status: 'ACTIVE', // login rejects PENDING accounts, so seeded users must be active
       role: 'TEAM_MEMBER',
       organizationId: org.id,
     },
@@ -68,6 +76,7 @@ async function main() {
       name: 'Maya Patel',
       email: 'maya@eyelevel.digital',
       password,
+      status: 'ACTIVE', // login rejects PENDING accounts, so seeded users must be active
       role: 'TEAM_MEMBER',
       organizationId: org.id,
     },
@@ -78,6 +87,7 @@ async function main() {
       name: 'James Wilson',
       email: 'james@eyelevel.digital',
       password,
+      status: 'ACTIVE', // login rejects PENDING accounts, so seeded users must be active
       role: 'ADMIN',
       organizationId: org.id,
     },
@@ -378,6 +388,7 @@ async function main() {
   await prisma.projectTemplate.create({
     data: {
       name: 'Website Development',
+      organizationId: org.id, // templates are scoped per org (20260717000000_scope_project_templates_per_org)
       description: 'Standard website development workflow with discovery, design, development, and launch phases.',
       structure: {
         tasks: [
