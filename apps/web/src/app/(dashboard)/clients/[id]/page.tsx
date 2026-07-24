@@ -14,6 +14,8 @@ import { useMembers } from '@/hooks/useQueries';
 import { useConfirmStore, useModuleStore } from '@/stores';
 import { CreateProjectModal } from '@/components/projects/create-project-modal';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { NoAccess } from '@/components/ui/no-access';
+import { NotFoundPanel } from '@/components/ui/not-found-panel';
 
 interface ClientContact {
   id: string; name: string; designation?: string | null; email?: string | null; phone?: string | null;
@@ -65,9 +67,22 @@ export default function ClientDetailPage() {
   const [editError, setEditError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [orgProfile, setOrgProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
 
   useEffect(() => {
-    const fetchClient = () => api.get<ClientDetail>(`/clients/${id}`).then(setClient).catch(() => router.push('/clients'));
+    const fetchClient = () =>
+      api.get<ClientDetail>(`/clients/${id}`)
+        .then((data) => {
+          setClient(data);
+          setErrorStatus(null);
+        })
+        .catch((err: any) => {
+          if (err?.status === 403) setErrorStatus(403);
+          else setErrorStatus(404);
+        })
+        .finally(() => setLoading(false));
+
     fetchClient();
 
     const sse = getSSE();
@@ -82,11 +97,11 @@ export default function ClientDetailPage() {
         sse.off('client:updated', handleUpdate);
       };
     }
-  }, [id, router]);
+  }, [id]);
 
   useEffect(() => {
     if (client && client.name === 'Internal') {
-      api.get('/settings/organization').then(setOrgProfile).catch(() => {});
+      api.get('/settings/organization').then(setOrgProfile).catch(() => { });
     }
   }, [client]);
 
@@ -167,7 +182,13 @@ export default function ClientDetailPage() {
     }
   }
 
-  if (!client) return <div className="py-20 text-center text-sm text-muted">Loading...</div>;
+  if (loading) return <div className="py-20 text-center text-sm text-secondary">Loading...</div>;
+  if (errorStatus === 403) {
+    return <NoAccess title="Access Restricted" message="You do not have permission or module access to view this client." backHref="/clients" backLabel="Back to Clients" />;
+  }
+  if (errorStatus === 404 || !client) {
+    return <NotFoundPanel title="Client Not Found" message="The requested client could not be found or has been removed." backHref="/clients" backLabel="Back to Clients" />;
+  }
 
   const tabs = [
     { id: 'overview' as Tab, label: 'Overview' },
@@ -244,7 +265,7 @@ export default function ClientDetailPage() {
             <h3 className="text-sm font-semibold text-primary">
               {client.name === 'Internal' ? 'Organization Profile' : 'Company Details'}
             </h3>
-            
+
             {client.name === 'Internal' && orgProfile ? (
               <div className="space-y-4 pt-1">
                 <p className="text-sm text-[#374151] leading-relaxed">
@@ -287,15 +308,15 @@ export default function ClientDetailPage() {
                     <InfoRow icon={Briefcase} label="Engagement Type" value={client.engagementType || '—'} />
                     <InfoRow icon={Calendar} label="Start Date" value={client.startDate ? formatDate(client.startDate) : '—'} />
                   </div>
-                  
+
                   {client.scope ? (
                     <div className="mt-2 bg-blue-50/50 p-4 rounded-xl border border-blue-100/50">
                       <span className="block text-xs font-semibold text-blue-900 mb-2">Scope of Work</span>
-                      <div 
+                      <div
                         className="text-sm text-[#374151] line-clamp-3 prose prose-sm max-w-none"
                         dangerouslySetInnerHTML={{ __html: client.scope }}
                       />
-                      <button 
+                      <button
                         onClick={() => setViewModalContent({ title: 'Scope', content: client.scope || '' })}
                         className="mt-3 text-xs font-medium text-[#2563EB] hover:text-[#1D4ED8]"
                       >
@@ -303,7 +324,7 @@ export default function ClientDetailPage() {
                       </button>
                     </div>
                   ) : (
-                    <p className="text-sm text-muted">No scope defined.</p>
+                    <p className="text-sm text-secondary">No scope defined.</p>
                   )}
                 </div>
               </div>
@@ -318,8 +339,8 @@ export default function ClientDetailPage() {
                       <p className="text-sm font-semibold text-primary">{c.name}</p>
                       {c.designation && <p className="text-xs text-secondary mb-2">{c.designation}</p>}
                       <div className="space-y-1 mt-2">
-                        {c.email && <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5 text-muted" /><span className="text-xs text-[#374151]">{c.email}</span></div>}
-                        {c.phone && <div className="flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-muted" /><span className="text-xs text-[#374151]">{c.phone}</span></div>}
+                        {c.email && <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5 text-secondary" /><span className="text-xs text-[#374151]">{c.email}</span></div>}
+                        {c.phone && <div className="flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-secondary" /><span className="text-xs text-[#374151]">{c.phone}</span></div>}
                       </div>
                     </div>
                   ))}
@@ -386,12 +407,12 @@ export default function ClientDetailPage() {
                           <span className="text-[#374151] font-medium">{p.owner.name}</span>
                         </>
                       ) : (
-                        <span className="text-muted">Unassigned</span>
+                        <span className="text-secondary">Unassigned</span>
                       )}
                     </span>
-                    <span className="flex items-center gap-1.5"><Briefcase className="h-3.5 w-3.5 text-muted" /> {p._count?.tasks ?? 0} tasks</span>
+                    <span className="flex items-center gap-1.5"><Briefcase className="h-3.5 w-3.5 text-secondary" /> {p._count?.tasks ?? 0} tasks</span>
                     <span className={`flex items-center gap-1.5 ${overdue ? 'text-red-600 font-medium' : ''}`}>
-                      <Calendar className="h-3.5 w-3.5 text-muted" /> {p.endDate ? formatDate(p.endDate) : 'No due date'}{overdue ? ' · Overdue' : ''}
+                      <Calendar className="h-3.5 w-3.5 text-secondary" /> {p.endDate ? formatDate(p.endDate) : 'No due date'}{overdue ? ' · Overdue' : ''}
                     </span>
                   </div>
 
@@ -416,10 +437,10 @@ export default function ClientDetailPage() {
         <div className="space-y-3">
           {client.activities.map((a) => (
             <div key={a.id} className="flex items-start gap-3 py-2">
- <div className={`h-7 w-7 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(a.user.name)}`}>{getInitials(a.user.name)}</div>
+              <div className={`h-7 w-7 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(a.user.name)}`}>{getInitials(a.user.name)}</div>
               <div>
                 <p className="text-sm text-[#374151]"><span className="font-medium">{a.user.name}</span> {a.message}</p>
-                <p className="text-xs text-muted">{formatRelativeDate(a.createdAt)}</p>
+                <p className="text-xs text-secondary">{formatRelativeDate(a.createdAt)}</p>
               </div>
             </div>
           ))}
@@ -436,7 +457,7 @@ export default function ClientDetailPage() {
             {client.notes.map((n) => (
               <div key={n.id} className="rounded-2xl border border-border bg-white p-4">
                 <p className="text-sm text-[#374151]">{n.content}</p>
-                <p className="text-xs text-muted mt-2">{n.author.name} · {formatRelativeDate(n.createdAt)}</p>
+                <p className="text-xs text-secondary mt-2">{n.author.name} · {formatRelativeDate(n.createdAt)}</p>
               </div>
             ))}
           </div>
@@ -464,7 +485,7 @@ export default function ClientDetailPage() {
                 {editError && <div className="absolute top-0 left-6 right-6 -mt-2 z-10 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 shadow-sm border border-red-100">{editError}</div>}
                 <Field label="Company Name *" value={editForm.company || editForm.name} onChange={(v) => setEditForm({ ...editForm, name: v, company: v })} required />
                 <Field label="Industry" value={editForm.industry} onChange={(v) => setEditForm({ ...editForm, industry: v })} />
-                
+
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Engagement Type</label>
                   <Select
@@ -523,7 +544,7 @@ export default function ClientDetailPage() {
                   {editForm.contacts.map((contact, i) => (
                     <div key={i} className="p-4 border border-border rounded-xl bg-surface relative">
                       {editForm.contacts.length > 1 && (
-                        <button type="button" onClick={() => setEditForm({ ...editForm, contacts: editForm.contacts.filter((_, idx) => idx !== i) })} className="absolute top-2 right-2 p-1.5 text-muted hover:text-red-500 rounded-lg hover:bg-white transition-colors border border-transparent hover:border-red-100 shadow-sm hover:shadow">
+                        <button type="button" onClick={() => setEditForm({ ...editForm, contacts: editForm.contacts.filter((_, idx) => idx !== i) })} className="absolute top-2 right-2 p-1.5 text-secondary hover:text-red-500 rounded-lg hover:bg-white transition-colors border border-transparent hover:border-red-100 shadow-sm hover:shadow">
                           <X className="h-3.5 w-3.5" />
                         </button>
                       )}
@@ -542,12 +563,12 @@ export default function ClientDetailPage() {
                     {activeModule === 'PM' ? 'Lifecycle Stage' : 'Status'}
                   </label>
                   {activeModule === 'PM' ? (
-                    <div className="w-full rounded-xl border border-border bg-gray-50 px-4 py-2.5 text-sm text-muted cursor-not-allowed select-none">
+                    <div className="w-full rounded-xl border border-border bg-gray-50 px-4 py-2.5 text-sm text-secondary cursor-not-allowed select-none">
                       {editForm.status === 'PROSPECT' ? 'Prospect' :
-                       editForm.status === 'ACTIVE' ? 'Active' :
-                       editForm.status === 'ONHOLD' ? 'On Hold' :
-                       editForm.status === 'PROJECT_COMPLETED' ? 'Completed' :
-                       editForm.status === 'CHURNED' ? 'Churned' : editForm.status}
+                        editForm.status === 'ACTIVE' ? 'Active' :
+                          editForm.status === 'ONHOLD' ? 'On Hold' :
+                            editForm.status === 'PROJECT_COMPLETED' ? 'Completed' :
+                              editForm.status === 'CHURNED' ? 'Churned' : editForm.status}
                       <span className="ml-2 text-xs text-amber-500 font-medium">(Managed via CRM)</span>
                     </div>
                   ) : (
@@ -588,7 +609,7 @@ export default function ClientDetailPage() {
                 <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
               </div>
               <div className="p-6 overflow-y-auto flex-1">
-                <div 
+                <div
                   className="prose prose-sm max-w-none text-[#374151]"
                   dangerouslySetInnerHTML={{ __html: viewModalContent.content }}
                 />
@@ -619,9 +640,9 @@ export default function ClientDetailPage() {
 function InfoRow({ icon: Icon, label, value }: { icon: typeof Mail; label: string; value: string }) {
   return (
     <div className="flex items-center gap-3">
-      <Icon className="h-4 w-4 text-muted" />
+      <Icon className="h-4 w-4 text-secondary" />
       <div>
-        <p className="text-xs text-muted">{label}</p>
+        <p className="text-xs text-secondary">{label}</p>
         <p className="text-sm text-[#374151]">{value}</p>
       </div>
     </div>

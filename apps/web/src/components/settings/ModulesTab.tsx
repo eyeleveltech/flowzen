@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
-import { useAuthStore } from '@/stores';
+import { useAuthStore, useConfirmStore } from '@/stores';
 import { FolderKanban, TrendingUp } from 'lucide-react';
 
 const MODULE_META: Record<string, { label: string; description: string; icon: any }> = {
@@ -11,11 +11,24 @@ const MODULE_META: Record<string, { label: string; description: string; icon: an
   CRM: { label: 'CRM', description: 'Sales pipeline & lead management (Admins only).', icon: TrendingUp },
 };
 
-export function ModulesTab({ modules, fetchModules }: { modules: { key: string; enabled: boolean }[]; fetchModules: () => void }) {
+export function ModulesTab({ modules, fetchModules, userCount }: { modules: { key: string; enabled: boolean }[]; fetchModules: () => void; userCount?: number }) {
   const { setAuth } = useAuthStore();
+  const confirm = useConfirmStore((state) => state.confirm);
   const [saving, setSaving] = useState<string | null>(null);
 
   const toggle = async (key: string, enabled: boolean) => {
+    // Only confirm when disabling
+    if (!enabled) {
+      const activeCountStr = userCount ? ` (${userCount} active users)` : '';
+      const confirmed = await confirm({
+        title: `Disable ${MODULE_META[key]?.label || key}?`,
+        message: `This will hide ${key === 'PM' ? 'Projects, Tasks, Dashboard, Reports, Workflows, Clients, and Team pages' : 'CRM and associated features'} for everyone in your organization${activeCountStr}.`,
+        confirmText: 'Disable',
+        variant: 'danger',
+      });
+      if (!confirmed) return;
+    }
+
     setSaving(key);
     try {
       await api.put(`/settings/modules/${key}`, { enabled });

@@ -59,7 +59,7 @@ export function TimeTrackingPrompt() {
             {/* Close Button */}
             <button
               onClick={onCancel}
-              className="absolute right-4 top-4 rounded-lg p-1.5 text-muted hover:bg-[#F3F4F6] hover:text-[#4B5563] transition-colors"
+              className="absolute right-4 top-4 rounded-lg p-1.5 text-secondary hover:bg-[#F3F4F6] hover:text-[#4B5563] transition-colors"
             >
               <X className="h-4.5 w-4.5" />
             </button>
@@ -78,7 +78,7 @@ export function TimeTrackingPrompt() {
                 <p className="mt-1 text-sm text-secondary leading-relaxed line-clamp-2">
                   <span className="font-semibold text-primary">{options.taskTitle}</span>
                 </p>
-                
+
                 <p className="mt-5 text-sm text-[#4B5563] mb-2 font-medium">
                   How long did this take?
                 </p>
@@ -94,7 +94,7 @@ export function TimeTrackingPrompt() {
                     placeholder="e.g. 1.5"
                     autoComplete="off"
                     style={{ appearance: 'textfield', WebkitAppearance: 'none', MozAppearance: 'textfield' }}
-                    className="w-full rounded-xl border border-border pl-4 pr-16 py-2.5 text-sm text-primary outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/10 placeholder:text-muted"
+                    className="w-full rounded-xl border border-border pl-4 pr-16 py-2.5 text-sm text-primary outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/10 placeholder:text-secondary"
                   />
                   <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-secondary pointer-events-none select-none">
                     hours

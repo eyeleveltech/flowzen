@@ -54,7 +54,7 @@ export function ActivityFeedWidget({ itemVariants }: { itemVariants?: any }) {
 
   const getReadableMessage = (item: any) => {
     const actor = item.user?.name || 'Someone';
-    
+
     // Fallbacks
     let target = '';
     let inProject = item.project?.name ? ` in the ${item.project.name} project` : '';
@@ -74,7 +74,7 @@ export function ActivityFeedWidget({ itemVariants }: { itemVariants?: any }) {
       const newStatus = match ? match[1].replace('_', ' ') : 'a new status';
       return <><span className="font-semibold text-primary">{actor}</span> moved {target} to <span className="font-medium text-[#374151]">{newStatus}</span>{inProject}</>;
     }
-    
+
     if (item.type === 'TASK_CREATED') {
       return <><span className="font-semibold text-primary">{actor}</span> created task {target}{inProject}</>;
     }
@@ -101,9 +101,9 @@ export function ActivityFeedWidget({ itemVariants }: { itemVariants?: any }) {
     <motion.div variants={itemVariants} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-primary shrink-0">
-          <Zap className="w-4 h-4 text-secondary"/> Activity Feed
+          <Zap className="w-4 h-4 text-secondary" /> Activity Feed
         </h2>
-        <button 
+        <button
           onClick={handleMarkAsRead}
           disabled={markingRead}
           className="text-[11px] font-medium text-secondary hover:text-primary transition-colors flex items-center gap-1 shrink-0"
@@ -114,21 +114,19 @@ export function ActivityFeedWidget({ itemVariants }: { itemVariants?: any }) {
       <div className="mb-4 flex rounded-xl border border-border p-1 bg-gray-50/50 shadow-inner">
         <button
           onClick={() => setFilter('ALL')}
-          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-            filter === 'ALL'
+          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${filter === 'ALL'
               ? 'bg-primary text-white shadow-sm'
               : 'text-secondary hover:text-primary hover:bg-gray-100/50'
-          }`}
+            }`}
         >
           All Activity
         </button>
         <button
           onClick={() => setFilter('MY_PROJECTS')}
-          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-            filter === 'MY_PROJECTS'
+          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${filter === 'MY_PROJECTS'
               ? 'bg-primary text-white shadow-sm'
               : 'text-secondary hover:text-primary hover:bg-gray-100/50'
-          }`}
+            }`}
         >
           My Projects
         </button>
@@ -142,13 +140,13 @@ export function ActivityFeedWidget({ itemVariants }: { itemVariants?: any }) {
         ) : (
           <div className="absolute left-2.5 top-2 bottom-2 w-px bg-border -z-10" />
         )}
-        
+
         {activities.map((item: any) => {
           const isUnread = new Date(item.createdAt).getTime() > lastReadAt;
-          
+
           return (
-            <div 
-              key={item.id} 
+            <div
+              key={item.id}
               onClick={() => handleClick(item)}
               className="flex gap-3 relative z-0 p-2 -mx-2 rounded-xl hover:bg-surface cursor-pointer transition-colors group"
             >
@@ -167,7 +165,7 @@ export function ActivityFeedWidget({ itemVariants }: { itemVariants?: any }) {
                 <p className={`text-xs leading-snug ${isUnread ? 'text-primary' : 'text-[#4B5563]'}`}>
                   {getReadableMessage(item)}
                 </p>
-                <p className="text-[10px] text-muted mt-1 font-medium">{formatRelativeDate(item.createdAt)}</p>
+                <p className="text-xs text-secondary mt-1 font-medium">{formatRelativeDate(item.createdAt)}</p>
               </div>
             </div>
           );

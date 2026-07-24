@@ -45,13 +45,20 @@ const clientSchema = z.object({
 clientRouter.get('/', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const { search, status, city, accountManagerId, engagementType, industry, page = '1', limit = '20' } = req.query;
+    const { search, status, city, accountManagerId, engagementType, industry, includeArchived, page = '1', limit = '20' } = req.query;
 
-    const where: Record<string, unknown> = { organizationId: orgId };
+    const where: Record<string, unknown> = {
+      organizationId: orgId,
+      NOT: { engagementType: 'INTERNAL' },
+    };
+    if (includeArchived !== 'true') where.archivedAt = null;
     if (status) where.status = whereIn(status);
     if (city) where.city = { contains: city as string, mode: 'insensitive' };
     if (accountManagerId) where.accountManagerId = whereIn(accountManagerId);
-    if (engagementType) where.engagementType = whereIn(engagementType);
+    if (engagementType) {
+      delete where.NOT;
+      where.engagementType = whereIn(engagementType);
+    }
     if (industry) where.industry = whereIn(industry);
     if (search) {
       where.OR = buildSearchFilter(
@@ -336,7 +343,7 @@ clientRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), v
   }
 });
 
-// DELETE /api/clients/:id
+// DELETE /api/clients/:id — soft-delete (archive)
 clientRouter.delete('/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     const existing = await prisma.client.findFirst({
@@ -348,25 +355,18 @@ clientRouter.delete('/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthR
       return;
     }
 
-    if (existing.name === 'Internal') {
-      res.status(403).json({ error: 'The Internal client cannot be deleted' });
+    if (existing.name === 'Internal' || existing.engagementType === 'INTERNAL') {
+      res.status(403).json({ error: 'The Internal client cannot be deleted or archived' });
       return;
     }
 
-    try {
-      await prisma.client.deleteMany({
-        where: { id: (req.params.id as string), organizationId: req.user!.organizationId },
-      });
-    } catch (err: any) {
-      if (err.code === 'P2003' || (err.message && /foreign key/i.test(err.message))) {
-        res.status(400).json({ error: 'Cannot delete this client because they have associated records (e.g., quotes, contracts, subscriptions) that must be deleted first.' });
-        return;
-      }
-      throw err;
-    }
+    const updated = await prisma.client.update({
+      where: { id: existing.id },
+      data: { archivedAt: new Date(), status: 'CHURNED' },
+    });
 
     const io = req.app.get('io');
-    emitToOrganization(io, req.user!.organizationId, 'client:deleted', { id: (req.params.id as string) });
+    emitToOrganization(io, req.user!.organizationId, 'client:deleted', { id: existing.id });
     await invalidateOrganizationCache(req.user!.organizationId);
 
     await createAuditLog({
@@ -375,10 +375,51 @@ clientRouter.delete('/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthR
       action: 'CLIENT_DELETE',
       entityType: 'CLIENT',
       entityId: existing.id,
+      details: { name: existing.name, company: existing.company, archivedAt: updated.archivedAt }
+    });
+
+    res.json({ message: 'Client archived successfully', client: updated });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/clients/:id/restore — restore an archived client
+clientRouter.post('/:id/restore', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const existing = await prisma.client.findFirst({
+      where: { id: (req.params.id as string), organizationId: req.user!.organizationId }
+    });
+
+    if (!existing) {
+      res.status(404).json({ error: 'Client not found' });
+      return;
+    }
+
+    if (!existing.archivedAt) {
+      res.status(400).json({ error: 'Client is not archived' });
+      return;
+    }
+
+    const updated = await prisma.client.update({
+      where: { id: existing.id },
+      data: { archivedAt: null, status: 'ACTIVE' },
+    });
+
+    const io = req.app.get('io');
+    emitToOrganization(io, req.user!.organizationId, 'client:updated', { id: existing.id });
+    await invalidateOrganizationCache(req.user!.organizationId);
+
+    await createAuditLog({
+      organizationId: req.user!.organizationId,
+      userId: req.user!.userId,
+      action: 'CLIENT_RESTORE',
+      entityType: 'CLIENT',
+      entityId: existing.id,
       details: { name: existing.name, company: existing.company }
     });
 
-    res.json({ message: 'Client deleted' });
+    res.json({ message: 'Client restored successfully', client: updated });
   } catch (error) {
     next(error);
   }

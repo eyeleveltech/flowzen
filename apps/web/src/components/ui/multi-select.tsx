@@ -121,68 +121,68 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
             triggerClassName
           )}
         >
-          <span className={`min-w-0 truncate ${selectedOptions.length === 0 ? 'text-muted' : 'text-primary'}`}>
+          <span className={`min-w-0 truncate ${selectedOptions.length === 0 ? 'text-secondary' : 'text-primary'}`}>
             {selectedOptions.length === 0
               ? placeholder
               : selectedOptions.length === 1
                 ? selectedOptions[0].label
                 : `${selectedOptions.length} selected`}
           </span>
-          <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted ml-2" />
+          <ChevronsUpDown className="h-4 w-4 shrink-0 text-secondary ml-2" />
         </button>
       ) : (
-      <div
-        id={id}
-        className="min-h-10.5 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary cursor-pointer flex flex-wrap gap-2 items-center transition-all focus-within:border-primary focus-within:ring-1 focus-within:ring-primary"
-        onClick={() => setIsOpen(true)}
-      >
-        {selectedOptions.length === 0 && (
-          <span className="text-muted px-1">{placeholder}</span>
-        )}
+        <div
+          id={id}
+          className="min-h-10.5 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary cursor-pointer flex flex-wrap gap-2 items-center transition-all focus-within:border-primary focus-within:ring-1 focus-within:ring-primary"
+          onClick={() => setIsOpen(true)}
+        >
+          {selectedOptions.length === 0 && (
+            <span className="text-secondary px-1">{placeholder}</span>
+          )}
 
-        {selectedOptions.map(opt => (
-          <span
-            key={opt.value}
-            className="flex items-center gap-1 bg-[#F3F4F6] text-[#374151] px-2 py-1 rounded-lg text-xs font-medium"
-          >
-            {opt.image && <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-semibold ${opt.colorClass || 'bg-primary text-white'}`}>{opt.image}</div>}
-            {opt.label}
-            <button
-              type="button"
-              onClick={(e) => handleRemove(e, opt.value)}
-              className="hover:bg-border rounded-full p-0.5"
+          {selectedOptions.map(opt => (
+            <span
+              key={opt.value}
+              className="flex items-center gap-1 bg-[#F3F4F6] text-[#374151] px-2 py-1 rounded-lg text-xs font-medium"
             >
-              <X className="h-3 w-3" />
-            </button>
-          </span>
-        ))}
+              {opt.image && <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-semibold ${opt.colorClass || 'bg-primary text-white'}`}>{opt.image}</div>}
+              {opt.label}
+              <button
+                type="button"
+                onClick={(e) => handleRemove(e, opt.value)}
+                className="hover:bg-border rounded-full p-0.5"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
 
-        <input
-          type="text"
-          role="combobox"
-          aria-expanded={isOpen}
-          aria-haspopup="listbox"
-          className="flex-1 min-w-12.5 bg-transparent outline-none text-sm placeholder:text-muted"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={selectedOptions.length === 0 ? "" : "Search..."}
-          onFocus={() => setIsOpen(true)}
-          onKeyDown={(e) => {
-            if (e.key === 'ArrowDown' && isOpen) {
-               e.preventDefault();
-               const first = containerRef.current?.querySelector('[role="option"]') as HTMLElement;
-               if (first) first.focus();
-            }
-            if (e.key === 'Escape') {
-               setIsOpen(false);
-            }
-          }}
-        />
+          <input
+            type="text"
+            role="combobox"
+            aria-expanded={isOpen}
+            aria-haspopup="listbox"
+            className="flex-1 min-w-12.5 bg-transparent outline-none text-sm placeholder:text-secondary"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={selectedOptions.length === 0 ? "" : "Search..."}
+            onFocus={() => setIsOpen(true)}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowDown' && isOpen) {
+                e.preventDefault();
+                const first = containerRef.current?.querySelector('[role="option"]') as HTMLElement;
+                if (first) first.focus();
+              }
+              if (e.key === 'Escape') {
+                setIsOpen(false);
+              }
+            }}
+          />
 
-        <div className="ml-auto flex items-center shrink-0">
-          <ChevronsUpDown className="h-4 w-4 text-muted" />
+          <div className="ml-auto flex items-center shrink-0">
+            <ChevronsUpDown className="h-4 w-4 text-secondary" />
+          </div>
         </div>
-      </div>
       )}
 
       {isOpen && isMobile ? (
@@ -203,8 +203,8 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
                 {showSelectAll && (
                   <button
                     type="button"
-                    onClick={(e) => { 
-                      e.stopPropagation(); 
+                    onClick={(e) => {
+                      e.stopPropagation();
                       if (value.length === options.length) {
                         onChange([]);
                       } else {
@@ -221,137 +221,136 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
                 )}
                 {filteredOptions.map((opt) => {
                   const isSelected = value.includes(opt.value);
-                return (
-                  <button
-                    type="button"
-                    key={opt.value}
-                    onClick={(e) => { e.stopPropagation(); handleSelect(opt.value); }}
-                    className={`flex w-full items-center text-left gap-3 px-4 py-3.5 rounded-xl text-base transition-colors ${
-                      isSelected
-                        ? 'bg-[#F3F4F6] text-primary font-semibold'
-                        : 'text-[#374151] active:bg-[#F9FAFB]'
-                    }`}
-                  >
-                    <div className={`flex items-center justify-center w-5 h-5 rounded border shrink-0 ${isSelected ? 'bg-primary border-primary' : 'border-[#D1D5DB]'}`}>
-                      {isSelected && <Check className="h-3.5 w-3.5 text-white" />}
-                    </div>
-                    {opt.image && <div className={`w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-primary text-white'}`}>{opt.image}</div>}
-                    <span className="truncate flex-1">{opt.label}</span>
-                    {opt.capacity !== undefined && (
-                      <span className="flex items-center gap-1.5 shrink-0 ml-2" title={`Capacity: ${opt.capacity}%`}>
-                        <span className={`w-2 h-2 rounded-full ${opt.isOverloaded || opt.capacity > 80 ? 'bg-red-500' : opt.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                        <span className="text-[11px] font-medium text-[#86868B]">{opt.capacity}%</span>
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+                  return (
+                    <button
+                      type="button"
+                      key={opt.value}
+                      onClick={(e) => { e.stopPropagation(); handleSelect(opt.value); }}
+                      className={`flex w-full items-center text-left gap-3 px-4 py-3.5 rounded-xl text-base transition-colors ${isSelected
+                          ? 'bg-[#F3F4F6] text-primary font-semibold'
+                          : 'text-[#374151] active:bg-[#F9FAFB]'
+                        }`}
+                    >
+                      <div className={`flex items-center justify-center w-5 h-5 rounded border shrink-0 ${isSelected ? 'bg-primary border-primary' : 'border-[#D1D5DB]'}`}>
+                        {isSelected && <Check className="h-3.5 w-3.5 text-white" />}
+                      </div>
+                      {opt.image && <div className={`w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-primary text-white'}`}>{opt.image}</div>}
+                      <span className="truncate flex-1">{opt.label}</span>
+                      {opt.capacity !== undefined && (
+                        <span className="flex items-center gap-1.5 shrink-0 ml-2" title={`Capacity: ${opt.capacity}%`}>
+                          <span className={`w-2 h-2 rounded-full ${opt.isOverloaded || opt.capacity > 80 ? 'bg-red-500' : opt.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                          <span className="text-xs font-medium text-secondary">{opt.capacity}%</span>
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </>
             )}
           </div>
         </Drawer>
       ) : (
         typeof document !== 'undefined' && isOpen && createPortal(
-        <div
-          ref={dropdownRef}
-          data-multiselect-dropdown
-          role="listbox"
-          aria-multiselectable="true"
-          className="fixed z-9999 overflow-y-auto rounded-xl border border-border bg-white py-1.5 shadow-lg shadow-black/5"
-          style={{
-            width: rect ? Math.max(rect.width, 200) : 'auto',
-            left: rect ? rect.left : 0,
-            maxHeight: dropdownMaxHeight,
-            ...(openUp
-              ? { bottom: rect ? viewportH - rect.top + 8 : 0 }
-              : { top: rect ? rect.bottom + 8 : 0 }),
-          }}
-        >
-          {compact && options.length > 7 && (
-            <div className="sticky top-0 z-10 -mt-1.5 mb-1 bg-white px-1.5 pt-1.5 pb-1.5 border-b border-[#F3F4F6]">
-              <input
-                autoFocus
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search..."
-                className="w-full rounded-lg border border-border bg-white py-1.5 px-2.5 text-sm text-primary outline-none focus:border-primary"
-              />
-            </div>
-          )}
-          {filteredOptions.length === 0 ? (
-            <div className="px-4 py-2.5 text-sm text-secondary">No results found.</div>
-          ) : (
-            <>
-              {showSelectAll && (
-                <div
-                  className="flex items-center gap-2 mx-1.5 px-3 py-2 rounded-lg text-sm cursor-pointer hover:bg-[#F9FAFB] text-primary font-medium transition-colors border-b border-border/50 mb-1 pb-2"
-                  onClick={(e) => { 
-                    e.stopPropagation(); 
-                    if (value.length === options.length) {
-                      onChange([]);
-                    } else {
-                      onChange(options.map(o => o.value));
-                    }
-                  }}
-                >
-                  <div className={`flex items-center justify-center w-4 h-4 rounded border shrink-0 ${value.length === options.length ? 'bg-primary border-primary' : 'border-[#D1D5DB]'}`}>
-                    {value.length === options.length && <Check className="h-3 w-3 text-white" />}
-                  </div>
-                  <span>Select All</span>
-                </div>
-              )}
-              {filteredOptions.map(opt => {
-                const isSelected = value.includes(opt.value);
-              return (
-                <div
-                  key={opt.value}
-                  role="option"
-                  tabIndex={isOpen ? 0 : -1}
-                  aria-selected={isSelected}
-                  className="flex items-center gap-2 mx-1.5 px-3 py-2 rounded-lg text-sm cursor-pointer hover:bg-[#F9FAFB] focus:bg-[#F9FAFB] focus:ring-2 focus:ring-inset focus:ring-primary/10 outline-none transition-colors"
-                  onClick={(e) => { e.stopPropagation(); handleSelect(opt.value); }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      handleSelect(opt.value);
-                    }
-                    if (e.key === 'ArrowDown') {
-                      e.preventDefault();
-                      const next = e.currentTarget.nextElementSibling as HTMLElement;
-                      if (next) next.focus();
-                    }
-                    if (e.key === 'ArrowUp') {
-                      e.preventDefault();
-                      const prev = e.currentTarget.previousElementSibling as HTMLElement;
-                      if (prev && prev.getAttribute('role') === 'option') {
-                        prev.focus();
+          <div
+            ref={dropdownRef}
+            data-multiselect-dropdown
+            role="listbox"
+            aria-multiselectable="true"
+            className="fixed z-9999 overflow-y-auto rounded-xl border border-border bg-white py-1.5 shadow-lg shadow-black/5"
+            style={{
+              width: rect ? Math.max(rect.width, 200) : 'auto',
+              left: rect ? rect.left : 0,
+              maxHeight: dropdownMaxHeight,
+              ...(openUp
+                ? { bottom: rect ? viewportH - rect.top + 8 : 0 }
+                : { top: rect ? rect.bottom + 8 : 0 }),
+            }}
+          >
+            {compact && options.length > 7 && (
+              <div className="sticky top-0 z-10 -mt-1.5 mb-1 bg-white px-1.5 pt-1.5 pb-1.5 border-b border-[#F3F4F6]">
+                <input
+                  autoFocus
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search..."
+                  className="w-full rounded-lg border border-border bg-white py-1.5 px-2.5 text-sm text-primary outline-none focus:border-primary"
+                />
+              </div>
+            )}
+            {filteredOptions.length === 0 ? (
+              <div className="px-4 py-2.5 text-sm text-secondary">No results found.</div>
+            ) : (
+              <>
+                {showSelectAll && (
+                  <div
+                    className="flex items-center gap-2 mx-1.5 px-3 py-2 rounded-lg text-sm cursor-pointer hover:bg-[#F9FAFB] text-primary font-medium transition-colors border-b border-border/50 mb-1 pb-2"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (value.length === options.length) {
+                        onChange([]);
                       } else {
-                        dropdownRef.current?.querySelector('input')?.focus();
+                        onChange(options.map(o => o.value));
                       }
-                    }
-                    if (e.key === 'Escape') {
-                      setIsOpen(false);
-                    }
-                  }}
-                >
-                  <div className={`flex items-center justify-center w-4 h-4 rounded border shrink-0 ${isSelected ? 'bg-primary border-primary' : 'border-[#D1D5DB]'}`}>
-                    {isSelected && <Check className="h-3 w-3 text-white" />}
+                    }}
+                  >
+                    <div className={`flex items-center justify-center w-4 h-4 rounded border shrink-0 ${value.length === options.length ? 'bg-primary border-primary' : 'border-[#D1D5DB]'}`}>
+                      {value.length === options.length && <Check className="h-3 w-3 text-white" />}
+                    </div>
+                    <span>Select All</span>
                   </div>
-                  {opt.image && <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-primary text-white'}`}>{opt.image}</div>}
-                  <span className="text-[#374151] truncate flex-1">{opt.label}</span>
-                  {opt.capacity !== undefined && (
-                    <span className="flex items-center gap-1.5 shrink-0 ml-2" title={`Capacity: ${opt.capacity}%`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${opt.isOverloaded || opt.capacity > 80 ? 'bg-red-500' : opt.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                      <span className="text-[10px] font-medium text-[#86868B]">{opt.capacity}%</span>
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-            </>
-          )}
-        </div>,
-        document.body
+                )}
+                {filteredOptions.map(opt => {
+                  const isSelected = value.includes(opt.value);
+                  return (
+                    <div
+                      key={opt.value}
+                      role="option"
+                      tabIndex={isOpen ? 0 : -1}
+                      aria-selected={isSelected}
+                      className="flex items-center gap-2 mx-1.5 px-3 py-2 rounded-lg text-sm cursor-pointer hover:bg-[#F9FAFB] focus:bg-[#F9FAFB] focus:ring-2 focus:ring-inset focus:ring-primary/10 outline-none transition-colors"
+                      onClick={(e) => { e.stopPropagation(); handleSelect(opt.value); }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleSelect(opt.value);
+                        }
+                        if (e.key === 'ArrowDown') {
+                          e.preventDefault();
+                          const next = e.currentTarget.nextElementSibling as HTMLElement;
+                          if (next) next.focus();
+                        }
+                        if (e.key === 'ArrowUp') {
+                          e.preventDefault();
+                          const prev = e.currentTarget.previousElementSibling as HTMLElement;
+                          if (prev && prev.getAttribute('role') === 'option') {
+                            prev.focus();
+                          } else {
+                            dropdownRef.current?.querySelector('input')?.focus();
+                          }
+                        }
+                        if (e.key === 'Escape') {
+                          setIsOpen(false);
+                        }
+                      }}
+                    >
+                      <div className={`flex items-center justify-center w-4 h-4 rounded border shrink-0 ${isSelected ? 'bg-primary border-primary' : 'border-[#D1D5DB]'}`}>
+                        {isSelected && <Check className="h-3 w-3 text-white" />}
+                      </div>
+                      {opt.image && <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-primary text-white'}`}>{opt.image}</div>}
+                      <span className="text-[#374151] truncate flex-1">{opt.label}</span>
+                      {opt.capacity !== undefined && (
+                        <span className="flex items-center gap-1.5 shrink-0 ml-2" title={`Capacity: ${opt.capacity}%`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${opt.isOverloaded || opt.capacity > 80 ? 'bg-red-500' : opt.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                          <span className="text-xs font-medium text-secondary">{opt.capacity}%</span>
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </div>,
+          document.body
         )
       )}
     </div>

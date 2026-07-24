@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
-import { Building2, Globe, Briefcase, Users, Phone, MapPin } from 'lucide-react';
+import { Building2, Globe, Briefcase, Users, Phone, MapPin, Info } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { useAuthStore } from '@/stores';
 
@@ -17,14 +17,20 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
     description: initialData?.description || '',
   });
   const [saving, setSaving] = useState(false);
+  const [nameError, setNameError] = useState('');
 
   const handleSave = async () => {
+    setNameError('');
+    if (!data.name.trim() || data.name.trim().length < 2) {
+      setNameError('Organization name must be at least 2 characters.');
+      return;
+    }
+
     setSaving(true);
     try {
       await api.put('/settings/organization', data);
       toast.success('Organization settings saved');
-      // Refresh the parent's cached org data (so switching tabs doesn't revert),
-      // and keep the auth store's org name in sync for anywhere it's shown.
+      // Refresh parent cached org data and update store
       onSaved?.();
       if (user?.organization) {
         setAuth({ ...user, organization: { ...user.organization, name: data.name } });
@@ -44,7 +50,7 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
   ];
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-6 max-w-2xl">
       <div>
         <h2 className="text-lg font-semibold text-primary">Organization Profile</h2>
         <p className="text-sm text-secondary">Manage your company details and branding.</p>
@@ -54,15 +60,18 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <label htmlFor="org-name" className="text-sm font-medium text-[#374151] flex items-center gap-2">
-              <Building2 className="h-3.5 w-3.5 text-secondary" /> Organization Name
+              <Building2 className="h-3.5 w-3.5 text-secondary" /> Organization Name <span className="text-red-500">*</span>
             </label>
             <input
               id="org-name"
               type="text"
+              required
+              minLength={2}
               value={data.name}
-              onChange={(e) => setData({ ...data, name: e.target.value })}
-              className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+              onChange={(e) => { setData({ ...data, name: e.target.value }); setNameError(''); }}
+              className={`w-full bg-white border ${nameError ? 'border-red-500' : 'border-border'} rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all`}
             />
+            {nameError && <p className="text-xs text-red-600 font-medium">{nameError}</p>}
           </div>
           <div className="space-y-1.5">
             <label htmlFor="org-website" className="text-sm font-medium text-[#374151] flex items-center gap-2">
@@ -150,15 +159,19 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
         </div>
       </div>
 
-      <div className="flex justify-end pt-4 border-t border-border">
+      <div className="pt-4 border-t border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-xs text-secondary">
+          <Info className="h-3.5 w-3.5 shrink-0 text-secondary" />
+          <span>Saving updates your organization details and syncs company name on your Internal Client entity.</span>
+        </div>
         <button
-          onClick={handleSave}
+          type="submit"
           disabled={saving}
-          className="bg-primary text-white px-6 py-2.5 rounded-xl text-sm font-medium hover:bg-black transition-colors disabled:opacity-50"
+          className="bg-primary text-white px-6 py-2.5 rounded-xl text-sm font-medium hover:bg-black transition-colors disabled:opacity-50 shrink-0"
         >
           {saving ? 'Saving...' : 'Save Changes'}
         </button>
       </div>
-    </div>
+    </form>
   );
 }

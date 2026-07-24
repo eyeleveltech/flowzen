@@ -7,12 +7,14 @@ import { formatDate, formatShortDate, getInitials, getAvatarColor, getClientDisp
 import { ROLE_LABELS } from '@flowzen/shared';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
-import { 
-  Search, Mail, Phone, Calendar, Briefcase, 
-  CheckCircle2, Clock, X, ChevronRight, Shield, 
+import {
+  Search, Mail, Phone, Calendar, Briefcase,
+  CheckCircle2, Clock, X, ChevronRight, Shield,
   Activity, FileText, Sparkles, AlertCircle, Folder, User, Zap, Leaf
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ErrorPanel } from '@/components/ui/error-panel';
+import { Drawer } from '@/components/ui/drawer';
 import { useAuthStore } from '@/stores';
 import toast from 'react-hot-toast';
 
@@ -62,14 +64,16 @@ interface MemberDetail {
   };
 }
 
-
-
 import { StatusBadge } from '@/components/ui/status-badge';
 
+import { usePageTitle } from '@/hooks/usePageTitle';
+
 export default function TeamPage() {
+  usePageTitle('Team Members');
   const { user: currentUser } = useAuthStore();
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [teamError, setTeamError] = useState<string | null>(null);
   const [promoting, setPromoting] = useState(false);
 
   const handlePromoteToSuperAdmin = async (memberId: string) => {
@@ -89,7 +93,7 @@ export default function TeamPage() {
       setPromoting(false);
     }
   };
-  
+
   // Search and Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRole, setSelectedRole] = useState<string[]>([]);
@@ -104,9 +108,10 @@ export default function TeamPage() {
   // Fetch Team List
   const fetchTeam = useCallback(() => {
     setLoading(true);
+    setTeamError(null);
     api.get<TeamMember[]>('/team')
       .then(setTeam)
-      .catch(() => {})
+      .catch((e: any) => setTeamError(e.message || 'Failed to load team members'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -143,9 +148,9 @@ export default function TeamPage() {
 
   // Filtered members list
   const filteredTeam = team.filter((m) => {
-    const matchesSearch = m.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          m.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (m.department && m.department.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesSearch = m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      m.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (m.department && m.department.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesRole = selectedRole.length === 0 || selectedRole.includes(m.role);
     const matchesDept = selectedDept.length === 0 || (m.department ? selectedDept.includes(m.department) : false);
     return matchesSearch && matchesRole && matchesDept;
@@ -162,11 +167,11 @@ export default function TeamPage() {
     if (!memberDetail) {
       return (
         <div className="h-137.5 flex flex-col items-center justify-center text-center p-8 bg-gray-50/50 rounded-3xl border border-dashed border-border">
-          <div className="h-14 w-14 rounded-2xl bg-white flex items-center justify-center border border-border text-muted mb-5">
+          <div className="h-14 w-14 rounded-2xl bg-white flex items-center justify-center border border-border text-secondary mb-5">
             <Sparkles className="h-6 w-6 text-indigo-500" />
           </div>
           <h3 className="text-sm font-semibold text-primary">Workload Inspector</h3>
-          <p className="text-xs text-[#86868B] max-w-65 mt-2 leading-relaxed">
+          <p className="text-xs text-secondary max-w-65 mt-2 leading-relaxed">
             Select a team member from the dashboard to inspect their active assignments, led projects, and performance statistics.
           </p>
         </div>
@@ -220,21 +225,19 @@ export default function TeamPage() {
         <div className="flex bg-[#F3F4F6] p-1 rounded-xl">
           <button
             onClick={() => setActiveTab('tasks')}
-            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
-              activeTab === 'tasks' 
-                ? 'bg-white text-primary shadow-xs' 
+            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${activeTab === 'tasks'
+                ? 'bg-white text-primary shadow-xs'
                 : 'text-secondary hover:text-primary'
-            }`}
+              }`}
           >
             Tasks & Projects ({activeTasks.length + ownedProjects.length})
           </button>
           <button
             onClick={() => setActiveTab('profile')}
-            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
-              activeTab === 'profile' 
-                ? 'bg-white text-primary shadow-xs' 
+            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${activeTab === 'profile'
+                ? 'bg-white text-primary shadow-xs'
                 : 'text-secondary hover:text-primary'
-            }`}
+              }`}
           >
             Bio & Statistics
           </button>
@@ -266,13 +269,12 @@ export default function TeamPage() {
                 </div>
                 <div className="h-2 w-full rounded-full bg-border overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      isOverloaded ? 'bg-red-500' : stats.capacity > 80 ? 'bg-red-500' : stats.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'
-                    }`}
+                    className={`h-full rounded-full transition-all duration-500 ${isOverloaded ? 'bg-red-500' : stats.capacity > 80 ? 'bg-red-500' : stats.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                      }`}
                     style={{ width: `${stats.capacity}%` }}
                   />
                 </div>
-                <div className="flex items-center text-[10px] text-[#86868B] mt-2.5 font-medium">
+                <div className="flex items-center text-xs text-secondary mt-2.5 font-medium">
                   {isOverloaded ? (
                     <><AlertCircle className="w-3.5 h-3.5 text-red-500 mr-1.5 animate-bounce" /> Overloaded: active tasks ({activeTasks.length}) exceeds threshold ({overloadThreshold}).</>
                   ) : stats.capacity > 80 ? (
@@ -293,21 +295,21 @@ export default function TeamPage() {
                 </div>
                 <div className="space-y-2.5 max-h-55 overflow-y-auto pr-1">
                   {activeTasks.map((t) => (
-                    <div 
-                      key={t.id} 
+                    <div
+                      key={t.id}
                       className="p-3.5 bg-white border border-border rounded-xl hover:border-gray-300 transition-colors shadow-xs"
                     >
                       <div className="flex justify-between items-start gap-2 mb-2">
                         <h4 className="text-xs font-semibold text-primary line-clamp-1">{t.title}</h4>
                         <StatusBadge status={t.status} size="xs" />
                       </div>
-                      <div className="flex justify-between items-center text-[10px] text-muted">
+                      <div className="flex justify-between items-center text-xs text-secondary">
                         <span className="truncate max-w-42.5 font-semibold text-secondary flex items-center gap-1.5">
                           <Folder className="h-3 w-3" />
                           {t.project?.name || 'No project'}
                         </span>
                         {t.dueDate && (
-                          <span className="tabular-nums font-medium text-[#86868B] flex items-center gap-1.5">
+                          <span className="tabular-nums font-medium text-secondary flex items-center gap-1.5">
                             <Calendar className="h-3 w-3" />
                             {formatShortDate(t.dueDate)}
                           </span>
@@ -316,7 +318,7 @@ export default function TeamPage() {
                     </div>
                   ))}
                   {activeTasks.length === 0 && (
-                    <p className="text-xs text-muted italic text-center py-6 bg-gray-50/50 rounded-xl border border-dashed border-border">
+                    <p className="text-xs text-secondary italic text-center py-6 bg-gray-50/50 rounded-xl border border-dashed border-border">
                       No active tasks assigned
                     </p>
                   )}
@@ -331,12 +333,12 @@ export default function TeamPage() {
                 </div>
                 <div className="space-y-2.5 max-h-45 overflow-y-auto pr-1">
                   {ownedProjects.map((p) => (
-                    <div 
+                    <div
                       key={p.id}
                       className="p-3.5 bg-white border border-border rounded-xl hover:border-gray-300 transition-colors shadow-xs"
                     >
                       <h4 className="text-xs font-semibold text-primary line-clamp-1">{p.name}</h4>
-                      <div className="flex justify-between items-center text-[10px] text-muted mt-2">
+                      <div className="flex justify-between items-center text-xs text-secondary mt-2">
                         <span className="truncate max-w-42.5 font-medium flex items-center gap-1.5">
                           <User className="h-3 w-3" />
                           {p.client ? getClientDisplayName(p.client) : 'Internal'}
@@ -348,7 +350,7 @@ export default function TeamPage() {
                     </div>
                   ))}
                   {ownedProjects.length === 0 && (
-                    <p className="text-xs text-muted italic text-center py-6 bg-gray-50/50 rounded-xl border border-dashed border-border">
+                    <p className="text-xs text-secondary italic text-center py-6 bg-gray-50/50 rounded-xl border border-dashed border-border">
                       No led projects assigned
                     </p>
                   )}
@@ -366,20 +368,20 @@ export default function TeamPage() {
             >
               {/* Contact Info Card */}
               <div className="bg-surface rounded-2xl p-5 border border-border/80 space-y-3.5 text-xs text-[#4B5563]">
-                <h4 className="text-[10px] text-[#86868B] font-medium uppercase tracking-wide mb-1">Contact Information</h4>
+                <h4 className="text-xs text-secondary font-medium uppercase tracking-wide mb-1">Contact Information</h4>
                 <div className="flex items-center gap-3">
-                  <Mail className="h-4 w-4 text-muted" />
+                  <Mail className="h-4 w-4 text-secondary" />
                   <a href={`mailto:${email}`} className="hover:underline hover:text-primary font-medium truncate">{email}</a>
                 </div>
                 {phone && (
                   <div className="flex items-center gap-3">
-                    <Phone className="h-4 w-4 text-muted" />
+                    <Phone className="h-4 w-4 text-secondary" />
                     <span className="tabular-nums font-medium">{phone}</span>
                   </div>
                 )}
                 {joiningDate && (
                   <div className="flex items-center gap-3">
-                    <Calendar className="h-4 w-4 text-muted" />
+                    <Calendar className="h-4 w-4 text-secondary" />
                     <span className="font-medium">Joined {formatDate(joiningDate)}</span>
                   </div>
                 )}
@@ -390,19 +392,19 @@ export default function TeamPage() {
                 <h3 className="text-xs font-bold text-primary uppercase tracking-wider mb-3">Overall Performance</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-white p-4 rounded-2xl border border-border">
-                    <span className="text-[10px] text-[#86868B] font-medium uppercase tracking-wide block mb-1">Active Tasks</span>
+                    <span className="text-xs text-secondary font-medium uppercase tracking-wide block mb-1">Active Tasks</span>
                     <p className="text-2xl font-bold text-primary tabular-nums">{stats.activeTasks}</p>
                   </div>
                   <div className="bg-white p-4 rounded-2xl border border-border">
-                    <span className="text-[10px] text-[#86868B] font-medium uppercase tracking-wide block mb-1">Completed</span>
+                    <span className="text-xs text-secondary font-medium uppercase tracking-wide block mb-1">Completed</span>
                     <p className="text-2xl font-bold text-emerald-600 tabular-nums">{stats.completedTasks}</p>
                   </div>
                   <div className="bg-white p-4 rounded-2xl border border-border">
-                    <span className="text-[10px] text-[#86868B] font-medium uppercase tracking-wide block mb-1">Total Assigned</span>
+                    <span className="text-xs text-secondary font-medium uppercase tracking-wide block mb-1">Total Assigned</span>
                     <p className="text-2xl font-bold text-primary tabular-nums">{stats.totalTasks}</p>
                   </div>
                   <div className="bg-white p-4 rounded-2xl border border-border">
-                    <span className="text-[10px] text-[#86868B] font-medium uppercase tracking-wide block mb-1">Led Projects</span>
+                    <span className="text-xs text-secondary font-medium uppercase tracking-wide block mb-1">Led Projects</span>
                     <p className="text-2xl font-bold text-blue-600 tabular-nums">{stats.totalProjects}</p>
                   </div>
                 </div>
@@ -429,13 +431,13 @@ export default function TeamPage() {
           <div className="bg-white border border-border rounded-2xl p-4 shadow-sm flex flex-wrap items-center gap-2 w-full">
             {/* Search Input */}
             <div className="relative w-full sm:w-64 md:w-80 shrink-0">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
               <input
                 type="text"
                 placeholder="Search team by name, email..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-muted"
+                className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-secondary"
               />
             </div>
 
@@ -478,12 +480,16 @@ export default function TeamPage() {
             )}
           </div>
 
-          {/* Grid Loading State */}
+          {/* Grid Loading & Error States */}
           {loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {[...Array(8)].map((_, i) => (
                 <Skeleton key={i} className="h-56 w-full rounded-3xl" />
               ))}
+            </div>
+          ) : teamError ? (
+            <div className="py-12 bg-white rounded-3xl border border-border">
+              <ErrorPanel message={teamError} onRetry={fetchTeam} />
             </div>
           ) : (
             /* Members Card Grid */
@@ -492,14 +498,15 @@ export default function TeamPage() {
                 const isSelected = selectedId === m.id;
                 const isOverloaded = m.activeTasks > (m.overloadThreshold ?? 25);
                 return (
-                  <div
+                  <button
                     key={m.id}
+                    type="button"
                     onClick={() => setSelectedId(m.id)}
-                    className={`group relative flex flex-col p-6 rounded-3xl bg-white cursor-pointer transition-all duration-300 border ${
-                      isSelected 
-                        ? 'border-primary ring-1 ring-primary' 
+                    aria-label={`View ${m.name}'s workload`}
+                    className={`group relative flex flex-col p-6 rounded-3xl bg-white text-left w-full transition-all duration-300 border focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${isSelected
+                        ? 'border-primary ring-1 ring-primary'
                         : 'border-border hover:shadow-sm'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center gap-4 mb-5">
                       {/* Avatar */}
@@ -510,12 +517,12 @@ export default function TeamPage() {
                         <div className="flex items-center justify-between gap-1.5">
                           <h3 className="text-[15px] font-semibold text-primary truncate leading-snug group-hover:text-black transition-colors">{m.name}</h3>
                           {isOverloaded && (
-                            <span className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-100 animate-pulse shrink-0">
+                            <span className="inline-flex items-center text-xs font-bold px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-100 animate-pulse shrink-0">
                               Overloaded
                             </span>
                           )}
                         </div>
-                        <p className="text-[13px] text-[#86868B] truncate mt-0.5">
+                        <p className="text-xs text-secondary truncate mt-0.5">
                           {m.designation || getRoleLabel(m.role)}
                           {m.department && <span className="mx-1.5 opacity-50">·</span>}
                           {m.department && m.department}
@@ -523,37 +530,36 @@ export default function TeamPage() {
                       </div>
                     </div>
 
-                    <div className="mt-auto pt-4 border-t border-[#F3F4F6] flex items-center justify-between text-[13px]">
-                      <div className="flex items-center gap-3 text-[#86868B]">
+                    <div className="mt-auto pt-4 border-t border-[#F3F4F6] flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-3 text-secondary">
                         <span className="flex items-center gap-1">
-                           <span className="font-semibold text-primary">{m.activeTasks}</span> 
-                           <span className="opacity-80">tasks</span>
+                          <span className="font-semibold text-primary">{m.activeTasks}</span>
+                          <span className="opacity-80">tasks</span>
                         </span>
                         <span className="w-0.5 h-0.5 rounded-full bg-[#D1D5DB]"></span>
                         <span className="flex items-center gap-1">
-                           <span className="font-semibold text-primary">{m.totalProjects}</span> 
-                           <span className="opacity-80">projects</span>
+                          <span className="font-semibold text-primary">{m.totalProjects}</span>
+                          <span className="opacity-80">projects</span>
                         </span>
                       </div>
-                      
+
                       {/* Minimal Capacity Dot */}
                       <div className="flex items-center gap-1.5" title={`Capacity: ${m.capacity}%`}>
-                        <div className={`w-2 h-2 rounded-full ${
-                          m.capacity > 80 ? 'bg-red-500' : m.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'
-                        }`} />
-                        <span className="text-[#86868B] font-medium">{m.capacity}%</span>
+                        <div className={`w-2 h-2 rounded-full ${m.capacity > 80 ? 'bg-red-500' : m.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                          }`} />
+                        <span className="text-secondary font-medium">{m.capacity}%</span>
                       </div>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
 
               {/* Empty State Grid */}
               {filteredTeam.length === 0 && (
                 <div className="col-span-full py-20 text-center bg-white rounded-3xl border border-dashed border-border">
-                  <AlertCircle className="h-10 w-10 text-muted mx-auto mb-4" />
+                  <AlertCircle className="h-10 w-10 text-secondary mx-auto mb-4" />
                   <p className="text-sm font-semibold text-primary">No members match search query</p>
-                  <p className="text-xs text-[#86868B] mt-1.5">Try resetting the department or role filters.</p>
+                  <p className="text-xs text-secondary mt-1.5">Try resetting the department or role filters.</p>
                 </div>
               )}
             </div>
@@ -562,41 +568,14 @@ export default function TeamPage() {
       </div>
 
       {/* Slide-over sheet Drawer (Universal) */}
-      <AnimatePresence>
-        {selectedId && (
-          <div className="fixed inset-0 z-50 flex justify-end">
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSelectedId(null)}
-              className="absolute inset-0 bg-black/30 backdrop-blur-xs"
-            />
-
-            {/* Panel */}
-            <motion.div
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-              className="relative w-full max-w-md bg-white h-full shadow-2xl p-6 overflow-y-auto flex flex-col z-10"
-            >
-              {/* Close Button overlay */}
-              <button 
-                onClick={() => setSelectedId(null)}
-                className="absolute right-4 top-4 p-2 text-muted hover:bg-[#F3F4F6] rounded-xl transition-colors"
-              >
-                <X className="h-5 w-5" />
-              </button>
-
-              <div className="flex-1 mt-6">
-                {renderInspector()}
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <Drawer
+        variant="slideover"
+        isOpen={!!selectedId}
+        onClose={() => setSelectedId(null)}
+        title={memberDetail?.name || 'Member Details'}
+      >
+        {renderInspector()}
+      </Drawer>
     </div>
   );
 }

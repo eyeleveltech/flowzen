@@ -29,15 +29,15 @@ import { getPriorityDot } from '@/lib/priority';
 export default function CalendarPage() {
   const { user } = useAuthStore();
   const isStaff = user?.role === 'TEAM_MEMBER';
-  
+
   const [view, setView] = useState<'month' | 'week'>('month');
   const [date, setDate] = useState(new Date());
-  
+
   const [tasks, setTasks] = useState<CalendarTask[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
-  
+
   // Filters
   const { data: teams = [] } = useTeams();
   const [assigneeFilter, setAssigneeFilter] = useState<string[]>(isStaff && user?.id ? [user.id] : []);
@@ -56,10 +56,10 @@ export default function CalendarPage() {
 
   useEffect(() => {
     if (!isStaff) {
-      api.get<Member[]>('/team').then(setMembers).catch(() => {});
+      api.get<Member[]>('/team').then(setMembers).catch(() => { });
     }
-    api.get<{projects: Project[]}>('/projects').then(res => setProjects(res.projects || [])).catch(() => {});
-    api.get<{clients: Client[]}>('/clients').then(res => setClients(res.clients || [])).catch(() => {});
+    api.get<{ projects: Project[] }>('/projects').then(res => setProjects(res.projects || [])).catch(() => { });
+    api.get<{ clients: Client[] }>('/clients').then(res => setClients(res.clients || [])).catch(() => { });
   }, [isStaff]);
 
   function fetchTasks() {
@@ -80,7 +80,7 @@ export default function CalendarPage() {
         }
         setTasks(filtered);
       })
-      .catch(() => {});
+      .catch(() => { });
   }
 
   function prevPeriod() {
@@ -119,7 +119,7 @@ export default function CalendarPage() {
 
   function renderTaskPill(t: CalendarTask, compact: boolean = false) {
     const pColor = t.project.color || '#3B82F6';
-    
+
     if (compact) {
       return (
         <div key={t.id} className="flex items-center gap-1.5 rounded-md px-1.5 py-0.5 border" style={{ backgroundColor: `${pColor}15`, borderColor: `${pColor}30` }}>
@@ -128,10 +128,10 @@ export default function CalendarPage() {
         </div>
       );
     }
-    
+
     return (
-      <div 
-        key={t.id} 
+      <div
+        key={t.id}
         className="flex flex-col gap-1 rounded-md px-2 py-1.5 border text-[10px] leading-tight"
         style={{ backgroundColor: `${pColor}15`, borderColor: `${pColor}30` }}
       >
@@ -140,7 +140,7 @@ export default function CalendarPage() {
           <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${getPriorityDot(t.priority)}`} />
         </div>
         <div className="flex items-center justify-between text-secondary">
-           <span className="truncate max-w-[80%]">{t.project.name}</span>
+          <span className="truncate max-w-[80%]">{t.project.name}</span>
         </div>
       </div>
     );
@@ -161,8 +161,8 @@ export default function CalendarPage() {
         <div className="flex flex-wrap items-center gap-2 w-full">
           <button
             onClick={() => setAssigneeFilter(assigneeFilter.length === 1 && assigneeFilter[0] === user?.id ? [] : (user?.id ? [user.id] : []))}
-            className={assigneeFilter.length === 1 && assigneeFilter[0] === user?.id 
-              ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" 
+            className={assigneeFilter.length === 1 && assigneeFilter[0] === user?.id
+              ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold"
               : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"
             }
           >
@@ -238,7 +238,7 @@ export default function CalendarPage() {
               <ChevronLeft className="h-4 w-4 text-secondary" />
             </button>
             <div className="text-sm font-semibold text-primary px-2 min-w-36 text-center select-none">
-              {view === 'month' 
+              {view === 'month'
                 ? date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
                 : `Week of ${startOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
               }
@@ -251,16 +251,16 @@ export default function CalendarPage() {
           {/* Right Side: Segmented switcher */}
           <div className="flex justify-center sm:justify-end flex-1">
             <div className="flex bg-[#F3F4F6] p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center">
-              <button 
+              <button
                 type="button"
-                onClick={() => setView('month')} 
+                onClick={() => setView('month')}
                 className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all shrink-0 ${view === 'month' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
               >
                 Month
               </button>
-              <button 
+              <button
                 type="button"
-                onClick={() => setView('week')} 
+                onClick={() => setView('week')}
                 className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all shrink-0 ${view === 'week' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
               >
                 Week
@@ -277,7 +277,7 @@ export default function CalendarPage() {
             {/* Desktop Grid Headers */}
             <div className="hidden md:grid grid-cols-7 border-b border-[#F3F4F6]">
               {(view === 'month' ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] : weekDays).map((d, i) => (
-                <div key={i} className="px-2 py-2.5 text-center text-xs font-medium text-muted uppercase tracking-wide">
+                <div key={i} className="px-2 py-2.5 text-center text-xs font-medium text-secondary uppercase tracking-wide">
                   {view === 'month' ? d as string : (d as Date).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })}
                 </div>
               ))}
@@ -301,7 +301,7 @@ export default function CalendarPage() {
                       <div className="space-y-1">
                         {dayTasks.slice(0, 3).map((t) => renderTaskPill(t, true))}
                         {dayTasks.length > 3 && (
-                          <span className="text-[10px] text-muted px-1 font-medium block mt-1">+{dayTasks.length - 3} more</span>
+                          <span className="text-xs text-secondary px-1 font-medium block mt-1">+{dayTasks.length - 3} more</span>
                         )}
                       </div>
                     </div>
@@ -331,17 +331,17 @@ export default function CalendarPage() {
             {/* Mobile View (Agenda) */}
             <div className="md:hidden flex flex-col p-4 gap-6 bg-surface min-h-100">
               {(() => {
-                const daysToRender = view === 'month' 
+                const daysToRender = view === 'month'
                   ? days.filter(d => d !== null).map(d => new Date(year, month, d as number))
                   : weekDays;
-                
+
                 const agendaDays = daysToRender.map(dObj => ({
                   date: dObj,
                   tasks: getTasksForDate(dObj)
                 })).filter(day => day.tasks.length > 0);
 
                 if (agendaDays.length === 0) {
-                  return <div className="text-center text-sm text-muted py-8 bg-white rounded-xl border border-border">No tasks scheduled for this period.</div>;
+                  return <div className="text-center text-sm text-secondary py-8 bg-white rounded-xl border border-border">No tasks scheduled for this period.</div>;
                 }
 
                 return agendaDays.map((day, i) => (
@@ -351,8 +351,8 @@ export default function CalendarPage() {
                     </h3>
                     <div className="flex flex-col gap-2">
                       {day.tasks.map(t => (
-                        <div 
-                          key={t.id} 
+                        <div
+                          key={t.id}
                           className="flex flex-col gap-1.5 rounded-lg px-3 py-2.5 border text-xs"
                           style={{ backgroundColor: `${t.project.color || '#3B82F6'}10`, borderColor: `${t.project.color || '#3B82F6'}30` }}
                         >

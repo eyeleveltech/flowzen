@@ -28,15 +28,15 @@ export function PipelineDashboard() {
   const [allLeads, setAllLeads] = useState<any[]>([]);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [isFiltering, setIsFiltering] = useState(false);
-  
+
   // Filters State
-  const [dateRange, setDateRange] = useState('ALL'); 
-  const [dateFilterType, setDateFilterType] = useState<'CREATED'|'CLOSE'>('CREATED');
+  const [dateRange, setDateRange] = useState('ALL');
+  const [dateFilterType, setDateFilterType] = useState<'CREATED' | 'CLOSE'>('CREATED');
   const [customDateFrom, setCustomDateFrom] = useState('');
   const [customDateTo, setCustomDateTo] = useState('');
-  
+
   const [ownerFilter, setOwnerFilter] = useState<string[]>([]);
-  
+
   const [selectedStages, setSelectedStages] = useState<string[]>(ALL_STAGES);
   const [showStageDropdown, setShowStageDropdown] = useState(false);
   const stageDropdownRef = useRef<HTMLDivElement>(null);
@@ -80,13 +80,13 @@ export function PipelineDashboard() {
       if (dateRange !== 'ALL') {
         const targetDateStr = dateFilterType === 'CREATED' ? lead.createdAt : lead.expectedCloseDate;
         if (!targetDateStr) return false;
-        
+
         const targetDate = new Date(targetDateStr);
         const now = new Date();
-        
+
         let start = new Date(0);
         let end = new Date('2100-01-01');
-        
+
         switch (dateRange) {
           case 'THIS_MONTH':
             start = startOfMonth(now);
@@ -127,7 +127,7 @@ export function PipelineDashboard() {
     const openLeads = filteredLeads.filter(l => !['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED', 'CHURNED'].includes(l.stage));
     const totalPipelineValue = openLeads.reduce((sum, l) => sum + (l.dealValue || 0), 0);
     const wonValue = filteredLeads.filter(l => ['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED'].includes(l.stage)).reduce((sum, l) => sum + (l.dealValue || 0), 0);
-    
+
     // Stage Distribution for Bar Chart
     const stageCounts: Record<string, number> = {};
     activeLeads.forEach(l => {
@@ -191,7 +191,7 @@ export function PipelineDashboard() {
     return <div className="animate-pulse space-y-6">
       <div className="h-20 bg-gray-200/50 rounded-2xl mb-6"></div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[1,2,3,4].map(i => <div key={i} className="h-32 bg-gray-200/50 rounded-2xl"></div>)}
+        {[1, 2, 3, 4].map(i => <div key={i} className="h-32 bg-gray-200/50 rounded-2xl"></div>)}
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="h-80 bg-gray-200/50 rounded-2xl"></div>
@@ -228,10 +228,10 @@ export function PipelineDashboard() {
 
   return (
     <div className="space-y-6 pb-8">
-      
+
       {/* Filter Bar */}
       <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-2xl border border-border shadow-sm">
-        
+
         {/* Date Range */}
         <div className="flex items-center gap-2">
           <Select
@@ -284,7 +284,7 @@ export function PipelineDashboard() {
             <span>Stages ({selectedStages.length === ALL_STAGES.length ? 'All' : selectedStages.length})</span>
             <ChevronDown className="w-4 h-4" />
           </button>
-          
+
           <AnimatePresence>
             {showStageDropdown && (
               <motion.div
@@ -325,11 +325,11 @@ export function PipelineDashboard() {
       {/* Metrics Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 relative">
         {isFiltering && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-2xl"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}
-        
+
         <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full relative overflow-hidden">
           <div className="flex items-start justify-between gap-2 mb-3">
             <p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Total Pipeline Value</p>
-            <IndianRupee className="w-4 h-4 shrink-0 text-muted" />
+            <IndianRupee className="w-4 h-4 shrink-0 text-secondary" />
           </div>
           <p className="text-3xl font-semibold text-primary">{formatCurrency(metrics.pipelineValue)}</p>
         </div>
@@ -337,7 +337,7 @@ export function PipelineDashboard() {
         <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full">
           <div className="flex items-start justify-between gap-2 mb-3">
             <p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Closed / Won Value</p>
-            <TrendingUp className="w-4 h-4 shrink-0 text-muted" />
+            <TrendingUp className="w-4 h-4 shrink-0 text-secondary" />
           </div>
           <p className="text-3xl font-semibold text-primary">{formatCurrency(metrics.wonValue)}</p>
         </div>
@@ -345,7 +345,7 @@ export function PipelineDashboard() {
         <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full">
           <div className="flex items-start justify-between gap-2 mb-3">
             <p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Active Deals</p>
-            <Target className="w-4 h-4 shrink-0 text-muted" />
+            <Target className="w-4 h-4 shrink-0 text-secondary" />
           </div>
           <p className="text-3xl font-semibold text-primary">{metrics.activeLeads}</p>
         </div>
@@ -353,17 +353,17 @@ export function PipelineDashboard() {
         <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full">
           <div className="flex items-start justify-between gap-2 mb-3">
             <p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Total Leads Tracked</p>
-            <Briefcase className="w-4 h-4 shrink-0 text-muted" />
+            <Briefcase className="w-4 h-4 shrink-0 text-secondary" />
           </div>
           <p className="text-3xl font-semibold text-primary">{metrics.totalLeads}</p>
         </div>
 
       </div>
-      
+
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative">
         {isFiltering && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-2xl"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}
-        
+
         <div className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-6">Leads by Stage</h2>
           <div className="h-70 w-full">
@@ -416,7 +416,7 @@ export function PipelineDashboard() {
                 </div>
               </>
             ) : (
-               <div className="flex-1 flex items-center justify-center text-sm text-secondary">No data for selected filters</div>
+              <div className="flex-1 flex items-center justify-center text-sm text-secondary">No data for selected filters</div>
             )}
           </div>
         </div>
@@ -480,9 +480,9 @@ export function PipelineDashboard() {
       {/* Recent Activity Table */}
       <div className="rounded-2xl bg-white border border-border overflow-hidden relative">
         {isFiltering && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}
-        
+
         <div className="p-5 border-b border-border flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Clock className="w-4 h-4 text-secondary"/> Recent Leads</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Clock className="w-4 h-4 text-secondary" /> Recent Leads</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left min-w-150">
@@ -504,11 +504,10 @@ export function PipelineDashboard() {
                     </div>
                   </td>
                   <td className="px-5 py-3">
-                    <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md border ${
-                      lead.stage === 'PROJECT_COMPLETED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                      lead.stage === 'CHURNED' ? 'bg-red-50 text-red-700 border-red-200' :
-                      'text-primary bg-[#F3F4F6] border-border'
-                    }`}>
+                    <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md border ${lead.stage === 'PROJECT_COMPLETED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                        lead.stage === 'CHURNED' ? 'bg-red-50 text-red-700 border-red-200' :
+                          'text-primary bg-[#F3F4F6] border-border'
+                      }`}>
                       {STAGE_LABELS[lead.stage] || lead.stage}
                     </span>
                   </td>
@@ -535,7 +534,7 @@ export function PipelineDashboard() {
           </table>
         </div>
       </div>
-      
+
     </div>
   );
 }

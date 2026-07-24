@@ -206,8 +206,8 @@ revenueRouter.post('/invoice-drafts', async (req: AuthRequest, res: Response) =>
     if (!quote) return res.status(404).json({ error: 'Quote not found' });
     if (quote.status !== 'ACCEPTED') return res.status(400).json({ error: 'Quote must be ACCEPTED to generate an invoice draft' });
 
-    // The client must belong to the caller's org.
-    const clientOk = await prisma.client.findFirst({ where: { id: clientId, organizationId: orgId }, select: { id: true } });
+    // The client must belong to the caller's org and not be archived.
+    const clientOk = await prisma.client.findFirst({ where: { id: clientId, organizationId: orgId, archivedAt: null }, select: { id: true } });
     if (!clientOk) return res.status(400).json({ error: 'Client not found in your organization' });
 
     const draft = await prisma.invoiceDraft.create({

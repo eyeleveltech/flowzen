@@ -27,7 +27,7 @@ export function AuditLogsTab() {
     setLoading(true);
     api.get<AuditLog[]>('/settings/audit-logs')
       .then(setLogs)
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   };
 
@@ -84,10 +84,10 @@ export function AuditLogsTab() {
 
     if (log.action.startsWith('CLIENT_') || log.action.startsWith('LEAD_')) {
       const type = log.action.startsWith('CLIENT_') ? 'Client' : 'Lead';
-      const entityName = details.companyName 
-        ? `${details.contactName || ''} (${details.companyName})` 
+      const entityName = details.companyName
+        ? `${details.contactName || ''} (${details.companyName})`
         : (details.contactName || details.name || 'Unknown');
-      
+
       const changeList = details.changes && Array.isArray(details.changes) && details.changes.length > 0
         ? `: ${details.changes.join(', ')}`
         : '';
@@ -159,7 +159,7 @@ export function AuditLogsTab() {
           <div className="text-center py-12 text-sm text-secondary">Loading audit logs...</div>
         ) : filteredLogs.length === 0 ? (
           <div className="text-center py-12 text-sm text-secondary flex flex-col items-center gap-2">
-            <FileText className="h-8 w-8 text-muted stroke-[1.5]" />
+            <FileText className="h-8 w-8 text-secondary stroke-[1.5]" />
             No audit logs found matching the filter.
           </div>
         ) : (

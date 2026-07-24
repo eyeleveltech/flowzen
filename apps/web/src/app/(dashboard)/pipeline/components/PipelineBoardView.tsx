@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatCurrencyCompact } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence } from 'framer-motion';
 import { ChevronDown, Check, Plus, ChevronsLeft, ChevronsRight } from 'lucide-react';
@@ -250,7 +250,7 @@ export function PipelineBoardView() {
   }
 
   return (
-    <div className="w-full flex flex-col h-[calc(100vh-185px)] min-h-[550px] overflow-hidden">
+    <div className="w-full flex flex-col h-[calc(100vh-185px)] min-h-137.5 overflow-hidden">
 
       <div className="flex items-center justify-end px-1 pb-2 shrink-0">
         <label className="flex items-center gap-2 text-xs font-medium text-secondary cursor-pointer select-none">
@@ -315,7 +315,7 @@ export function PipelineBoardView() {
             }
 
             return (
-              <div key={group.id} className="flex flex-col flex-1 min-w-[260px] max-w-[340px] h-full shrink-0 border border-gray-200 bg-gray-50/80 rounded-xl overflow-hidden shadow-sm">
+              <div key={group.id} className="flex flex-col flex-1 min-w-65 max-w-85 h-full shrink-0 border border-gray-200 bg-gray-50/80 rounded-xl overflow-hidden shadow-sm">
                 {/* Column Header */}
                 <div
                   className="px-4 py-3 flex items-center justify-between shrink-0 animate-fade-in"
@@ -409,9 +409,9 @@ export function PipelineBoardView() {
                                   );
                                 })()}
 
-                                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
-                                  <p className="text-sm font-bold text-primary">
-                                    {lead.dealValue ? `${formatCurrency(lead.dealValue)}` : 'TBD'}
+                                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between gap-2 min-w-0">
+                                  <p className="text-sm font-bold text-primary truncate" title={lead.dealValue ? formatCurrency(lead.dealValue) : ''}>
+                                    {lead.dealValue ? formatCurrencyCompact(lead.dealValue) : 'TBD'}
                                   </p>
                                   <button
                                     type="button"
@@ -434,15 +434,19 @@ export function PipelineBoardView() {
 
                 {/* Column Footer — fixed, shows total + weighted deal values */}
                 <div className="px-3 py-2.5 bg-white border-t border-gray-200 flex items-center justify-between shrink-0 select-none">
-                  <div className="flex flex-col gap-0.5">
+                  <div className="flex flex-col gap-0.5 min-w-0">
                     <div className="flex items-center gap-3">
-                      <div>
+                      <div className="min-w-0">
                         <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider block">Total</span>
-                        <span className="text-xs font-bold text-primary">{formatCurrency(columnValue)}</span>
+                        <span className="text-xs font-bold text-primary truncate block max-w-37.5" title={formatCurrency(columnValue)}>
+                          {formatCurrencyCompact(columnValue)}
+                        </span>
                       </div>
-                      <div className="border-l border-gray-100 pl-3">
+                      <div className="border-l border-gray-100 pl-3 min-w-0">
                         <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider block">Weighted</span>
-                        <span className="text-xs font-bold text-emerald-600">{formatCurrency(columnWeightedValue)}</span>
+                        <span className="text-xs font-bold text-emerald-600 truncate block max-w-37.5" title={formatCurrency(columnWeightedValue)}>
+                          {formatCurrencyCompact(columnWeightedValue)}
+                        </span>
                       </div>
                     </div>
                   </div>

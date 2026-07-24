@@ -15,7 +15,10 @@ const STATUS_STYLES: Record<string, string> = {
   CANCELLED: 'bg-red-50 text-red-700 border-red-200',
 };
 
+import { usePageTitle } from '@/hooks/usePageTitle';
+
 export default function InvoicesPage() {
+  usePageTitle('Invoices');
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -55,7 +58,7 @@ export default function InvoicesPage() {
                 <tr key={inv.id} className="hover:bg-surface transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-muted shrink-0" />
+                      <FileText className="h-4 w-4 text-secondary shrink-0" />
                       <div>
                         <p className="text-sm font-medium text-primary font-mono">{inv.draftNumber}</p>
                         <p className="text-[11px] text-secondary">Quote: {inv.quote?.documentNumber ?? '—'}</p>
@@ -77,8 +80,8 @@ export default function InvoicesPage() {
                           <Download className="h-4 w-4" />
                         </a>
                       ) : (
-                        <button 
-                          title="Generate PDF" 
+                        <button
+                          title="Generate PDF"
                           onClick={async () => {
                             try {
                               toast.loading('Generating Invoice...', { id: 'pdf' });

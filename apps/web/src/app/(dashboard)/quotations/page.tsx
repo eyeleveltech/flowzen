@@ -20,7 +20,10 @@ const STATUS_STYLES: Record<string, string> = {
   CANCELLED: 'bg-red-50 text-red-700 border-red-200',
 };
 
+import { usePageTitle } from '@/hooks/usePageTitle';
+
 export default function QuotationsPage() {
+  usePageTitle('Quotations');
   const queryClient = useQueryClient();
   const confirm = useConfirmStore((s) => s.confirm);
   const [search, setSearch] = useState('');
@@ -114,7 +117,7 @@ export default function QuotationsPage() {
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <div className="relative w-full sm:max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search number or client..." className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
         </div>
         <div className="w-full sm:w-48">
@@ -148,7 +151,7 @@ export default function QuotationsPage() {
                 <tr key={q.id} onClick={() => openEdit(q.id)} className="hover:bg-surface transition-colors cursor-pointer">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-muted shrink-0" />
+                      <FileText className="h-4 w-4 text-secondary shrink-0" />
                       <div>
                         <p className="text-sm font-medium text-primary font-mono">{q.documentNumber}</p>
                         <p className="text-[11px] text-secondary">{q.documentType === 'QUOTATION' ? 'Quotation' : 'Proforma Invoice'}</p>
@@ -180,7 +183,7 @@ export default function QuotationsPage() {
 
                     {/* Mobile Viewport — ⋯ menu with text labels */}
                     <div className="relative md:hidden flex justify-end">
-                      <button 
+                      <button
                         className="p-1.5 rounded-lg hover:bg-[#F3F4F6] text-secondary hover:text-primary transition-colors"
                         onClick={() => setActiveDropdownId(activeDropdownId === q.id ? null : q.id)}
                       >
@@ -190,26 +193,26 @@ export default function QuotationsPage() {
                         <>
                           <div className="fixed inset-0 z-40" onClick={() => setActiveDropdownId(null)} />
                           <div className="absolute right-0 top-8 z-50 w-52 rounded-xl bg-white shadow-2xl border border-border py-1 flex flex-col text-left">
-                            <button 
+                            <button
                               onClick={() => { setActiveDropdownId(null); openEdit(q.id); }}
                               className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
                             >
                               <Eye className="h-4 w-4" /> View / Edit
                             </button>
-                            <button 
+                            <button
                               onClick={() => { setActiveDropdownId(null); q.pdfUrl ? window.open(fileUrl(q.pdfUrl), '_blank') : generatePdf(q.id); }}
                               className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
                             >
                               <Download className="h-4 w-4" /> Download PDF
                             </button>
-                            <button 
+                            <button
                               onClick={() => { setActiveDropdownId(null); duplicate(q.id); }}
                               className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
                             >
                               <Copy className="h-4 w-4" /> Duplicate
                             </button>
                             {q.status === 'ACCEPTED' && (
-                              <button 
+                              <button
                                 onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Create Invoice', message: 'Move this quote to an Invoice Draft?', confirmText: 'Create Invoice', cancelText: 'Cancel' })) createInvoiceDraft(q); }}
                                 className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-emerald-600 hover:bg-emerald-50 transition-colors text-left"
                               >
@@ -217,14 +220,14 @@ export default function QuotationsPage() {
                               </button>
                             )}
                             {q.status !== 'CANCELLED' && (
-                              <button 
+                              <button
                                 onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Cancel Document', message: 'Are you sure you want to cancel this document?', confirmText: 'Cancel Document', cancelText: 'Keep', variant: 'warning' })) statusMutation.mutate({ id: q.id, status: 'CANCELLED' }); }}
                                 className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-amber-600 hover:bg-amber-50 transition-colors text-left"
                               >
                                 <Ban className="h-4 w-4" /> Cancel
                               </button>
                             )}
-                            <button 
+                            <button
                               onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Delete Document', message: 'Are you sure you want to delete this document? This cannot be undone.', confirmText: 'Delete', cancelText: 'Cancel', variant: 'danger' })) deleteMutation.mutate(q.id); }}
                               className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors text-left"
                             >
@@ -264,7 +267,7 @@ export default function QuotationsPage() {
                 {q.status[0] + q.status.slice(1).toLowerCase()}
               </span>
             </div>
-            
+
             <div className="mb-3">
               <p className="text-sm font-medium text-primary">{q.clientName}</p>
               <p className="text-xs text-secondary mt-0.5">Date: {formatDate(q.documentDate)}</p>
@@ -272,9 +275,9 @@ export default function QuotationsPage() {
 
             <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-50">
               <p className="text-sm font-bold text-primary">{formatCurrency(Number(q.grandTotal))}</p>
-              
+
               <div className="relative" onClick={e => e.stopPropagation()}>
-                <button 
+                <button
                   className="p-1.5 rounded-lg hover:bg-[#F3F4F6] text-secondary hover:text-primary transition-colors"
                   onClick={() => setActiveDropdownId(activeDropdownId === q.id ? null : q.id)}
                 >
@@ -284,26 +287,26 @@ export default function QuotationsPage() {
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setActiveDropdownId(null)} />
                     <div className="absolute right-0 bottom-8 z-50 w-52 rounded-xl bg-white shadow-2xl border border-border py-1 flex flex-col text-left">
-                      <button 
+                      <button
                         onClick={() => { setActiveDropdownId(null); openEdit(q.id); }}
                         className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
                       >
                         <Eye className="h-4 w-4" /> View / Edit
                       </button>
-                      <button 
+                      <button
                         onClick={() => { setActiveDropdownId(null); q.pdfUrl ? window.open(fileUrl(q.pdfUrl), '_blank') : generatePdf(q.id); }}
                         className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
                       >
                         <Download className="h-4 w-4" /> Download PDF
                       </button>
-                      <button 
+                      <button
                         onClick={() => { setActiveDropdownId(null); duplicate(q.id); }}
                         className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
                       >
                         <Copy className="h-4 w-4" /> Duplicate
                       </button>
                       {q.status === 'ACCEPTED' && (
-                        <button 
+                        <button
                           onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Create Invoice', message: 'Move this quote to an Invoice Draft?', confirmText: 'Create Invoice', cancelText: 'Cancel' })) createInvoiceDraft(q); }}
                           className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-emerald-600 hover:bg-emerald-50 transition-colors text-left"
                         >
@@ -311,14 +314,14 @@ export default function QuotationsPage() {
                         </button>
                       )}
                       {q.status !== 'CANCELLED' && (
-                        <button 
+                        <button
                           onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Cancel Document', message: 'Are you sure you want to cancel this document?', confirmText: 'Cancel Document', cancelText: 'Keep', variant: 'warning' })) statusMutation.mutate({ id: q.id, status: 'CANCELLED' }); }}
                           className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-amber-600 hover:bg-amber-50 transition-colors text-left"
                         >
                           <Ban className="h-4 w-4" /> Cancel
                         </button>
                       )}
-                      <button 
+                      <button
                         onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Delete Document', message: 'Are you sure you want to delete this document? This cannot be undone.', confirmText: 'Delete', cancelText: 'Cancel', variant: 'danger' })) deleteMutation.mutate(q.id); }}
                         className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors text-left"
                       >

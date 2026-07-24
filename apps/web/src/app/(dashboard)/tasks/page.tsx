@@ -89,7 +89,10 @@ function AssigneeAvatars({ task, size = 26 }: { task: { assignees?: AssigneePers
   );
 }
 
+import { usePageTitle } from '@/hooks/usePageTitle';
+
 function TasksContent() {
+  usePageTitle('Tasks');
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuthStore();
@@ -515,12 +518,12 @@ function TasksContent() {
         <div className="flex flex-wrap items-center gap-2 w-full">
           {/* Search Box */}
           <div className="relative w-full sm:w-64 md:w-80 shrink-0">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search tasks..."
-              className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-muted"
+              className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-secondary"
             />
           </div>
 
@@ -771,7 +774,7 @@ function TasksContent() {
                       <div className="flex items-center gap-2 mb-3 px-1">
                         <div className={`h-2 w-2 rounded-full ${TASK_STATUS_COLORS[col]?.split(' ')[0] || 'bg-gray-200'}`} />
                         <span className="text-xs font-medium text-[#374151] uppercase tracking-wide">{TASK_STATUS_LABELS[col]}</span>
-                        <span className="ml-auto text-xs text-muted bg-[#F3F4F6] rounded-full px-2 py-0.5 tabular-nums">{colTasks.length}</span>
+                        <span className="ml-auto text-xs text-secondary bg-[#F3F4F6] rounded-full px-2 py-0.5 tabular-nums">{colTasks.length}</span>
                       </div>
                       <Droppable droppableId={col}>
                         {(provided, snapshot) => (
@@ -799,12 +802,12 @@ function TasksContent() {
                                       <p className="text-sm font-medium text-primary leading-snug">{t.title}</p>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                      <span className="text-[11px] text-muted">
+                                      <span className="text-xs text-secondary">
                                         {t.project?.client?.name ? `${t.project.client.name} • ` : ''}{t.project?.name}
                                       </span>
                                       <div className="flex items-center gap-2">
                                         {(t._count?.comments ?? 0) > 0 && (
-                                          <span className="flex items-center gap-0.5 text-[10px] text-muted">
+                                          <span className="flex items-center gap-0.5 text-xs text-secondary">
                                             <MessageSquare className="h-3 w-3" /> {t._count?.comments}
                                           </span>
                                         )}
@@ -818,7 +821,7 @@ function TasksContent() {
                                     </div>
                                     {t.dueDate && (
                                       <div className="flex items-center gap-2 mt-2">
-                                        <p className={`text-[10px] ${isTaskOverdue(t) ? 'text-red-500 font-medium' : 'text-muted'}`}>
+                                        <p className={`text-xs ${isTaskOverdue(t) ? 'text-red-500 font-medium' : 'text-secondary'}`}>
                                           {isTaskOverdue(t) ? `Overdue (${getDaysLate(t)} days late)` : formatShortDate(t.dueDate)}
                                         </p>
                                       </div>
@@ -903,7 +906,7 @@ function TasksContent() {
                         <th className="px-6 py-3.5 w-10 text-center relative select-none">
                           <button
                             onClick={(e) => { e.stopPropagation(); setShowColumnDropdown(!showColumnDropdown); }}
-                            className="inline-flex items-center justify-center h-6 w-6 rounded-md text-muted hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
+                            className="inline-flex items-center justify-center h-6 w-6 rounded-md text-secondary hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
                             title="Toggle visible columns"
                           >
                             +
@@ -964,7 +967,7 @@ function TasksContent() {
                                   <AssigneeAvatars task={t} size={24} />
                                   <span className="text-sm text-[#374151]">{assigneeLabel(t)}</span>
                                 </div>
-                              ) : <span className="text-sm text-muted">Unassigned</span>}
+                              ) : <span className="text-sm text-secondary">Unassigned</span>}
                             </td>
                           )}
                           {visibleColumns.includes('priority') && (
@@ -993,7 +996,7 @@ function TasksContent() {
                                   </span>
                                 </div>
                               ) : (
-                                <span className="text-muted">-</span>
+                                <span className="text-secondary">-</span>
                               )}
                             </td>
                           )}
@@ -1033,7 +1036,7 @@ function TasksContent() {
                       </div>
                       {t.dueDate && (
                         <div className="flex items-center gap-2 mt-2">
-                          <p className={`text-[10px] ${isTaskOverdue(t) ? 'text-red-500 font-medium' : 'text-muted'}`}>{formatShortDate(t.dueDate)}</p>
+                          <p className={`text-xs ${isTaskOverdue(t) ? 'text-red-500 font-medium' : 'text-secondary'}`}>{formatShortDate(t.dueDate)}</p>
                         </div>
                       )}
                     </div>
