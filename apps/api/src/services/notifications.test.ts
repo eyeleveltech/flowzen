@@ -93,7 +93,7 @@ describe('NotificationService', () => {
     // but we CAN assert that findUnique was called to fetch the user's email.
     expect(prisma.user.findUnique).toHaveBeenCalledWith({
       where: { id: payload.userId },
-      select: { email: true, name: true },
+      select: { email: true, name: true, settings: true },
     });
   });
 });

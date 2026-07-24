@@ -46,7 +46,10 @@ type ViewMode = 'list' | 'board' | 'timeline' | 'calendar' | 'gantt';
 
 
 
+import { usePageTitle } from '@/hooks/usePageTitle';
+
 function ProjectsContent() {
+  usePageTitle('Projects');
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuthStore();
@@ -143,7 +146,9 @@ function ProjectsContent() {
   const { data: clients = [] } = useClients();
   const { data: members = [] } = useMembers();
   const { data: teams = [] } = useTeams();
-  const { data: templates = [] } = useTemplates();
+  const { data: templates = [] } = useTemplates(
+    !!user && ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'].includes(user.role)
+  );
   const loading = isLoadingProjects;
 
   const selectedClientId = watch('clientId');

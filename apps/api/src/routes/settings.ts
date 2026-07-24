@@ -397,6 +397,7 @@ settingsRouter.put('/users/:id', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimi
       designation: z.string().nullable().optional(),
       teamId: z.string().nullable().optional(),
       status: z.enum(['ACTIVE', 'PENDING', 'INACTIVE']).optional(),
+      reassignTo: z.string().nullable().optional(),
     }).strict();
 
     let body: any;
@@ -412,6 +413,74 @@ settingsRouter.put('/users/:id', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimi
       }
       throw err;
     }
+
+    if (body.status === 'INACTIVE') {
+      const openTaskCount = await prisma.task.count({
+        where: {
+          project: { client: { organizationId: req.user!.organizationId } },
+          status: { not: 'COMPLETED' },
+          OR: [
+            { assigneeId: targetUserId },
+            { assignees: { some: { id: targetUserId } } },
+          ],
+        },
+      });
+
+      if (openTaskCount > 0) {
+        const reassignToId = body.reassignTo;
+        if (!reassignToId) {
+          res.status(409).json({
+            error: `User has ${openTaskCount} open task(s) assigned. Please specify a user to reassign tasks to.`,
+            openTaskCount,
+          });
+          return;
+        }
+
+        const replacementUser = await prisma.user.findFirst({
+          where: {
+            id: reassignToId,
+            organizationId: req.user!.organizationId,
+            status: 'ACTIVE',
+          },
+        });
+        if (!replacementUser) {
+          res.status(400).json({ error: 'Replacement user not found or not active' });
+          return;
+        }
+
+        await prisma.task.updateMany({
+          where: {
+            assigneeId: targetUserId,
+            status: { not: 'COMPLETED' },
+            project: { client: { organizationId: req.user!.organizationId } },
+          },
+          data: { assigneeId: reassignToId },
+        });
+
+        const multiAssignedTasks = await prisma.task.findMany({
+          where: {
+            project: { client: { organizationId: req.user!.organizationId } },
+            status: { not: 'COMPLETED' },
+            assignees: { some: { id: targetUserId } },
+          },
+          select: { id: true },
+        });
+
+        for (const t of multiAssignedTasks) {
+          await prisma.task.update({
+            where: { id: t.id },
+            data: {
+              assignees: {
+                disconnect: { id: targetUserId },
+                connect: { id: reassignToId },
+              },
+            },
+          });
+        }
+      }
+    }
+
+    delete body.reassignTo;
 
     if (body.name) {
       body.name = toProperCase(body.name);
@@ -503,7 +572,7 @@ settingsRouter.delete('/users/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (re
 });
 
 // GET /api/settings/templates
-settingsRouter.get('/templates', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+settingsRouter.get('/templates', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), async (req: AuthRequest, res: Response, next) => {
   try {
     const templates = await prisma.projectTemplate.findMany({
       where: { organizationId: req.user!.organizationId },

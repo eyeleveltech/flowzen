@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores';
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { Zap, Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
+  usePageTitle('Login');
   const router = useRouter();
   const { setAuth } = useAuthStore();
   const [email, setEmail] = useState('');

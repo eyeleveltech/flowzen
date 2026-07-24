@@ -66,7 +66,10 @@ interface MemberDetail {
 
 import { StatusBadge } from '@/components/ui/status-badge';
 
+import { usePageTitle } from '@/hooks/usePageTitle';
+
 export default function TeamPage() {
+  usePageTitle('Team Members');
   const { user: currentUser } = useAuthStore();
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);

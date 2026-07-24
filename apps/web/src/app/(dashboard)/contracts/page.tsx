@@ -7,7 +7,10 @@ import { formatCurrency, formatDate } from '@/lib/utils';
 import { FileText, Plus } from 'lucide-react';
 import { ContractFormModal } from './components/ContractFormModal';
 
+import { usePageTitle } from '@/hooks/usePageTitle';
+
 export default function ContractsPage() {
+  usePageTitle('Contracts');
   const [showModal, setShowModal] = useState(false);
 
   const { data, isLoading, refetch } = useQuery({

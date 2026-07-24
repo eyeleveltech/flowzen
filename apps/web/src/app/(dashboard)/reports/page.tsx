@@ -9,6 +9,7 @@ import { formatDate, formatCurrency, getAvatarColor, getInitials, getClientDispl
 import { PieChart, ListTodo, Users, FolderKanban, Clock, AlertTriangle, TrendingUp, LayoutDashboard, IndianRupee, Target, Trophy, Download } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { useExecutiveReport } from '@/hooks/useQueries';
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer, PieChart as RPieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 
 const COLORS = ['#111827', '#4B5563', '#9CA3AF', '#D1D5DB', '#F3F4F6'];
@@ -87,10 +88,13 @@ export default function ReportsPage() {
     }
   }, [activeModule, tab]);
 
+  usePageTitle('Reports');
   const [datePreset, setDatePreset] = useState('this_quarter');
   const [customRange, setCustomRange] = useState({ start: '', end: '' });
   const dateRange = computeRange(datePreset, customRange);
-  const { data: exec } = useExecutiveReport(dateRange);
+
+  const canAccessReports = !!user && ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'].includes(user.role);
+  const { data: exec } = useExecutiveReport(dateRange, canAccessReports);
 
   interface Department {
     id: string;
@@ -101,8 +105,10 @@ export default function ReportsPage() {
   const [selectedDepartment, setSelectedDepartment] = useState<string>('');
 
   useEffect(() => {
+    if (!user) return;
+    if (!canAccessReports) return;
     api.get<{ teams: Department[] }>('/teams').then((res) => setDepartments(res.teams || [])).catch(() => { });
-  }, []);
+  }, [user, canAccessReports]);
 
   const [projectReport, setProjectReport] = useState<ProjectReport | null>(null);
   const [taskReport, setTaskReport] = useState<TaskReport | null>(null);
@@ -110,7 +116,8 @@ export default function ReportsPage() {
   const [clientReport, setClientReport] = useState<ClientReport | null>(null);
 
   useEffect(() => {
-    if (user && user.role === 'TEAM_MEMBER') {
+    if (!user) return;
+    if (user.role === 'TEAM_MEMBER') {
       router.push('/dashboard');
       return;
     }

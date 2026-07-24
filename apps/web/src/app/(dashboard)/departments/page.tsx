@@ -35,7 +35,10 @@ interface Team {
   members: User[];
 }
 
+import { usePageTitle } from '@/hooks/usePageTitle';
+
 export default function TeamsPage() {
+  usePageTitle('Departments');
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();

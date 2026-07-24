@@ -16,6 +16,9 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
   const [confirmOrgInput, setConfirmOrgInput] = useState('');
   const [transferring, setTransferring] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [reassignModal, setReassignModal] = useState<{ userId: string; userName: string; openTaskCount: number } | null>(null);
+  const [reassignTargetId, setReassignTargetId] = useState('');
+  const [reassigning, setReassigning] = useState(false);
 
   const authUser = useAuthStore(state => state.user);
   const effectiveCurrentUser = currentUser || authUser;
@@ -122,20 +125,41 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
     }
   };
 
-  const handleDeactivate = async (userId: string) => {
-    const isConfirmed = await confirm({
-      title: 'Deactivate User',
-      message: 'Are you sure you want to deactivate this user?',
-      confirmText: 'Deactivate',
-      variant: 'warning'
-    });
-    if (!isConfirmed) return;
+  const handleDeactivate = async (u: any, reassignToId?: string) => {
+    const targetId = typeof u === 'string' ? u : u.id;
+    const targetName = typeof u === 'string' ? (users.find(usr => usr.id === u)?.name || 'this user') : u.name;
+
+    if (!reassignToId) {
+      const isConfirmed = await confirm({
+        title: 'Deactivate User',
+        message: `Are you sure you want to deactivate ${targetName}?`,
+        confirmText: 'Deactivate',
+        variant: 'warning'
+      });
+      if (!isConfirmed) return;
+    }
+
     try {
-      await api.put(`/settings/users/${userId}`, { status: 'INACTIVE' });
-      toast.success('User deactivated');
-      refreshMembers();
+      setReassigning(true);
+      const payload: any = { status: 'INACTIVE' };
+      if (reassignToId) payload.reassignTo = reassignToId;
+      await api.put(`/settings/users/${targetId}`, payload);
+      toast.success('User deactivated successfully');
+      setReassignModal(null);
+      setReassignTargetId('');
+      fetchUsers();
     } catch (err: any) {
-      toast.error(err.message || 'Failed to deactivate user');
+      if (err?.status === 409 && err?.openTaskCount) {
+        setReassignModal({
+          userId: targetId,
+          userName: targetName,
+          openTaskCount: err.openTaskCount,
+        });
+      } else {
+        toast.error(err?.message || 'Failed to deactivate user');
+      }
+    } finally {
+      setReassigning(false);
     }
   };
 
@@ -237,7 +261,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                       </button>
                       {u.status !== 'INACTIVE' && (
                         <button
-                          onClick={() => handleDeactivate(u.id)}
+                          onClick={() => handleDeactivate(u)}
                           title="Deactivate user"
                           className="px-2.5 py-1 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 rounded-lg transition-colors flex items-center gap-1.5 shrink-0"
                         >
@@ -309,7 +333,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                   </button>
                   {u.status !== 'INACTIVE' && (
                     <button
-                      onClick={() => handleDeactivate(u.id)}
+                      onClick={() => handleDeactivate(u)}
                       title="Deactivate user"
                       className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 rounded-xl transition-all flex items-center gap-1 shrink-0"
                     >
@@ -509,6 +533,62 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                   className="flex-1 bg-amber-600 text-white px-4 py-2.5 rounded-xl font-medium hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {transferring ? 'Transferring...' : 'Transfer Role'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Reassign Open Tasks Modal on Deactivation */}
+      <AnimatePresence>
+        {reassignModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-border space-y-4"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-primary">Reassign Open Tasks</h3>
+                <button onClick={() => setReassignModal(null)} className="text-secondary hover:text-primary"><X className="h-5 w-5" /></button>
+              </div>
+
+              <p className="text-sm text-secondary">
+                <strong className="text-primary">{reassignModal.userName}</strong> has <strong>{reassignModal.openTaskCount} open task(s)</strong> assigned. Select an active team member to reassign these tasks to before deactivating.
+              </p>
+
+              <div>
+                <label className="block text-xs font-semibold text-secondary uppercase tracking-wider mb-1.5">Reassign Tasks To</label>
+                <Select
+                  value={reassignTargetId}
+                  onChange={(val) => setReassignTargetId(val)}
+                  options={[
+                    { value: '', label: 'Select Team Member...' },
+                    ...users
+                      .filter((usr) => usr.id !== reassignModal.userId && usr.status === 'ACTIVE')
+                      .map((usr) => ({ value: usr.id, label: `${usr.name} (${usr.role.replace(/_/g, ' ')})` }))
+                  ]}
+                  placeholder="Select replacement..."
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setReassignModal(null)}
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-border text-secondary font-medium hover:bg-surface transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeactivate(reassignModal.userId, reassignTargetId)}
+                  disabled={!reassignTargetId || reassigning}
+                  className="flex-1 bg-amber-600 text-white px-4 py-2.5 rounded-xl font-medium hover:bg-amber-700 transition-colors disabled:opacity-50"
+                >
+                  {reassigning ? 'Reassigning...' : 'Reassign & Deactivate'}
                 </button>
               </div>
             </motion.div>

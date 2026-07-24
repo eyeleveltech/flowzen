@@ -7,7 +7,10 @@ import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores';
 import { Zap, Eye, EyeOff } from 'lucide-react';
 
+import { usePageTitle } from '@/hooks/usePageTitle';
+
 export default function RegisterPage() {
+  usePageTitle('Register');
   const router = useRouter();
   const { setAuth } = useAuthStore();
   const [name, setName] = useState('');

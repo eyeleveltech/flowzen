@@ -86,6 +86,23 @@ export function formatCurrency(value: number | null | undefined): string {
   }).format(value);
 }
 
+export function formatCurrencyCompact(value: number | null | undefined): string {
+  if (value == null) return '—';
+  const abs = Math.abs(value);
+  const sign = value < 0 ? '- ' : '';
+
+  if (abs >= 1_00_00_000) {
+    const cr = value / 1_00_00_000;
+    if (abs >= 1_00_00_00_000) return `${sign}₹${Math.round(cr)} Cr`;
+    return `${sign}₹${cr.toFixed(2)} Cr`;
+  }
+  if (abs >= 1_00_000) {
+    const l = value / 1_00_000;
+    return `${sign}₹${l.toFixed(1)} L`;
+  }
+  return `${sign}₹${Math.abs(value).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+}
+
 export function getInitials(name: string): string {
   if (!name) return '??';
   const cleanName = name.replace(/[^a-zA-Z0-9 ]/g, '').trim();

@@ -20,7 +20,10 @@ const STATUS_STYLES: Record<string, string> = {
   CANCELLED: 'bg-red-50 text-red-700 border-red-200',
 };
 
+import { usePageTitle } from '@/hooks/usePageTitle';
+
 export default function QuotationsPage() {
+  usePageTitle('Quotations');
   const queryClient = useQueryClient();
   const confirm = useConfirmStore((s) => s.confirm);
   const [search, setSearch] = useState('');

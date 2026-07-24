@@ -9,7 +9,10 @@ import { Select } from '@/components/ui/select';
 import { useTeams, useMembers } from '@/hooks/useQueries';
 import { useQueryClient } from '@tanstack/react-query';
 
+import { usePageTitle } from '@/hooks/usePageTitle';
+
 export default function ProfilePage() {
+  usePageTitle('Profile');
   const { user, setAuth } = useAuthStore();
   const queryClient = useQueryClient();
   const { data: teams = [] } = useTeams();

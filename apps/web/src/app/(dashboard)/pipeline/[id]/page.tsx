@@ -20,6 +20,8 @@ import { TimelineTab } from '../components/TimelineTab';
 import { ContactsTab } from '../components/ContactsTab';
 import { OverflowMarquee } from '@/components/ui/overflow-marquee';
 import { useConfirmStore } from '@/stores';
+import { NoAccess } from '@/components/ui/no-access';
+import { NotFoundPanel } from '@/components/ui/not-found-panel';
 
 function SocialLink({ platform, input }: { platform: 'linkedin' | 'instagram' | 'facebook', input?: string | null }) {
   if (!input) return <span className="text-sm font-medium text-gray-400">—</span>;
@@ -83,9 +85,10 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   // Safe unwrapping for Next.js 15 async params
   const { id: leadId } = use(params);
 
-  const { data: lead, isLoading } = useQuery({
+  const { data: lead, isLoading, error } = useQuery({
     queryKey: ['lead', leadId],
-    queryFn: () => api.get<any>(`/crm/leads/${leadId}`)
+    queryFn: () => api.get<any>(`/crm/leads/${leadId}`),
+    retry: false,
   });
 
   const stageMutation = useMutation({
@@ -115,8 +118,12 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
     return <div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>;
   }
 
-  if (!lead) {
-    return <div className="p-8 text-center text-gray-500">Lead not found</div>;
+  if ((error as any)?.status === 403) {
+    return <NoAccess title="Access Restricted" message="You do not have permission or CRM module access to view this lead." backHref="/pipeline" backLabel="Back to Pipeline" />;
+  }
+
+  if (error || !lead) {
+    return <NotFoundPanel title="Lead Not Found" message="The requested lead could not be found or has been removed." backHref="/pipeline" backLabel="Back to Pipeline" />;
   }
 
   const displayName = lead.companyName || lead.contactName || lead.client?.company || lead.client?.name || 'Lead';

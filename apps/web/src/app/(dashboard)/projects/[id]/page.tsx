@@ -44,6 +44,8 @@ interface ProjectDetail {
 }
 
 import { StatusBadge } from '@/components/ui/status-badge';
+import { NoAccess } from '@/components/ui/no-access';
+import { NotFoundPanel } from '@/components/ui/not-found-panel';
 import { getPriorityDot } from '@/lib/priority';
 
 type Tab = 'tasks' | 'team' | 'activity' | 'comments';
@@ -155,9 +157,21 @@ export default function ProjectDetailPage() {
   const [submittingComment, setSubmittingComment] = useState(false);
   const [viewModalContent, setViewModalContent] = useState<{ title: string, content: string } | null>(null);
 
+  const [loading, setLoading] = useState(true);
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
+
   const fetchProject = useCallback(() => {
-    api.get<ProjectDetail>(`/projects/${id}`).then(setProject).catch(() => router.push('/projects'));
-  }, [id, router]);
+    api.get<ProjectDetail>(`/projects/${id}`)
+      .then((data) => {
+        setProject(data);
+        setErrorStatus(null);
+      })
+      .catch((err: any) => {
+        if (err?.status === 403) setErrorStatus(403);
+        else setErrorStatus(404);
+      })
+      .finally(() => setLoading(false));
+  }, [id]);
 
   useEffect(() => {
     fetchProject();
@@ -510,6 +524,14 @@ export default function ProjectDetailPage() {
   } else {
     // Default: priority descending
     finalTasks.sort((a, b) => (priorityOrder[b.priority] || 0) - (priorityOrder[a.priority] || 0));
+  }
+
+  if (loading) return <div className="py-20 text-center text-sm text-secondary">Loading...</div>;
+  if (errorStatus === 403) {
+    return <NoAccess title="Access Restricted" message="You do not have permission or module access to view this project." backHref="/projects" backLabel="Back to Projects" />;
+  }
+  if (errorStatus === 404 || !project) {
+    return <NotFoundPanel title="Project Not Found" message="The requested project could not be found or has been removed." backHref="/projects" backLabel="Back to Projects" />;
   }
 
   const hasTaskFilters = !!(taskSearch || taskStatusFilter.length || taskAssigneeFilter.length || taskTypeFilter.length || taskDueDateFilter || showCompleted || taskPriorityFilter.length || taskSort);

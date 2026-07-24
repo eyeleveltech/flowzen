@@ -69,7 +69,7 @@ export function computeQuoteFinancials(items: LineInput[]): QuoteFinancials {
   untaxed = round2(untaxed);
   cgst = round2(cgst); sgst = round2(sgst); igst = round2(igst);
   const totalTax = round2(cgst + sgst + igst);
-  const grandTotal = round2(untaxed + totalTax);
+  const grandTotal = Math.round(round2(untaxed + totalTax));
 
   return {
     untaxedAmount: untaxed,
@@ -79,7 +79,7 @@ export function computeQuoteFinancials(items: LineInput[]): QuoteFinancials {
     igst,
     totalTax,
     grandTotal,
-    amountInWords: amountInWords(Math.round(grandTotal)),
+    amountInWords: amountInWords(grandTotal),
     lineAmounts,
     rcm,
   };

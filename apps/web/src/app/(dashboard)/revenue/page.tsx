@@ -1,18 +1,26 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
-import { DollarSign, TrendingUp, Wallet, ArrowUpRight } from 'lucide-react';
+import { DollarSign, TrendingUp, Wallet, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/utils';
+
+import { NoAccess } from '@/components/ui/no-access';
 
 export default function RevenueOverviewPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
 
   useEffect(() => {
     api.get('/revenue/overview')
-      .then(setData)
+      .then((res) => { setData(res); setErrorStatus(null); })
+      .catch((err: any) => {
+        if (err?.status === 403) setErrorStatus(403);
+        else setErrorStatus(404);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -24,6 +32,10 @@ export default function RevenueOverviewPage() {
     );
   }
 
+  if (errorStatus === 403) {
+    return <NoAccess title="Access Restricted" message="You do not have permission or CRM module access to view revenue overview." backHref="/dashboard" backLabel="Back to Dashboard" />;
+  }
+
   const kpis = [
     { label: 'Paid This Month', value: data?.paidThisMonth || 0, icon: DollarSign, trend: data?.paidTrend || '0%' },
     { label: 'MRR', value: data?.mrr || 0, icon: TrendingUp, trend: data?.mrrTrend || '0%' },
@@ -32,37 +44,61 @@ export default function RevenueOverviewPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-primary">Revenue Overview</h1>
+          <h1 className="text-2xl font-semibold text-primary tracking-tight">Revenue Overview</h1>
           <p className="mt-1 text-sm text-secondary">Monitor your monthly payments, MRR, and receivables.</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-        {kpis.map((kpi, i) => (
-          <motion.div
-            key={kpi.label}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.1 }}
-            className="flex flex-col rounded-2xl border border-border bg-white p-6 shadow-sm"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                <kpi.icon className="h-6 w-6" />
+        {kpis.map((kpi, i) => {
+          const trendStr = kpi.trend || '0%';
+          const trendNum = parseFloat(trendStr);
+          const isNegative = trendNum < 0;
+          const isZero = trendNum === 0;
+
+          return (
+            <motion.div
+              key={kpi.label}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.1 }}
+              className="flex flex-col rounded-2xl border border-border bg-white p-6 shadow-sm"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                  <kpi.icon className="h-6 w-6" />
+                </div>
+                <span className={`flex items-center text-sm font-medium px-2 py-1 rounded-md ${
+                  isNegative ? 'text-red-600 bg-red-50' : 'text-emerald-600 bg-emerald-50'
+                }`}>
+                  {kpi.trend}
+                  {!isZero && (isNegative ? <ArrowDownRight className="ml-1 h-3 w-3" /> : <ArrowUpRight className="ml-1 h-3 w-3" />)}
+                </span>
               </div>
-              <span className="flex items-center text-sm font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">
-                {kpi.trend} <ArrowUpRight className="ml-1 h-3 w-3" />
-              </span>
-            </div>
-            <div className="mt-4">
-              <p className="text-sm font-medium text-secondary">{kpi.label}</p>
-              <h3 className="mt-1 text-3xl font-bold text-primary">{formatCurrency(kpi.value)}</h3>
-            </div>
-          </motion.div>
-        ))}
+              <div className="mt-4">
+                <p className="text-sm font-medium text-secondary">{kpi.label}</p>
+                <h3 className="mt-1 text-3xl font-bold text-primary">{formatCurrency(kpi.value)}</h3>
+              </div>
+            </motion.div>
+          );
+        })}
       </div>
+
+      {(!data?.paidThisMonth && !data?.mrr && !data?.receivables) && (
+        <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-sm">
+          <p className="text-secondary">
+            Revenue metrics will populate here once you have active clients with payments or contracts.
+          </p>
+          <Link
+            href="/clients"
+            className="text-xs font-semibold text-primary hover:text-black shrink-0 underline decoration-gray-300 underline-offset-4"
+          >
+            Add your first client →
+          </Link>
+        </div>
+      )}
 
       <div className="rounded-2xl border border-border bg-white shadow-sm overflow-hidden">
         <div className="border-b border-border px-6 py-5">

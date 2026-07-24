@@ -8,8 +8,9 @@ import { useAuthStore, useModuleStore } from '@/stores';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatDate, formatCurrency, getInitials, getAvatarColor, getClientDisplayName } from '@/lib/utils';
+import Link from 'next/link';
 import {
-  Plus, Search, Filter, Users, Building2, Mail, Phone, X, ChevronRight, FolderKanban, Download, Upload, FileText, List, LayoutGrid, Columns, Check, Settings
+  Plus, Search, Filter, Users, Building2, Mail, Phone, X, ChevronRight, FolderKanban, Download, Upload, FileText, List, LayoutGrid, Columns, Check, Settings, Briefcase
 } from 'lucide-react';
 import { ClientTimelineView } from '@/components/clients/client-timeline-view';
 import { Select } from '@/components/ui/select';
@@ -57,7 +58,10 @@ const INDUSTRY_OPTIONS = [
   'Food & Beverage', 'Automotive', 'Non-Profit', 'Professional Services', 'Other',
 ];
 
+import { usePageTitle } from '@/hooks/usePageTitle';
+
 function ClientsContent() {
+  usePageTitle('Clients');
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuthStore();
@@ -620,8 +624,26 @@ function ClientsContent() {
               ))
             ) : clients.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-12 text-center text-sm text-secondary">
-                  No clients found. Add your first client to get started.
+                <td colSpan={7} className="px-6 py-16 text-center">
+                  <Briefcase className="h-12 w-12 text-secondary/40 mx-auto mb-3" />
+                  <h3 className="text-sm font-semibold text-primary mb-1">No clients yet</h3>
+                  <p className="text-sm text-secondary mb-6 max-w-sm mx-auto">
+                    Add your first client to start tracking projects, contracts, and revenue.
+                  </p>
+                  <div className="flex items-center justify-center gap-3">
+                    <button
+                      onClick={() => setShowCreate(true)}
+                      className="bg-primary text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-black transition-colors"
+                    >
+                      + Add Client
+                    </button>
+                    <Link
+                      href="/pipeline?create=true"
+                      className="border border-border text-primary text-xs font-semibold px-4 py-2 rounded-xl hover:bg-gray-50 transition-colors"
+                    >
+                      + Add Lead Instead
+                    </Link>
+                  </div>
                 </td>
               </tr>
             ) : (
@@ -717,8 +739,26 @@ function ClientsContent() {
             </div>
           ))
         ) : clients.length === 0 ? (
-          <div className="p-8 text-center text-sm text-secondary bg-white rounded-xl border border-border">
-            No clients found.
+          <div className="p-8 text-center bg-white rounded-xl border border-border">
+            <Briefcase className="h-10 w-10 text-secondary/40 mx-auto mb-3" />
+            <h3 className="text-sm font-semibold text-primary mb-1">No clients yet</h3>
+            <p className="text-xs text-secondary mb-4">
+              Add your first client to start tracking projects and revenue.
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => setShowCreate(true)}
+                className="bg-primary text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-black transition-colors"
+              >
+                + Add Client
+              </button>
+              <Link
+                href="/pipeline?create=true"
+                className="border border-border text-primary text-xs font-semibold px-4 py-2 rounded-xl hover:bg-gray-50 transition-colors"
+              >
+                + Add Lead Instead
+              </Link>
+            </div>
           </div>
         ) : (
           clients.map((client) => (

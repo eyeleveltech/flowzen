@@ -95,7 +95,7 @@ quoteRouter.post('/', validate(quoteSchema), async (req: AuthRequest, res: Respo
     const orgId = req.user!.organizationId;
     const body = req.body as z.infer<typeof quoteSchema>;
 
-    const client = await prisma.client.findFirst({ where: { id: body.clientId, organizationId: orgId } });
+    const client = await prisma.client.findFirst({ where: { id: body.clientId, organizationId: orgId, archivedAt: null } });
     if (!client) {
       res.status(404).json({ error: 'Client not found.' });
       return;
@@ -189,7 +189,7 @@ quoteRouter.patch('/:id', validate(quoteSchema.partial().extend({ lineItems: z.a
     if (existing.status === 'CANCELLED') { res.status(400).json({ error: 'Cancelled documents cannot be edited.' }); return; }
 
     const body = req.body as any;
-    const client = await prisma.client.findFirst({ where: { id: existing.clientId, organizationId: orgId } });
+    const client = await prisma.client.findFirst({ where: { id: existing.clientId, organizationId: orgId, archivedAt: null } });
     const orgState = await getOrgState(orgId);
 
     let fin = null as ReturnType<typeof computeQuoteFinancials> | null;

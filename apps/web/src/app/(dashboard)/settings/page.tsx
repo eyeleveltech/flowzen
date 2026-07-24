@@ -22,7 +22,10 @@ import { ErrorPanel } from '@/components/ui/error-panel';
 
 type Tab = 'organization' | 'modules' | 'billing' | 'users' | 'templates' | 'permissions' | 'workflows' | 'notifications' | 'audit' | 'api';
 
+import { usePageTitle } from '@/hooks/usePageTitle';
+
 export default function SettingsPage() {
+  usePageTitle('Settings');
   const { user } = useAuthStore();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('organization');

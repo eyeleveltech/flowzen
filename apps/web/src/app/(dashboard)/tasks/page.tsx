@@ -89,7 +89,10 @@ function AssigneeAvatars({ task, size = 26 }: { task: { assignees?: AssigneePers
   );
 }
 
+import { usePageTitle } from '@/hooks/usePageTitle';
+
 function TasksContent() {
+  usePageTitle('Tasks');
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuthStore();

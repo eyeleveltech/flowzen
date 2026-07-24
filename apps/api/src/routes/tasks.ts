@@ -53,7 +53,7 @@ const taskSchema = z.object({
 taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const { search, status, priority, projectId, assigneeId, type, clientId, filter, teamId, sort, dueDateFrom, dueDateTo, page = '1', limit = '50' } = req.query;
+    const { search, status, priority, projectId, assigneeId, type, clientId, filter, teamId, sort, dueDateFrom, dueDateTo, page = '1', limit = '50', orphaned } = req.query;
 
     const projectFilter: any = { client: { organizationId: orgId } };
     if (clientId) projectFilter.clientId = whereIn(clientId);
@@ -102,6 +102,16 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
       }
     } else if (filter === 'approval') {
       where.status = 'REVIEW';
+    }
+
+    if (orphaned === 'true') {
+      andConditions.push({
+        OR: [
+          { assigneeId: null },
+          { assignee: { status: 'INACTIVE' } },
+          { assignees: { some: { status: 'INACTIVE' } } },
+        ],
+      });
     }
 
 

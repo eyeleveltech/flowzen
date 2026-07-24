@@ -65,6 +65,7 @@ searchRouter.get('/', async (req: AuthRequest, res: Response, next) => {
         ? prisma.client.findMany({
             where: {
               organizationId: orgId,
+              archivedAt: null,
               ...buildSearchFilter(['name', 'company'], query),
             },
             select: { id: true, name: true, company: true, status: true },

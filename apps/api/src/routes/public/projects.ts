@@ -102,15 +102,20 @@ projectRouter.post('/', async (req: Request, res: Response) => {
     let finalClientId = clientId;
     if (!finalClientId) {
       const org = await prisma.organization.findUnique({ where: { id: orgId } });
-      const internalName = `${org?.name || 'Internal'} (Internal)`;
-      
+
       let internalClient = await prisma.client.findFirst({
-        where: { organizationId: orgId, name: internalName }
+        where: { organizationId: orgId, engagementType: 'INTERNAL' }
       });
 
       if (!internalClient) {
         internalClient = await prisma.client.create({
-          data: { name: internalName, organizationId: orgId, status: 'ACTIVE' }
+          data: {
+            name: 'Internal',
+            company: org?.name || '',
+            organizationId: orgId,
+            status: 'ACTIVE',
+            engagementType: 'INTERNAL'
+          }
         });
       }
       finalClientId = internalClient.id;

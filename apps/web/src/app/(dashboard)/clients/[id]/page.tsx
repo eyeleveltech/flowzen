@@ -14,6 +14,8 @@ import { useMembers } from '@/hooks/useQueries';
 import { useConfirmStore, useModuleStore } from '@/stores';
 import { CreateProjectModal } from '@/components/projects/create-project-modal';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { NoAccess } from '@/components/ui/no-access';
+import { NotFoundPanel } from '@/components/ui/not-found-panel';
 
 interface ClientContact {
   id: string; name: string; designation?: string | null; email?: string | null; phone?: string | null;
@@ -65,9 +67,22 @@ export default function ClientDetailPage() {
   const [editError, setEditError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [orgProfile, setOrgProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
 
   useEffect(() => {
-    const fetchClient = () => api.get<ClientDetail>(`/clients/${id}`).then(setClient).catch(() => router.push('/clients'));
+    const fetchClient = () =>
+      api.get<ClientDetail>(`/clients/${id}`)
+        .then((data) => {
+          setClient(data);
+          setErrorStatus(null);
+        })
+        .catch((err: any) => {
+          if (err?.status === 403) setErrorStatus(403);
+          else setErrorStatus(404);
+        })
+        .finally(() => setLoading(false));
+
     fetchClient();
 
     const sse = getSSE();
@@ -82,7 +97,7 @@ export default function ClientDetailPage() {
         sse.off('client:updated', handleUpdate);
       };
     }
-  }, [id, router]);
+  }, [id]);
 
   useEffect(() => {
     if (client && client.name === 'Internal') {
@@ -167,7 +182,13 @@ export default function ClientDetailPage() {
     }
   }
 
-  if (!client) return <div className="py-20 text-center text-sm text-secondary">Loading...</div>;
+  if (loading) return <div className="py-20 text-center text-sm text-secondary">Loading...</div>;
+  if (errorStatus === 403) {
+    return <NoAccess title="Access Restricted" message="You do not have permission or module access to view this client." backHref="/clients" backLabel="Back to Clients" />;
+  }
+  if (errorStatus === 404 || !client) {
+    return <NotFoundPanel title="Client Not Found" message="The requested client could not be found or has been removed." backHref="/clients" backLabel="Back to Clients" />;
+  }
 
   const tabs = [
     { id: 'overview' as Tab, label: 'Overview' },

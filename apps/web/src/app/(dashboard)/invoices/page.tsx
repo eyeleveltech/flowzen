@@ -15,7 +15,10 @@ const STATUS_STYLES: Record<string, string> = {
   CANCELLED: 'bg-red-50 text-red-700 border-red-200',
 };
 
+import { usePageTitle } from '@/hooks/usePageTitle';
+
 export default function InvoicesPage() {
+  usePageTitle('Invoices');
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
