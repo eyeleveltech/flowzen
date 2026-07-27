@@ -8,6 +8,7 @@ import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
 import { NotificationService } from '../services/notifications.js';
 import { whereIn } from '../utils/query.js';
 import { createAuditLog } from '../utils/audit.js';
+import { sanitizeRichText } from '../utils/html.js';
 import { buildSearchFilter } from '../utils/search-utils.js';
 
 export const clientRouter = Router();
@@ -148,6 +149,8 @@ clientRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
 clientRouter.post('/', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), validate(clientSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const { contacts, startDate, ...data } = req.body;
+    // Scope is rich-text HTML rendered raw in the UI — strip anything executable on write.
+    data.scope = sanitizeRichText(data.scope);
 
     // Rule: a client must have at least one contact phone number.
     const hasContactPhone = Array.isArray(contacts) && contacts.some((c: any) => c.phone && String(c.phone).trim());
@@ -244,7 +247,7 @@ clientRouter.post('/bulk', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN
           website: data.website || null,
           city: data.city || null,
           address: data.address || null,
-          scope: data.scope || null,
+          scope: sanitizeRichText(data.scope) || null,
           assetLinks: data.assetLinks || null,
           startDate: data.startDate ? new Date(data.startDate) : null,
           contractValue: data.contractValue ? parseFloat(data.contractValue) : null,
@@ -305,6 +308,8 @@ clientRouter.put('/:id', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN',
     }
 
     const { contacts, startDate, ...data } = req.body;
+    // Scope is rich-text HTML rendered raw in the UI — strip anything executable on write.
+    data.scope = sanitizeRichText(data.scope);
 
     // Enforce unique client name when renaming (case-insensitive, excluding self).
     const newName = String(data.name || '').trim();
@@ -319,23 +324,32 @@ clientRouter.put('/:id', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN',
       }
     }
 
+    const updateData: any = {
+      ...data,
+      name: newName || existing.name,
+      accountManagerId: data.accountManagerId || null,
+      startDate: startDate ? new Date(startDate) : undefined,
+    };
+
+    // Only replace contacts when the request actually sends a contacts array. The previous
+    // unconditional `deleteMany: {}` meant ANY update that omitted contacts (e.g. changing
+    // just the GST number or status) silently deleted every contact on the client. A partial
+    // update must leave contacts it didn't mention untouched.
+    if (Array.isArray(contacts)) {
+      updateData.contacts = {
+        deleteMany: {},
+        create: contacts.map((c: any) => ({
+          name: c.name,
+          designation: c.designation,
+          email: c.email,
+          phone: c.phone,
+        })),
+      };
+    }
+
     const updated = await prisma.client.update({
       where: { id: existing.id },
-      data: {
-        ...data,
-        name: newName || existing.name,
-        accountManagerId: data.accountManagerId || null,
-        startDate: startDate ? new Date(startDate) : undefined,
-        contacts: {
-          deleteMany: {},
-          create: contacts?.map((c: any) => ({
-            name: c.name,
-            designation: c.designation,
-            email: c.email,
-            phone: c.phone
-          })) || []
-        }
-      },
+      data: updateData,
       include: { contacts: true }
     });
 

@@ -151,8 +151,15 @@ export function triggerHaptic(type: 'light' | 'medium' | 'heavy' = 'medium') {
 
 export function getClientDisplayName(client: { name: string, company?: string | null } | null | undefined): string {
   if (!client) return '—';
-  if (client.name === 'Internal') return client.company || 'Internal';
+  // The hidden "Internal" account holds an org's own projects. Show it as "Internal · <Org>"
+  // (company holds the org name) so people can tell an internal project from client work.
+  if (client.name === 'Internal') return client.company ? `Internal · ${client.company}` : 'Internal';
   return client.company || client.name;
+}
+
+/** True for the hidden per-org "Internal" account that own-organization projects file under. */
+export function isInternalClient(client: { name?: string | null; engagementType?: string | null } | null | undefined): boolean {
+  return !!client && (client.name === 'Internal' || client.engagementType === 'INTERNAL');
 }
 
 export function toProperCase(str: string): string {

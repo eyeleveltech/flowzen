@@ -16,7 +16,7 @@ import { useAuthStore, useTimeTrackingStore } from '@/stores';
 import { useProjects, useMembers, useClients } from '@/hooks/useQueries';
 import { useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { getClientDisplayName } from '@/lib/utils';
+import { getClientDisplayName, isInternalClient } from '@/lib/utils';
 
 const taskSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -91,10 +91,23 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
   const { data: clients = [] } = useClients();
 
   const clientOptions = useMemo(() => {
-    return clients
+    const opts = clients
       .filter((c: any) => c.status !== 'CHURNED')
       .map((c: any) => ({ label: getClientDisplayName(c), value: c.id }));
-  }, [clients]);
+
+    // The hidden "Internal" account isn't in the clients list, but own-org projects reference
+    // it. Surface it here (derived from the projects that use it) so "Internal · <Org>" is
+    // selectable and filters the project list to internal projects — the same client→project
+    // flow used for client work.
+    const seen = new Set(opts.map((o) => o.value));
+    for (const p of projects as any[]) {
+      if (isInternalClient(p.client) && p.client?.id && !seen.has(p.client.id)) {
+        seen.add(p.client.id);
+        opts.unshift({ label: getClientDisplayName(p.client), value: p.client.id });
+      }
+    }
+    return opts;
+  }, [clients, projects]);
 
   const isEditing = !!taskToEdit;
 

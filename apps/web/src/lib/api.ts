@@ -44,10 +44,14 @@ class ApiClient {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Request failed' }));
-      if (error.details) {
-        throw new Error(`${error.error}: ${JSON.stringify(error.details)}`);
-      }
-      throw new Error(error.error || 'Request failed');
+      const err: any = new Error(
+        error.details ? `${error.error}: ${JSON.stringify(error.details)}` : (error.error || 'Request failed')
+      );
+      // Surface the HTTP status and any machine-readable code so callers can branch on them
+      // (e.g. a 409 DEAL_CLOSED prompts a reopen confirmation instead of just erroring).
+      err.status = response.status;
+      if (error.code) err.code = error.code;
+      throw err;
     }
 
     return response.json();

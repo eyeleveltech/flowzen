@@ -13,7 +13,6 @@ async function main() {
   await prisma.comment.deleteMany();
   await prisma.note.deleteMany();
   await prisma.task.deleteMany();
-  await prisma.milestone.deleteMany();
   await prisma.projectMember.deleteMany();
   await prisma.project.deleteMany();
   await prisma.client.deleteMany();
@@ -254,20 +253,6 @@ async function main() {
   });
 
   console.log('  ✅ 5 projects created');
-
-  // Milestones
-  await prisma.milestone.createMany({
-    data: [
-      { name: 'Design Approval', dueDate: new Date('2025-03-15'), completed: true, projectId: project1.id },
-      { name: 'Frontend Complete', dueDate: new Date('2025-05-15'), completed: false, projectId: project1.id },
-      { name: 'Launch', dueDate: new Date('2025-06-30'), completed: false, projectId: project1.id },
-      { name: 'Requirements Sign-off', dueDate: new Date('2025-04-30'), completed: false, projectId: project2.id },
-      { name: 'Beta Launch', dueDate: new Date('2025-08-15'), completed: false, projectId: project2.id },
-      { name: 'Store Setup', dueDate: new Date('2025-05-01'), completed: true, projectId: project3.id },
-      { name: 'Payment Integration', dueDate: new Date('2025-06-15'), completed: false, projectId: project3.id },
-    ],
-  });
-  console.log('  ✅ 7 milestones created');
 
   // Tasks for Project 1 (Website Redesign)
   const t1 = await prisma.task.create({

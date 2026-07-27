@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
 import { hashPassword, comparePassword } from '../utils/password.js';
+import { generateToken } from '../utils/jwt.js';
 import { emitToOrganization } from '../sse.js';
 
 export const profileRouter = Router();
@@ -107,9 +108,27 @@ profileRouter.put('/password', async (req: AuthRequest, res: Response, next) => 
 
     const hashedPassword = await hashPassword(newPassword);
 
-    await prisma.user.update({
+    // Bump tokenVersion to revoke every existing session, then reissue a token for THIS
+    // session so the user who just changed their password stays logged in on this device
+    // while all other devices are signed out.
+    const updated = await prisma.user.update({
       where: { id: user.id },
-      data: { password: hashedPassword },
+      data: { password: hashedPassword, tokenVersion: { increment: 1 } },
+      select: { id: true, email: true, role: true, organizationId: true, tokenVersion: true },
+    });
+
+    const token = generateToken({
+      userId: updated.id,
+      email: updated.email,
+      role: updated.role,
+      organizationId: updated.organizationId,
+      tokenVersion: updated.tokenVersion,
+    });
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     res.json({ success: true, message: 'Password updated successfully' });

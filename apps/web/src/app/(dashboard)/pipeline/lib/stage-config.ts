@@ -8,8 +8,11 @@ export interface StageField {
   required?: boolean;
 }
 
-// Fields shown when MOVING INTO a stage — i.e. the "(previous) → stage" gate (brief §3.4).
-// `required: true` = HARD gate (blocks the transition). Others are SOFT (stored if filled).
+// Fields shown when MOVING INTO a stage — the "(previous) → stage" prompt (brief §3.4).
+// Policy: NO hard gates — every field below is optional (stored if filled, never blocks the
+// move). Stages can also be skipped/jumped freely. If you ever want to hard-gate a field, set
+// `required: true` here AND enforce it server-side in the stage service; the UI alone is not a
+// guarantee. (The only mandatory input is the Lost Reason on CHURNED, handled by the modal.)
 export const STAGE_FIELDS: Record<string, StageField[]> = {
   NEW_LEAD: [], // captured by the lead creation form; no notes required
 
@@ -39,8 +42,9 @@ export const STAGE_FIELDS: Record<string, StageField[]> = {
     { key: 'agreedFinalValue', label: 'Agreed Final Value (₹)', type: 'number', required: false },
   ],
 
-  // CONTRACT → ACTIVE_RETAINER / ACTIVE_PROJECT (Won & Closed → Active)
-  // Hard gate: signedContractLink REQUIRED — cannot proceed without it
+  // CONTRACT → ACTIVE_RETAINER / ACTIVE_PROJECT (Won & Closed → Active).
+  // Entering Active is what auto-creates the revenue record (retainer → subscription,
+  // project → contract). These fields are captured if filled but do not block the move.
   ACTIVE_RETAINER: [
     { key: 'signedContractLink', label: 'Signed Contract Document Link', type: 'text', required: false },
     { key: 'paymentTerms', label: 'Payment Terms', type: 'select', options: ['100% Advance', '50-50', 'Monthly', 'Milestone-based'], required: false },

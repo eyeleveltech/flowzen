@@ -17,6 +17,7 @@ import { ColumnDropdown } from '@/components/ui/column-dropdown';
 
 import { MultiSelect } from '@/components/ui/multi-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
+import { SafeHtml } from '@/components/ui/safe-html';
 import { TagsInput } from '@/components/ui/tags-input';
 import toast from 'react-hot-toast';
 import { useAuthStore, useConfirmStore, useTimeTrackingStore } from '@/stores';
@@ -38,7 +39,6 @@ interface ProjectDetail {
     assignedBy?: { id: string; name: string; avatar?: string | null } | null;
     _count?: { subtasks: number; comments: number };
   }[];
-  milestones?: { id: string; name: string; dueDate?: string | null; completed: boolean }[];
   activities?: { id: string; type: string; message: string; createdAt: string; user: { name: string } }[];
   comments?: { id: string; content: string; createdAt: string; author: { id: string; name: string; avatar?: string | null } }[];
 }
@@ -146,13 +146,6 @@ export default function ProjectDetailPage() {
   const [members, setMembers] = useState<{ id: string, name: string }[]>([]);
   const [teams, setTeams] = useState<{ id: string, name: string }[]>([]);
 
-  // Milestone States
-  const [showMilestoneModal, setShowMilestoneModal] = useState(false);
-  const [isEditingMilestone, setIsEditingMilestone] = useState(false);
-  const [editingMilestoneId, setEditingMilestoneId] = useState('');
-  const [milestoneForm, setMilestoneForm] = useState({ name: '', dueDate: '' });
-  const [submittingMilestone, setSubmittingMilestone] = useState(false);
-
   const [commentContent, setCommentContent] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
   const [viewModalContent, setViewModalContent] = useState<{ title: string, content: string } | null>(null);
@@ -182,7 +175,7 @@ export default function ProjectDetailPage() {
 
   // Lock body scroll when any drawer is open
   useEffect(() => {
-    const anyOpen = showEditProject || showCreateTask || !!editingTask || showMilestoneModal || !!viewModalContent;
+    const anyOpen = showEditProject || showCreateTask || !!editingTask || !!viewModalContent;
     if (anyOpen) {
       document.body.style.overflow = 'hidden';
     } else {
@@ -191,7 +184,7 @@ export default function ProjectDetailPage() {
     return () => {
       document.body.style.overflow = '';
     };
-  }, [showEditProject, showCreateTask, editingTask, showMilestoneModal, viewModalContent]);
+  }, [showEditProject, showCreateTask, editingTask, viewModalContent]);
 
   function startEditingTask(t: any, e?: React.MouseEvent) {
     e?.stopPropagation();
@@ -253,7 +246,7 @@ export default function ProjectDetailPage() {
   async function handleDeleteProject() {
     const confirmed = await confirm({
       title: 'Delete Project',
-      message: 'This permanently deletes the project, including its tasks and milestones. This action cannot be undone.',
+      message: 'This permanently deletes the project, including its tasks. This action cannot be undone.',
       confirmText: 'Delete Project',
       cancelText: 'Cancel',
       variant: 'danger',
@@ -331,71 +324,6 @@ export default function ProjectDetailPage() {
     } catch (err: any) {
       toast.error(err.message || 'Failed to delete task');
       console.error(err);
-    }
-  }
-
-  function openCreateMilestone() {
-    setMilestoneForm({ name: '', dueDate: '' });
-    setIsEditingMilestone(false);
-    setEditingMilestoneId('');
-    setShowMilestoneModal(true);
-  }
-
-  function startEditingMilestone(m: any, e: React.MouseEvent) {
-    e.stopPropagation();
-    setMilestoneForm({
-      name: m.name,
-      dueDate: m.dueDate ? new Date(m.dueDate).toISOString().split('T')[0] : '',
-    });
-    setEditingMilestoneId(m.id);
-    setIsEditingMilestone(true);
-    setShowMilestoneModal(true);
-  }
-
-  async function handleSaveMilestone(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmittingMilestone(true);
-    try {
-      if (isEditingMilestone) {
-        await api.put(`/projects/${id}/milestones/${editingMilestoneId}`, milestoneForm);
-      } else {
-        await api.post(`/projects/${id}/milestones`, milestoneForm);
-      }
-      toast.success(isEditingMilestone ? 'Milestone updated' : 'Milestone created');
-      setShowMilestoneModal(false);
-      fetchProject();
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to save milestone');
-    } finally { setSubmittingMilestone(false); }
-  }
-
-  async function handleDeleteMilestone(milestoneId: string, e: React.MouseEvent) {
-    e.stopPropagation();
-    const confirmed = await confirm({
-      title: 'Delete Milestone',
-      message: 'Are you sure you want to delete this milestone?',
-      confirmText: 'Delete',
-      cancelText: 'Cancel',
-      variant: 'danger',
-    });
-    if (!confirmed) return;
-    try {
-      await api.delete(`/projects/${id}/milestones/${milestoneId}`);
-      toast.success('Milestone deleted');
-      fetchProject();
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to delete milestone');
-    }
-  }
-
-  async function toggleMilestoneCompletion(milestoneId: string, currentStatus: boolean, e: React.MouseEvent) {
-    e.stopPropagation();
-    try {
-      await api.put(`/projects/${id}/milestones/${milestoneId}`, { completed: !currentStatus });
-      toast.success(currentStatus ? 'Milestone marked incomplete' : 'Milestone marked complete');
-      fetchProject();
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to toggle milestone');
     }
   }
 
@@ -668,9 +596,9 @@ export default function ProjectDetailPage() {
           <span className="block text-xs font-medium text-secondary uppercase tracking-wide mb-3">Description</span>
           {project.description ? (
             <>
-              <div
+              <SafeHtml
                 className="text-sm text-[#374151] line-clamp-2 prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: project.description }}
+                html={project.description}
               />
               <button
                 onClick={() => setViewModalContent({ title: 'Description', content: project.description || '' })}
@@ -687,9 +615,9 @@ export default function ProjectDetailPage() {
           <span className="block text-xs font-medium text-secondary uppercase tracking-wide mb-3">Scope of Work</span>
           {project.scope ? (
             <>
-              <div
+              <SafeHtml
                 className="text-sm text-[#374151] line-clamp-2 prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: project.scope }}
+                html={project.scope}
               />
               <button
                 onClick={() => setViewModalContent({ title: 'Scope of Work', content: project.scope || '' })}
@@ -705,9 +633,9 @@ export default function ProjectDetailPage() {
         {project.projectNotes && (
           <div className="bg-white rounded-2xl border border-border p-6 relative">
             <span className="block text-xs font-medium text-secondary uppercase tracking-wide mb-3">Internal Notes</span>
-            <div
+            <SafeHtml
               className="text-sm text-[#374151] line-clamp-2 prose prose-sm max-w-none"
-              dangerouslySetInnerHTML={{ __html: project.projectNotes }}
+              html={project.projectNotes}
             />
             <button
               onClick={() => setViewModalContent({ title: 'Internal Notes', content: project.projectNotes || '' })}
@@ -1423,38 +1351,11 @@ export default function ProjectDetailPage() {
                 <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
               </div>
               <div className="p-6 pb-24 md:pb-6 overflow-y-auto flex-1">
-                <div
+                <SafeHtml
                   className="prose prose-sm max-w-none text-[#374151]"
-                  dangerouslySetInnerHTML={{ __html: viewModalContent.content }}
+                  html={viewModalContent.content}
                 />
               </div>
-            </motion.div>
-          </>
-        )}
-
-        {/* Milestone Modal */}
-        {showMilestoneModal && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setShowMilestoneModal(false)} />
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
-                <h2 className="text-lg font-semibold text-primary">{isEditingMilestone ? 'Edit Milestone' : 'New Milestone'}</h2>
-                <button onClick={() => setShowMilestoneModal(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
-              </div>
-              <form onSubmit={handleSaveMilestone} className="p-6 pb-24 md:pb-6 space-y-4">
-                <div>
-                  <label htmlFor="ms-name" className="block text-sm font-medium text-[#374151] mb-1.5">Milestone Name *</label>
-                  <input id="ms-name" value={milestoneForm.name} onChange={(e) => setMilestoneForm({ ...milestoneForm, name: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                </div>
-                <div>
-                  <label htmlFor="ms-dueDate" className="block text-sm font-medium text-[#374151] mb-1.5">Due Date</label>
-                  <input id="ms-dueDate" type="date" value={milestoneForm.dueDate} onChange={(e) => setMilestoneForm({ ...milestoneForm, dueDate: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-                </div>
-                <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setShowMilestoneModal(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
-                  <button type="submit" disabled={submittingMilestone} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submittingMilestone ? 'Saving...' : 'Save Milestone'}</button>
-                </div>
-              </form>
             </motion.div>
           </>
         )}

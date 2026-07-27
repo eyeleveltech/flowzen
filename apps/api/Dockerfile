@@ -8,15 +8,20 @@ WORKDIR /app
 # Don't let Puppeteer download Chromium during install — we use a system Chromium at runtime.
 ENV PUPPETEER_SKIP_DOWNLOAD=1
 
-# Copy root config and API package
+# Copy root config and package manifests. The API imports @flowzen/shared (a workspace
+# package), so its manifest must be present at `npm ci` time for the workspace symlink to be
+# created — otherwise `tsc` can't resolve the import and the build fails.
 COPY package*.json ./
 COPY apps/api/package*.json ./apps/api/
+COPY packages/shared/package*.json ./packages/shared/
 
 # Install dependencies (workspaces need root install)
 RUN npm ci
 
-# Copy the rest of the API source
+# Copy the API source and the shared package source. @flowzen/shared's "main"/"types" point
+# at raw TS (src/index.ts), so tsc reads it directly — the source must be here to build.
 COPY apps/api ./apps/api
+COPY packages/shared ./packages/shared
 
 # Generate Prisma Client and build TypeScript
 WORKDIR /app/apps/api

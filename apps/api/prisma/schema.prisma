@@ -279,6 +279,10 @@ model User {
   phone          String?
   joiningDate    DateTime @default(now())
   status           UserStatus @default(PENDING)
+  // Bumped on password change / reset (and any forced "log out everywhere") to revoke every
+  // previously-issued JWT: a token carries the tokenVersion it was signed under, and auth
+  // rejects it once this no longer matches. Without it, a stolen token survived a reset.
+  tokenVersion     Int      @default(0)
   resetToken       String?  @unique
   resetTokenExpiry DateTime?
   lastActivityReadAt DateTime?
@@ -420,11 +424,13 @@ model Project {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
-  client     Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  // Restrict, not Cascade: a client's delivery history must never be wiped by deleting the
+  // client. Deletion is soft (archivedAt) in the app; this makes destruction impossible at
+  // the DB level too, so a stray hard delete errors instead of silently erasing projects.
+  client     Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
   owner      User             @relation("ProjectOwner", fields: [ownerId], references: [id])
   template   ProjectTemplate? @relation(fields: [templateId], references: [id])
   tasks      Task[]
-  milestones Milestone[]
   activities Activity[]       @relation("ProjectActivities")
   members    ProjectMember[]
   teams      ProjectTeam[]
@@ -520,7 +526,7 @@ model Task {
 
   project    Project?        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   lead       Lead?           @relation("LeadTasks", fields: [leadId], references: [id], onDelete: Cascade)
-  client     Client?         @relation("ClientTasks", fields: [clientId], references: [id], onDelete: Cascade)
+  client     Client?         @relation("ClientTasks", fields: [clientId], references: [id], onDelete: Restrict) // preserve logged work; see Project.client
   assignee   User?           @relation("TaskAssignee", fields: [assigneeId], references: [id])
   assignees  User[]          @relation("TaskAssignees")
   assignedBy User?           @relation("TaskAssigner", fields: [assignedById], references: [id])
@@ -534,20 +540,6 @@ model Task {
   @@index([projectId, status, assigneeId])
   @@index([assigneeId, status])
   @@map("tasks")
-}
-
-model Milestone {
-  id        String    @id @default(cuid())
-  name      String
-  dueDate   DateTime?
-  completed Boolean   @default(false)
-  projectId String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@map("milestones")
 }
 
 model Comment {
@@ -629,7 +621,7 @@ model Note {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  client Client? @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client Client? @relation(fields: [clientId], references: [id], onDelete: Restrict) // preserve notes; see Project.client
   lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: Cascade)
   author User    @relation(fields: [authorId], references: [id])
 
@@ -1066,6 +1058,9 @@ model Contract {
   endDate          DateTime?
   status           ContractStatus @default(ACTIVE)
   notes            String?        @db.Text
+  // The CRM lead this contract was auto-created from, so the same won deal never creates a
+  // second contract if it re-enters the Active stage. Null for manually-created contracts.
+  sourceLeadId     String?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
@@ -1075,6 +1070,7 @@ model Contract {
   subscriptions    Subscription[]
 
   @@index([organizationId])
+  @@index([sourceLeadId])
   @@map("contracts")
 }
 
@@ -1113,6 +1109,9 @@ model Subscription {
   nextBillingDate  DateTime?
   status           SubscriptionStatus @default(ACTIVE)
   notes            String?
+  // The CRM lead this subscription was auto-created from, so the same won deal never creates a
+  // second subscription if it re-enters the Active stage. Null for manually-created subs.
+  sourceLeadId     String?
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
 
@@ -1121,6 +1120,7 @@ model Subscription {
   contract         Contract?          @relation(fields: [contractId], references: [id])
 
   @@index([organizationId])
+  @@index([sourceLeadId])
   @@map("subscriptions")
 }
 

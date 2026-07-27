@@ -51,6 +51,10 @@ authRouter.post('/register', authLimiter, validate(registerSchema), async (req, 
 
     const hashedPassword = await hashPassword(password);
 
+    // A brand-new org starts completely clean — no demo clients, projects, tasks or leads.
+    // The "Internal" fallback client is intentionally NOT created here; the project route
+    // creates it lazily the first time someone makes a project without choosing a client
+    // (see routes/projects.ts), so orgs that always assign real clients never see it.
     const organization = await prisma.organization.create({
       data: {
         name: organizationName,
@@ -67,14 +71,6 @@ authRouter.post('/register', authLimiter, validate(registerSchema), async (req, 
             status: 'ACTIVE',
           },
         },
-        clients: {
-          create: {
-            name: 'Internal',
-            company: organizationName,
-            status: 'ACTIVE',
-            engagementType: 'INTERNAL',
-          },
-        },
       },
       include: { users: true },
     });
@@ -88,6 +84,7 @@ authRouter.post('/register', authLimiter, validate(registerSchema), async (req, 
       email: user.email,
       role: user.role,
       organizationId: organization.id,
+      tokenVersion: user.tokenVersion,
     });
 
     res.cookie('token', token, {
@@ -142,6 +139,7 @@ authRouter.post('/login', authLimiter, validate(loginSchema), async (req, res: R
       email: user.email,
       role: user.role,
       organizationId: user.organizationId,
+      tokenVersion: user.tokenVersion,
     });
 
     res.cookie('token', token, {
@@ -229,22 +227,23 @@ authRouter.post('/request-reset', authLimiter, async (req: Request, res: Respons
     }
 
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      // Don't leak whether the email exists or not
-      res.json({ success: true, message: 'If an account exists, a reset link has been sent.' });
-      return;
+    if (user) {
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { resetToken, resetTokenExpiry },
+      });
+
+      // Fire-and-forget: do NOT await the SMTP send. Awaiting it is exactly what turned this
+      // into an account-enumeration oracle — a real email stalled the response ~2s waiting on
+      // the mail server while an unknown email returned instantly. The send self-logs its own
+      // failures, so a dropped promise is safe.
+      void EmailService.sendPasswordResetEmail(user.email, resetToken);
     }
 
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { resetToken, resetTokenExpiry },
-    });
-
-    await EmailService.sendPasswordResetEmail(user.email, resetToken);
-
+    // Always the same message, in ~the same time, whether or not the account exists.
     res.json({ success: true, message: 'If an account exists, a reset link has been sent.' });
   } catch (error) {
     next(error);
@@ -272,6 +271,8 @@ authRouter.post('/reset-password', authLimiter, validate(resetPasswordSchema), a
         resetToken: null,
         resetTokenExpiry: null,
         status: 'ACTIVE',
+        // Revoke every token issued before this reset — the whole point of resetting.
+        tokenVersion: { increment: 1 },
       },
     });
 

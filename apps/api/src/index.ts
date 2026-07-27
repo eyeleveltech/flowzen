@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authenticate, authorize, requireModule } from './middleware/auth.js';
 import { authRouter } from './routes/auth.js';
+import { uploadsRouter } from './routes/uploads.js';
 import { dashboardRouter } from './routes/dashboard.js';
 import { clientRouter } from './routes/clients.js';
 import { projectRouter } from './routes/projects.js';
@@ -34,7 +35,14 @@ import { requestIdMiddleware } from './middleware/requestId.js';
 console.log(`[env] cwd=${process.cwd()} | APIFY_TOKEN=${process.env.APIFY_TOKEN ? 'loaded' : 'MISSING'} | OPENAI_API_KEY=${process.env.OPENAI_API_KEY ? 'loaded' : 'MISSING'}`);
 
 const app = express();
-app.set('trust proxy', 1);
+// Trust ONLY local/private proxies (loopback + Docker/private ranges), never arbitrary hops.
+// With the old `1`, Express trusted the X-Forwarded-For of whoever connected — so a client
+// hitting the API directly (the container port was internet-exposed) could spoof X-Forwarded-For
+// and get a fresh rate-limit bucket per request, fully bypassing the login/global limiters.
+// Now a spoofed X-Forwarded-For is honoured only when the request genuinely arrives from the
+// reverse proxy (a private address); a direct public client's header is ignored and its real
+// socket IP is used for rate limiting. (Also bind the container port to loopback in compose.)
+app.set('trust proxy', 'loopback, uniquelocal');
 
 import cookieParser from 'cookie-parser';
 
@@ -59,14 +67,13 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// Static files for uploads. Served under BOTH paths:
-//  - /uploads      : direct access (local dev, where the browser hits the API host:port)
-//  - /api/uploads  : production, where a reverse proxy routes only /api/* to this service,
-//                    so upload URLs must go through /api to reach us (otherwise the frontend
-//                    origin serves them -> 404).
-const uploadsStatic = express.static('uploads');
-app.use('/uploads', uploadsStatic);
-app.use('/api/uploads', uploadsStatic);
+// Generated files (quote / invoice PDFs) are served through an AUTHENTICATED, org-scoped
+// router — never as blanket static, which allowed anonymous cross-org download. Mounted under
+// BOTH paths for the same reason the old static mount was:
+//  - /uploads      : direct access in local dev
+//  - /api/uploads  : production, where the reverse proxy routes only /api/* to this service
+app.use('/uploads', uploadsRouter);
+app.use('/api/uploads', uploadsRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {

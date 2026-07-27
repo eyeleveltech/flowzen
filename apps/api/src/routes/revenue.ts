@@ -37,6 +37,35 @@ const expenseSchema = z.object({
   description: z.string().optional(),
   notes: z.string().optional(),
 });
+// Guard against cross-tenant IDOR: a revenue record may only reference a client / contract /
+// project that belongs to the caller's own organization. Returns an error message to send as
+// 400, or null when every supplied reference checks out. Only truthy ids are validated (a
+// Prisma `id: undefined` filter would match ANY row in the org, so callers must pass real ids).
+async function assertOrgRefs(
+  orgId: string,
+  refs: { clientId?: string | null; contractId?: string | null; projectId?: string | null },
+): Promise<string | null> {
+  if (refs.clientId) {
+    const ok = await prisma.client.findFirst({ where: { id: refs.clientId, organizationId: orgId }, select: { id: true } });
+    if (!ok) return 'Client not found in your organization';
+  }
+  if (refs.contractId) {
+    const ok = await prisma.contract.findFirst({ where: { id: refs.contractId, organizationId: orgId }, select: { id: true } });
+    if (!ok) return 'Contract not found in your organization';
+  }
+  if (refs.projectId) {
+    const ok = await prisma.project.findFirst({ where: { id: refs.projectId, client: { organizationId: orgId } }, select: { id: true } });
+    if (!ok) return 'Project not found in your organization';
+  }
+  return null;
+}
+
+// Strip fields the client must never set on a revenue record — organizationId is always the
+// caller's, and these are server-managed. Prevents body injection via the `...data` spread.
+function stripProtected(body: any) {
+  const { organizationId, id, createdAt, updatedAt, sourceLeadId, ...rest } = body || {};
+  return rest;
+}
 
 // Normalize any billing frequency (a free-form string) to a monthly figure so MRR
 // is comparable across cadences. Unknown values fall back to monthly.
@@ -411,16 +440,21 @@ revenueRouter.get('/contracts', async (req: AuthRequest, res: Response, next: Ne
 
 revenueRouter.post('/contracts', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const data = req.body;
+    const orgId = req.user!.organizationId;
+    const data = stripProtected(req.body);
+    if (!data.clientId) return res.status(400).json({ error: 'clientId is required' });
+    const refErr = await assertOrgRefs(orgId, { clientId: data.clientId });
+    if (refErr) return res.status(400).json({ error: refErr });
+
     const contract = await prisma.contract.create({
       data: {
         ...data,
-        organizationId: req.user!.organizationId,
+        organizationId: orgId,
         startDate: new Date(data.startDate),
         endDate: data.endDate ? new Date(data.endDate) : null,
       },
     });
-    emitToOrganization(req.app.get('io'), req.user!.organizationId, 'revenue:contract-created', contract);
+    emitToOrganization(req.app.get('io'), orgId, 'revenue:contract-created', contract);
     res.status(201).json(contract);
   } catch (err: any) {
     next(err);
@@ -449,15 +483,20 @@ revenueRouter.get('/payments', async (req: AuthRequest, res: Response, next: Nex
 
 revenueRouter.post('/payments', validate(paymentSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const data = req.body;
+    const orgId = req.user!.organizationId;
+    const data = stripProtected(req.body);
+    if (!data.clientId) return res.status(400).json({ error: 'clientId is required' });
+    const refErr = await assertOrgRefs(orgId, { clientId: data.clientId, contractId: data.contractId });
+    if (refErr) return res.status(400).json({ error: refErr });
+
     const payment = await prisma.payment.create({
       data: {
         ...data,
-        organizationId: req.user!.organizationId,
+        organizationId: orgId,
         paidOn: new Date(data.paidOn),
       },
     });
-    emitToOrganization(req.app.get('io'), req.user!.organizationId, 'revenue:payment-logged', payment);
+    emitToOrganization(req.app.get('io'), orgId, 'revenue:payment-logged', payment);
     res.status(201).json(payment);
   } catch (err: any) {
     next(err);
@@ -486,16 +525,21 @@ revenueRouter.get('/subscriptions', async (req: AuthRequest, res: Response, next
 
 revenueRouter.post('/subscriptions', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const data = req.body;
+    const orgId = req.user!.organizationId;
+    const data = stripProtected(req.body);
+    if (!data.clientId) return res.status(400).json({ error: 'clientId is required' });
+    const refErr = await assertOrgRefs(orgId, { clientId: data.clientId, contractId: data.contractId });
+    if (refErr) return res.status(400).json({ error: refErr });
+
     const sub = await prisma.subscription.create({
       data: {
         ...data,
-        organizationId: req.user!.organizationId,
+        organizationId: orgId,
         startDate: new Date(data.startDate),
         nextBillingDate: data.nextBillingDate ? new Date(data.nextBillingDate) : null,
       },
     });
-    emitToOrganization(req.app.get('io'), req.user!.organizationId, 'revenue:subscription-created', sub);
+    emitToOrganization(req.app.get('io'), orgId, 'revenue:subscription-created', sub);
     res.status(201).json(sub);
   } catch (err: any) {
     next(err);
@@ -524,15 +568,20 @@ revenueRouter.get('/expenses', async (req: AuthRequest, res: Response, next: Nex
 
 revenueRouter.post('/expenses', validate(expenseSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const data = req.body;
+    const orgId = req.user!.organizationId;
+    const data = stripProtected(req.body);
+    // clientId and projectId are optional on an expense, but if supplied they must be ours.
+    const refErr = await assertOrgRefs(orgId, { clientId: data.clientId, projectId: data.projectId });
+    if (refErr) return res.status(400).json({ error: refErr });
+
     const expense = await prisma.expense.create({
       data: {
         ...data,
-        organizationId: req.user!.organizationId,
+        organizationId: orgId,
         date: new Date(data.date),
       },
     });
-    emitToOrganization(req.app.get('io'), req.user!.organizationId, 'revenue:expense-logged', expense);
+    emitToOrganization(req.app.get('io'), orgId, 'revenue:expense-logged', expense);
     res.status(201).json(expense);
   } catch (err: any) {
     next(err);

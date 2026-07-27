@@ -30,11 +30,19 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
   try {
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      select: { id: true, role: true, status: true, organizationId: true },
+      select: { id: true, role: true, status: true, organizationId: true, tokenVersion: true },
     });
 
     if (!user || user.status !== 'ACTIVE') {
       res.status(401).json({ error: 'Account is inactive' });
+      return;
+    }
+
+    // Token revocation: a password change/reset bumps the user's tokenVersion, instantly
+    // invalidating every JWT issued before it. Tokens minted before this field existed carry
+    // no version → treated as 0 (the default) so they aren't force-logged-out on deploy.
+    if ((decoded.tokenVersion ?? 0) !== user.tokenVersion) {
+      res.status(401).json({ error: 'Session expired, please sign in again' });
       return;
     }
 

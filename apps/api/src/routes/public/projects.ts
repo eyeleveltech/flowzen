@@ -65,7 +65,6 @@ projectRouter.get('/:id', async (req: Request, res: Response) => {
         client: { select: { id: true, name: true, company: true } },
         owner: { select: { id: true, name: true, avatar: true } },
         members: { include: { user: { select: { id: true, name: true, avatar: true } } } },
-        milestones: { orderBy: { dueDate: 'asc' } },
         tasks: {
           include: {
             assignee: { select: { id: true, name: true, avatar: true } }
