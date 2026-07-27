@@ -5,9 +5,14 @@ FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Install dependencies based on the preferred package manager
+# Install dependencies based on the preferred package manager. The web app imports
+# @flowzen/shared (ROLE_LABELS, USER_ROLES, PRIORITY_CONFIG), a workspace package — its
+# manifest must be present at `npm ci` time so the workspace symlink is created, else
+# `next build` fails with "Can't resolve '@flowzen/shared'". The source itself arrives via
+# the builder stage's `COPY . .`.
 COPY package*.json ./
 COPY apps/web/package*.json ./apps/web/
+COPY packages/shared/package*.json ./packages/shared/
 RUN npm ci
 
 # Rebuild the source code only when needed
