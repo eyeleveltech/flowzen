@@ -1100,53 +1100,6 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
           currentClientId = null;
         }
 
-        if (currentClientId) {
-          let newStatus: 'ACTIVE' | 'PROJECT_COMPLETED' | 'CHURNED' | null = null;
-          if (['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(stage)) newStatus = 'ACTIVE';
-          else if (stage === 'PROJECT_COMPLETED') newStatus = 'PROJECT_COMPLETED';
-          else if (stage === 'CHURNED') newStatus = 'CHURNED';
-          if (newStatus) {
-            await tx.client.update({
-              where: { id: currentClientId },
-              data: {
-                status: newStatus,
-                contractValue: existingLead.dealValue || undefined
-              }
-            });
-            
-            // --- REVENUE MODULE AUTOMATION (5.7) ---
-            const fields = req.body.fields || {};
-            const billingFreq = String(fields['Billing Frequency'] || fields['billingFrequency'] || 'MONTHLY').toUpperCase();
-            const startDateRaw = fields['Start Date Confirmed'] || fields['startDate'];
-            const startDate = startDateRaw ? new Date(startDateRaw) : new Date();
-            const agreedValue = existingLead.dealValue || 0;
-
-            if (stage === 'ACTIVE_RETAINER') {
-               await tx.subscription.create({
-                 data: {
-                   organizationId: orgId,
-                   clientId: currentClientId,
-                   amount: agreedValue,
-                   billingFrequency: billingFreq === 'YEARLY' ? 'YEARLY' : 'MONTHLY',
-                   startDate: startDate,
-                   notes: 'Auto-created from CRM'
-                 }
-               });
-            } else if (stage === 'ACTIVE_PROJECT' || stage === 'CONTRACT') {
-               await tx.contract.create({
-                 data: {
-                   organizationId: orgId,
-                   clientId: currentClientId,
-                   title: `${existingLead.companyName || existingLead.contactName} - Contract`,
-                   value: agreedValue,
-                   billingFrequency: billingFreq === 'MONTHLY' ? 'MONTHLY' : 'ONE_TIME',
-                   startDate: startDate,
-                   notes: 'Auto-created from CRM'
-                 }
-               });
-            }
-          }
-        }
       }
 
       const updated = await tx.lead.update({
