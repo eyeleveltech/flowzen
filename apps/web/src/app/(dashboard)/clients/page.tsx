@@ -2,13 +2,13 @@
 
 import { useState, useEffect, useId, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { useAuthStore, useModuleStore } from '@/stores';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatDate, formatCurrency, getInitials, getAvatarColor, getClientDisplayName } from '@/lib/utils';
-import Link from 'next/link';
 import {
   Plus, Search, Filter, Users, Building2, Mail, Phone, X, ChevronRight, FolderKanban, Download, Upload, FileText, List, LayoutGrid, Columns, Check, Settings, Briefcase
 } from 'lucide-react';
@@ -484,16 +484,16 @@ function ClientsContent() {
               </button>
             )}
 
+            {/* No "Add Client" here by design: every client is born from the pipeline, when a
+                deal is won or a project starts. That keeps one company from existing as two
+                records. Bulk onboarding of existing customers still goes through Import. */}
             {activeModule !== 'PM' && (
-              <button
-                onClick={() => {
-                  setShowCreate(true);
-                  setCreationMode('MANUAL');
-                }}
+              <Link
+                href="/pipeline"
                 className="flex items-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-semibold text-white hover:bg-[#1F2937] transition-all h-9 shrink-0 whitespace-nowrap"
               >
-                <Plus className="h-3.5 w-3.5" /> Add Client
-              </button>
+                <Plus className="h-3.5 w-3.5" /> New Lead
+              </Link>
             )}
           </div>
         </div>
