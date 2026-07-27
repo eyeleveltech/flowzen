@@ -222,22 +222,23 @@ authRouter.post('/request-reset', authLimiter, async (req: Request, res: Respons
     }
 
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      // Don't leak whether the email exists or not
-      res.json({ success: true, message: 'If an account exists, a reset link has been sent.' });
-      return;
+    if (user) {
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { resetToken, resetTokenExpiry },
+      });
+
+      // Fire-and-forget: do NOT await the SMTP send. Awaiting it is exactly what turned this
+      // into an account-enumeration oracle — a real email stalled the response ~2s waiting on
+      // the mail server while an unknown email returned instantly. The send self-logs its own
+      // failures, so a dropped promise is safe.
+      void EmailService.sendPasswordResetEmail(user.email, resetToken);
     }
 
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { resetToken, resetTokenExpiry },
-    });
-
-    await EmailService.sendPasswordResetEmail(user.email, resetToken);
-
+    // Always the same message, in ~the same time, whether or not the account exists.
     res.json({ success: true, message: 'If an account exists, a reset link has been sent.' });
   } catch (error) {
     next(error);
