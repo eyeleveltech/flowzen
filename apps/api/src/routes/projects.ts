@@ -8,6 +8,7 @@ import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
 import { NotificationService } from '../services/notifications.js';
 import { toList, whereIn } from '../utils/query.js';
 import { createAuditLog } from '../utils/audit.js';
+import { sanitizeRichText } from '../utils/html.js';
 import { buildSearchFilter } from '../utils/search-utils.js';
 
 export const projectRouter = Router();
@@ -177,6 +178,11 @@ projectRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), va
     if (projectData.priority === '') projectData.priority = 'MEDIUM';
     if (projectData.status === '') projectData.status = 'PLANNING';
 
+    // Rich-text HTML fields: strip anything executable before it ever hits the DB.
+    projectData.description = sanitizeRichText(projectData.description);
+    projectData.scope = sanitizeRichText(projectData.scope);
+    projectData.projectNotes = sanitizeRichText(projectData.projectNotes);
+
     let finalClientId = projectData.clientId;
     if (!finalClientId) {
       const org = await prisma.organization.findUnique({ where: { id: req.user!.organizationId } });
@@ -283,6 +289,11 @@ projectRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), 
     if (projectData.type === '') projectData.type = 'ONE_TIME';
     if (projectData.priority === '') projectData.priority = 'MEDIUM';
     if (projectData.status === '') projectData.status = 'PLANNING';
+
+    // Rich-text HTML fields: strip anything executable before it ever hits the DB.
+    projectData.description = sanitizeRichText(projectData.description);
+    projectData.scope = sanitizeRichText(projectData.scope);
+    projectData.projectNotes = sanitizeRichText(projectData.projectNotes);
 
     let finalClientId = projectData.clientId;
     if (finalClientId === '') {
@@ -480,7 +491,7 @@ projectRouter.post('/from-template', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_
     const project = await prisma.project.create({
       data: {
         name: name || template.name,
-        description: template.description,
+        description: sanitizeRichText(template.description), // rendered raw in the UI
         clientId,
         ownerId,
         templateId,

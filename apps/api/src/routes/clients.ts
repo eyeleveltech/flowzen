@@ -8,6 +8,7 @@ import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
 import { NotificationService } from '../services/notifications.js';
 import { whereIn } from '../utils/query.js';
 import { createAuditLog } from '../utils/audit.js';
+import { sanitizeRichText } from '../utils/html.js';
 import { buildSearchFilter } from '../utils/search-utils.js';
 
 export const clientRouter = Router();
@@ -139,6 +140,8 @@ clientRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
 clientRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), validate(clientSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const { contacts, startDate, ...data } = req.body;
+    // Scope is rich-text HTML rendered raw in the UI — strip anything executable on write.
+    data.scope = sanitizeRichText(data.scope);
 
     // Rule: a client must have at least one contact phone number.
     const hasContactPhone = Array.isArray(contacts) && contacts.some((c: any) => c.phone && String(c.phone).trim());
@@ -235,7 +238,7 @@ clientRouter.post('/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRe
           website: data.website || null,
           city: data.city || null,
           address: data.address || null,
-          scope: data.scope || null,
+          scope: sanitizeRichText(data.scope) || null,
           assetLinks: data.assetLinks || null,
           startDate: data.startDate ? new Date(data.startDate) : null,
           contractValue: data.contractValue ? parseFloat(data.contractValue) : null,
@@ -296,6 +299,8 @@ clientRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), v
     }
 
     const { contacts, startDate, ...data } = req.body;
+    // Scope is rich-text HTML rendered raw in the UI — strip anything executable on write.
+    data.scope = sanitizeRichText(data.scope);
 
     // Enforce unique client name when renaming (case-insensitive, excluding self).
     const newName = String(data.name || '').trim();

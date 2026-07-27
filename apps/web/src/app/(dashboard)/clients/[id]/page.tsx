@@ -9,6 +9,7 @@ import { formatDate, formatCurrency, getInitials, getAvatarColor, getClientDispl
 import { ArrowLeft, Mail, Phone, MapPin, Building2, DollarSign, X, Plus, Users, Globe, Briefcase, Trash2, Calendar, FolderKanban } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
+import { SafeHtml } from '@/components/ui/safe-html';
 import toast from 'react-hot-toast';
 import { useMembers } from '@/hooks/useQueries';
 import { useConfirmStore, useModuleStore } from '@/stores';
@@ -312,9 +313,9 @@ export default function ClientDetailPage() {
                   {client.scope ? (
                     <div className="mt-2 bg-blue-50/50 p-4 rounded-xl border border-blue-100/50">
                       <span className="block text-xs font-semibold text-blue-900 mb-2">Scope of Work</span>
-                      <div
+                      <SafeHtml
                         className="text-sm text-[#374151] line-clamp-3 prose prose-sm max-w-none"
-                        dangerouslySetInnerHTML={{ __html: client.scope }}
+                        html={client.scope}
                       />
                       <button
                         onClick={() => setViewModalContent({ title: 'Scope', content: client.scope || '' })}
@@ -609,9 +610,9 @@ export default function ClientDetailPage() {
                 <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
               </div>
               <div className="p-6 overflow-y-auto flex-1">
-                <div
+                <SafeHtml
                   className="prose prose-sm max-w-none text-[#374151]"
-                  dangerouslySetInnerHTML={{ __html: viewModalContent.content }}
+                  html={viewModalContent.content}
                 />
               </div>
             </motion.div>
