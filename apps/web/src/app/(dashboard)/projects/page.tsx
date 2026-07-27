@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatDate, formatShortDate, getInitials, getAvatarColor, getClientDisplayName, getProjectStatusFromClient } from '@/lib/utils';
-import { Plus, LayoutList, GanttChartSquare, Calendar, ChevronRight, BarChart3, Clock, LayoutGrid, Search, X, Check, Settings, Kanban, Filter } from 'lucide-react';
+import { Plus, LayoutList, GanttChartSquare, Calendar, ChevronRight, BarChart3, Clock, LayoutGrid, Search, X, Check, Settings, Kanban, Filter, Lock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '@/stores';
 import { useProjectFilters } from '@/stores/projectFilters';
@@ -679,7 +679,11 @@ function ProjectsContent() {
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Project Type</label>
                       <Select
                         value={formValues.type}
-                        onChange={(val) => setValue('type', val as any, { shouldValidate: true })}
+                        onChange={(val) => {
+                          setValue('type', val as any, { shouldValidate: true });
+                          // Internal projects belong to the org itself — no customer client.
+                          if (val === 'INTERNAL') setValue('clientId', '', { shouldValidate: true });
+                        }}
                         options={[
                           { label: 'Retainer', value: 'RETAINER' },
                           { label: 'One-Time Project', value: 'ONE_TIME' },
@@ -726,18 +730,26 @@ function ProjectsContent() {
                   <div className="flex flex-col gap-4">
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Client</label>
-                      <Select
-                        value={formValues.clientId || ''}
-                        onChange={(val) => setValue('clientId', val, { shouldValidate: true })}
-                        options={[
-                          { label: 'Select a client...', value: '' },
-                          // Don't offer inactive/churned clients when creating a project,
-                          // but keep a pre-filled client visible even if it's inactive.
-                          ...clients
-                            .filter((c: any) => !['PROJECT_COMPLETED', 'CHURNED'].includes(c.status) || c.id === formValues.clientId)
-                            .map((c) => ({ label: getClientDisplayName(c), value: c.id }))
-                        ]}
-                      />
+                      {formValues.type === 'INTERNAL' ? (
+                        // Internal project → no client picker; it's locked to the org's own account.
+                        <div className="flex items-center gap-2 h-10 px-3 rounded-lg border border-border bg-[#F9FAFB] text-sm text-secondary">
+                          <Lock className="h-3.5 w-3.5" />
+                          <span>Internal · {user?.organization?.name || 'your organization'}</span>
+                        </div>
+                      ) : (
+                        <Select
+                          value={formValues.clientId || ''}
+                          onChange={(val) => setValue('clientId', val, { shouldValidate: true })}
+                          options={[
+                            { label: 'Select a client...', value: '' },
+                            // Don't offer inactive/churned clients when creating a project,
+                            // but keep a pre-filled client visible even if it's inactive.
+                            ...clients
+                              .filter((c: any) => !['PROJECT_COMPLETED', 'CHURNED'].includes(c.status) || c.id === formValues.clientId)
+                              .map((c) => ({ label: getClientDisplayName(c), value: c.id }))
+                          ]}
+                        />
+                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Project Owner *</label>

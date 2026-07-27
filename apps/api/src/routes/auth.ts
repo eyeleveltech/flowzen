@@ -46,6 +46,10 @@ authRouter.post('/register', authLimiter, validate(registerSchema), async (req, 
 
     const hashedPassword = await hashPassword(password);
 
+    // A brand-new org starts completely clean — no demo clients, projects, tasks or leads.
+    // The "Internal" fallback client is intentionally NOT created here; the project route
+    // creates it lazily the first time someone makes a project without choosing a client
+    // (see routes/projects.ts), so orgs that always assign real clients never see it.
     const organization = await prisma.organization.create({
       data: {
         name: organizationName,
@@ -60,14 +64,6 @@ authRouter.post('/register', authLimiter, validate(registerSchema), async (req, 
             // ACTIVE) rejects them once the initial session cookie expires — the
             // only path to ACTIVE otherwise is the email-based password reset.
             status: 'ACTIVE',
-          },
-        },
-        clients: {
-          create: {
-            name: 'Internal',
-            company: organizationName,
-            status: 'ACTIVE',
-            engagementType: 'INTERNAL',
           },
         },
       },
