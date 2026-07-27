@@ -17,6 +17,7 @@ import { ColumnDropdown } from '@/components/ui/column-dropdown';
 
 import { MultiSelect } from '@/components/ui/multi-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
+import { SafeHtml } from '@/components/ui/safe-html';
 import { TagsInput } from '@/components/ui/tags-input';
 import toast from 'react-hot-toast';
 import { useAuthStore, useConfirmStore, useTimeTrackingStore } from '@/stores';
@@ -668,9 +669,9 @@ export default function ProjectDetailPage() {
           <span className="block text-xs font-medium text-secondary uppercase tracking-wide mb-3">Description</span>
           {project.description ? (
             <>
-              <div
+              <SafeHtml
                 className="text-sm text-[#374151] line-clamp-2 prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: project.description }}
+                html={project.description}
               />
               <button
                 onClick={() => setViewModalContent({ title: 'Description', content: project.description || '' })}
@@ -687,9 +688,9 @@ export default function ProjectDetailPage() {
           <span className="block text-xs font-medium text-secondary uppercase tracking-wide mb-3">Scope of Work</span>
           {project.scope ? (
             <>
-              <div
+              <SafeHtml
                 className="text-sm text-[#374151] line-clamp-2 prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: project.scope }}
+                html={project.scope}
               />
               <button
                 onClick={() => setViewModalContent({ title: 'Scope of Work', content: project.scope || '' })}
@@ -705,9 +706,9 @@ export default function ProjectDetailPage() {
         {project.projectNotes && (
           <div className="bg-white rounded-2xl border border-border p-6 relative">
             <span className="block text-xs font-medium text-secondary uppercase tracking-wide mb-3">Internal Notes</span>
-            <div
+            <SafeHtml
               className="text-sm text-[#374151] line-clamp-2 prose prose-sm max-w-none"
-              dangerouslySetInnerHTML={{ __html: project.projectNotes }}
+              html={project.projectNotes}
             />
             <button
               onClick={() => setViewModalContent({ title: 'Internal Notes', content: project.projectNotes || '' })}
@@ -1423,9 +1424,9 @@ export default function ProjectDetailPage() {
                 <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
               </div>
               <div className="p-6 pb-24 md:pb-6 overflow-y-auto flex-1">
-                <div
+                <SafeHtml
                   className="prose prose-sm max-w-none text-[#374151]"
-                  dangerouslySetInnerHTML={{ __html: viewModalContent.content }}
+                  html={viewModalContent.content}
                 />
               </div>
             </motion.div>

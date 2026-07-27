@@ -62,7 +62,11 @@ services:
       # Set to "true" ONLY to bypass the automatic pre-migration backup (not recommended).
       - SKIP_PREMIGRATION_BACKUP=${SKIP_PREMIGRATION_BACKUP:-false}
     ports:
-      - "4000:4000"
+      # Bind to the host LOOPBACK only. Publishing "4000:4000" exposed the API on every
+      # interface (and Docker's publish bypasses ufw), so clients could reach it directly,
+      # skip the Apache reverse proxy, and spoof X-Forwarded-For to defeat rate limiting.
+      # The reverse proxy on the host still reaches it via 127.0.0.1:4000; the internet can't.
+      - "127.0.0.1:4000:4000"
     depends_on:
       postgres:
         condition: service_healthy

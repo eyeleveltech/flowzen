@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { formatDate } from '@/lib/utils';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { SafeHtml } from '@/components/ui/safe-html';
 import { TASK_STATUSES, TASK_STATUS_LABELS, TASK_STATUS_COLORS } from '@/lib/task-status';
 import { useConfirmStore, useTimeTrackingStore } from '@/stores';
 
@@ -167,7 +168,7 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
             </div>
 
             <h2 className="text-xl font-semibold text-primary mb-2">{task.title}</h2>
-            {task.description && <div className="text-sm text-secondary mb-4 prose prose-sm prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: task.description }} />}
+            {task.description && <SafeHtml className="text-sm text-secondary mb-4 prose prose-sm prose-slate max-w-none" html={task.description} />}
 
             <div className="space-y-1">
               <Row label="Client" value={task.client?.company || task.project?.client?.company || task.client?.name || task.project?.client?.name} />

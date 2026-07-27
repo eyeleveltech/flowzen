@@ -10,6 +10,7 @@ import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
 import { idempotency } from '../middleware/idempotency.js';
 import { toList, whereIn } from '../utils/query.js';
 import { buildSearchFilter } from '../utils/search-utils.js';
+import { sanitizeRichText } from '../utils/html.js';
 
 
 function calculateNextDueDate(date: Date | string | null, freq: string) {
@@ -371,7 +372,7 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
     const task = await prisma.task.create({
       data: {
         title,
-        description,
+        description: sanitizeRichText(description), // rich-text HTML rendered raw in the UI
         type: type || 'OTHER',
         projectId: projectId || null,
         leadId: leadId || null,
@@ -462,6 +463,8 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
       'reviewerId', 'assignedById', 'parentId', 'loggedHours', 'estimatedHours',
       'driveLink', 'isRecurring', 'recurrenceFrequency'] as const;
     for (const f of SCALARS) if (f in b) data[f] = b[f];
+    // description is rich-text HTML rendered raw in the UI — strip anything executable.
+    if ('description' in data) data.description = sanitizeRichText(data.description as string);
 
     if ('dueDate' in b) data.dueDate = b.dueDate ? new Date(b.dueDate) : null;
     if ('assignedDate' in b) data.assignedDate = b.assignedDate ? new Date(b.assignedDate) : null;

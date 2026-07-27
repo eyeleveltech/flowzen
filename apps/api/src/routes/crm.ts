@@ -8,6 +8,7 @@ import { whereIn } from '../utils/query.js';
 import { generateLeadId, normalizePhone } from '../utils/leadId.js';
 import { runIntelligence } from '../services/intelligence.service.js';
 import { ensureClientForLead, LEAD_IDENTITY_FIELDS } from '../services/clientConversion.service.js';
+import { applyLeadStageEffects } from '../services/leadStage.service.js';
 import { logActivity, ActivityType, ACTIVITY_CATEGORIES } from '../services/activity.service.js';
 import { createAuditLog } from '../utils/audit.js';
 
@@ -609,13 +610,11 @@ crmRouter.post('/leads/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
   }
 });
 
-// Stages at which the deal is won and delivery/billing begins — the Client account is
-// created on entering any of these. Everything before CONTRACT stays lead-only: no Client
-// record exists while the deal is still being chased, so there is nothing to duplicate.
-//
-// A stage change never deletes a Client. Dragging a card backwards only moves the card;
-// the account, its contacts, notes, tasks and billing data are left untouched.
-const CONVERSION_STAGES = ['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT'];
+// CONVERSION_STAGES (imported) are where the deal is won and delivery/billing begins — the
+// Client account is created on entering any of these. Everything before CONTRACT stays
+// lead-only: no Client record exists while the deal is still being chased, so there is
+// nothing to duplicate. A stage change never deletes a Client — dragging a card backwards
+// only moves the card; the account and all its data are left untouched.
 
 const stageUpdateSchema = z.object({
   stage: z.enum(['NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION', 'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'ON_HOLD', 'PROJECT_COMPLETED', 'CHURNED']),
@@ -676,17 +675,6 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
         }
       });
 
-      // Create Stage History
-      await tx.stageHistory.create({
-        data: {
-          leadId,
-          fromStage: previousStage,
-          toStage: stage,
-          notes: notes || null,
-          changedById: req.user!.userId,
-        }
-      });
-
       // Upsert any dynamic fields passed
       if (fields && typeof fields === 'object') {
         for (const [key, value] of Object.entries(fields)) {
@@ -699,66 +687,21 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
         }
       }
 
-      let currentClientId = existingLead.clientId;
-      let outNewClientId = null;
-
-      if (CONVERSION_STAGES.includes(stage) && !currentClientId) {
-        const { clientId, created } = await ensureClientForLead(tx, existingLead, orgId);
-        currentClientId = clientId;
-        if (created) outNewClientId = clientId;
-        updated.clientId = clientId;
-      }
-
-      if (currentClientId) {
-        // Only ever move the account forward. Dragging a won deal back to an earlier stage
-        // must not demote a real customer to PROSPECT — the account has already been billed
-        // and delivered against, and its lifecycle is no longer the pipeline's to rewind.
-        let newStatus: 'ACTIVE' | 'PROJECT_COMPLETED' | 'CHURNED' | 'ONHOLD' | null = null;
-        if (['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(stage)) newStatus = 'ACTIVE';
-        else if (stage === 'ON_HOLD') newStatus = 'ONHOLD';
-        else if (stage === 'PROJECT_COMPLETED') newStatus = 'PROJECT_COMPLETED';
-        else if (stage === 'CHURNED') newStatus = 'CHURNED';
-        if (newStatus) {
-          await tx.client.update({ where: { id: currentClientId }, data: { status: newStatus } });
-        }
-      }
-
-      // --- Revenue Sync Automation ---
-      if (currentClientId) {
-        if (stage === 'ACTIVE_RETAINER' && previousStage !== 'ACTIVE_RETAINER') {
-          const freq = contractType === 'RETAINER' ? (fields?.billingFrequency || 'MONTHLY') : 'MONTHLY';
-          const start = contractStartDate ? new Date(contractStartDate) : new Date();
-          await tx.subscription.create({
-            data: {
-              organizationId: orgId,
-              clientId: currentClientId,
-              amount: dealValue || 0,
-              billingFrequency: freq,
-              startDate: start,
-              nextBillingDate: start,
-              status: 'ACTIVE',
-              notes: 'Auto-created from CRM Won & Closed gate',
-            }
-          });
-        } else if (stage === 'ACTIVE_PROJECT' && previousStage !== 'ACTIVE_PROJECT') {
-          const start = contractStartDate ? new Date(contractStartDate) : new Date();
-          const end = contractEndDate ? new Date(contractEndDate) : null;
-          await tx.contract.create({
-            data: {
-              organizationId: orgId,
-              clientId: currentClientId,
-              title: `${existingLead.companyName || existingLead.contactName} Project`,
-              value: dealValue || 0,
-              billingFrequency: 'ONE_TIME',
-              startDate: start,
-              endDate: end,
-              status: 'ACTIVE',
-              notes: 'Auto-created from CRM Won & Closed gate',
-            }
-          });
-        }
-      }
-      // -------------------------------
+      // All stage consequences — history, conversion, client status, idempotent revenue — live
+      // in one shared service (also used by PATCH /leads/:id) so both entry points behave identically.
+      const { clientId: currentClientId, newClientId: outNewClientId } = await applyLeadStageEffects(tx, {
+        lead: existingLead,
+        orgId,
+        userId: req.user!.userId,
+        toStage: stage,
+        previousStage,
+        notes,
+        dealValue: dealValue ?? existingLead.dealValue ?? undefined,
+        contractStartDate,
+        contractEndDate,
+        billingFrequency: contractType === 'RETAINER' ? fields?.billingFrequency : undefined,
+      });
+      if (currentClientId) updated.clientId = currentClientId;
 
       const reasonLabel = lostReason ? String(lostReason).replace(/_/g, ' ') : null;
       const stageMsg = stage === 'CONTRACT' ? 'signed the contract 🎉'
@@ -1033,67 +976,15 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
       return;
     }
     const { updatedLead, finalClientId, newClientId } = await prisma.$transaction(async (tx) => {
-      let currentClientId = existingLead.clientId;
-      let outNewClientId = null;
+      let currentClientId: string | null = existingLead.clientId;
+      let outNewClientId: string | null = null;
 
+      // Only the lead's own stage/renewal fields are set here; the *consequences* of the stage
+      // change (history, conversion, client status, revenue) are applied by applyLeadStageEffects
+      // after the lead row is written — the exact same path POST /leads/:id/stage uses.
       if (stage !== undefined && existingLead.stage !== stage) {
         updateData.stage = stage;
         if (stage === 'CHURNED') updateData.renewalStatus = 'CHURNED';
-        
-        if (CONVERSION_STAGES.includes(stage) && !currentClientId) {
-          const { clientId, created } = await ensureClientForLead(tx, existingLead, orgId);
-          currentClientId = clientId;
-          if (created) outNewClientId = clientId;
-          // ensureClientForLead already linked the lead; don't fight it in this update.
-        }
-
-        if (currentClientId) {
-          let newStatus: 'ACTIVE' | 'PROJECT_COMPLETED' | 'CHURNED' | null = null;
-          if (['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(stage)) newStatus = 'ACTIVE';
-          else if (stage === 'PROJECT_COMPLETED') newStatus = 'PROJECT_COMPLETED';
-          else if (stage === 'CHURNED') newStatus = 'CHURNED';
-          if (newStatus) {
-            await tx.client.update({
-              where: { id: currentClientId },
-              data: {
-                status: newStatus,
-                contractValue: existingLead.dealValue || undefined
-              }
-            });
-            
-            // --- REVENUE MODULE AUTOMATION (5.7) ---
-            const fields = req.body.fields || {};
-            const billingFreq = String(fields['Billing Frequency'] || fields['billingFrequency'] || 'MONTHLY').toUpperCase();
-            const startDateRaw = fields['Start Date Confirmed'] || fields['startDate'];
-            const startDate = startDateRaw ? new Date(startDateRaw) : new Date();
-            const agreedValue = existingLead.dealValue || 0;
-
-            if (stage === 'ACTIVE_RETAINER') {
-               await tx.subscription.create({
-                 data: {
-                   organizationId: orgId,
-                   clientId: currentClientId,
-                   amount: agreedValue,
-                   billingFrequency: billingFreq === 'YEARLY' ? 'YEARLY' : 'MONTHLY',
-                   startDate: startDate,
-                   notes: 'Auto-created from CRM'
-                 }
-               });
-            } else if (stage === 'ACTIVE_PROJECT' || stage === 'CONTRACT') {
-               await tx.contract.create({
-                 data: {
-                   organizationId: orgId,
-                   clientId: currentClientId,
-                   title: `${existingLead.companyName || existingLead.contactName} - Contract`,
-                   value: agreedValue,
-                   billingFrequency: billingFreq === 'MONTHLY' ? 'MONTHLY' : 'ONE_TIME',
-                   startDate: startDate,
-                   notes: 'Auto-created from CRM'
-                 }
-               });
-            }
-          }
-        }
       }
 
       const updated = await tx.lead.update({
@@ -1105,6 +996,24 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
           dealFields: true,
         }
       });
+
+      // Apply all stage consequences via the shared service (identical to the drag endpoint).
+      if (stage !== undefined && existingLead.stage !== stage) {
+        const eff = await applyLeadStageEffects(tx, {
+          lead: existingLead,
+          orgId,
+          userId: req.user!.userId,
+          toStage: stage,
+          previousStage: existingLead.stage,
+          notes: null,
+          dealValue: dealValue ?? existingLead.dealValue ?? undefined,
+          contractStartDate: req.body.fields?.['Start Date Confirmed'] ?? req.body.fields?.startDate,
+          billingFrequency: req.body.fields?.['Billing Frequency'] ?? req.body.fields?.billingFrequency,
+        });
+        currentClientId = eff.clientId;
+        outNewClientId = eff.newClientId;
+        if (currentClientId) updated.clientId = currentClientId;
+      }
 
       if (currentClientId && dealValue !== undefined) {
         await tx.client.update({
@@ -1127,7 +1036,7 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
       }
 
       if (stage !== undefined && existingLead.stage !== stage) {
-        await tx.stageHistory.create({ data: { leadId, fromStage: existingLead.stage, toStage: stage, notes: null, changedById: req.user!.userId } });
+        // Stage history is created by applyLeadStageEffects; here we only add the human-facing feed entry.
         await tx.activity.create({
           data: {
             type: 'STAGE_CHANGED',
