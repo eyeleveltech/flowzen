@@ -8,7 +8,7 @@ import { whereIn } from '../utils/query.js';
 import { generateLeadId, normalizePhone } from '../utils/leadId.js';
 import { runIntelligence } from '../services/intelligence.service.js';
 import { ensureClientForLead, LEAD_IDENTITY_FIELDS } from '../services/clientConversion.service.js';
-import { applyLeadStageEffects } from '../services/leadStage.service.js';
+import { applyLeadStageEffects, stageTransitionError } from '../services/leadStage.service.js';
 import { logActivity, ActivityType, ACTIVITY_CATEGORIES } from '../services/activity.service.js';
 import { createAuditLog } from '../utils/audit.js';
 
@@ -628,6 +628,7 @@ const stageUpdateSchema = z.object({
   fields: z.record(z.any()).optional(),
   followUpDate: z.string().optional().nullable(),
   lastContactedDate: z.string().optional().nullable(),
+  reopen: z.boolean().optional(), // explicit intent to reopen a closed (CHURNED/PROJECT_COMPLETED) deal
 });
 
 // POST /api/crm/leads/:id/stage
@@ -635,7 +636,7 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
   try {
     const orgId = req.user!.organizationId;
     const leadId = req.params.id as string;
-    const { stage, notes, dealValue, expectedCloseDate, contractType, contractStartDate, contractEndDate, lostReason, fields, followUpDate, lastContactedDate } = req.body;
+    const { stage, notes, dealValue, expectedCloseDate, contractType, contractStartDate, contractEndDate, lostReason, fields, followUpDate, lastContactedDate, reopen } = req.body;
 
     const existingLead = await prisma.lead.findFirst({
       where: { id: leadId, organizationId: orgId },
@@ -648,6 +649,13 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
     }
 
     const previousStage = existingLead.stage;
+
+    // State-machine guard: a closed deal can't be silently reopened into the funnel.
+    const transitionErr = stageTransitionError(previousStage, stage, reopen);
+    if (transitionErr) {
+      res.status(409).json({ error: transitionErr, code: 'DEAL_CLOSED' });
+      return;
+    }
 
     // Build update data
     const updateData: any = { stage };
@@ -700,6 +708,7 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
         contractStartDate,
         contractEndDate,
         billingFrequency: contractType === 'RETAINER' ? fields?.billingFrequency : undefined,
+        reopen,
       });
       if (currentClientId) updated.clientId = currentClientId;
 
@@ -902,7 +911,7 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
   try {
     const orgId = req.user!.organizationId;
     const leadId = req.params.id as string;
-    const { source, assignedToId, dealValue, expectedRevenue, expectedCloseDate, followUpDate, lastContactedDate, contractType, healthStatus, lostReason, priority, stage } = req.body;
+    const { source, assignedToId, dealValue, expectedRevenue, expectedCloseDate, followUpDate, lastContactedDate, contractType, healthStatus, lostReason, priority, stage, reopen } = req.body;
     // Editable contact/company identity fields on the lead detail card.
     const EDITABLE_TEXT_FIELDS = ['contactName', 'companyName', 'contactEmail', 'contactPhone', 'jobTitle', 'linkedinUrl', 'companySize', 'landlinePhone', 'address', 'city', 'state', 'zip', 'country', 'billingAddress', 'gstNumber', 'website', 'instagramHandle', 'facebookPage', 'industry'] as const;
 
@@ -914,6 +923,15 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
     if (!existingLead) {
       res.status(404).json({ error: 'Lead not found' });
       return;
+    }
+
+    // State-machine guard: a closed deal can't be silently reopened into the funnel.
+    if (stage !== undefined && existingLead.stage !== stage) {
+      const transitionErr = stageTransitionError(existingLead.stage, stage, reopen);
+      if (transitionErr) {
+        res.status(409).json({ error: transitionErr, code: 'DEAL_CLOSED' });
+        return;
+      }
     }
 
     const updateData: any = {};
@@ -1009,6 +1027,7 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
           dealValue: dealValue ?? existingLead.dealValue ?? undefined,
           contractStartDate: req.body.fields?.['Start Date Confirmed'] ?? req.body.fields?.startDate,
           billingFrequency: req.body.fields?.['Billing Frequency'] ?? req.body.fields?.billingFrequency,
+          reopen,
         });
         currentClientId = eff.clientId;
         outNewClientId = eff.newClientId;

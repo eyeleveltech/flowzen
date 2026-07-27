@@ -12,6 +12,7 @@ import toast from 'react-hot-toast';
 import { StageTransitionModal } from './StageTransitionModal';
 import { WonCelebrationModal } from './WonCelebrationModal';
 import { useQueryClient } from '@tanstack/react-query';
+import { useConfirmStore } from '@/stores';
 import { LeadModal } from './LeadModal';
 
 // All pipeline stages in chronological order (used by the per-card stage menu)
@@ -47,6 +48,7 @@ const GROUPS = [
 export function PipelineBoardView() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const confirm = useConfirmStore((s) => s.confirm);
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
@@ -169,6 +171,41 @@ export function PipelineBoardView() {
     return cols;
   }, [leads]);
 
+  // Move a lead to an earlier stage. A closed (Churned/Completed) deal can't be reopened
+  // silently — the API returns 409 DEAL_CLOSED and we confirm the reopen, then retry.
+  const moveStageBackward = (leadId: string, newStage: string, previousLeads: any[]) => {
+    const submit = (reopen: boolean) => {
+      setIsSubmitting(true);
+      return api.post(`/crm/leads/${leadId}/stage`, { stage: newStage, fields: {}, ...(reopen ? { reopen: true } : {}) })
+        .then((updatedLead: any) => {
+          toast.success(reopen ? 'Deal reopened' : 'Stage updated successfully');
+          queryClient.invalidateQueries({ queryKey: ['leads'] });
+          queryClient.invalidateQueries({ queryKey: ['clients'] });
+          queryClient.setQueryData(['lead', leadId], updatedLead);
+          fetchLeads();
+        })
+        .finally(() => setIsSubmitting(false));
+    };
+    submit(false).catch(async (err: any) => {
+      if (err?.code === 'DEAL_CLOSED') {
+        const okReopen = await confirm({
+          title: 'Reopen closed deal?',
+          message: err.message || 'This deal is closed. Reopen it back into the pipeline?',
+          confirmText: 'Reopen',
+          cancelText: 'Cancel',
+          variant: 'warning',
+        });
+        if (okReopen) {
+          try { await submit(true); return; }
+          catch (e: any) { toast.error(e?.message || 'Failed to reopen'); }
+        }
+      } else {
+        toast.error(err.message || 'Failed to update stage');
+      }
+      setLeads(previousLeads); // revert: cancelled reopen, failed reopen, or other error
+    });
+  };
+
   const handleDragEnd = (result: DropResult) => {
     stopAutoScroll();
     if (!result.destination) return;
@@ -192,23 +229,7 @@ export function PipelineBoardView() {
       // Optimistic update for backward move to prevent snap-back
       const previousLeads = [...leads];
       setLeads(leads.map(l => l.id === lead.id ? { ...l, stage: newStage } : l));
-
-      setIsSubmitting(true);
-      api.post(`/crm/leads/${lead.id}/stage`, { stage: newStage, fields: {} })
-        .then((updatedLead: any) => {
-          toast.success('Stage updated successfully');
-          queryClient.invalidateQueries({ queryKey: ['leads'] });
-          queryClient.invalidateQueries({ queryKey: ['clients'] });
-          queryClient.setQueryData(['lead', lead.id], updatedLead);
-          fetchLeads();
-        })
-        .catch((err: any) => {
-          toast.error(err.message || 'Failed to update stage');
-          setLeads(previousLeads); // revert on failure
-        })
-        .finally(() => {
-          setIsSubmitting(false);
-        });
+      moveStageBackward(lead.id, newStage, previousLeads);
     } else {
       // Optimistic update for forward move too
       const previousLeads = [...leads];
@@ -495,20 +516,10 @@ export function PipelineBoardView() {
                     const targIdx = PIPELINE_STAGES.indexOf(stage);
                     if (targIdx < currIdx) {
                       const prevLeads = [...leads];
-                      setLeads(leads.map(l => l.id === stageMenu.lead.id ? { ...l, stage } : l));
+                      const leadId = stageMenu.lead.id;
+                      setLeads(leads.map(l => l.id === leadId ? { ...l, stage } : l));
                       setStageMenu(null);
-                      api.post(`/crm/leads/${stageMenu.lead.id}/stage`, { stage, fields: {} })
-                        .then((updatedLead: any) => {
-                          toast.success('Stage updated successfully');
-                          queryClient.invalidateQueries({ queryKey: ['leads'] });
-                          queryClient.invalidateQueries({ queryKey: ['clients'] });
-                          queryClient.setQueryData(['lead', stageMenu.lead.id], updatedLead);
-                          fetchLeads();
-                        })
-                        .catch((err: any) => {
-                          toast.error(err.message || 'Failed to update stage');
-                          setLeads(prevLeads);
-                        });
+                      moveStageBackward(leadId, stage, prevLeads);
                     } else {
                       const prevLeads = [...leads];
                       setLeads(leads.map(l => l.id === stageMenu.lead.id ? { ...l, stage } : l));

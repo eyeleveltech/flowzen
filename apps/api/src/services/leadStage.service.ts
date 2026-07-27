@@ -21,6 +21,27 @@ type Tx = Prisma.TransactionClient;
 /** Stages at which a Client account is born (find-or-create; never duplicates). */
 export const CONVERSION_STAGES = ['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT'] as const;
 
+/** Closed/terminal stages. A deal here is done — reopening it needs an explicit action. */
+export const TERMINAL_STAGES = ['CHURNED', 'PROJECT_COMPLETED'] as const;
+
+/**
+ * The pipeline's ONE state-machine rule. It is otherwise free-form by design — stages can be
+ * skipped, jumped, or moved backwards. But a CLOSED deal (CHURNED / PROJECT_COMPLETED) must not
+ * be silently dragged back into the active funnel: that requires an explicit `reopen`, because
+ * it re-activates a lost/finished deal and (below) resets the client status so the two records
+ * don't disagree. Returns an error string to send as 409, or null when the move is allowed.
+ */
+export function stageTransitionError(previousStage: string, toStage: string, reopen?: boolean): string | null {
+  if (previousStage === toStage) return null;
+  const wasClosed = (TERMINAL_STAGES as readonly string[]).includes(previousStage);
+  const reopeningIntoFunnel = wasClosed && !(TERMINAL_STAGES as readonly string[]).includes(toStage);
+  if (reopeningIntoFunnel && !reopen) {
+    const label = previousStage === 'CHURNED' ? 'lost (Churned)' : 'completed';
+    return `This deal is closed as ${label}. Reopen it to move it back into the pipeline.`;
+  }
+  return null;
+}
+
 export interface StageEffectParams {
   /** The lead as it was BEFORE this change (needs id, stage, clientId, identity + dealValue). */
   lead: any;
@@ -37,6 +58,8 @@ export interface StageEffectParams {
   contractEndDate?: string | Date | null;
   /** For retainers: MONTHLY | QUARTERLY | YEARLY | ONE_TIME (defaults MONTHLY). */
   billingFrequency?: string | null;
+  /** Explicit intent to reopen a closed (CHURNED / PROJECT_COMPLETED) deal. */
+  reopen?: boolean;
 }
 
 export interface StageEffectResult {
@@ -78,6 +101,11 @@ export async function applyLeadStageEffects(tx: Tx, params: StageEffectParams): 
     else if (toStage === 'ON_HOLD') newStatus = 'ONHOLD';
     else if (toStage === 'PROJECT_COMPLETED') newStatus = 'PROJECT_COMPLETED';
     else if (toStage === 'CHURNED') newStatus = 'CHURNED';
+    // Reopening a closed deal into the active funnel: bring the account back to ACTIVE so it
+    // isn't left CHURNED/PROJECT_COMPLETED while its lead is being worked again.
+    const reopeningIntoFunnel = (TERMINAL_STAGES as readonly string[]).includes(previousStage)
+      && !(TERMINAL_STAGES as readonly string[]).includes(toStage);
+    if (newStatus === null && reopeningIntoFunnel) newStatus = 'ACTIVE';
     if (newStatus) {
       await tx.client.update({ where: { id: clientId }, data: { status: newStatus } });
     }
