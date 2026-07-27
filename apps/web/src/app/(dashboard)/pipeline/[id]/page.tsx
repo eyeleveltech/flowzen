@@ -501,6 +501,35 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                     </div>
                   </div>
 
+                  {/* Contract & Renewal Card */}
+                  <div className="bg-white rounded-2xl border border-border p-6 shadow-sm">
+                    <h2 className="text-xs font-bold text-secondary flex items-center gap-2 mb-6 uppercase tracking-wider">
+                      <Calendar className="w-4 h-4" /> Contract & Renewal
+                    </h2>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between py-2.5 border-b border-gray-50">
+                        <span className="text-sm text-secondary font-medium">Contract Start Date</span>
+                        <span className="text-sm font-bold text-primary">{formatDate(lead.contractStartDate)}</span>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5 border-b border-gray-50">
+                        <span className="text-sm text-secondary font-medium">Contract End Date</span>
+                        <span className="text-sm font-bold text-primary">{formatDate(lead.contractEndDate)}</span>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5 border-b border-gray-50">
+                        <span className="text-sm text-secondary font-medium">Auto Renewal</span>
+                        <span className={`px-2 py-0.5 rounded text-[11px] font-bold tracking-wider uppercase border ${lead.autoRenewal ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
+                          {lead.autoRenewal ? 'Enabled' : 'Disabled'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5">
+                        <span className="text-sm text-secondary font-medium">Renewal Status</span>
+                        <span className="text-sm font-bold text-primary">
+                          {lead.renewalStatus ? lead.renewalStatus.replace(/_/g, ' ') : 'Upcoming'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Pipeline History Card */}
                   {lead.stageHistory && lead.stageHistory.length > 0 && (
                     <div className="bg-white rounded-2xl border border-border p-6 shadow-sm">

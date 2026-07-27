@@ -16,22 +16,25 @@ import { logger } from '../utils/logger.js';
 
 export function errorHandler(
   err: Error | AppError,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction
 ): void {
+  const requestId = (req as any).id;
   if (err instanceof AppError) {
     res.status(err.statusCode).json({
       error: err.message,
+      requestId,
     });
     return;
   }
 
-  logger.error('Unhandled error: %O', err);
+  logger.error('[%s] Unhandled error: %O', requestId || '-', err);
 
   res.status(500).json({
     error: process.env.NODE_ENV === 'production'
       ? 'Internal server error'
       : err.message,
+    requestId,
   });
 }

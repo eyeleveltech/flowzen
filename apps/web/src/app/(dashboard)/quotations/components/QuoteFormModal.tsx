@@ -60,7 +60,7 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
   useEffect(() => {
     api.get<{ clients: any[] }>('/clients?limit=200').then((d) => setClients(d.clients || [])).catch(() => { });
     api.get<any>('/crm/leads?limit=200').then((d) => setLeads(d?.leads || d || [])).catch(() => { });
-    api.get<any>('/settings/company').then((c) => {
+    api.get<any>('/settings/company/quote-context').then((c) => {
       setOrgState(c?.state || '');
       if (!editId && !duplicateOf && c?.standardTerms) setForm((f) => ({ ...f, termsConditions: c.standardTerms }));
     }).catch(() => { });
@@ -362,7 +362,7 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
               <button onClick={() => setLineItems((r) => [...r, emptyLine()])} className="flex items-center gap-1.5 text-xs font-medium text-primary border border-border rounded-lg px-2.5 py-1.5 hover:bg-gray-50"><Plus className="h-3.5 w-3.5" /> Add Row</button>
             </div>
             <div className="overflow-x-auto rounded-xl border border-border bg-white">
-              <table className="w-full text-sm min-w-[920px]">
+              <table className="w-full text-sm min-w-230">
                 <thead><tr className="text-left text-[11px] uppercase tracking-wider text-secondary border-b border-border">
                   <th className="px-2 py-2 w-8">#</th><th className="px-2 py-2">Description</th><th className="px-2 py-2 w-24">Unit</th>
                   <th className="px-2 py-2 w-16">Qty</th><th className="px-2 py-2 w-24">Unit Price</th><th className="px-2 py-2 w-16">Disc %</th>

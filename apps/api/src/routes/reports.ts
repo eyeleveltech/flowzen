@@ -214,6 +214,8 @@ reportRouter.get('/clients', async (req: AuthRequest, res: Response, next) => {
         company: true,
         contractValue: true,
         status: true,
+        contracts: { select: { value: true, status: true } },
+        subscriptions: { select: { amount: true, status: true } },
         contacts: { select: { name: true } },
         projects: {
           select: { 
@@ -228,6 +230,9 @@ reportRouter.get('/clients', async (req: AuthRequest, res: Response, next) => {
     });
 
     const clientMetrics = clients.map((c) => {
+      const contractsVal = (c.contracts || []).filter(ct => ct.status === 'ACTIVE').reduce((sum, ct) => sum + Number(ct.value || 0), 0);
+      const subsVal = (c.subscriptions || []).filter(s => s.status === 'ACTIVE').reduce((sum, s) => sum + Number(s.amount || 0), 0);
+      const effectiveValue = (contractsVal + subsVal) > 0 ? (contractsVal + subsVal) : (c.contractValue || 0);
       const completedProjects = c.projects.filter((p) => p.status === 'COMPLETED').length;
       const totalProjects = c.projects.length;
       const totalBudget = c.projects.reduce((sum, p) => sum + (p.budget || 0), 0);
@@ -259,7 +264,7 @@ reportRouter.get('/clients', async (req: AuthRequest, res: Response, next) => {
         id: c.id,
         name: c.name,
         company: c.company,
-        contractValue: c.contractValue,
+        contractValue: effectiveValue,
         status: c.status,
         totalProjects,
         completedProjects,
@@ -309,6 +314,8 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
         where: { organizationId: orgId },
         select: {
           id: true, name: true, company: true, contractValue: true, status: true, updatedAt: true,
+          contracts: { select: { value: true, status: true } },
+          subscriptions: { select: { amount: true, status: true } },
           projects: { select: { status: true, endDate: true, tasks: { select: { status: true, dueDate: true } } } },
         },
       }),
@@ -356,7 +363,12 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
       CHURNED: 0.0,
     };
 
-    const activeRevenue = clients.filter(c => c.status === 'ACTIVE').reduce((s, c) => s + (c.contractValue || 0), 0);
+    const activeRevenue = clients.filter(c => c.status === 'ACTIVE').reduce((s, c) => {
+      const contractsVal = (c.contracts || []).filter(ct => ct.status === 'ACTIVE').reduce((sum, ct) => sum + Number(ct.value || 0), 0);
+      const subsVal = (c.subscriptions || []).filter(sub => sub.status === 'ACTIVE').reduce((sum, sub) => sum + Number(sub.amount || 0), 0);
+      const effectiveVal = (contractsVal + subsVal) > 0 ? (contractsVal + subsVal) : (c.contractValue || 0);
+      return s + effectiveVal;
+    }, 0);
     const WON_STAGES = ['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED'];
     const openPipelineLeads = leads.filter(l => l.stage !== 'CHURNED' && l.stage !== 'PROJECT_COMPLETED');
     const pipelineValue = openPipelineLeads.reduce((s, l) => s + (l.dealValue || 0), 0);

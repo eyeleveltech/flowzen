@@ -29,6 +29,7 @@ import './workers/emailWorker.js'; // Initialize BullMQ email worker
 import { startScheduler } from './services/scheduler.js';
 import { morganMiddleware } from './middleware/logger.js';
 import { logger } from './utils/logger.js';
+import { requestIdMiddleware } from './middleware/requestId.js';
 
 // Startup diagnostic (masked) — confirms whether AI keys actually loaded into this process.
 console.log(`[env] cwd=${process.cwd()} | APIFY_TOKEN=${process.env.APIFY_TOKEN ? 'loaded' : 'MISSING'} | OPENAI_API_KEY=${process.env.OPENAI_API_KEY ? 'loaded' : 'MISSING'}`);
@@ -46,6 +47,7 @@ app.set('trust proxy', 'loopback, uniquelocal');
 import cookieParser from 'cookie-parser';
 
 // Middleware
+app.use(requestIdMiddleware);
 app.use(helmet());
 app.use(morganMiddleware);
 app.use(cors({
@@ -90,7 +92,7 @@ app.use('/api/stream', sseRouter);
 // CRM module (Admins only):
 app.use('/api/crm/quotes', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), requireModule('CRM'), quoteRouter);
 app.use('/api/crm', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), requireModule('CRM'), crmRouter);
-app.use('/api/revenue', authenticate, authorize('SUPER_ADMIN'), requireModule('REVENUE'), revenueRouter);
+app.use('/api/revenue', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), requireModule('REVENUE'), revenueRouter);
 app.use('/api/analytics', analyticsRouter);
 
 // Shared infrastructure — available whenever CRM or PM is on (both use clients + the members list):
@@ -110,6 +112,15 @@ app.use('/api/v1', publicApiRouter);
 
 // Error handler
 app.use(errorHandler);
+
+// Process-level safety net for floating promise rejections and uncaught exceptions
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', error);
+});
 
 // Start
 const PORT = process.env.API_PORT || 4000;

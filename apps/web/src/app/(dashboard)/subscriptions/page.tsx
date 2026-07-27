@@ -4,12 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { RefreshCw } from 'lucide-react';
-
-const STATUS_STYLES: Record<string, string> = {
-  ACTIVE: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  CANCELLED: 'bg-red-50 text-red-700 border-red-200',
-  PAUSED: 'bg-amber-50 text-amber-700 border-amber-200',
-};
+import { StatusBadge } from '@/components/ui/status-badge';
+import { TableSkeleton } from '@/components/ui/skeleton-loaders';
 
 export default function SubscriptionsPage() {
   const { data, isLoading } = useQuery({
@@ -17,6 +13,20 @@ export default function SubscriptionsPage() {
     queryFn: () => api.get<any[]>('/revenue/subscriptions'),
   });
   const subscriptions = data || [];
+
+  if (isLoading) {
+    return (
+      <div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl font-semibold text-primary tracking-tight">Subscriptions</h1>
+            <p className="text-sm text-secondary mt-1">Manage recurring billing and subscriptions</p>
+          </div>
+        </div>
+        <TableSkeleton rows={5} />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -60,9 +70,7 @@ export default function SubscriptionsPage() {
                   <td className="px-6 py-4 text-sm text-secondary capitalize">{s.billingFrequency?.toLowerCase() || '-'}</td>
                   <td className="px-6 py-4 text-sm text-secondary">{s.nextBillingDate ? formatDate(s.nextBillingDate) : '-'}</td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md border ${STATUS_STYLES[s.status] || STATUS_STYLES.ACTIVE}`}>
-                      {s.status[0] + s.status.slice(1).toLowerCase()}
-                    </span>
+                    <StatusBadge status={s.status} />
                   </td>
                 </tr>
               ))}

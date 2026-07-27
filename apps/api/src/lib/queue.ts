@@ -30,6 +30,9 @@ const queueOptions: QueueOptions = {
 };
 
 export const emailQueue = new Queue('emailQueue', queueOptions);
+emailQueue.on('error', () => {
+  isQueueReady = false;
+});
 
 // Utility to dispatch jobs
 export async function enqueueEmail(data: { to: string; subject: string; html: string }) {

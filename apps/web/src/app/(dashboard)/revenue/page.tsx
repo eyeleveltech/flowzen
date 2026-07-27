@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { DollarSign, TrendingUp, Wallet, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/utils';
 
+import { PageSkeleton } from '@/components/ui/skeleton-loaders';
 import { NoAccess } from '@/components/ui/no-access';
 
 export default function RevenueOverviewPage() {
@@ -25,11 +26,7 @@ export default function RevenueOverviewPage() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="flex h-[50vh] items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   if (errorStatus === 403) {

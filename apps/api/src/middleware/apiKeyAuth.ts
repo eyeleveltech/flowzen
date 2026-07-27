@@ -10,12 +10,10 @@ export const apiKeyAuth = async (req: Request, res: Response, next: NextFunction
 
     if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
       token = authHeader.substring(7).trim(); // Extract token, case-insensitive 'Bearer '
-    } else if (req.query.apiKey) {
-      token = req.query.apiKey as string;
     }
 
     if (!token) {
-      res.status(401).json({ success: false, error: 'Missing or invalid API key', code: 401 });
+      res.status(401).json({ success: false, error: 'Missing or invalid API key. API key must be provided in the Authorization header.', code: 401 });
       return;
     }
 

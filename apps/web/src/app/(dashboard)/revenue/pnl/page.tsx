@@ -41,7 +41,7 @@ export default function PnLPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-primary">Per-Project P&L</h1>
+          <h1 className="text-2xl font-semibold text-primary tracking-tight">Per-Project P&L</h1>
           <p className="mt-1 text-sm text-secondary">Track revenue versus expenses across all projects and events.</p>
         </div>
       </div>

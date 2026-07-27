@@ -35,6 +35,9 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
     followUpDate: lead.followUpDate ? new Date(lead.followUpDate).toISOString().split('T')[0] : '',
     linkedinUrl: lead.linkedinUrl || '',
     lastContactedDate: lead.lastContactedDate ? new Date(lead.lastContactedDate).toISOString().split('T')[0] : '',
+    contractStartDate: lead.contractStartDate ? new Date(lead.contractStartDate).toISOString().split('T')[0] : '',
+    contractEndDate: lead.contractEndDate ? new Date(lead.contractEndDate).toISOString().split('T')[0] : '',
+    autoRenewal: Boolean(lead.autoRenewal),
   });
 
   const [errors, setErrors] = useState<{ contactName?: string; contactEmail?: string; contactPhone?: string }>({});
@@ -70,6 +73,9 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
         expectedCloseDate: form.expectedCloseDate || undefined,
         followUpDate: form.followUpDate || null,
         lastContactedDate: form.lastContactedDate || null,
+        contractStartDate: form.contractStartDate || null,
+        contractEndDate: form.contractEndDate || null,
+        autoRenewal: form.autoRenewal,
         assignedToId: form.assignedToId || undefined,
       };
       await api.patch(`/crm/leads/${lead.id}`, payload);
@@ -204,6 +210,24 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
             <div className="grid grid-cols-2 gap-4">
               <Field id="edit-followUpDate" label="Next Follow-up Date" type="date" value={form.followUpDate} onChange={(v) => setForm({ ...form, followUpDate: v })} />
               <Field id="edit-lastContactedDate" label="Last Contacted Date" type="date" value={form.lastContactedDate} onChange={(v) => setForm({ ...form, lastContactedDate: v })} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field id="edit-contractStartDate" label="Contract Start Date" type="date" value={form.contractStartDate} onChange={(v) => setForm({ ...form, contractStartDate: v })} />
+              <Field id="edit-contractEndDate" label="Contract End Date" type="date" value={form.contractEndDate} onChange={(v) => setForm({ ...form, contractEndDate: v })} />
+            </div>
+
+            <div className="flex items-center gap-3 p-3 bg-gray-50 border border-border rounded-xl">
+              <input
+                id="edit-autoRenewal"
+                type="checkbox"
+                checked={form.autoRenewal}
+                onChange={(e) => setForm({ ...form, autoRenewal: e.target.checked })}
+                className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary cursor-pointer"
+              />
+              <label htmlFor="edit-autoRenewal" className="text-sm font-medium text-[#374151] cursor-pointer">
+                Enable Auto-Renewal (Extends contract & updates billing date on expiry)
+              </label>
             </div>
           </form>
         </div>

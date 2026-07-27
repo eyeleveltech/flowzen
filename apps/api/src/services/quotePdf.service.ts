@@ -443,6 +443,35 @@ function buildModernHtml(quote: any, org: any, logoUri: string): string {
   </body></html>`;
 }
 
+// Concurrency limit to prevent memory exhaustion from simultaneous Puppeteer launches (max 2 parallel renders)
+class Semaphore {
+  private active = 0;
+  private queue: Array<() => void> = [];
+  constructor(private max: number) {}
+
+  async acquire(): Promise<void> {
+    if (this.active < this.max) {
+      this.active++;
+      return;
+    }
+    return new Promise<void>((resolve) => {
+      this.queue.push(resolve);
+    });
+  }
+
+  release(): void {
+    this.active--;
+    const next = this.queue.shift();
+    if (next) {
+      this.active++;
+      next();
+    }
+  }
+}
+
+const pdfRenderQueue = new Semaphore(2);
+const RENDER_TIMEOUT_MS = 15000; // 15s execution timeout
+
 export async function generateQuotePdf(quote: any, org: any): Promise<string> {
   const logoUri = await loadBrandLogo();
   const template = (org?.settings as any)?.company?.quotationTemplate || 'CLASSIC';
@@ -484,14 +513,19 @@ export async function generateQuotePdf(quote: any, org: any): Promise<string> {
     </div>`;
   }
 
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    ...(process.env.PUPPETEER_EXECUTABLE_PATH ? { executablePath: process.env.PUPPETEER_EXECUTABLE_PATH } : {}),
-  });
+  await pdfRenderQueue.acquire();
+  let browser: any = null;
   try {
+    browser = await puppeteer.launch({
+      headless: true,
+      timeout: RENDER_TIMEOUT_MS,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+      ...(process.env.PUPPETEER_EXECUTABLE_PATH ? { executablePath: process.env.PUPPETEER_EXECUTABLE_PATH } : {}),
+    });
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'load' });
+    page.setDefaultTimeout(RENDER_TIMEOUT_MS);
+    page.setDefaultNavigationTimeout(RENDER_TIMEOUT_MS);
+    await page.setContent(html, { waitUntil: 'load', timeout: RENDER_TIMEOUT_MS });
     const dir = path.resolve(process.cwd(), 'uploads', 'quotes');
     await fs.mkdir(dir, { recursive: true });
     const safeClient = String(quote.clientName || 'client').replace(/[^a-z0-9]+/gi, '_').slice(0, 40);
@@ -505,9 +539,13 @@ export async function generateQuotePdf(quote: any, org: any): Promise<string> {
       headerTemplate: '<span></span>',
       footerTemplate,
       margin: { top: '6mm', bottom: '20mm', left: '8mm', right: '8mm' },
+      timeout: RENDER_TIMEOUT_MS,
     });
     return `/uploads/quotes/${filename}`;
   } finally {
-    await browser.close();
+    if (browser) {
+      try { await browser.close(); } catch (_) {}
+    }
+    pdfRenderQueue.release();
   }
 }

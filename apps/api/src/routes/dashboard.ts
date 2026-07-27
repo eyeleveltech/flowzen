@@ -36,6 +36,9 @@ dashboardRouter.get('/stats', async (req: AuthRequest, res: Response, next) => {
         prisma.client.count({
           where: {
             organizationId: orgId,
+            ...(role === 'TEAM_MEMBER' ? {
+              projects: { some: { members: { some: { userId } } } }
+            } : {}),
             OR: [
               {
                 projects: {
@@ -69,7 +72,7 @@ dashboardRouter.get('/stats', async (req: AuthRequest, res: Response, next) => {
         }),
         prisma.task.count({
           where: {
-            project: { client: { organizationId: orgId } },
+            project: { client: { organizationId: orgId }, status: { not: 'CANCELLED' } },
             status: { in: ['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'BLOCKED'] },
             ...dateFilter,
             ...(role === 'TEAM_MEMBER' ? { assigneeId: userId } : {})
@@ -98,7 +101,14 @@ dashboardRouter.get('/stats', async (req: AuthRequest, res: Response, next) => {
             ...(role === 'TEAM_MEMBER' ? { members: { some: { userId } } } : {})
           },
         }),
-        prisma.user.count({ where: { organizationId: orgId, status: 'ACTIVE', ...dateFilter } }),
+        prisma.user.count({
+          where: {
+            organizationId: orgId,
+            status: 'ACTIVE',
+            ...dateFilter,
+            ...(role === 'TEAM_MEMBER' ? { id: userId } : {})
+          }
+        }),
         prisma.task.count({
           where: {
             project: { client: { organizationId: orgId } },
@@ -274,7 +284,11 @@ dashboardRouter.get('/team-workload', async (req: AuthRequest, res: Response, ne
     }
 
     const members = await prisma.user.findMany({
-      where: { organizationId: orgId, status: 'ACTIVE' },
+      where: {
+        organizationId: orgId,
+        status: 'ACTIVE',
+        ...(req.user!.role === 'TEAM_MEMBER' ? { id: req.user!.userId } : {})
+      },
       select: {
         id: true,
         name: true,
@@ -337,7 +351,8 @@ dashboardRouter.get('/velocity', async (req: AuthRequest, res: Response, next) =
         completedAt: { gte: start, lte: end },
         ...(role === 'TEAM_MEMBER' ? { assigneeId: userId } : {})
       },
-      select: { completedAt: true }
+      select: { completedAt: true },
+      take: 5000,
     });
 
     const dataMap = new Map();
@@ -389,16 +404,32 @@ dashboardRouter.get('/status-distribution', async (req: AuthRequest, res: Respon
       };
     }
 
-    const tasks = await prisma.task.findMany({
-      where: {
-        project: { client: { organizationId: orgId } },
-        ...(role === 'TEAM_MEMBER' ? { assigneeId: userId } : {}),
-        ...dateFilter
-      },
-      select: { status: true, dueDate: true }
-    });
-
     const todayStart = istStartOfDay();
+
+    const [statusGroups, overdueCount] = await Promise.all([
+      prisma.task.groupBy({
+        by: ['status'],
+        where: {
+          project: { client: { organizationId: orgId } },
+          ...(role === 'TEAM_MEMBER' ? { assigneeId: userId } : {}),
+          ...dateFilter,
+          NOT: {
+            dueDate: { lt: todayStart },
+            status: { notIn: ['COMPLETED', 'ON_HOLD'] },
+          },
+        },
+        _count: { _all: true },
+      }),
+      prisma.task.count({
+        where: {
+          project: { client: { organizationId: orgId } },
+          ...(role === 'TEAM_MEMBER' ? { assigneeId: userId } : {}),
+          ...dateFilter,
+          dueDate: { lt: todayStart },
+          status: { notIn: ['COMPLETED', 'ON_HOLD'] },
+        },
+      }),
+    ]);
 
     let buckets = {
       TODO: 0,
@@ -406,20 +437,16 @@ dashboardRouter.get('/status-distribution', async (req: AuthRequest, res: Respon
       REVIEW: 0,
       APPROVED: 0,
       COMPLETED: 0,
-      OVERDUE: 0
+      OVERDUE: overdueCount,
     };
 
-    tasks.forEach(t => {
-      // Overdue takes precedence
-      if (t.dueDate && new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED' && t.status !== 'ON_HOLD') {
-        buckets.OVERDUE++;
-      } else {
-        if (t.status === 'TODO' || t.status === 'BACKLOG' || t.status === 'BLOCKED') buckets.TODO++;
-        else if (t.status === 'IN_PROGRESS') buckets.IN_PROGRESS++;
-        else if (t.status === 'REVIEW') buckets.REVIEW++;
-        else if (t.status === 'APPROVED') buckets.APPROVED++;
-        else if (t.status === 'COMPLETED') buckets.COMPLETED++;
-      }
+    statusGroups.forEach((g) => {
+      const cnt = g._count._all;
+      if (g.status === 'TODO' || g.status === 'BACKLOG' || g.status === 'BLOCKED') buckets.TODO += cnt;
+      else if (g.status === 'IN_PROGRESS') buckets.IN_PROGRESS += cnt;
+      else if (g.status === 'REVIEW') buckets.REVIEW += cnt;
+      else if (g.status === 'APPROVED') buckets.APPROVED += cnt;
+      else if (g.status === 'COMPLETED') buckets.COMPLETED += cnt;
     });
 
     const data = [

@@ -33,6 +33,11 @@ const loginSchema = z.object({
   password: z.string(),
 });
 
+const resetPasswordSchema = z.object({
+  token: z.string().min(1),
+  password: z.string().min(8),
+});
+
 // POST /api/auth/register
 authRouter.post('/register', authLimiter, validate(registerSchema), async (req, res: Response, next) => {
   try {
@@ -246,13 +251,9 @@ authRouter.post('/request-reset', authLimiter, async (req: Request, res: Respons
 });
 
 // POST /api/auth/reset-password
-authRouter.post('/reset-password', async (req: Request, res: Response, next) => {
+authRouter.post('/reset-password', authLimiter, validate(resetPasswordSchema), async (req: Request, res: Response, next) => {
   try {
     const { token, password } = req.body;
-    if (!token || !password) {
-      res.status(400).json({ error: 'Token and new password are required' });
-      return;
-    }
 
     const user = await prisma.user.findUnique({ where: { resetToken: token } });
     

@@ -13,6 +13,10 @@ const bullMqRedisConnection = new Redis(redisUrl, {
   },
 });
 
+bullMqRedisConnection.on('error', (err) => {
+  // Silence connection errors when Redis is not running locally
+});
+
 export async function processEmailJob(data: { to: string; subject: string; html: string }) {
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS || process.env.SMTP_USER === 'your-email@gmail.com') {
     logger.warn('[EmailWorker] SMTP not fully configured. Skipping email to:', data.to);
@@ -57,4 +61,8 @@ emailWorker.on('completed', (job) => {
 
 emailWorker.on('failed', (job, err) => {
   logger.error(`[EmailWorker] Job ${job?.id} failed: ${err.message}`);
+});
+
+emailWorker.on('error', (err) => {
+  // Prevent BullMQ worker connection error from crashing Node process
 });

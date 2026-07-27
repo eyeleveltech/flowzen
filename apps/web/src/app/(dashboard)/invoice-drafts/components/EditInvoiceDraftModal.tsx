@@ -24,7 +24,7 @@ export function EditInvoiceDraftModal({ draftId, onClose, onSaved }: { draftId: 
   const [notes, setNotes] = useState('');
 
   useEffect(() => {
-    api.get<any>('/settings/company').then((c) => {
+    api.get<any>('/settings/company/quote-context').then((c) => {
       setOrgState(c?.state || '');
     }).catch(() => {});
 

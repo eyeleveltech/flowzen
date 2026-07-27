@@ -35,7 +35,7 @@ export default function ReceivablesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-primary">Receivables</h1>
+          <h1 className="text-2xl font-semibold text-primary tracking-tight">Receivables</h1>
           <p className="mt-1 text-sm text-secondary">Track outstanding payments from active contracts.</p>
         </div>
       </div>

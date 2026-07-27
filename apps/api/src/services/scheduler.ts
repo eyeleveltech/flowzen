@@ -4,10 +4,26 @@ import { NotificationService } from './notifications.js';
 import { runDailyNotificationJobs } from './notificationScanners.js';
 import { logger } from '../utils/logger.js';
 import { istStartOfDay } from '../utils/istDay.js';
+import { withDistributedLock } from '../lib/lock.js';
+import { executeWorkflowRules } from './workflowEngine.js';
 
 const CHECK_INTERVAL_MS = 60 * 60 * 1000;      // run hourly
 const LOOKAHEAD_MS = 24 * 60 * 60 * 1000;       // notify for tasks due within 24h
 const DEDUP_WINDOW_MS = 20 * 60 * 60 * 1000;    // don't re-notify the same task within 20h
+
+async function safeDeadlineCheck() {
+  await withDistributedLock('lock:scheduler:deadline', 55 * 60 * 1000, runDeadlineCheck);
+}
+
+async function safeOverdueCheck() {
+  await withDistributedLock('lock:scheduler:overdue', 55 * 60 * 1000, runOverdueCheck);
+}
+
+async function safeDailyCRMJobs() {
+  await withDistributedLock('lock:scheduler:daily-crm', 23 * 60 * 60 * 1000, async () => {
+    await runDailyNotificationJobs();
+  });
+}
 
 /**
  * Finds tasks whose deadline is approaching and notifies their assignee.
@@ -25,7 +41,10 @@ async function runDeadlineCheck() {
         status: { notIn: ['COMPLETED', 'ON_HOLD'] },
         assigneeId: { not: null },
       },
-      select: { id: true, title: true, assigneeId: true, projectId: true },
+      include: {
+        project: { select: { client: { select: { organizationId: true } } } },
+        lead: { select: { organizationId: true } },
+      },
     });
 
     if (tasks.length === 0) return;
@@ -48,6 +67,14 @@ async function runDeadlineCheck() {
         userId: task.assigneeId!,
         metadata: { taskId: task.id, projectId: task.projectId },
       });
+
+      const orgId = task.project?.client?.organizationId || task.lead?.organizationId;
+      if (orgId) {
+        await executeWorkflowRules('TASK_DEADLINE_APPROACHING', { task, orgId }).catch((err) => {
+          logger.error(`[Scheduler] Workflow execution failed for task ${task.id}:`, err);
+        });
+      }
+
       sent++;
     }
 
@@ -109,14 +136,14 @@ async function runOverdueCheck() {
 
 export function startScheduler() {
   // Run shortly after boot (let the app settle), then on a fixed interval.
-  setTimeout(runDeadlineCheck, 30 * 1000);
-  setInterval(runDeadlineCheck, CHECK_INTERVAL_MS);
+  setTimeout(safeDeadlineCheck, 30 * 1000);
+  setInterval(safeDeadlineCheck, CHECK_INTERVAL_MS);
 
-  setTimeout(runOverdueCheck, 45 * 1000);
-  setInterval(runOverdueCheck, CHECK_INTERVAL_MS);
+  setTimeout(safeOverdueCheck, 45 * 1000);
+  setInterval(safeOverdueCheck, CHECK_INTERVAL_MS);
 
   // Module F — daily CRM jobs (follow-up due, stale leads, digest) at 08:00 IST.
-  cron.schedule('0 8 * * *', () => { runDailyNotificationJobs().catch((e) => logger.error('[Scheduler] daily jobs failed', e)); }, { timezone: 'Asia/Kolkata' });
+  cron.schedule('0 8 * * *', () => { safeDailyCRMJobs().catch((e) => logger.error('[Scheduler] daily jobs failed', e)); }, { timezone: 'Asia/Kolkata' });
 
-  logger.info('[Scheduler] Deadline, Overdue + daily notification schedulers started');
+  logger.info('[Scheduler] Deadline, Overdue + daily notification schedulers started with distributed locking');
 }

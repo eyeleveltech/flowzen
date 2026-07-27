@@ -32,6 +32,21 @@ const identityFrom = (lead: any) => ({
   billingAddress: lead.billingAddress || null,
   gstNumber: lead.gstNumber || null,
   contractValue: lead.dealValue ?? null,
+  jobTitle: lead.jobTitle || null,
+  linkedinUrl: lead.linkedinUrl || null,
+  companySize: lead.companySize || null,
+  landlinePhone: lead.landlinePhone || null,
+  zip: lead.zip || null,
+  country: lead.country || null,
+  instagramHandle: lead.instagramHandle || null,
+  facebookPage: lead.facebookPage || null,
+  source: lead.source || null,
+  priority: lead.priority || null,
+  contractType: lead.contractType || null,
+  healthStatus: lead.healthStatus || null,
+  expectedRevenue: lead.expectedRevenue ?? null,
+  dossierJson: lead.dossierJson ?? null,
+  dossierStatus: lead.dossierStatus || null,
 });
 
 /**
@@ -44,6 +59,12 @@ async function findMatchingClient(tx: Tx, orgId: string, lead: any) {
   const candidates: Prisma.ClientWhereInput[] = [];
   if (lead.contactEmail) candidates.push({ email: { equals: lead.contactEmail, mode: 'insensitive' } });
   if (lead.contactPhone) candidates.push({ phone: lead.contactPhone });
+
+  const targetName = (lead.companyName || lead.contactName || '').trim();
+  if (targetName) {
+    candidates.push({ name: { equals: targetName, mode: 'insensitive' } });
+    candidates.push({ company: { equals: targetName, mode: 'insensitive' } });
+  }
   if (lead.companyName) {
     candidates.push({ company: { equals: lead.companyName, mode: 'insensitive' } });
     candidates.push({ name: { equals: lead.companyName, mode: 'insensitive' } });
@@ -76,12 +97,21 @@ export async function ensureClientForLead(
   lead: any,
   orgId: string,
 ): Promise<ConversionResult> {
-  if (lead.clientId) return { clientId: lead.clientId, created: false };
+  if (lead.clientId) {
+    const existingClient = await tx.client.findUnique({ where: { id: lead.clientId }, select: { id: true, status: true } });
+    if (existingClient && existingClient.status === 'PROSPECT') {
+      await tx.client.update({ where: { id: lead.clientId }, data: { status: 'ACTIVE' } });
+    }
+    return { clientId: lead.clientId, created: false };
+  }
 
   const existing = await findMatchingClient(tx, orgId, lead);
   if (existing) {
     await tx.lead.update({ where: { id: lead.id }, data: { clientId: existing.id } });
     await repointLeadQuotes(tx, lead.id, existing.id);
+    if (existing.status === 'PROSPECT') {
+      await tx.client.update({ where: { id: existing.id }, data: { status: 'ACTIVE' } });
+    }
     return { clientId: existing.id, created: false };
   }
 
@@ -125,7 +155,7 @@ export async function ensureClientForLead(
  */
 async function repointLeadQuotes(tx: Tx, leadId: string, clientId: string) {
   await tx.quoteDocument.updateMany({
-    where: { leadId, clientId: null },
+    where: { leadId, clientId: null } as any,
     data: { clientId },
   });
 }

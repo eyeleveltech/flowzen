@@ -25,6 +25,35 @@ function calculateNextDueDate(date: Date | string | null, freq: string) {
 
 // Ensure the helper is at the top
 
+async function validateTaskUserOrg(orgId: string, userIds: (string | null | undefined)[]) {
+  const cleanIds = Array.from(new Set(userIds.filter(Boolean))) as string[];
+  if (cleanIds.length === 0) return true;
+  const count = await prisma.user.count({
+    where: { id: { in: cleanIds }, organizationId: orgId },
+  });
+  return count === cleanIds.length;
+}
+
+export async function recomputeProjectProgress(projectIds: (string | null | undefined)[]) {
+  const cleanIds = Array.from(new Set(projectIds.filter(Boolean))) as string[];
+  if (cleanIds.length === 0) return;
+
+  await Promise.all(
+    cleanIds.map(async (projectId) => {
+      const projectTasks = await prisma.task.findMany({
+        where: { projectId, parentId: null },
+        select: { status: true },
+      });
+      const completed = projectTasks.filter((t) => t.status === 'COMPLETED').length;
+      const progress = projectTasks.length > 0 ? Math.round((completed / projectTasks.length) * 100) : 0;
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { progress },
+      });
+    })
+  );
+}
+
 export const taskRouter = Router();
 taskRouter.use(authenticate);
 
@@ -74,7 +103,10 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     const orgId = req.user!.organizationId;
     const { search, status, priority, projectId, leadId, assigneeId, type, clientId, filter, teamId, sort, dueDateFrom, dueDateTo, page = '1', limit = '50', orphaned } = req.query;
 
-    const projectFilter: any = { client: { organizationId: orgId } };
+    const projectFilter: any = {
+      client: { organizationId: orgId },
+      ...(projectId ? {} : { status: { not: 'CANCELLED' } }),
+    };
     if (clientId) projectFilter.clientId = whereIn(clientId);
 
     // Filtering by client is inherently about delivery work, so it stays project-only.
@@ -369,6 +401,12 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
     const ids: string[] = Array.from(new Set(((assigneeIds?.length ? assigneeIds : (assigneeId ? [assigneeId] : [])) as string[]).filter(Boolean)));
     const primaryAssigneeId = ids[0] || null;
 
+    const userOk = await validateTaskUserOrg(req.user!.organizationId, [...ids, reviewerId, assignedById]);
+    if (!userOk) {
+      res.status(400).json({ error: 'One or more assigned users do not belong to your organization' });
+      return;
+    }
+
     const task = await prisma.task.create({
       data: {
         title,
@@ -479,6 +517,17 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
     if (newAssigneeIds) {
       data.assigneeId = newAssigneeIds[0] || null;
       data.assignees = { set: newAssigneeIds.map((id) => ({ id })) };
+    }
+
+    const targetUserIds = [
+      ...(newAssigneeIds || []),
+      b.reviewerId,
+      b.assignedById,
+    ];
+    const userOk = await validateTaskUserOrg(req.user!.organizationId, targetUserIds);
+    if (!userOk) {
+      res.status(400).json({ error: 'One or more assigned users do not belong to your organization' });
+      return;
     }
 
     // project is a required relation — reassign via connect, and only when it changes.
@@ -905,6 +954,12 @@ taskRouter.patch('/reorder', async (req: AuthRequest, res: Response, next) => {
       }
     }
 
+    const targetTasks = await prisma.task.findMany({
+      where: { id: { in: ids } },
+      select: { projectId: true },
+    });
+    const affectedProjectIds = targetTasks.map((t) => t.projectId);
+
     await prisma.$transaction(
       tasks.map((t) =>
         prisma.task.update({
@@ -913,6 +968,8 @@ taskRouter.patch('/reorder', async (req: AuthRequest, res: Response, next) => {
         })
       )
     );
+
+    await recomputeProjectProgress(affectedProjectIds);
 
     const io = req.app.get('io');
     emitToOrganization(io, req.user!.organizationId, 'tasks:reordered', { tasks });

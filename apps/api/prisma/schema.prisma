@@ -357,6 +357,21 @@ model Client {
   // Billing details used to auto-fill quotations / proforma invoices
   billingAddress String?      @db.Text
   gstNumber      String?
+  jobTitle         String?
+  linkedinUrl      String?
+  companySize      String?
+  landlinePhone    String?
+  zip              String?
+  country          String?
+  instagramHandle  String?
+  facebookPage     String?
+  source           LeadSource?
+  priority         LeadPriority?
+  contractType     ContractType?
+  healthStatus     HealthStatus?
+  expectedRevenue  Float?
+  dossierJson      Json?
+  dossierStatus    String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   archivedAt     DateTime?
@@ -660,6 +675,7 @@ model Lead {
   source            LeadSource   @default(MANUAL)
   stage             LeadStage    @default(NEW_LEAD)
   priority          LeadPriority @default(MEDIUM)
+  position          Int          @default(0)
   assignedToId      String?
   dealValue         Float?
   expectedCloseDate DateTime?
@@ -724,7 +740,7 @@ model Lead {
 
   @@unique([organizationId, leadId])
   @@index([organizationId, stage])
-  @@index([organizationId, contactPhone])
+  @@unique([organizationId, contactPhone])
   @@index([clientId]) // replaces the old unique index; still needs to be fast to look up
   @@map("leads")
 }

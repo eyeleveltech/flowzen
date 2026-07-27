@@ -39,10 +39,10 @@ const leadSchema = z.object({
   industry: z.string().optional(),
   source: z.enum(['EXCEL', 'MANUAL', 'API', 'REFERRAL', 'INBOUND', 'LINKEDIN', 'INSTAGRAM', 'WHATSAPP', 'OTHER', 'OUTBOUND', 'SOCIAL_MEDIA', 'EVENT', 'COLD_CALL', 'EXISTING_CLIENT']).optional(),
   assignedToId: z.string().optional(),
-  dealValue: z.number().optional(),
-  expectedRevenue: z.number().optional(),
-  expectedCloseDate: z.string().optional(),
-  followUpDate: z.string().optional(),
+  dealValue: z.number().min(0, 'Deal value cannot be negative').optional(),
+  expectedRevenue: z.number().min(0, 'Expected revenue cannot be negative').optional(),
+  expectedCloseDate: z.string().refine((v) => !isNaN(Date.parse(v)), { message: 'Expected close date must be a valid date string' }).optional(),
+  followUpDate: z.string().refine((v) => !isNaN(Date.parse(v)), { message: 'Follow-up date must be a valid date string' }).optional(),
   notes: z.string().optional(),
   priority: z.enum(['HIGH', 'MEDIUM', 'LOW']).optional(),
 });
@@ -89,6 +89,10 @@ crmRouter.get('/leads', async (req: AuthRequest, res: Response, next) => {
       if (dateAddedFrom) (where.createdAt as any).gte = new Date(dateAddedFrom as string);
       if (dateAddedTo) (where.createdAt as any).lte = new Date(dateAddedTo as string);
     }
+    const pageNum = req.query.page ? parseInt(req.query.page as string, 10) : undefined;
+    const limitNum = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const skip = pageNum && limitNum ? (pageNum - 1) * limitNum : undefined;
+    const take = limitNum ? limitNum : undefined;
 
     const leads = await prisma.lead.findMany({
       where: where as any,
@@ -111,10 +115,104 @@ crmRouter.get('/leads', async (req: AuthRequest, res: Response, next) => {
              : sort === 'closeDate_desc' ? [{ expectedCloseDate: 'desc' }]
              : sort === 'owner_asc' ? [{ assignedTo: { name: 'asc' } }]
              : sort === 'owner_desc' ? [{ assignedTo: { name: 'desc' } }]
-             : [{ createdAt: 'desc' }],
+             : [{ stage: 'asc' }, { position: 'asc' }, { createdAt: 'desc' }],
+      ...(skip !== undefined ? { skip } : {}),
+      ...(take !== undefined ? { take } : {}),
     });
 
     res.json(leads);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PATCH /api/crm/leads/reorder — Batch reorder cards within a column or across columns
+crmRouter.patch('/leads/reorder', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const { items } = req.body; // Array of { id: string, position: number, stage?: string }
+
+    if (!Array.isArray(items) || !items.length) {
+      res.status(400).json({ error: 'items array is required' });
+      return;
+    }
+
+    await prisma.$transaction(
+      items.map((item: any) =>
+        prisma.lead.updateMany({
+          where: { id: item.id, organizationId: orgId },
+          data: {
+            position: Number(item.position) || 0,
+            ...(item.stage ? { stage: item.stage } : {}),
+          },
+        })
+      )
+    );
+
+    const io = req.app.get('io');
+    emitToOrganization(io, orgId, 'lead:updated', { reordered: true });
+
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+const FORECAST_STAGE_WEIGHTS: Record<string, number> = {
+  NEW_LEAD: 0.10, OUTREACH: 0.20, MEETING: 0.30, PROPOSAL: 0.40, NEGOTIATION: 0.70,
+  CONTRACT: 0.90, ACTIVE_RETAINER: 1.00, ACTIVE_PROJECT: 1.00, ON_HOLD: 0.10,
+  PROJECT_COMPLETED: 1.00, CHURNED: 0.00,
+};
+
+// GET /api/crm/forecast — Server-side pipeline & forecast aggregates
+crmRouter.get('/forecast', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+
+    const leads = await prisma.lead.findMany({
+      where: { organizationId: orgId },
+      select: { stage: true, dealValue: true, expectedCloseDate: true },
+    });
+
+    let totalPipelineValue = 0;
+    let wonValue = 0;
+    let weightedForecastValue = 0;
+    let totalCount = leads.length;
+    let wonCount = 0;
+    const stageCounts: Record<string, number> = {};
+    const stageValues: Record<string, number> = {};
+
+    for (const l of leads) {
+      const val = Number(l.dealValue) || 0;
+      const st = l.stage || 'NEW_LEAD';
+
+      stageCounts[st] = (stageCounts[st] || 0) + 1;
+      stageValues[st] = (stageValues[st] || 0) + val;
+
+      if (['ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'CONTRACT', 'PROJECT_COMPLETED'].includes(st)) {
+        wonValue += val;
+        wonCount++;
+      }
+      if (st !== 'CHURNED') {
+        totalPipelineValue += val;
+        const weight = FORECAST_STAGE_WEIGHTS[st] ?? 0.10;
+        weightedForecastValue += val * weight;
+      }
+    }
+
+    const averageDealSize = totalCount > 0 ? totalPipelineValue / totalCount : 0;
+    const winRate = totalCount > 0 ? (wonCount / totalCount) * 100 : 0;
+
+    res.json({
+      totalLeads: totalCount,
+      totalPipelineValue,
+      wonValue,
+      weightedForecastValue,
+      averageDealSize,
+      winRate,
+      stageCounts,
+      stageValues,
+    });
   } catch (error) {
     next(error);
   }
@@ -436,47 +534,68 @@ crmRouter.post('/leads', authorize('SUPER_ADMIN', 'ADMIN'), validate(leadSchema)
       }
     }
 
-    const newLeadId = await generateLeadId(orgId);
-
-    // Create the lead with its own contact identity (no client yet).
-    const lead = await prisma.lead.create({
-      data: {
-        leadId: newLeadId,
-        clientId: client ? client.id : null,
-        organizationId: orgId,
-        source: source || 'MANUAL',
-        stage: 'NEW_LEAD',
-        assignedToId: assignedToId || null,
-        dealValue: dealValue || null,
-        expectedRevenue: expectedRevenue || null,
-        expectedCloseDate: expectedCloseDate ? new Date(expectedCloseDate) : null,
-        followUpDate: followUpDate ? new Date(followUpDate) : null,
-        priority: priority || 'MEDIUM',
-        contactName,
-        companyName: companyName || null,
-        contactEmail: email,
-        contactPhone: phone,
-        jobTitle: jobTitle || null,
-        linkedinUrl: linkedinUrl || null,
-        companySize: companySize || null,
-        landlinePhone: landlinePhone || null,
-        address: address || null,
-        city: city || null,
-        state: state || null,
-        zip: zip || null,
-        country: country || null,
-        website: website || null,
-        instagramHandle: instagramHandle || null,
-        facebookPage: facebookPage || null,
-        industry: industry || null,
-        billingAddress: billingAddress || null,
-        gstNumber: gstNumber || null,
-      },
-      include: {
-        client: true,
-        assignedTo: { select: { id: true, name: true, avatar: true } }
+    if (assignedToId) {
+      const assignee = await prisma.user.findFirst({
+        where: { id: assignedToId, organizationId: orgId, status: 'ACTIVE' },
+        select: { id: true },
+      });
+      if (!assignee) {
+        res.status(400).json({ error: 'Assigned user not found in your organization' });
+        return;
       }
-    });
+    }
+
+    let lead: any = null;
+    let attempts = 0;
+    while (!lead && attempts < 3) {
+      attempts++;
+      const currentLeadId = await generateLeadId(orgId);
+      try {
+        lead = await prisma.lead.create({
+          data: {
+            leadId: currentLeadId,
+            clientId: client ? client.id : null,
+            organizationId: orgId,
+            source: source || 'MANUAL',
+            stage: 'NEW_LEAD',
+            assignedToId: assignedToId || null,
+            dealValue: dealValue ?? null,
+            expectedRevenue: expectedRevenue ?? null,
+            expectedCloseDate: expectedCloseDate ? new Date(expectedCloseDate) : null,
+            followUpDate: followUpDate ? new Date(followUpDate) : null,
+            priority: priority || 'MEDIUM',
+            contactName,
+            companyName: companyName || null,
+            contactEmail: email,
+            contactPhone: phone,
+            jobTitle: jobTitle || null,
+            linkedinUrl: linkedinUrl || null,
+            companySize: companySize || null,
+            landlinePhone: landlinePhone || null,
+            address: address || null,
+            city: city || null,
+            state: state || null,
+            zip: zip || null,
+            country: country || null,
+            website: website || null,
+            instagramHandle: instagramHandle || null,
+            facebookPage: facebookPage || null,
+            industry: industry || null,
+            billingAddress: billingAddress || null,
+            gstNumber: gstNumber || null,
+          },
+          include: {
+            client: true,
+            assignedTo: { select: { id: true, name: true, avatar: true } }
+          }
+        });
+      } catch (err: any) {
+        if (err?.code === 'P2002' && Array.isArray(err?.meta?.target) && err.meta.target.includes('leadId') && attempts < 3) {
+          continue;
+        }
+        throw err;
+      }
+    }
 
     // Log Activity
     await prisma.activity.create({
@@ -505,7 +624,11 @@ crmRouter.post('/leads', authorize('SUPER_ADMIN', 'ADMIN'), validate(leadSchema)
     });
 
     res.status(201).json(lead);
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.code === 'P2002') {
+      res.status(409).json({ error: 'A lead with this phone number already exists in your organization.' });
+      return;
+    }
     next(error);
   }
 });
@@ -557,6 +680,27 @@ crmRouter.post('/leads/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
       if (seenPhones.has(digits)) { rejected.push({ ...data, rejection_reason: 'Duplicate phone number (already exists).' }); continue; }
       seenPhones.add(digits);
 
+      if (data.assignedToId) {
+        const assignee = await prisma.user.findFirst({
+          where: { id: data.assignedToId, organizationId: orgId, status: 'ACTIVE' },
+          select: { id: true },
+        });
+        if (!assignee) {
+          rejected.push({ ...data, rejection_reason: 'Assigned user not found in your organization.' });
+          continue;
+        }
+      }
+
+      const parsedDealValue = data.dealValue !== undefined && data.dealValue !== '' ? parseFloat(data.dealValue) : null;
+      if (parsedDealValue !== null && (isNaN(parsedDealValue) || parsedDealValue < 0)) {
+        rejected.push({ ...data, rejection_reason: 'Deal value must be a non-negative number.' });
+        continue;
+      }
+      if (data.expectedCloseDate && isNaN(Date.parse(data.expectedCloseDate))) {
+        rejected.push({ ...data, rejection_reason: 'Expected close date must be a valid date string.' });
+        continue;
+      }
+
       // No client is created at import — contact identity lives on the lead until OUTREACH.
       const validStage = validStages.includes(data.stage) ? data.stage : 'NEW_LEAD';
       const newLeadId = await generateLeadId(orgId);
@@ -568,7 +712,7 @@ crmRouter.post('/leads/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
           source: 'EXCEL', // bulk upload
           stage: validStage,
           assignedToId: data.assignedToId || null,
-          dealValue: data.dealValue ? parseFloat(data.dealValue) : null,
+          dealValue: parsedDealValue,
           expectedCloseDate: data.expectedCloseDate ? new Date(data.expectedCloseDate) : null,
           contactName: name,
           companyName: data.companyName || null,
@@ -619,8 +763,8 @@ crmRouter.post('/leads/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
 const stageUpdateSchema = z.object({
   stage: z.enum(['NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION', 'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'ON_HOLD', 'PROJECT_COMPLETED', 'CHURNED']),
   notes: z.string().optional(),
-  dealValue: z.number().optional(),
-  expectedCloseDate: z.string().optional(),
+  dealValue: z.number().min(0, 'Deal value cannot be negative').optional(),
+  expectedCloseDate: z.string().refine((v) => !isNaN(Date.parse(v)), { message: 'Expected close date must be a valid date string' }).optional(),
   contractType: z.enum(['RETAINER', 'ONE_TIME']).optional(),
   contractStartDate: z.string().optional(),
   contractEndDate: z.string().optional(),
@@ -670,6 +814,7 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
       // Only seed UPCOMING on first set — never clobber an admin's AT_RISK / IN_DISCUSSION.
       if (!existingLead.renewalStatus) updateData.renewalStatus = 'UPCOMING';
     }
+    if (position !== undefined) updateData.position = Number(position) || 0;
     if (stage === 'CHURNED') updateData.renewalStatus = 'CHURNED'; // keep renewal state coherent with churn
     if (lostReason !== undefined) updateData.lostReason = lostReason;
 
@@ -938,10 +1083,47 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
     const changes: string[] = [];
 
     if (source !== undefined && existingLead.source !== source) { updateData.source = source; changes.push(`changed Source to ${source}`); }
-    if (assignedToId !== undefined && existingLead.assignedToId !== assignedToId) { updateData.assignedToId = assignedToId; changes.push(`reassigned lead`); }
-    if (dealValue !== undefined && existingLead.dealValue !== dealValue) { updateData.dealValue = dealValue; changes.push(`changed Deal Value to ${dealValue}`); }
-    if (expectedRevenue !== undefined && existingLead.expectedRevenue !== expectedRevenue) { updateData.expectedRevenue = expectedRevenue; changes.push(`changed Expected Revenue to ${expectedRevenue}`); }
-    if (expectedCloseDate !== undefined) {
+    if (assignedToId !== undefined && assignedToId !== null && existingLead.assignedToId !== assignedToId) {
+      const assignee = await prisma.user.findFirst({
+        where: { id: assignedToId, organizationId: orgId, status: 'ACTIVE' },
+        select: { id: true },
+      });
+      if (!assignee) {
+        res.status(400).json({ error: 'Assigned user not found in your organization' });
+        return;
+      }
+      updateData.assignedToId = assignedToId;
+      changes.push(`reassigned lead`);
+    } else if (assignedToId === null && existingLead.assignedToId !== null) {
+      updateData.assignedToId = null;
+      changes.push(`unassigned lead`);
+    }
+
+    if (dealValue !== undefined && dealValue !== null) {
+      if (typeof dealValue === 'number' && dealValue < 0) {
+        res.status(400).json({ error: 'Deal value cannot be negative' });
+        return;
+      }
+      if (existingLead.dealValue !== dealValue) {
+        updateData.dealValue = dealValue;
+        changes.push(`changed Deal Value to ${dealValue}`);
+      }
+    }
+    if (expectedRevenue !== undefined && expectedRevenue !== null) {
+      if (typeof expectedRevenue === 'number' && expectedRevenue < 0) {
+        res.status(400).json({ error: 'Expected revenue cannot be negative' });
+        return;
+      }
+      if (existingLead.expectedRevenue !== expectedRevenue) {
+        updateData.expectedRevenue = expectedRevenue;
+        changes.push(`changed Expected Revenue to ${expectedRevenue}`);
+      }
+    }
+    if (expectedCloseDate !== undefined && expectedCloseDate !== null) {
+      if (typeof expectedCloseDate === 'string' && isNaN(Date.parse(expectedCloseDate))) {
+        res.status(400).json({ error: 'Expected close date must be a valid date string' });
+        return;
+      }
       const newDate = expectedCloseDate ? new Date(expectedCloseDate) : null;
       if (existingLead.expectedCloseDate?.getTime() !== newDate?.getTime()) {
         updateData.expectedCloseDate = newDate;
@@ -962,6 +1144,28 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
         changes.push(`changed Last Contacted Date`);
       }
     }
+    if (contractStartDate !== undefined) {
+      const newDate = contractStartDate ? new Date(contractStartDate) : null;
+      if (existingLead.contractStartDate?.getTime() !== newDate?.getTime()) {
+        updateData.contractStartDate = newDate;
+        changes.push(`changed Contract Start Date`);
+      }
+    }
+    if (contractEndDate !== undefined) {
+      const newDate = contractEndDate ? new Date(contractEndDate) : null;
+      if (existingLead.contractEndDate?.getTime() !== newDate?.getTime()) {
+        updateData.contractEndDate = newDate;
+        changes.push(`changed Contract End Date`);
+      }
+    }
+    if (autoRenewal !== undefined && existingLead.autoRenewal !== autoRenewal) {
+      updateData.autoRenewal = Boolean(autoRenewal);
+      changes.push(`updated Auto Renewal`);
+    }
+    if (renewalStatus !== undefined && existingLead.renewalStatus !== renewalStatus) {
+      updateData.renewalStatus = renewalStatus;
+      changes.push(`updated Renewal Status`);
+    }
     if (contractType !== undefined && existingLead.contractType !== contractType) { updateData.contractType = contractType; changes.push(`changed Contract Type to ${contractType}`); }
     if (healthStatus !== undefined && existingLead.healthStatus !== healthStatus) { updateData.healthStatus = healthStatus; changes.push(`changed Health Status to ${healthStatus}`); }
     if (lostReason !== undefined && existingLead.lostReason !== lostReason) { updateData.lostReason = lostReason; changes.push(`changed Lost Reason`); }
@@ -969,34 +1173,63 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
     // Once the lead has converted, the Client is the single master for identity and billing
     // data. Freezing the lead's copies here is what stops the two records from drifting into
     // disagreeing about a company's address or GST number.
-    const frozen = existingLead.clientId
-      ? new Set<string>(LEAD_IDENTITY_FIELDS as readonly string[])
-      : new Set<string>();
-    const rejected: string[] = [];
-
-    for (const f of EDITABLE_TEXT_FIELDS) {
-      if (req.body[f] !== undefined && (existingLead as any)[f] !== req.body[f]) {
-        if (frozen.has(f)) {
-          rejected.push(f);
-          continue;
-        }
-        updateData[f] = req.body[f] || null;
-        changes.push(`updated ${f}`);
-      }
-    }
-
-    if (rejected.length) {
-      res.status(409).json({
-        error: 'This lead has been converted — edit these details on the client record instead.',
-        clientId: existingLead.clientId,
-        fields: rejected,
-      });
-      return;
-    }
     const { updatedLead, finalClientId, newClientId } = await prisma.$transaction(async (tx) => {
       let currentClientId: string | null = existingLead.clientId;
       let outNewClientId: string | null = null;
 
+      const clientUpdateData: any = {};
+
+      for (const f of EDITABLE_TEXT_FIELDS) {
+        if (req.body[f] !== undefined && (existingLead as any)[f] !== req.body[f]) {
+          updateData[f] = req.body[f] || null;
+          changes.push(`updated ${f}`);
+
+          if (currentClientId) {
+            const val = req.body[f] || null;
+            if (f === 'companyName') {
+              clientUpdateData.company = val;
+              if (val) clientUpdateData.name = val;
+            } else if (f === 'contactName') {
+              clientUpdateData.contactPerson = val;
+              if (!clientUpdateData.name && val) clientUpdateData.name = val;
+            } else if (f === 'contactEmail') {
+              clientUpdateData.email = val;
+            } else if (f === 'contactPhone') {
+              clientUpdateData.phone = val;
+            } else {
+              clientUpdateData[f] = val;
+            }
+          }
+        }
+      }
+
+      if (currentClientId && Object.keys(clientUpdateData).length > 0) {
+        await tx.client.update({
+          where: { id: currentClientId },
+          data: clientUpdateData,
+        });
+      }
+
+      if (stage !== undefined && existingLead.stage !== stage) {
+        updateData.stage = stage;
+        if (stage === 'CHURNED') updateData.renewalStatus = 'CHURNED';
+        
+        if (CONVERSION_STAGES.includes(stage) && !currentClientId) {
+          const { clientId, created } = await ensureClientForLead(tx, existingLead, orgId);
+          currentClientId = clientId;
+          if (created) outNewClientId = clientId;
+        }
+
+        if (currentClientId) {
+          let newStatus: 'ACTIVE' | 'PROJECT_COMPLETED' | 'CHURNED' | 'ONHOLD' | null = null;
+          if (['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(stage)) newStatus = 'ACTIVE';
+          else if (stage === 'ON_HOLD') newStatus = 'ONHOLD';
+          else if (stage === 'PROJECT_COMPLETED') newStatus = 'PROJECT_COMPLETED';
+          else if (stage === 'CHURNED') newStatus = 'CHURNED';
+          if (newStatus) {
+            await tx.client.update({ where: { id: currentClientId }, data: { status: newStatus } });
+          }
+        }
       // Only the lead's own stage/renewal fields are set here; the *consequences* of the stage
       // change (history, conversion, client status, revenue) are applied by applyLeadStageEffects
       // after the lead row is written — the exact same path POST /leads/:id/stage uses.
@@ -1090,6 +1323,8 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
 
     const io = req.app.get('io');
     emitToOrganization(io, orgId, 'lead:updated', updatedLead);
+    if (finalClientId) emitToOrganization(io, orgId, 'client:updated', { id: finalClientId });
+    if (newClientId) emitToOrganization(io, orgId, 'client:created', { id: newClientId });
 
     await createAuditLog({
       organizationId: orgId,
@@ -1281,6 +1516,155 @@ crmRouter.delete('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Au
     });
 
     res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+const crmClientUpdateSchema = z.object({
+  name: z.string().min(1).optional(),
+  company: z.string().optional().nullable(),
+  industry: z.string().optional().nullable(),
+  email: z.string().email().optional().or(z.literal('')).nullable(),
+  phone: z.string().optional().nullable(),
+  address: z.string().optional().nullable(),
+  contractValue: z.number().min(0).optional().nullable(),
+  startDate: z.string().optional().nullable(),
+  engagementType: z.string().optional().nullable(),
+  website: z.string().optional().nullable(),
+  city: z.string().optional().nullable(),
+  state: z.string().optional().nullable(),
+  billingAddress: z.string().optional().nullable(),
+  gstNumber: z.string().optional().nullable(),
+  scope: z.string().optional().nullable(),
+  assetLinks: z.string().optional().nullable(),
+  accountManagerId: z.string().optional().nullable(),
+  status: z.enum(['PROSPECT', 'ACTIVE', 'ONHOLD', 'CHURNED', 'PROJECT_COMPLETED']).optional(),
+  jobTitle: z.string().optional().nullable(),
+  linkedinUrl: z.string().optional().nullable(),
+  companySize: z.string().optional().nullable(),
+  landlinePhone: z.string().optional().nullable(),
+  zip: z.string().optional().nullable(),
+  country: z.string().optional().nullable(),
+  instagramHandle: z.string().optional().nullable(),
+  facebookPage: z.string().optional().nullable(),
+  source: z.enum(['EXCEL', 'MANUAL', 'API', 'REFERRAL', 'INBOUND', 'LINKEDIN', 'INSTAGRAM', 'WHATSAPP', 'OTHER', 'OUTBOUND', 'SOCIAL_MEDIA', 'EVENT', 'COLD_CALL', 'EXISTING_CLIENT']).optional().nullable(),
+  priority: z.enum(['HIGH', 'MEDIUM', 'LOW']).optional().nullable(),
+  contractType: z.enum(['RETAINER', 'ONE_TIME']).optional().nullable(),
+  healthStatus: z.enum(['GREEN', 'AMBER', 'RED']).optional().nullable(),
+  expectedRevenue: z.number().min(0).optional().nullable(),
+  dossierJson: z.any().optional().nullable(),
+  dossierStatus: z.string().optional().nullable(),
+  contacts: z.array(z.object({
+    id: z.string().optional(),
+    name: z.string().min(1),
+    designation: z.string().optional().nullable(),
+    email: z.string().optional().nullable(),
+    phone: z.string().optional().nullable(),
+  })).optional(),
+});
+
+// GET /api/crm/clients/:id — Full rich client data for CRM context (contacts, leads, projects, quotes)
+crmRouter.get('/clients/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const clientId = req.params.id as string;
+
+    const client = await prisma.client.findFirst({
+      where: { id: clientId, organizationId: orgId },
+      include: {
+        contacts: true,
+        accountManager: { select: { id: true, name: true, email: true, avatar: true } },
+        [('leads' as any)]: { orderBy: { createdAt: 'desc' } },
+        projects: { select: { id: true, name: true, status: true, progress: true } },
+        quotes: { select: { id: true, documentNumber: true, status: true, grandTotal: true, createdAt: true } },
+        notes: { include: { author: { select: { id: true, name: true, avatar: true } } }, orderBy: { createdAt: 'desc' } },
+        activities: { include: { user: { select: { id: true, name: true, avatar: true } } }, orderBy: { createdAt: 'desc' }, take: 50 },
+      },
+    });
+
+    if (!client) {
+      res.status(404).json({ error: 'Client not found' });
+      return;
+    }
+
+    res.json(client);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PUT /api/crm/clients/:id — CRM-only edit endpoint (gated: SUPER_ADMIN, ADMIN)
+crmRouter.put('/clients/:id', authorize('SUPER_ADMIN', 'ADMIN'), validate(crmClientUpdateSchema), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const clientId = req.params.id as string;
+
+    const existing = await prisma.client.findFirst({
+      where: { id: clientId, organizationId: orgId },
+    });
+
+    if (!existing) {
+      res.status(404).json({ error: 'Client not found' });
+      return;
+    }
+
+    if (existing.name === 'Internal') {
+      res.status(403).json({ error: 'The Internal client syncs automatically and cannot be manually edited' });
+      return;
+    }
+
+    const { contacts, startDate, ...data } = req.body;
+
+    const newName = data.name ? String(data.name).trim() : existing.name;
+    if (newName && newName.toLowerCase() !== existing.name.toLowerCase()) {
+      const duplicate = await prisma.client.findFirst({
+        where: { organizationId: orgId, name: { equals: newName, mode: 'insensitive' }, id: { not: existing.id } },
+        select: { id: true },
+      });
+      if (duplicate) {
+        res.status(409).json({ error: `A client named "${newName}" already exists.` });
+        return;
+      }
+    }
+
+    const updated = await prisma.client.update({
+      where: { id: existing.id },
+      data: {
+        ...data,
+        name: newName,
+        startDate: startDate ? new Date(startDate) : (startDate === null ? null : undefined),
+        ...(contacts ? {
+          contacts: {
+            deleteMany: {},
+            create: contacts.map((c: any) => ({
+              name: c.name,
+              designation: c.designation || null,
+              email: c.email || null,
+              phone: c.phone || null,
+            })),
+          },
+        } : {}),
+      },
+      include: {
+        contacts: true,
+        accountManager: { select: { id: true, name: true, avatar: true } },
+      },
+    });
+
+    const io = req.app.get('io');
+    emitToOrganization(io, orgId, 'client:updated', updated);
+
+    await createAuditLog({
+      organizationId: orgId,
+      userId: req.user!.userId,
+      action: 'CLIENT_UPDATE',
+      entityType: 'CLIENT',
+      entityId: updated.id,
+      details: { name: updated.name, company: updated.company, via: 'CRM' },
+    });
+
+    res.json(updated);
   } catch (error) {
     next(error);
   }
