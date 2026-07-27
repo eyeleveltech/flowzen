@@ -30,7 +30,7 @@ export function LeadListView() {
 
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Filters State
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [stageFilter, setStageFilter] = useState<string[]>((searchParams.get('stage') || '').split(',').filter(Boolean));
@@ -61,7 +61,7 @@ export function LeadListView() {
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<'MANUAL'|'BULK'>('MANUAL');
+  const [modalMode, setModalMode] = useState<'MANUAL' | 'BULK'>('MANUAL');
 
   // Filter logic trigger
   useEffect(() => {
@@ -83,7 +83,7 @@ export function LeadListView() {
     window.history.replaceState(null, '', newUrl);
 
     fetchLeads(params);
-    
+
     const sse = getSSE();
     if (sse) {
       const handleUpdate = () => fetchLeads(params);
@@ -143,7 +143,7 @@ export function LeadListView() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto flex-1">
             <div className="relative w-full sm:max-w-60 md:max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -151,7 +151,7 @@ export function LeadListView() {
                 className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
               />
             </div>
-            
+
             <div className="w-full sm:hidden">
               <Select
                 ariaLabel="Sort Leads"
@@ -189,9 +189,8 @@ export function LeadListView() {
 
             <button
               onClick={() => setShowMoreFilters(!showMoreFilters)}
-              className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-all ${
-                showMoreFilters || activeFilterCount > 0 ? 'bg-primary text-white border-primary' : 'bg-white border-border text-secondary hover:bg-gray-50'
-              }`}
+              className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-all ${showMoreFilters || activeFilterCount > 0 ? 'bg-primary text-white border-primary' : 'bg-white border-border text-secondary hover:bg-gray-50'
+                }`}
             >
               <Filter className="h-4 w-4" />
               More Filters {activeFilterCount > 0 && `(${activeFilterCount})`}
@@ -319,58 +318,58 @@ export function LeadListView() {
             <thead>
               <tr className="border-b border-[#F3F4F6] bg-white">
                 <th className="px-6 py-3.5 text-left text-xs font-semibold text-secondary uppercase tracking-wider">
-                  <ColumnDropdown 
-                    title="Client" 
-                    sortAscValue="client_asc" 
-                    sortDescValue="client_desc" 
+                  <ColumnDropdown
+                    title="Client"
+                    sortAscValue="client_asc"
+                    sortDescValue="client_desc"
                     sortAscLabel="Sort A to Z"
                     sortDescLabel="Sort Z to A"
-                    currentSort={sort} 
-                    onSortChange={setSort} 
+                    currentSort={sort}
+                    onSortChange={setSort}
                   />
                 </th>
                 <th className="px-6 py-3.5 text-left text-xs font-semibold text-secondary uppercase tracking-wider">
-                  <ColumnDropdown 
-                    title="Stage" 
-                    sortAscValue="stage_asc" 
-                    sortDescValue="stage_desc" 
+                  <ColumnDropdown
+                    title="Stage"
+                    sortAscValue="stage_asc"
+                    sortDescValue="stage_desc"
                     sortAscLabel="New Lead to End"
                     sortDescLabel="End to New Lead"
-                    currentSort={sort} 
-                    onSortChange={setSort} 
+                    currentSort={sort}
+                    onSortChange={setSort}
                   />
                 </th>
                 <th className="px-6 py-3.5 text-left text-xs font-semibold text-secondary uppercase tracking-wider">
-                  <ColumnDropdown 
-                    title="Deal Value" 
-                    sortAscValue="dealValue_asc" 
-                    sortDescValue="dealValue_desc" 
+                  <ColumnDropdown
+                    title="Deal Value"
+                    sortAscValue="dealValue_asc"
+                    sortDescValue="dealValue_desc"
                     sortAscLabel="Sort Lowest to Highest"
                     sortDescLabel="Sort Highest to Lowest"
-                    currentSort={sort} 
-                    onSortChange={setSort} 
+                    currentSort={sort}
+                    onSortChange={setSort}
                   />
                 </th>
                 <th className="px-6 py-3.5 text-left text-xs font-semibold text-secondary uppercase tracking-wider">
-                  <ColumnDropdown 
-                    title="Close Date" 
-                    sortAscValue="closeDate_asc" 
-                    sortDescValue="closeDate_desc" 
+                  <ColumnDropdown
+                    title="Close Date"
+                    sortAscValue="closeDate_asc"
+                    sortDescValue="closeDate_desc"
                     sortAscLabel="Sort Earliest to Latest"
                     sortDescLabel="Sort Latest to Earliest"
-                    currentSort={sort} 
-                    onSortChange={setSort} 
+                    currentSort={sort}
+                    onSortChange={setSort}
                   />
                 </th>
                 <th className="px-6 py-3.5 text-left text-xs font-semibold text-secondary uppercase tracking-wider">
-                  <ColumnDropdown 
-                    title="Owner" 
-                    sortAscValue="owner_asc" 
-                    sortDescValue="owner_desc" 
+                  <ColumnDropdown
+                    title="Owner"
+                    sortAscValue="owner_asc"
+                    sortDescValue="owner_desc"
                     sortAscLabel="Sort A to Z"
                     sortDescLabel="Sort Z to A"
-                    currentSort={sort} 
-                    onSortChange={setSort} 
+                    currentSort={sort}
+                    onSortChange={setSort}
                   />
                 </th>
                 <th className="px-6 py-3.5"></th>
@@ -405,7 +404,7 @@ export function LeadListView() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         {lead.priority && (
-                           <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${lead.priority === 'HIGH' ? 'bg-red-500' : lead.priority === 'MEDIUM' ? 'bg-yellow-500' : 'bg-gray-300'}`} title={`Priority: ${lead.priority}`} />
+                          <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${lead.priority === 'HIGH' ? 'bg-red-500' : lead.priority === 'MEDIUM' ? 'bg-yellow-500' : 'bg-gray-300'}`} title={`Priority: ${lead.priority}`} />
                         )}
                         <div className="flex flex-col">
                           <span className="text-sm font-medium text-primary">{lead.contactName || lead.companyName || getClientDisplayName(lead.client)}</span>
@@ -416,11 +415,10 @@ export function LeadListView() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md border ${
-                        lead.stage === 'PROJECT_COMPLETED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                        lead.stage === 'CHURNED' ? 'bg-red-50 text-red-700 border-red-200' :
-                        'text-primary bg-[#F3F4F6] border-border'
-                      }`}>
+                      <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md border ${lead.stage === 'PROJECT_COMPLETED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          lead.stage === 'CHURNED' ? 'bg-red-50 text-red-700 border-red-200' :
+                            'text-primary bg-[#F3F4F6] border-border'
+                        }`}>
                         {lead.stage.replace(/_/g, ' ')}
                       </span>
                     </td>
@@ -443,7 +441,7 @@ export function LeadListView() {
                           <span className="text-sm text-[#374151]">{lead.assignedTo.name}</span>
                         </div>
                       ) : (
-                        <span className="text-sm text-muted">—</span>
+                        <span className="text-sm text-secondary">—</span>
                       )}
                     </td>
                     <td className="px-6 py-4 text-right">
@@ -473,7 +471,7 @@ export function LeadListView() {
             </div>
           ))
         ) : filteredLeads.length === 0 ? (
-          <div className="p-8 text-center text-sm text-muted bg-white rounded-xl border border-border">
+          <div className="p-8 text-center text-sm text-secondary bg-white rounded-xl border border-border">
             No leads found.
           </div>
         ) : (
@@ -499,11 +497,10 @@ export function LeadListView() {
                     </p>
                   </div>
                 </div>
-                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold border shrink-0 ${
-                  lead.stage === 'PROJECT_COMPLETED' ? 'bg-green-50 text-green-700 border-green-200' :
-                  lead.stage === 'CHURNED' ? 'bg-red-50 text-red-700 border-red-200' :
-                  'text-primary bg-[#F3F4F6] border-border'
-                }`}>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold border shrink-0 ${lead.stage === 'PROJECT_COMPLETED' ? 'bg-green-50 text-green-700 border-green-200' :
+                    lead.stage === 'CHURNED' ? 'bg-red-50 text-red-700 border-red-200' :
+                      'text-primary bg-[#F3F4F6] border-border'
+                  }`}>
                   {lead.stage.replace(/_/g, ' ')}
                 </span>
               </div>
@@ -515,7 +512,7 @@ export function LeadListView() {
                       {formatCurrency(lead.dealValue)}
                     </span>
                   ) : (
-                    <span className="text-[#9CA3AF]">—</span>
+                    <span className="text-secondary">—</span>
                   )}
                   {lead.expectedCloseDate && (
                     <span className={new Date(lead.expectedCloseDate) < new Date() && !['PROJECT_COMPLETED', 'CHURNED'].includes(lead.stage) ? 'text-red-600 font-medium' : ''}>
@@ -528,7 +525,7 @@ export function LeadListView() {
                     <span className="font-medium">{lead.assignedTo.name}</span>
                   </div>
                 ) : (
-                  <span className="text-[11px] text-[#9CA3AF]">Unassigned</span>
+                  <span className="text-xs text-secondary">Unassigned</span>
                 )}
               </div>
             </motion.div>

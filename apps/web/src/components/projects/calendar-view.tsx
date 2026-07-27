@@ -112,32 +112,33 @@ export function CalendarView({ projects }: CalendarViewProps) {
                     {format(date, 'd')}
                   </span>
                   {dayEvents.length > 0 && (
-                    <span className="text-[10px] text-muted font-medium">{dayEvents.length} items</span>
+                    <span className="text-xs text-secondary font-medium">{dayEvents.length} items</span>
                   )}
                 </div>
-                
+
                 <div className="space-y-1.5 overflow-y-auto max-h-35 pr-1 custom-scrollbar">
                   {dayEvents.map(event => {
                     const isProject = event.type === 'PROJECT_START' || event.type === 'PROJECT_DUE';
                     const Icon = event.type === 'PROJECT_START' ? PlayCircle : event.type === 'PROJECT_DUE' ? Flag : MapPin;
                     return (
-                    <motion.div
-                      initial={{ opacity: 0, y: 5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      key={event.id}
-                      onClick={() => router.push(`/projects/${event.projectId}`)}
-                      className={`px-2.5 py-1.5 text-xs rounded-lg border cursor-pointer hover:shadow-md transition-all truncate group
+                      <motion.div
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        key={event.id}
+                        onClick={() => router.push(`/projects/${event.projectId}`)}
+                        className={`px-2.5 py-1.5 text-xs rounded-lg border cursor-pointer hover:shadow-md transition-all truncate group
                         ${event.type === 'MILESTONE' ? (event.completed ? 'bg-emerald-50 text-emerald-700 border-emerald-100 opacity-70 line-through' : 'bg-emerald-100 text-emerald-800 border-emerald-200 shadow-sm') : ''}
                         ${isProject ? `${getStatusColor(event.status).bg} ${getStatusColor(event.status).text} ${getStatusColor(event.status).border} shadow-sm` : ''}
                       `}
-                      title={event.title}
-                    >
-                      <div className="flex items-center gap-1.5 truncate">
-                        <Icon className={`h-3.5 w-3.5 shrink-0 ${event.type === 'PROJECT_START' ? 'text-blue-500' : event.type === 'PROJECT_DUE' ? 'text-red-500' : 'text-emerald-600'}`} />
-                        <span className="truncate font-medium">{event.title}</span>
-                      </div>
-                    </motion.div>
-                  )})}
+                        title={event.title}
+                      >
+                        <div className="flex items-center gap-1.5 truncate">
+                          <Icon className={`h-3.5 w-3.5 shrink-0 ${event.type === 'PROJECT_START' ? 'text-blue-500' : event.type === 'PROJECT_DUE' ? 'text-red-500' : 'text-emerald-600'}`} />
+                          <span className="truncate font-medium">{event.title}</span>
+                        </div>
+                      </motion.div>
+                    )
+                  })}
                 </div>
               </div>
             );
@@ -147,7 +148,7 @@ export function CalendarView({ projects }: CalendarViewProps) {
         {/* Mobile Agenda View */}
         <div className="md:hidden flex flex-col p-4 gap-4">
           {days.filter(d => getEventsForDay(d).length > 0).length === 0 ? (
-            <div className="text-center text-sm text-muted py-8">No scheduled events this month</div>
+            <div className="text-center text-sm text-secondary py-8">No scheduled events this month</div>
           ) : (
             days.filter(d => isSameMonth(d, monthStart) && getEventsForDay(d).length > 0).map(date => {
               const dayEvents = getEventsForDay(date);

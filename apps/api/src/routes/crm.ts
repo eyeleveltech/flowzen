@@ -428,7 +428,7 @@ crmRouter.post('/leads', authorize('SUPER_ADMIN', 'ADMIN'), validate(leadSchema)
     // explicitly chosen, validate it; otherwise the lead starts with no client.
     let client = null as { id: string } | null;
     if (clientId) {
-      client = await prisma.client.findUnique({ where: { id: clientId, organizationId: orgId }, select: { id: true } });
+      client = await prisma.client.findFirst({ where: { id: clientId, organizationId: orgId, archivedAt: null }, select: { id: true } });
       if (!client) {
         res.status(404).json({ error: 'Client not found' });
         return;

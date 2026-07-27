@@ -87,7 +87,7 @@ export function BottomTabs() {
                 {canSwitch && (
                   <Link href="/modules" onClick={() => setShowMore(false)}>
                     <div className="flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all border border-border mb-1">
-                      <ArrowLeftRight className="h-5 w-5 text-muted" />
+                      <ArrowLeftRight className="h-5 w-5 text-secondary" />
                       Switch module
                     </div>
                   </Link>
@@ -102,12 +102,12 @@ export function BottomTabs() {
                     >
                       <div
                         className={`flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-medium transition-all duration-150 ${isActive
-                            ? 'bg-primary text-white'
-                            : 'text-[#374151] hover:bg-[#F9FAFB]'
+                          ? 'bg-primary text-white'
+                          : 'text-[#374151] hover:bg-[#F9FAFB]'
                           }`}
                       >
                         <item.icon
-                          className={`h-5 w-5 ${isActive ? 'text-white' : 'text-muted'
+                          className={`h-5 w-5 ${isActive ? 'text-white' : 'text-secondary'
                             }`}
                         />
                         {item.label}
@@ -157,11 +157,11 @@ export function BottomTabs() {
                   />
                 )}
                 <tab.icon
-                  className={`h-5 w-5 transition-colors duration-150 ${isActive ? 'text-primary' : 'text-muted'
+                  className={`h-5 w-5 transition-colors duration-150 ${isActive ? 'text-primary' : 'text-secondary'
                     }`}
                 />
                 <span
-                  className={`text-[10px] font-medium transition-colors duration-150 ${isActive ? 'text-primary' : 'text-muted'
+                  className={`text-xs font-medium transition-colors duration-150 ${isActive ? 'text-primary' : 'text-secondary'
                     }`}
                 >
                   {tab.label}
@@ -183,11 +183,11 @@ export function BottomTabs() {
               />
             )}
             <MoreHorizontal
-              className={`h-5 w-5 transition-colors duration-150 ${isMoreActive ? 'text-primary' : 'text-muted'
+              className={`h-5 w-5 transition-colors duration-150 ${isMoreActive ? 'text-primary' : 'text-secondary'
                 }`}
             />
             <span
-              className={`text-[10px] font-medium transition-colors duration-150 ${isMoreActive ? 'text-primary' : 'text-muted'
+              className={`text-xs font-medium transition-colors duration-150 ${isMoreActive ? 'text-primary' : 'text-secondary'
                 }`}
             >
               More

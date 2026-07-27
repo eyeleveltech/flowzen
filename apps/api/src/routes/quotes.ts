@@ -131,7 +131,7 @@ quoteRouter.post('/', validate(quoteSchema), async (req: AuthRequest, res: Respo
       }
       party = leadAsParty(lead);
     } else {
-      const client = await prisma.client.findFirst({ where: { id: body.clientId, organizationId: orgId } });
+      const client = await prisma.client.findFirst({ where: { id: body.clientId, organizationId: orgId, archivedAt: null } });
       if (!client) {
         res.status(404).json({ error: 'Client not found.' });
         return;

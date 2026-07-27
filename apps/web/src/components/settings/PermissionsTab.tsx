@@ -1,26 +1,29 @@
 import { Check, Minus } from 'lucide-react';
+import { USER_ROLES, ROLE_LABELS } from '@flowzen/shared';
 
 export function PermissionsTab() {
-  const roles = ['Super Admin', 'Admin', 'Manager', 'Executive'];
-  
+  const roles = USER_ROLES.map((r) => ROLE_LABELS[r]);
+
+  // Order of roles: SUPER_ADMIN (0), ADMIN (1), PROJECT_MANAGER (2), TEAM_MEMBER (3)
   const permissions = [
-    { name: 'Full access', values: [true, false, false, false] },
-    { name: 'Manage organization settings', values: [true, true, false, false] },
-    { name: 'Invite / remove members', values: [true, true, false, false] },
-    { name: 'Manage projects', values: [true, true, true, false] },
-    { name: 'Create / edit tasks', values: [true, true, true, true] },
-    { name: 'View all projects', values: [true, true, true, false] },
-    { name: 'View own tasks only', values: [true, true, true, true] },
-    { name: 'Approve deliverables', values: [true, true, true, false] },
-    { name: 'View reports', values: [true, true, true, false] },
-    { name: 'Manage permissions', values: [true, false, false, false] },
+    { name: 'Manage organization settings & modules', values: [true, true, false, false] },
+    { name: 'Invite & remove organization members', values: [true, true, false, false] },
+    { name: 'Manage teams & departments', values: [true, true, false, false] },
+    { name: 'Manage clients (create, edit)', values: [true, true, true, false] },
+    { name: 'Manage projects (create, edit, delete)', values: [true, true, true, false] },
+    { name: 'Approve deliverables & bulk tasks', values: [true, true, true, false] },
+    { name: 'Manage workflow templates', values: [true, true, true, false] },
+    { name: 'View analytics & reports', values: [true, true, true, false] },
+    { name: 'View system audit logs', values: [true, false, false, false] },
+    { name: 'Manage API keys', values: [true, false, false, false] },
+    { name: 'Transfer Super Admin ownership', values: [true, false, false, false] },
   ];
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-primary">Role Permissions</h2>
-        <p className="text-sm text-secondary">Review what each role can access and do within the platform.</p>
+        <p className="text-sm text-secondary">Review what each canonical role can access and do within the platform.</p>
       </div>
 
       <div className="bg-white border border-border rounded-2xl overflow-hidden overflow-x-auto">
@@ -40,9 +43,9 @@ export function PermissionsTab() {
                 {p.values.map((v, j) => (
                   <td key={j} className="px-6 py-4 text-center">
                     {v ? (
-                      <Check className="h-4 w-4 text-green-600 mx-auto" strokeWidth={3} />
+                      <Check className="h-4 w-4 text-emerald-600 mx-auto" strokeWidth={3} />
                     ) : (
-                      <Minus className="h-4 w-4 text-[#D1D5DB] mx-auto" />
+                      <Minus className="h-4 w-4 text-secondary/40 mx-auto" />
                     )}
                   </td>
                 ))}

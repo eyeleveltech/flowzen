@@ -79,12 +79,13 @@ export function useTeams() {
 }
 
 // --- Templates ---
-export function useTemplates() {
+export function useTemplates(enabled: boolean = true) {
   return useQuery({
     queryKey: ['templates'],
     queryFn: async () => {
       return api.get<any[]>('/settings/templates');
     },
+    enabled,
   });
 }
 
@@ -142,7 +143,7 @@ export function useDashboardData(role?: string, dateRange?: { startDate?: string
 }
 
 // --- Executive report (boss view) ---
-export function useExecutiveReport(dateRange?: { startDate?: string, endDate?: string }) {
+export function useExecutiveReport(dateRange?: { startDate?: string, endDate?: string }, enabled: boolean = true) {
   return useQuery({
     queryKey: ['executive', dateRange],
     queryFn: async () => {
@@ -152,6 +153,7 @@ export function useExecutiveReport(dateRange?: { startDate?: string, endDate?: s
       const qs = params.toString() ? `?${params.toString()}` : '';
       return api.get<any>(`/reports/executive${qs}`);
     },
+    enabled,
     refetchOnMount: 'always',
     staleTime: 0,
   });

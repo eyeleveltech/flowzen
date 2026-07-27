@@ -14,7 +14,10 @@ const moduleIcons: Record<ModuleKey, typeof FolderKanban> = {
   REVENUE: DollarSign,
 };
 
+import { usePageTitle } from '@/hooks/usePageTitle';
+
 export default function ModulePickerPage() {
+  usePageTitle('Modules');
   const router = useRouter();
   const { user, loadFromStorage, setAuth } = useAuthStore();
   const setActiveModule = useModuleStore((s) => s.setActiveModule);

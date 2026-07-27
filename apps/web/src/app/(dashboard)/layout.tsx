@@ -25,7 +25,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     loadFromStorage();
     hydrateModule();
     // Refresh the session (incl. enabledModules) so module gating reflects the server.
-    api.get('/auth/me').then((fresh: any) => setAuth(fresh)).catch(() => {});
+    api.get('/auth/me').then((fresh: any) => setAuth(fresh)).catch(() => { });
 
     const checkMobile = () => setIsMobile(window.innerWidth <= 768);
     checkMobile();
@@ -58,14 +58,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-screen bg-white">
       {/* Desktop Sidebar only — hidden on mobile */}
       {!isMobile && <Sidebar isMobile={false} />}
-      
+
       <motion.main
         animate={{ marginLeft: isMobile ? 0 : (sidebarCollapsed ? 72 : 260) }}
         transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
         className="flex-1 flex flex-col min-w-0 bg-surface w-full"
       >
         <TopNav isMobile={isMobile} />
-        <div className={`px-4 sm:px-6 lg:px-8 py-8 w-full max-w-[1600px] mx-auto ${isMobile ? 'pb-24' : ''}`}>
+        <div className={`px-4 sm:px-6 lg:px-8 py-8 w-full max-w-400 mx-auto ${isMobile ? 'pb-24' : ''}`}>
           {children}
         </div>
       </motion.main>
@@ -92,7 +92,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
           <button
             onClick={clearToast}
-            className="flex shrink-0 items-center justify-center rounded-lg p-1 text-muted hover:bg-[#F3F4F6] hover:text-primary transition-colors"
+            className="flex shrink-0 items-center justify-center rounded-lg p-1 text-secondary hover:bg-[#F3F4F6] hover:text-primary transition-colors"
           >
             <X className="h-4 w-4" />
           </button>

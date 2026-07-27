@@ -50,8 +50,11 @@ async function findMatchingClient(tx: Tx, orgId: string, lead: any) {
   }
   if (!candidates.length) return null;
 
+  // Only match a live account. An archived (soft-deleted) client was deliberately retired, so
+  // a returning customer gets a fresh active account rather than silently resurrecting one
+  // that's hidden from every list.
   return tx.client.findFirst({
-    where: { organizationId: orgId, OR: candidates },
+    where: { organizationId: orgId, archivedAt: null, OR: candidates },
     orderBy: { createdAt: 'asc' },
   });
 }

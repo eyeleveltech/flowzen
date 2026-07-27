@@ -109,22 +109,20 @@ export function ViewSettingsPanel({
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => onViewTypeChange('list')}
-                    className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-sm font-medium transition-all ${
-                      viewType === 'list'
+                    className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-sm font-medium transition-all ${viewType === 'list'
                         ? 'border-primary bg-primary/5 text-primary'
                         : 'border-border text-secondary hover:bg-gray-50'
-                    }`}
+                      }`}
                   >
                     <List className="w-4 h-4" />
                     List (Table)
                   </button>
                   <button
                     onClick={() => onViewTypeChange('board')}
-                    className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-sm font-medium transition-all ${
-                      viewType === 'board'
+                    className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-sm font-medium transition-all ${viewType === 'board'
                         ? 'border-primary bg-primary/5 text-primary'
                         : 'border-border text-secondary hover:bg-gray-50'
-                    }`}
+                      }`}
                   >
                     <LayoutGrid className="w-4 h-4" />
                     Board (Cards)
@@ -175,7 +173,7 @@ export function ViewSettingsPanel({
                     className="w-full flex items-center justify-between p-2.5 rounded-xl border border-border text-sm text-secondary hover:text-primary hover:bg-gray-50 transition-all font-medium text-left"
                   >
                     <span className="flex items-center gap-2">
-                      <Link2 className="w-4 h-4 text-muted" />
+                      <Link2 className="w-4 h-4 text-secondary" />
                       Copy Link to View
                     </span>
                   </button>
@@ -186,7 +184,7 @@ export function ViewSettingsPanel({
                       className="w-full flex items-center justify-between p-2.5 rounded-xl border border-border text-sm text-secondary hover:text-primary hover:bg-gray-50 transition-all font-medium text-left"
                     >
                       <span className="flex items-center gap-2">
-                        <Download className="w-4 h-4 text-muted" />
+                        <Download className="w-4 h-4 text-secondary" />
                         Export Data (⌘Shift X)
                       </span>
                     </button>

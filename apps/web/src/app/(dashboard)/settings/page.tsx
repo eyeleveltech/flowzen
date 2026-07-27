@@ -1,13 +1,12 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { useAuthStore } from '@/stores';
 import { useRouter } from 'next/navigation';
-import { Building2, Users, FileText, Shield, Zap, Boxes, Receipt, Bell, Key } from 'lucide-react';
+import { Building2, Users, FileText, Shield, Zap, Boxes, Receipt, Bell, Key, ChevronRight } from 'lucide-react';
 import { OrganizationTab } from '@/components/settings/OrganizationTab';
 import { NotificationsTab } from '@/components/settings/NotificationsTab';
 import { UsersTab } from '@/components/settings/UsersTab';
@@ -19,10 +18,14 @@ import { BillingTab } from '@/components/settings/BillingTab';
 import { AuditLogsTab } from '@/components/settings/AuditLogsTab';
 import { ApiKeysTab } from '@/components/settings/ApiKeysTab';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ErrorPanel } from '@/components/ui/error-panel';
 
 type Tab = 'organization' | 'modules' | 'billing' | 'users' | 'templates' | 'permissions' | 'workflows' | 'notifications' | 'audit' | 'api';
 
+import { usePageTitle } from '@/hooks/usePageTitle';
+
 export default function SettingsPage() {
+  usePageTitle('Settings');
   const { user } = useAuthStore();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('organization');
@@ -53,13 +56,14 @@ export default function SettingsPage() {
   const [workflows, setWorkflows] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const [modules, setModules] = useState<any[]>([]);
+  const [fetchErrors, setFetchErrors] = useState<Record<string, string | null>>({});
 
-  const fetchUsers = () => api.get<any[]>('/settings/users').then(setUsers).catch(() => {});
-  const fetchWorkflows = () => api.get<any[]>('/settings/workflows').then(setWorkflows).catch(() => {});
-  const fetchTemplates = () => api.get<any[]>('/settings/templates').then(setTemplates).catch(() => {});
-  const fetchOrg = () => api.get<any>('/settings/organization').then(setOrgData).catch(() => {});
-  const fetchTeams = () => api.get<{ teams: any[] }>('/teams').then((res) => setTeams(res.teams || [])).catch(() => {});
-  const fetchModules = () => api.get<any[]>('/settings/modules').then(setModules).catch(() => {});
+  const fetchUsers = () => api.get<any[]>('/settings/users').then((d) => { setUsers(d); setFetchErrors(p => ({ ...p, users: null })); }).catch((e: any) => setFetchErrors(p => ({ ...p, users: e.message || 'Failed to load users' })));
+  const fetchWorkflows = () => api.get<any[]>('/settings/workflows').then((d) => { setWorkflows(d); setFetchErrors(p => ({ ...p, workflows: null })); }).catch((e: any) => setFetchErrors(p => ({ ...p, workflows: e.message || 'Failed to load workflows' })));
+  const fetchTemplates = () => api.get<any[]>('/settings/templates').then((d) => { setTemplates(d); setFetchErrors(p => ({ ...p, templates: null })); }).catch((e: any) => setFetchErrors(p => ({ ...p, templates: e.message || 'Failed to load templates' })));
+  const fetchOrg = () => api.get<any>('/settings/organization').then((d) => { setOrgData(d); setFetchErrors(p => ({ ...p, organization: null })); }).catch((e: any) => setFetchErrors(p => ({ ...p, organization: e.message || 'Failed to load organization' })));
+  const fetchTeams = () => api.get<{ teams: any[] }>('/teams').then((res) => setTeams(res.teams || [])).catch(() => { });
+  const fetchModules = () => api.get<any[]>('/settings/modules').then((d) => { setModules(d); setFetchErrors(p => ({ ...p, modules: null })); }).catch((e: any) => setFetchErrors(p => ({ ...p, modules: e.message || 'Failed to load modules' })));
 
   useEffect(() => {
     if (user && (user.role === 'TEAM_MEMBER' || user.role === 'PROJECT_MANAGER')) {
@@ -126,20 +130,19 @@ export default function SettingsPage() {
           onScroll={updateTabScroll}
           className="flex gap-2 p-1 bg-[#F3F4F6] rounded-xl overflow-x-auto"
         >
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id as Tab)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              tab === t.id
-                ? 'bg-white text-primary shadow-sm'
-                : 'text-secondary hover:text-primary hover:bg-white/50'
-            }`}
-          >
-            <t.icon className="h-4 w-4" />
-            {t.label}
-          </button>
-        ))}
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id as Tab)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === t.id
+                  ? 'bg-white text-primary shadow-sm'
+                  : 'text-secondary hover:text-primary hover:bg-white/50'
+                }`}
+            >
+              <t.icon className="h-4 w-4" />
+              {t.label}
+            </button>
+          ))}
         </div>
 
         {/* Scroll affordance: only rendered when there are tabs still off-screen. */}
@@ -166,12 +169,22 @@ export default function SettingsPage() {
         transition={{ duration: 0.2 }}
         className="bg-white p-6 rounded-2xl border border-border"
       >
-        {tab === 'organization' && <OrganizationTab initialData={orgData} onSaved={fetchOrg} />}
-        {tab === 'modules' && <ModulesTab modules={modules} fetchModules={fetchModules} />}
+        {tab === 'organization' && (fetchErrors.organization
+          ? <ErrorPanel message={fetchErrors.organization} onRetry={fetchOrg} />
+          : <OrganizationTab initialData={orgData} onSaved={fetchOrg} />)}
+        {tab === 'modules' && (fetchErrors.modules
+          ? <ErrorPanel message={fetchErrors.modules} onRetry={fetchModules} />
+          : <ModulesTab modules={modules} fetchModules={fetchModules} userCount={users.length} />)}
         {tab === 'billing' && <BillingTab />}
-        {tab === 'users' && <UsersTab users={users} fetchUsers={fetchUsers} teams={teams} currentUser={user} />}
-        {tab === 'workflows' && <WorkflowsTab workflows={workflows} fetchWorkflows={fetchWorkflows} users={users} />}
-        {tab === 'templates' && <TemplatesTab templates={templates} fetchTemplates={fetchTemplates} />}
+        {tab === 'users' && (fetchErrors.users
+          ? <ErrorPanel message={fetchErrors.users} onRetry={fetchUsers} />
+          : <UsersTab users={users} fetchUsers={fetchUsers} teams={teams} currentUser={user} />)}
+        {tab === 'workflows' && (fetchErrors.workflows
+          ? <ErrorPanel message={fetchErrors.workflows} onRetry={fetchWorkflows} />
+          : <WorkflowsTab workflows={workflows} fetchWorkflows={fetchWorkflows} users={users} />)}
+        {tab === 'templates' && (fetchErrors.templates
+          ? <ErrorPanel message={fetchErrors.templates} onRetry={fetchTemplates} />
+          : <TemplatesTab templates={templates} fetchTemplates={fetchTemplates} />)}
         {tab === 'notifications' && <NotificationsTab />}
         {tab === 'permissions' && <PermissionsTab />}
         {tab === 'audit' && <AuditLogsTab />}

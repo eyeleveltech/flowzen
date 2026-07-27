@@ -157,7 +157,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
             {selectedOption ? selectedOption.label : placeholder}
           </span>
         </span>
-        <ChevronDown className={`h-4 w-4 shrink-0 text-muted transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+        <ChevronDown className={`h-4 w-4 shrink-0 text-secondary transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
       </button>
 
       {required && (
@@ -175,7 +175,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
           <div className="flex flex-col space-y-1">
             {showSearch && (
               <div className="relative mb-2">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" aria-hidden="true" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" aria-hidden="true" />
                 <input
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -186,7 +186,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
               </div>
             )}
             {filteredOptions.length === 0 && (
-              <div className="px-4 py-3.5 text-sm text-muted">No options found</div>
+              <div className="px-4 py-3.5 text-sm text-secondary">No options found</div>
             )}
             {filteredOptions.map((option) => (
               <button
@@ -206,12 +206,12 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                   )}
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">{option.label}</span>
-                    {option.sublabel && <span className="block text-xs text-muted truncate">{option.sublabel}</span>}
+                    {option.sublabel && <span className="block text-xs text-secondary truncate">{option.sublabel}</span>}
                   </span>
                   {option.capacity !== undefined && (
                     <span className="flex items-center gap-1.5 shrink-0 ml-2" title={`Capacity: ${option.capacity}%`}>
                       <span className={`w-2 h-2 rounded-full ${option.isOverloaded || option.capacity > 80 ? 'bg-red-500' : option.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                      <span className="text-[11px] font-medium text-[#86868B]">{option.capacity}%</span>
+                      <span className="text-xs font-medium text-secondary">{option.capacity}%</span>
                     </span>
                   )}
                 </span>
@@ -244,7 +244,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                   {showSearch && (
                     <div className="sticky top-0 z-10 -mx-1.5 -mt-1.5 mb-1 border-b border-[#F3F4F6] bg-white px-1.5 pt-1.5 pb-1.5">
                       <div className="relative">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted" aria-hidden="true" />
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-secondary" aria-hidden="true" />
                         <input
                           ref={searchInputRef}
                           value={searchQuery}
@@ -274,7 +274,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                     </div>
                   )}
                   {filteredOptions.length === 0 && (
-                    <div className="px-3 py-2 text-sm text-muted">No options found</div>
+                    <div className="px-3 py-2 text-sm text-secondary">No options found</div>
                   )}
                   {filteredOptions.map((option) => (
                     <button
@@ -327,12 +327,12 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                         )}
                         <span className="min-w-0 flex-1">
                           <span className="block truncate">{option.label}</span>
-                          {option.sublabel && <span className="block text-[11px] text-muted truncate">{option.sublabel}</span>}
+                          {option.sublabel && <span className="block text-xs text-secondary truncate">{option.sublabel}</span>}
                         </span>
                         {option.capacity !== undefined && (
                           <span className="flex items-center gap-1.5 shrink-0 ml-2" title={`Capacity: ${option.capacity}%`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${option.isOverloaded || option.capacity > 80 ? 'bg-red-500' : option.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                            <span className="text-[10px] font-medium text-[#86868B]">{option.capacity}%</span>
+                            <span className="text-xs font-medium text-secondary">{option.capacity}%</span>
                           </span>
                         )}
                       </span>

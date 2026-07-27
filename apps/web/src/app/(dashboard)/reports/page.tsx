@@ -9,6 +9,7 @@ import { formatDate, formatCurrency, getAvatarColor, getInitials, getClientDispl
 import { PieChart, ListTodo, Users, FolderKanban, Clock, AlertTriangle, TrendingUp, LayoutDashboard, IndianRupee, Target, Trophy, Download } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { useExecutiveReport } from '@/hooks/useQueries';
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer, PieChart as RPieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 
 const COLORS = ['#111827', '#4B5563', '#9CA3AF', '#D1D5DB', '#F3F4F6'];
@@ -87,10 +88,13 @@ export default function ReportsPage() {
     }
   }, [activeModule, tab]);
 
+  usePageTitle('Reports');
   const [datePreset, setDatePreset] = useState('this_quarter');
   const [customRange, setCustomRange] = useState({ start: '', end: '' });
   const dateRange = computeRange(datePreset, customRange);
-  const { data: exec } = useExecutiveReport(dateRange);
+
+  const canAccessReports = !!user && ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'].includes(user.role);
+  const { data: exec } = useExecutiveReport(dateRange, canAccessReports);
 
   interface Department {
     id: string;
@@ -101,8 +105,10 @@ export default function ReportsPage() {
   const [selectedDepartment, setSelectedDepartment] = useState<string>('');
 
   useEffect(() => {
+    if (!user) return;
+    if (!canAccessReports) return;
     api.get<{ teams: Department[] }>('/teams').then((res) => setDepartments(res.teams || [])).catch(() => { });
-  }, []);
+  }, [user, canAccessReports]);
 
   const [projectReport, setProjectReport] = useState<ProjectReport | null>(null);
   const [taskReport, setTaskReport] = useState<TaskReport | null>(null);
@@ -110,7 +116,8 @@ export default function ReportsPage() {
   const [clientReport, setClientReport] = useState<ClientReport | null>(null);
 
   useEffect(() => {
-    if (user && user.role === 'TEAM_MEMBER') {
+    if (!user) return;
+    if (user.role === 'TEAM_MEMBER') {
       router.push('/dashboard');
       return;
     }
@@ -181,11 +188,10 @@ export default function ReportsPage() {
           {user?.teamId && (
             <button
               onClick={() => setSelectedDepartment(user.teamId || '')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all flex items-center gap-1.5 ${
-                selectedDepartment === user.teamId
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all flex items-center gap-1.5 ${selectedDepartment === user.teamId
                   ? 'bg-primary text-white border-primary shadow-sm'
                   : 'bg-white text-secondary border-border hover:text-primary hover:bg-[#F9FAFB]'
-              }`}
+                }`}
             >
               <Users className="w-3.5 h-3.5" />
               My Department
@@ -264,7 +270,7 @@ export default function ReportsPage() {
                       {t.type.replace('_', ' ')}: <span className="text-primary ml-1 font-semibold">{t.count}</span>
                     </div>
                   ))}
-                  {projectReport.projectsByType.length === 0 && <span className="text-sm text-muted">No data available.</span>}
+                  {projectReport.projectsByType.length === 0 && <span className="text-sm text-secondary">No data available.</span>}
                 </div>
               </div>
 
@@ -277,7 +283,7 @@ export default function ReportsPage() {
                       <span className="text-sm font-semibold text-primary px-2 py-0.5 bg-[#F3F4F6] rounded-md">{c.count}</span>
                     </div>
                   ))}
-                  {projectReport.projectsByClient.length === 0 && <span className="text-sm text-muted">No active projects.</span>}
+                  {projectReport.projectsByClient.length === 0 && <span className="text-sm text-secondary">No active projects.</span>}
                 </div>
               </div>
             </motion.div>
@@ -314,7 +320,7 @@ export default function ReportsPage() {
                     <span className="text-sm font-semibold text-primary tabular-nums w-8 text-right">{a.count}</span>
                   </div>
                 ))}
-                {taskReport.tasksByAssignee.length === 0 && <span className="text-sm text-muted">No open assigned tasks.</span>}
+                {taskReport.tasksByAssignee.length === 0 && <span className="text-sm text-secondary">No open assigned tasks.</span>}
               </div>
             </motion.div>
 
@@ -327,7 +333,7 @@ export default function ReportsPage() {
                     <span className="bg-primary text-white text-[10px] px-1.5 py-0.5 rounded-md font-semibold">{t.count}</span>
                   </div>
                 ))}
-                {taskReport.tasksByType.length === 0 && <span className="text-sm text-muted">No open tasks.</span>}
+                {taskReport.tasksByType.length === 0 && <span className="text-sm text-secondary">No open tasks.</span>}
               </div>
             </motion.div>
           </div>
@@ -347,7 +353,7 @@ export default function ReportsPage() {
 
           <motion.div variants={item} className="rounded-2xl border border-border bg-white overflow-hidden hover:shadow-sm transition-shadow">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[700px]">
+              <table className="w-full min-w-175">
                 <thead>
                   <tr className="border-b border-[#F3F4F6] bg-surface">
                     <th className="px-6 py-4 text-left text-xs font-medium text-secondary uppercase tracking-wide">Member</th>
@@ -404,7 +410,7 @@ export default function ReportsPage() {
 
           <motion.div variants={item} className="rounded-2xl border border-border bg-white overflow-hidden hover:shadow-sm transition-shadow">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px]">
+              <table className="w-full min-w-225">
                 <thead>
                   <tr className="border-b border-[#F3F4F6] bg-surface">
                     <th className="px-6 py-4 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>
@@ -426,7 +432,7 @@ export default function ReportsPage() {
                       <td className="px-6 py-4 text-center">
                         <div className="flex flex-col items-center">
                           <span className="text-sm font-semibold text-primary">{c.completedProjects} / {c.totalProjects}</span>
-                          <span className="text-[10px] font-medium text-muted uppercase">Completed</span>
+                          <span className="text-xs font-medium text-secondary uppercase">Completed</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -446,14 +452,14 @@ export default function ReportsPage() {
                             {c.overdueTasks} Overdue
                           </span>
                         ) : (
-                          <span className="text-sm text-muted">-</span>
+                          <span className="text-sm text-secondary">-</span>
                         )}
                       </td>
                       <td className="px-6 py-4 text-left">
                         {c.nextDueDate ? (
                           <span className="text-sm font-medium text-primary">{formatDate(c.nextDueDate)}</span>
                         ) : (
-                          <span className="text-sm text-muted italic">No upcoming</span>
+                          <span className="text-sm text-secondary italic">No upcoming</span>
                         )}
                       </td>
                     </tr>
@@ -476,11 +482,11 @@ function MetricCard({ label, value, suffix, danger, icon: Icon }: { label: strin
     <div className={`flex flex-col p-4 sm:p-5 rounded-2xl border ${danger ? 'border-red-200 bg-red-50' : 'border-border bg-white'} hover:shadow-sm transition-shadow`}>
       <div className="flex items-start justify-between gap-2 mb-3">
         <p className={`text-[11px] sm:text-xs font-medium uppercase tracking-wide ${danger ? 'text-red-600' : 'text-secondary'}`}>{label}</p>
-        {Icon && <Icon className={`w-4 h-4 shrink-0 ${danger ? 'text-red-500' : 'text-muted'}`} />}
+        {Icon && <Icon className={`w-4 h-4 shrink-0 ${danger ? 'text-red-500' : 'text-secondary'}`} />}
       </div>
       <p title={String(value)} className={`${String(value).length > 12 ? 'text-lg sm:text-xl' : String(value).length > 8 ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-3xl'} font-semibold tabular-nums tracking-tight ${danger ? 'text-red-600' : 'text-primary'}`}>
         {value}
-        {suffix && <span className={`text-sm font-medium ml-2 ${danger ? 'text-red-400' : 'text-muted'}`}>{suffix}</span>}
+        {suffix && <span className={`text-sm font-medium ml-2 ${danger ? 'text-red-400' : 'text-secondary'}`}>{suffix}</span>}
       </p>
     </div>
   );
@@ -491,14 +497,14 @@ function ReportSkeleton() {
     <div className="space-y-6 animate-pulse">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="p-4 sm:p-5 rounded-2xl border border-border bg-white h-[104px]">
+          <div key={i} className="p-4 sm:p-5 rounded-2xl border border-border bg-white h-26">
             <div className="h-3 w-24 bg-[#F3F4F6] rounded mb-4" />
             <div className="h-8 w-16 bg-[#F3F4F6] rounded" />
           </div>
         ))}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="rounded-2xl border border-border bg-white p-6 h-[300px]">
+        <div className="rounded-2xl border border-border bg-white p-6 h-75">
           <div className="h-4 w-32 bg-[#F3F4F6] rounded mb-6" />
           <div className="space-y-6">
             {[...Array(4)].map((_, i) => (
@@ -509,7 +515,7 @@ function ReportSkeleton() {
             ))}
           </div>
         </div>
-        <div className="rounded-2xl border border-border bg-white p-6 h-[300px]">
+        <div className="rounded-2xl border border-border bg-white p-6 h-75">
           <div className="h-4 w-32 bg-[#F3F4F6] rounded mb-6" />
           <div className="flex gap-2 flex-wrap">
             {[...Array(6)].map((_, i) => (
@@ -539,7 +545,7 @@ function StatRow({ label, value, sub, tone }: { label: string; value: string; su
     <div className="rounded-2xl border border-border bg-white p-4 flex items-center justify-between">
       <div>
         <p className="text-xs font-medium text-secondary uppercase tracking-wide">{label}</p>
-        {sub && <p className="text-[11px] text-muted mt-0.5">{sub}</p>}
+        {sub && <p className="text-xs text-secondary mt-0.5">{sub}</p>}
       </div>
       <p className={`text-lg font-semibold tabular-nums ${color}`}>{value}</p>
     </div>
@@ -551,7 +557,7 @@ function MiniLegend({ dot, label }: { dot: string; label: string }) {
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
-  return <div className="h-[180px] flex items-center justify-center text-sm text-secondary">{children}</div>;
+  return <div className="h-45 flex items-center justify-center text-sm text-secondary">{children}</div>;
 }
 
 function ExecutiveTab({ data, periodLabel }: { data: any; periodLabel: string }) {
@@ -583,7 +589,7 @@ function ExecutiveTab({ data, periodLabel }: { data: any; periodLabel: string })
           <div className="lg:col-span-2 rounded-2xl border border-border bg-white p-5">
             <h3 className="text-sm font-semibold text-primary mb-4">Reasons for Loss</h3>
             {revenue.lostReasons.length ? (
-              <div className="h-[220px]">
+              <div className="h-55">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={revenue.lostReasons.map((r: any) => ({ name: titleCase(r.reason), count: r.count }))} layout="vertical" margin={{ left: 10, right: 12 }}>
                     <XAxis type="number" hide allowDecimals={false} />
@@ -604,7 +610,7 @@ function ExecutiveTab({ data, periodLabel }: { data: any; periodLabel: string })
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 rounded-2xl border border-border bg-white p-5">
             <h3 className="text-sm font-semibold text-primary mb-4">Completion Velocity</h3>
-            <div className="h-[220px]">
+            <div className="h-55">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={delivery.velocity} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
@@ -624,7 +630,7 @@ function ExecutiveTab({ data, periodLabel }: { data: any; periodLabel: string })
           </div>
           <div className="rounded-2xl border border-border bg-white p-5 flex flex-col">
             <h3 className="text-sm font-semibold text-primary mb-2">Project Health</h3>
-            <div className="h-[160px]">
+            <div className="h-40">
               <ResponsiveContainer width="100%" height="100%">
                 <RPieChart>
                   <Pie
@@ -655,7 +661,7 @@ function ExecutiveTab({ data, periodLabel }: { data: any; periodLabel: string })
         <SectionTitle icon={Users} title="Team & Utilization" subtitle={`Avg utilization ${team.avgUtilization}% · ${Math.round(team.totalLoggedHours)}h logged`} />
         <div className="rounded-2xl border border-border bg-white p-5">
           {team.members.length ? (
-            <div className="h-[260px]">
+            <div className="h-65">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={team.members.slice(0, 10).map((m: any) => ({ name: (m.name || '').split(' ')[0], capacity: m.capacity }))} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />

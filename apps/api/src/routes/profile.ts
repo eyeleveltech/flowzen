@@ -13,7 +13,7 @@ profileRouter.use(authenticate);
 // Validation schemas
 const updateProfileSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
-  designation: z.string().optional().nullable(),
+  designation: z.string().trim().max(60).optional().nullable(),
 });
 
 const updatePasswordSchema = z.object({

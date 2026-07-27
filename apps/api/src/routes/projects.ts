@@ -180,15 +180,20 @@ projectRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), va
     let finalClientId = projectData.clientId;
     if (!finalClientId) {
       const org = await prisma.organization.findUnique({ where: { id: req.user!.organizationId } });
-      const internalName = `${org?.name || 'Internal'} (Internal)`;
-      
+
       let internalClient = await prisma.client.findFirst({
-        where: { organizationId: req.user!.organizationId, name: internalName }
+        where: { organizationId: req.user!.organizationId, engagementType: 'INTERNAL' }
       });
 
       if (!internalClient) {
         internalClient = await prisma.client.create({
-          data: { name: internalName, organizationId: req.user!.organizationId, status: 'ACTIVE' }
+          data: {
+            name: 'Internal',
+            company: org?.name || '',
+            organizationId: req.user!.organizationId,
+            status: 'ACTIVE',
+            engagementType: 'INTERNAL'
+          }
         });
       }
       finalClientId = internalClient.id;
@@ -197,7 +202,7 @@ projectRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), va
     // Validate every referenced entity belongs to the caller's org (no cross-tenant injection).
     {
       const orgId = req.user!.organizationId;
-      const clientOk = await prisma.client.findFirst({ where: { id: finalClientId, organizationId: orgId }, select: { id: true } });
+      const clientOk = await prisma.client.findFirst({ where: { id: finalClientId, organizationId: orgId, archivedAt: null }, select: { id: true } });
       if (!clientOk) { res.status(400).json({ error: 'Client not found in your organization' }); return; }
 
       const userIds = Array.from(new Set([...(req.body.memberIds || []), ...(req.body.ownerId ? [req.body.ownerId] : [])])) as string[];
@@ -282,15 +287,20 @@ projectRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), 
     let finalClientId = projectData.clientId;
     if (finalClientId === '') {
       const org = await prisma.organization.findUnique({ where: { id: req.user!.organizationId } });
-      const internalName = `${org?.name || 'Internal'} (Internal)`;
-      
+
       let internalClient = await prisma.client.findFirst({
-        where: { organizationId: req.user!.organizationId, name: internalName }
+        where: { organizationId: req.user!.organizationId, engagementType: 'INTERNAL' }
       });
 
       if (!internalClient) {
         internalClient = await prisma.client.create({
-          data: { name: internalName, organizationId: req.user!.organizationId, status: 'ACTIVE' }
+          data: {
+            name: 'Internal',
+            company: org?.name || '',
+            organizationId: req.user!.organizationId,
+            status: 'ACTIVE',
+            engagementType: 'INTERNAL'
+          }
         });
       }
       finalClientId = internalClient.id;
@@ -301,7 +311,7 @@ projectRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), 
     // Validate every referenced entity belongs to the caller's org (no cross-tenant injection).
     {
       const orgId = req.user!.organizationId;
-      const clientOk = await prisma.client.findFirst({ where: { id: finalClientId, organizationId: orgId }, select: { id: true } });
+      const clientOk = await prisma.client.findFirst({ where: { id: finalClientId, organizationId: orgId, archivedAt: null }, select: { id: true } });
       if (!clientOk) { res.status(400).json({ error: 'Client not found in your organization' }); return; }
 
       const userIds = Array.from(new Set([...(req.body.memberIds || []), ...(req.body.ownerId ? [req.body.ownerId] : [])])) as string[];
@@ -459,7 +469,7 @@ projectRouter.post('/from-template', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_
     // clientId/ownerId must belong to the caller's org (no cross-tenant injection).
     {
       const orgId = req.user!.organizationId;
-      const clientOk = await prisma.client.findFirst({ where: { id: clientId, organizationId: orgId }, select: { id: true } });
+      const clientOk = await prisma.client.findFirst({ where: { id: clientId, organizationId: orgId, archivedAt: null }, select: { id: true } });
       if (!clientOk) { res.status(400).json({ error: 'Client not found in your organization' }); return; }
       const ownerOk = await prisma.user.findFirst({ where: { id: ownerId, organizationId: orgId }, select: { id: true } });
       if (!ownerOk) { res.status(400).json({ error: 'Owner not found in your organization' }); return; }

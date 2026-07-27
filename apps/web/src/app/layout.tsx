@@ -13,7 +13,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Flowzen — Premium Project Management',
+  title: { default: 'Flowzen', template: '%s — Flowzen' },
   description: 'Premium agency project management platform for digital teams',
   icons: { icon: '/icon.png' },
   manifest: '/manifest.json',

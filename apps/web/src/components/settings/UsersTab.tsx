@@ -4,6 +4,7 @@ import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { Plus, X, Edit2, Shield, Trash2, Mail, Building2, UserCircle, UserX } from 'lucide-react';
 import { Select } from '@/components/ui/select';
+import { Drawer } from '@/components/ui/drawer';
 import { getInitials, getAvatarColor, toProperCase, getRoleLabel } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useConfirmStore, useAuthStore } from '@/stores';
@@ -15,6 +16,9 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
   const [confirmOrgInput, setConfirmOrgInput] = useState('');
   const [transferring, setTransferring] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [reassignModal, setReassignModal] = useState<{ userId: string; userName: string; openTaskCount: number } | null>(null);
+  const [reassignTargetId, setReassignTargetId] = useState('');
+  const [reassigning, setReassigning] = useState(false);
 
   const authUser = useAuthStore(state => state.user);
   const effectiveCurrentUser = currentUser || authUser;
@@ -22,6 +26,33 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
 
   const confirm = useConfirmStore(state => state.confirm);
   const queryClient = useQueryClient();
+
+  const getRecordCountsSummary = (u: any) => {
+    if (!u._count) return null;
+    const parts: string[] = [];
+    if (u._count.assignedTasks > 0) parts.push(`${u._count.assignedTasks} task${u._count.assignedTasks > 1 ? 's' : ''}`);
+    if (u._count.comments > 0) parts.push(`${u._count.comments} comment${u._count.comments > 1 ? 's' : ''}`);
+    if (u._count.projectMembers > 0) parts.push(`${u._count.projectMembers} project${u._count.projectMembers > 1 ? 's' : ''}`);
+    if (u._count.assignedLeads > 0) parts.push(`${u._count.assignedLeads} lead${u._count.assignedLeads > 1 ? 's' : ''}`);
+    if (u._count.stageChanges > 0) parts.push(`${u._count.stageChanges} stage change${u._count.stageChanges > 1 ? 's' : ''}`);
+    if (u._count.quotesAsSalesperson > 0) parts.push(`${u._count.quotesAsSalesperson} quote${u._count.quotesAsSalesperson > 1 ? 's' : ''}`);
+    if (u._count.activities > 0) parts.push(`${u._count.activities} activit${u._count.activities > 1 ? 'ies' : 'y'}`);
+    if (u._count.notes > 0) parts.push(`${u._count.notes} note${u._count.notes > 1 ? 's' : ''}`);
+    if (u._count.ownedProjects > 0) parts.push(`${u._count.ownedProjects} project${u._count.ownedProjects > 1 ? 's' : ''}`);
+    if (u._count.assignedTasksBy > 0) parts.push(`${u._count.assignedTasksBy} assigned task${u._count.assignedTasksBy > 1 ? 's' : ''}`);
+    if (u._count.reviewedTasks > 0) parts.push(`${u._count.reviewedTasks} review${u._count.reviewedTasks > 1 ? 's' : ''}`);
+    if (u._count.managedClients > 0) parts.push(`${u._count.managedClients} client${u._count.managedClients > 1 ? 's' : ''}`);
+    if (u._count.createdWorkflows > 0) parts.push(`${u._count.createdWorkflows} workflow${u._count.createdWorkflows > 1 ? 's' : ''}`);
+    return parts.length > 0 ? parts.join(', ') : null;
+  };
+
+  const getDeleteDisabledReason = (u: any, currentUser: any) => {
+    if (u.role === 'SUPER_ADMIN') return 'Super Admin cannot be deleted';
+    if (currentUser && u.id === currentUser.id) return 'You cannot delete your own account';
+    const summary = getRecordCountsSummary(u);
+    if (summary) return `Deactivate this user instead (${summary})`;
+    return null;
+  };
 
   // Refresh the Settings table + the shared ['members'] cache that feeds assignee
   // dropdowns across Tasks/Projects/Pipeline/Clients.
@@ -94,20 +125,41 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
     }
   };
 
-  const handleDeactivate = async (userId: string) => {
-    const isConfirmed = await confirm({
-      title: 'Deactivate User',
-      message: 'Are you sure you want to deactivate this user?',
-      confirmText: 'Deactivate',
-      variant: 'warning'
-    });
-    if (!isConfirmed) return;
+  const handleDeactivate = async (u: any, reassignToId?: string) => {
+    const targetId = typeof u === 'string' ? u : u.id;
+    const targetName = typeof u === 'string' ? (users.find(usr => usr.id === u)?.name || 'this user') : u.name;
+
+    if (!reassignToId) {
+      const isConfirmed = await confirm({
+        title: 'Deactivate User',
+        message: `Are you sure you want to deactivate ${targetName}?`,
+        confirmText: 'Deactivate',
+        variant: 'warning'
+      });
+      if (!isConfirmed) return;
+    }
+
     try {
-      await api.put(`/settings/users/${userId}`, { status: 'INACTIVE' });
-      toast.success('User deactivated');
-      refreshMembers();
+      setReassigning(true);
+      const payload: any = { status: 'INACTIVE' };
+      if (reassignToId) payload.reassignTo = reassignToId;
+      await api.put(`/settings/users/${targetId}`, payload);
+      toast.success('User deactivated successfully');
+      setReassignModal(null);
+      setReassignTargetId('');
+      fetchUsers();
     } catch (err: any) {
-      toast.error(err.message || 'Failed to deactivate user');
+      if (err?.status === 409 && err?.openTaskCount) {
+        setReassignModal({
+          userId: targetId,
+          userName: targetName,
+          openTaskCount: err.openTaskCount,
+        });
+      } else {
+        toast.error(err?.message || 'Failed to deactivate user');
+      }
+    } finally {
+      setReassigning(false);
     }
   };
 
@@ -187,7 +239,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                   <td className="px-5 py-3">
                     {u.status === 'ACTIVE' && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[#F3F4F6] text-primary border border-border uppercase tracking-wide">Active</span>}
                     {u.status === 'PENDING' && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[#F3F4F6] text-secondary border border-border uppercase tracking-wide">Pending</span>}
-                    {u.status === 'INACTIVE' && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[#F9FAFB] text-muted border border-border uppercase tracking-wide">Inactive</span>}
+                    {u.status === 'INACTIVE' && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[#F9FAFB] text-secondary border border-border uppercase tracking-wide">Inactive</span>}
                   </td>
                   <td className="px-5 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
@@ -200,17 +252,46 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                           <Shield className="h-4 w-4" />
                         </button>
                       )}
-                      <button onClick={() => setEditingUser(u)} className="p-1.5 text-secondary hover:text-primary hover:bg-[#F3F4F6] rounded-md transition-colors">
+                      <button
+                        onClick={() => setEditingUser(u)}
+                        title="Edit user"
+                        className="p-1.5 text-secondary hover:text-primary hover:bg-[#F3F4F6] rounded-md transition-colors"
+                      >
                         <Edit2 className="h-4 w-4" />
                       </button>
                       {u.status !== 'INACTIVE' && (
-                        <button onClick={() => handleDeactivate(u.id)} title="Deactivate" className="p-1.5 text-secondary hover:text-primary hover:bg-[#F3F4F6] rounded-md transition-colors">
-                          <UserX className="h-4 w-4" />
+                        <button
+                          onClick={() => handleDeactivate(u)}
+                          title="Deactivate user"
+                          className="px-2.5 py-1 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 rounded-lg transition-colors flex items-center gap-1.5 shrink-0"
+                        >
+                          <UserX className="h-3.5 w-3.5" />
+
                         </button>
                       )}
-                      <button onClick={() => handleDelete(u.id)} title="Permanently Delete" className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {(() => {
+                        const disabledReason = getDeleteDisabledReason(u, effectiveCurrentUser);
+                        if (disabledReason) {
+                          return (
+                            <button
+                              disabled
+                              title={disabledReason}
+                              className="p-1.5 text-gray-300 bg-gray-50 border border-gray-100 rounded-md cursor-not-allowed opacity-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          );
+                        }
+                        return (
+                          <button
+                            onClick={() => handleDelete(u.id)}
+                            title="Permanently Delete"
+                            className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        );
+                      })()}
                     </div>
                   </td>
                 </tr>
@@ -233,7 +314,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                     <p className="text-xs text-secondary truncate max-w-35 sm:max-w-none">{u.email}</p>
                   </div>
                 </div>
-                <div className="flex gap-1.5 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
                   {effectiveCurrentUser?.role === 'SUPER_ADMIN' && u.id !== effectiveCurrentUser.id && (
                     <button
                       onClick={() => { setTransferTarget(u); setConfirmOrgInput(''); }}
@@ -243,17 +324,45 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                       <Shield className="h-4 w-4" />
                     </button>
                   )}
-                  <button onClick={() => setEditingUser(u)} className="p-1.5 text-secondary hover:text-primary bg-white border border-border hover:bg-[#F3F4F6] rounded-xl transition-all">
+                  <button
+                    onClick={() => setEditingUser(u)}
+                    title="Edit user"
+                    className="p-1.5 text-secondary hover:text-primary bg-white border border-border hover:bg-[#F3F4F6] rounded-xl transition-all"
+                  >
                     <Edit2 className="h-4 w-4" />
                   </button>
                   {u.status !== 'INACTIVE' && (
-                    <button onClick={() => handleDeactivate(u.id)} title="Deactivate" className="p-1.5 text-secondary hover:text-primary bg-white border border-border hover:bg-[#F3F4F6] rounded-xl transition-all">
-                      <UserX className="h-4 w-4" />
+                    <button
+                      onClick={() => handleDeactivate(u)}
+                      title="Deactivate user"
+                      className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 rounded-xl transition-all flex items-center gap-1 shrink-0"
+                    >
+                      <UserX className="h-3.5 w-3.5" />
                     </button>
                   )}
-                  <button onClick={() => handleDelete(u.id)} title="Permanently Delete" className="p-1.5 text-red-500 hover:text-red-700 bg-white border border-border hover:bg-red-50 rounded-xl transition-all">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  {(() => {
+                    const disabledReason = getDeleteDisabledReason(u, effectiveCurrentUser);
+                    if (disabledReason) {
+                      return (
+                        <button
+                          disabled
+                          title={disabledReason}
+                          className="p-1.5 text-gray-300 bg-gray-50 border border-gray-200 rounded-xl cursor-not-allowed opacity-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      );
+                    }
+                    return (
+                      <button
+                        onClick={() => handleDelete(u.id)}
+                        title="Permanently Delete"
+                        className="p-1.5 text-red-500 hover:text-red-700 bg-white border border-border hover:bg-red-50 rounded-xl transition-all"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -274,7 +383,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                   <span className="text-[10px] font-medium text-secondary uppercase tracking-wide block mb-0.5">Status</span>
                   {u.status === 'ACTIVE' && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-white text-primary border border-border uppercase">Active</span>}
                   {u.status === 'PENDING' && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-white text-secondary border border-border uppercase">Pending</span>}
-                  {u.status === 'INACTIVE' && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-white text-muted border border-border uppercase">Inactive</span>}
+                  {u.status === 'INACTIVE' && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-white text-secondary border border-border uppercase">Inactive</span>}
                 </div>
               </div>
             </div>
@@ -285,101 +394,81 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
         </div>
       </div>
 
-      <AnimatePresence>
-        {showInvite && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-100 bg-black/20 backdrop-blur-sm" onClick={() => setShowInvite(false)} />
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-101 w-full max-w-md bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto flex flex-col">
-              <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-border bg-surface sticky top-0 z-10 shrink-0">
-                <h3 className="text-base font-semibold text-primary">Invite Member</h3>
-                <button type="button" onClick={() => setShowInvite(false)} className="text-secondary hover:text-primary p-1 rounded-md hover:bg-border transition-colors"><X className="h-5 w-5" /></button>
-              </div>
-              <form onSubmit={handleInvite} className="p-4 sm:p-6 space-y-4 flex-1">
-                <div className="space-y-1.5">
-                  <label htmlFor="invite-name" className="text-sm font-medium text-[#374151]">Full Name</label>
-                  <input id="invite-name" required value={inviteForm.name} onChange={(e) => setInviteForm({ ...inviteForm, name: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
-                </div>
-                <div className="space-y-1.5">
-                  <label htmlFor="invite-email" className="text-sm font-medium text-[#374151]">Email Address</label>
-                  <input id="invite-email" required type="email" value={inviteForm.email} onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
-                </div>
-                <div className="space-y-1.5 z-30 relative">
-                  <label htmlFor="invite-role" className="text-sm font-medium text-[#374151]">Role</label>
-                  <Select id="invite-role" ariaLabel="Role" value={inviteForm.role} onChange={(val) => setInviteForm({ ...inviteForm, role: val })} options={roleOptions} />
-                </div>
-                <div className="space-y-1.5 z-20 relative">
-                  <label htmlFor="invite-team" className="text-sm font-medium text-[#374151]">Team (Optional)</label>
-                  <Select 
-                    id="invite-team"
-                    ariaLabel="Team"
-                    value={inviteForm.teamId || ''} 
-                    onChange={(val) => setInviteForm({ ...inviteForm, teamId: val || '' })} 
-                    options={[{ label: 'No Team', value: '' }, ...(teams?.map(t => ({ label: t.name, value: t.id })) || [])]} 
-                  />
-                </div>
-                <div className="space-y-1.5 relative">
-                  <label htmlFor="invite-designation" className="text-sm font-medium text-[#374151]">Designation (Optional)</label>
-                  <input id="invite-designation" list="designation-options" placeholder="Select or type a designation…" value={inviteForm.designation || ''} onChange={(e) => setInviteForm({ ...inviteForm, designation: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
-                </div>
-                <div className="pt-8 flex gap-3">
-                  <button type="button" onClick={() => setShowInvite(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-border text-[#374151] font-medium hover:bg-surface transition-colors">Cancel</button>
-                  <button type="submit" disabled={saving} className="flex-1 bg-primary text-white px-4 py-2.5 rounded-xl font-medium hover:bg-black transition-colors disabled:opacity-50">
-                    {saving ? 'Sending...' : 'Send Invite'}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      <Drawer variant="slideover" isOpen={showInvite} onClose={() => setShowInvite(false)} title="Invite Member">
+        <form onSubmit={handleInvite} className="space-y-4">
+          <div className="space-y-1.5">
+            <label htmlFor="invite-name" className="text-sm font-medium text-[#374151]">Full Name</label>
+            <input id="invite-name" required value={inviteForm.name} onChange={(e) => setInviteForm({ ...inviteForm, name: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="invite-email" className="text-sm font-medium text-[#374151]">Email Address</label>
+            <input id="invite-email" required type="email" value={inviteForm.email} onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
+          </div>
+          <div className="space-y-1.5 z-30 relative">
+            <label htmlFor="invite-role" className="text-sm font-medium text-[#374151]">Role</label>
+            <Select id="invite-role" ariaLabel="Role" value={inviteForm.role} onChange={(val) => setInviteForm({ ...inviteForm, role: val })} options={roleOptions} />
+          </div>
+          <div className="space-y-1.5 z-20 relative">
+            <label htmlFor="invite-team" className="text-sm font-medium text-[#374151]">Team (Optional)</label>
+            <Select
+              id="invite-team"
+              ariaLabel="Team"
+              value={inviteForm.teamId || ''}
+              onChange={(val) => setInviteForm({ ...inviteForm, teamId: val || '' })}
+              options={[{ label: 'No Team', value: '' }, ...(teams?.map(t => ({ label: t.name, value: t.id })) || [])]}
+            />
+          </div>
+          <div className="space-y-1.5 relative">
+            <label htmlFor="invite-designation" className="text-sm font-medium text-[#374151]">Designation (Optional)</label>
+            <input id="invite-designation" list="designation-options" placeholder="Select or type a designation…" value={inviteForm.designation || ''} onChange={(e) => setInviteForm({ ...inviteForm, designation: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
+          </div>
+          <div className="pt-8 flex gap-3">
+            <button type="button" onClick={() => setShowInvite(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-border text-[#374151] font-medium hover:bg-surface transition-colors">Cancel</button>
+            <button type="submit" disabled={saving} className="flex-1 bg-primary text-white px-4 py-2.5 rounded-xl font-medium hover:bg-black transition-colors disabled:opacity-50">
+              {saving ? 'Sending...' : 'Send Invite'}
+            </button>
+          </div>
+        </form>
+      </Drawer>
 
-      <AnimatePresence>
+      <Drawer variant="slideover" isOpen={!!editingUser} onClose={() => setEditingUser(null)} title="Edit User">
         {editingUser && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-100 bg-black/20 backdrop-blur-sm" onClick={() => setEditingUser(null)} />
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-101 w-full max-w-md bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto flex flex-col">
-              <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-border bg-surface sticky top-0 z-10 shrink-0">
-                <h3 className="text-base font-semibold text-primary">Edit User</h3>
-                <button type="button" onClick={() => setEditingUser(null)} className="text-secondary hover:text-primary p-1 rounded-md hover:bg-border transition-colors"><X className="h-5 w-5" /></button>
-              </div>
-              <form onSubmit={handleUpdateUser} className="p-4 sm:p-6 space-y-4 flex-1">
-                <div className="space-y-1.5">
-                  <label htmlFor="edit-name" className="text-sm font-medium text-[#374151]">Full Name</label>
-                  <input id="edit-name" required value={editingUser.name} onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
-                </div>
-                <div className="space-y-1.5 z-40 relative">
-                  <label htmlFor="edit-role" className="text-sm font-medium text-[#374151]">Role</label>
-                  <Select id="edit-role" ariaLabel="Role" value={editingUser.role} onChange={(val) => setEditingUser({ ...editingUser, role: val })} options={roleOptions} disabled={editingUser.role === 'SUPER_ADMIN'} />
-                </div>
-                <div className="space-y-1.5 z-30 relative">
-                  <label htmlFor="edit-team" className="text-sm font-medium text-[#374151]">Team (Optional)</label>
-                  <Select 
-                    id="edit-team"
-                    ariaLabel="Team"
-                    value={editingUser.teamId || ''} 
-                    onChange={(val) => setEditingUser({ ...editingUser, teamId: val ? val : null })} 
-                    options={[{ label: 'No Team', value: '' }, ...(teams?.map(t => ({ label: t.name, value: t.id })) || [])]} 
-                  />
-                </div>
-                <div className="space-y-1.5 relative">
-                  <label htmlFor="edit-designation" className="text-sm font-medium text-[#374151]">Designation (Optional)</label>
-                  <input id="edit-designation" list="designation-options" placeholder="Select or type a designation…" value={editingUser.designation || ''} onChange={(e) => setEditingUser({ ...editingUser, designation: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
-                </div>
-                <div className="space-y-1.5 z-10 relative">
-                  <label htmlFor="edit-status" className="text-sm font-medium text-[#374151]">Status</label>
-                  <Select id="edit-status" ariaLabel="Status" value={editingUser.status} onChange={(val) => setEditingUser({ ...editingUser, status: val })} options={[{label: 'Active', value: 'ACTIVE'}, {label: 'Pending', value: 'PENDING'}, {label: 'Inactive', value: 'INACTIVE'}]} />
-                </div>
-                <div className="pt-8 flex gap-3">
-                  <button type="button" onClick={() => setEditingUser(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-border text-[#374151] font-medium hover:bg-surface transition-colors">Cancel</button>
-                  <button type="submit" disabled={saving} className="flex-1 bg-primary text-white px-4 py-2.5 rounded-xl font-medium hover:bg-black transition-colors disabled:opacity-50">
-                    {saving ? 'Saving...' : 'Save Changes'}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </>
+          <form onSubmit={handleUpdateUser} className="space-y-4">
+            <div className="space-y-1.5">
+              <label htmlFor="edit-name" className="text-sm font-medium text-[#374151]">Full Name</label>
+              <input id="edit-name" required value={editingUser.name} onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
+            </div>
+            <div className="space-y-1.5 z-40 relative">
+              <label htmlFor="edit-role" className="text-sm font-medium text-[#374151]">Role</label>
+              <Select id="edit-role" ariaLabel="Role" value={editingUser.role} onChange={(val) => setEditingUser({ ...editingUser, role: val })} options={roleOptions} disabled={editingUser.role === 'SUPER_ADMIN'} />
+            </div>
+            <div className="space-y-1.5 z-30 relative">
+              <label htmlFor="edit-team" className="text-sm font-medium text-[#374151]">Team (Optional)</label>
+              <Select
+                id="edit-team"
+                ariaLabel="Team"
+                value={editingUser.teamId || ''}
+                onChange={(val) => setEditingUser({ ...editingUser, teamId: val ? val : null })}
+                options={[{ label: 'No Team', value: '' }, ...(teams?.map(t => ({ label: t.name, value: t.id })) || [])]}
+              />
+            </div>
+            <div className="space-y-1.5 relative">
+              <label htmlFor="edit-designation" className="text-sm font-medium text-[#374151]">Designation (Optional)</label>
+              <input id="edit-designation" list="designation-options" placeholder="Select or type a designation…" value={editingUser.designation || ''} onChange={(e) => setEditingUser({ ...editingUser, designation: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
+            </div>
+            <div className="space-y-1.5 z-10 relative">
+              <label htmlFor="edit-status" className="text-sm font-medium text-[#374151]">Status</label>
+              <Select id="edit-status" ariaLabel="Status" value={editingUser.status} onChange={(val) => setEditingUser({ ...editingUser, status: val })} options={[{ label: 'Active', value: 'ACTIVE' }, { label: 'Pending', value: 'PENDING' }, { label: 'Inactive', value: 'INACTIVE' }]} />
+            </div>
+            <div className="pt-8 flex gap-3">
+              <button type="button" onClick={() => setEditingUser(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-border text-[#374151] font-medium hover:bg-surface transition-colors">Cancel</button>
+              <button type="submit" disabled={saving} className="flex-1 bg-primary text-white px-4 py-2.5 rounded-xl font-medium hover:bg-black transition-colors disabled:opacity-50">
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </form>
         )}
-      </AnimatePresence>
+      </Drawer>
 
       {/* Transfer Super Admin Modal */}
       <AnimatePresence>
@@ -444,6 +533,62 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                   className="flex-1 bg-amber-600 text-white px-4 py-2.5 rounded-xl font-medium hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {transferring ? 'Transferring...' : 'Transfer Role'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Reassign Open Tasks Modal on Deactivation */}
+      <AnimatePresence>
+        {reassignModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-border space-y-4"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-primary">Reassign Open Tasks</h3>
+                <button onClick={() => setReassignModal(null)} className="text-secondary hover:text-primary"><X className="h-5 w-5" /></button>
+              </div>
+
+              <p className="text-sm text-secondary">
+                <strong className="text-primary">{reassignModal.userName}</strong> has <strong>{reassignModal.openTaskCount} open task(s)</strong> assigned. Select an active team member to reassign these tasks to before deactivating.
+              </p>
+
+              <div>
+                <label className="block text-xs font-semibold text-secondary uppercase tracking-wider mb-1.5">Reassign Tasks To</label>
+                <Select
+                  value={reassignTargetId}
+                  onChange={(val) => setReassignTargetId(val)}
+                  options={[
+                    { value: '', label: 'Select Team Member...' },
+                    ...users
+                      .filter((usr) => usr.id !== reassignModal.userId && usr.status === 'ACTIVE')
+                      .map((usr) => ({ value: usr.id, label: `${usr.name} (${usr.role.replace(/_/g, ' ')})` }))
+                  ]}
+                  placeholder="Select replacement..."
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setReassignModal(null)}
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-border text-secondary font-medium hover:bg-surface transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeactivate(reassignModal.userId, reassignTargetId)}
+                  disabled={!reassignTargetId || reassigning}
+                  className="flex-1 bg-amber-600 text-white px-4 py-2.5 rounded-xl font-medium hover:bg-amber-700 transition-colors disabled:opacity-50"
+                >
+                  {reassigning ? 'Reassigning...' : 'Reassign & Deactivate'}
                 </button>
               </div>
             </motion.div>

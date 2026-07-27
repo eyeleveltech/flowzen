@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores';
 import toast from 'react-hot-toast';
+import { ErrorPanel } from '@/components/ui/error-panel';
 
 const STAGES = ['OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION', 'CONTRACT'];
 
@@ -44,30 +45,59 @@ export function NotificationsTab() {
   const [thresholds, setThresholds] = useState<Record<string, number>>({});
   const [crmEmail, setCrmEmail] = useState('');
   const [overloadThreshold, setOverloadThreshold] = useState<number>(25);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    api.get<any>('/settings/notification-preferences').then(setPrefs).catch(() => {});
-    if (isAdmin) {
-      api.get<any>('/settings/notification-thresholds').then((d) => {
-        setThresholds(d.thresholds || {});
-        setCrmEmail(d.crmNotificationEmail || '');
-        setOverloadThreshold(d.overloadThreshold ?? 25);
-      }).catch(() => {});
+  async function loadData() {
+    setLoading(true);
+    setFetchError(null);
+    try {
+      const pReq = api.get<any>('/settings/notification-preferences');
+      const tReq = isAdmin ? api.get<any>('/settings/notification-thresholds') : Promise.resolve(null);
+      const [pRes, tRes] = await Promise.all([pReq, tReq]);
+      if (pRes) setPrefs(pRes);
+      if (tRes) {
+        setThresholds(tRes.thresholds || {});
+        setCrmEmail(tRes.crmNotificationEmail || '');
+        setOverloadThreshold(tRes.overloadThreshold ?? 25);
+      }
+    } catch (e: any) {
+      setFetchError(e.message || 'Failed to load notification settings');
+    } finally {
+      setLoading(false);
     }
+  }
+
+  useEffect(() => {
+    loadData();
   }, [isAdmin]);
 
   const save = async () => {
+    if (isAdmin) {
+      const invalidStages = STAGES.filter((s) => {
+        const val = thresholds[s];
+        return val === undefined || val === null || isNaN(val) || val < 1;
+      });
+      if (invalidStages.length > 0) {
+        toast.error(`Stale lead thresholds must be at least 1 day (${invalidStages.map(s => s.replace(/_/g, ' ')).join(', ')})`);
+        return;
+      }
+      if (!overloadThreshold || isNaN(overloadThreshold) || overloadThreshold < 1) {
+        toast.error('Task overload threshold must be at least 1 task');
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       await api.patch('/settings/notification-preferences', prefs);
       if (isAdmin) {
-        // Drop blank/invalid threshold fields so we never persist a 0-day threshold.
-        const cleanThresholds = Object.fromEntries(Object.entries(thresholds).filter(([, v]) => Number.isFinite(v) && (v as number) >= 1));
+        const cleanThresholds = Object.fromEntries(Object.entries(thresholds).map(([k, v]) => [k, Math.max(1, Math.round(Number(v)))]));
         await api.patch('/settings/notification-thresholds', {
           thresholds: cleanThresholds,
           crmNotificationEmail: crmEmail,
-          overloadThreshold
+          overloadThreshold: Math.max(1, Math.round(Number(overloadThreshold)))
         });
       }
       toast.success('Notification settings saved');
@@ -77,6 +107,9 @@ export function NotificationsTab() {
       setSaving(false);
     }
   };
+
+  if (loading) return <p className="text-sm text-secondary">Loading…</p>;
+  if (fetchError) return <ErrorPanel message={fetchError} onRetry={loadData} />;
 
   return (
     <div className="space-y-8 max-w-2xl">
@@ -139,7 +172,7 @@ export function NotificationsTab() {
             min={1}
             value={overloadThreshold}
             onChange={(e) => setOverloadThreshold(Number(e.target.value))}
-            className="w-full max-w-[150px] rounded-xl border border-border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:bg-white"
+            className="w-full max-w-37.5 rounded-xl border border-border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:bg-white"
           />
         </div>
       )}

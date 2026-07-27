@@ -10,7 +10,7 @@ import { dashboardRouter } from './routes/dashboard.js';
 import { clientRouter } from './routes/clients.js';
 import { projectRouter } from './routes/projects.js';
 import { taskRouter } from './routes/tasks.js';
-import { teamRouter } from './routes/team.js';
+import { membersRouter } from './routes/members.js';
 import { teamRouter as teamsRouter } from './routes/teams.js';
 import { reportRouter } from './routes/reports.js';
 import { notificationRouter } from './routes/notifications.js';
@@ -88,7 +88,7 @@ app.use('/api/analytics', analyticsRouter);
 
 // Shared infrastructure — available whenever CRM or PM is on (both use clients + the members list):
 app.use('/api/clients', authenticate, requireModule('CRM', 'PM'), clientRouter);
-app.use('/api/team', authenticate, requireModule('CRM', 'PM'), teamRouter);
+app.use('/api/team', authenticate, requireModule('CRM', 'PM'), membersRouter);
 
 // PM module:
 app.use('/api/dashboard', authenticate, requireModule('PM'), dashboardRouter);
