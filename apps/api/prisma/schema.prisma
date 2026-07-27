@@ -405,7 +405,10 @@ model Project {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
-  client     Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  // Restrict, not Cascade: a client's delivery history must never be wiped by deleting the
+  // client. Deletion is soft (archivedAt) in the app; this makes destruction impossible at
+  // the DB level too, so a stray hard delete errors instead of silently erasing projects.
+  client     Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
   owner      User             @relation("ProjectOwner", fields: [ownerId], references: [id])
   template   ProjectTemplate? @relation(fields: [templateId], references: [id])
   tasks      Task[]
@@ -505,7 +508,7 @@ model Task {
 
   project    Project?        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   lead       Lead?           @relation("LeadTasks", fields: [leadId], references: [id], onDelete: Cascade)
-  client     Client?         @relation("ClientTasks", fields: [clientId], references: [id], onDelete: Cascade)
+  client     Client?         @relation("ClientTasks", fields: [clientId], references: [id], onDelete: Restrict) // preserve logged work; see Project.client
   assignee   User?           @relation("TaskAssignee", fields: [assigneeId], references: [id])
   assignees  User[]          @relation("TaskAssignees")
   assignedBy User?           @relation("TaskAssigner", fields: [assignedById], references: [id])
@@ -614,7 +617,7 @@ model Note {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  client Client? @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client Client? @relation(fields: [clientId], references: [id], onDelete: Restrict) // preserve notes; see Project.client
   lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: Cascade)
   author User    @relation(fields: [authorId], references: [id])
 
