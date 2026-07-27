@@ -363,7 +363,7 @@ model Client {
   activities   Activity[]    @relation("ClientActivities")
   contacts     ClientContact[]
   accountManager User?       @relation("ClientAccountManager", fields: [accountManagerId], references: [id])
-  lead         Lead?
+  leads        Lead[]        // a customer can be won repeatedly — one account, many deals
   tasks        Task[]        @relation("ClientTasks")
   quotes       QuoteDocument[]
 
@@ -660,7 +660,10 @@ model ClientContact {
 model Lead {
   id                String       @id @default(cuid())
   leadId            String?      // FL-YYYYMM-XXXXXX, auto-generated on creation, never editable (unique PER ORG)
-  clientId          String?      @unique
+  // NOT unique: one Client can be won more than once. A repeat customer's second deal is a
+  // new Lead pointing at the account you already have, which is what stops the same company
+  // existing twice. See clientConversion.service.ts.
+  clientId          String?
   organizationId    String
   source            LeadSource   @default(MANUAL)
   stage             LeadStage    @default(NEW_LEAD)
@@ -725,10 +728,12 @@ model Lead {
   tasks             Task[]       @relation("LeadTasks")
   notes             Note[]
   contacts          LeadContact[]
+  quotes            QuoteDocument[]
 
   @@unique([organizationId, leadId])
   @@index([organizationId, stage])
   @@index([organizationId, contactPhone])
+  @@index([clientId]) // replaces the old unique index; still needs to be fast to look up
   @@map("leads")
 }
 
@@ -799,7 +804,12 @@ model QuoteDocument {
   documentNumber   String       // EL/QT/YYYY/NNN or EL/PI/YYYY/NNN (unique PER ORG)
   documentDate     DateTime     @default(now())
   expirationDate   DateTime
-  clientId         String       // FK -> Client.id (quotes are raised for clients-page clients)
+  // A quote is raised against exactly one party: a Lead (still being chased — no Client
+  // account exists yet) or a Client (already won). Enforced in the route layer, and the
+  // billing snapshot below is filled from whichever party it was.
+  // On conversion the quote is re-pointed from the lead to the new client.
+  clientId         String?      // FK -> Client.id
+  leadId           String?      // FK -> Lead.id
   clientName       String       // denormalized for display
   contactPerson    String
   clientEmail      String?
@@ -836,12 +846,14 @@ model QuoteDocument {
 
   lineItems        QuoteLineItem[]
   organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  client           Client       @relation(fields: [clientId], references: [id])
+  client           Client?      @relation(fields: [clientId], references: [id])
+  lead             Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
   salesperson      User?        @relation("QuoteSalesperson", fields: [salespersonId], references: [id])
   invoiceDraft     InvoiceDraft?
 
   @@unique([organizationId, documentNumber])
   @@index([clientId])
+  @@index([leadId])
   @@index([organizationId, status])
   @@map("quote_documents")
 }

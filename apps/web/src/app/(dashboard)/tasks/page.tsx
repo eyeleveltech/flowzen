@@ -28,7 +28,9 @@ interface Task {
   dueDate?: string | null; assignedDate?: string | null; completedAt?: string | null; createdAt: string; projectId: string;
   loggedHours?: number | null;
   type: string; driveLink?: string | null; reviewerId?: string | null;
-  project?: { id: string; name: string; client?: { name: string } };
+  project?: { id: string; name: string; client?: { name: string; company?: string } };
+  // Pre-sales tasks hang off a Lead instead of a Project, so both are optional.
+  lead?: { id: string; leadId?: string | null; companyName?: string | null; contactName?: string | null; stage?: string } | null;
   assignee?: { id: string; name: string; avatar?: string | null } | null;
   assignees?: { id: string; name: string; avatar?: string | null }[];
   assignedBy?: { id: string; name: string; avatar?: string | null } | null;
@@ -803,7 +805,9 @@ function TasksContent() {
                                     </div>
                                     <div className="flex items-center justify-between">
                                       <span className="text-xs text-secondary">
-                                        {t.project?.client?.name ? `${t.project.client.name} • ` : ''}{t.project?.name}
+                                        {t.lead
+                                          ? `${t.lead.companyName || t.lead.contactName || 'Lead'} • Pre-sales`
+                                          : `${t.project?.client?.name ? `${t.project.client.name} • ` : ''}${t.project?.name || ''}`}
                                       </span>
                                       <div className="flex items-center gap-2">
                                         {(t._count?.comments ?? 0) > 0 && (
@@ -958,8 +962,8 @@ function TasksContent() {
                               </div>
                             </td>
                           )}
-                          {visibleColumns.includes('client') && <td className="px-6 py-3.5 text-sm text-secondary">{t.project?.client?.company || '-'}</td>}
-                          {visibleColumns.includes('project') && <td className="px-6 py-3.5 text-sm text-secondary">{t.project?.name}</td>}
+                          {visibleColumns.includes('client') && <td className="px-6 py-3.5 text-sm text-secondary">{t.project?.client?.company || t.lead?.companyName || '-'}</td>}
+                          {visibleColumns.includes('project') && <td className="px-6 py-3.5 text-sm text-secondary">{t.project?.name || (t.lead ? 'Pre-sales (lead)' : '-')}</td>}
                           {visibleColumns.includes('assignee') && (
                             <td className="px-6 py-3.5">
                               {taskAssignees(t).length ? (

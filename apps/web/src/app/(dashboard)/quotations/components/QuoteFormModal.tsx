@@ -23,10 +23,14 @@ const DEFAULT_TERMS = '1. This quotation is valid until the expiration date stat
 type Line = { description: string; unit: string; quantity: string; unitPrice: string; discountPct: string; taxPct: string; taxType: string };
 const emptyLine = (): Line => ({ description: '', unit: 'Units', quantity: '1', unitPrice: '', discountPct: '', taxPct: '18', taxType: DEFAULT_TAX_TYPE });
 
-export function QuoteFormModal({ editId: initialEditId, duplicateOf, onClose, onSaved }: { editId: string | null; duplicateOf: any; onClose: () => void; onSaved: () => void }) {
+export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLeadId, onClose, onSaved }: { editId: string | null; duplicateOf: any; prefillLeadId?: string | null; onClose: () => void; onSaved: () => void }) {
   const { user } = useAuthStore();
   const { data: members = [] } = useMembers();
   const [clients, setClients] = useState<any[]>([]);
+  // Leads still in the pipeline can be quoted too — that's the whole point of not creating a
+  // client account until the deal is won. A quote is raised against a lead OR a client.
+  const [leads, setLeads] = useState<any[]>([]);
+  const [leadId, setLeadId] = useState('');
   const [orgState, setOrgState] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   // editId may change after first save (new doc -> DRAFT with ID)
@@ -55,11 +59,18 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, onClose, on
 
   useEffect(() => {
     api.get<{ clients: any[] }>('/clients?limit=200').then((d) => setClients(d.clients || [])).catch(() => { });
+    api.get<any>('/crm/leads?limit=200').then((d) => setLeads(d?.leads || d || [])).catch(() => { });
     api.get<any>('/settings/company').then((c) => {
       setOrgState(c?.state || '');
       if (!editId && !duplicateOf && c?.standardTerms) setForm((f) => ({ ...f, termsConditions: c.standardTerms }));
     }).catch(() => { });
   }, []);
+
+  // Deep-linked from a lead's "Raise Quotation" button.
+  useEffect(() => {
+    if (!prefillLeadId || editId || duplicateOf) return;
+    api.get<any>(`/crm/leads/${prefillLeadId}`).then((l) => { if (l) selectLead(l); }).catch(() => { });
+  }, [prefillLeadId, editId, duplicateOf]);
 
   // Populate for edit / duplicate
   useEffect(() => {
@@ -103,12 +114,40 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, onClose, on
     return [c.company, c.name].filter(Boolean).some((v: string) => v.toLowerCase().includes(s));
   }).slice(0, 8);
 
+  // Only leads that haven't converted yet — once a lead has a client, quote the client.
+  const filteredLeads = leads.filter((l) => {
+    if (l.clientId) return false;
+    const s = clientSearch.toLowerCase();
+    return [l.companyName, l.contactName].filter(Boolean).some((v: string) => v.toLowerCase().includes(s));
+  }).slice(0, 6);
+
   function selectClient(c: any) {
     setClientId(c.id);
+    setLeadId('');
     setClientName(c.company || c.name);
     setClientState(c.state || '');
     setClientSearch(c.company || c.name);
     setForm((f) => ({ ...f, contactPerson: c.contactPerson || c.contacts?.[0]?.name || c.name || f.contactPerson, clientEmail: c.email || '', clientPhone: c.phone || '', billingAddress: c.billingAddress || c.address || '', clientGst: c.gstNumber || '' }));
+    setShowClientList(false);
+  }
+
+  // A lead carries the same billing details a quotation needs (billingAddress, gstNumber),
+  // so no client account has to be created just to send a quote.
+  function selectLead(l: any) {
+    const label = l.companyName || l.contactName || 'Lead';
+    setLeadId(l.id);
+    setClientId('');
+    setClientName(label);
+    setClientState(l.state || '');
+    setClientSearch(label);
+    setForm((f) => ({
+      ...f,
+      contactPerson: l.contactName || f.contactPerson,
+      clientEmail: l.contactEmail || '',
+      clientPhone: l.contactPhone || '',
+      billingAddress: l.billingAddress || l.address || '',
+      clientGst: l.gstNumber || '',
+    }));
     setShowClientList(false);
   }
 
@@ -137,7 +176,8 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, onClose, on
 
   function buildPayload() {
     return {
-      documentType, clientId, contactPerson: form.contactPerson, clientEmail: form.clientEmail, clientPhone: form.clientPhone,
+      documentType, clientId: clientId || undefined, leadId: leadId || undefined,
+      contactPerson: form.contactPerson, clientEmail: form.clientEmail, clientPhone: form.clientPhone,
       billingAddress: form.billingAddress, documentDate: form.documentDate, expirationDate: form.expirationDate,
       paymentTerms: form.paymentTerms, salespersonId: form.salespersonId || undefined,
       salesTeam: form.salesTeam || undefined, onlineSignature: form.onlineSignature, onlinePayment: form.onlinePayment,
@@ -153,7 +193,7 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, onClose, on
   }
 
   function validate(): string | null {
-    if (!clientId) return 'Select a client.';
+    if (!clientId && !leadId) return 'Select a client or a lead.';
     if (!form.contactPerson.trim()) return 'Contact person is required.';
     if (!form.expirationDate) return 'Expiration date is required.';
     if (!lineItems.length || lineItems.some((l) => !l.description.trim() || !(parseFloat(l.unitPrice) >= 0))) return 'Each line needs a description and unit price.';
@@ -236,23 +276,47 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, onClose, on
           {/* Header fields */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="relative sm:col-span-2" ref={clientRef}>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Client <span className="text-red-500">*</span></label>
+              <label className="block text-sm font-medium text-[#374151] mb-1.5">
+                Client or Lead <span className="text-red-500">*</span>
+                {leadId && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">Lead</span>}
+              </label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
                 <input value={clientSearch} onChange={(e) => { setClientSearch(e.target.value); setShowClientList(true); }} onFocus={() => setShowClientList(true)}
-                  placeholder="Search clients by name or company…" className={`w-full rounded-xl border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary ${clientId ? 'border-blue-200 bg-blue-50/40' : 'border-border'}`} />
-                {clientId && <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-600" />}
+                  placeholder="Search clients or pipeline leads…" className={`w-full rounded-xl border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary ${clientId || leadId ? 'border-blue-200 bg-blue-50/40' : 'border-border'}`} />
+                {(clientId || leadId) && <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-600" />}
               </div>
               {showClientList && (
                 <div className="absolute z-20 w-full mt-1 bg-white border border-border rounded-xl shadow-lg max-h-56 overflow-auto p-1">
-                  {clients.length === 0 ? <div className="px-3 py-2 text-sm text-secondary">No clients found — add them on the Clients page first.</div> :
-                    filteredClients.length === 0 ? <div className="px-3 py-2 text-sm text-secondary">No match for “{clientSearch}”.</div> :
-                      filteredClients.map((c) => (
+                  {filteredClients.length === 0 && filteredLeads.length === 0 ? (
+                    <div className="px-3 py-2 text-sm text-secondary">
+                      {clients.length === 0 && leads.length === 0 ? 'Nothing to quote yet — add a lead in the Pipeline first.' : `No match for “${clientSearch}”.`}
+                    </div>
+                  ) : (
+                    <>
+                      {filteredClients.length > 0 && (
+                        <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-secondary/70">Clients</p>
+                      )}
+                      {filteredClients.map((c) => (
                         <button key={c.id} onClick={() => selectClient(c)} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 rounded-lg">
                           <span className="font-medium text-primary">{c.company || c.name}</span>
                           {c.company && c.name && c.name !== c.company && <span className="text-xs text-secondary ml-2">{c.name}</span>}
                         </button>
                       ))}
+                      {filteredLeads.length > 0 && (
+                        <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-secondary/70">Pipeline leads (not yet won)</p>
+                      )}
+                      {filteredLeads.map((l) => (
+                        <button key={l.id} onClick={() => selectLead(l)} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 rounded-lg flex items-center justify-between gap-2">
+                          <span className="min-w-0">
+                            <span className="font-medium text-primary">{l.companyName || l.contactName}</span>
+                            {l.contactName && l.companyName && <span className="text-xs text-secondary ml-2">{l.contactName}</span>}
+                          </span>
+                          <span className="shrink-0 text-[10px] font-semibold text-secondary/80">{String(l.stage || '').replace(/_/g, ' ')}</span>
+                        </button>
+                      ))}
+                    </>
+                  )}
                 </div>
               )}
             </div>

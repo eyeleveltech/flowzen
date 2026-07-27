@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, FileText, Download, Copy, Ban, Search, Eye, Trash2, MoreHorizontal } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -10,6 +11,7 @@ import { Select } from '@/components/ui/select';
 import toast from 'react-hot-toast';
 import { useConfirmStore } from '@/stores';
 import { fileUrl } from '@/lib/files';
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { QuoteFormModal } from './components/QuoteFormModal';
 
 const STATUS_STYLES: Record<string, string> = {
@@ -20,9 +22,7 @@ const STATUS_STYLES: Record<string, string> = {
   CANCELLED: 'bg-red-50 text-red-700 border-red-200',
 };
 
-import { usePageTitle } from '@/hooks/usePageTitle';
-
-export default function QuotationsPage() {
+function QuotationsContent() {
   usePageTitle('Quotations');
   const queryClient = useQueryClient();
   const confirm = useConfirmStore((s) => s.confirm);
@@ -32,8 +32,19 @@ export default function QuotationsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [duplicateOf, setDuplicateOf] = useState<any>(null);
+  const [prefillLeadId, setPrefillLeadId] = useState<string | null>(null);
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Deep link from a lead's "Raise Quotation" button: /quotations?create=true&leadId=…
+  useEffect(() => {
+    if (searchParams.get('create') !== 'true') return;
+    setEditId(null);
+    setDuplicateOf(null);
+    setPrefillLeadId(searchParams.get('leadId'));
+    setShowForm(true);
+  }, [searchParams]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['quotes', search, typeFilter, statusFilter],
@@ -340,10 +351,25 @@ export default function QuotationsPage() {
         <QuoteFormModal
           editId={editId}
           duplicateOf={duplicateOf}
-          onClose={() => setShowForm(false)}
-          onSaved={() => { setShowForm(false); queryClient.invalidateQueries({ queryKey: ['quotes'] }); }}
+          prefillLeadId={prefillLeadId}
+          onClose={() => { setShowForm(false); setPrefillLeadId(null); }}
+          onSaved={() => { setShowForm(false); setPrefillLeadId(null); queryClient.invalidateQueries({ queryKey: ['quotes'] }); }}
         />
       )}
     </div>
+  );
+}
+
+// useSearchParams needs a Suspense boundary or the production build fails
+// (missing-suspense-with-csr-bailout). Dev renders on demand and won't warn.
+export default function QuotationsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-100">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    }>
+      <QuotationsContent />
+    </Suspense>
   );
 }

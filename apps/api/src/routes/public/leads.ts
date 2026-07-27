@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient, LeadStage, LeadSource, ActivityEntityType, LostReason, ClientStatus } from '@prisma/client';
+import { ensureClientForLead } from '../../services/clientConversion.service.js';
 
 const prisma = new PrismaClient();
 const leadRouter = Router();
@@ -85,7 +86,7 @@ const formatLeadResponse = (dbLead: any) => {
     contact_email: dbLead.client?.email || dbLead.contactEmail || '',
     contact_phone: dbLead.client?.phone || dbLead.contactPhone || '',
     contact_whatsapp: dbLead.client?.phone || dbLead.contactPhone || '',
-    vertical: dbLead.client?.industry || '',
+    vertical: dbLead.client?.industry || dbLead.industry || '',
     source: mapEnumToSource(dbLead.source),
     stage: mapEnumToStage(dbLead.stage),
     monthly_value: dbLead.dealValue || 0,
@@ -269,33 +270,26 @@ leadRouter.post('/', async (req: Request, res: Response) => {
       assignedToId = assigned_to_id;
     }
 
-    // Create client wrapper first
-    const client = await prisma.client.create({
-      data: {
-        name: contact_name || company_name || 'Unknown Lead',
-        company: company_name,
-        email: contact_email,
-        phone: contact_phone,
-        industry: vertical,
-        organizationId: orgId,
-        status: 'PROSPECT',
-      }
-    });
-
+    // An inbound lead is just a lead. Its identity lives on the Lead itself — no Client
+    // account is created here, because nothing is being billed or delivered yet. The account
+    // is born later, when the deal is won or a project starts.
     const lead = await prisma.lead.create({
       data: {
-        clientId: client.id,
         organizationId: orgId,
         source: dbSource,
         stage: dbStage,
         dealValue: monthly_value,
         assignedToId,
+        contactName: contact_name || null,
+        companyName: company_name || null,
+        contactEmail: contact_email || null,
+        contactPhone: contact_phone || null,
+        industry: vertical || null,
         expectedCloseDate: next_followup_date ? new Date(next_followup_date) : undefined,
         notes: notes ? {
           create: {
             content: notes,
             authorId: (req as any).user.userId,
-            clientId: client.id
           }
         } : undefined
       },
@@ -311,7 +305,7 @@ leadRouter.post('/', async (req: Request, res: Response) => {
     await prisma.activity.create({
       data: {
         type: 'LEAD_CREATED',
-        message: `added lead "${client.name}" to the pipeline via EyeLevel AI`,
+        message: `added lead "${company_name || contact_name || 'Unknown Lead'}" to the pipeline via EyeLevel AI`,
         entityType: 'LEAD',
         entityId: lead.id,
         userId: (req as any).user.userId,
@@ -447,18 +441,21 @@ leadRouter.post('/:id/convert', async (req: Request, res: Response) => {
   try {
     const { poc_name, poc_email, poc_phone, monthly_retainer, retainer_start_date } = req.body;
 
-    const lead = await prisma.lead.findFirst({ where: { id: req.params.id as string, organizationId: (req as any).user.organizationId }, include: { client: true } });
+    const orgId = (req as any).user.organizationId;
+    const lead = await prisma.lead.findFirst({ where: { id: req.params.id as string, organizationId: orgId }, include: { client: true } });
     if (!lead) return res.status(404).json({ success: false, error: 'Lead not found', code: 404 });
-    if (!lead.clientId) return res.status(400).json({ success: false, error: 'Lead has no client yet — move it to the MEETING stage first.', code: 400 });
 
-    // Update Client record to Active
+    // This IS the conversion — the account is created here if the lead doesn't have one yet,
+    // rather than requiring the caller to have dragged the card to a particular stage first.
+    const { clientId } = await prisma.$transaction((tx) => ensureClientForLead(tx, lead, orgId));
+
     const client = await prisma.client.update({
-      where: { id: lead.clientId },
+      where: { id: clientId },
       data: {
         status: 'ACTIVE',
-        contactPerson: poc_name || (lead as any).client.contactPerson,
-        email: poc_email || (lead as any).client.email,
-        phone: poc_phone || (lead as any).client.phone,
+        ...(poc_name ? { contactPerson: poc_name } : {}),
+        ...(poc_email ? { email: poc_email } : {}),
+        ...(poc_phone ? { phone: poc_phone } : {}),
         contractValue: monthly_retainer || lead.dealValue,
         startDate: retainer_start_date ? new Date(retainer_start_date) : new Date(),
       }

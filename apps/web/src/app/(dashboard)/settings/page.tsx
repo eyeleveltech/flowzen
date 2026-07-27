@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { useAuthStore } from '@/stores';
 import { useRouter } from 'next/navigation';
-import { Building2, Users, FileText, Shield, Zap, Boxes, Receipt, Bell, Key } from 'lucide-react';
+import { Building2, Users, FileText, Shield, Zap, Boxes, Receipt, Bell, Key, ChevronRight } from 'lucide-react';
 import { OrganizationTab } from '@/components/settings/OrganizationTab';
 import { NotificationsTab } from '@/components/settings/NotificationsTab';
 import { UsersTab } from '@/components/settings/UsersTab';

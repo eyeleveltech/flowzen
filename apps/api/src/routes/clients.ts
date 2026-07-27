@@ -49,15 +49,19 @@ clientRouter.get('/', async (req: AuthRequest, res: Response, next) => {
 
     const where: Record<string, unknown> = {
       organizationId: orgId,
-      NOT: { engagementType: 'INTERNAL' },
     };
     if (includeArchived !== 'true') where.archivedAt = null;
     if (status) where.status = whereIn(status);
     if (city) where.city = { contains: city as string, mode: 'insensitive' };
     if (accountManagerId) where.accountManagerId = whereIn(accountManagerId);
     if (engagementType) {
-      delete where.NOT;
       where.engagementType = whereIn(engagementType);
+    } else {
+      // Hide the auto-managed Internal client, but KEEP clients whose engagementType is null
+      // (that's most of them — the field is optional). A plain `NOT: { engagementType:
+      // 'INTERNAL' }` or `{ not: 'INTERNAL' }` drops null rows in SQL, which silently emptied
+      // the whole Clients page. The explicit null branch is the null-safe form.
+      where.AND = [{ OR: [{ engagementType: null }, { engagementType: { not: 'INTERNAL' } }] }];
     }
     if (industry) where.industry = whereIn(industry);
     if (search) {
@@ -73,7 +77,8 @@ clientRouter.get('/', async (req: AuthRequest, res: Response, next) => {
         where: where as any,
         include: {
           contacts: true,
-          lead: { select: { id: true, stage: true } },
+          // Most recent deal only — an account can have been won several times over.
+        leads: { select: { id: true, stage: true }, orderBy: { createdAt: 'desc' }, take: 1 },
           _count: { select: { projects: true } },
         },
         orderBy: { createdAt: 'desc' },
@@ -96,7 +101,8 @@ clientRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
       where: { id: (req.params.id as string), organizationId: req.user!.organizationId },
       include: {
         contacts: true,
-        lead: { select: { id: true, stage: true } },
+        // Most recent deal only — an account can have been won several times over.
+        leads: { select: { id: true, stage: true }, orderBy: { createdAt: 'desc' }, take: 1 },
         projects: {
           include: {
             owner: { select: { id: true, name: true, avatar: true } },
