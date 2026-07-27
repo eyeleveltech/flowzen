@@ -29,6 +29,23 @@ export const STATUS_LABELS: Record<string, string> = {
   APPROVED: 'Approved',
   BLOCKED: 'Blocked',
 
+  // Document & Quote statuses
+  DRAFT: 'Draft',
+  SENT: 'Sent',
+  ACCEPTED: 'Accepted',
+  EXPIRED: 'Expired',
+
+  // Invoice & Payment statuses
+  PAID: 'Paid',
+  UNPAID: 'Unpaid',
+  OVERDUE: 'Overdue',
+  PARTIAL: 'Partially Paid',
+  REFUNDED: 'Refunded',
+
+  // Subscription & Contract statuses
+  RENEWED: 'Renewed',
+  TERMINATED: 'Terminated',
+
   // Pipeline stages
   NEW_LEAD: 'New Lead',
   LEAD: 'Lead',
@@ -48,7 +65,7 @@ export const STATUS_LABELS: Record<string, string> = {
 };
 
 export const STATUS_COLORS: Record<string, StatusConfig> = {
-  // Client statuses
+  // Client & General Active statuses
   PROSPECT: { label: 'Prospect', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', dot: 'bg-blue-500', bar: 'bg-blue-500' },
   ACTIVE: { label: 'Active', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500', bar: 'bg-emerald-500' },
   ONHOLD: { label: 'On Hold', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', dot: 'bg-amber-500', bar: 'bg-amber-500' },
@@ -68,6 +85,21 @@ export const STATUS_COLORS: Record<string, StatusConfig> = {
   TODO: { label: 'To Do', bg: 'bg-slate-100', text: 'text-slate-600', border: 'border-slate-200', dot: 'bg-slate-400', bar: 'bg-slate-400' },
   APPROVED: { label: 'Approved', bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200', dot: 'bg-teal-500', bar: 'bg-teal-500' },
   BLOCKED: { label: 'Blocked', bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', dot: 'bg-red-500', bar: 'bg-red-500' },
+
+  // Document, Invoice & Quote statuses
+  DRAFT: { label: 'Draft', bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-200', dot: 'bg-slate-400', bar: 'bg-slate-400' },
+  SENT: { label: 'Sent', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', dot: 'bg-blue-500', bar: 'bg-blue-500' },
+  ACCEPTED: { label: 'Accepted', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500', bar: 'bg-emerald-500' },
+  EXPIRED: { label: 'Expired', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', dot: 'bg-amber-500', bar: 'bg-amber-500' },
+
+  // Payment & Financial statuses
+  PAID: { label: 'Paid', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500', bar: 'bg-emerald-500' },
+  UNPAID: { label: 'Unpaid', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', dot: 'bg-amber-500', bar: 'bg-amber-500' },
+  OVERDUE: { label: 'Overdue', bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', dot: 'bg-red-500', bar: 'bg-red-500' },
+  PARTIAL: { label: 'Partially Paid', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', dot: 'bg-blue-500', bar: 'bg-blue-500' },
+  REFUNDED: { label: 'Refunded', bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', dot: 'bg-purple-500', bar: 'bg-purple-500' },
+  RENEWED: { label: 'Renewed', bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200', dot: 'bg-teal-500', bar: 'bg-teal-500' },
+  TERMINATED: { label: 'Terminated', bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', dot: 'bg-rose-500', bar: 'bg-rose-500' },
 };
 
 const DEFAULT_STATUS_CONFIG: StatusConfig = {

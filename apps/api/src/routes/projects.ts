@@ -13,7 +13,7 @@ import { buildSearchFilter } from '../utils/search-utils.js';
 export const projectRouter = Router();
 projectRouter.use(authenticate);
 
-const projectSchema = z.object({
+export const projectSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   type: z.enum(['RETAINER', 'ONE_TIME', 'EVENT', 'INTERNAL']).optional().or(z.literal('')),
@@ -29,10 +29,54 @@ const projectSchema = z.object({
   endDate: z.string().optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional().or(z.literal('')),
   status: z.enum(['PLANNING', 'IN_PROGRESS', 'REVIEW', 'COMPLETED', 'ON_HOLD', 'CANCELLED']).optional().or(z.literal('')),
-  budget: z.number().optional(),
+  budget: z.number().min(0, 'Budget cannot be negative').optional(),
   platform: z.enum(['INSTAGRAM', 'FACEBOOK', 'LINKEDIN', 'X_TWITTER', 'TIKTOK', 'YOUTUBE', 'GOOGLE_ADS', 'WEBSITE', 'MOBILE_APP', 'E_COMMERCE', 'CROSS_PLATFORM', 'OTHER']).optional().nullable().or(z.literal('')),
   memberIds: z.array(z.string()).optional(),
   teamIds: z.array(z.string()).optional(),
+}).superRefine((data, ctx) => {
+  if (data.type === 'ONE_TIME' || data.type === 'EVENT') {
+    if (!data.endDate || data.endDate.trim() === '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'End date is required for One-Time or Event projects',
+        path: ['endDate'],
+      });
+    }
+  }
+
+  if (data.startDate) {
+    const startYear = new Date(data.startDate).getFullYear();
+    if (isNaN(startYear) || startYear > 2100 || startYear < 1970) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Start date must be a valid date between 1970 and 2100',
+        path: ['startDate'],
+      });
+    }
+  }
+
+  if (data.endDate) {
+    const endYear = new Date(data.endDate).getFullYear();
+    if (isNaN(endYear) || endYear > 2100 || endYear < 1970) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'End date must be a valid date between 1970 and 2100',
+        path: ['endDate'],
+      });
+    }
+  }
+
+  if (data.startDate && data.endDate && data.startDate.trim() !== '' && data.endDate.trim() !== '') {
+    const start = new Date(data.startDate);
+    const end = new Date(data.endDate);
+    if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end < start) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'End date cannot be before start date',
+        path: ['endDate'],
+      });
+    }
+  }
 });
 
 // GET /api/projects
@@ -182,7 +226,15 @@ projectRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), va
       const org = await prisma.organization.findUnique({ where: { id: req.user!.organizationId } });
 
       let internalClient = await prisma.client.findFirst({
-        where: { organizationId: req.user!.organizationId, engagementType: 'INTERNAL' }
+        where: {
+          organizationId: req.user!.organizationId,
+          OR: [
+            { engagementType: 'INTERNAL' },
+            { name: { equals: 'Internal', mode: 'insensitive' } },
+            { name: { contains: 'Internal', mode: 'insensitive' } },
+          ],
+        },
+        orderBy: { createdAt: 'asc' },
       });
 
       if (!internalClient) {
@@ -192,8 +244,13 @@ projectRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), va
             company: org?.name || '',
             organizationId: req.user!.organizationId,
             status: 'ACTIVE',
-            engagementType: 'INTERNAL'
-          }
+            engagementType: 'INTERNAL',
+          },
+        });
+      } else if (internalClient.engagementType !== 'INTERNAL') {
+        await prisma.client.update({
+          where: { id: internalClient.id },
+          data: { engagementType: 'INTERNAL' },
         });
       }
       finalClientId = internalClient.id;
@@ -384,6 +441,16 @@ projectRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), 
           projectId: project.id,
         },
       });
+
+      if (project.status === 'CANCELLED' || project.status === 'ON_HOLD') {
+        await prisma.task.updateMany({
+          where: {
+            projectId: project.id,
+            status: { notIn: ['COMPLETED', 'ON_HOLD'] },
+          },
+          data: { status: 'ON_HOLD' },
+        });
+      }
 
       if (project.status === 'COMPLETED' || project.status === 'CANCELLED') {
         await createAuditLog({

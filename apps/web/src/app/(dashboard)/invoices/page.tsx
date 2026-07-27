@@ -7,14 +7,8 @@ import { FileText, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { fileUrl } from '@/lib/files';
 
-const STATUS_STYLES: Record<string, string> = {
-  DRAFT: 'bg-gray-100 text-gray-600 border-gray-200',
-  SENT: 'bg-blue-50 text-blue-700 border-blue-200',
-  PAID: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  OVERDUE: 'bg-amber-50 text-amber-700 border-amber-200',
-  CANCELLED: 'bg-red-50 text-red-700 border-red-200',
-};
-
+import { StatusBadge } from '@/components/ui/status-badge';
+import { TableSkeleton } from '@/components/ui/skeleton-loaders';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
 export default function InvoicesPage() {
@@ -27,12 +21,26 @@ export default function InvoicesPage() {
   });
   const invoices = data || [];
 
+  if (isLoading) {
+    return (
+      <div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl font-semibold text-primary tracking-tight">Invoices</h1>
+            <p className="text-sm text-secondary mt-1">View and manage all issued invoices</p>
+          </div>
+        </div>
+        <TableSkeleton rows={5} />
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-primary tracking-tight">Invoice Drafts</h1>
-          <p className="text-sm text-secondary mt-1">Manage invoices generated from Quotations</p>
+          <h1 className="text-2xl font-semibold text-primary tracking-tight">Invoices</h1>
+          <p className="text-sm text-secondary mt-1">View and manage all issued invoices</p>
         </div>
       </div>
 
@@ -69,9 +77,7 @@ export default function InvoicesPage() {
                   <td className="px-6 py-4 text-sm text-secondary">{formatDate(inv.createdAt)}</td>
                   <td className="px-6 py-4 text-sm font-medium text-primary text-right">{formatCurrency(Number(inv.grandTotal))}</td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md border ${STATUS_STYLES[inv.status] || STATUS_STYLES.DRAFT}`}>
-                      {inv.status[0] + inv.status.slice(1).toLowerCase()}
-                    </span>
+                    <StatusBadge status={inv.status} />
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-1.5 text-secondary">

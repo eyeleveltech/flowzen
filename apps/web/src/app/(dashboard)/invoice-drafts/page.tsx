@@ -53,7 +53,7 @@ export default function InvoiceDraftsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-primary">Invoice Drafts</h1>
+          <h1 className="text-2xl font-semibold text-primary tracking-tight">Invoice Drafts</h1>
           <p className="mt-1 text-sm text-secondary">Drafts generated from accepted CRM Quotations.</p>
         </div>
       </div>

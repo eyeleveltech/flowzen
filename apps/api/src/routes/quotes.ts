@@ -226,6 +226,7 @@ quoteRouter.patch('/:id', validate(quoteBaseSchema.partial().extend({ lineItems:
     const existing = await prisma.quoteDocument.findFirst({ where: { id, organizationId: orgId } });
     if (!existing) { res.status(404).json({ error: 'Quotation not found' }); return; }
     if (existing.status === 'CANCELLED') { res.status(400).json({ error: 'Cancelled documents cannot be edited.' }); return; }
+    if (existing.status === 'ACCEPTED') { res.status(400).json({ error: 'Accepted documents cannot be edited. Create a new quotation revision instead.' }); return; }
 
     const body = req.body as any;
     const orgState = await getOrgState(orgId);
@@ -276,15 +277,19 @@ quoteRouter.patch('/:id/status', async (req: AuthRequest, res: Response, next) =
     }
     const existing = await prisma.quoteDocument.findFirst({ where: { id, organizationId: orgId } });
     if (!existing) { res.status(404).json({ error: 'Quotation not found' }); return; }
+
+    if (existing.status === 'ACCEPTED' && status !== 'ACCEPTED') {
+      res.status(400).json({ error: 'Accepted quotations cannot have their status reversed.' });
+      return;
+    }
+    if (existing.status === 'CANCELLED' && status !== 'CANCELLED') {
+      res.status(400).json({ error: 'Cancelled quotations cannot have their status changed.' });
+      return;
+    }
+
     const updated = await prisma.quoteDocument.update({ where: { id }, data: { status: status as any } });
-    
-    // When a quote is accepted, record it as a ONE-TIME contract (money owed).
-    // A quotation is a one-off sale — creating a recurring MONTHLY subscription from
-    // its tax-inclusive grandTotal permanently and wrongly inflates MRR.
+
     if (status === 'ACCEPTED' && existing.status !== 'ACCEPTED') {
-      // Accepting a quotation is a commitment to pay, so this is one of the moments an
-      // account is born. A quote raised against a lead converts that lead first — the
-      // contract has to hang off a real Client.
       let contractClientId = existing.clientId;
       if (!contractClientId && existing.leadId) {
         const lead = await prisma.lead.findFirst({ where: { id: existing.leadId, organizationId: orgId } });
@@ -299,18 +304,36 @@ quoteRouter.patch('/:id/status', async (req: AuthRequest, res: Response, next) =
         return;
       }
 
-      await prisma.contract.create({
-        data: {
+      // Check if client already has an active retainer subscription
+      const activeSub = await prisma.subscription.findFirst({
+        where: { organizationId: orgId, clientId: contractClientId, status: 'ACTIVE' }
+      });
+
+      // Idempotence check — only create a Contract if one doesn't already exist for this quote
+      const existingContract = await prisma.contract.findFirst({
+        where: {
           organizationId: orgId,
           clientId: contractClientId,
           title: 'Quote ' + existing.documentNumber,
-          value: existing.grandTotal,
-          billingFrequency: 'ONE_TIME',
-          startDate: new Date(),
-          status: 'ACTIVE',
-          notes: 'Auto-created from Quote ' + existing.documentNumber,
         }
       });
+
+      if (!existingContract) {
+        await prisma.contract.create({
+          data: {
+            organizationId: orgId,
+            clientId: contractClientId,
+            title: 'Quote ' + existing.documentNumber,
+            value: existing.grandTotal,
+            billingFrequency: activeSub ? 'MONTHLY' : 'ONE_TIME',
+            startDate: new Date(),
+            status: 'ACTIVE',
+            notes: activeSub
+              ? 'Auto-created from Quote ' + existing.documentNumber + ' (Linked to Retainer Subscription)'
+              : 'Auto-created from Quote ' + existing.documentNumber,
+          }
+        });
+      }
     }
 
     emitToOrganization(req.app.get('io'), orgId, 'quote:updated', { id });

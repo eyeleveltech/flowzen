@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
-import { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
+import { authenticate, authorize, requireModule, AuthRequest } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { emitToOrganization } from '../sse.js';
 import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
@@ -57,11 +57,20 @@ clientRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     if (engagementType) {
       where.engagementType = whereIn(engagementType);
     } else {
-      // Hide the auto-managed Internal client, but KEEP clients whose engagementType is null
-      // (that's most of them — the field is optional). A plain `NOT: { engagementType:
-      // 'INTERNAL' }` or `{ not: 'INTERNAL' }` drops null rows in SQL, which silently emptied
-      // the whole Clients page. The explicit null branch is the null-safe form.
-      where.AND = [{ OR: [{ engagementType: null }, { engagementType: { not: 'INTERNAL' } }] }];
+      where.AND = [
+        {
+          OR: [
+            { engagementType: null },
+            { engagementType: { not: 'INTERNAL' } }
+          ]
+        },
+        {
+          name: { notIn: ['Internal', 'internal'] }
+        },
+        {
+          NOT: { name: { contains: '(Internal)', mode: 'insensitive' } }
+        }
+      ];
     }
     if (industry) where.industry = whereIn(industry);
     if (search) {
@@ -78,7 +87,7 @@ clientRouter.get('/', async (req: AuthRequest, res: Response, next) => {
         include: {
           contacts: true,
           // Most recent deal only — an account can have been won several times over.
-        leads: { select: { id: true, stage: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+        [('leads' as any)]: { select: { id: true, stage: true }, orderBy: { createdAt: 'desc' }, take: 1 },
           _count: { select: { projects: true } },
         },
         orderBy: { createdAt: 'desc' },
@@ -102,7 +111,7 @@ clientRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
       include: {
         contacts: true,
         // Most recent deal only — an account can have been won several times over.
-        leads: { select: { id: true, stage: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+        [('leads' as any)]: { select: { id: true, stage: true }, orderBy: { createdAt: 'desc' }, take: 1 },
         projects: {
           include: {
             owner: { select: { id: true, name: true, avatar: true } },
@@ -136,7 +145,7 @@ clientRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
 });
 
 // POST /api/clients
-clientRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), validate(clientSchema), async (req: AuthRequest, res: Response, next) => {
+clientRouter.post('/', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), validate(clientSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const { contacts, startDate, ...data } = req.body;
 
@@ -210,7 +219,7 @@ clientRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), val
 });
 
 // POST /api/clients/bulk
-clientRouter.post('/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+clientRouter.post('/bulk', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     const clientsData = req.body.clients;
     if (!Array.isArray(clientsData) || clientsData.length === 0) {
@@ -279,7 +288,7 @@ clientRouter.post('/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRe
 });
 
 // PUT /api/clients/:id
-clientRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), validate(clientSchema), async (req: AuthRequest, res: Response, next) => {
+clientRouter.put('/:id', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), validate(clientSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const existing = await prisma.client.findFirst({
       where: { id: (req.params.id as string), organizationId: req.user!.organizationId }
@@ -350,7 +359,7 @@ clientRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), v
 });
 
 // DELETE /api/clients/:id — soft-delete (archive)
-clientRouter.delete('/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+clientRouter.delete('/:id', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     const existing = await prisma.client.findFirst({
       where: { id: (req.params.id as string), organizationId: req.user!.organizationId }
@@ -391,7 +400,7 @@ clientRouter.delete('/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthR
 });
 
 // POST /api/clients/:id/restore — restore an archived client
-clientRouter.post('/:id/restore', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+clientRouter.post('/:id/restore', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     const existing = await prisma.client.findFirst({
       where: { id: (req.params.id as string), organizationId: req.user!.organizationId }
@@ -432,7 +441,7 @@ clientRouter.post('/:id/restore', authorize('SUPER_ADMIN', 'ADMIN'), async (req:
 });
 
 // POST /api/clients/:id/notes
-clientRouter.post('/:id/notes', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+clientRouter.post('/:id/notes', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     // The client must belong to the caller's org (else this writes a note onto another org's client).
     const client = await prisma.client.findFirst({

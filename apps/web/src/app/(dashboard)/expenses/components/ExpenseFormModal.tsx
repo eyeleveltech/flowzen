@@ -20,7 +20,7 @@ export function ExpenseFormModal({ onClose, onSaved }: Props) {
     description: '',
     amount: '',
     date: '',
-    category: 'SOFTWARE',
+    category: 'VENDOR',
   });
 
   const queryClient = useQueryClient();
@@ -115,12 +115,11 @@ export function ExpenseFormModal({ onClose, onSaved }: Props) {
               onChange={(e) => setFormData(f => ({ ...f, category: e.target.value }))}
               className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-primary transition-all"
             >
-              <option value="SOFTWARE">Software / Tools</option>
-              <option value="SUBCONTRACTOR">Subcontractor</option>
-              <option value="ADVERTISING">Advertising</option>
+              <option value="VENDOR">Vendor / Software / Tools</option>
               <option value="TRAVEL">Travel</option>
-              <option value="OFFICE">Office Supplies</option>
-              <option value="OTHER">Other</option>
+              <option value="EQUIPMENT">Equipment</option>
+              <option value="MARKETING">Marketing / Advertising</option>
+              <option value="MISC">Miscellaneous</option>
             </select>
           </div>
 

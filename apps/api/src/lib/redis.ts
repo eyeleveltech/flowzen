@@ -74,5 +74,15 @@ export const redisClient = {
     } catch (err: any) {
       logger.error(`Failed to delete cache prefix ${prefix}: ${err.message}`);
     }
+  },
+
+  acquireLock: async (key: string, ttlMs: number): Promise<boolean> => {
+    if (!redis || !isConnected) return false;
+    try {
+      const res = await redis.set(key, '1', 'PX', ttlMs, 'NX');
+      return res === 'OK';
+    } catch {
+      return false;
+    }
   }
 };

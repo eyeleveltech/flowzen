@@ -1,10 +1,42 @@
-import { Router, Response } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 import { emitToOrganization } from '../sse.js';
+import { z } from 'zod';
+import { validate } from '../middleware/validate.js';
 import { generateQuotePdf } from '../services/quotePdf.service.js';
+import { generateDocNumber } from '../utils/quote.js';
 
 export const revenueRouter = Router();
+
+const paymentSchema = z.object({
+  clientId: z.string().min(1, 'Client ID is required'),
+  contractId: z.string().optional(),
+  amount: z.number().min(0, 'Amount must be a positive number'),
+  paidOn: z.string().refine((d) => !isNaN(Date.parse(d)), 'Invalid paidOn date'),
+  method: z.string().optional(),
+  reference: z.string().optional(),
+  notes: z.string().optional(),
+  status: z.enum(['PENDING', 'PARTIAL', 'PAID', 'REFUNDED']).optional(),
+});
+
+const invoiceStatusSchema = z.object({
+  status: z.enum(['DRAFT', 'SENT', 'PAID', 'CANCELLED'], {
+    message: 'Invalid status value',
+  }),
+});
+
+const expenseSchema = z.object({
+  amount: z.number().min(0, 'Amount must be a positive number'),
+  category: z.enum(['VENDOR', 'TRAVEL', 'EQUIPMENT', 'MARKETING', 'MISC'], {
+    message: 'Invalid expense category',
+  }),
+  date: z.string().refine((d) => !isNaN(Date.parse(d)), 'Invalid expense date'),
+  projectId: z.string().optional(),
+  clientId: z.string().optional(),
+  description: z.string().optional(),
+  notes: z.string().optional(),
+});
 
 // Normalize any billing frequency (a free-form string) to a monthly figure so MRR
 // is comparable across cadences. Unknown values fall back to monthly.
@@ -28,7 +60,7 @@ const toMonthlyAmount = (amount: number, freq: string | null | undefined): numbe
 // Overview & Dashboards
 // ============================================================================
 
-revenueRouter.get('/overview', async (req: AuthRequest, res: Response) => {
+revenueRouter.get('/overview', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const orgId = req.user!.organizationId;
     const now = new Date();
@@ -59,6 +91,9 @@ revenueRouter.get('/overview', async (req: AuthRequest, res: Response) => {
     });
     let receivables = 0;
     for (const c of activeContracts) {
+      if (c.notes?.includes('Linked to Retainer Subscription') && c.billingFrequency === 'MONTHLY') {
+        continue; // Prevent double-counting retainer contracts whose MRR is already tracked in Subscriptions
+      }
       const paid = c.payments.reduce((acc, p) => acc + Number(p.amount), 0);
       receivables += Math.max(0, Number(c.value) - paid);
     }
@@ -111,9 +146,20 @@ revenueRouter.get('/overview', async (req: AuthRequest, res: Response) => {
   }
 });
 
-revenueRouter.get('/pnl', async (req: AuthRequest, res: Response) => {
+revenueRouter.get('/pnl', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const orgId = req.user!.organizationId;
+    const { startDate, endDate } = req.query;
+
+    let paymentDateFilter = {};
+    let expenseDateFilter = {};
+
+    if (startDate && endDate) {
+      const start = new Date(startDate as string);
+      const end = new Date(endDate as string);
+      paymentDateFilter = { paidOn: { gte: start, lte: end } };
+      expenseDateFilter = { date: { gte: start, lte: end } };
+    }
     
     // Fetch clients for this org to find their projects
     const clients = await prisma.client.findMany({
@@ -132,13 +178,13 @@ revenueRouter.get('/pnl', async (req: AuthRequest, res: Response) => {
     
     // Fetch expenses for these projects
     const expenses = await prisma.expense.findMany({
-      where: { projectId: { in: projectIds } }
+      where: { projectId: { in: projectIds }, ...expenseDateFilter }
     });
 
     // To get revenue, we will fetch contracts per client
     const contracts = await prisma.contract.findMany({
       where: { organizationId: orgId, clientId: { in: clientIds } },
-      include: { payments: { where: { status: 'PAID' } } }
+      include: { payments: { where: { status: 'PAID', ...paymentDateFilter } } }
     });
 
     // Contracts are per-client (no projectId), so a client's paid revenue is split
@@ -172,7 +218,7 @@ revenueRouter.get('/pnl', async (req: AuthRequest, res: Response) => {
 
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
@@ -196,7 +242,7 @@ revenueRouter.get('/invoice-drafts', async (req: AuthRequest, res: Response) => 
   }
 });
 
-revenueRouter.post('/invoice-drafts', async (req: AuthRequest, res: Response) => {
+revenueRouter.post('/invoice-drafts', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { quoteId, draftNumber, clientId, clientName, lineItems, grandTotal, notes } = req.body;
     
@@ -210,11 +256,13 @@ revenueRouter.post('/invoice-drafts', async (req: AuthRequest, res: Response) =>
     const clientOk = await prisma.client.findFirst({ where: { id: clientId, organizationId: orgId, archivedAt: null }, select: { id: true } });
     if (!clientOk) return res.status(400).json({ error: 'Client not found in your organization' });
 
+    const generatedDraftNumber = await generateDocNumber(orgId, 'INV');
+
     const draft = await prisma.invoiceDraft.create({
       data: {
         organizationId: orgId,
         quoteId,
-        draftNumber,
+        draftNumber: generatedDraftNumber,
         clientId,
         clientName,
         lineItems,
@@ -231,11 +279,15 @@ revenueRouter.post('/invoice-drafts', async (req: AuthRequest, res: Response) =>
     emitToOrganization(req.app.get('io'), req.user!.organizationId, 'revenue:invoice-draft-created', draft);
     res.status(201).json(draft);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    if (err?.code === 'P2002') {
+      res.status(409).json({ error: 'An invoice draft already exists for this quote' });
+      return;
+    }
+    next(err);
   }
 });
 
-revenueRouter.put('/invoice-drafts/:id', async (req: AuthRequest, res: Response) => {
+revenueRouter.put('/invoice-drafts/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { lineItems, untaxedAmount, cgst, sgst, igst, totalTax, grandTotal, notes } = req.body;
     
@@ -270,10 +322,10 @@ revenueRouter.put('/invoice-drafts/:id', async (req: AuthRequest, res: Response)
     emitToOrganization(req.app.get('io'), req.user!.organizationId, 'revenue:invoice-draft-updated', draft);
     res.json(draft);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
-revenueRouter.put('/invoice-drafts/:id/status', async (req: AuthRequest, res: Response) => {
+revenueRouter.put('/invoice-drafts/:id/status', validate(invoiceStatusSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { status } = req.body;
     const draft = await prisma.invoiceDraft.update({
@@ -283,14 +335,14 @@ revenueRouter.put('/invoice-drafts/:id/status', async (req: AuthRequest, res: Re
     emitToOrganization(req.app.get('io'), req.user!.organizationId, 'revenue:invoice-draft-updated', draft);
     res.json(draft);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
  // Wait, let's fix imports properly at the top. 
 // I'll add the route first, then fix imports if needed.
 
-revenueRouter.post('/invoice-drafts/:id/generate-pdf', async (req: AuthRequest, res: Response) => {
+revenueRouter.post('/invoice-drafts/:id/generate-pdf', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const orgId = req.user!.organizationId;
     const id = req.params.id as string;
@@ -334,7 +386,7 @@ revenueRouter.post('/invoice-drafts/:id/generate-pdf', async (req: AuthRequest, 
     
     res.json({ pdfUrl });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
@@ -342,7 +394,7 @@ revenueRouter.post('/invoice-drafts/:id/generate-pdf', async (req: AuthRequest, 
 // 2. Contracts
 // ============================================================================
 
-revenueRouter.get('/contracts', async (req: AuthRequest, res: Response) => {
+revenueRouter.get('/contracts', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const contracts = await prisma.contract.findMany({
       where: { organizationId: req.user!.organizationId },
@@ -353,11 +405,11 @@ revenueRouter.get('/contracts', async (req: AuthRequest, res: Response) => {
     });
     res.json(contracts);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-revenueRouter.post('/contracts', async (req: AuthRequest, res: Response) => {
+revenueRouter.post('/contracts', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const data = req.body;
     const contract = await prisma.contract.create({
@@ -371,7 +423,7 @@ revenueRouter.post('/contracts', async (req: AuthRequest, res: Response) => {
     emitToOrganization(req.app.get('io'), req.user!.organizationId, 'revenue:contract-created', contract);
     res.status(201).json(contract);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
@@ -379,7 +431,7 @@ revenueRouter.post('/contracts', async (req: AuthRequest, res: Response) => {
 // 3. Payments
 // ============================================================================
 
-revenueRouter.get('/payments', async (req: AuthRequest, res: Response) => {
+revenueRouter.get('/payments', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const payments = await prisma.payment.findMany({
       where: { organizationId: req.user!.organizationId },
@@ -391,11 +443,11 @@ revenueRouter.get('/payments', async (req: AuthRequest, res: Response) => {
     });
     res.json(payments);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-revenueRouter.post('/payments', async (req: AuthRequest, res: Response) => {
+revenueRouter.post('/payments', validate(paymentSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const data = req.body;
     const payment = await prisma.payment.create({
@@ -408,7 +460,7 @@ revenueRouter.post('/payments', async (req: AuthRequest, res: Response) => {
     emitToOrganization(req.app.get('io'), req.user!.organizationId, 'revenue:payment-logged', payment);
     res.status(201).json(payment);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
@@ -416,7 +468,7 @@ revenueRouter.post('/payments', async (req: AuthRequest, res: Response) => {
 // 4. Subscriptions
 // ============================================================================
 
-revenueRouter.get('/subscriptions', async (req: AuthRequest, res: Response) => {
+revenueRouter.get('/subscriptions', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const subs = await prisma.subscription.findMany({
       where: { organizationId: req.user!.organizationId },
@@ -428,11 +480,11 @@ revenueRouter.get('/subscriptions', async (req: AuthRequest, res: Response) => {
     });
     res.json(subs);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-revenueRouter.post('/subscriptions', async (req: AuthRequest, res: Response) => {
+revenueRouter.post('/subscriptions', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const data = req.body;
     const sub = await prisma.subscription.create({
@@ -446,7 +498,7 @@ revenueRouter.post('/subscriptions', async (req: AuthRequest, res: Response) => 
     emitToOrganization(req.app.get('io'), req.user!.organizationId, 'revenue:subscription-created', sub);
     res.status(201).json(sub);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
@@ -454,7 +506,7 @@ revenueRouter.post('/subscriptions', async (req: AuthRequest, res: Response) => 
 // 5. Expenses
 // ============================================================================
 
-revenueRouter.get('/expenses', async (req: AuthRequest, res: Response) => {
+revenueRouter.get('/expenses', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const expenses = await prisma.expense.findMany({
       where: { organizationId: req.user!.organizationId },
@@ -466,11 +518,11 @@ revenueRouter.get('/expenses', async (req: AuthRequest, res: Response) => {
     });
     res.json(expenses);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-revenueRouter.post('/expenses', async (req: AuthRequest, res: Response) => {
+revenueRouter.post('/expenses', validate(expenseSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const data = req.body;
     const expense = await prisma.expense.create({
@@ -483,6 +535,6 @@ revenueRouter.post('/expenses', async (req: AuthRequest, res: Response) => {
     emitToOrganization(req.app.get('io'), req.user!.organizationId, 'revenue:expense-logged', expense);
     res.status(201).json(expense);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });

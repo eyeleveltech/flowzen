@@ -157,9 +157,12 @@ export function PipelineBoardView() {
       }
     });
 
-    // Sort each column by contract value descending
+    // Sort each column by position ascending (or dealValue descending fallback)
     Object.keys(cols).forEach(colId => {
       cols[colId].sort((a, b) => {
+        if (a.position !== undefined && b.position !== undefined && a.position !== b.position) {
+          return a.position - b.position;
+        }
         const valA = a.dealValue || 0;
         const valB = b.dealValue || 0;
         return valB - valA;
@@ -174,7 +177,23 @@ export function PipelineBoardView() {
     if (!result.destination) return;
     const { source, destination, draggableId } = result;
 
-    if (source.droppableId === destination.droppableId) return; // Didn't change column
+    if (source.droppableId === destination.droppableId) {
+      if (source.index === destination.index) return;
+      const colLeads = [...(columns[source.droppableId] || [])];
+      const [moved] = colLeads.splice(source.index, 1);
+      colLeads.splice(destination.index, 0, moved);
+      const reorderedItems = colLeads.map((l, idx) => ({ id: l.id, position: idx }));
+
+      setLeads(prev => prev.map(l => {
+        const item = reorderedItems.find(i => i.id === l.id);
+        return item ? { ...l, position: item.position } : l;
+      }));
+
+      api.patch('/crm/leads/reorder', { items: reorderedItems }).catch(() => {
+        fetchLeads();
+      });
+      return;
+    }
 
     const lead = leads.find(l => l.id === draggableId);
     if (!lead) return;

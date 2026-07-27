@@ -21,6 +21,20 @@ const daysBetween = (a: Date, b: Date) => istDayIndex(a) - istDayIndex(b);
 const prefOn = (user: any, key: string) => ((user?.settings as any)?.notifications?.[key]) !== false;
 const leadName = (l: any) => l.companyName || l.contactName || 'Lead';
 
+export function addCalendarMonthsAnchored(fromDate: Date, months: number, anchorDay: number): Date {
+  const res = new Date(fromDate);
+  res.setMonth(res.getMonth() + months, 1);
+  const daysInMonth = new Date(res.getFullYear(), res.getMonth() + 1, 0).getDate();
+  res.setDate(Math.min(anchorDay, daysInMonth));
+  return res;
+}
+
+export function calculateTermMonths(startDate: Date, endDate: Date): number {
+  const yearsDiff = endDate.getFullYear() - startDate.getFullYear();
+  const monthsDiff = yearsDiff * 12 + (endDate.getMonth() - startDate.getMonth());
+  return Math.max(monthsDiff, 1);
+}
+
 // Activities that count as actually contacting the lead (for "already followed up").
 const CONTACT_ACTIVITY_TYPES = ['CALL_LOGGED', 'EMAIL_LOGGED', 'MEETING_LOGGED', 'MESSAGE_SENT'];
 
@@ -168,8 +182,12 @@ export async function sendDailyDigests(): Promise<number> {
 export async function runRenewalScan(): Promise<number> {
   const today = new Date();
   const leads = await prisma.lead.findMany({
-    where: { stage: 'ACTIVE_RETAINER', contractEndDate: { not: null }, renewalStatus: { not: 'CHURNED' } },
-    select: { id: true, assignedToId: true, organizationId: true, companyName: true, contactName: true, dealValue: true, contractStartDate: true, contractEndDate: true, autoRenewal: true, renewalStatus: true },
+    where: {
+      stage: 'ACTIVE_RETAINER',
+      contractEndDate: { not: null },
+      OR: [{ renewalStatus: null }, { renewalStatus: { not: 'CHURNED' } }],
+    },
+    select: { id: true, clientId: true, assignedToId: true, organizationId: true, companyName: true, contactName: true, dealValue: true, contractStartDate: true, contractEndDate: true, autoRenewal: true, renewalStatus: true },
   });
   if (!leads.length) return 0;
 
@@ -184,14 +202,35 @@ export async function runRenewalScan(): Promise<number> {
     const end = new Date(l.contractEndDate!);
     const days = daysBetween(end, today);
 
-    // Auto-renew: on/after end date, extend by the original term (or a 1-year default when the
-    // start date is unknown — never let an auto-renew contract silently expire) and log it.
+    // Auto-renew: on/after end date, extend by whole calendar term anchored on original start day and sync subscription.
     if (l.autoRenewal) {
       if (days <= 0) {
-        const dur = l.contractStartDate ? end.getTime() - new Date(l.contractStartDate).getTime() : 365 * 86400000;
-        const newEnd = new Date(end.getTime() + Math.max(dur, 30 * 86400000));
-        await prisma.lead.update({ where: { id: l.id }, data: { contractStartDate: end, contractEndDate: newEnd, renewalStatus: 'RENEWED' } });
-        if (l.assignedToId) await logActivity({ leadId: l.id, type: ActivityType.STATUS_CHANGED, message: `auto-renewed the retainer to ${newEnd.toLocaleDateString('en-IN')}`, userId: l.assignedToId });
+        const startDate = l.contractStartDate ? new Date(l.contractStartDate) : null;
+        const anchorDay = startDate ? startDate.getDate() : end.getDate();
+        const termMonths = startDate ? calculateTermMonths(startDate, end) : 12;
+        const newStart = new Date(end);
+        const newEnd = addCalendarMonthsAnchored(end, termMonths, anchorDay);
+
+        await prisma.lead.update({
+          where: { id: l.id },
+          data: { contractStartDate: newStart, contractEndDate: newEnd, renewalStatus: 'RENEWED' },
+        });
+
+        if (l.clientId) {
+          await prisma.subscription.updateMany({
+            where: { clientId: l.clientId, status: 'ACTIVE' },
+            data: { nextBillingDate: newEnd },
+          });
+        }
+
+        if (l.assignedToId) {
+          await logActivity({
+            leadId: l.id,
+            type: ActivityType.STATUS_CHANGED,
+            message: `auto-renewed the retainer to ${newEnd.toLocaleDateString('en-IN')}`,
+            userId: l.assignedToId,
+          });
+        }
       }
       continue;
     }
@@ -313,6 +352,56 @@ export async function sendOrgCrmDigest(): Promise<number> {
   return sent;
 }
 
+export async function processSubscriptionBilling() {
+  try {
+    const now = new Date();
+    const today = startOfDay(now);
+
+    const dueSubs = await prisma.subscription.findMany({
+      where: {
+        status: 'ACTIVE',
+        nextBillingDate: { lte: today },
+      },
+    });
+
+    let processed = 0;
+    for (const sub of dueSubs) {
+      const currentNext = sub.nextBillingDate ? new Date(sub.nextBillingDate) : new Date();
+      const newNext = new Date(currentNext);
+      newNext.setMonth(newNext.getMonth() + 1);
+
+      await prisma.$transaction([
+        prisma.payment.create({
+          data: {
+            organizationId: sub.organizationId,
+            clientId: sub.clientId,
+            contractId: sub.contractId,
+            amount: sub.amount,
+            status: 'PAID',
+            method: 'AUTO_DEBIT',
+            notes: `Automated recurring payment for subscription ${sub.id}`,
+            paidOn: new Date(),
+          },
+        }),
+        prisma.subscription.update({
+          where: { id: sub.id },
+          data: { nextBillingDate: newNext },
+        }),
+      ]);
+
+      processed++;
+    }
+
+    if (processed > 0) {
+      logger.info(`[Billing] Processed recurring billing for ${processed} subscription(s)`);
+    }
+    return processed;
+  } catch (error) {
+    logger.error('[Billing] Subscription recurring billing failed:', error);
+    return 0;
+  }
+}
+
 // Orchestrator — runs all daily jobs. The daily cron passes sendEmails=true; the manual
 // /run-scan trigger passes false so repeated test runs never re-send digest emails.
 export async function runDailyNotificationJobs(sendEmails = true) {
@@ -320,7 +409,8 @@ export async function runDailyNotificationJobs(sendEmails = true) {
   const stale = await runStaleLeadScan().catch((e) => { logger.error('[Scanner] stale scan failed', e); return 0; });
   const renewals = await runRenewalScan().catch((e) => { logger.error('[Scanner] renewal scan failed', e); return 0; });
   const reactivations = await runReactivationScan().catch((e) => { logger.error('[Scanner] reactivation scan failed', e); return 0; });
+  const billing = await processSubscriptionBilling().catch((e) => { logger.error('[Scanner] subscription billing failed', e); return 0; });
   const digests = sendEmails ? await sendDailyDigests().catch((e) => { logger.error('[Scanner] digest failed', e); return 0; }) : 0;
   const orgDigests = sendEmails ? await sendOrgCrmDigest().catch((e) => { logger.error('[Scanner] org CRM digest failed', e); return 0; }) : 0;
-  return { followUps, stale, renewals, reactivations, digests, orgDigests, emailsSent: sendEmails };
+  return { followUps, stale, renewals, reactivations, billing, digests, orgDigests, emailsSent: sendEmails };
 }

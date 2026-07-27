@@ -13,14 +13,7 @@ import { useConfirmStore } from '@/stores';
 import { fileUrl } from '@/lib/files';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { QuoteFormModal } from './components/QuoteFormModal';
-
-const STATUS_STYLES: Record<string, string> = {
-  DRAFT: 'bg-gray-100 text-gray-600 border-gray-200',
-  SENT: 'bg-blue-50 text-blue-700 border-blue-200',
-  ACCEPTED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  EXPIRED: 'bg-amber-50 text-amber-700 border-amber-200',
-  CANCELLED: 'bg-red-50 text-red-700 border-red-200',
-};
+import { StatusBadge } from '@/components/ui/status-badge';
 
 function QuotationsContent() {
   usePageTitle('Quotations');
@@ -173,7 +166,7 @@ function QuotationsContent() {
                   <td className="px-6 py-4 text-sm text-secondary">{formatDate(q.documentDate)}</td>
                   <td className="px-6 py-4 text-sm font-medium text-primary text-right">{formatCurrency(Number(q.grandTotal))}</td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md border ${STATUS_STYLES[q.status]}`}>{q.status[0] + q.status.slice(1).toLowerCase()}</span>
+                    <StatusBadge status={q.status} />
                   </td>
                   <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                     {/* Desktop Viewport — icon row */}
@@ -274,9 +267,7 @@ function QuotationsContent() {
                   <p className="text-[11px] text-secondary mt-0.5">{q.documentType === 'QUOTATION' ? 'Quotation' : 'Proforma Invoice'}</p>
                 </div>
               </div>
-              <span className={`inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-md border ${STATUS_STYLES[q.status]}`}>
-                {q.status[0] + q.status.slice(1).toLowerCase()}
-              </span>
+              <StatusBadge status={q.status} size="xs" />
             </div>
 
             <div className="mb-3">

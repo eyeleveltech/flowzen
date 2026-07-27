@@ -110,19 +110,28 @@ settingsRouter.put('/organization', authorize('SUPER_ADMIN', 'ADMIN'), validate(
   }
 });
 
-// GET /api/settings/company — company billing details (GST/PAN/bank/state/standard T&C) used by quotations.
-// The quote and invoice-draft forms need `state` (IGST vs CGST/SGST) and `standardTerms`, so the route stays
-// open to every role — but bank/GST/PAN are admin-only and must not travel to a TEAM_MEMBER.
-const COMPANY_NON_ADMIN_FIELDS = ['state', 'standardTerms'] as const;
-
-settingsRouter.get('/company', async (req: AuthRequest, res: Response, next) => {
+// GET /api/settings/company — full company billing details (GST/PAN/bank/state/standard T&C). Admin-only.
+settingsRouter.get('/company', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     const org = await prisma.organization.findUnique({ where: { id: req.user!.organizationId }, select: { name: true, address: true, phone: true, settings: true } });
     const company = ((org?.settings as any)?.company) || {};
-    const visible = isOrgAdmin(req)
-      ? company
-      : Object.fromEntries(COMPANY_NON_ADMIN_FIELDS.filter((k) => k in company).map((k) => [k, company[k]]));
-    res.json({ name: org?.name, address: org?.address, phone: org?.phone, ...visible });
+    res.json({ name: org?.name, address: org?.address, phone: org?.phone, ...company });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/settings/company/quote-context — narrow public endpoint returning only the fields
+// that quotation and invoice-draft forms legitimately need (state for IGST/CGST determination
+// and standardTerms to pre-fill T&C). Open to all authenticated roles.
+settingsRouter.get('/company/quote-context', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const org = await prisma.organization.findUnique({ where: { id: req.user!.organizationId }, select: { settings: true } });
+    const company = ((org?.settings as any)?.company) || {};
+    res.json({
+      state: company.state || null,
+      standardTerms: company.standardTerms || null,
+    });
   } catch (error) {
     next(error);
   }

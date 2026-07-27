@@ -7,6 +7,8 @@ import { formatCurrency, formatDate } from '@/lib/utils';
 import { FileText, Plus } from 'lucide-react';
 import { ContractFormModal } from './components/ContractFormModal';
 
+import { StatusBadge } from '@/components/ui/status-badge';
+import { TableSkeleton } from '@/components/ui/skeleton-loaders';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
 export default function ContractsPage() {
@@ -18,6 +20,20 @@ export default function ContractsPage() {
     queryFn: () => api.get<any[]>('/revenue/contracts'),
   });
   const contracts = data || [];
+
+  if (isLoading) {
+    return (
+      <div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl font-semibold text-primary tracking-tight">Contracts</h1>
+            <p className="text-sm text-secondary mt-1">Manage active contracts and service agreements</p>
+          </div>
+        </div>
+        <TableSkeleton rows={5} />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -74,9 +90,7 @@ export default function ContractsPage() {
                   <td className="px-6 py-4 text-sm text-secondary">{formatDate(c.startDate)}</td>
                   <td className="px-6 py-4 text-sm font-medium text-primary text-right">{formatCurrency(Number(c.value))}</td>
                   <td className="px-6 py-4">
-                    <span className="inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md border bg-gray-100 text-gray-600 border-gray-200">
-                      {c.status}
-                    </span>
+                    <StatusBadge status={c.status} />
                   </td>
                 </tr>
               ))}

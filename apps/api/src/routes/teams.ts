@@ -88,6 +88,10 @@ teamRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN'), validate(teamSchema), as
     emitToOrganization(req.app.get('io'), req.user!.organizationId, 'team:changed', { id: team.id });
     res.status(201).json(team);
   } catch (error: any) {
+    if (error?.code === 'P2002') {
+      res.status(409).json({ error: `A team named "${req.body.name}" already exists in your organization.` });
+      return;
+    }
     next(error);
   }
 });
@@ -142,6 +146,10 @@ teamRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), val
     emitToOrganization(req.app.get('io'), req.user!.organizationId, 'team:changed', { id: team.id });
     res.json(team);
   } catch (error: any) {
+    if (error?.code === 'P2002') {
+      res.status(409).json({ error: `A team named "${req.body.name}" already exists in your organization.` });
+      return;
+    }
     next(error);
   }
 });
