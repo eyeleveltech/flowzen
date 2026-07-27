@@ -279,6 +279,10 @@ model User {
   phone          String?
   joiningDate    DateTime @default(now())
   status           UserStatus @default(PENDING)
+  // Bumped on password change / reset (and any forced "log out everywhere") to revoke every
+  // previously-issued JWT: a token carries the tokenVersion it was signed under, and auth
+  // rejects it once this no longer matches. Without it, a stolen token survived a reset.
+  tokenVersion     Int      @default(0)
   resetToken       String?  @unique
   resetTokenExpiry DateTime?
   lastActivityReadAt DateTime?

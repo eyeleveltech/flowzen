@@ -12,6 +12,10 @@ export interface JwtPayload {
   email: string;
   role: string;
   organizationId: string;
+  // The user's tokenVersion at issue time. Optional so tokens minted before this existed still
+  // type-check; the auth middleware treats a missing value as 0 (the default) to avoid logging
+  // everyone out on deploy.
+  tokenVersion?: number;
 }
 
 export function generateToken(payload: JwtPayload): string {

@@ -79,6 +79,7 @@ authRouter.post('/register', authLimiter, validate(registerSchema), async (req, 
       email: user.email,
       role: user.role,
       organizationId: organization.id,
+      tokenVersion: user.tokenVersion,
     });
 
     res.cookie('token', token, {
@@ -133,6 +134,7 @@ authRouter.post('/login', authLimiter, validate(loginSchema), async (req, res: R
       email: user.email,
       role: user.role,
       organizationId: user.organizationId,
+      tokenVersion: user.tokenVersion,
     });
 
     res.cookie('token', token, {
@@ -267,6 +269,8 @@ authRouter.post('/reset-password', async (req: Request, res: Response, next) => 
         resetToken: null,
         resetTokenExpiry: null,
         status: 'ACTIVE',
+        // Revoke every token issued before this reset — the whole point of resetting.
+        tokenVersion: { increment: 1 },
       },
     });
 
