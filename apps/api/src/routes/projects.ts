@@ -95,9 +95,6 @@ projectRouter.get('/', async (req: AuthRequest, res: Response, next) => {
           members: { include: { user: { select: { id: true, name: true, avatar: true } } } },
           teams: { include: { team: { include: { members: { select: { id: true, name: true, avatar: true } } } } } },
           _count: { select: { tasks: true } },
-          ...(req.query.includeCalendarData === 'true' && {
-            milestones: { select: { id: true, name: true, dueDate: true, completed: true } },
-          }),
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -141,7 +138,6 @@ projectRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
           },
           orderBy: [{ status: 'asc' }, { order: 'asc' }],
         },
-        milestones: { orderBy: { dueDate: 'asc' } },
         activities: {
           include: { user: { select: { id: true, name: true, avatar: true } } },
           orderBy: { createdAt: 'desc' },
@@ -375,7 +371,6 @@ projectRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), 
           },
           orderBy: [{ status: 'asc' }, { order: 'asc' }],
         },
-        milestones: { orderBy: { dueDate: 'asc' } },
         activities: {
           include: { user: { select: { id: true, name: true, avatar: true } } },
           orderBy: { createdAt: 'desc' },
@@ -532,54 +527,6 @@ projectRouter.post('/from-template', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_
 
     await invalidateOrganizationCache(req.user!.organizationId);
     res.status(201).json(project);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// POST /api/projects/:id/milestones
-projectRouter.post('/:id/milestones', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), async (req: AuthRequest, res: Response, next) => {
-  try {
-    const milestone = await prisma.milestone.create({
-      data: {
-        name: req.body.name,
-        dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
-        projectId: (req.params.id as string),
-      },
-    });
-
-    res.status(201).json(milestone);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// PUT /api/projects/:id/milestones/:milestoneId
-projectRouter.put('/:id/milestones/:milestoneId', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), async (req: AuthRequest, res: Response, next) => {
-  try {
-    const milestone = await prisma.milestone.update({
-      where: { id: req.params.milestoneId as string },
-      data: {
-        name: req.body.name,
-        dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
-        completed: req.body.completed !== undefined ? req.body.completed : undefined,
-      },
-    });
-
-    res.json(milestone);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// DELETE /api/projects/:id/milestones/:milestoneId
-projectRouter.delete('/:id/milestones/:milestoneId', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), async (req: AuthRequest, res: Response, next) => {
-  try {
-    await prisma.milestone.delete({
-      where: { id: req.params.milestoneId as string },
-    });
-
-    res.status(204).send();
   } catch (error) {
     next(error);
   }

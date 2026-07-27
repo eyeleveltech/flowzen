@@ -697,7 +697,7 @@ export const docsHtml = `
           <span class="badge badge-get">GET</span>
           <span>/projects/:id</span>
         </div>
-        <p>Fetch details of a single project including members, active milestones, and task checklists.</p>
+        <p>Fetch details of a single project including members and task checklists.</p>
       </div>
 
       <div class="card" id="post-projects">

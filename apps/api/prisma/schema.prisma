@@ -412,7 +412,6 @@ model Project {
   owner      User             @relation("ProjectOwner", fields: [ownerId], references: [id])
   template   ProjectTemplate? @relation(fields: [templateId], references: [id])
   tasks      Task[]
-  milestones Milestone[]
   activities Activity[]       @relation("ProjectActivities")
   members    ProjectMember[]
   teams      ProjectTeam[]
@@ -522,20 +521,6 @@ model Task {
   @@index([projectId, status, assigneeId])
   @@index([assigneeId, status])
   @@map("tasks")
-}
-
-model Milestone {
-  id        String    @id @default(cuid())
-  name      String
-  dueDate   DateTime?
-  completed Boolean   @default(false)
-  projectId String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@map("milestones")
 }
 
 model Comment {

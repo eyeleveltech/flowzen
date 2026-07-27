@@ -17,10 +17,9 @@ interface CalendarEvent {
   id: string;
   title: string;
   date: Date;
-  type: 'PROJECT_START' | 'PROJECT_DUE' | 'MILESTONE';
+  type: 'PROJECT_START' | 'PROJECT_DUE';
   status?: string;
   projectId: string;
-  completed?: boolean;
 }
 
 import { getStatusColor } from '@/lib/status';
@@ -40,15 +39,6 @@ export function CalendarView({ projects }: CalendarViewProps) {
       if (p.endDate) {
         allEvents.push({
           id: `p-end-${p.id}`, title: p.name, date: new Date(p.endDate), type: 'PROJECT_DUE', projectId: p.id, status: p.status
-        });
-      }
-      if (p.milestones) {
-        p.milestones.forEach((m: any) => {
-          if (m.dueDate) {
-            allEvents.push({
-              id: `m-${m.id}`, title: m.name, date: new Date(m.dueDate), type: 'MILESTONE', projectId: p.id, completed: m.completed
-            });
-          }
         });
       }
     });
@@ -127,7 +117,6 @@ export function CalendarView({ projects }: CalendarViewProps) {
                         key={event.id}
                         onClick={() => router.push(`/projects/${event.projectId}`)}
                         className={`px-2.5 py-1.5 text-xs rounded-lg border cursor-pointer hover:shadow-md transition-all truncate group
-                        ${event.type === 'MILESTONE' ? (event.completed ? 'bg-emerald-50 text-emerald-700 border-emerald-100 opacity-70 line-through' : 'bg-emerald-100 text-emerald-800 border-emerald-200 shadow-sm') : ''}
                         ${isProject ? `${getStatusColor(event.status).bg} ${getStatusColor(event.status).text} ${getStatusColor(event.status).border} shadow-sm` : ''}
                       `}
                         title={event.title}
@@ -171,8 +160,7 @@ export function CalendarView({ projects }: CalendarViewProps) {
                           key={event.id}
                           onClick={() => router.push(`/projects/${event.projectId}`)}
                           className={`p-3 text-sm rounded-xl border cursor-pointer active:scale-[0.98] transition-all
-                            ${event.type === 'MILESTONE' ? (event.completed ? 'bg-emerald-50 text-emerald-700 border-emerald-100 opacity-70 line-through' : 'bg-emerald-100 text-emerald-800 border-emerald-200 shadow-sm') : ''}
-                            ${isProject ? `${getStatusColor(event.status).bg} ${getStatusColor(event.status).text} ${getStatusColor(event.status).border} shadow-sm` : ''}
+                                ${isProject ? `${getStatusColor(event.status).bg} ${getStatusColor(event.status).text} ${getStatusColor(event.status).border} shadow-sm` : ''}
                           `}
                         >
                           <div className="flex items-center gap-2">
