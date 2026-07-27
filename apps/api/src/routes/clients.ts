@@ -310,23 +310,32 @@ clientRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), v
       }
     }
 
+    const updateData: any = {
+      ...data,
+      name: newName || existing.name,
+      accountManagerId: data.accountManagerId || null,
+      startDate: startDate ? new Date(startDate) : undefined,
+    };
+
+    // Only replace contacts when the request actually sends a contacts array. The previous
+    // unconditional `deleteMany: {}` meant ANY update that omitted contacts (e.g. changing
+    // just the GST number or status) silently deleted every contact on the client. A partial
+    // update must leave contacts it didn't mention untouched.
+    if (Array.isArray(contacts)) {
+      updateData.contacts = {
+        deleteMany: {},
+        create: contacts.map((c: any) => ({
+          name: c.name,
+          designation: c.designation,
+          email: c.email,
+          phone: c.phone,
+        })),
+      };
+    }
+
     const updated = await prisma.client.update({
       where: { id: existing.id },
-      data: {
-        ...data,
-        name: newName || existing.name,
-        accountManagerId: data.accountManagerId || null,
-        startDate: startDate ? new Date(startDate) : undefined,
-        contacts: {
-          deleteMany: {},
-          create: contacts?.map((c: any) => ({
-            name: c.name,
-            designation: c.designation,
-            email: c.email,
-            phone: c.phone
-          })) || []
-        }
-      },
+      data: updateData,
       include: { contacts: true }
     });
 
