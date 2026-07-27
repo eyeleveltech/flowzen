@@ -1053,6 +1053,9 @@ model Contract {
   endDate          DateTime?
   status           ContractStatus @default(ACTIVE)
   notes            String?        @db.Text
+  // The CRM lead this contract was auto-created from, so the same won deal never creates a
+  // second contract if it re-enters the Active stage. Null for manually-created contracts.
+  sourceLeadId     String?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
@@ -1062,6 +1065,7 @@ model Contract {
   subscriptions    Subscription[]
 
   @@index([organizationId])
+  @@index([sourceLeadId])
   @@map("contracts")
 }
 
@@ -1100,6 +1104,9 @@ model Subscription {
   nextBillingDate  DateTime?
   status           SubscriptionStatus @default(ACTIVE)
   notes            String?
+  // The CRM lead this subscription was auto-created from, so the same won deal never creates a
+  // second subscription if it re-enters the Active stage. Null for manually-created subs.
+  sourceLeadId     String?
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
 
@@ -1108,6 +1115,7 @@ model Subscription {
   contract         Contract?          @relation(fields: [contractId], references: [id])
 
   @@index([organizationId])
+  @@index([sourceLeadId])
   @@map("subscriptions")
 }
 
