@@ -646,16 +646,21 @@ model ProjectTemplate {
 }
 
 model ClientContact {
-  id          String   @id @default(cuid())
+  id          String       @id @default(cuid())
   name        String
   designation String?
   email       String?
   phone       String?
+  linkedinUrl String?
+  // Carried over from the LeadContact when the deal is won — who's the decision maker vs.
+  // champion vs. gatekeeper. Nullable because manually-added client contacts may not have one.
+  role        ContactRole?
+  notes       String?      @db.Text
   clientId    String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
-  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client      Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@map("client_contacts")
 }
@@ -1069,8 +1074,8 @@ model Contract {
   payments         Payment[]
   subscriptions    Subscription[]
 
+  @@unique([sourceLeadId]) // DB-enforced one-contract-per-lead: makes CRM revenue idempotency concurrency-safe. NULLs (manual contracts) are distinct in Postgres, so unaffected.
   @@index([organizationId])
-  @@index([sourceLeadId])
   @@map("contracts")
 }
 
@@ -1119,8 +1124,8 @@ model Subscription {
   client           Client             @relation("ClientSubscriptions", fields: [clientId], references: [id])
   contract         Contract?          @relation(fields: [contractId], references: [id])
 
+  @@unique([sourceLeadId]) // DB-enforced one-subscription-per-lead: makes CRM revenue idempotency concurrency-safe. NULLs (manual subs) are distinct in Postgres, so unaffected.
   @@index([organizationId])
-  @@index([sourceLeadId])
   @@map("subscriptions")
 }
 

@@ -772,6 +772,7 @@ const stageUpdateSchema = z.object({
   fields: z.record(z.any()).optional(),
   followUpDate: z.string().optional().nullable(),
   lastContactedDate: z.string().optional().nullable(),
+  position: z.number().optional(), // optional card position when a drag both moves stage and reorders
   reopen: z.boolean().optional(), // explicit intent to reopen a closed (CHURNED/PROJECT_COMPLETED) deal
 });
 
@@ -780,7 +781,7 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
   try {
     const orgId = req.user!.organizationId;
     const leadId = req.params.id as string;
-    const { stage, notes, dealValue, expectedCloseDate, contractType, contractStartDate, contractEndDate, lostReason, fields, followUpDate, lastContactedDate, reopen } = req.body;
+    const { stage, notes, dealValue, expectedCloseDate, contractType, contractStartDate, contractEndDate, lostReason, fields, followUpDate, lastContactedDate, position, reopen } = req.body;
 
     const existingLead = await prisma.lead.findFirst({
       where: { id: leadId, organizationId: orgId },
@@ -891,7 +892,18 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
     if (newClientId) emitToOrganization(io, orgId, 'client:created', { id: newClientId });
 
     res.json(updatedLead);
-  } catch (error) {
+  } catch (error: any) {
+    // Lost a concurrency race: a parallel stage change for THIS lead already created the single
+    // subscription/contract (unique sourceLeadId). Our transaction rolled back cleanly, so no
+    // double revenue was written. The winner already set the target stage — return current state
+    // so a double-fired drag resolves as a harmless no-op instead of a 500.
+    if (error?.code === 'P2002' && String(error?.meta?.target ?? '').includes('sourceLeadId')) {
+      const current = await prisma.lead.findFirst({
+        where: { id: req.params.id as string, organizationId: req.user!.organizationId },
+        include: { client: true, assignedTo: { select: { id: true, name: true, avatar: true } } },
+      });
+      if (current) { res.json(current); return; }
+    }
     next(error);
   }
 });
@@ -956,6 +968,8 @@ crmRouter.post('/leads/:id/hold', authorize('SUPER_ADMIN', 'ADMIN'), async (req:
     const clientId = existingLead.clientId;
     if (clientId) {
       await prisma.client.update({ where: { id: clientId }, data: { status: 'ONHOLD' } });
+      // Pause billing while parked so it drops off MRR (mirrors the stage-based ON_HOLD path).
+      await prisma.subscription.updateMany({ where: { clientId, status: 'ACTIVE' }, data: { status: 'PAUSED' } });
     }
 
     const updatedLead = await prisma.lead.update({
@@ -1019,6 +1033,10 @@ crmRouter.post('/leads/:id/unhold', authorize('SUPER_ADMIN', 'ADMIN'), async (re
 
       if (clientStatus) {
         await prisma.client.update({ where: { id: existingLead.clientId }, data: { status: clientStatus } });
+        // Resume billing we paused at hold-time when the account comes back active.
+        if (clientStatus === 'ACTIVE') {
+          await prisma.subscription.updateMany({ where: { clientId: existingLead.clientId, status: 'PAUSED' }, data: { status: 'ACTIVE' } });
+        }
       }
     }
 
@@ -1056,7 +1074,7 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
   try {
     const orgId = req.user!.organizationId;
     const leadId = req.params.id as string;
-    const { source, assignedToId, dealValue, expectedRevenue, expectedCloseDate, followUpDate, lastContactedDate, contractType, healthStatus, lostReason, priority, stage, reopen } = req.body;
+    const { source, assignedToId, dealValue, expectedRevenue, expectedCloseDate, followUpDate, lastContactedDate, contractType, healthStatus, lostReason, priority, stage, contractStartDate, contractEndDate, autoRenewal, renewalStatus, reopen } = req.body;
     // Editable contact/company identity fields on the lead detail card.
     const EDITABLE_TEXT_FIELDS = ['contactName', 'companyName', 'contactEmail', 'contactPhone', 'jobTitle', 'linkedinUrl', 'companySize', 'landlinePhone', 'address', 'city', 'state', 'zip', 'country', 'billingAddress', 'gstNumber', 'website', 'instagramHandle', 'facebookPage', 'industry'] as const;
 
@@ -1210,29 +1228,11 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
         });
       }
 
-      if (stage !== undefined && existingLead.stage !== stage) {
-        updateData.stage = stage;
-        if (stage === 'CHURNED') updateData.renewalStatus = 'CHURNED';
-        
-        if (CONVERSION_STAGES.includes(stage) && !currentClientId) {
-          const { clientId, created } = await ensureClientForLead(tx, existingLead, orgId);
-          currentClientId = clientId;
-          if (created) outNewClientId = clientId;
-        }
-
-        if (currentClientId) {
-          let newStatus: 'ACTIVE' | 'PROJECT_COMPLETED' | 'CHURNED' | 'ONHOLD' | null = null;
-          if (['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(stage)) newStatus = 'ACTIVE';
-          else if (stage === 'ON_HOLD') newStatus = 'ONHOLD';
-          else if (stage === 'PROJECT_COMPLETED') newStatus = 'PROJECT_COMPLETED';
-          else if (stage === 'CHURNED') newStatus = 'CHURNED';
-          if (newStatus) {
-            await tx.client.update({ where: { id: currentClientId }, data: { status: newStatus } });
-          }
-        }
       // Only the lead's own stage/renewal fields are set here; the *consequences* of the stage
       // change (history, conversion, client status, revenue) are applied by applyLeadStageEffects
       // after the lead row is written — the exact same path POST /leads/:id/stage uses.
+      // (A duplicate inline conversion/status block used to live here from a bad merge; it has
+      // been removed so stage side-effects run exactly once, via applyLeadStageEffects below.)
       if (stage !== undefined && existingLead.stage !== stage) {
         updateData.stage = stage;
         if (stage === 'CHURNED') updateData.renewalStatus = 'CHURNED';
@@ -1340,7 +1340,17 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
     });
 
     res.json(updatedLead);
-  } catch (error) {
+  } catch (error: any) {
+    // Same concurrency-race guard as POST /leads/:id/stage: the unique sourceLeadId constraint
+    // stopped a parallel request from writing a second subscription/contract. No double revenue
+    // was created; return current lead state instead of a 500.
+    if (error?.code === 'P2002' && String(error?.meta?.target ?? '').includes('sourceLeadId')) {
+      const current = await prisma.lead.findFirst({
+        where: { id: req.params.id as string, organizationId: req.user!.organizationId },
+        include: { client: true, assignedTo: { select: { id: true, name: true, avatar: true } }, dealFields: true },
+      });
+      if (current) { res.json(current); return; }
+    }
     next(error);
   }
 });

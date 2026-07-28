@@ -124,6 +124,11 @@ export async function ensureClientForLead(
         designation: c.designation || null,
         email: c.email || null,
         phone: c.phone || null,
+        // Carry the full contact intelligence across — who's the decision maker / champion /
+        // gatekeeper, their LinkedIn and any notes — instead of dropping it at the win line.
+        linkedinUrl: c.linkedinUrl || null,
+        role: c.role || null,
+        notes: c.notes || null,
       }))
     : lead.contactName
       ? [{
@@ -131,6 +136,9 @@ export async function ensureClientForLead(
           designation: lead.jobTitle || null,
           email: lead.contactEmail || null,
           phone: lead.contactPhone || null,
+          linkedinUrl: lead.linkedinUrl || null,
+          role: null,
+          notes: null,
         }]
       : [];
 

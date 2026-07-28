@@ -12,14 +12,26 @@ import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { SafeHtml } from '@/components/ui/safe-html';
 import toast from 'react-hot-toast';
 import { useMembers } from '@/hooks/useQueries';
-import { useConfirmStore, useModuleStore } from '@/stores';
+import { useConfirmStore, useModuleStore, useAuthStore } from '@/stores';
 import { CreateProjectModal } from '@/components/projects/create-project-modal';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { NoAccess } from '@/components/ui/no-access';
 import { NotFoundPanel } from '@/components/ui/not-found-panel';
 
+type ContactRole = 'DECISION_MAKER' | 'INFLUENCER' | 'GATEKEEPER' | 'CHAMPION' | 'CC_ONLY';
+
+const CONTACT_ROLES: { value: ContactRole; label: string }[] = [
+  { value: 'DECISION_MAKER', label: 'Decision Maker' },
+  { value: 'INFLUENCER', label: 'Influencer' },
+  { value: 'GATEKEEPER', label: 'Gatekeeper' },
+  { value: 'CHAMPION', label: 'Champion' },
+  { value: 'CC_ONLY', label: 'CC Only' },
+];
+const roleLabel = (r?: ContactRole | null) => CONTACT_ROLES.find((x) => x.value === r)?.label ?? null;
+
 interface ClientContact {
   id: string; name: string; designation?: string | null; email?: string | null; phone?: string | null;
+  linkedinUrl?: string | null; role?: ContactRole | null; notes?: string | null;
 }
 
 interface ClientDetail {
@@ -49,6 +61,10 @@ export default function ClientDetailPage() {
   const { id } = useParams();
   const confirm = useConfirmStore((s) => s.confirm);
   const { activeModule } = useModuleStore();
+  const { user } = useAuthStore();
+  // Client master data is CRM-owned: only SUPER_ADMIN / ADMIN may edit or delete it. PM roles
+  // get a read-only view (they can still see clients to attach to projects).
+  const canManageClients = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
   const router = useRouter();
   const [client, setClient] = useState<ClientDetail | null>(null);
   const [tab, setTab] = useState<Tab>('overview');
@@ -235,7 +251,7 @@ export default function ClientDetailPage() {
                 <Plus className="h-4 w-4" /> Create Project
               </button>
             )}
-            {activeModule !== 'PM' && (
+            {activeModule !== 'PM' && canManageClients && (
               <>
                 <button onClick={openEdit} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-[#374151] hover:bg-gray-50 transition-colors shadow-sm whitespace-nowrap">
                   Edit Client
@@ -337,12 +353,19 @@ export default function ClientDetailPage() {
                 <div className="space-y-3">
                   {client.contacts.map((c) => (
                     <div key={c.id} className="p-3 bg-surface rounded-xl border border-border">
-                      <p className="text-sm font-semibold text-primary">{c.name}</p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-primary">{c.name}</p>
+                        {roleLabel(c.role) && (
+                          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-primary/10 text-primary">{roleLabel(c.role)}</span>
+                        )}
+                      </div>
                       {c.designation && <p className="text-xs text-secondary mb-2">{c.designation}</p>}
                       <div className="space-y-1 mt-2">
                         {c.email && <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5 text-secondary" /><span className="text-xs text-[#374151]">{c.email}</span></div>}
                         {c.phone && <div className="flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-secondary" /><span className="text-xs text-[#374151]">{c.phone}</span></div>}
+                        {c.linkedinUrl && <div className="flex items-center gap-2"><Globe className="h-3.5 w-3.5 text-secondary" /><a href={c.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline truncate">LinkedIn</a></div>}
                       </div>
+                      {c.notes && <p className="text-xs text-secondary mt-2 whitespace-pre-wrap">{c.notes}</p>}
                     </div>
                   ))}
                 </div>
@@ -554,6 +577,15 @@ export default function ClientDetailPage() {
                         <Field label="Designation" value={contact.designation || ''} onChange={(v) => { const c = [...editForm.contacts]; c[i].designation = v; setEditForm({ ...editForm, contacts: c }); }} />
                         <Field label="Email" type="email" value={contact.email || ''} onChange={(v) => { const c = [...editForm.contacts]; c[i].email = v; setEditForm({ ...editForm, contacts: c }); }} />
                         <Field label="Phone" value={contact.phone || ''} onChange={(v) => { const c = [...editForm.contacts]; c[i].phone = v; setEditForm({ ...editForm, contacts: c }); }} />
+                        <div>
+                          <label className="block text-xs font-medium text-secondary mb-1">Role</label>
+                          <Select
+                            value={contact.role || ''}
+                            onChange={(val) => { const c = [...editForm.contacts]; c[i].role = (val || null) as ContactRole | null; setEditForm({ ...editForm, contacts: c }); }}
+                            options={[{ label: '— None —', value: '' }, ...CONTACT_ROLES]}
+                          />
+                        </div>
+                        <Field label="LinkedIn URL" value={contact.linkedinUrl || ''} onChange={(v) => { const c = [...editForm.contacts]; c[i].linkedinUrl = v; setEditForm({ ...editForm, contacts: c }); }} />
                       </div>
                     </div>
                   ))}

@@ -10,16 +10,10 @@ export default function ReceivablesPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Re-use contracts API for receivables, or create a specific endpoint
-    api.get<any[]>('/revenue/contracts')
-      .then((contracts: any[]) => {
-        // Filter contracts with remaining receivables
-        const filtered = contracts.filter((c: any) => {
-          const paid = (c.payments || []).reduce((acc: number, p: any) => acc + (p.status === 'PAID' ? Number(p.amount) : 0), 0);
-          return Number(c.value) > paid;
-        });
-        setData(filtered);
-      })
+    // Dedicated endpoint: server computes Paid/Remaining from the same source as the Overview
+    // total, so the two screens can never disagree (FZ-039).
+    api.get<{ items: any[]; total: number }>('/revenue/receivables')
+      .then((res) => setData(res.items || []))
       .finally(() => setLoading(false));
   }, []);
 
@@ -59,8 +53,8 @@ export default function ReceivablesPage() {
                 </tr>
               ) : (
                 data.map((c: any) => {
-                  const paid = (c.payments || []).reduce((acc: number, p: any) => acc + (p.status === 'PAID' ? Number(p.amount) : 0), 0);
-                  const remaining = Math.max(0, Number(c.value) - paid);
+                  const paid = Number(c.paid || 0);
+                  const remaining = Number(c.remaining ?? Math.max(0, Number(c.value) - paid));
                   return (
                     <tr key={c.id} className="hover:bg-[#F9FAFB] transition-colors">
                       <td className="px-6 py-4 font-medium text-primary">{c.title}</td>

@@ -66,6 +66,9 @@ function ClientsContent() {
   const searchParams = useSearchParams();
   const { user } = useAuthStore();
   const { activeModule } = useModuleStore();
+  // Client master data is CRM-owned: only SUPER_ADMIN / ADMIN may create clients. PM roles get
+  // a read-only list (still usable to pick a client for a project).
+  const canManageClients = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
   const [clients, setClients] = useState<Client[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1); // grows when "Load more" is clicked
@@ -152,7 +155,7 @@ function ClientsContent() {
     name: '', company: '', industry: '', address: '', startDate: '',
     engagementType: '', website: '', city: '', state: '', billingAddress: '', gstNumber: '', scope: '', assetLinks: '', accountManagerId: '',
     status: 'PROSPECT',
-    contacts: [{ name: '', designation: '', email: '', phone: '' }]
+    contacts: [{ name: '', designation: '', email: '', phone: '', role: '', linkedinUrl: '' }]
   });
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -223,11 +226,11 @@ function ClientsContent() {
       await api.post('/clients', {
         ...form,
         startDate: form.startDate || undefined,
-        contacts: form.contacts.filter(c => c.name.trim() !== ''),
+        contacts: form.contacts.filter(c => c.name.trim() !== '').map(c => ({ ...c, role: c.role || null })),
       });
       toast.success('Client created successfully');
       setShowCreate(false);
-      setForm({ name: '', company: '', industry: '', address: '', startDate: '', engagementType: '', website: '', city: '', state: '', billingAddress: '', gstNumber: '', scope: '', assetLinks: '', accountManagerId: '', status: 'PROSPECT', contacts: [{ name: '', designation: '', email: '', phone: '' }] });
+      setForm({ name: '', company: '', industry: '', address: '', startDate: '', engagementType: '', website: '', city: '', state: '', billingAddress: '', gstNumber: '', scope: '', assetLinks: '', accountManagerId: '', status: 'PROSPECT', contacts: [{ name: '', designation: '', email: '', phone: '', role: '', linkedinUrl: '' }] });
       fetchClients();
     } catch (err: any) {
       toast.error(err.message || 'Failed to create client');
@@ -631,12 +634,14 @@ function ClientsContent() {
                         Add your first client to start tracking projects, contracts, and revenue.
                       </p>
                       <div className="flex items-center justify-center gap-3">
+                        {canManageClients && (
                         <button
                           onClick={() => setShowCreate(true)}
                           className="bg-primary text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-black transition-colors"
                         >
                           + Add Client
                         </button>
+                        )}
                         <Link
                           href="/pipeline?create=true"
                           className="border border-border text-primary text-xs font-semibold px-4 py-2 rounded-xl hover:bg-gray-50 transition-colors"
@@ -746,12 +751,14 @@ function ClientsContent() {
               Add your first client to start tracking projects and revenue.
             </p>
             <div className="flex flex-col gap-2">
+              {canManageClients && (
               <button
                 onClick={() => setShowCreate(true)}
                 className="bg-primary text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-black transition-colors"
               >
                 + Add Client
               </button>
+              )}
               <Link
                 href="/pipeline?create=true"
                 className="border border-border text-primary text-xs font-semibold px-4 py-2 rounded-xl hover:bg-gray-50 transition-colors"
@@ -828,7 +835,7 @@ function ClientsContent() {
 
       {/* Create Modal */}
       <AnimatePresence>
-        {showCreate && (
+        {showCreate && canManageClients && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setShowCreate(false)} />
             <motion.div
@@ -925,7 +932,7 @@ function ClientsContent() {
                     <div className="flex items-center justify-between">
                       <label className="block text-sm font-medium text-[#374151]">Contacts</label>
                       {form.contacts.length < 5 && (
-                        <button type="button" onClick={() => setForm({ ...form, contacts: [...form.contacts, { name: '', designation: '', email: '', phone: '' }] })} className="text-xs font-medium text-primary flex items-center gap-1 hover:bg-[#F3F4F6] px-2 py-1 rounded transition-colors">
+                        <button type="button" onClick={() => setForm({ ...form, contacts: [...form.contacts, { name: '', designation: '', email: '', phone: '', role: '', linkedinUrl: '' }] })} className="text-xs font-medium text-primary flex items-center gap-1 hover:bg-[#F3F4F6] px-2 py-1 rounded transition-colors">
                           <Plus className="h-3 w-3" /> Add Contact
                         </button>
                       )}
@@ -942,6 +949,22 @@ function ClientsContent() {
                           <Field label="Designation" value={contact.designation} onChange={(v) => { const c = [...form.contacts]; c[i].designation = v; setForm({ ...form, contacts: c }); }} />
                           <Field label="Email" type="email" value={contact.email} onChange={(v) => { const c = [...form.contacts]; c[i].email = v; setForm({ ...form, contacts: c }); }} />
                           <Field label={i === 0 ? "Phone *" : "Phone"} value={contact.phone} onChange={(v) => { const c = [...form.contacts]; c[i].phone = v; setForm({ ...form, contacts: c }); }} required={i === 0} />
+                          <div>
+                            <label className="block text-xs font-medium text-secondary mb-1">Role</label>
+                            <Select
+                              value={contact.role || ''}
+                              onChange={(val) => { const c = [...form.contacts]; c[i].role = val; setForm({ ...form, contacts: c }); }}
+                              options={[
+                                { label: '— None —', value: '' },
+                                { label: 'Decision Maker', value: 'DECISION_MAKER' },
+                                { label: 'Influencer', value: 'INFLUENCER' },
+                                { label: 'Gatekeeper', value: 'GATEKEEPER' },
+                                { label: 'Champion', value: 'CHAMPION' },
+                                { label: 'CC Only', value: 'CC_ONLY' },
+                              ]}
+                            />
+                          </div>
+                          <Field label="LinkedIn URL" value={contact.linkedinUrl} onChange={(v) => { const c = [...form.contacts]; c[i].linkedinUrl = v; setForm({ ...form, contacts: c }); }} />
                         </div>
                       </div>
                     ))}

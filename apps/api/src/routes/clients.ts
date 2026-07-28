@@ -39,6 +39,9 @@ const clientSchema = z.object({
     designation: z.string().optional(),
     email: z.string().optional(),
     phone: z.string().optional(),
+    linkedinUrl: z.string().optional().nullable(),
+    role: z.enum(['DECISION_MAKER', 'INFLUENCER', 'GATEKEEPER', 'CHAMPION', 'CC_ONLY']).or(z.literal('')).optional().nullable(),
+    notes: z.string().optional().nullable(),
   })).max(5).optional(),
 });
 
@@ -146,7 +149,7 @@ clientRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
 });
 
 // POST /api/clients
-clientRouter.post('/', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), validate(clientSchema), async (req: AuthRequest, res: Response, next) => {
+clientRouter.post('/', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN'), validate(clientSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const { contacts, startDate, ...data } = req.body;
     // Scope is rich-text HTML rendered raw in the UI — strip anything executable on write.
@@ -182,7 +185,10 @@ clientRouter.post('/', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN', '
             name: c.name,
             designation: c.designation,
             email: c.email,
-            phone: c.phone
+            phone: c.phone,
+            linkedinUrl: c.linkedinUrl || null,
+            role: c.role || null,
+            notes: c.notes || null,
           }))
         } : undefined,
       },
@@ -291,7 +297,7 @@ clientRouter.post('/bulk', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN
 });
 
 // PUT /api/clients/:id
-clientRouter.put('/:id', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), validate(clientSchema), async (req: AuthRequest, res: Response, next) => {
+clientRouter.put('/:id', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN'), validate(clientSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const existing = await prisma.client.findFirst({
       where: { id: (req.params.id as string), organizationId: req.user!.organizationId }
@@ -343,6 +349,9 @@ clientRouter.put('/:id', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN',
           designation: c.designation,
           email: c.email,
           phone: c.phone,
+          linkedinUrl: c.linkedinUrl || null,
+          role: c.role || null,
+          notes: c.notes || null,
         })),
       };
     }

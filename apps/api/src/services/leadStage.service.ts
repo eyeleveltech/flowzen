@@ -108,6 +108,21 @@ export async function applyLeadStageEffects(tx: Tx, params: StageEffectParams): 
     if (newStatus === null && reopeningIntoFunnel) newStatus = 'ACTIVE';
     if (newStatus) {
       await tx.client.update({ where: { id: clientId }, data: { status: newStatus } });
+
+      // Keep recurring revenue in step with the account's lifecycle, in the SAME transaction —
+      // otherwise a CHURNED client keeps an ACTIVE subscription and MRR never drops (MRR sums
+      // only status='ACTIVE' subscriptions/contracts, see revenue.ts).
+      if (newStatus === 'CHURNED') {
+        // The account left: stop billing. Cancellation is terminal.
+        await tx.subscription.updateMany({ where: { clientId, status: 'ACTIVE' }, data: { status: 'CANCELLED' } });
+        await tx.contract.updateMany({ where: { clientId, status: 'ACTIVE' }, data: { status: 'TERMINATED' } });
+      } else if (newStatus === 'ONHOLD') {
+        // Parked, not gone: pause billing so it's off MRR but can be resumed.
+        await tx.subscription.updateMany({ where: { clientId, status: 'ACTIVE' }, data: { status: 'PAUSED' } });
+      } else if (newStatus === 'ACTIVE') {
+        // Resuming an account (un-hold or an explicit reopen): reactivate whatever we paused.
+        await tx.subscription.updateMany({ where: { clientId, status: 'PAUSED' }, data: { status: 'ACTIVE' } });
+      }
     }
 
     // 4. Revenue automation — IDEMPOTENT per lead (keyed on sourceLeadId), so a deal that leaves

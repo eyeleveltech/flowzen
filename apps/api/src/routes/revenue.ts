@@ -4,20 +4,51 @@ import { prisma } from '../lib/prisma.js';
 import { emitToOrganization } from '../sse.js';
 import { z } from 'zod';
 import { validate } from '../middleware/validate.js';
+import { idempotency } from '../middleware/idempotency.js';
 import { generateQuotePdf } from '../services/quotePdf.service.js';
-import { generateDocNumber } from '../utils/quote.js';
+import { generateDocNumber, computeQuoteFinancials } from '../utils/quote.js';
 
 export const revenueRouter = Router();
 
-const paymentSchema = z.object({
+export const paymentSchema = z.object({
   clientId: z.string().min(1, 'Client ID is required'),
   contractId: z.string().optional(),
-  amount: z.number().min(0, 'Amount must be a positive number'),
-  paidOn: z.string().refine((d) => !isNaN(Date.parse(d)), 'Invalid paidOn date'),
+  amount: z.number().positive('Amount must be greater than zero'),
+  paidOn: z.string()
+    .refine((d) => !isNaN(Date.parse(d)), 'Invalid paidOn date')
+    // Allow up to 24h of clock skew, but no genuinely future-dated payments (they'd distort
+    // paidThisMonth / receivables / trends).
+    .refine((d) => Date.parse(d) <= Date.now() + 86400000, 'paidOn cannot be in the future'),
   method: z.string().optional(),
   reference: z.string().optional(),
   notes: z.string().optional(),
   status: z.enum(['PENDING', 'PARTIAL', 'PAID', 'REFUNDED']).optional(),
+});
+
+export const contractSchema = z.object({
+  clientId: z.string().min(1, 'Client ID is required'),
+  title: z.string().min(1, 'Title is required'),
+  value: z.number().nonnegative('Value cannot be negative'),
+  advanceAmount: z.number().nonnegative('Advance cannot be negative').optional(),
+  billingFrequency: z.string().optional(),
+  startDate: z.string().refine((d) => !isNaN(Date.parse(d)), 'Invalid start date'),
+  endDate: z.string().refine((d) => !isNaN(Date.parse(d)), 'Invalid end date').optional(),
+  status: z.enum(['DRAFT', 'ACTIVE', 'EXPIRED', 'TERMINATED']).optional(),
+  notes: z.string().optional(),
+}).refine((d) => !d.endDate || Date.parse(d.endDate) >= Date.parse(d.startDate), {
+  message: 'End date cannot be before start date', path: ['endDate'],
+});
+
+export const subscriptionSchema = z.object({
+  clientId: z.string().min(1, 'Client ID is required'),
+  contractId: z.string().optional(),
+  amount: z.number().nonnegative('Amount cannot be negative'),
+  billingFrequency: z.string().optional(),
+  taxIncluded: z.boolean().optional(),
+  startDate: z.string().refine((d) => !isNaN(Date.parse(d)), 'Invalid start date'),
+  nextBillingDate: z.string().refine((d) => !isNaN(Date.parse(d)), 'Invalid next billing date').optional(),
+  status: z.enum(['ACTIVE', 'PAUSED', 'CANCELLED', 'EXPIRED']).optional(),
+  notes: z.string().optional(),
 });
 
 const invoiceStatusSchema = z.object({
@@ -26,16 +57,16 @@ const invoiceStatusSchema = z.object({
   }),
 });
 
-const expenseSchema = z.object({
-  amount: z.number().min(0, 'Amount must be a positive number'),
+export const expenseSchema = z.object({
+  amount: z.number().positive('Amount must be greater than zero'),
   category: z.enum(['VENDOR', 'TRAVEL', 'EQUIPMENT', 'MARKETING', 'MISC'], {
     message: 'Invalid expense category',
   }),
   date: z.string().refine((d) => !isNaN(Date.parse(d)), 'Invalid expense date'),
+  vendor: z.string().optional(),
   projectId: z.string().optional(),
   clientId: z.string().optional(),
   description: z.string().optional(),
-  notes: z.string().optional(),
 });
 // Guard against cross-tenant IDOR: a revenue record may only reference a client / contract /
 // project that belongs to the caller's own organization. Returns an error message to send as
@@ -60,16 +91,10 @@ async function assertOrgRefs(
   return null;
 }
 
-// Strip fields the client must never set on a revenue record — organizationId is always the
-// caller's, and these are server-managed. Prevents body injection via the `...data` spread.
-function stripProtected(body: any) {
-  const { organizationId, id, createdAt, updatedAt, sourceLeadId, ...rest } = body || {};
-  return rest;
-}
-
-// Normalize any billing frequency (a free-form string) to a monthly figure so MRR
-// is comparable across cadences. Unknown values fall back to monthly.
-const toMonthlyAmount = (amount: number, freq: string | null | undefined): number => {
+// Normalize a recurring billing frequency to its monthly figure so MRR is comparable across
+// cadences. Non-recurring (ONE_TIME) and any UNRECOGNISED frequency contribute 0 — MRR is
+// recurring revenue only, so a one-off amount (or a garbage value) must never inflate it.
+export const toMonthlyAmount = (amount: number, freq: string | null | undefined): number => {
   switch ((freq || 'MONTHLY').toUpperCase()) {
     case 'YEARLY':
     case 'ANNUAL':
@@ -78,12 +103,33 @@ const toMonthlyAmount = (amount: number, freq: string | null | undefined): numbe
     case 'SEMI_ANNUAL':
     case 'BIANNUAL': return amount / 6;
     case 'QUARTERLY': return amount / 3;
+    case 'MONTHLY': return amount;
     case 'WEEKLY': return amount * 4.33;
     case 'DAILY': return amount * 30;
-    case 'MONTHLY':
-    default: return amount;
+    // ONE_TIME / ONETIME and anything else are non-recurring → 0 MRR.
+    default: return 0;
   }
 };
+
+// The single definition of "what counts as a receivable", shared by the Overview total and the
+// dedicated Receivables screen so the two can never report different numbers (FZ-039). A
+// receivable is an ACTIVE contract; retainer contracts already tracked as MRR via Subscriptions
+// are excluded so receivables and MRR don't double-count the same money.
+export async function receivableContracts(orgId: string) {
+  const contracts = await prisma.contract.findMany({
+    where: { organizationId: orgId, status: 'ACTIVE' },
+    include: {
+      client: { select: { name: true, company: true } },
+      payments: { where: { status: 'PAID' } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  return contracts.filter(
+    (c) => !(c.notes?.includes('Linked to Retainer Subscription') && c.billingFrequency === 'MONTHLY'),
+  );
+}
+export const contractPaid = (c: { payments?: { amount: unknown }[] }) =>
+  (c.payments ?? []).reduce((acc, p) => acc + Number(p.amount), 0);
 
 // ============================================================================
 // Overview & Dashboards
@@ -114,17 +160,11 @@ revenueRouter.get('/overview', async (req: AuthRequest, res: Response, next: Nex
     });
     const mrr = subs.reduce((acc, s) => acc + toMonthlyAmount(Number(s.amount), s.billingFrequency), 0);
 
-    const activeContracts = await prisma.contract.findMany({
-      where: { organizationId: orgId, status: 'ACTIVE' },
-      include: { payments: { where: { status: 'PAID' } } }
-    });
+    // Same source as the Receivables screen (see receivableContracts) so totals always agree.
+    const activeContracts = await receivableContracts(orgId);
     let receivables = 0;
     for (const c of activeContracts) {
-      if (c.notes?.includes('Linked to Retainer Subscription') && c.billingFrequency === 'MONTHLY') {
-        continue; // Prevent double-counting retainer contracts whose MRR is already tracked in Subscriptions
-      }
-      const paid = c.payments.reduce((acc, p) => acc + Number(p.amount), 0);
-      receivables += Math.max(0, Number(c.value) - paid);
+      receivables += Math.max(0, Number(c.value) - contractPaid(c));
     }
     
     // Trend Calculation Helper
@@ -273,11 +313,18 @@ revenueRouter.get('/invoice-drafts', async (req: AuthRequest, res: Response) => 
 
 revenueRouter.post('/invoice-drafts', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { quoteId, draftNumber, clientId, clientName, lineItems, grandTotal, notes } = req.body;
-    
+    // Note: client-sent grandTotal / tax / lineItems / draftNumber are intentionally NOT read
+    // here — an invoice must never bill an amount the browser posted. Everything financial is
+    // inherited from the ACCEPTED source quote below.
+    const { quoteId, clientId, clientName, notes } = req.body;
+
     const orgId = req.user!.organizationId;
-    // Check the quote exists IN THIS ORG and is ACCEPTED (no cross-tenant quote read).
-    const quote = await prisma.quoteDocument.findFirst({ where: { id: quoteId, organizationId: orgId } });
+    // Check the quote exists IN THIS ORG and is ACCEPTED (no cross-tenant quote read); pull its
+    // server-authoritative financials and line items to copy onto the draft.
+    const quote = await prisma.quoteDocument.findFirst({
+      where: { id: quoteId, organizationId: orgId },
+      include: { lineItems: { orderBy: { sortOrder: 'asc' } } },
+    });
     if (!quote) return res.status(404).json({ error: 'Quote not found' });
     if (quote.status !== 'ACCEPTED') return res.status(400).json({ error: 'Quote must be ACCEPTED to generate an invoice draft' });
 
@@ -287,6 +334,14 @@ revenueRouter.post('/invoice-drafts', async (req: AuthRequest, res: Response, ne
 
     const generatedDraftNumber = await generateDocNumber(orgId, 'INV');
 
+    // Faithful snapshot of the accepted quote's line items so the draft matches the quote (and
+    // its totals) exactly, rather than trusting whatever the client posted.
+    const lineItemsSnapshot = quote.lineItems.map((li) => ({
+      description: li.description, unit: li.unit, quantity: Number(li.quantity),
+      unitPrice: Number(li.unitPrice), discountPct: Number(li.discountPct),
+      taxType: li.taxType, taxPct: Number(li.taxPct), amount: Number(li.amount),
+    }));
+
     const draft = await prisma.invoiceDraft.create({
       data: {
         organizationId: orgId,
@@ -294,8 +349,14 @@ revenueRouter.post('/invoice-drafts', async (req: AuthRequest, res: Response, ne
         draftNumber: generatedDraftNumber,
         clientId,
         clientName,
-        lineItems,
-        grandTotal,
+        lineItems: lineItemsSnapshot,
+        // Financials inherited from the ACCEPTED quote — server-authoritative, tax fields included.
+        untaxedAmount: quote.untaxedAmount,
+        cgst: quote.cgst,
+        sgst: quote.sgst,
+        igst: quote.igst,
+        totalTax: quote.totalTax,
+        grandTotal: quote.grandTotal,
         notes,
         status: 'DRAFT',
       },
@@ -318,28 +379,35 @@ revenueRouter.post('/invoice-drafts', async (req: AuthRequest, res: Response, ne
 
 revenueRouter.put('/invoice-drafts/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { lineItems, untaxedAmount, cgst, sgst, igst, totalTax, grandTotal, notes } = req.body;
-    
+    // Client-sent totals/tax are ignored — recomputed server-side from the line items below.
+    const { lineItems, notes } = req.body;
+
     // Only allow editing if status is DRAFT
     const existing = await prisma.invoiceDraft.findUnique({
       where: { id: req.params.id as string, organizationId: req.user!.organizationId }
     });
-    
+
     if (!existing) return res.status(404).json({ error: 'Invoice draft not found' });
     if (existing.status !== 'DRAFT') {
       return res.status(400).json({ error: 'Only DRAFT invoices can be edited' });
     }
 
+    // Recompute every total from the submitted line items so the draft can never bill an amount
+    // the browser posted (FZ-036). Line amounts are normalised to the computed values too.
+    const items = Array.isArray(lineItems) ? lineItems : [];
+    const fin = computeQuoteFinancials(items);
+    const normalizedItems = items.map((it: any, i: number) => ({ ...it, amount: fin.lineAmounts[i] }));
+
     const draft = await prisma.invoiceDraft.update({
       where: { id: req.params.id as string },
       data: {
-        lineItems,
-        untaxedAmount,
-        cgst,
-        sgst,
-        igst,
-        totalTax,
-        grandTotal,
+        lineItems: normalizedItems,
+        untaxedAmount: fin.untaxedAmount,
+        cgst: fin.cgst,
+        sgst: fin.sgst,
+        igst: fin.igst,
+        totalTax: fin.totalTax,
+        grandTotal: fin.grandTotal,
         notes
       },
       include: {
@@ -354,11 +422,38 @@ revenueRouter.put('/invoice-drafts/:id', async (req: AuthRequest, res: Response,
     next(err);
   }
 });
+// Legal invoice status transitions. Forward-only: once an invoice is SENT it can never return to
+// DRAFT (which is the only editable state), and PAID / CANCELLED are terminal. This is what stops
+// a paid invoice being flipped back to DRAFT and silently rewritten (FZ-037).
+export const INVOICE_STATUS_TRANSITIONS: Record<string, string[]> = {
+  DRAFT: ['SENT', 'PAID', 'OVERDUE', 'CANCELLED'], // forward to anything; never back to DRAFT
+  SENT: ['PAID', 'OVERDUE', 'CANCELLED'],
+  OVERDUE: ['PAID', 'CANCELLED'],
+  PAID: [],       // terminal
+  CANCELLED: [],  // terminal
+};
+
 revenueRouter.put('/invoice-drafts/:id/status', validate(invoiceStatusSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { status } = req.body;
+    const id = req.params.id as string;
+    const existing = await prisma.invoiceDraft.findFirst({
+      where: { id, organizationId: req.user!.organizationId },
+      select: { status: true },
+    });
+    if (!existing) return res.status(404).json({ error: 'Invoice not found' });
+
+    if (existing.status !== status) {
+      const allowed = INVOICE_STATUS_TRANSITIONS[existing.status] ?? [];
+      if (!allowed.includes(status)) {
+        return res.status(400).json({
+          error: `Cannot change an invoice from ${existing.status} to ${status}. A sent or paid invoice cannot be reopened or rewritten.`,
+        });
+      }
+    }
+
     const draft = await prisma.invoiceDraft.update({
-      where: { id: req.params.id as string, organizationId: req.user!.organizationId },
+      where: { id, organizationId: req.user!.organizationId },
       data: { status },
     });
     emitToOrganization(req.app.get('io'), req.user!.organizationId, 'revenue:invoice-draft-updated', draft);
@@ -429,6 +524,9 @@ revenueRouter.get('/contracts', async (req: AuthRequest, res: Response, next: Ne
       where: { organizationId: req.user!.organizationId },
       include: {
         client: { select: { name: true, company: true } },
+        // Receivables reads c.payments to compute Paid / Remaining. Without this include it was
+        // always undefined, so Paid rendered 0 and every contract looked fully outstanding.
+        payments: { where: { status: 'PAID' } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -438,20 +536,46 @@ revenueRouter.get('/contracts', async (req: AuthRequest, res: Response, next: Ne
   }
 });
 
-revenueRouter.post('/contracts', async (req: AuthRequest, res: Response, next: NextFunction) => {
+// Outstanding receivables — computed server-side from the same source as the Overview total, so
+// the two screens can never disagree (FZ-039). Each row carries Paid / Remaining so the client
+// doesn't recompute (and can't drift).
+revenueRouter.get('/receivables', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const contracts = await receivableContracts(req.user!.organizationId);
+    const items = contracts
+      .map((c) => {
+        const paid = contractPaid(c);
+        return { id: c.id, title: c.title, value: c.value, client: c.client, paid, remaining: Math.max(0, Number(c.value) - paid) };
+      })
+      .filter((x) => x.remaining > 0);
+    const total = items.reduce((acc, x) => acc + x.remaining, 0);
+    res.json({ items, total });
+  } catch (err: any) {
+    next(err);
+  }
+});
+
+revenueRouter.post('/contracts', validate(contractSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const orgId = req.user!.organizationId;
-    const data = stripProtected(req.body);
-    if (!data.clientId) return res.status(400).json({ error: 'clientId is required' });
-    const refErr = await assertOrgRefs(orgId, { clientId: data.clientId });
+    const b = req.body; // validated by contractSchema
+    const refErr = await assertOrgRefs(orgId, { clientId: b.clientId });
     if (refErr) return res.status(400).json({ error: refErr });
 
+    // Explicit whitelist (FZ-034): no req.body spread, so client-set id/createdAt/tax columns
+    // are ignored; server owns those.
     const contract = await prisma.contract.create({
       data: {
-        ...data,
         organizationId: orgId,
-        startDate: new Date(data.startDate),
-        endDate: data.endDate ? new Date(data.endDate) : null,
+        clientId: b.clientId,
+        title: b.title,
+        value: b.value,
+        advanceAmount: b.advanceAmount ?? null,
+        billingFrequency: b.billingFrequency || 'ONE_TIME',
+        startDate: new Date(b.startDate),
+        endDate: b.endDate ? new Date(b.endDate) : null,
+        status: b.status ?? undefined,
+        notes: b.notes ?? null,
       },
     });
     emitToOrganization(req.app.get('io'), orgId, 'revenue:contract-created', contract);
@@ -481,19 +605,48 @@ revenueRouter.get('/payments', async (req: AuthRequest, res: Response, next: Nex
   }
 });
 
-revenueRouter.post('/payments', validate(paymentSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
+revenueRouter.post('/payments', idempotency, validate(paymentSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const orgId = req.user!.organizationId;
-    const data = stripProtected(req.body);
-    if (!data.clientId) return res.status(400).json({ error: 'clientId is required' });
-    const refErr = await assertOrgRefs(orgId, { clientId: data.clientId, contractId: data.contractId });
+    const b = req.body; // validated by paymentSchema
+    const refErr = await assertOrgRefs(orgId, { clientId: b.clientId, contractId: b.contractId });
     if (refErr) return res.status(400).json({ error: refErr });
 
+    const paidOn = new Date(b.paidOn);
+
+    // Natural-key dedup: this is the money-in path, so a double-submit (a double click, or a
+    // retry that carried a fresh idempotency key) must not book the same payment twice. If an
+    // identical payment was recorded in the last 2 minutes, return that one instead of creating
+    // a duplicate. (The idempotency middleware above already covers same-key retries.)
+    const existing = await prisma.payment.findFirst({
+      where: {
+        organizationId: orgId,
+        clientId: b.clientId,
+        contractId: b.contractId ?? null,
+        amount: b.amount,
+        paidOn,
+        reference: b.reference ?? null,
+        createdAt: { gte: new Date(Date.now() - 2 * 60 * 1000) },
+      },
+    });
+    if (existing) {
+      res.status(200).json(existing);
+      return;
+    }
+
+    // Explicit whitelist — never spread req.body, so a client can't set id/createdAt or any
+    // other column (FZ-034). id/createdAt/updatedAt default on the server.
     const payment = await prisma.payment.create({
       data: {
-        ...data,
         organizationId: orgId,
-        paidOn: new Date(data.paidOn),
+        clientId: b.clientId,
+        contractId: b.contractId ?? null,
+        amount: b.amount,
+        paidOn,
+        method: b.method ?? null,
+        reference: b.reference ?? null,
+        notes: b.notes ?? null,
+        status: b.status ?? undefined,
       },
     });
     emitToOrganization(req.app.get('io'), orgId, 'revenue:payment-logged', payment);
@@ -523,20 +676,26 @@ revenueRouter.get('/subscriptions', async (req: AuthRequest, res: Response, next
   }
 });
 
-revenueRouter.post('/subscriptions', async (req: AuthRequest, res: Response, next: NextFunction) => {
+revenueRouter.post('/subscriptions', validate(subscriptionSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const orgId = req.user!.organizationId;
-    const data = stripProtected(req.body);
-    if (!data.clientId) return res.status(400).json({ error: 'clientId is required' });
-    const refErr = await assertOrgRefs(orgId, { clientId: data.clientId, contractId: data.contractId });
+    const b = req.body; // validated by subscriptionSchema
+    const refErr = await assertOrgRefs(orgId, { clientId: b.clientId, contractId: b.contractId });
     if (refErr) return res.status(400).json({ error: refErr });
 
+    // Explicit whitelist (FZ-034).
     const sub = await prisma.subscription.create({
       data: {
-        ...data,
         organizationId: orgId,
-        startDate: new Date(data.startDate),
-        nextBillingDate: data.nextBillingDate ? new Date(data.nextBillingDate) : null,
+        clientId: b.clientId,
+        contractId: b.contractId ?? null,
+        amount: b.amount,
+        taxIncluded: b.taxIncluded ?? undefined,
+        billingFrequency: b.billingFrequency || 'MONTHLY',
+        startDate: new Date(b.startDate),
+        nextBillingDate: b.nextBillingDate ? new Date(b.nextBillingDate) : null,
+        status: b.status ?? undefined,
+        notes: b.notes ?? null,
       },
     });
     emitToOrganization(req.app.get('io'), orgId, 'revenue:subscription-created', sub);
@@ -569,16 +728,22 @@ revenueRouter.get('/expenses', async (req: AuthRequest, res: Response, next: Nex
 revenueRouter.post('/expenses', validate(expenseSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const orgId = req.user!.organizationId;
-    const data = stripProtected(req.body);
+    const b = req.body; // validated by expenseSchema
     // clientId and projectId are optional on an expense, but if supplied they must be ours.
-    const refErr = await assertOrgRefs(orgId, { clientId: data.clientId, projectId: data.projectId });
+    const refErr = await assertOrgRefs(orgId, { clientId: b.clientId, projectId: b.projectId });
     if (refErr) return res.status(400).json({ error: refErr });
 
+    // Explicit whitelist (FZ-034).
     const expense = await prisma.expense.create({
       data: {
-        ...data,
         organizationId: orgId,
-        date: new Date(data.date),
+        vendor: b.vendor || 'N/A',
+        category: b.category,
+        amount: b.amount,
+        date: new Date(b.date),
+        projectId: b.projectId ?? null,
+        clientId: b.clientId ?? null,
+        description: b.description ?? null,
       },
     });
     emitToOrganization(req.app.get('io'), orgId, 'revenue:expense-logged', expense);
