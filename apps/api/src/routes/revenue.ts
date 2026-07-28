@@ -23,6 +23,7 @@ export const paymentSchema = z.object({
   reference: z.string().optional(),
   notes: z.string().optional(),
   status: z.enum(['PENDING', 'PARTIAL', 'PAID', 'REFUNDED']).optional(),
+  currency: z.string().length(3).optional(),
 });
 
 export const contractSchema = z.object({
@@ -35,6 +36,7 @@ export const contractSchema = z.object({
   endDate: z.string().refine((d) => !isNaN(Date.parse(d)), 'Invalid end date').optional(),
   status: z.enum(['DRAFT', 'ACTIVE', 'EXPIRED', 'TERMINATED']).optional(),
   notes: z.string().optional(),
+  currency: z.string().length(3).optional(),
 }).refine((d) => !d.endDate || Date.parse(d.endDate) >= Date.parse(d.startDate), {
   message: 'End date cannot be before start date', path: ['endDate'],
 });
@@ -49,6 +51,7 @@ export const subscriptionSchema = z.object({
   nextBillingDate: z.string().refine((d) => !isNaN(Date.parse(d)), 'Invalid next billing date').optional(),
   status: z.enum(['ACTIVE', 'PAUSED', 'CANCELLED', 'EXPIRED']).optional(),
   notes: z.string().optional(),
+  currency: z.string().length(3).optional(),
 });
 
 const invoiceStatusSchema = z.object({
@@ -67,6 +70,7 @@ export const expenseSchema = z.object({
   projectId: z.string().optional(),
   clientId: z.string().optional(),
   description: z.string().optional(),
+  currency: z.string().length(3).optional(),
 });
 // Guard against cross-tenant IDOR: a revenue record may only reference a client / contract /
 // project that belongs to the caller's own organization. Returns an error message to send as
@@ -211,7 +215,7 @@ revenueRouter.get('/overview', async (req: AuthRequest, res: Response, next: Nex
       recentPayments: payments.slice(0, 5)
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
@@ -295,7 +299,7 @@ revenueRouter.get('/pnl', async (req: AuthRequest, res: Response, next: NextFunc
 // 1. Invoice Drafts
 // ============================================================================
 
-revenueRouter.get('/invoice-drafts', async (req: AuthRequest, res: Response) => {
+revenueRouter.get('/invoice-drafts', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const drafts = await prisma.invoiceDraft.findMany({
       where: { organizationId: req.user!.organizationId },
@@ -307,7 +311,7 @@ revenueRouter.get('/invoice-drafts', async (req: AuthRequest, res: Response) => 
     });
     res.json(drafts);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
@@ -359,6 +363,8 @@ revenueRouter.post('/invoice-drafts', async (req: AuthRequest, res: Response, ne
         grandTotal: quote.grandTotal,
         notes,
         status: 'DRAFT',
+        // Currency snapshot: carried forward from the quote (which inherited from the client at creation)
+        currency: (quote as any).currency ?? 'INR',
       },
       include: {
         client: { select: { name: true, company: true } },
@@ -562,6 +568,13 @@ revenueRouter.post('/contracts', validate(contractSchema), async (req: AuthReque
     const refErr = await assertOrgRefs(orgId, { clientId: b.clientId });
     if (refErr) return res.status(400).json({ error: refErr });
 
+    // Inherit currency from client when caller doesn't explicitly send one
+    let currency = b.currency;
+    if (!currency) {
+      const client = await prisma.client.findFirst({ where: { id: b.clientId, organizationId: orgId }, select: { currency: true } });
+      currency = client?.currency ?? 'INR';
+    }
+
     // Explicit whitelist (FZ-034): no req.body spread, so client-set id/createdAt/tax columns
     // are ignored; server owns those.
     const contract = await prisma.contract.create({
@@ -576,6 +589,7 @@ revenueRouter.post('/contracts', validate(contractSchema), async (req: AuthReque
         endDate: b.endDate ? new Date(b.endDate) : null,
         status: b.status ?? undefined,
         notes: b.notes ?? null,
+        currency,
       },
     });
     emitToOrganization(req.app.get('io'), orgId, 'revenue:contract-created', contract);
@@ -636,6 +650,20 @@ revenueRouter.post('/payments', idempotency, validate(paymentSchema), async (req
 
     // Explicit whitelist — never spread req.body, so a client can't set id/createdAt or any
     // other column (FZ-034). id/createdAt/updatedAt default on the server.
+    //
+    // Currency: use whatever the caller sends, or fall back to the linked contract's currency,
+    // then to the client's currency, then to 'INR'.
+    let currency = b.currency;
+    if (!currency) {
+      if (b.contractId) {
+        const contract = await prisma.contract.findFirst({ where: { id: b.contractId, organizationId: orgId }, select: { currency: true } });
+        currency = contract?.currency;
+      }
+      if (!currency) {
+        const client = await prisma.client.findFirst({ where: { id: b.clientId, organizationId: orgId }, select: { currency: true } });
+        currency = client?.currency ?? 'INR';
+      }
+    }
     const payment = await prisma.payment.create({
       data: {
         organizationId: orgId,
@@ -647,6 +675,7 @@ revenueRouter.post('/payments', idempotency, validate(paymentSchema), async (req
         reference: b.reference ?? null,
         notes: b.notes ?? null,
         status: b.status ?? undefined,
+        currency,
       },
     });
     emitToOrganization(req.app.get('io'), orgId, 'revenue:payment-logged', payment);
@@ -684,6 +713,19 @@ revenueRouter.post('/subscriptions', validate(subscriptionSchema), async (req: A
     if (refErr) return res.status(400).json({ error: refErr });
 
     // Explicit whitelist (FZ-034).
+    // Currency: use whatever the caller sends, or fall back to the linked contract's currency,
+    // then to the client's currency, then to 'INR'.
+    let currency = b.currency;
+    if (!currency) {
+      if (b.contractId) {
+        const contract = await prisma.contract.findFirst({ where: { id: b.contractId, organizationId: orgId }, select: { currency: true } });
+        currency = contract?.currency;
+      }
+      if (!currency) {
+        const client = await prisma.client.findFirst({ where: { id: b.clientId, organizationId: orgId }, select: { currency: true } });
+        currency = client?.currency ?? 'INR';
+      }
+    }
     const sub = await prisma.subscription.create({
       data: {
         organizationId: orgId,
@@ -696,6 +738,7 @@ revenueRouter.post('/subscriptions', validate(subscriptionSchema), async (req: A
         nextBillingDate: b.nextBillingDate ? new Date(b.nextBillingDate) : null,
         status: b.status ?? undefined,
         notes: b.notes ?? null,
+        currency,
       },
     });
     emitToOrganization(req.app.get('io'), orgId, 'revenue:subscription-created', sub);
@@ -734,6 +777,18 @@ revenueRouter.post('/expenses', validate(expenseSchema), async (req: AuthRequest
     if (refErr) return res.status(400).json({ error: refErr });
 
     // Explicit whitelist (FZ-034).
+    // Currency: use whatever the caller sends, or fall back to the linked client, then org default.
+    let currency = b.currency;
+    if (!currency) {
+      if (b.clientId) {
+        const client = await prisma.client.findFirst({ where: { id: b.clientId, organizationId: orgId }, select: { currency: true } });
+        currency = client?.currency;
+      }
+      if (!currency) {
+        const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { currency: true } });
+        currency = org?.currency ?? 'INR';
+      }
+    }
     const expense = await prisma.expense.create({
       data: {
         organizationId: orgId,
@@ -744,6 +799,7 @@ revenueRouter.post('/expenses', validate(expenseSchema), async (req: AuthRequest
         projectId: b.projectId ?? null,
         clientId: b.clientId ?? null,
         description: b.description ?? null,
+        currency,
       },
     });
     emitToOrganization(req.app.get('io'), orgId, 'revenue:expense-logged', expense);

@@ -43,6 +43,9 @@ export const STATUS_LABELS: Record<string, string> = {
   REFUNDED: 'Refunded',
 
   // Subscription & Contract statuses
+  UPCOMING: 'Upcoming',
+  IN_DISCUSSION: 'In Discussion',
+  AT_RISK: 'At Risk',
   RENEWED: 'Renewed',
   TERMINATED: 'Terminated',
 
@@ -98,6 +101,9 @@ export const STATUS_COLORS: Record<string, StatusConfig> = {
   OVERDUE: { label: 'Overdue', bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', dot: 'bg-red-500', bar: 'bg-red-500' },
   PARTIAL: { label: 'Partially Paid', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', dot: 'bg-blue-500', bar: 'bg-blue-500' },
   REFUNDED: { label: 'Refunded', bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', dot: 'bg-purple-500', bar: 'bg-purple-500' },
+  UPCOMING: { label: 'Upcoming', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', dot: 'bg-blue-500' },
+  IN_DISCUSSION: { label: 'In Discussion', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', dot: 'bg-amber-500' },
+  AT_RISK: { label: 'At Risk', bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', dot: 'bg-red-500' },
   RENEWED: { label: 'Renewed', bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200', dot: 'bg-teal-500', bar: 'bg-teal-500' },
   TERMINATED: { label: 'Terminated', bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', dot: 'bg-rose-500', bar: 'bg-rose-500' },
 };

@@ -48,7 +48,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Projects', href: '/projects', icon: FolderKanban, module: 'PM', isPrimaryMobile: true },
   { label: 'Tasks', href: '/tasks', icon: CheckSquare, module: 'PM', isPrimaryMobile: true },
   { label: 'Calendar', href: '/calendar', icon: CalendarDays, module: 'PM' },
-  { label: 'Members', href: '/members', icon: UsersRound, module: 'PM' },
+  { label: 'Members', href: '/members', icon: UsersRound, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'], module: 'PM' },
   { label: 'Departments', href: '/departments', icon: Network, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'PM' },
   { label: 'Reports', href: '/reports', icon: BarChart3, roles: ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'], module: ['CRM', 'PM'] },
 ];

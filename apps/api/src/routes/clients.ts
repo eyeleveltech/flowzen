@@ -43,6 +43,7 @@ const clientSchema = z.object({
     role: z.enum(['DECISION_MAKER', 'INFLUENCER', 'GATEKEEPER', 'CHAMPION', 'CC_ONLY']).or(z.literal('')).optional().nullable(),
     notes: z.string().optional().nullable(),
   })).max(5).optional(),
+  currency: z.string().length(3, 'Must be a 3-letter ISO currency code').optional().default('INR'),
 });
 
 // GET /api/clients

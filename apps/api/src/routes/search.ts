@@ -91,7 +91,7 @@ searchRouter.get('/', async (req: AuthRequest, res: Response, next) => {
             where: {
               organizationId: orgId,
               status: 'ACTIVE',
-              ...buildSearchFilter(['name', 'email'], query),
+              ...(isTeamMember ? { id: userId } : buildSearchFilter(['name', 'email'], query)),
             },
             select: { id: true, name: true, email: true, avatar: true, role: true },
             take: 5,

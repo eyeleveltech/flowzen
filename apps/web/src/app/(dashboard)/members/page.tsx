@@ -71,6 +71,21 @@ import { usePageTitle } from '@/hooks/usePageTitle';
 export default function TeamPage() {
   usePageTitle('Team Members');
   const { user: currentUser } = useAuthStore();
+
+  if (currentUser?.role === 'TEAM_MEMBER') {
+    return (
+      <div className="max-w-350 mx-auto p-4 md:p-8">
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <Shield className="h-12 w-12 text-secondary mb-4" />
+          <h2 className="text-lg font-semibold text-primary">Access Restricted</h2>
+          <p className="text-sm text-secondary mt-2 max-w-md">
+            The Team Workspace is available to managers and administrators only.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [teamError, setTeamError] = useState<string | null>(null);

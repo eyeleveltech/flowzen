@@ -218,6 +218,10 @@ projectRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), va
     if (projectData.priority === '') projectData.priority = 'MEDIUM';
     if (projectData.status === '') projectData.status = 'PLANNING';
 
+    if (projectData.type === 'RETAINER' && !projectData.reportingCadence) {
+      projectData.reportingCadence = 'MONTHLY';
+    }
+
     // Rich-text HTML fields: strip anything executable before it ever hits the DB.
     projectData.description = sanitizeRichText(projectData.description);
     projectData.scope = sanitizeRichText(projectData.scope);
@@ -342,6 +346,10 @@ projectRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), 
     if (projectData.type === '') projectData.type = 'ONE_TIME';
     if (projectData.priority === '') projectData.priority = 'MEDIUM';
     if (projectData.status === '') projectData.status = 'PLANNING';
+
+    if (projectData.type === 'RETAINER' && !projectData.reportingCadence) {
+      projectData.reportingCadence = 'MONTHLY';
+    }
 
     // Rich-text HTML fields: strip anything executable before it ever hits the DB.
     projectData.description = sanitizeRichText(projectData.description);

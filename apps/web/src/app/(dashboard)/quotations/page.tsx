@@ -89,7 +89,6 @@ function QuotationsContent() {
     try {
       const payload = {
         quoteId: q.id,
-        draftNumber: `INV-${q.documentNumber.split('-')[1] || Date.now()}`,
         clientId: q.clientId,
         clientName: q.clientName,
         lineItems: q.lineItems,

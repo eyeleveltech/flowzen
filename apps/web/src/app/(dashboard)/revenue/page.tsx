@@ -123,7 +123,7 @@ export default function RevenueOverviewPage() {
                     <td className="px-6 py-4 font-medium text-primary">
                       {payment.client?.company || payment.client?.name}
                     </td>
-                    <td className="px-6 py-4 font-medium text-primary">{formatCurrency(payment.amount)}</td>
+                    <td className="px-6 py-4 font-medium text-primary">{formatCurrency(payment.amount, payment.currency)}</td>
                     <td className="px-6 py-4 text-secondary">{formatDate(payment.paidOn)}</td>
                     <td className="px-6 py-4 text-secondary">{payment.method || 'Transfer'}</td>
                     <td className="px-6 py-4">

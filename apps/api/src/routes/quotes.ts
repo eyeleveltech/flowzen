@@ -151,6 +151,10 @@ quoteRouter.post('/', validate(quoteSchema), async (req: AuthRequest, res: Respo
         documentNumber,
         clientId: body.clientId || null,
         leadId: body.leadId || null,
+        // Currency snapshot: inherited from the client at creation time (leads have no direct currency,
+        // so fall back to 'INR'). Stored so a quote rendered later still shows the correct symbol even
+        // if the client's currency is later changed.
+        currency: (party as any).currency ?? 'INR',
         ...buildDocData(body, party, orgState, fin),
         lineItems: {
           create: body.lineItems.map((li, i) => ({
@@ -304,35 +308,36 @@ quoteRouter.patch('/:id/status', async (req: AuthRequest, res: Response, next) =
         return;
       }
 
-      // Check if client already has an active retainer subscription
       const activeSub = await prisma.subscription.findFirst({
         where: { organizationId: orgId, clientId: contractClientId, status: 'ACTIVE' }
       });
 
-      // Idempotence check — only create a Contract if one doesn't already exist for this quote
-      const existingContract = await prisma.contract.findFirst({
-        where: {
-          organizationId: orgId,
-          clientId: contractClientId,
-          title: 'Quote ' + existing.documentNumber,
-        }
-      });
-
-      if (!existingContract) {
-        await prisma.contract.create({
-          data: {
-            organizationId: orgId,
-            clientId: contractClientId,
-            title: 'Quote ' + existing.documentNumber,
-            value: existing.grandTotal,
-            billingFrequency: activeSub ? 'MONTHLY' : 'ONE_TIME',
-            startDate: new Date(),
-            status: 'ACTIVE',
-            notes: activeSub
-              ? 'Auto-created from Quote ' + existing.documentNumber + ' (Linked to Retainer Subscription)'
-              : 'Auto-created from Quote ' + existing.documentNumber,
-          }
+      if (activeSub) {
+        // Retainer — subscription already tracks MRR. Link the quote to it
+        // instead of creating a separate contract that double-counts revenue.
+        await prisma.subscription.update({
+          where: { id: activeSub.id },
+          data: { notes: `Quote ${existing.documentNumber} accepted — ₹${existing.grandTotal}` },
         });
+      } else {
+        // One-off project — create a contract as the formal document
+        const existingContract = await prisma.contract.findFirst({
+          where: { organizationId: orgId, clientId: contractClientId, title: 'Quote ' + existing.documentNumber }
+        });
+        if (!existingContract) {
+          await prisma.contract.create({
+            data: {
+              organizationId: orgId,
+              clientId: contractClientId,
+              title: 'Quote ' + existing.documentNumber,
+              value: existing.grandTotal,
+              billingFrequency: 'ONE_TIME',
+              startDate: new Date(),
+              status: 'ACTIVE',
+              notes: 'Auto-created from Quote ' + existing.documentNumber,
+            }
+          });
+        }
       }
     }
 
@@ -379,8 +384,8 @@ quoteRouter.post('/:id/generate-pdf', async (req: AuthRequest, res: Response, ne
     }
 
     res.json({ pdfUrl });
-  } catch (error: any) {
-    res.status(500).json({ error: `PDF generation failed: ${error?.message || 'unknown error'}` });
+  } catch (error) {
+    next(error);
   }
 });
 

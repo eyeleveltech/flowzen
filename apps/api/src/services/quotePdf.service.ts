@@ -449,13 +449,21 @@ class Semaphore {
   private queue: Array<() => void> = [];
   constructor(private max: number) {}
 
-  async acquire(): Promise<void> {
+  async acquire(timeoutMs: number = 15000): Promise<void> {
     if (this.active < this.max) {
       this.active++;
       return;
     }
-    return new Promise<void>((resolve) => {
-      this.queue.push(resolve);
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        const idx = this.queue.indexOf(resolve);
+        if (idx !== -1) this.queue.splice(idx, 1);
+        reject(new Error(`Render queue timeout after ${timeoutMs}ms`));
+      }, timeoutMs);
+      this.queue.push(() => {
+        clearTimeout(timer);
+        resolve();
+      });
     });
   }
 
@@ -513,7 +521,7 @@ export async function generateQuotePdf(quote: any, org: any): Promise<string> {
     </div>`;
   }
 
-  await pdfRenderQueue.acquire();
+  await pdfRenderQueue.acquire(RENDER_TIMEOUT_MS);
   let browser: any = null;
   try {
     browser = await puppeteer.launch({

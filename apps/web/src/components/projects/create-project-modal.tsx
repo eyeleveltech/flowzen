@@ -117,7 +117,7 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
               <label htmlFor="cp-description" className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
               <RichTextEditor value={formValues.description || ''} onChange={(val) => setValue('description', val)} placeholder="Project description..." />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-[#374151] mb-1.5">Project Type</label>
                 <Select ariaLabel="Project Type" value={formValues.type} onChange={(val) => setValue('type', val as any, { shouldValidate: true })} options={[
@@ -125,6 +125,15 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
                   { label: 'One-Time Project', value: 'ONE_TIME' },
                   { label: 'Event', value: 'EVENT' },
                   { label: 'Internal', value: 'INTERNAL' },
+                ]} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#374151] mb-1.5">Reporting Cadence</label>
+                <Select ariaLabel="Reporting Cadence" value={formValues.reportingCadence || (formValues.type === 'RETAINER' ? 'MONTHLY' : 'NONE')} onChange={(val) => setValue('reportingCadence', val as any)} options={[
+                  { label: 'None', value: 'NONE' },
+                  { label: 'Weekly', value: 'WEEKLY' },
+                  { label: 'Fortnightly (Biweekly)', value: 'FORTNIGHTLY' },
+                  { label: 'Monthly', value: 'MONTHLY' },
                 ]} />
               </div>
               <div>

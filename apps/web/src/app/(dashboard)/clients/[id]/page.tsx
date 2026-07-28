@@ -44,6 +44,21 @@ interface ClientDetail {
   projects: { id: string; name: string; status: string; progress: number; endDate?: string | null; owner?: { id: string; name: string; avatar?: string | null }; _count?: { tasks: number } }[];
   notes: { id: string; content: string; type: string; createdAt: string; author: { name: string } }[];
   activities: { id: string; type: string; message: string; createdAt: string; user: { name: string } }[];
+  jobTitle?: string | null;
+  linkedinUrl?: string | null;
+  companySize?: string | null;
+  landlinePhone?: string | null;
+  zip?: string | null;
+  country?: string | null;
+  instagramHandle?: string | null;
+  facebookPage?: string | null;
+  source?: string | null;
+  priority?: string | null;
+  contractType?: string | null;
+  healthStatus?: string | null;
+  expectedRevenue?: number | null;
+  dossierJson?: any;
+  dossierStatus?: string | null;
 }
 
 type Tab = 'overview' | 'projects' | 'activity' | 'notes';
@@ -79,6 +94,8 @@ export default function ClientDetailPage() {
   const [editForm, setEditForm] = useState({
     name: '', company: '', industry: '', address: '', contractValue: '', status: 'PROSPECT',
     engagementType: '', website: '', city: '', state: '', billingAddress: '', gstNumber: '', scope: '', assetLinks: '', accountManagerId: '', startDate: '',
+    jobTitle: '', linkedinUrl: '', companySize: '', landlinePhone: '', zip: '', country: '',
+    instagramHandle: '', facebookPage: '', source: '', priority: '', contractType: '', healthStatus: '', expectedRevenue: '',
     contacts: [{ id: '', name: '', designation: '', email: '', phone: '' }] as ClientContact[]
   });
   const [editError, setEditError] = useState('');
@@ -171,6 +188,19 @@ export default function ClientDetailPage() {
       scope: client!.scope || '',
       assetLinks: client!.assetLinks || '',
       accountManagerId: client!.accountManagerId || '',
+      jobTitle: client!.jobTitle || '',
+      linkedinUrl: client!.linkedinUrl || '',
+      companySize: client!.companySize || '',
+      landlinePhone: client!.landlinePhone || '',
+      zip: client!.zip || '',
+      country: client!.country || '',
+      instagramHandle: client!.instagramHandle || '',
+      facebookPage: client!.facebookPage || '',
+      source: client!.source || '',
+      priority: client!.priority || '',
+      contractType: client!.contractType || '',
+      healthStatus: client!.healthStatus || '',
+      expectedRevenue: client!.expectedRevenue?.toString() || '',
       contacts: client!.contacts?.length ? [...client!.contacts] : [{ id: '', name: '', designation: '', email: '', phone: '' }]
     });
     setShowEdit(true);
@@ -181,9 +211,10 @@ export default function ClientDetailPage() {
     setEditError('');
     setSubmitting(true);
     try {
-      await api.put(`/clients/${id}`, {
+      await api.put(`/crm/clients/${id}`, {
         ...editForm,
         contractValue: editForm.contractValue ? parseFloat(editForm.contractValue) : undefined,
+        expectedRevenue: editForm.expectedRevenue ? parseFloat(editForm.expectedRevenue) : undefined,
         startDate: editForm.startDate || undefined,
         contacts: editForm.contacts.filter(c => c.name.trim() !== ''),
       });
@@ -344,6 +375,27 @@ export default function ClientDetailPage() {
                     <p className="text-sm text-secondary">No scope defined.</p>
                   )}
                 </div>
+
+                {/* CRM Details */}
+                {activeModule !== 'PM' && (
+                  <div>
+                    <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-[#F3F4F6]">CRM Details</h4>
+                    <div className="grid grid-cols-2 gap-y-4 gap-x-2">
+                      <InfoRow icon={Briefcase} label="Job Title" value={client.jobTitle || '—'} />
+                      <InfoRow icon={Globe} label="LinkedIn" value={client.linkedinUrl || '—'} />
+                      <InfoRow icon={Phone} label="Landline" value={client.landlinePhone || '—'} />
+                      <InfoRow icon={Users} label="Company Size" value={client.companySize || '—'} />
+                      <InfoRow icon={MapPin} label="Zip / Country" value={[client.zip, client.country].filter(Boolean).join(', ') || '—'} />
+                      <InfoRow icon={Globe} label="Instagram" value={client.instagramHandle || '—'} />
+                      <InfoRow icon={Globe} label="Facebook" value={client.facebookPage || '—'} />
+                      <InfoRow icon={Briefcase} label="Source" value={client.source?.replace(/_/g, ' ') || '—'} />
+                      <InfoRow icon={Briefcase} label="Priority" value={client.priority || '—'} />
+                      <InfoRow icon={Briefcase} label="Contract Type" value={client.contractType?.replace(/_/g, ' ') || '—'} />
+                      <InfoRow icon={Briefcase} label="Health Status" value={client.healthStatus || '—'} />
+                      <InfoRow icon={DollarSign} label="Expected Revenue" value={client.expectedRevenue ? formatCurrency(client.expectedRevenue) : '—'} />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -532,6 +584,118 @@ export default function ClientDetailPage() {
                   <textarea value={editForm.billingAddress} onChange={(e) => setEditForm({ ...editForm, billingAddress: e.target.value })} rows={2} placeholder="Used to auto-fill quotations" className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary resize-none" />
                 </div>
                 <Field label="Start Date" type="date" value={editForm.startDate} onChange={(v) => setEditForm({ ...editForm, startDate: v })} />
+
+                {activeModule !== 'PM' && (
+                  <div className="space-y-4 pt-4 border-t border-[#F3F4F6]">
+                    <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider">CRM Details</h4>
+
+                    {/* Contact Info */}
+                    <div className="space-y-3">
+                      <p className="text-xs font-medium text-primary">Contact Info</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <Field label="Job Title" value={editForm.jobTitle} onChange={(v) => setEditForm({ ...editForm, jobTitle: v })} />
+                        <Field label="Landline Phone" value={editForm.landlinePhone} onChange={(v) => setEditForm({ ...editForm, landlinePhone: v })} />
+                      </div>
+                      <Field label="LinkedIn URL" value={editForm.linkedinUrl} onChange={(v) => setEditForm({ ...editForm, linkedinUrl: v })} />
+                    </div>
+
+                    {/* Location */}
+                    <div className="space-y-3">
+                      <p className="text-xs font-medium text-primary">Location</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <Field label="ZIP Code" value={editForm.zip} onChange={(v) => setEditForm({ ...editForm, zip: v })} />
+                        <Field label="Country" value={editForm.country} onChange={(v) => setEditForm({ ...editForm, country: v })} />
+                      </div>
+                    </div>
+
+                    {/* Social */}
+                    <div className="space-y-3">
+                      <p className="text-xs font-medium text-primary">Social Handles</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <Field label="Instagram Handle" value={editForm.instagramHandle} onChange={(v) => setEditForm({ ...editForm, instagramHandle: v })} />
+                        <Field label="Facebook Page" value={editForm.facebookPage} onChange={(v) => setEditForm({ ...editForm, facebookPage: v })} />
+                      </div>
+                    </div>
+
+                    {/* Sales */}
+                    <div className="space-y-3">
+                      <p className="text-xs font-medium text-primary">Sales Info</p>
+                      <div>
+                        <label className="block text-sm font-medium text-[#374151] mb-1.5">Source</label>
+                        <Select
+                          value={editForm.source}
+                          onChange={(v) => setEditForm({ ...editForm, source: v })}
+                          options={[
+                            { label: 'Select Source', value: '' },
+                            { label: 'Excel', value: 'EXCEL' },
+                            { label: 'Manual', value: 'MANUAL' },
+                            { label: 'API', value: 'API' },
+                            { label: 'Referral', value: 'REFERRAL' },
+                            { label: 'Inbound', value: 'INBOUND' },
+                            { label: 'LinkedIn', value: 'LINKEDIN' },
+                            { label: 'Instagram', value: 'INSTAGRAM' },
+                            { label: 'WhatsApp', value: 'WHATSAPP' },
+                            { label: 'Other', value: 'OTHER' },
+                            { label: 'Outbound', value: 'OUTBOUND' },
+                            { label: 'Social Media', value: 'SOCIAL_MEDIA' },
+                            { label: 'Event', value: 'EVENT' },
+                            { label: 'Cold Call', value: 'COLD_CALL' },
+                            { label: 'Existing Client', value: 'EXISTING_CLIENT' }
+                          ]}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority</label>
+                          <Select
+                            value={editForm.priority}
+                            onChange={(v) => setEditForm({ ...editForm, priority: v })}
+                            options={[
+                              { label: 'Select Priority', value: '' },
+                              { label: 'High', value: 'HIGH' },
+                              { label: 'Medium', value: 'MEDIUM' },
+                              { label: 'Low', value: 'LOW' }
+                            ]}
+                          />
+                        </div>
+                        <Field label="Expected Revenue" type="number" value={editForm.expectedRevenue} onChange={(v) => setEditForm({ ...editForm, expectedRevenue: v })} />
+                      </div>
+                    </div>
+
+                    {/* Account */}
+                    <div className="space-y-3">
+                      <p className="text-xs font-medium text-primary">Account Details</p>
+                      <Field label="Company Size" value={editForm.companySize} onChange={(v) => setEditForm({ ...editForm, companySize: v })} />
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-[#374151] mb-1.5">Contract Type</label>
+                          <Select
+                            value={editForm.contractType}
+                            onChange={(v) => setEditForm({ ...editForm, contractType: v })}
+                            options={[
+                              { label: 'Select Contract Type', value: '' },
+                              { label: 'Retainer', value: 'RETAINER' },
+                              { label: 'One Time', value: 'ONE_TIME' }
+                            ]}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-[#374151] mb-1.5">Health Status</label>
+                          <Select
+                            value={editForm.healthStatus}
+                            onChange={(v) => setEditForm({ ...editForm, healthStatus: v })}
+                            options={[
+                              { label: 'Select Health Status', value: '' },
+                              { label: 'Green', value: 'GREEN' },
+                              { label: 'Amber', value: 'AMBER' },
+                              { label: 'Red', value: 'RED' }
+                            ]}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Scope</label>
