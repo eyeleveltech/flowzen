@@ -28,7 +28,7 @@ export default function PaymentsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-primary">Payments Log</h1>
-          <p className="mt-1 text-sm text-secondary">All incoming payments logged against contracts and invoices.</p>
+          <p className="mt-1 text-sm text-secondary">All incoming payments logged against contracts, retainers and invoices.</p>
         </div>
       </div>
 
@@ -39,7 +39,7 @@ export default function PaymentsPage() {
               <tr>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Payment ID</th>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Company</th>
-                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Contract Ref</th>
+                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Against</th>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Date</th>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Method</th>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider text-right">Amount</th>
@@ -59,7 +59,11 @@ export default function PaymentsPage() {
                       {p.id.slice(-6).toUpperCase()}
                     </td>
                     <td className="px-6 py-4 text-secondary">{p.client?.company || p.client?.name}</td>
-                    <td className="px-6 py-4 text-secondary">{p.contract?.title || '-'}</td>
+                    <td className="px-6 py-4 text-secondary">
+                      {p.contract?.title
+                        || (p.subscription ? <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 border border-blue-200">Retainer</span>
+                        : '-')}
+                    </td>
                     <td className="px-6 py-4 text-secondary">{formatDate(p.paidOn)}</td>
                     <td className="px-6 py-4 text-secondary">{p.method}</td>
                     <td className="px-6 py-4 text-right font-medium text-primary">{formatCurrency(p.amount)}</td>

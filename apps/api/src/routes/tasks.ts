@@ -8,7 +8,7 @@ import { NotificationService } from '../services/notifications.js';
 import { executeWorkflowRules } from '../services/workflowEngine.js';
 import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
 import { idempotency } from '../middleware/idempotency.js';
-import { toList, whereIn } from '../utils/query.js';
+import { toList, whereIn, parsePagination } from '../utils/query.js';
 import { buildSearchFilter } from '../utils/search-utils.js';
 import { sanitizeRichText } from '../utils/html.js';
 
@@ -32,6 +32,19 @@ async function validateTaskUserOrg(orgId: string, userIds: (string | null | unde
     where: { id: { in: cleanIds }, organizationId: orgId },
   });
   return count === cleanIds.length;
+}
+
+// A task moves to APPROVED only by someone with review authority who did NOT do the work.
+// Assignees (primary or co-assignee) can send work to REVIEW but can never sign off on their
+// own task — otherwise a TEAM_MEMBER (or a self-assigned PM) approves themselves (FZ-025).
+function canApproveTask(
+  user: { userId: string; role: string },
+  task: { assigneeId: string | null; reviewerId: string | null; assignees?: { id: string }[] },
+): boolean {
+  const isAssignee = task.assigneeId === user.userId || (task.assignees || []).some((a) => a.id === user.userId);
+  if (isAssignee) return false; // no self-approval, regardless of role
+  if (task.reviewerId === user.userId) return true; // the designated reviewer
+  return user.role === 'SUPER_ADMIN' || user.role === 'ADMIN' || user.role === 'PROJECT_MANAGER';
 }
 
 export async function recomputeProjectProgress(projectIds: (string | null | undefined)[]) {
@@ -101,7 +114,8 @@ const taskOrgScope = (orgId: string) => ({
 taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const { search, status, priority, projectId, leadId, assigneeId, type, clientId, filter, teamId, sort, dueDateFrom, dueDateTo, page = '1', limit = '50', orphaned } = req.query;
+    const { search, status, priority, projectId, leadId, assigneeId, type, clientId, filter, teamId, sort, dueDateFrom, dueDateTo, orphaned } = req.query;
+    const { page, limit, skip, take } = parsePagination(req.query as any);
 
     const projectFilter: any = {
       client: { organizationId: orgId },
@@ -198,7 +212,6 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     }
     if (andConditions.length) where.AND = andConditions;
 
-    const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
     const [tasks, total] = await Promise.all([
       prisma.task.findMany({
         where: where as any,
@@ -227,12 +240,12 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
                                   : sort === 'title_desc' ? [{ title: 'desc' }]
                                     : [{ createdAt: 'desc' }],
         skip,
-        take: parseInt(limit as string),
+        take,
       }),
       prisma.task.count({ where: where as any }),
     ]);
 
-    res.json({ tasks, total, page: parseInt(page as string), totalPages: Math.ceil(total / parseInt(limit as string)) });
+    res.json({ tasks, total, page, totalPages: Math.ceil(total / limit) });
   } catch (error) {
     next(error);
   }
@@ -293,13 +306,18 @@ taskRouter.post('/bulk-approve', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANA
       return;
     }
 
-    const tasks = await prisma.task.findMany({
+    const candidates = await prisma.task.findMany({
       where: {
         id: { in: taskIds },
         status: 'REVIEW',
         ...taskOrgScope(req.user!.organizationId),
-      }
+      },
+      include: { assignees: { select: { id: true } } },
     });
+
+    // Even an admin/PM can't approve their own work — drop any task they're assigned to (FZ-025).
+    const tasks = candidates.filter((t) => canApproveTask(req.user!, t));
+    const skipped = candidates.length - tasks.length;
 
     const updatedTasks = await Promise.all(
       tasks.map(async (t) => {
@@ -350,7 +368,7 @@ taskRouter.post('/bulk-approve', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANA
     emitToOrganization(io, req.user!.organizationId, 'task:updated', { taskIds: updatedTasks.map(t => t.id) });
     await invalidateOrganizationCache(req.user!.organizationId);
 
-    res.json({ success: true, count: updatedTasks.length });
+    res.json({ success: true, count: updatedTasks.length, ...(skipped ? { skipped, skippedReason: 'You cannot approve tasks assigned to you' } : {}) });
   } catch (error) {
     next(error);
   }
@@ -374,23 +392,37 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
         res.status(404).json({ error: 'Lead not found' });
         return;
       }
-    } else if (req.user!.role === 'TEAM_MEMBER') {
-      const isMember = await prisma.projectMember.findFirst({
-        where: { projectId: req.body.projectId, userId: req.user!.userId }
+    } else {
+      // Project task. The project must live in the caller's org for EVERY role — an
+      // ADMIN/PM could otherwise POST a crafted projectId belonging to another tenant
+      // (the TEAM_MEMBER path below only proved membership, never org ownership).
+      const project = await prisma.project.findFirst({
+        where: { id: req.body.projectId, client: { organizationId: req.user!.organizationId } },
+        select: { id: true },
       });
-
-      let isTeamMember = false;
-      if (!isMember) {
-        const projectTeams = await prisma.projectTeam.findMany({
-          where: { projectId: req.body.projectId },
-          include: { team: { include: { members: true } } }
-        });
-        isTeamMember = projectTeams.some((pt: any) => pt.team.members.some((m: any) => m.id === req.user!.userId));
+      if (!project) {
+        res.status(404).json({ error: 'Project not found' });
+        return;
       }
 
-      if (!isMember && !isTeamMember) {
-        res.status(403).json({ error: 'You are not a member of this project' });
-        return;
+      if (req.user!.role === 'TEAM_MEMBER') {
+        const isMember = await prisma.projectMember.findFirst({
+          where: { projectId: req.body.projectId, userId: req.user!.userId }
+        });
+
+        let isTeamMember = false;
+        if (!isMember) {
+          const projectTeams = await prisma.projectTeam.findMany({
+            where: { projectId: req.body.projectId },
+            include: { team: { include: { members: true } } }
+          });
+          isTeamMember = projectTeams.some((pt: any) => pt.team.members.some((m: any) => m.id === req.user!.userId));
+        }
+
+        if (!isMember && !isTeamMember) {
+          res.status(403).json({ error: 'You are not a member of this project' });
+          return;
+        }
       }
     }
 
@@ -491,6 +523,12 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
       return;
     }
 
+    // Approving work is a review action — never a self-approval (FZ-025).
+    if (req.body.status === 'APPROVED' && existing.status !== 'APPROVED' && !canApproveTask(req.user!, existing)) {
+      res.status(403).json({ error: 'Only a reviewer or manager (other than the assignee) can approve this task' });
+      return;
+    }
+
     // Build the update from an explicit allowlist. The client also sends derived
     // fields (dueDateOnly/dueTimeOnly, which aren't columns) and a raw projectId
     // (project is a REQUIRED relation, so its FK can only change via `connect`) —
@@ -531,7 +569,17 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
     }
 
     // project is a required relation — reassign via connect, and only when it changes.
+    // Verify the destination project is in the caller's org, or a crafted projectId
+    // could move the task into another tenant (same IDOR class as task-create).
     if (b.projectId && b.projectId !== existing.projectId) {
+      const destProject = await prisma.project.findFirst({
+        where: { id: b.projectId as string, client: { organizationId: req.user!.organizationId } },
+        select: { id: true },
+      });
+      if (!destProject) {
+        res.status(404).json({ error: 'Target project not found' });
+        return;
+      }
       data.project = { connect: { id: b.projectId as string } };
     }
 
@@ -704,6 +752,12 @@ taskRouter.put('/:id/status', idempotency, async (req: AuthRequest, res: Respons
     const { status } = req.body;
     if (!VALID_STATUSES.includes(status)) {
       res.status(400).json({ error: 'Invalid status' });
+      return;
+    }
+
+    // Approving work is a review action — never a self-approval (FZ-025).
+    if (status === 'APPROVED' && existing.status !== 'APPROVED' && !canApproveTask(req.user!, existing)) {
+      res.status(403).json({ error: 'Only a reviewer or manager (other than the assignee) can approve this task' });
       return;
     }
 
@@ -919,10 +973,10 @@ taskRouter.patch('/reorder', async (req: AuthRequest, res: Response, next) => {
           { assignee: { organizationId: req.user!.organizationId } },
         ],
       },
-      select: { id: true },
+      select: { id: true, projectId: true, assigneeId: true, reviewerId: true, status: true, assignees: { select: { id: true } } },
     });
-    const ownedIds = new Set(owned.map((t) => t.id));
-    if (ownedIds.size !== new Set(ids).size) {
+    const ownedById = new Map(owned.map((t) => [t.id, t]));
+    if (ownedById.size !== new Set(ids).size) {
       res.status(403).json({ error: 'One or more tasks are outside your organization' });
       return;
     }
@@ -933,32 +987,41 @@ taskRouter.patch('/reorder', async (req: AuthRequest, res: Response, next) => {
       return;
     }
 
-    if (tasks.length > 0 && req.user!.role === 'TEAM_MEMBER') {
-      const firstTask = await prisma.task.findUnique({ where: { id: tasks[0].id } });
-      if (firstTask) {
-        const isMember = firstTask.projectId ? await prisma.projectMember.findFirst({
-          where: { projectId: firstTask.projectId, userId: req.user!.userId }
-        }) : null;
+    // Approving through a drag is still an approval — apply the same no-self-approval
+    // rule per task (FZ-025), so reorder can't be used to bypass the status guards.
+    for (const t of tasks) {
+      const current = ownedById.get(t.id)!;
+      if (t.status === 'APPROVED' && current.status !== 'APPROVED' && !canApproveTask(req.user!, current)) {
+        res.status(403).json({ error: 'Only a reviewer or manager (other than the assignee) can approve a task' });
+        return;
+      }
+    }
+
+    // A TEAM_MEMBER may only reorder within projects they belong to — and that has to be
+    // checked for EVERY affected project, not just the first task in the payload (FZ-028).
+    if (req.user!.role === 'TEAM_MEMBER') {
+      const projectIds = Array.from(new Set(owned.map((t) => t.projectId).filter(Boolean))) as string[];
+      for (const projectId of projectIds) {
+        const isMember = await prisma.projectMember.findFirst({
+          where: { projectId, userId: req.user!.userId },
+          select: { userId: true },
+        });
         let isTeamMember = false;
-        if (!isMember && firstTask.projectId) {
+        if (!isMember) {
           const projectTeams = await prisma.projectTeam.findMany({
-            where: { projectId: firstTask.projectId },
+            where: { projectId },
             include: { team: { include: { members: true } } }
           });
           isTeamMember = projectTeams.some((pt: any) => pt.team.members.some((m: any) => m.id === req.user!.userId));
         }
         if (!isMember && !isTeamMember) {
-          res.status(403).json({ error: 'You are not a member of this project' });
+          res.status(403).json({ error: 'You are not a member of one or more of these projects' });
           return;
         }
       }
     }
 
-    const targetTasks = await prisma.task.findMany({
-      where: { id: { in: ids } },
-      select: { projectId: true },
-    });
-    const affectedProjectIds = targetTasks.map((t) => t.projectId);
+    const affectedProjectIds = owned.map((t) => t.projectId);
 
     await prisma.$transaction(
       tasks.map((t) =>

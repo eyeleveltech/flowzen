@@ -22,3 +22,24 @@ export function whereIn(v: unknown): string | { in: string[] } | undefined {
   if (!arr) return undefined;
   return arr.length === 1 ? arr[0] : { in: arr };
 }
+
+/**
+ * Clamp raw `page`/`limit` query params into a safe range for `skip`/`take` (FZ-023).
+ * Guards against NaN, zero/negative, and unbounded page sizes — a `?limit=99999999`
+ * would otherwise let a single request try to load an entire table.
+ */
+export function parsePagination(
+  query: { page?: unknown; limit?: unknown },
+  opts: { defaultLimit?: number; maxLimit?: number } = {},
+): { page: number; limit: number; skip: number; take: number } {
+  const defaultLimit = opts.defaultLimit ?? 50;
+  const maxLimit = opts.maxLimit ?? 100;
+
+  const rawPage = Number.parseInt(String(query.page ?? ''), 10);
+  const page = Number.isFinite(rawPage) && rawPage >= 1 ? rawPage : 1;
+
+  const rawLimit = Number.parseInt(String(query.limit ?? ''), 10);
+  const limit = Number.isFinite(rawLimit) && rawLimit >= 1 ? Math.min(rawLimit, maxLimit) : defaultLimit;
+
+  return { page, limit, skip: (page - 1) * limit, take: limit };
+}

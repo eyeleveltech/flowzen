@@ -91,8 +91,13 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
     e.preventDefault();
     setSaving(true);
     try {
-      await api.post('/settings/users', { ...inviteForm, name: toProperCase(inviteForm.name) });
-      toast.success('Invitation sent');
+      const res = await api.post<{ emailSent?: boolean }>('/settings/users', { ...inviteForm, name: toProperCase(inviteForm.name) });
+      // The account is always created; only claim we emailed them when the mail actually went out.
+      if (res?.emailSent === false) {
+        toast.error('Member added, but the invite email could not be sent. Use "Resend invite" once mail is configured.', { duration: 6000 });
+      } else {
+        toast.success('Invitation sent');
+      }
       setShowInvite(false);
       setInviteForm({ name: '', email: '', role: 'TEAM_MEMBER', designation: '', teamId: '' });
       refreshMembers();
@@ -100,6 +105,15 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
       toast.error(err.message || 'Failed to send invite');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleResendInvite = async (userId: string) => {
+    try {
+      await api.post(`/settings/users/${userId}/resend-invite`, {});
+      toast.success('Invite email resent');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to resend invite');
     }
   };
 
@@ -250,6 +264,15 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                           className="p-1.5 text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded-md transition-colors"
                         >
                           <Shield className="h-4 w-4" />
+                        </button>
+                      )}
+                      {u.status === 'PENDING' && (
+                        <button
+                          onClick={() => handleResendInvite(u.id)}
+                          title="Resend invite email"
+                          className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors"
+                        >
+                          <Mail className="h-4 w-4" />
                         </button>
                       )}
                       <button

@@ -232,10 +232,10 @@ reportRouter.get('/clients', async (req: AuthRequest, res: Response, next) => {
     const clientMetrics = clients.map((c) => {
       const contractsVal = (c.contracts || []).filter(ct => ct.status === 'ACTIVE').reduce((sum, ct) => sum + Number(ct.value || 0), 0);
       const subsVal = (c.subscriptions || []).filter(s => s.status === 'ACTIVE').reduce((sum, s) => sum + Number(s.amount || 0), 0);
-      const effectiveValue = (contractsVal + subsVal) > 0 ? (contractsVal + subsVal) : (c.contractValue || 0);
+      const effectiveValue = (contractsVal + subsVal) > 0 ? (contractsVal + subsVal) : Number(c.contractValue || 0);
       const completedProjects = c.projects.filter((p) => p.status === 'COMPLETED').length;
       const totalProjects = c.projects.length;
-      const totalBudget = c.projects.reduce((sum, p) => sum + (p.budget || 0), 0);
+      const totalBudget = c.projects.reduce((sum, p) => sum + Number(p.budget || 0), 0);
       
       let totalTasks = 0;
       let completedTasks = 0;
@@ -366,24 +366,24 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
     const activeRevenue = clients.filter(c => c.status === 'ACTIVE').reduce((s, c) => {
       const contractsVal = (c.contracts || []).filter(ct => ct.status === 'ACTIVE').reduce((sum, ct) => sum + Number(ct.value || 0), 0);
       const subsVal = (c.subscriptions || []).filter(sub => sub.status === 'ACTIVE').reduce((sum, sub) => sum + Number(sub.amount || 0), 0);
-      const effectiveVal = (contractsVal + subsVal) > 0 ? (contractsVal + subsVal) : (c.contractValue || 0);
+      const effectiveVal = (contractsVal + subsVal) > 0 ? (contractsVal + subsVal) : Number(c.contractValue || 0);
       return s + effectiveVal;
     }, 0);
     const WON_STAGES = ['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED'];
     const openPipelineLeads = leads.filter(l => l.stage !== 'CHURNED' && l.stage !== 'PROJECT_COMPLETED');
-    const pipelineValue = openPipelineLeads.reduce((s, l) => s + (l.dealValue || 0), 0);
-    const weightedPipelineValue = openPipelineLeads.reduce((s, l) => s + ((l.dealValue || 0) * (STAGE_PROBABILITIES[l.stage] || 0)), 0);
+    const pipelineValue = openPipelineLeads.reduce((s, l) => s + Number(l.dealValue || 0), 0);
+    const weightedPipelineValue = openPipelineLeads.reduce((s, l) => s + (Number(l.dealValue || 0) * (STAGE_PROBABILITIES[l.stage] || 0)), 0);
     const won = leads.filter(l => WON_STAGES.includes(l.stage) && inPeriod(l.updatedAt));
     const lost = leads.filter(l => l.stage === 'CHURNED' && inPeriod(l.updatedAt));
-    const wonValue = won.reduce((s, l) => s + (l.dealValue || 0), 0);
-    const lostValue = lost.reduce((s, l) => s + (l.dealValue || 0), 0);
+    const wonValue = won.reduce((s, l) => s + Number(l.dealValue || 0), 0);
+    const lostValue = lost.reduce((s, l) => s + Number(l.dealValue || 0), 0);
     const winRate = (won.length + lost.length) > 0 ? Math.round((won.length / (won.length + lost.length)) * 100) : 0;
     const reasonMap: Record<string, { count: number; value: number }> = {};
     lost.forEach(l => {
       const r = l.lostReason || 'OTHER';
       if (!reasonMap[r]) reasonMap[r] = { count: 0, value: 0 };
       reasonMap[r].count++;
-      reasonMap[r].value += l.dealValue || 0;
+      reasonMap[r].value += Number(l.dealValue || 0);
     });
     const lostReasons = Object.entries(reasonMap)
       .map(([reason, v]) => ({ reason, count: v.count, value: v.value }))
@@ -447,7 +447,7 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
       let health = 'Green';
       if (cOverdue >= 3 || pastEnd) health = 'Red';
       else if (cOverdue > 0) health = 'Amber';
-      return { name: (c.company || c.name) as string, contractValue: c.contractValue || 0, status: c.status, overdueTasks: cOverdue, health, updatedAt: c.updatedAt };
+      return { name: (c.company || c.name) as string, contractValue: Number(c.contractValue || 0), status: c.status, overdueTasks: cOverdue, health, updatedAt: c.updatedAt };
     });
     const topClients = [...portfolio]
       .filter(c => c.contractValue > 0)

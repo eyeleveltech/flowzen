@@ -9,6 +9,7 @@ import { generateQuotePdf } from '../services/quotePdf.service.js';
 import { logActivity, ActivityType } from '../services/activity.service.js';
 import { buildSearchFilter } from '../utils/search-utils.js';
 import { ensureClientForLead } from '../services/clientConversion.service.js';
+import { AppError } from '../middleware/errorHandler.js';
 
 export const quoteRouter = Router();
 quoteRouter.use(authenticate);
@@ -287,56 +288,73 @@ quoteRouter.patch('/:id/status', async (req: AuthRequest, res: Response, next) =
       return;
     }
 
-    const updated = await prisma.quoteDocument.update({ where: { id }, data: { status: status as any } });
+    // Non-accept transitions are a simple guarded update.
+    if (!(status === 'ACCEPTED' && existing.status !== 'ACCEPTED')) {
+      const updated = await prisma.quoteDocument.update({ where: { id }, data: { status: status as any } });
+      emitToOrganization(req.app.get('io'), orgId, 'quote:updated', { id });
+      res.json(updated);
+      return;
+    }
 
-    if (status === 'ACCEPTED' && existing.status !== 'ACCEPTED') {
+    // Accepting is the sensitive path. The status flip doubles as a lock: an atomic
+    // updateMany that only matches a not-yet-ACCEPTED row means exactly one concurrent
+    // request wins and creates the Contract — the rest see count 0 and do nothing. This
+    // closes the read-then-write race that let two accepts each spawn a contract (FZ-031).
+    const result = await prisma.$transaction(async (tx) => {
+      const claim = await tx.quoteDocument.updateMany({
+        where: { id, organizationId: orgId, status: { not: 'ACCEPTED' } },
+        data: { status: 'ACCEPTED' },
+      });
+      if (claim.count === 0) return { createdClientId: null as string | null };
+
       let contractClientId = existing.clientId;
+      let createdClientId: string | null = null;
       if (!contractClientId && existing.leadId) {
-        const lead = await prisma.lead.findFirst({ where: { id: existing.leadId, organizationId: orgId } });
+        const lead = await tx.lead.findFirst({ where: { id: existing.leadId, organizationId: orgId } });
         if (lead) {
-          const { clientId, created } = await prisma.$transaction((tx) => ensureClientForLead(tx, lead, orgId));
+          const { clientId, created } = await ensureClientForLead(tx, lead, orgId);
           contractClientId = clientId;
-          if (created) emitToOrganization(req.app.get('io'), orgId, 'client:created', { id: clientId });
+          if (created) createdClientId = clientId;
         }
       }
       if (!contractClientId) {
-        res.status(409).json({ error: 'This quotation is not linked to a client or a lead, so it cannot be accepted.' });
-        return;
+        // Nothing to attach the contract to — abort the accept entirely (rolls back the flip).
+        throw new AppError('This quotation is not linked to a client or a lead, so it cannot be accepted.', 409);
       }
 
-      // Check if client already has an active retainer subscription
-      const activeSub = await prisma.subscription.findFirst({
-        where: { organizationId: orgId, clientId: contractClientId, status: 'ACTIVE' }
+      // If the client already runs on an active retainer Subscription, that Subscription IS the
+      // recurring revenue — creating a Contract too would double-count it (Subscription in MRR +
+      // Contract in reports). So only materialize a one-time Contract when there's no active
+      // retainer to attach the revenue to (FZ-032/FZ-059).
+      const activeSub = await tx.subscription.findFirst({
+        where: { organizationId: orgId, clientId: contractClientId, status: 'ACTIVE' },
+        select: { id: true },
       });
-
-      // Idempotence check — only create a Contract if one doesn't already exist for this quote
-      const existingContract = await prisma.contract.findFirst({
-        where: {
-          organizationId: orgId,
-          clientId: contractClientId,
-          title: 'Quote ' + existing.documentNumber,
-        }
-      });
-
-      if (!existingContract) {
-        await prisma.contract.create({
-          data: {
-            organizationId: orgId,
-            clientId: contractClientId,
-            title: 'Quote ' + existing.documentNumber,
-            value: existing.grandTotal,
-            billingFrequency: activeSub ? 'MONTHLY' : 'ONE_TIME',
-            startDate: new Date(),
-            status: 'ACTIVE',
-            notes: activeSub
-              ? 'Auto-created from Quote ' + existing.documentNumber + ' (Linked to Retainer Subscription)'
-              : 'Auto-created from Quote ' + existing.documentNumber,
-          }
+      if (!activeSub) {
+        const existingContract = await tx.contract.findFirst({
+          where: { organizationId: orgId, clientId: contractClientId, title: 'Quote ' + existing.documentNumber },
         });
+        if (!existingContract) {
+          await tx.contract.create({
+            data: {
+              organizationId: orgId,
+              clientId: contractClientId,
+              title: 'Quote ' + existing.documentNumber,
+              value: existing.grandTotal,
+              billingFrequency: 'ONE_TIME',
+              startDate: new Date(),
+              status: 'ACTIVE',
+              notes: 'Auto-created from Quote ' + existing.documentNumber,
+            },
+          });
+        }
       }
-    }
+      return { createdClientId };
+    });
 
+    if (result.createdClientId) emitToOrganization(req.app.get('io'), orgId, 'client:created', { id: result.createdClientId });
     emitToOrganization(req.app.get('io'), orgId, 'quote:updated', { id });
+    const updated = await prisma.quoteDocument.findUnique({ where: { id } });
     res.json(updated);
   } catch (error) {
     next(error);

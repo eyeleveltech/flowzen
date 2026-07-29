@@ -6,7 +6,7 @@ import { validate } from '../middleware/validate.js';
 import { emitToOrganization } from '../sse.js';
 import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
 import { NotificationService } from '../services/notifications.js';
-import { toList, whereIn } from '../utils/query.js';
+import { toList, whereIn, parsePagination } from '../utils/query.js';
 import { createAuditLog } from '../utils/audit.js';
 import { sanitizeRichText } from '../utils/html.js';
 import { buildSearchFilter } from '../utils/search-utils.js';
@@ -84,7 +84,8 @@ export const projectSchema = z.object({
 projectRouter.get('/', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const { search, status, priority, clientId, ownerId, endDate, page = '1', limit = '20' } = req.query;
+    const { search, status, priority, clientId, ownerId, endDate } = req.query;
+    const { page, limit, skip, take } = parsePagination(req.query as any, { defaultLimit: 20 });
 
     const where: Record<string, unknown> = { client: { organizationId: orgId } };
     
@@ -129,7 +130,6 @@ projectRouter.get('/', async (req: AuthRequest, res: Response, next) => {
       }
     }
 
-    const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
     const [projects, total] = await Promise.all([
       prisma.project.findMany({
         where: where as any,
@@ -142,12 +142,12 @@ projectRouter.get('/', async (req: AuthRequest, res: Response, next) => {
         },
         orderBy: { createdAt: 'desc' },
         skip,
-        take: parseInt(limit as string),
+        take,
       }),
       prisma.project.count({ where: where as any }),
     ]);
 
-    res.json({ projects, total, page: parseInt(page as string), totalPages: Math.ceil(total / parseInt(limit as string)) });
+    res.json({ projects, total, page, totalPages: Math.ceil(total / limit) });
   } catch (error) {
     next(error);
   }

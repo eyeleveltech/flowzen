@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { parsePagination } from '../../utils/query.js';
 
 const prisma = new PrismaClient();
 const projectRouter = Router();
@@ -18,9 +19,7 @@ projectRouter.get('/', async (req: Request, res: Response) => {
       where.clientId = clientId;
     }
 
-    const parsedLimit = limit ? parseInt(limit as string, 10) : 100;
-    const parsedPage = page ? parseInt(page as string, 10) : 1;
-    const skip = (parsedPage - 1) * parsedLimit;
+    const { page: parsedPage, limit: parsedLimit, skip } = parsePagination({ page, limit }, { defaultLimit: 100, maxLimit: 100 });
 
     const [projects, total] = await Promise.all([
       prisma.project.findMany({

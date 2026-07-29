@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient, LeadStage, LeadSource, ActivityEntityType, LostReason, ClientStatus } from '@prisma/client';
 import { ensureClientForLead } from '../../services/clientConversion.service.js';
+import { parsePagination } from '../../utils/query.js';
 
 const prisma = new PrismaClient();
 const leadRouter = Router();
@@ -89,7 +90,7 @@ const formatLeadResponse = (dbLead: any) => {
     vertical: dbLead.client?.industry || dbLead.industry || '',
     source: mapEnumToSource(dbLead.source),
     stage: mapEnumToStage(dbLead.stage),
-    monthly_value: dbLead.dealValue || 0,
+    monthly_value: Number(dbLead.dealValue || 0), // Decimal -> number, keep the API contract numeric (FZ-020)
     assigned_to: dbLead.assignedTo ? {
       id: dbLead.assignedTo.id,
       name: dbLead.assignedTo.name,
@@ -169,9 +170,7 @@ leadRouter.get('/', async (req: Request, res: Response) => {
     }
 
     // Pagination calculations
-    const parsedLimit = limit ? parseInt(limit as string, 10) : 100;
-    const parsedPage = page ? parseInt(page as string, 10) : 1;
-    const skip = (parsedPage - 1) * parsedLimit;
+    const { page: parsedPage, limit: parsedLimit, skip } = parsePagination({ page, limit }, { defaultLimit: 100, maxLimit: 100 });
 
     // Fetch leads
     const leads = await prisma.lead.findMany({
@@ -484,7 +483,7 @@ leadRouter.post('/:id/convert', async (req: Request, res: Response) => {
         poc_email: client.email,
         poc_phone: client.phone,
         vertical: client.industry,
-        monthly_retainer: client.contractValue,
+        monthly_retainer: client.contractValue == null ? null : Number(client.contractValue), // Decimal -> number (FZ-020)
         retainer_start_date: client.startDate?.toISOString().split('T')[0],
         status: 'active',
         created_at: client.createdAt,

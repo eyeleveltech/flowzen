@@ -320,10 +320,14 @@ model User {
 
 model ApiKey {
   id             String       @id @default(cuid())
+  // SHA-256 hash of the raw token (never the token itself). The plaintext is shown to the
+  // caller exactly once, at creation, and is unrecoverable afterwards.
   key            String       @unique
-  name           String       
-  userId         String       
-  organizationId String       
+  // Non-secret prefix (e.g. "fz_1a2b3c4") kept only so the UI can identify a key in the list.
+  keyPrefix      String?
+  name           String
+  userId         String
+  organizationId String
   lastUsedAt     DateTime?
   createdAt      DateTime     @default(now())
 
@@ -343,7 +347,7 @@ model Client {
   email          String?
   phone          String?
   address        String?
-  contractValue  Float?
+  contractValue  Decimal?     @db.Decimal(12, 2) // money — never Float (FZ-020)
   startDate      DateTime?
   status         ClientStatus @default(PROSPECT)
   engagementType String?
@@ -369,7 +373,7 @@ model Client {
   priority         LeadPriority?
   contractType     ContractType?
   healthStatus     HealthStatus?
-  expectedRevenue  Float?
+  expectedRevenue  Decimal?     @db.Decimal(12, 2) // money — never Float (FZ-020)
   dossierJson      Json?
   dossierStatus    String?
   createdAt      DateTime     @default(now())
@@ -409,7 +413,7 @@ model Project {
   endDate     DateTime?
   priority    ProjectPriority @default(MEDIUM)
   status      ProjectStatus   @default(PLANNING)
-  budget      Float?
+  budget      Decimal?        @db.Decimal(12, 2) // money — never Float (FZ-020)
   progress    Int             @default(0)
   reportingCadence ReportingCadence @default(NONE)
   clientApprovalRequired Boolean @default(false)
@@ -682,9 +686,9 @@ model Lead {
   priority          LeadPriority @default(MEDIUM)
   position          Int          @default(0)
   assignedToId      String?
-  dealValue         Float?
+  dealValue         Decimal?          @db.Decimal(12, 2) // money — never Float (FZ-020)
   expectedCloseDate DateTime?
-  expectedRevenue   Float?
+  expectedRevenue   Decimal?          @db.Decimal(12, 2) // money — never Float (FZ-020)
   followUpDate      DateTime?
   contractType      ContractType?
   healthStatus      HealthStatus?
@@ -1084,6 +1088,9 @@ model Payment {
   organizationId String
   clientId       String
   contractId     String?
+  // A retainer payment realizes recurring (Subscription) revenue; a project payment realizes a
+  // Contract. Exactly one of contractId / subscriptionId is set in practice (FZ-032).
+  subscriptionId String?
   amount         Decimal
   paidOn         DateTime
   method         String?
@@ -1096,9 +1103,11 @@ model Payment {
   organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   client         Client        @relation("ClientPayments", fields: [clientId], references: [id])
   contract       Contract?     @relation(fields: [contractId], references: [id])
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
 
   @@index([clientId])
   @@index([organizationId])
+  @@index([subscriptionId])
   @@map("payments")
 }
 
@@ -1123,6 +1132,7 @@ model Subscription {
   organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   client           Client             @relation("ClientSubscriptions", fields: [clientId], references: [id])
   contract         Contract?          @relation(fields: [contractId], references: [id])
+  payments         Payment[]
 
   @@unique([sourceLeadId]) // DB-enforced one-subscription-per-lead: makes CRM revenue idempotency concurrency-safe. NULLs (manual subs) are distinct in Postgres, so unaffected.
   @@index([organizationId])

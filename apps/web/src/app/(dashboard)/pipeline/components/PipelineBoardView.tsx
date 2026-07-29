@@ -308,11 +308,13 @@ export function PipelineBoardView() {
         <DragDropContext onDragStart={startAutoScroll} onDragEnd={handleDragEnd}>
           {visibleGroups.map((group) => {
             const columnLeads = columns[group.id] || [];
-            const columnValue = columnLeads.reduce((acc, curr) => acc + (curr.dealValue || 0), 0);
+            // dealValue arrives as a string (Decimal serialized over JSON) — coerce with
+            // Number() before summing, or `+` concatenates instead of adding (FZ-020).
+            const columnValue = columnLeads.reduce((acc, curr) => acc + Number(curr.dealValue || 0), 0);
             // Weighted value = sum of (dealValue × stage probability weight) per card
             const columnWeightedValue = columnLeads.reduce((acc, curr) => {
               const weight = STAGE_WEIGHTS[curr.stage] ?? 0.5;
-              return acc + (curr.dealValue || 0) * weight;
+              return acc + Number(curr.dealValue || 0) * weight;
             }, 0);
             const isCollapsed = collapsedColumns.includes(group.id);
 

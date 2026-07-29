@@ -89,8 +89,13 @@ crmRouter.get('/leads', async (req: AuthRequest, res: Response, next) => {
       if (dateAddedFrom) (where.createdAt as any).gte = new Date(dateAddedFrom as string);
       if (dateAddedTo) (where.createdAt as any).lte = new Date(dateAddedTo as string);
     }
-    const pageNum = req.query.page ? parseInt(req.query.page as string, 10) : undefined;
-    const limitNum = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    // Pagination is optional here — the pipeline board pulls every lead. But when a limit IS
+    // supplied, sanitize it: floor page at 1 and cap the page size so ?limit=99999999 can't
+    // ask for the whole table, and NaN/negative values fall back to sane bounds (FZ-023).
+    const rawLimit = req.query.limit ? parseInt(req.query.limit as string, 10) : NaN;
+    const limitNum = Number.isFinite(rawLimit) && rawLimit >= 1 ? Math.min(rawLimit, 100) : undefined;
+    const rawPage = req.query.page ? parseInt(req.query.page as string, 10) : NaN;
+    const pageNum = Number.isFinite(rawPage) && rawPage >= 1 ? rawPage : (limitNum ? 1 : undefined);
     const skip = pageNum && limitNum ? (pageNum - 1) * limitNum : undefined;
     const take = limitNum ? limitNum : undefined;
 
@@ -1122,7 +1127,9 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
         res.status(400).json({ error: 'Deal value cannot be negative' });
         return;
       }
-      if (existingLead.dealValue !== dealValue) {
+      // dealValue is a Decimal column — coerce before comparing, or a Decimal object is always
+      // !== the incoming number and every save would log a spurious change (FZ-020).
+      if (Number(existingLead.dealValue ?? NaN) !== dealValue) {
         updateData.dealValue = dealValue;
         changes.push(`changed Deal Value to ${dealValue}`);
       }
@@ -1132,7 +1139,7 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
         res.status(400).json({ error: 'Expected revenue cannot be negative' });
         return;
       }
-      if (existingLead.expectedRevenue !== expectedRevenue) {
+      if (Number(existingLead.expectedRevenue ?? NaN) !== expectedRevenue) {
         updateData.expectedRevenue = expectedRevenue;
         changes.push(`changed Expected Revenue to ${expectedRevenue}`);
       }

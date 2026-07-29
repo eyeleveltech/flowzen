@@ -15,14 +15,21 @@ export default function RevenueOverviewPage() {
   const [loading, setLoading] = useState(true);
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true);
     api.get('/revenue/overview')
       .then((res) => { setData(res); setErrorStatus(null); })
       .catch((err: any) => {
-        if (err?.status === 403) setErrorStatus(403);
-        else setErrorStatus(404);
+        // Distinguish "no access" (403) from a genuine failure. Anything else — a 5xx,
+        // a network drop, an offline API — must surface as an error, never as ₹0 KPIs
+        // that read like real (empty) figures (FZ-041).
+        setErrorStatus(err?.status || 500);
       })
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
   }, []);
 
   if (loading) {
@@ -31,6 +38,23 @@ export default function RevenueOverviewPage() {
 
   if (errorStatus === 403) {
     return <NoAccess title="Access Restricted" message="You do not have permission or CRM module access to view revenue overview." backHref="/dashboard" backLabel="Back to Dashboard" />;
+  }
+
+  if (errorStatus !== null) {
+    return (
+      <div className="flex h-[50vh] flex-col items-center justify-center gap-4 text-center">
+        <p className="text-sm text-secondary">
+          We couldn&apos;t load your revenue figures right now. This is a temporary problem, not ₹0 in revenue.
+        </p>
+        <button
+          type="button"
+          onClick={load}
+          className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-gray-800"
+        >
+          Try again
+        </button>
+      </div>
+    );
   }
 
   const kpis = [

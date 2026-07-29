@@ -13,6 +13,7 @@ export const revenueRouter = Router();
 export const paymentSchema = z.object({
   clientId: z.string().min(1, 'Client ID is required'),
   contractId: z.string().optional(),
+  subscriptionId: z.string().optional(), // realizes retainer (recurring) revenue (FZ-032)
   amount: z.number().positive('Amount must be greater than zero'),
   paidOn: z.string()
     .refine((d) => !isNaN(Date.parse(d)), 'Invalid paidOn date')
@@ -74,7 +75,7 @@ export const expenseSchema = z.object({
 // Prisma `id: undefined` filter would match ANY row in the org, so callers must pass real ids).
 async function assertOrgRefs(
   orgId: string,
-  refs: { clientId?: string | null; contractId?: string | null; projectId?: string | null },
+  refs: { clientId?: string | null; contractId?: string | null; projectId?: string | null; subscriptionId?: string | null },
 ): Promise<string | null> {
   if (refs.clientId) {
     const ok = await prisma.client.findFirst({ where: { id: refs.clientId, organizationId: orgId }, select: { id: true } });
@@ -83,6 +84,14 @@ async function assertOrgRefs(
   if (refs.contractId) {
     const ok = await prisma.contract.findFirst({ where: { id: refs.contractId, organizationId: orgId }, select: { id: true } });
     if (!ok) return 'Contract not found in your organization';
+  }
+  if (refs.subscriptionId) {
+    // Scope by client too when given, so a payment can't be booked against another client's sub.
+    const ok = await prisma.subscription.findFirst({
+      where: { id: refs.subscriptionId, organizationId: orgId, ...(refs.clientId ? { clientId: refs.clientId } : {}) },
+      select: { id: true },
+    });
+    if (!ok) return 'Subscription not found in your organization';
   }
   if (refs.projectId) {
     const ok = await prisma.project.findFirst({ where: { id: refs.projectId, client: { organizationId: orgId } }, select: { id: true } });
@@ -211,7 +220,7 @@ revenueRouter.get('/overview', async (req: AuthRequest, res: Response, next: Nex
       recentPayments: payments.slice(0, 5)
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    next(err); // central handler maps Prisma errors and never leaks err.message (FZ-022/074)
   }
 });
 
@@ -295,7 +304,7 @@ revenueRouter.get('/pnl', async (req: AuthRequest, res: Response, next: NextFunc
 // 1. Invoice Drafts
 // ============================================================================
 
-revenueRouter.get('/invoice-drafts', async (req: AuthRequest, res: Response) => {
+revenueRouter.get('/invoice-drafts', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const drafts = await prisma.invoiceDraft.findMany({
       where: { organizationId: req.user!.organizationId },
@@ -307,7 +316,7 @@ revenueRouter.get('/invoice-drafts', async (req: AuthRequest, res: Response) => 
     });
     res.json(drafts);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    next(err); // central handler maps Prisma errors and never leaks err.message (FZ-022/074)
   }
 });
 
@@ -595,7 +604,8 @@ revenueRouter.get('/payments', async (req: AuthRequest, res: Response, next: Nex
       where: { organizationId: req.user!.organizationId },
       include: {
         client: { select: { name: true, company: true } },
-        contract: { select: { title: true } }
+        contract: { select: { title: true } },
+        subscription: { select: { id: true, notes: true, billingFrequency: true } },
       },
       orderBy: { paidOn: 'desc' },
     });
@@ -609,7 +619,7 @@ revenueRouter.post('/payments', idempotency, validate(paymentSchema), async (req
   try {
     const orgId = req.user!.organizationId;
     const b = req.body; // validated by paymentSchema
-    const refErr = await assertOrgRefs(orgId, { clientId: b.clientId, contractId: b.contractId });
+    const refErr = await assertOrgRefs(orgId, { clientId: b.clientId, contractId: b.contractId, subscriptionId: b.subscriptionId });
     if (refErr) return res.status(400).json({ error: refErr });
 
     const paidOn = new Date(b.paidOn);
@@ -623,6 +633,7 @@ revenueRouter.post('/payments', idempotency, validate(paymentSchema), async (req
         organizationId: orgId,
         clientId: b.clientId,
         contractId: b.contractId ?? null,
+        subscriptionId: b.subscriptionId ?? null,
         amount: b.amount,
         paidOn,
         reference: b.reference ?? null,
@@ -641,6 +652,7 @@ revenueRouter.post('/payments', idempotency, validate(paymentSchema), async (req
         organizationId: orgId,
         clientId: b.clientId,
         contractId: b.contractId ?? null,
+        subscriptionId: b.subscriptionId ?? null,
         amount: b.amount,
         paidOn,
         method: b.method ?? null,

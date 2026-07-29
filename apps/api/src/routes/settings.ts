@@ -10,6 +10,7 @@ import { seedDefaultModules } from '../lib/modules.js';
 import rateLimit from 'express-rate-limit';
 import { createAuditLog } from '../utils/audit.js';
 import { toProperCase } from '../utils/properCase.js';
+import { logger } from '../utils/logger.js';
 
 const settingsLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -255,7 +256,7 @@ settingsRouter.put('/modules/:key', authorize('SUPER_ADMIN', 'ADMIN'), async (re
   try {
     const orgId = req.user!.organizationId;
     const key = String(req.params.key).toUpperCase();
-    if (!['CRM', 'PM'].includes(key)) {
+    if (!['CRM', 'PM', 'REVENUE'].includes(key)) {
       res.status(400).json({ error: 'Unknown module' });
       return;
     }
@@ -371,10 +372,51 @@ settingsRouter.post('/users', authorize('SUPER_ADMIN', 'ADMIN'), validate(invite
       },
     });
 
-    await EmailService.sendSetupPasswordEmail(email, resetToken);
+    const emailSent = await EmailService.sendSetupPasswordEmail(email, resetToken);
+    if (!emailSent) {
+      logger.warn(`[Invite] Setup email failed for ${email} (user ${user.id}); admin can resend from Team settings.`);
+    }
 
     emitToOrganization(req.app.get('io'), req.user!.organizationId, 'member:changed', { id: user.id });
-    res.status(201).json(user);
+    // 201 either way — the account exists — but tell the UI whether the invite mail actually
+    // went out so it can warn and offer a resend instead of implying the person was emailed (FZ-043).
+    res.status(201).json({ ...user, emailSent });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/settings/users/:id/resend-invite — re-issue the setup-password email for a
+// pending member (FZ-043). Mints a fresh 24h token so an expired or never-delivered invite
+// can be recovered without deleting and recreating the user.
+settingsRouter.post('/users/:id/resend-invite', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimiter, async (req: AuthRequest, res: Response, next) => {
+  try {
+    const targetUser = await prisma.user.findFirst({
+      where: { id: req.params.id as string, organizationId: req.user!.organizationId },
+      select: { id: true, email: true, status: true },
+    });
+    if (!targetUser) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    if (targetUser.status === 'ACTIVE') {
+      res.status(400).json({ error: 'This member has already set up their account' });
+      return;
+    }
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await prisma.user.update({
+      where: { id: targetUser.id },
+      data: { resetToken, resetTokenExpiry },
+    });
+
+    const emailSent = await EmailService.sendSetupPasswordEmail(targetUser.email, resetToken);
+    if (!emailSent) {
+      res.status(502).json({ error: 'Could not send the invite email. Please check the mail configuration and try again.' });
+      return;
+    }
+    res.json({ success: true, emailSent: true });
   } catch (error) {
     next(error);
   }
@@ -783,6 +825,7 @@ settingsRouter.get('/api-keys', authorize('SUPER_ADMIN'), async (req: AuthReques
       select: {
         id: true,
         name: true,
+        keyPrefix: true,
         lastUsedAt: true,
         createdAt: true,
         user: { select: { id: true, name: true } }
@@ -805,24 +848,28 @@ settingsRouter.post('/api-keys', authorize('SUPER_ADMIN'), async (req: AuthReque
     }
 
     const rawToken = 'fz_' + crypto.randomBytes(24).toString('hex');
+    // Store only the hash. The raw token is returned once below and never persisted.
+    const keyHash = crypto.createHash('sha256').update(rawToken).digest('hex');
 
     const apiKey = await prisma.apiKey.create({
       data: {
-        key: rawToken,
+        key: keyHash,
+        keyPrefix: rawToken.slice(0, 11),
         name: name.trim(),
         userId: req.user!.userId,
         organizationId: req.user!.organizationId,
       },
       select: {
         id: true,
-        key: true,
+        keyPrefix: true,
         name: true,
         createdAt: true,
         user: { select: { id: true, name: true } }
       }
     });
 
-    res.status(201).json(apiKey);
+    // `key` here is the plaintext — shown once, then unrecoverable.
+    res.status(201).json({ ...apiKey, key: rawToken });
   } catch (error) {
     next(error);
   }

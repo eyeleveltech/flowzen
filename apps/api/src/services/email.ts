@@ -52,7 +52,10 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
 export const EmailService = {
 
-  sendPasswordResetEmail: async (to: string, token: string) => {
+  // Returns true when the message was handed to the SMTP transport, false on any failure.
+  // Callers use this to surface a "couldn't email the invite" warning and offer a resend,
+  // rather than reporting success when the mail silently never left (FZ-043).
+  sendPasswordResetEmail: async (to: string, token: string): Promise<boolean> => {
     try {
       const mailer = await getTransporter();
       const resetUrl = `${APP_URL}/reset-password?token=${token}`;
@@ -75,12 +78,14 @@ export const EmailService = {
       if (!process.env.SMTP_USER && !process.env.EMAIL_USER) {
         logger.info(`[ETHEREAL MAIL URL]: ${nodemailer.getTestMessageUrl(info)}`);
       }
+      return true;
     } catch (error) {
       logger.error('Failed to send password reset email', { error });
+      return false;
     }
   },
 
-  sendSetupPasswordEmail: async (to: string, token: string) => {
+  sendSetupPasswordEmail: async (to: string, token: string): Promise<boolean> => {
     try {
       const mailer = await getTransporter();
       const setupUrl = `${APP_URL}/setup-password?token=${token}`;
@@ -104,8 +109,10 @@ export const EmailService = {
       if (!process.env.SMTP_USER && !process.env.EMAIL_USER) {
         logger.info(`[ETHEREAL MAIL URL]: ${nodemailer.getTestMessageUrl(info)}`);
       }
+      return true;
     } catch (error) {
       logger.error('Failed to send setup password email', { error });
+      return false;
     }
   }
 };

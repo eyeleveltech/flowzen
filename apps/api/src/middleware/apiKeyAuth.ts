@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
+import crypto from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -17,8 +18,10 @@ export const apiKeyAuth = async (req: Request, res: Response, next: NextFunction
       return;
     }
 
+    // Keys are stored as SHA-256 hashes (FZ-024) — hash the presented token and match on that.
+    const keyHash = crypto.createHash('sha256').update(token).digest('hex');
     const apiKey = await prisma.apiKey.findUnique({
-      where: { key: token },
+      where: { key: keyHash },
       include: { user: { select: { id: true, role: true, email: true, status: true } } },
     });
 

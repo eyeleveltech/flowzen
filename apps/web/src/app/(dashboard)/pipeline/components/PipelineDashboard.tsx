@@ -125,8 +125,9 @@ export function PipelineDashboard() {
     const activeLeads = filteredLeads.filter(l => !['PROJECT_COMPLETED', 'CHURNED'].includes(l.stage));
     // Open pipeline only — exclude won/active/closed stages so this doesn't double-count value already in wonValue.
     const openLeads = filteredLeads.filter(l => !['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED', 'CHURNED'].includes(l.stage));
-    const totalPipelineValue = openLeads.reduce((sum, l) => sum + (l.dealValue || 0), 0);
-    const wonValue = filteredLeads.filter(l => ['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED'].includes(l.stage)).reduce((sum, l) => sum + (l.dealValue || 0), 0);
+    // dealValue is a Decimal serialized as a string — Number() before summing (FZ-020).
+    const totalPipelineValue = openLeads.reduce((sum, l) => sum + Number(l.dealValue || 0), 0);
+    const wonValue = filteredLeads.filter(l => ['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'PROJECT_COMPLETED'].includes(l.stage)).reduce((sum, l) => sum + Number(l.dealValue || 0), 0);
 
     // Stage Distribution for Bar Chart
     const stageCounts: Record<string, number> = {};
@@ -142,7 +143,7 @@ export function PipelineDashboard() {
     const stageValues: Record<string, number> = {};
     activeLeads.forEach(l => {
       if (l.dealValue) {
-        stageValues[l.stage] = (stageValues[l.stage] || 0) + l.dealValue;
+        stageValues[l.stage] = (stageValues[l.stage] || 0) + Number(l.dealValue || 0);
       }
     });
     const pieData = Object.entries(stageValues)
@@ -175,9 +176,9 @@ export function PipelineDashboard() {
       barData,
       pieData,
       wonCount: wonClosed.length,
-      wonClosedValue: wonClosed.reduce((sum, l) => sum + (l.dealValue || 0), 0),
+      wonClosedValue: wonClosed.reduce((sum, l) => sum + Number(l.dealValue || 0), 0),
       lostCount: lostClosed.length,
-      lostValue: lostClosed.reduce((sum, l) => sum + (l.dealValue || 0), 0),
+      lostValue: lostClosed.reduce((sum, l) => sum + Number(l.dealValue || 0), 0),
       lostReasonData,
     };
   }, [filteredLeads]);
