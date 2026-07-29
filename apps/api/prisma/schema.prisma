@@ -230,6 +230,7 @@ model Organization {
   phone     String?
   address   String?
   description String?
+  currency    String   @default("INR")
   settings  Json     @default("{}")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -350,6 +351,7 @@ model Client {
   contractValue  Decimal?     @db.Decimal(12, 2) // money — never Float (FZ-020)
   startDate      DateTime?
   status         ClientStatus @default(PROSPECT)
+  currency       String       @default("INR")
   engagementType String?
   website        String?
   city           String?
@@ -848,6 +850,7 @@ model QuoteDocument {
   scope            String?      @db.Text
   termsConditions  String       @db.Text
   status           QuoteStatus  @default(DRAFT)
+  currency         String       @default("INR")
   // Snapshot of computed totals at save time (server-authoritative).
   untaxedAmount    Decimal      @default(0)
   totalDiscount    Decimal      @default(0)
@@ -1029,6 +1032,7 @@ model InvoiceDraft {
   clientId       String
   clientName     String
   status         InvoiceStatus @default(DRAFT)
+  currency       String        @default("INR")
   lineItems      Json
   untaxedAmount  Decimal       @default(0)
   cgst           Decimal       @default(0)
@@ -1066,6 +1070,7 @@ model Contract {
   startDate        DateTime
   endDate          DateTime?
   status           ContractStatus @default(ACTIVE)
+  currency         String         @default("INR")
   notes            String?        @db.Text
   // The CRM lead this contract was auto-created from, so the same won deal never creates a
   // second contract if it re-enters the Active stage. Null for manually-created contracts.
@@ -1091,12 +1096,14 @@ model Payment {
   // A retainer payment realizes recurring (Subscription) revenue; a project payment realizes a
   // Contract. Exactly one of contractId / subscriptionId is set in practice (FZ-032).
   subscriptionId String?
+  billingPeriod  String?       // "2026-03" — YYYY-MM of the period being billed (idempotent recurring billing)
   amount         Decimal
   paidOn         DateTime
   method         String?
   reference      String?
   notes          String?
   status         PaymentStatus @default(PAID)
+  currency       String        @default("INR")
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -1107,7 +1114,7 @@ model Payment {
 
   @@index([clientId])
   @@index([organizationId])
-  @@index([subscriptionId])
+  @@unique([subscriptionId, billingPeriod])
   @@map("payments")
 }
 
@@ -1122,6 +1129,7 @@ model Subscription {
   startDate        DateTime
   nextBillingDate  DateTime?
   status           SubscriptionStatus @default(ACTIVE)
+  currency         String             @default("INR")
   notes            String?
   // The CRM lead this subscription was auto-created from, so the same won deal never creates a
   // second subscription if it re-enters the Active stage. Null for manually-created subs.
@@ -1146,6 +1154,7 @@ model Expense {
   clientId       String?
   vendor         String
   category       ExpenseCategory @default(MISC)
+  currency       String          @default("INR")
   amount         Decimal
   date           DateTime
   description    String?

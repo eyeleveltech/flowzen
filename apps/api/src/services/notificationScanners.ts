@@ -366,20 +366,32 @@ export async function processSubscriptionBilling() {
 
     let processed = 0;
     for (const sub of dueSubs) {
-      const currentNext = sub.nextBillingDate ? new Date(sub.nextBillingDate) : new Date();
-      const newNext = new Date(currentNext);
-      newNext.setMonth(newNext.getMonth() + 1);
+      // ── Idempotency check (subscriptionId + billingPeriod) ──
+      const billingPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const existing = await prisma.payment.findFirst({
+        where: { subscriptionId: sub.id, billingPeriod },
+        select: { id: true },
+      });
+      if (existing) continue;
 
+      // ── Month-end-safe date roll ──
+      const currentNext = sub.nextBillingDate ? new Date(sub.nextBillingDate) : new Date();
+      const anchorDay = currentNext.getDate();
+      const newNext = addCalendarMonthsAnchored(currentNext, 1, anchorDay);
+
+      // ── Transaction: create payment + advance nextBillingDate ──
       await prisma.$transaction([
         prisma.payment.create({
           data: {
             organizationId: sub.organizationId,
             clientId: sub.clientId,
             contractId: sub.contractId,
+            subscriptionId: sub.id,
+            billingPeriod,
             amount: sub.amount,
             status: 'PAID',
             method: 'AUTO_DEBIT',
-            notes: `Automated recurring payment for subscription ${sub.id}`,
+            notes: `Auto-billing for period ${billingPeriod}`,
             paidOn: new Date(),
           },
         }),
@@ -393,7 +405,7 @@ export async function processSubscriptionBilling() {
     }
 
     if (processed > 0) {
-      logger.info(`[Billing] Processed recurring billing for ${processed} subscription(s)`);
+      logger.info(`[Billing] Processed ${processed} subscription(s)`);
     }
     return processed;
   } catch (error) {

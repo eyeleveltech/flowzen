@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -16,9 +16,14 @@ import {
 
 export function Sidebar({ isMobile }: { isMobile?: boolean }) {
   const pathname = usePathname();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
   const { sidebarCollapsed, toggleCollapse, mobileSidebarOpen } = useUIStore();
   const { user, logout } = useAuthStore();
   const { activeModule: storeModule, setActiveModule } = useModuleStore();
+
+  const userRole = mounted ? (user?.role || '') : '';
 
   // The route is the primary signal for the current module; fall back to the
   // last-used module on shared/core pages (Clients, Settings, Profile).
@@ -26,13 +31,13 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
   useEffect(() => { if (routeModule) setActiveModule(routeModule); }, [routeModule, setActiveModule]);
   const activeModule: ModuleKey = routeModule ?? storeModule;
 
-  const canSwitch = accessibleModules(user).length > 1;
+  const canSwitch = mounted && accessibleModules(user).length > 1;
   const inActiveModule = (item: NavItem) => {
     const mods = Array.isArray(item.module) ? item.module : [item.module];
     return mods.includes(activeModule);
   };
   const visibleNav = NAV_ITEMS.filter(
-    (item) => (!item.roles || item.roles.includes(user?.role || '')) && inActiveModule(item),
+    (item) => (!item.roles || item.roles.includes(userRole)) && inActiveModule(item),
   );
   const activeLabel = MODULES.find((m) => m.key === activeModule)?.label ?? '';
 
@@ -120,7 +125,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
 
       {/* Bottom */}
       <div className="px-3 py-3 space-y-1 border-t border-border">
-        {BOTTOM_NAV_ITEMS.filter(item => item.href !== '/profile' && (!item.roles || item.roles.includes(user?.role || ''))).map((item) => {
+        {BOTTOM_NAV_ITEMS.filter(item => item.href !== '/profile' && (!item.roles || item.roles.includes(userRole))).map((item) => {
           const isActive = pathname.startsWith(item.href);
           return (
             <Link key={item.href} href={item.href}>

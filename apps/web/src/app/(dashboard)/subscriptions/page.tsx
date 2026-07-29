@@ -66,7 +66,7 @@ export default function SubscriptionsPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4 text-sm text-secondary">{s.contract?.title || '-'}</td>
-                  <td className="px-6 py-4 text-sm font-medium text-primary text-right">{formatCurrency(Number(s.amount))}</td>
+                  <td className="px-6 py-4 text-sm font-medium text-primary text-right">{formatCurrency(Number(s.amount), s.currency)}</td>
                   <td className="px-6 py-4 text-sm text-secondary capitalize">{s.billingFrequency?.toLowerCase() || '-'}</td>
                   <td className="px-6 py-4 text-sm text-secondary">{s.nextBillingDate ? formatDate(s.nextBillingDate) : '-'}</td>
                   <td className="px-6 py-4">

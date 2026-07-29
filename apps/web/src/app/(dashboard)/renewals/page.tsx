@@ -8,16 +8,10 @@ import { X, RefreshCw } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatCurrency, formatDate, getInitials, getAvatarColor } from '@/lib/utils';
+import { StatusBadge } from '@/components/ui/status-badge';
 import toast from 'react-hot-toast';
 
 const STATUSES = ['UPCOMING', 'IN_DISCUSSION', 'RENEWED', 'AT_RISK', 'CHURNED'] as const;
-const STATUS_BADGE: Record<string, string> = {
-  UPCOMING: 'bg-blue-50 text-blue-700 border-blue-200',
-  IN_DISCUSSION: 'bg-amber-50 text-amber-700 border-amber-200',
-  RENEWED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  AT_RISK: 'bg-red-50 text-red-700 border-red-200',
-  CHURNED: 'bg-gray-100 text-gray-600 border-gray-200',
-};
 const fmtDate = formatDate;
 const daysTo = (end: any) => (end ? Math.ceil((new Date(end).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000) : null);
 const name = (l: any) => l.companyName || l.contactName || 'Client';
@@ -94,7 +88,7 @@ export default function RenewalsPage() {
                     <td className="px-4 py-3 text-secondary">{fmtDate(r.contractStartDate)}</td>
                     <td className="px-4 py-3 text-secondary">{fmtDate(r.contractEndDate)}</td>
                     <td className={`px-4 py-3 text-right font-medium tabular-nums ${d != null && d <= 7 ? 'text-red-600' : d != null && d <= 30 ? 'text-amber-600' : 'text-primary'}`}>{d == null ? '—' : d < 0 ? `${Math.abs(d)}d overdue` : `${d}d`}</td>
-                    <td className="px-4 py-3">{r.renewalStatus ? <span className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border ${STATUS_BADGE[r.renewalStatus] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>{r.renewalStatus.replace(/_/g, ' ')}</span> : <span className="text-secondary">—</span>}</td>
+                    <td className="px-4 py-3">{r.renewalStatus ? <StatusBadge status={r.renewalStatus} size="xs" /> : <span className="text-secondary">—</span>}</td>
                     <td className="px-4 py-3">{r.assignedTo ? <span className="flex items-center gap-1.5"><span className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold ${getAvatarColor(r.assignedTo.name)}`}>{getInitials(r.assignedTo.name)}</span><span className="text-secondary">{r.assignedTo.name}</span></span> : <span className="text-secondary">—</span>}</td>
                     <td className="px-4 py-3 text-right"><button onClick={() => setEditing(r)} className="text-xs font-medium text-primary border border-border rounded-lg px-3 py-1.5 hover:bg-gray-50">Update</button></td>
                   </tr>

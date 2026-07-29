@@ -1,16 +1,45 @@
 import { ApifyClient } from 'apify-client';
 import OpenAI from 'openai';
 
+export type IntelligenceErrorCode =
+  | 'TIMEOUT'
+  | 'TOKEN_LIMIT'
+  | 'INVALID_API_KEY'
+  | 'RATE_LIMITED'
+  | 'NO_DATA'
+  | 'INVALID_URL'
+  | 'PARSE_ERROR'
+  | 'CONFIG_ERROR'
+  | 'UNKNOWN';
+
 export interface IntelligenceResult {
   success: boolean;
   dossier?: any;
   error?: string;
+  code?: IntelligenceErrorCode;
+  tokensUsed?: number;
+  durationMs?: number;
+}
+
+const APIFY_TIMEOUT_MS = Number(process.env.APIFY_TIMEOUT_MS) || 120000;
+const OPENAI_TIMEOUT_MS = Number(process.env.OPENAI_TIMEOUT_MS) || 60000;
+const OPENAI_MAX_TOKENS = Number(process.env.OPENAI_MAX_TOKENS) || 2048;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, errorMessage: string): Promise<T> {
+  let timer: NodeJS.Timeout;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const err = new Error(errorMessage);
+      (err as any).isTimeout = true;
+      reject(err);
+    }, ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
 }
 
 // Pull profile sections from the Apify LinkedIn scraper response, applying the
 // character limits from the brief (§6.2) before sending to GPT-4o.
 function extractProfileSections(profile: any) {
-  // Field names tuned for harvestapi/linkedin-profile-scraper, with fallbacks for other actors.
   const name = profile?.fullName || [profile?.firstName, profile?.lastName].filter(Boolean).join(' ') || '';
   const company =
     profile?.currentPosition?.[0]?.companyName ||
@@ -113,13 +142,19 @@ Method: Derive the DISC code from OCEAN scores internally. O and E drive I. C dr
 }
 
 export async function runIntelligence(linkedinUrl: string): Promise<IntelligenceResult> {
-  if (!process.env.APIFY_TOKEN) return { success: false, error: 'APIFY_TOKEN is not configured on the server.' };
-  if (!process.env.OPENAI_API_KEY) return { success: false, error: 'OPENAI_API_KEY is not configured on the server.' };
-  if (!linkedinUrl) return { success: false, error: 'No LinkedIn URL provided for this lead.' };
+  const startTime = Date.now();
 
-  // Actor slug is configurable so you can swap to whichever LinkedIn scraper you have access to.
+  if (!process.env.APIFY_TOKEN) {
+    return { success: false, code: 'CONFIG_ERROR', error: 'APIFY_TOKEN is not configured on the server.' };
+  }
+  if (!process.env.OPENAI_API_KEY) {
+    return { success: false, code: 'CONFIG_ERROR', error: 'OPENAI_API_KEY is not configured on the server.' };
+  }
+  if (!linkedinUrl) {
+    return { success: false, code: 'INVALID_URL', error: 'No LinkedIn URL provided for this lead.' };
+  }
+
   const actorId = process.env.APIFY_LINKEDIN_ACTOR || 'harvestapi/linkedin-profile-scraper';
-  // Input field name varies between actors (profileUrls / urls / startUrls). Override via env if needed.
   const inputKey = process.env.APIFY_LINKEDIN_INPUT_KEY || 'profileUrls';
   const isHarvest = actorId.includes('harvestapi');
 
@@ -128,39 +163,79 @@ export async function runIntelligence(linkedinUrl: string): Promise<Intelligence
     const apify = new ApifyClient({ token: process.env.APIFY_TOKEN });
     const input: any = isHarvest
       ? {
-          // harvestapi expects `queries` + a required scraper mode.
           profileScraperMode: process.env.APIFY_LINKEDIN_MODE || 'Profile details no email ($4 per 1k)',
           queries: [linkedinUrl],
         }
       : inputKey === 'startUrls'
         ? { startUrls: [{ url: linkedinUrl }] }
         : { [inputKey]: [linkedinUrl] };
-    const run = await apify.actor(actorId).call(input);
-    const { items } = await apify.dataset(run.defaultDatasetId).listItems();
-    profile = items?.[0];
-    if (!profile) return { success: false, error: 'No profile data returned from LinkedIn. Check the URL.' };
+
+    const runApify = async () => {
+      const run = await apify.actor(actorId).call(input);
+      const { items } = await apify.dataset(run.defaultDatasetId).listItems();
+      return items?.[0];
+    };
+
+    profile = await withTimeout(runApify(), APIFY_TIMEOUT_MS, 'LinkedIn scraper timed out. Please try again.');
+    if (!profile) {
+      return { success: false, code: 'NO_DATA', error: 'No profile data returned from LinkedIn. Check the URL.' };
+    }
   } catch (e: any) {
-    return { success: false, error: `LinkedIn scrape failed (actor "${actorId}"): ${e?.message || 'unknown error'}` };
+    if (e?.isTimeout || e?.message?.includes('timed out')) {
+      return { success: false, code: 'TIMEOUT', error: 'LinkedIn scraper timed out. Please try again.' };
+    }
+    if (e?.status === 401 || e?.statusCode === 401 || e?.message?.includes('401') || e?.message?.includes('unauthorized') || e?.message?.includes('invalid')) {
+      return { success: false, code: 'INVALID_API_KEY', error: 'Apify API key is invalid or unauthorized.' };
+    }
+    if (e?.status === 429 || e?.statusCode === 429) {
+      return { success: false, code: 'RATE_LIMITED', error: 'Apify rate limit exceeded. Please wait and try again.' };
+    }
+    return { success: false, code: 'UNKNOWN', error: `LinkedIn scrape failed (actor "${actorId}"): ${e?.message || 'unknown error'}` };
   }
 
   let raw: string;
+  let tokensUsed: number | undefined;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
+
   try {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      temperature: 0,
-      messages: [{ role: 'user', content: buildPrompt(extractProfileSections(profile)) }],
-    });
+    const completion = await openai.chat.completions.create(
+      {
+        model: 'gpt-4o',
+        temperature: 0,
+        max_tokens: OPENAI_MAX_TOKENS,
+        messages: [{ role: 'user', content: buildPrompt(extractProfileSections(profile)) }],
+      },
+      { signal: controller.signal }
+    );
     raw = completion.choices[0]?.message?.content || '';
+    tokensUsed = completion.usage?.total_tokens;
   } catch (e: any) {
-    return { success: false, error: `Analysis failed: ${e?.message || 'unknown error'}` };
+    if (e?.name === 'AbortError' || controller.signal.aborted) {
+      return { success: false, code: 'TIMEOUT', error: 'OpenAI analysis timed out. Please try again.' };
+    }
+    if (e instanceof OpenAI.AuthenticationError || e?.status === 401) {
+      return { success: false, code: 'INVALID_API_KEY', error: 'OpenAI API key is invalid or unauthorized.' };
+    }
+    if (e instanceof OpenAI.RateLimitError || e?.status === 429) {
+      return { success: false, code: 'RATE_LIMITED', error: 'OpenAI rate limit exceeded. Please wait and try again.' };
+    }
+    if (e?.status === 400 && (e?.code === 'context_length_exceeded' || e?.message?.includes('context_length'))) {
+      return { success: false, code: 'TOKEN_LIMIT', error: 'Profile is too large for the model. Try a shorter profile URL.' };
+    }
+    return { success: false, code: 'UNKNOWN', error: `Analysis failed: ${e?.message || 'unknown error'}` };
+  } finally {
+    clearTimeout(timeoutId);
   }
 
-  // Strip markdown fences if GPT-4o wraps the response, then parse.
   raw = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
   try {
-    return { success: true, dossier: JSON.parse(raw) };
+    const dossier = JSON.parse(raw);
+    const durationMs = Date.now() - startTime;
+    return { success: true, dossier, tokensUsed, durationMs };
   } catch {
-    return { success: false, error: 'Failed to parse intelligence response. Please retry.' };
+    return { success: false, code: 'PARSE_ERROR', error: 'Failed to parse intelligence response. Please retry.' };
   }
 }

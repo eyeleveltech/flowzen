@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useUIStore } from '@/stores';
+import { useUIStore, useAuthStore } from '@/stores';
 import { getInitials, getAvatarColor, getClientDisplayName } from '@/lib/utils';
 import { api } from '@/lib/api';
 import {
@@ -26,6 +26,7 @@ interface SearchResults {
 export function CommandPalette() {
   const router = useRouter();
   const { commandPaletteOpen, setCommandPaletteOpen } = useUIStore();
+  const { user: currentUser } = useAuthStore();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResults | null>(null);
   const [loading, setLoading] = useState(false);
@@ -164,7 +165,7 @@ export function CommandPalette() {
                       onNavigate={navigate}
                     />
                   )}
-                  {results!.members.length > 0 && (
+                  {currentUser?.role !== 'TEAM_MEMBER' && results!.members.length > 0 && (
                     <ResultSection
                       title="Team"
                       icon={UsersRound}

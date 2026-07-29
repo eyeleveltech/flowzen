@@ -484,6 +484,14 @@ export default function ProjectDetailPage() {
             <span className="inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 capitalize">
               {project.type?.replace('_', ' ') || 'One Time'}
             </span>
+            {project.reportingCadence && project.reportingCadence !== 'NONE' && (
+              <span className="inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium bg-teal-50 text-teal-700 border border-teal-200">
+                {project.reportingCadence === 'WEEKLY' ? 'Weekly Reports' :
+                 project.reportingCadence === 'FORTNIGHTLY' ? 'Biweekly Reports' :
+                 project.reportingCadence === 'MONTHLY' ? 'Monthly Reports' :
+                 project.reportingCadence}
+              </span>
+            )}
             <StatusBadge status={project.status} />
           </div>
           <p className="text-base font-medium text-secondary">{project.client ? getClientDisplayName(project.client) : 'Internal Project'}</p>
@@ -1229,6 +1237,22 @@ export default function ProjectDetailPage() {
                         ]}
                       />
                     </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Reporting Cadence</label>
+                      <Select
+                        ariaLabel="Reporting Cadence"
+                        value={editForm.reportingCadence}
+                        onChange={(val) => setEditForm({ ...editForm, reportingCadence: val })}
+                        options={[
+                          { label: 'None', value: 'NONE' },
+                          { label: 'Weekly', value: 'WEEKLY' },
+                          { label: 'Fortnightly (Biweekly)', value: 'FORTNIGHTLY' },
+                          { label: 'Monthly', value: 'MONTHLY' },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Status</label>
                       <Select

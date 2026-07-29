@@ -208,6 +208,7 @@ reportRouter.get('/clients', async (req: AuthRequest, res: Response, next) => {
 
     const clients = await prisma.client.findMany({
       where: { organizationId: orgId },
+      take: 200,
       select: {
         id: true,
         name: true,
@@ -278,12 +279,19 @@ reportRouter.get('/clients', async (req: AuthRequest, res: Response, next) => {
       };
     });
 
+    const canSeeRevenue = ['SUPER_ADMIN', 'ADMIN'].includes(req.user!.role);
     const totalRevenue = clientMetrics.reduce((sum, c) => sum + (c.contractValue || 0), 0);
+
+    const enrichedClients = clientMetrics.map((c) => {
+      const entry: any = { ...c };
+      if (!canSeeRevenue) delete entry.contractValue;
+      return entry;
+    });
 
     res.json({
       totalClients: clients.length,
-      totalRevenue,
-      clients: clientMetrics,
+      ...(canSeeRevenue ? { totalRevenue } : {}),
+      clients: enrichedClients,
     });
   } catch (error) {
     next(error);
@@ -296,6 +304,7 @@ reportRouter.get('/clients', async (req: AuthRequest, res: Response, next) => {
 reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
+    const canSeeRevenue = ['SUPER_ADMIN', 'ADMIN'].includes(req.user!.role);
     const now = new Date();
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
@@ -312,6 +321,7 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
     const [clients, leads, activeProjects, completedWithDue, overdueTasks, members, velTasks] = await Promise.all([
       prisma.client.findMany({
         where: { organizationId: orgId },
+        take: 200,
         select: {
           id: true, name: true, company: true, contractValue: true, status: true, updatedAt: true,
           contracts: { select: { value: true, status: true } },
@@ -321,10 +331,12 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
       }),
       prisma.lead.findMany({
         where: { organizationId: orgId },
+        take: 5000,
         select: { dealValue: true, stage: true, lostReason: true, updatedAt: true },
       }),
       prisma.project.findMany({
         where: { client: { organizationId: orgId }, status: { notIn: ['COMPLETED', 'CANCELLED'] } },
+        take: 5000,
         select: { endDate: true, progress: true },
       }),
       prisma.task.findMany({
@@ -334,6 +346,7 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
           dueDate: { not: null },
           completedAt: hasPeriod ? { gte: periodStart!, lte: periodEnd! } : { not: null },
         },
+        take: 10000,
         select: { dueDate: true, completedAt: true },
       }),
       prisma.task.count({
@@ -341,10 +354,12 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
       }),
       prisma.user.findMany({
         where: { organizationId: orgId, status: 'ACTIVE' },
+        take: 500,
         select: { id: true, name: true, avatar: true, assignedTasks: { select: { status: true, loggedHours: true } } },
       }),
       prisma.task.findMany({
         where: { project: { client: { organizationId: orgId } }, status: 'COMPLETED', completedAt: { gte: vStart, lte: vEnd } },
+        take: 10000,
         select: { completedAt: true },
       }),
     ]);
@@ -462,7 +477,7 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
 
     res.json({
       period: hasPeriod ? { startDate: periodStart, endDate: periodEnd } : null,
-      revenue: { activeRevenue, pipelineValue, weightedPipelineValue, wonValue, lostValue, wonCount: won.length, lostCount: lost.length, winRate, lostReasons },
+      ...(canSeeRevenue ? { revenue: { activeRevenue, pipelineValue, weightedPipelineValue, wonValue, lostValue, wonCount: won.length, lostCount: lost.length, winRate, lostReasons } } : {}),
       delivery: { onTimeRate, overdueTasks, projectHealth: { onTrack, atRisk: atRiskProjects, delayed, total: activeProjects.length }, velocity },
       team: { avgUtilization, totalLoggedHours, members: teamMembers },
       clients: {
@@ -471,7 +486,7 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
         churned: clients.filter(c => c.status === 'CHURNED').length,
         inactive: clients.filter(c => c.status === 'PROJECT_COMPLETED').length,
         churnedInPeriod: clients.filter(c => c.status === 'CHURNED' && inPeriod(c.updatedAt)).length,
-        topClients,
+        ...(canSeeRevenue ? { topClients } : {}),
         atRisk: atRiskClients,
       },
     });

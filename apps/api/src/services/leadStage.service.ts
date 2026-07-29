@@ -134,6 +134,9 @@ export async function applyLeadStageEffects(tx: Tx, params: StageEffectParams): 
     const startDate = params.contractStartDate ? new Date(params.contractStartDate) : new Date();
 
     if (toStage === 'ACTIVE_RETAINER') {
+      if (!lead.renewalStatus) {
+        await tx.lead.update({ where: { id: lead.id }, data: { renewalStatus: 'UPCOMING' } });
+      }
       const already = await tx.subscription.findFirst({ where: { sourceLeadId: lead.id }, select: { id: true } });
       if (!already) {
         await tx.subscription.create({

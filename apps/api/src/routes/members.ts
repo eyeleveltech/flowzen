@@ -1,12 +1,12 @@
 import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
-import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
 
 export const membersRouter = Router();
 membersRouter.use(authenticate);
 
 // GET /api/team
-membersRouter.get('/', async (req: AuthRequest, res: Response, next) => {
+membersRouter.get('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
 
@@ -68,7 +68,7 @@ membersRouter.get('/', async (req: AuthRequest, res: Response, next) => {
 });
 
 // GET /api/team/:id
-membersRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
+membersRouter.get('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
 

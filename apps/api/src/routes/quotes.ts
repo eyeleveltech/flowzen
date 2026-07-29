@@ -152,6 +152,10 @@ quoteRouter.post('/', validate(quoteSchema), async (req: AuthRequest, res: Respo
         documentNumber,
         clientId: body.clientId || null,
         leadId: body.leadId || null,
+        // Currency snapshot: inherited from the client at creation time (leads have no direct currency,
+        // so fall back to 'INR'). Stored so a quote rendered later still shows the correct symbol even
+        // if the client's currency is later changed.
+        currency: (party as any).currency ?? 'INR',
         ...buildDocData(body, party, orgState, fin),
         lineItems: {
           create: body.lineItems.map((li, i) => ({
@@ -324,13 +328,19 @@ quoteRouter.patch('/:id/status', async (req: AuthRequest, res: Response, next) =
 
       // If the client already runs on an active retainer Subscription, that Subscription IS the
       // recurring revenue — creating a Contract too would double-count it (Subscription in MRR +
-      // Contract in reports). So only materialize a one-time Contract when there's no active
-      // retainer to attach the revenue to (FZ-032/FZ-059).
+      // Contract in reports). So when a retainer exists we just record the acceptance on the
+      // subscription; only a non-retainer quote materializes a one-time Contract (FZ-032/FZ-059).
+      // Every read/write uses `tx` to keep the accept path atomic (FZ-031).
       const activeSub = await tx.subscription.findFirst({
         where: { organizationId: orgId, clientId: contractClientId, status: 'ACTIVE' },
         select: { id: true },
       });
-      if (!activeSub) {
+      if (activeSub) {
+        await tx.subscription.update({
+          where: { id: activeSub.id },
+          data: { notes: `Quote ${existing.documentNumber} accepted (${existing.currency || 'INR'} ${existing.grandTotal})` },
+        });
+      } else {
         const existingContract = await tx.contract.findFirst({
           where: { organizationId: orgId, clientId: contractClientId, title: 'Quote ' + existing.documentNumber },
         });
@@ -341,6 +351,7 @@ quoteRouter.patch('/:id/status', async (req: AuthRequest, res: Response, next) =
               clientId: contractClientId,
               title: 'Quote ' + existing.documentNumber,
               value: existing.grandTotal,
+              currency: existing.currency || 'INR',
               billingFrequency: 'ONE_TIME',
               startDate: new Date(),
               status: 'ACTIVE',
@@ -397,8 +408,8 @@ quoteRouter.post('/:id/generate-pdf', async (req: AuthRequest, res: Response, ne
     }
 
     res.json({ pdfUrl });
-  } catch (error: any) {
-    res.status(500).json({ error: `PDF generation failed: ${error?.message || 'unknown error'}` });
+  } catch (error) {
+    next(error);
   }
 });
 

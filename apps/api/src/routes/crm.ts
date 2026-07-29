@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
-import { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
+import { authenticate, authorize, requireModule, AuthRequest } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { emitToOrganization } from '../sse.js';
 import { whereIn } from '../utils/query.js';
@@ -386,6 +386,28 @@ crmRouter.get('/renewals/summary', async (req: AuthRequest, res: Response, next)
   } catch (error) { next(error); }
 });
 
+// POST /api/crm/renewals/backfill — backfill missing renewalStatus on active retainers
+crmRouter.post('/renewals/backfill', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const result = await prisma.lead.updateMany({
+      where: {
+        organizationId: orgId,
+        stage: 'ACTIVE_RETAINER',
+        renewalStatus: null,
+      },
+      data: {
+        renewalStatus: 'UPCOMING',
+      },
+    });
+    const io = req.app.get('io');
+    emitToOrganization(io, orgId, 'lead:updated', {});
+    res.json({ count: result.count, message: `Successfully backfilled ${result.count} renewal records to UPCOMING status.` });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // PATCH /api/crm/leads/:id/renewal — update renewal status / notes / dates.
 crmRouter.patch('/leads/:id/renewal', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
@@ -710,27 +732,37 @@ crmRouter.post('/leads/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
       const validStage = validStages.includes(data.stage) ? data.stage : 'NEW_LEAD';
       const newLeadId = await generateLeadId(orgId);
 
-      const lead = await prisma.lead.create({
-        data: {
-          leadId: newLeadId,
-          organizationId: orgId,
-          source: 'EXCEL', // bulk upload
-          stage: validStage,
-          assignedToId: data.assignedToId || null,
-          dealValue: parsedDealValue,
-          expectedCloseDate: data.expectedCloseDate ? new Date(data.expectedCloseDate) : null,
-          contactName: name,
-          companyName: data.companyName || null,
-          contactEmail: email,
-          contactPhone: (data.phone || '').toString(),
-          jobTitle: data.jobTitle || null,
-          linkedinUrl: data.linkedinUrl || null,
-          companySize: data.companySize || null,
-          website: data.website || null,
-          industry: data.industry || null,
-          city: data.city || null,
+      let lead;
+      try {
+        lead = await prisma.lead.create({
+          data: {
+            leadId: newLeadId,
+            organizationId: orgId,
+            source: 'EXCEL', // bulk upload
+            stage: validStage,
+            assignedToId: data.assignedToId || null,
+            dealValue: parsedDealValue,
+            expectedCloseDate: data.expectedCloseDate ? new Date(data.expectedCloseDate) : null,
+            contactName: name,
+            companyName: data.companyName || null,
+            contactEmail: email,
+            contactPhone: (data.phone || '').toString(),
+            jobTitle: data.jobTitle || null,
+            linkedinUrl: data.linkedinUrl || null,
+            companySize: data.companySize || null,
+            website: data.website || null,
+            industry: data.industry || null,
+            city: data.city || null,
+          }
+        });
+      } catch (createErr: any) {
+        if (createErr?.code === 'P2002') {
+          rejected.push({ ...data, rejection_reason: 'Duplicate phone number (already exists in organization).' });
+          seenPhones.add(digits);
+          continue;
         }
-      });
+        throw createErr;
+      }
 
       await prisma.activity.create({
         data: {
@@ -752,10 +784,7 @@ crmRouter.post('/leads/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
 
     res.status(201).json({ imported, rejectedCount: rejected.length, rejected });
   } catch (error) {
-    console.error('[Bulk Import Error (Leads)]:', error);
-    res.status(400).json({
-      error: 'Failed to process bulk import. Please check your file format and try again.'
-    });
+    next(error);
   }
 });
 
@@ -1578,6 +1607,9 @@ const crmClientUpdateSchema = z.object({
     designation: z.string().optional().nullable(),
     email: z.string().optional().nullable(),
     phone: z.string().optional().nullable(),
+    linkedinUrl: z.string().optional().nullable(),
+    role: z.enum(['DECISION_MAKER', 'INFLUENCER', 'GATEKEEPER', 'CHAMPION', 'CC_ONLY']).or(z.literal('')).optional().nullable(),
+    notes: z.string().optional().nullable(),
   })).optional(),
 });
 
@@ -1612,7 +1644,7 @@ crmRouter.get('/clients/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
 });
 
 // PUT /api/crm/clients/:id — CRM-only edit endpoint (gated: SUPER_ADMIN, ADMIN)
-crmRouter.put('/clients/:id', authorize('SUPER_ADMIN', 'ADMIN'), validate(crmClientUpdateSchema), async (req: AuthRequest, res: Response, next) => {
+crmRouter.put('/clients/:id', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN'), validate(crmClientUpdateSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
     const clientId = req.params.id as string;
@@ -1659,6 +1691,9 @@ crmRouter.put('/clients/:id', authorize('SUPER_ADMIN', 'ADMIN'), validate(crmCli
               designation: c.designation || null,
               email: c.email || null,
               phone: c.phone || null,
+              linkedinUrl: c.linkedinUrl || null,
+              role: c.role || null,
+              notes: c.notes || null,
             })),
           },
         } : {}),

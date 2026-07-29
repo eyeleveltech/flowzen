@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
-import { Building2, Globe, Briefcase, Users, Phone, MapPin, Info } from 'lucide-react';
+import { Building2, Globe, Briefcase, Users, Phone, MapPin, Info, Coins } from 'lucide-react';
 import { Select } from '@/components/ui/select';
+import { CurrencySelect } from '@/components/ui/currency-select';
 import { useAuthStore } from '@/stores';
 
 export function OrganizationTab({ initialData, onSaved }: { initialData: any, onSaved?: () => void }) {
@@ -15,6 +16,7 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
     phone: initialData?.phone || '',
     address: initialData?.address || '',
     description: initialData?.description || '',
+    currency: initialData?.currency || 'INR',
   });
   const [saving, setSaving] = useState(false);
   const [nameError, setNameError] = useState('');
@@ -128,6 +130,15 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
               value={data.phone}
               onChange={(e) => setData({ ...data, phone: e.target.value })}
               className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="org-currency" className="text-sm font-medium text-[#374151] flex items-center gap-2">
+              <Coins className="h-3.5 w-3.5 text-secondary" /> Default Currency
+            </label>
+            <CurrencySelect
+              value={data.currency}
+              onChange={(val) => setData({ ...data, currency: val })}
             />
           </div>
         </div>

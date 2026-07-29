@@ -76,31 +76,49 @@ export function formatRelativeDate(date: string | Date | number | null | undefin
   return formatDate(d);
 }
 
-export function formatCurrency(value: number | null | undefined): string {
+// Maps ISO 4217 currency codes to their most natural locale for Intl.NumberFormat formatting.
+const CURRENCY_LOCALE: Record<string, string> = {
+  INR: 'en-IN', USD: 'en-US', EUR: 'de-DE', GBP: 'en-GB',
+  AED: 'ar-AE', SGD: 'en-SG', AUD: 'en-AU', CAD: 'en-CA',
+  MYR: 'ms-MY', LKR: 'si-LK', NPR: 'ne-NP', BDT: 'bn-BD',
+  PKR: 'ur-PK', THB: 'th-TH', PHP: 'en-PH', IDR: 'id-ID', VND: 'vi-VN',
+};
+
+export function formatCurrency(value: number | null | undefined, currency = 'INR'): string {
   if (value == null) return '—';
-  return new Intl.NumberFormat('en-IN', {
+  const locale = CURRENCY_LOCALE[currency] ?? 'en-US';
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency: 'INR',
+    currency,
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(value);
 }
 
-export function formatCurrencyCompact(value: number | null | undefined): string {
+export function formatCurrencyCompact(value: number | null | undefined, currency = 'INR'): string {
   if (value == null) return '—';
   const abs = Math.abs(value);
   const sign = value < 0 ? '- ' : '';
 
-  if (abs >= 1_00_00_000) {
-    const cr = value / 1_00_00_000;
-    if (abs >= 1_00_00_00_000) return `${sign}₹${Math.round(cr)} Cr`;
-    return `${sign}₹${cr.toFixed(2)} Cr`;
+  // Indian Lakh/Crore notation only applies to INR
+  if (currency === 'INR') {
+    if (abs >= 1_00_00_000) {
+      const cr = value / 1_00_00_000;
+      if (abs >= 1_00_00_00_000) return `${sign}₹${Math.round(cr)} Cr`;
+      return `${sign}₹${cr.toFixed(2)} Cr`;
+    }
+    if (abs >= 1_00_000) return `${sign}₹${(value / 1_00_000).toFixed(1)} L`;
+    return `${sign}₹${Math.abs(value).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
   }
-  if (abs >= 1_00_000) {
-    const l = value / 1_00_000;
-    return `${sign}₹${l.toFixed(1)} L`;
-  }
-  return `${sign}₹${Math.abs(value).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+
+  // Other currencies: use Intl compact notation (K / M)
+  const locale = CURRENCY_LOCALE[currency] ?? 'en-US';
+  return new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency,
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(value);
 }
 
 export function getInitials(name: string): string {

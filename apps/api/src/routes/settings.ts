@@ -56,15 +56,16 @@ settingsRouter.get('/organization', authorize('SUPER_ADMIN', 'ADMIN'), async (re
 });
 
 const updateOrgSchema = z.object({
-  name: z.string({ required_error: 'Organization name is required' }).trim().min(2, 'Organization name must be at least 2 characters'),
-  logo: z.string().optional().nullable(),
-  website: z.string().optional().nullable(),
-  industry: z.string().optional().nullable(),
-  companySize: z.string().optional().nullable(),
-  phone: z.string().optional().nullable(),
-  address: z.string().optional().nullable(),
-  description: z.string().optional().nullable(),
-});
+  name: z.string({ required_error: 'Organization name is required' }).trim().min(2, 'Organization name must be at least 2 characters').max(255),
+  logo: z.string().max(2048).optional().nullable(),
+  website: z.string().url('Must be a valid URL').max(2048).or(z.literal('')).optional().nullable(),
+  industry: z.string().max(100).optional().nullable(),
+  companySize: z.string().max(50).optional().nullable(),
+  phone: z.string().max(50).optional().nullable(),
+  address: z.string().max(500).optional().nullable(),
+  description: z.string().max(2000).optional().nullable(),
+  currency: z.string().length(3, 'Must be a 3-letter ISO currency code').optional().default('INR'),
+}).strict();
 
 // PUT /api/settings/organization
 settingsRouter.put('/organization', authorize('SUPER_ADMIN', 'ADMIN'), validate(updateOrgSchema), async (req: AuthRequest, res: Response, next) => {
@@ -80,6 +81,7 @@ settingsRouter.put('/organization', authorize('SUPER_ADMIN', 'ADMIN'), validate(
         phone: req.body.phone,
         address: req.body.address,
         description: req.body.description,
+        currency: req.body.currency,
       },
     });
 

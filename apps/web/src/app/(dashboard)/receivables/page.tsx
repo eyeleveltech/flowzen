@@ -59,9 +59,9 @@ export default function ReceivablesPage() {
                     <tr key={c.id} className="hover:bg-[#F9FAFB] transition-colors">
                       <td className="px-6 py-4 font-medium text-primary">{c.title}</td>
                       <td className="px-6 py-4 text-secondary">{c.client?.company || c.client?.name}</td>
-                      <td className="px-6 py-4 text-right text-secondary">{formatCurrency(c.value)}</td>
-                      <td className="px-6 py-4 text-right text-emerald-600">{formatCurrency(paid)}</td>
-                      <td className="px-6 py-4 text-right font-bold text-red-600">{formatCurrency(remaining)}</td>
+                      <td className="px-6 py-4 text-right text-secondary">{formatCurrency(c.value, c.currency)}</td>
+                      <td className="px-6 py-4 text-right text-emerald-600">{formatCurrency(paid, c.currency)}</td>
+                      <td className="px-6 py-4 text-right font-bold text-red-600">{formatCurrency(remaining, c.currency)}</td>
                     </tr>
                   );
                 })

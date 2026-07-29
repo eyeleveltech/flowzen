@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { DollarSign } from 'lucide-react';
 
 export default function PaymentsPage() {
@@ -66,11 +67,9 @@ export default function PaymentsPage() {
                     </td>
                     <td className="px-6 py-4 text-secondary">{formatDate(p.paidOn)}</td>
                     <td className="px-6 py-4 text-secondary">{p.method}</td>
-                    <td className="px-6 py-4 text-right font-medium text-primary">{formatCurrency(p.amount)}</td>
+                    <td className="px-6 py-4 text-right font-medium text-primary">{formatCurrency(p.amount, p.currency)}</td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${p.status === 'PAID' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                        {p.status}
-                      </span>
+                      <StatusBadge status={p.status} />
                     </td>
                   </tr>
                 ))
