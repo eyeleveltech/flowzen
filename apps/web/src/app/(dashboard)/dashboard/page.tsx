@@ -523,7 +523,6 @@ export default function DashboardPage() {
                 <div className="flex-1 overflow-y-auto max-h-120 custom-scrollbar p-3.5">
                   {sortedTasks.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 text-center gap-2">
-                      <span className="text-3xl">🎉</span>
                       <p className="text-sm font-semibold text-emerald-600">You're all caught up!</p>
                       <p className="text-xs text-secondary">No pending tasks right now.</p>
                     </div>
@@ -795,7 +794,6 @@ export default function DashboardPage() {
                 if (list.length === 0) {
                   return (
                     <div className="flex flex-col items-center justify-center py-6 text-center gap-2">
-                      <span className="text-2xl">🎉</span>
                       <p className="text-xs font-semibold text-emerald-600">No overdue tasks. Great job!</p>
                     </div>
                   );

@@ -100,97 +100,66 @@ function TasksContent() {
   const { user } = useAuthStore();
   const { confirm } = useConfirmStore();
   const queryClient = useQueryClient();
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string[]>(() => {
     const val = searchParams.get('statuses');
-    if (val) return val.split(',');
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('flowzen_tasks_filters');
-      if (saved) {
-        try {
-          return JSON.parse(saved).statuses || [];
-        } catch { /* ignore */ }
-      }
-    }
-    return [];
+    return val ? val.split(',') : [];
   });
   const [clientFilter, setClientFilter] = useState<string[]>(() => {
     const val = searchParams.get('clients');
-    if (val) return val.split(',');
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('flowzen_tasks_filters');
-      if (saved) {
-        try {
-          return JSON.parse(saved).clients || [];
-        } catch { /* ignore */ }
-      }
-    }
-    return [];
+    return val ? val.split(',') : [];
   });
   const [projectFilter, setProjectFilter] = useState<string[]>(() => {
     const val = searchParams.get('projects');
-    if (val) return val.split(',');
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('flowzen_tasks_filters');
-      if (saved) {
-        try {
-          return JSON.parse(saved).projects || [];
-        } catch { /* ignore */ }
-      }
-    }
-    return [];
+    return val ? val.split(',') : [];
   });
   // Default to all tasks. Team members are scoped to their own tasks by the API
   // (the assignee filter isn't shown to them); admins/managers see everyone and
   // can narrow with the people filter.
   const [assigneeFilter, setAssigneeFilter] = useState<string[]>(() => {
     const val = searchParams.get('assignees');
-    if (val) return val.split(',');
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('flowzen_tasks_filters');
-      if (saved) {
-        try {
-          return JSON.parse(saved).assignees || [];
-        } catch { /* ignore */ }
-      }
-    }
-    return [];
+    return val ? val.split(',') : [];
   });
   const [hasSetDefaultAssignee, setHasSetDefaultAssignee] = useState(() => {
-    const hasUrl = !!searchParams.get('assignees');
-    if (hasUrl) return true;
+    return !!searchParams.get('assignees');
+  });
+
+  // Restore saved localStorage filters after mount to prevent hydration mismatch
+  useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('flowzen_tasks_filters');
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          return !!(parsed.assignees && parsed.assignees.length > 0);
+          if (!searchParams.get('statuses') && parsed.statuses) setStatusFilter(parsed.statuses);
+          if (!searchParams.get('clients') && parsed.clients) setClientFilter(parsed.clients);
+          if (!searchParams.get('projects') && parsed.projects) setProjectFilter(parsed.projects);
+          if (!searchParams.get('assignees') && parsed.assignees && parsed.assignees.length > 0) {
+            setAssigneeFilter(parsed.assignees);
+            setHasSetDefaultAssignee(true);
+          }
+          if (!searchParams.get('teams') && parsed.teams) setTeamFilter(parsed.teams);
         } catch { /* ignore */ }
       }
     }
-    return false;
-  });
+  }, []);
 
   useEffect(() => {
-    if (user?.id && user.role !== 'TEAM_MEMBER' && !hasSetDefaultAssignee) {
+    if (isMounted && user?.id && user.role !== 'TEAM_MEMBER' && !hasSetDefaultAssignee) {
       setAssigneeFilter([user.id]);
       setHasSetDefaultAssignee(true);
     }
-  }, [user, hasSetDefaultAssignee]);
+  }, [user, hasSetDefaultAssignee, isMounted]);
 
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
   const [teamFilter, setTeamFilter] = useState<string[]>(() => {
     const val = searchParams.get('teams');
-    if (val) return val.split(',');
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('flowzen_tasks_filters');
-      if (saved) {
-        try {
-          return JSON.parse(saved).teams || [];
-        } catch { /* ignore */ }
-      }
-    }
-    return [];
+    return val ? val.split(',') : [];
   });
   const [showCompleted, setShowCompleted] = useState(false);
   const [sort, setSort] = useState<string>('createdAt_desc');
@@ -486,7 +455,7 @@ function TasksContent() {
   const isAssigneeCustom = assigneeFilter.length > 0 && !isDefaultAssigneeActive;
   const isAssigneeCleared = assigneeFilter.length === 0 && !!(user?.id && user.role !== 'TEAM_MEMBER');
 
-  const hasActiveFilters = !!(
+  const hasActiveFilters = isMounted && !!(
     search ||
     clientFilter.length > 0 ||
     projectFilter.length > 0 ||

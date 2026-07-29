@@ -16,8 +16,9 @@ interface CalendarTask {
   priority: string;
   status: string;
   type: string;
-  project: { id: string; name: string; color?: string };
-  assignee?: { id: string; name: string };
+  project?: { id: string; name: string; color?: string } | null;
+  lead?: { id: string; companyName?: string | null; contactName?: string | null } | null;
+  assignee?: { id: string; name: string } | null;
 }
 
 interface Member { id: string; name: string; }
@@ -118,7 +119,8 @@ export default function CalendarPage() {
   }
 
   function renderTaskPill(t: CalendarTask, compact: boolean = false) {
-    const pColor = t.project.color || '#3B82F6';
+    const pColor = t.project?.color || '#3B82F6';
+    const subtext = t.project?.name || t.lead?.companyName || t.lead?.contactName || 'Lead Task';
 
     if (compact) {
       return (
@@ -140,7 +142,7 @@ export default function CalendarPage() {
           <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${getPriorityDot(t.priority)}`} />
         </div>
         <div className="flex items-center justify-between text-secondary">
-          <span className="truncate max-w-[80%]">{t.project.name}</span>
+          <span className="truncate max-w-[80%]">{subtext}</span>
         </div>
       </div>
     );
@@ -350,19 +352,23 @@ export default function CalendarPage() {
                       {day.date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
                     </h3>
                     <div className="flex flex-col gap-2">
-                      {day.tasks.map(t => (
-                        <div
-                          key={t.id}
-                          className="flex flex-col gap-1.5 rounded-lg px-3 py-2.5 border text-xs"
-                          style={{ backgroundColor: `${t.project.color || '#3B82F6'}10`, borderColor: `${t.project.color || '#3B82F6'}30` }}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-medium truncate" style={{ color: t.project.color || '#3B82F6' }}>{t.title}</span>
-                            <div className={`h-2 w-2 rounded-full shrink-0 ${getPriorityDot(t.priority)}`} />
+                      {day.tasks.map(t => {
+                        const pColor = t.project?.color || '#3B82F6';
+                        const subtext = t.project?.name || t.lead?.companyName || t.lead?.contactName || 'Lead Task';
+                        return (
+                          <div
+                            key={t.id}
+                            className="flex flex-col gap-1.5 rounded-lg px-3 py-2.5 border text-xs"
+                            style={{ backgroundColor: `${pColor}10`, borderColor: `${pColor}30` }}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-medium truncate" style={{ color: pColor }}>{t.title}</span>
+                              <div className={`h-2 w-2 rounded-full shrink-0 ${getPriorityDot(t.priority)}`} />
+                            </div>
+                            <span className="text-secondary truncate">{subtext}</span>
                           </div>
-                          <span className="text-secondary truncate">{t.project.name}</span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 ));
