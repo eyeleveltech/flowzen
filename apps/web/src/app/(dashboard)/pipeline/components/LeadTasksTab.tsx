@@ -1,18 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Plus, Loader2, Trash2, Check, X, CalendarDays, User } from 'lucide-react';
+import { Plus, Loader2, Trash2, Check, User, CalendarDays } from 'lucide-react';
 import { api } from '@/lib/api';
-import { useMembers } from '@/hooks/useQueries';
 import { getInitials, getAvatarColor } from '@/lib/utils';
 import toast from 'react-hot-toast';
+import { LeadTaskFormDrawer } from './LeadTaskFormDrawer';
 
 // Pre-sales work (audits, research, follow-up prep) hangs off the Lead itself — there is no
 // Client or Project yet at this point in the pipeline, and creating one just to hold a task
 // is what used to produce duplicate company records.
-
-const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
 
 const priorityClass = (p: string) =>
   p === 'URGENT' || p === 'HIGH'
@@ -21,13 +18,10 @@ const priorityClass = (p: string) =>
       ? 'bg-amber-50 text-amber-700 border-amber-200'
       : 'bg-green-50 text-green-700 border-green-200';
 
-export function LeadTasksTab({ leadId }: { leadId: string }) {
+export function LeadTasksTab({ leadId, initialAdding = false }: { leadId: string; initialAdding?: boolean }) {
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ title: '', assigneeId: '', dueDate: '', priority: 'MEDIUM' });
-  const { data: members } = useMembers();
+  const [showDrawer, setShowDrawer] = useState(initialAdding);
 
   const load = useCallback(async () => {
     try {
@@ -41,33 +35,6 @@ export function LeadTasksTab({ leadId }: { leadId: string }) {
   }, [leadId]);
 
   useEffect(() => { load(); }, [load]);
-
-  const resetForm = () => setForm({ title: '', assigneeId: '', dueDate: '', priority: 'MEDIUM' });
-
-  const create = async () => {
-    if (!form.title.trim()) {
-      toast.error('Give the task a title');
-      return;
-    }
-    setSaving(true);
-    try {
-      await api.post('/tasks', {
-        title: form.title.trim(),
-        leadId,
-        priority: form.priority,
-        assigneeId: form.assigneeId || null,
-        dueDate: form.dueDate || null,
-      });
-      toast.success('Task added');
-      resetForm();
-      setAdding(false);
-      await load();
-    } catch (e: any) {
-      toast.error(e?.message || 'Failed to add task');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const toggleDone = async (t: any) => {
     const next = t.status === 'COMPLETED' ? 'TODO' : 'COMPLETED';
@@ -112,81 +79,22 @@ export function LeadTasksTab({ leadId }: { leadId: string }) {
             Pre-sales work on this lead — audits, research, prep. Carries over when the deal is won.
           </p>
         </div>
-        {!adding && (
-          <button
-            onClick={() => setAdding(true)}
-            className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#1F2937] transition-all"
-          >
-            <Plus className="h-3.5 w-3.5" /> Add Task
-          </button>
-        )}
+        <button
+          onClick={() => setShowDrawer(true)}
+          className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#1F2937] transition-all"
+        >
+          <Plus className="h-3.5 w-3.5" /> Add Task
+        </button>
       </div>
 
-      <AnimatePresence>
-        {adding && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="bg-white rounded-2xl border border-border p-4 space-y-3">
-              <input
-                autoFocus
-                value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
-                onKeyDown={(e) => { if (e.key === 'Enter') create(); }}
-                placeholder="e.g. Run website audit"
-                className="w-full rounded-xl border border-border px-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
-              />
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <select
-                  value={form.assigneeId}
-                  onChange={(e) => setForm({ ...form, assigneeId: e.target.value })}
-                  className="rounded-xl border border-border px-3 py-2.5 text-sm outline-none focus:border-primary transition-all"
-                >
-                  <option value="">Unassigned</option>
-                  {(members || []).map((m: any) => (
-                    <option key={m.id} value={m.id}>{m.name}</option>
-                  ))}
-                </select>
-                <input
-                  type="date"
-                  value={form.dueDate}
-                  onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
-                  className="rounded-xl border border-border px-3 py-2.5 text-sm outline-none focus:border-primary transition-all"
-                />
-                <select
-                  value={form.priority}
-                  onChange={(e) => setForm({ ...form, priority: e.target.value })}
-                  className="rounded-xl border border-border px-3 py-2.5 text-sm outline-none focus:border-primary transition-all"
-                >
-                  {PRIORITIES.map((p) => (
-                    <option key={p} value={p}>{p.charAt(0) + p.slice(1).toLowerCase()} priority</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={create}
-                  disabled={saving}
-                  className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-[#1F2937] disabled:opacity-60 transition-all"
-                >
-                  {saving ? 'Adding…' : 'Add Task'}
-                </button>
-                <button
-                  onClick={() => { setAdding(false); resetForm(); }}
-                  className="rounded-xl border border-border px-4 py-2 text-xs font-medium text-secondary hover:bg-gray-50 transition-all"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <LeadTaskFormDrawer
+        isOpen={showDrawer}
+        onClose={() => setShowDrawer(false)}
+        leadId={leadId}
+        onSuccess={load}
+      />
 
-      {tasks.length === 0 && !adding && (
+      {tasks.length === 0 && (
         <div className="bg-white rounded-2xl border border-border p-10 text-center">
           <p className="text-sm font-medium text-primary">No tasks yet</p>
           <p className="text-xs text-secondary mt-1">

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Building2, User, Phone, Mail, Calendar, MapPin, Tag, Clock, Globe, Pencil, Trash2, FolderPlus, Briefcase, Receipt, StickyNote, History } from 'lucide-react';
+import { ArrowLeft, Building2, User, Phone, Mail, Calendar, MapPin, Tag, Clock, Globe, Pencil, Trash2, FolderPlus, Briefcase, Receipt, StickyNote, History, CheckSquare, Plus } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getInitials, getAvatarColor, formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
 import toast from 'react-hot-toast';
@@ -80,6 +80,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isPipelineDetailsModalOpen, setIsPipelineDetailsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'details' | 'tasks' | 'timeline' | 'contacts'>('details');
+  const [autoOpenTaskForm, setAutoOpenTaskForm] = useState(false);
   const [preparingProject, setPreparingProject] = useState(false);
   const [wonModalLead, setWonModalLead] = useState<any>(null);
   const confirm = useConfirmStore((s) => s.confirm);
@@ -166,7 +167,17 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
               <ArrowLeft className="w-4 h-4" /> Back to Pipeline
             </Link>
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-              {lead.stage !== 'NEW_LEAD' && (
+              <button
+                onClick={() => {
+                  setActiveTab('tasks');
+                  setAutoOpenTaskForm(true);
+                }}
+                className="flex items-center justify-center gap-2 px-3.5 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-[#1F2937] transition-colors shadow-sm"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="hidden sm:inline">Add Task</span>
+              </button>
+              {['ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'CONTRACT'].includes(lead.stage) && (
                 <button
                   disabled={preparingProject}
                   onClick={async () => {
@@ -615,7 +626,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
 
           {activeTab === 'tasks' && (
             <div className="w-full">
-              <LeadTasksTab leadId={leadId} />
+              <LeadTasksTab leadId={leadId} initialAdding={autoOpenTaskForm} />
             </div>
           )}
 
