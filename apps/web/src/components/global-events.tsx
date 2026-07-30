@@ -24,16 +24,31 @@ export function GlobalEvents() {
     // team members or teams change anywhere.
     const handleMemberChanged = () => queryClient.invalidateQueries({ queryKey: ['members'] });
     const handleTeamChanged = () => queryClient.invalidateQueries({ queryKey: ['teams'] });
+    const handleLeadChanged = () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+    };
+    const handleTaskChanged = () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    };
 
     sse.off('notification:new');
     sse.on('notification:new', handleNewNotification);
     sse.on('member:changed', handleMemberChanged);
     sse.on('team:changed', handleTeamChanged);
+    sse.on('lead:updated', handleLeadChanged);
+    sse.on('lead:task:updated', handleLeadChanged);
+    sse.on('task:created', handleTaskChanged);
+    sse.on('task:updated', handleTaskChanged);
 
     return () => {
       sse.off('notification:new', handleNewNotification);
       sse.off('member:changed', handleMemberChanged);
       sse.off('team:changed', handleTeamChanged);
+      sse.off('lead:updated', handleLeadChanged);
+      sse.off('lead:task:updated', handleLeadChanged);
+      sse.off('task:created', handleTaskChanged);
+      sse.off('task:updated', handleTaskChanged);
     };
   }, [queryClient, showToast]);
 

@@ -49,7 +49,7 @@ export default function RegisterPage() {
           className="w-full max-w-sm"
         >
           <div className="flex items-center mb-10">
-            <img src="/logo_flowzen.png" alt="Flowzen" className="h-10 w-auto object-contain" />
+            <img src="/logo_flowzen.png" alt="Flowzen" className="h-12 w-auto object-contain" />
           </div>
 
           <h1 className="text-2xl font-bold text-primary mb-1">Create your workspace</h1>
@@ -148,7 +148,7 @@ export default function RegisterPage() {
         <div className="relative text-center px-12">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2 }}>
             <div className="flex items-center justify-center mx-auto mb-8">
-              <img src="/logo_flowzen.png" alt="Flowzen" className="h-16 w-auto object-contain brightness-0 invert opacity-90" />
+              <img src="/logo_flowzen.png" alt="Flowzen" className="h-20 w-auto object-contain brightness-0 invert opacity-90" />
             </div>
             <h2 className="text-3xl font-bold text-white mb-3">Built for agencies</h2>
             <p className="text-base text-white/60 max-w-sm mx-auto leading-relaxed">

@@ -61,7 +61,7 @@ export default function ModulePickerPage() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-surface px-6">
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="w-full max-w-3xl">
         <div className="mb-2 flex items-center justify-center">
-          <img src="/logo_flowzen.png" alt="Flowzen" className="h-9 w-auto object-contain" />
+          <img src="/logo_flowzen.png" alt="Flowzen" className="h-11 w-auto object-contain" />
         </div>
         <h1 className="text-center text-2xl font-semibold text-primary tracking-tight">Choose a workspace</h1>
         <p className="mt-1 text-center text-sm text-secondary">Hi {user.name?.split(' ')[0]} — pick a module to get started. You can switch anytime.</p>

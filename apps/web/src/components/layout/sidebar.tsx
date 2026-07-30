@@ -56,11 +56,11 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
       )}
     >
       {/* Logo */}
-      <div className={cn("flex h-16 items-center px-5 border-b border-border", sidebarCollapsed ? "justify-center px-0" : "justify-start")}>
+      <div className={cn("flex h-16 items-center px-5 border-b border-border", (mounted && sidebarCollapsed) ? "justify-center px-0" : "justify-start")}>
         <img
           src="/logo_flowzen.png"
           alt="Flowzen"
-          className={cn("w-auto object-contain", sidebarCollapsed ? "h-6" : "h-10")}
+          className={cn("w-auto object-contain", (mounted && sidebarCollapsed) ? "h-8" : "h-12")}
         />
       </div>
 

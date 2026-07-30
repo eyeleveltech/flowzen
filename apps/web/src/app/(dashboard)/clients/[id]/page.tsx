@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatDate, formatCurrency, getInitials, getAvatarColor, getClientDisplayName, formatRelativeDate } from '@/lib/utils';
-import { ArrowLeft, Mail, Phone, MapPin, Building2, DollarSign, X, Plus, Users, Globe, Briefcase, Trash2, Calendar, FolderKanban } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MapPin, Building2, DollarSign, X, Plus, Users, Globe, Briefcase, Trash2, Calendar, FolderKanban, Target } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { SafeHtml } from '@/components/ui/safe-html';
@@ -59,6 +59,7 @@ interface ClientDetail {
   expectedRevenue?: number | null;
   dossierJson?: any;
   dossierStatus?: string | null;
+  leads?: { id: string; stage: string }[];
 }
 
 type Tab = 'overview' | 'projects' | 'activity' | 'notes';
@@ -280,6 +281,14 @@ export default function ClientDetailPage() {
                 className="flex-1 sm:flex-none justify-center px-4 py-2 bg-primary text-white rounded-xl text-sm font-medium hover:bg-[#1F2937] transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap"
               >
                 <Plus className="h-4 w-4" /> Create Project
+              </button>
+            )}
+            {client.leads?.[0] && canManageClients && (
+              <button
+                onClick={() => router.push(`/pipeline/${client.leads![0].id}`)}
+                className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-[#374151] hover:bg-gray-50 transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap"
+              >
+                <Target className="h-4 w-4 text-purple-600" /> View Lead
               </button>
             )}
             {activeModule !== 'PM' && canManageClients && (

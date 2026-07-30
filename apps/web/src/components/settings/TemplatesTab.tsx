@@ -5,7 +5,10 @@ import { Plus, X, Edit2, Trash2, FileText } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { motion, AnimatePresence } from 'framer-motion';
 
+import { useConfirmStore } from '@/stores';
+
 export function TemplatesTab({ templates, fetchTemplates }: { templates: any[], fetchTemplates: () => void }) {
+  const confirm = useConfirmStore((state) => state.confirm);
   const [showModal, setShowModal] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
@@ -92,8 +95,21 @@ export function TemplatesTab({ templates, fetchTemplates }: { templates: any[], 
   };
 
   const handleDelete = async (id: string) => {
-    // Delete missing from API, but we'll mock it
-    toast.error('Deleting templates is not fully supported in this demo yet.');
+    const isConfirmed = await confirm({
+      title: 'Delete Template',
+      message: 'Are you sure you want to delete this template? This action cannot be undone.',
+      confirmText: 'Delete Template',
+      variant: 'danger',
+    });
+    if (!isConfirmed) return;
+
+    try {
+      await api.delete(`/settings/templates/${id}`);
+      toast.success('Template deleted');
+      fetchTemplates();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete template');
+    }
   };
 
   const addTask = () => {
