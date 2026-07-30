@@ -15,7 +15,7 @@ import { ActivityFeedWidget } from '@/components/dashboard/activity-feed';
 import {
   Users, FolderKanban, CheckSquare, CheckCircle2, Building2, Activity, Zap,
   AlertTriangle, UsersRound, Clock, PieChart as PieIcon, BarChart as BarIcon, BellDot, ChevronRight, Calendar,
-  Plus, FileText, Receipt
+  Plus, FileText, Receipt, Target
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -269,7 +269,7 @@ export default function DashboardPage() {
   const { data, refetch: fetchAll } = useDashboardData(user?.role, getDateRange());
   const {
     stats, activity = [], deadlines = [], velocity = [],
-    statusDist = [], workload = [], myTasks = [],
+    statusDist = [], workload = [], myTasks = [], leadTasks = [],
     pendingApprovals = [], clientHealth = [], myProjects = []
   } = data || {};
 
@@ -319,7 +319,7 @@ export default function DashboardPage() {
     if (user) {
       const sse = getSSE();
       if (sse) {
-        const events = ['client:created', 'project:created', 'task:created', 'task:updated', 'project:updated'];
+        const events = ['client:created', 'project:created', 'task:created', 'task:updated', 'project:updated', 'lead:updated', 'lead:task:updated'];
         events.forEach((e) => sse.on(e, fetchAll));
         return () => { events.forEach((e) => sse.off(e, fetchAll)); };
       }
@@ -342,14 +342,18 @@ export default function DashboardPage() {
 
   const isManager = user.role !== 'TEAM_MEMBER';
 
-  const handleOpenTask = async (taskId: string, readAt: string | null) => {
+  const handleOpenTask = async (taskId: string, readAt: string | null, leadId?: string | null) => {
     if (!readAt) {
       try {
         await api.put(`/tasks/${taskId}`, { readAt: new Date().toISOString() });
         fetchAll();
       } catch (err) { }
     }
-    router.push(`/tasks?taskId=${taskId}`);
+    if (leadId) {
+      router.push(`/pipeline/${leadId}?tab=tasks`);
+    } else {
+      router.push(`/tasks?taskId=${taskId}`);
+    }
   };
 
   const updateTaskStatus = async (taskId: string, status: string) => {
@@ -477,12 +481,18 @@ export default function DashboardPage() {
 
           {/* PENDING TASKS */}
           {(() => {
-            const overdueCount = myTasks.filter((t: any) => t.dueDate && new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED' && t.status !== 'ON_HOLD').length;
+            // Combine myTasks (project & lead tasks from my-tasks endpoint) and leadTasks (explicit lead tasks), removing duplicates
+            const taskMap = new Map<string, any>();
+            myTasks.forEach((t: any) => taskMap.set(t.id, t));
+            leadTasks.forEach((t: any) => taskMap.set(t.id, t));
+            const allPendingTasks = Array.from(taskMap.values());
+
+            const overdueCount = allPendingTasks.filter((t: any) => t.dueDate && new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED' && t.status !== 'ON_HOLD').length;
             const hasOverdue = overdueCount > 0;
-            const hasTasks = myTasks.length > 0;
+            const hasTasks = allPendingTasks.length > 0;
             // Sort: overdue first, then by priority weight, then by dueDate
             const priorityWeight: Record<string, number> = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
-            const sortedTasks = [...myTasks].sort((a: any, b: any) => {
+            const sortedTasks = [...allPendingTasks].sort((a: any, b: any) => {
               const aOverdue = a.dueDate && new Date(a.dueDate) < todayStart ? 0 : 1;
               const bOverdue = b.dueDate && new Date(b.dueDate) < todayStart ? 0 : 1;
               if (aOverdue !== bOverdue) return aOverdue - bOverdue;
@@ -510,7 +520,7 @@ export default function DashboardPage() {
                         ? 'bg-red-50 text-red-600 border-red-100'
                         : 'bg-[#F3F4F6] text-secondary border-border'
                         }`}>
-                        {hasOverdue ? `${overdueCount} overdue` : `${myTasks.length} pending`}
+                        {hasOverdue ? `${overdueCount} overdue` : `${allPendingTasks.length} pending`}
                       </span>
                     )}
                     <button onClick={() => router.push('/tasks')} className="text-xs font-semibold text-black-600 hover:text-blue-700 hover:underline transition-colors">
@@ -541,10 +551,12 @@ export default function DashboardPage() {
                               t.priority === 'MEDIUM' ? 'bg-blue-50 text-blue-700 border-blue-200' :
                                 'bg-gray-50 text-gray-600 border-gray-200';
 
+                        const leadInfo = t.lead;
+
                         return (
                           <div
                             key={t.id}
-                            onClick={() => handleOpenTask(t.id, t.readAt)}
+                            onClick={() => handleOpenTask(t.id, t.readAt, t.leadId || leadInfo?.id)}
                             className="group flex flex-col sm:flex-row sm:items-center justify-between py-2.5 px-4 rounded-xl border border-border/80 bg-white hover:bg-surface hover:border-border hover:shadow-sm cursor-pointer transition-all gap-2 sm:gap-4"
                           >
                             <div className="flex items-center min-w-0 flex-1 gap-3">
@@ -557,10 +569,17 @@ export default function DashboardPage() {
                               <div className="min-w-0 flex-1">
                                 <p className="text-sm font-semibold text-primary truncate mb-0.5">{t.title}</p>
                                 <div className="flex flex-wrap items-center gap-2.5 text-xs text-secondary">
-                                  <span className="flex items-center gap-1">
-                                    <FolderKanban className="w-3.5 h-3.5 text-secondary" />
-                                    {t.project?.name || 'No project'}
-                                  </span>
+                                  {leadInfo ? (
+                                    <span className="flex items-center gap-1 text-purple-700 font-medium truncate">
+                                      <Target className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                                      {leadInfo.companyName || leadInfo.contactName || leadInfo.leadId || 'Lead Task'}
+                                    </span>
+                                  ) : (
+                                    <span className="flex items-center gap-1 truncate">
+                                      <FolderKanban className="w-3.5 h-3.5 text-secondary shrink-0" />
+                                      {t.project?.name || 'No project'}
+                                    </span>
+                                  )}
                                   {t.dueDate && (
                                     <span className={`flex items-center gap-1 ${isOverdue ? 'text-red-500 font-medium' : ''}`}>
                                       <Calendar className="w-3.5 h-3.5 text-secondary shrink-0" />
@@ -581,6 +600,11 @@ export default function DashboardPage() {
                               {isOverdue && (
                                 <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-red-50 text-red-600 border-red-100 uppercase tracking-wide">
                                   Overdue
+                                </span>
+                              )}
+                              {leadInfo && (
+                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded border border-purple-200 bg-purple-50 text-purple-700 uppercase tracking-wide">
+                                  Pipeline
                                 </span>
                               )}
                               {t.priority && (

@@ -72,7 +72,10 @@ dashboardRouter.get('/stats', async (req: AuthRequest, res: Response, next) => {
         }),
         prisma.task.count({
           where: {
-            project: { client: { organizationId: orgId }, status: { not: 'CANCELLED' } },
+            OR: [
+              { project: { client: { organizationId: orgId }, status: { not: 'CANCELLED' } } },
+              { lead: { organizationId: orgId } }
+            ],
             status: { in: ['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'BLOCKED'] },
             ...dateFilter,
             ...(role === 'TEAM_MEMBER' ? { assigneeId: userId } : {})
@@ -80,7 +83,10 @@ dashboardRouter.get('/stats', async (req: AuthRequest, res: Response, next) => {
         }),
         prisma.task.count({
           where: { 
-            project: { client: { organizationId: orgId } }, 
+            OR: [
+              { project: { client: { organizationId: orgId } } },
+              { lead: { organizationId: orgId } }
+            ], 
             status: 'COMPLETED',
             ...(startDate && endDate ? {
               completedAt: {
@@ -111,7 +117,10 @@ dashboardRouter.get('/stats', async (req: AuthRequest, res: Response, next) => {
         }),
         prisma.task.count({
           where: {
-            project: { client: { organizationId: orgId } },
+            OR: [
+              { project: { client: { organizationId: orgId } } },
+              { lead: { organizationId: orgId } }
+            ],
             dueDate: { lt: todayStart },
             status: { notIn: ['COMPLETED'] },
             ...dateFilter,
@@ -473,19 +482,73 @@ dashboardRouter.get('/my-tasks', async (req: AuthRequest, res: Response, next) =
     const tasks = await prisma.task.findMany({
       where: {
         assigneeId: userId,
-        project: {
-          client: { organizationId: orgId },
-          status: { notIn: ['COMPLETED', 'CANCELLED', 'ON_HOLD'] }
-        },
-        status: { notIn: ['COMPLETED', 'ON_HOLD'] }
+        status: { notIn: ['COMPLETED', 'ON_HOLD'] },
+        OR: [
+          {
+            project: {
+              client: { organizationId: orgId },
+              status: { notIn: ['COMPLETED', 'CANCELLED', 'ON_HOLD'] }
+            }
+          },
+          {
+            lead: {
+              organizationId: orgId
+            }
+          }
+        ]
       },
       include: {
-        project: { select: { id: true, name: true } }
+        project: { select: { id: true, name: true } },
+        lead: {
+          select: {
+            id: true,
+            leadId: true,
+            companyName: true,
+            contactName: true,
+            stage: true
+          }
+        }
       },
       orderBy: [
         { priority: 'desc' },
         { dueDate: 'asc' }
       ]
+    });
+    res.json(tasks);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/dashboard/lead-tasks
+dashboardRouter.get('/lead-tasks', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const userId = req.user!.userId;
+
+    const tasks = await prisma.task.findMany({
+      where: {
+        assigneeId: userId,
+        leadId: { not: null },
+        lead: { organizationId: orgId },
+        status: { notIn: ['COMPLETED', 'ON_HOLD'] }
+      },
+      include: {
+        lead: {
+          select: {
+            id: true,
+            leadId: true,
+            companyName: true,
+            contactName: true,
+            stage: true
+          }
+        }
+      },
+      orderBy: [
+        { priority: 'desc' },
+        { dueDate: 'asc' }
+      ],
+      take: 20
     });
     res.json(tasks);
   } catch (error) {

@@ -657,6 +657,23 @@ settingsRouter.post('/templates', authorize('SUPER_ADMIN', 'ADMIN'), async (req:
   }
 });
 
+// DELETE /api/settings/templates/:id
+settingsRouter.delete('/templates/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const template = await prisma.projectTemplate.findFirst({
+      where: { id: req.params.id as string, organizationId: req.user!.organizationId },
+    });
+    if (!template) {
+      res.status(404).json({ error: 'Template not found' });
+      return;
+    }
+    await prisma.projectTemplate.delete({ where: { id: req.params.id as string } });
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // POST /api/settings/users/:id/transfer-super-admin
 settingsRouter.post('/users/:id/transfer-super-admin', authorize('SUPER_ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {

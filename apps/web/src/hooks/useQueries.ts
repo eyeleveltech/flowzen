@@ -99,12 +99,13 @@ export function useDashboardData(role?: string, dateRange?: { startDate?: string
       if (dateRange?.endDate) params.append('endDate', dateRange.endDate);
       const queryStr = params.toString() ? `?${params.toString()}` : '';
 
-      const [stats, activity, deadlines, velocity, myTasks] = await Promise.all([
+      const [stats, activity, deadlines, velocity, myTasks, leadTasks] = await Promise.all([
         api.get<any>(`/dashboard/stats${queryStr}`),
         api.get<any[]>(`/dashboard/activity${queryStr}`),
         api.get<any[]>(`/dashboard/deadlines${queryStr}`),
         api.get<any[]>(`/dashboard/velocity${queryStr}`),
-        api.get<any[]>(`/dashboard/my-tasks${queryStr}`)
+        api.get<any[]>(`/dashboard/my-tasks${queryStr}`),
+        api.get<any[]>(`/dashboard/lead-tasks${queryStr}`)
       ]);
       
       let statusDist: any[] = [];
@@ -131,7 +132,7 @@ export function useDashboardData(role?: string, dateRange?: { startDate?: string
         workload = await api.get<any[]>(`/dashboard/team-workload${queryStr}`);
       }
       
-      return { stats, activity, deadlines, velocity, statusDist, workload, myTasks, pendingApprovals, clientHealth, myProjects };
+      return { stats, activity, deadlines, velocity, statusDist, workload, myTasks, leadTasks, pendingApprovals, clientHealth, myProjects };
     },
     enabled: !!role,
     refetchInterval: 60000,
