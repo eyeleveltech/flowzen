@@ -466,6 +466,19 @@ projectRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), 
         });
       }
 
+      // Completing a project closes out its remaining open tasks too (FZ-067) — otherwise a
+      // COMPLETED project keeps "open" work that clutters task lists and holds progress < 100%.
+      if (project.status === 'COMPLETED') {
+        await prisma.task.updateMany({
+          where: {
+            projectId: project.id,
+            status: { not: 'COMPLETED' },
+          },
+          data: { status: 'COMPLETED', completedAt: new Date() },
+        });
+        await prisma.project.update({ where: { id: project.id }, data: { progress: 100 } });
+      }
+
       if (project.status === 'COMPLETED' || project.status === 'CANCELLED') {
         await createAuditLog({
           organizationId: req.user!.organizationId,

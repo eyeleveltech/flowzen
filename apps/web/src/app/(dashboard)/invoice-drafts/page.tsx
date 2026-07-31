@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import { FileText, Download, Loader2, Edit2 } from 'lucide-react';
+import { FileText, Download, Loader2, Edit2, Send } from 'lucide-react';
+import { StatusBadge } from '@/components/ui/status-badge';
 import toast from 'react-hot-toast';
 import { fileUrl } from '@/lib/files';
 import { EditInvoiceDraftModal } from './components/EditInvoiceDraftModal';
@@ -30,14 +31,25 @@ export default function InvoiceDraftsPage() {
     try {
       const res = await api.post<any>(`/revenue/invoice-drafts/${id}/generate-pdf`, {});
       if (res.pdfUrl) {
-        toast.success('PDF Generated successfully!');
+        toast.success('PDF generated');
         window.open(fileUrl(res.pdfUrl), '_blank');
-        fetchDrafts(); // Refresh to show SENT status
+        fetchDrafts(); // stays DRAFT — still editable/regenerable until explicitly marked Sent
       }
     } catch (err: any) {
       toast.error(err.message || 'Failed to generate PDF');
     } finally {
       setGenerating(null);
+    }
+  };
+
+  // Explicit send action: once SENT the draft locks (FZ-037 — never back to DRAFT).
+  const markSent = async (id: string) => {
+    try {
+      await api.put(`/revenue/invoice-drafts/${id}/status`, { status: 'SENT' });
+      toast.success('Marked as sent — the draft is now locked');
+      fetchDrafts();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update status');
     }
   };
 
@@ -87,33 +99,46 @@ export default function InvoiceDraftsPage() {
                     <td className="px-6 py-4 text-secondary">{draft.quote?.documentNumber}</td>
                     <td className="px-6 py-4 text-right font-medium text-primary">{formatCurrency(draft.grandTotal)}</td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${draft.status === 'SENT' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                        {draft.status}
-                      </span>
+                      <StatusBadge status={draft.status} size="sm" />
                     </td>
                     <td className="px-6 py-4 text-right">
-                      {draft.pdfUrl ? (
-                        <a href={fileUrl(draft.pdfUrl)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50">
-                          <Download className="h-4 w-4" /> Download
-                        </a>
-                      ) : (
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => setEditingDraftId(draft.id)}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-sm font-medium text-secondary hover:bg-gray-50 hover:text-primary transition-colors"
-                          >
-                            <Edit2 className="h-4 w-4" /> Edit
-                          </button>
-                          <button
-                            onClick={() => generatePDF(draft.id)}
-                            disabled={generating === draft.id}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
-                          >
-                            {generating === draft.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-                            Generate PDF
-                          </button>
-                        </div>
-                      )}
+                      <div className="flex items-center justify-end gap-2">
+                        {draft.pdfUrl && (
+                          <a href={fileUrl(draft.pdfUrl)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50">
+                            <Download className="h-4 w-4" /> Download
+                          </a>
+                        )}
+                        {/* While DRAFT the invoice stays workable — generating a PDF doesn't lock it.
+                            A typo caught after generating is fixed with Edit + Regenerate; the PDF
+                            file is overwritten so Download always serves the latest version. */}
+                        {draft.status === 'DRAFT' && (
+                          <>
+                            <button
+                              onClick={() => setEditingDraftId(draft.id)}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-sm font-medium text-secondary hover:bg-gray-50 hover:text-primary transition-colors"
+                            >
+                              <Edit2 className="h-4 w-4" /> Edit
+                            </button>
+                            <button
+                              onClick={() => generatePDF(draft.id)}
+                              disabled={generating === draft.id}
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+                            >
+                              {generating === draft.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                              {draft.pdfUrl ? 'Regenerate' : 'Generate PDF'}
+                            </button>
+                            {draft.pdfUrl && (
+                              <button
+                                onClick={() => markSent(draft.id)}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors"
+                                title="Locks the draft — it can no longer be edited"
+                              >
+                                <Send className="h-4 w-4" /> Mark Sent
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))

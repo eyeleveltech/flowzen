@@ -1594,11 +1594,13 @@ const crmClientUpdateSchema = z.object({
   country: z.string().optional().nullable(),
   instagramHandle: z.string().optional().nullable(),
   facebookPage: z.string().optional().nullable(),
-  source: z.enum(['EXCEL', 'MANUAL', 'API', 'REFERRAL', 'INBOUND', 'LINKEDIN', 'INSTAGRAM', 'WHATSAPP', 'OTHER', 'OUTBOUND', 'SOCIAL_MEDIA', 'EVENT', 'COLD_CALL', 'EXISTING_CLIENT']).optional().nullable(),
-  priority: z.enum(['HIGH', 'MEDIUM', 'LOW']).optional().nullable(),
-  contractType: z.enum(['RETAINER', 'ONE_TIME']).optional().nullable(),
-  healthStatus: z.enum(['GREEN', 'AMBER', 'RED']).optional().nullable(),
+  // The edit form sends '' for a never-set dropdown — treat that as null, not a 400.
+  source: z.enum(['EXCEL', 'MANUAL', 'API', 'REFERRAL', 'INBOUND', 'LINKEDIN', 'INSTAGRAM', 'WHATSAPP', 'OTHER', 'OUTBOUND', 'SOCIAL_MEDIA', 'EVENT', 'COLD_CALL', 'EXISTING_CLIENT']).or(z.literal('')).optional().nullable().transform((v) => (v === '' ? null : v)),
+  priority: z.enum(['HIGH', 'MEDIUM', 'LOW']).or(z.literal('')).optional().nullable().transform((v) => (v === '' ? null : v)),
+  contractType: z.enum(['RETAINER', 'ONE_TIME']).or(z.literal('')).optional().nullable().transform((v) => (v === '' ? null : v)),
+  healthStatus: z.enum(['GREEN', 'AMBER', 'RED']).or(z.literal('')).optional().nullable().transform((v) => (v === '' ? null : v)),
   expectedRevenue: z.number().min(0).optional().nullable(),
+  currency: z.string().length(3, 'Must be a 3-letter ISO currency code').optional(),
   dossierJson: z.any().optional().nullable(),
   dossierStatus: z.string().optional().nullable(),
   contacts: z.array(z.object({
@@ -1663,7 +1665,11 @@ crmRouter.put('/clients/:id', requireModule('CRM'), authorize('SUPER_ADMIN', 'AD
       return;
     }
 
-    const { contacts, startDate, ...data } = req.body;
+    // Re-parse through the schema rather than spreading req.body: `validate()` checks but does
+    // NOT reassign the body, so unknown keys (organizationId, id, archivedAt, …) would ride the
+    // spread straight into prisma.client.update — a mass-assignment hole. Zod's parse strips
+    // everything not declared in crmClientUpdateSchema.
+    const { contacts, startDate, ...data } = crmClientUpdateSchema.parse(req.body);
 
     const newName = data.name ? String(data.name).trim() : existing.name;
     if (newName && newName.toLowerCase() !== existing.name.toLowerCase()) {

@@ -9,11 +9,6 @@ import toast from 'react-hot-toast';
 
 import { getStatusLabel } from '@/lib/status';
 
-const PIPELINE_STAGES = [
-  'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
-  'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'CONTRACT', 'ON_HOLD', 'PROJECT_COMPLETED', 'CHURNED'
-];
-
 // The exact Lost Reason options per §3.6
 const LOST_REASONS = [
   { label: 'Quotation too high', value: 'BUDGET' },
@@ -33,25 +28,10 @@ interface StageTransitionModalProps {
 }
 
 export function StageTransitionModal({ lead, currentStage, targetStage, onClose, onSubmit, isLoading }: StageTransitionModalProps) {
-  const currentIndex = PIPELINE_STAGES.indexOf(currentStage);
-  const targetIndex = PIPELINE_STAGES.indexOf(targetStage);
-  
-  let combinedFields: StageField[] = [];
-  // For forward transitions, accumulate fields from all intermediate stages
-  if (targetIndex > currentIndex && targetStage !== 'CHURNED' && targetStage !== 'ON_HOLD') {
-    for (let i = currentIndex + 1; i <= targetIndex; i++) {
-      const stageName = PIPELINE_STAGES[i];
-      const stageFields = STAGE_FIELDS[stageName] || [];
-      for (const f of stageFields) {
-        if (!combinedFields.find(cf => cf.key === f.key)) {
-          combinedFields.push(f);
-        }
-      }
-    }
-  } else {
-    combinedFields = STAGE_FIELDS[targetStage] || [];
-  }
-  
+  // The DESTINATION stage defines the form. Skipping stages must not pile every
+  // intermediate stage's fields into one long questionnaire — a rep dragging
+  // New Lead straight to Negotiation answers Negotiation's questions, nothing more.
+  const combinedFields: StageField[] = STAGE_FIELDS[targetStage] || [];
   const fields = combinedFields;
 
   // Pre-fill form data from existing deal fields

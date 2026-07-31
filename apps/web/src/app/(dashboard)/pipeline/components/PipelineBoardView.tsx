@@ -10,6 +10,7 @@ import { AnimatePresence } from 'framer-motion';
 import { ChevronDown, Check, Plus, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { StageTransitionModal } from './StageTransitionModal';
+import { stageNeedsTransitionInput } from '../lib/stage-config';
 import { WonCelebrationModal } from './WonCelebrationModal';
 import { useQueryClient } from '@tanstack/react-query';
 import { useConfirmStore } from '@/stores';
@@ -253,9 +254,29 @@ export function PipelineBoardView() {
       // Optimistic update for forward move too
       const previousLeads = [...leads];
       setLeads(leads.map(l => l.id === lead.id ? { ...l, stage: newStage } : l));
-      setPendingTransition({ lead, targetStage: newStage, previousLeads });
+      if (stageNeedsTransitionInput(newStage)) {
+        setPendingTransition({ lead, targetStage: newStage, previousLeads });
+      } else {
+        // §3.4: stages with nothing to ask (e.g. → Outreach) commit instantly — no modal toll gate.
+        quickMoveForward(lead, newStage, previousLeads);
+      }
     }
   };
+
+  // Direct forward move for stages that require no input: the drag itself is the confirmation.
+  async function quickMoveForward(lead: any, newStage: string, previousLeads: any[]) {
+    try {
+      const updatedLead = await api.post(`/crm/leads/${lead.id}/stage`, { stage: newStage });
+      toast.success('Stage updated');
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      queryClient.setQueryData(['lead', lead.id], updatedLead);
+      fetchLeads();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update stage');
+      setLeads(previousLeads); // revert the optimistic move
+    }
+  }
 
   async function submitStageTransition(payload: any) {
     if (!pendingTransition) return;
@@ -544,7 +565,11 @@ export function PipelineBoardView() {
                     } else {
                       const prevLeads = [...leads];
                       setLeads(leads.map(l => l.id === stageMenu.lead.id ? { ...l, stage } : l));
-                      setPendingTransition({ lead: stageMenu.lead, targetStage: stage, previousLeads: prevLeads });
+                      if (stageNeedsTransitionInput(stage)) {
+                        setPendingTransition({ lead: stageMenu.lead, targetStage: stage, previousLeads: prevLeads });
+                      } else {
+                        quickMoveForward(stageMenu.lead, stage, prevLeads);
+                      }
                       setStageMenu(null);
                     }
                   }}

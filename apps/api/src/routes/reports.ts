@@ -206,6 +206,26 @@ reportRouter.get('/clients', async (req: AuthRequest, res: Response, next) => {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
+    // Totals must cover the WHOLE org (FZ-073): the `take: 200` below only bounds the heavy
+    // per-client detail rows (projects+tasks include). Summing revenue off that truncated set
+    // silently under-reports past 200 clients, so totals come from this lean full-set query.
+    const [totalClients, allClientValues] = await Promise.all([
+      prisma.client.count({ where: { organizationId: orgId } }),
+      prisma.client.findMany({
+        where: { organizationId: orgId },
+        select: {
+          contractValue: true,
+          contracts: { select: { value: true }, where: { status: 'ACTIVE' } },
+          subscriptions: { select: { amount: true }, where: { status: 'ACTIVE' } },
+        },
+      }),
+    ]);
+    const fullSetRevenue = allClientValues.reduce((sum, c) => {
+      const contractsVal = c.contracts.reduce((s, ct) => s + Number(ct.value || 0), 0);
+      const subsVal = c.subscriptions.reduce((s, sub) => s + Number(sub.amount || 0), 0);
+      return sum + ((contractsVal + subsVal) > 0 ? (contractsVal + subsVal) : Number(c.contractValue || 0));
+    }, 0);
+
     const clients = await prisma.client.findMany({
       where: { organizationId: orgId },
       take: 200,
@@ -219,11 +239,11 @@ reportRouter.get('/clients', async (req: AuthRequest, res: Response, next) => {
         subscriptions: { select: { amount: true, status: true } },
         contacts: { select: { name: true } },
         projects: {
-          select: { 
-            status: true, 
-            budget: true, 
+          select: {
+            status: true,
+            budget: true,
             endDate: true,
-            tasks: { select: { status: true, dueDate: true } } 
+            tasks: { select: { status: true, dueDate: true } }
           },
         },
       },
@@ -280,7 +300,6 @@ reportRouter.get('/clients', async (req: AuthRequest, res: Response, next) => {
     });
 
     const canSeeRevenue = ['SUPER_ADMIN', 'ADMIN'].includes(req.user!.role);
-    const totalRevenue = clientMetrics.reduce((sum, c) => sum + (c.contractValue || 0), 0);
 
     const enrichedClients = clientMetrics.map((c) => {
       const entry: any = { ...c };
@@ -289,9 +308,10 @@ reportRouter.get('/clients', async (req: AuthRequest, res: Response, next) => {
     });
 
     res.json({
-      totalClients: clients.length,
-      ...(canSeeRevenue ? { totalRevenue } : {}),
+      totalClients, // full-org count, not the truncated display set (FZ-073)
+      ...(canSeeRevenue ? { totalRevenue: fullSetRevenue } : {}),
       clients: enrichedClients,
+      ...(totalClients > clients.length ? { clientsTruncated: true, clientsShown: clients.length } : {}),
     });
   } catch (error) {
     next(error);
@@ -318,10 +338,15 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
     const vStart = periodStart ?? (() => { const d = new Date(); d.setDate(d.getDate() - 29); d.setHours(0, 0, 0, 0); return d; })();
     const vEnd = periodEnd ?? (() => { const d = new Date(); d.setHours(23, 59, 59, 999); return d; })();
 
-    const [clients, leads, activeProjects, completedWithDue, overdueTasks, members, velTasks] = await Promise.all([
+    // Aggregation inputs must NOT be row-capped (FZ-073): a `take` on the set a total is
+    // reduced from silently under-reports once the org outgrows the cap. The lean selects
+    // below (2-4 scalar fields per row) are cheap at any realistic org size, so they run
+    // uncapped; only `clients` keeps a cap because its nested projects→tasks include is
+    // heavy — and its revenue total comes from the separate lean full-set query instead.
+    const [clients, allActiveClientValues, leads, activeProjects, completedWithDue, overdueTasks, members, velTasks] = await Promise.all([
       prisma.client.findMany({
         where: { organizationId: orgId },
-        take: 200,
+        take: 200, // display/portfolio rows only — never an aggregation input
         select: {
           id: true, name: true, company: true, contractValue: true, status: true, updatedAt: true,
           contracts: { select: { value: true, status: true } },
@@ -329,14 +354,20 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
           projects: { select: { status: true, endDate: true, tasks: { select: { status: true, dueDate: true } } } },
         },
       }),
+      prisma.client.findMany({
+        where: { organizationId: orgId, status: 'ACTIVE' },
+        select: {
+          contractValue: true,
+          contracts: { select: { value: true }, where: { status: 'ACTIVE' } },
+          subscriptions: { select: { amount: true }, where: { status: 'ACTIVE' } },
+        },
+      }),
       prisma.lead.findMany({
         where: { organizationId: orgId },
-        take: 5000,
         select: { dealValue: true, stage: true, lostReason: true, updatedAt: true },
       }),
       prisma.project.findMany({
         where: { client: { organizationId: orgId }, status: { notIn: ['COMPLETED', 'CANCELLED'] } },
-        take: 5000,
         select: { endDate: true, progress: true },
       }),
       prisma.task.findMany({
@@ -346,7 +377,6 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
           dueDate: { not: null },
           completedAt: hasPeriod ? { gte: periodStart!, lte: periodEnd! } : { not: null },
         },
-        take: 10000,
         select: { dueDate: true, completedAt: true },
       }),
       prisma.task.count({
@@ -359,7 +389,6 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
       }),
       prisma.task.findMany({
         where: { project: { client: { organizationId: orgId } }, status: 'COMPLETED', completedAt: { gte: vStart, lte: vEnd } },
-        take: 10000,
         select: { completedAt: true },
       }),
     ]);
@@ -378,9 +407,10 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
       CHURNED: 0.0,
     };
 
-    const activeRevenue = clients.filter(c => c.status === 'ACTIVE').reduce((s, c) => {
-      const contractsVal = (c.contracts || []).filter(ct => ct.status === 'ACTIVE').reduce((sum, ct) => sum + Number(ct.value || 0), 0);
-      const subsVal = (c.subscriptions || []).filter(sub => sub.status === 'ACTIVE').reduce((sum, sub) => sum + Number(sub.amount || 0), 0);
+    // Full-set active revenue (lean uncapped query above) — not the capped display rows (FZ-073).
+    const activeRevenue = allActiveClientValues.reduce((s, c) => {
+      const contractsVal = c.contracts.reduce((sum, ct) => sum + Number(ct.value || 0), 0);
+      const subsVal = c.subscriptions.reduce((sum, sub) => sum + Number(sub.amount || 0), 0);
       const effectiveVal = (contractsVal + subsVal) > 0 ? (contractsVal + subsVal) : Number(c.contractValue || 0);
       return s + effectiveVal;
     }, 0);

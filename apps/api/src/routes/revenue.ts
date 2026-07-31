@@ -517,9 +517,14 @@ revenueRouter.post('/invoice-drafts/:id/generate-pdf', async (req: AuthRequest, 
     const { generateQuotePdf } = await import('../services/quotePdf.service.js');
     const pdfUrl = await generateQuotePdf(fakeQuote, org);
     
+    // Generating the PDF does NOT mark the draft SENT: the PDF is a reference document the
+    // user downloads and forwards (corrections §65) — producing it isn't sending it. While the
+    // draft stays DRAFT it remains editable and the PDF can be regenerated (same filename, so
+    // the download link always serves the latest). SENT is an explicit action via /:id/status,
+    // and once SENT the FZ-037 state machine locks it (never back to DRAFT).
     const updated = await prisma.invoiceDraft.update({
       where: { id },
-      data: { pdfUrl, status: 'SENT' }
+      data: { pdfUrl }
     });
     emitToOrganization(req.app.get('io'), orgId, 'revenue:invoice-draft-updated', updated);
     
@@ -692,6 +697,49 @@ revenueRouter.post('/payments', idempotency, validate(paymentSchema), async (req
     });
     emitToOrganization(req.app.get('io'), orgId, 'revenue:payment-logged', payment);
     res.status(201).json(payment);
+  } catch (err: any) {
+    next(err);
+  }
+});
+
+// PUT /revenue/payments/:id/status — confirm (or refund) a payment. Auto-billing books
+// retainer instalments as PENDING (FZ-077); this is how they become real, collected revenue.
+const paymentStatusSchema = z.object({
+  status: z.enum(['PENDING', 'PARTIAL', 'PAID', 'REFUNDED']),
+  paidOn: z.string()
+    .refine((d) => !isNaN(Date.parse(d)), 'Invalid paidOn date')
+    .refine((d) => Date.parse(d) <= Date.now() + 86400000, 'paidOn cannot be in the future')
+    .optional(),
+});
+const PAYMENT_STATUS_TRANSITIONS: Record<string, string[]> = {
+  PENDING: ['PARTIAL', 'PAID'],
+  PARTIAL: ['PAID'],
+  PAID: ['REFUNDED'],
+  REFUNDED: [], // terminal
+};
+revenueRouter.put('/payments/:id/status', validate(paymentStatusSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const existing = await prisma.payment.findFirst({
+      where: { id: req.params.id as string, organizationId: orgId },
+    });
+    if (!existing) return res.status(404).json({ error: 'Payment not found' });
+
+    const { status, paidOn } = req.body;
+    if (status !== existing.status && !PAYMENT_STATUS_TRANSITIONS[existing.status]?.includes(status)) {
+      return res.status(400).json({ error: `Cannot move a ${existing.status} payment to ${status}` });
+    }
+
+    const payment = await prisma.payment.update({
+      where: { id: existing.id },
+      data: {
+        status,
+        // Confirming receipt stamps when the money actually arrived.
+        ...(status === 'PAID' ? { paidOn: paidOn ? new Date(paidOn) : new Date() } : {}),
+      },
+    });
+    emitToOrganization(req.app.get('io'), orgId, 'revenue:payment-updated', payment);
+    res.json(payment);
   } catch (err: any) {
     next(err);
   }

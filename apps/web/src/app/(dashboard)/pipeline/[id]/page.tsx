@@ -9,7 +9,7 @@ import { ArrowLeft, Building2, User, Phone, Mail, Calendar, MapPin, Tag, Clock, 
 import { api } from '@/lib/api';
 import { getInitials, getAvatarColor, formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
 import toast from 'react-hot-toast';
-import { STAGE_FIELDS } from '../lib/stage-config';
+import { STAGE_FIELDS, stageNeedsTransitionInput } from '../lib/stage-config';
 import { StageTransitionModal } from '../components/StageTransitionModal';
 import { WonCelebrationModal } from '../components/WonCelebrationModal';
 import { EditLeadModal } from '../components/EditLeadModal';
@@ -312,8 +312,15 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                     value={lead.stage}
                     onChange={(val) => {
                       if (val && val !== lead.stage) {
-                        setTargetStage(val);
-                        setIsModalOpen(true);
+                        if (stageNeedsTransitionInput(val)) {
+                          setTargetStage(val);
+                          setIsModalOpen(true);
+                        } else {
+                          // Nothing to ask for this stage (§3.4) — commit directly, no modal.
+                          stageMutation.mutate({ stage: val }, {
+                            onError: (err: any) => toast.error(err.message || 'Failed to update stage'),
+                          });
+                        }
                       }
                     }}
                     options={PIPELINE_STAGES.map(s => ({

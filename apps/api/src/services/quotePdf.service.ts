@@ -480,6 +480,52 @@ class Semaphore {
 const pdfRenderQueue = new Semaphore(2);
 const RENDER_TIMEOUT_MS = 15000; // 15s execution timeout
 
+// Shared browser instance (FZ-051): launching Chromium is the expensive part of a render
+// (~1-2s + a large memory spike), so reuse one instance across renders instead of a fresh
+// launch per PDF. Renders each open their own page; the browser is closed after sitting
+// idle, and relaunched transparently if it crashed or disconnected.
+const BROWSER_IDLE_CLOSE_MS = 2 * 60 * 1000;
+let sharedBrowser: any = null;
+let browserLaunching: Promise<any> | null = null;
+let idleCloseTimer: NodeJS.Timeout | null = null;
+let activePages = 0;
+
+async function getSharedBrowser(): Promise<any> {
+  if (idleCloseTimer) { clearTimeout(idleCloseTimer); idleCloseTimer = null; }
+  if (sharedBrowser && sharedBrowser.connected !== false && sharedBrowser.isConnected?.() !== false) {
+    return sharedBrowser;
+  }
+  // Single-flight the launch so two concurrent renders don't spawn two browsers.
+  if (!browserLaunching) {
+    browserLaunching = puppeteer.launch({
+      headless: true,
+      timeout: RENDER_TIMEOUT_MS,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+      ...(process.env.PUPPETEER_EXECUTABLE_PATH ? { executablePath: process.env.PUPPETEER_EXECUTABLE_PATH } : {}),
+    }).then((b: any) => {
+      sharedBrowser = b;
+      b.on('disconnected', () => { if (sharedBrowser === b) sharedBrowser = null; });
+      return b;
+    }).finally(() => { browserLaunching = null; });
+  }
+  return browserLaunching;
+}
+
+function scheduleIdleClose(): void {
+  if (activePages > 0) return;
+  if (idleCloseTimer) clearTimeout(idleCloseTimer);
+  idleCloseTimer = setTimeout(async () => {
+    idleCloseTimer = null;
+    if (activePages === 0 && sharedBrowser) {
+      const b = sharedBrowser;
+      sharedBrowser = null;
+      try { await b.close(); } catch (_) {}
+    }
+  }, BROWSER_IDLE_CLOSE_MS);
+  // Don't hold the process open just to close an idle browser.
+  idleCloseTimer.unref?.();
+}
+
 export async function generateQuotePdf(quote: any, org: any): Promise<string> {
   const logoUri = await loadBrandLogo();
   const template = (org?.settings as any)?.company?.quotationTemplate || 'CLASSIC';
@@ -522,15 +568,12 @@ export async function generateQuotePdf(quote: any, org: any): Promise<string> {
   }
 
   await pdfRenderQueue.acquire(RENDER_TIMEOUT_MS);
-  let browser: any = null;
+  let page: any = null;
   try {
-    browser = await puppeteer.launch({
-      headless: true,
-      timeout: RENDER_TIMEOUT_MS,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-      ...(process.env.PUPPETEER_EXECUTABLE_PATH ? { executablePath: process.env.PUPPETEER_EXECUTABLE_PATH } : {}),
-    });
-    const page = await browser.newPage();
+    // Reuse the shared browser (FZ-051) — only the page is per-render.
+    const browser = await getSharedBrowser();
+    activePages++;
+    page = await browser.newPage();
     page.setDefaultTimeout(RENDER_TIMEOUT_MS);
     page.setDefaultNavigationTimeout(RENDER_TIMEOUT_MS);
     await page.setContent(html, { waitUntil: 'load', timeout: RENDER_TIMEOUT_MS });
@@ -551,9 +594,11 @@ export async function generateQuotePdf(quote: any, org: any): Promise<string> {
     });
     return `/uploads/quotes/${filename}`;
   } finally {
-    if (browser) {
-      try { await browser.close(); } catch (_) {}
+    if (page) {
+      try { await page.close(); } catch (_) {}
+      activePages--;
     }
+    scheduleIdleClose();
     pdfRenderQueue.release();
   }
 }

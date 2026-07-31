@@ -71,6 +71,19 @@ export const STAGE_FIELDS: Record<string, StageField[]> = {
   CHURNED: [],
 };
 
+// Does moving INTO this stage ask the user for anything? Covers both the per-stage fields
+// above AND the modal-level inputs (deal value/close date, contract type, lost reason).
+// Stages that need nothing (§3.4: e.g. New Lead → Outreach, or parking On Hold) commit
+// instantly on drag — no modal, no toll gate. The two common dates (Next Follow-up /
+// Last Contacted) are optional and editable on the lead itself, so they never justify
+// interrupting the move.
+export function stageNeedsTransitionInput(targetStage: string): boolean {
+  if (targetStage === 'CHURNED') return true; // mandatory Lost Reason (§3.6)
+  if (['NEGOTIATION', 'CONTRACT'].includes(targetStage)) return true; // deal value + expected close date
+  if (['ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(targetStage)) return true; // contract type + billing details
+  return (STAGE_FIELDS[targetStage] || []).length > 0;
+}
+
 // Stage-specific probability weights for weighted deal value calculations in the Kanban footer
 export const STAGE_PROBABILITIES: Record<string, number> = {
   NEW_LEAD: 0.10,

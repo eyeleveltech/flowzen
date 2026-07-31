@@ -380,28 +380,36 @@ export async function processSubscriptionBilling() {
       const newNext = addCalendarMonthsAnchored(currentNext, 1, anchorDay);
 
       // ── Transaction: create payment + advance nextBillingDate ──
-      await prisma.$transaction([
-        prisma.payment.create({
-          data: {
-            organizationId: sub.organizationId,
-            clientId: sub.clientId,
-            contractId: sub.contractId,
-            subscriptionId: sub.id,
-            billingPeriod,
-            amount: sub.amount,
-            status: 'PAID',
-            method: 'AUTO_DEBIT',
-            notes: `Auto-billing for period ${billingPeriod}`,
-            paidOn: new Date(),
-          },
-        }),
-        prisma.subscription.update({
-          where: { id: sub.id },
-          data: { nextBillingDate: newNext },
-        }),
-      ]);
-
-      processed++;
+      // The payment is PENDING, not PAID: no money has actually moved — this row is the
+      // "retainer instalment due" record. Booking it as PAID would inflate paidThisMonth
+      // with revenue that was never collected. It flips to PAID when receipt is confirmed.
+      // Per-sub try/catch so one collision (e.g. a P2002 race on the billing-period unique)
+      // skips that subscription instead of aborting the whole batch.
+      try {
+        await prisma.$transaction([
+          prisma.payment.create({
+            data: {
+              organizationId: sub.organizationId,
+              clientId: sub.clientId,
+              contractId: sub.contractId,
+              subscriptionId: sub.id,
+              billingPeriod,
+              amount: sub.amount,
+              currency: sub.currency || 'INR',
+              status: 'PENDING',
+              notes: `Retainer instalment due for period ${billingPeriod}`,
+              paidOn: new Date(),
+            },
+          }),
+          prisma.subscription.update({
+            where: { id: sub.id },
+            data: { nextBillingDate: newNext },
+          }),
+        ]);
+        processed++;
+      } catch (err: any) {
+        logger.error(`[Billing] Failed to bill subscription ${sub.id} for ${billingPeriod}: ${err?.code || err?.message}`);
+      }
     }
 
     if (processed > 0) {

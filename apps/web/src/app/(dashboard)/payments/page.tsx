@@ -4,17 +4,37 @@ import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { DollarSign } from 'lucide-react';
+import { DollarSign, Check } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function PaymentsPage() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [confirming, setConfirming] = useState<string | null>(null);
 
-  useEffect(() => {
+  const fetchPayments = () =>
     api.get('/revenue/payments')
       .then((data: any) => setData(data))
       .finally(() => setLoading(false));
+
+  useEffect(() => {
+    fetchPayments();
   }, []);
+
+  // Auto-billed retainer instalments arrive as PENDING; confirming receipt makes them
+  // real collected revenue (they only then count toward Paid This Month).
+  const markPaid = async (id: string) => {
+    setConfirming(id);
+    try {
+      await api.put(`/revenue/payments/${id}/status`, { status: 'PAID' });
+      toast.success('Payment confirmed as received');
+      await fetchPayments();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to confirm payment');
+    } finally {
+      setConfirming(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -69,7 +89,20 @@ export default function PaymentsPage() {
                     <td className="px-6 py-4 text-secondary">{p.method}</td>
                     <td className="px-6 py-4 text-right font-medium text-primary">{formatCurrency(p.amount, p.currency)}</td>
                     <td className="px-6 py-4">
-                      <StatusBadge status={p.status} />
+                      <div className="flex items-center gap-2">
+                        <StatusBadge status={p.status} />
+                        {p.status === 'PENDING' && (
+                          <button
+                            type="button"
+                            onClick={() => markPaid(p.id)}
+                            disabled={confirming === p.id}
+                            className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 transition-colors"
+                            title="Confirm this payment was received"
+                          >
+                            <Check className="h-3 w-3" /> Mark Paid
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))

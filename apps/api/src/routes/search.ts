@@ -14,7 +14,7 @@ searchRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     const query = req.query.q as string;
 
     if (!query || query.length < 2) {
-      res.json({ clients: [], projects: [], tasks: [], members: [] });
+      res.json({ clients: [], projects: [], tasks: [], members: [], leads: [], quotes: [] });
       return;
     }
 
@@ -22,13 +22,17 @@ searchRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     const hasCrm = enabledModules.includes('CRM');
     const hasPm = enabledModules.includes('PM');
 
+    const isTeamMember = req.user!.role === 'TEAM_MEMBER';
+    const isCrmRole = ['SUPER_ADMIN', 'ADMIN'].includes(req.user!.role);
+    const userId = req.user!.userId;
+
     const canSearchClients = hasCrm || hasPm;
     const canSearchProjects = hasPm;
     const canSearchTasks = hasPm;
     const canSearchMembers = hasCrm || hasPm;
-
-    const isTeamMember = req.user!.role === 'TEAM_MEMBER';
-    const userId = req.user!.userId;
+    // Leads and quotations are CRM objects — searchable only by the roles the CRM API itself
+    // admits (SUPER_ADMIN/ADMIN, see /api/crm gating), so search can't leak pipeline data.
+    const canSearchCrm = hasCrm && isCrmRole;
 
     const projectWhere: any = {
       client: { organizationId: orgId },
@@ -60,7 +64,7 @@ searchRouter.get('/', async (req: AuthRequest, res: Response, next) => {
       ];
     }
 
-    const [clients, projects, tasks, members] = await Promise.all([
+    const [clients, projects, tasks, members, leads, quotes] = await Promise.all([
       canSearchClients
         ? prisma.client.findMany({
             where: {
@@ -97,9 +101,29 @@ searchRouter.get('/', async (req: AuthRequest, res: Response, next) => {
             take: 5,
           })
         : Promise.resolve([]),
+      canSearchCrm
+        ? prisma.lead.findMany({
+            where: {
+              organizationId: orgId,
+              ...buildSearchFilter(['companyName', 'contactName', 'contactEmail', 'contactPhone', 'leadId'], query),
+            },
+            select: { id: true, leadId: true, companyName: true, contactName: true, stage: true },
+            take: 5,
+          })
+        : Promise.resolve([]),
+      canSearchCrm
+        ? prisma.quoteDocument.findMany({
+            where: {
+              organizationId: orgId,
+              ...buildSearchFilter(['documentNumber', 'clientName'], query),
+            },
+            select: { id: true, documentNumber: true, clientName: true, status: true, documentType: true },
+            take: 5,
+          })
+        : Promise.resolve([]),
     ]);
 
-    res.json({ clients, projects, tasks, members });
+    res.json({ clients, projects, tasks, members, leads, quotes });
   } catch (error) {
     next(error);
   }

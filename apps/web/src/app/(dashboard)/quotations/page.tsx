@@ -98,7 +98,7 @@ function QuotationsContent() {
       await api.post('/revenue/invoice-drafts', payload);
       toast.dismiss(t);
       toast.success('Invoice draft created successfully');
-      router.push('/invoices'); // Or wherever the revenue module is
+      router.push('/invoice-drafts'); // the editable invoice screen (the /invoices twin now redirects here)
     } catch (e: any) {
       toast.dismiss(t);
       toast.error(e.message || 'Failed to create invoice draft');

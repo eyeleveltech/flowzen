@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useAuthStore } from '@/stores';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
@@ -20,10 +20,22 @@ import { usePageTitle } from '@/hooks/usePageTitle';
 function PipelineContent() {
   usePageTitle('Pipeline');
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'BOARD' | 'LIST' | 'DASHBOARD'>('BOARD');
   const [totalLeads, setTotalLeads] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Quick Create ("+ → New Lead") lands here as /pipeline?create=true. The page defaults to the
+  // BOARD tab, which never read the param — so the header button silently did nothing. Honor it
+  // at page level, whatever tab is active.
+  useEffect(() => {
+    if (searchParams.get('create') === 'true') {
+      setIsModalOpen(true);
+      // Drop the param so tab switches / refreshes don't re-trigger the modal.
+      router.replace('/pipeline');
+    }
+  }, [searchParams, router]);
   const [showViewSettings, setShowViewSettings] = useState(false);
   const [viewName, setViewName] = useState('All Leads');
 

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient, LeadStage, LeadSource, ActivityEntityType, LostReason, ClientStatus } from '@prisma/client';
 import { ensureClientForLead } from '../../services/clientConversion.service.js';
 import { parsePagination } from '../../utils/query.js';
+import { normalizePhone } from '../../utils/leadId.js';
 
 const prisma = new PrismaClient();
 const leadRouter = Router();
@@ -269,6 +270,28 @@ leadRouter.post('/', async (req: Request, res: Response) => {
       assignedToId = assigned_to_id;
     }
 
+    // Same normalized phone dedup as the manual/import paths (FZ-054): the DB unique index is on
+    // the RAW value, so "+91 98765..." vs "98765..." would slip past it. Compare digits-only
+    // before creating, and return the existing lead's id instead of a duplicate.
+    if (contact_phone) {
+      const digits = normalizePhone(contact_phone);
+      if (digits) {
+        const orgLeads = await prisma.lead.findMany({
+          where: { organizationId: orgId, contactPhone: { not: null } },
+          select: { id: true, leadId: true, contactPhone: true },
+        });
+        const existingLead = orgLeads.find((l) => normalizePhone(l.contactPhone) === digits);
+        if (existingLead) {
+          return res.status(409).json({
+            success: false,
+            error: 'A lead with this phone number already exists',
+            code: 409,
+            existing_lead_id: existingLead.id,
+          });
+        }
+      }
+    }
+
     // An inbound lead is just a lead. Its identity lives on the Lead itself — no Client
     // account is created here, because nothing is being billed or delivered yet. The account
     // is born later, when the deal is won or a project starts.
@@ -321,7 +344,11 @@ leadRouter.post('/', async (req: Request, res: Response) => {
     }
 
     res.status(201).json({ success: true, data: formatLeadResponse(lead) });
-  } catch (error) {
+  } catch (error: any) {
+    // Raced past the app-level check — the DB unique on (org, contactPhone) is the backstop.
+    if (error?.code === 'P2002') {
+      return res.status(409).json({ success: false, error: 'A lead with this phone number already exists', code: 409 });
+    }
     console.error(error);
     res.status(500).json({ success: false, error: 'Internal server error', code: 500 });
   }

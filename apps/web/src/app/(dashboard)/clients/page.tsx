@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { ClientTimelineView } from '@/components/clients/client-timeline-view';
 import { Select } from '@/components/ui/select';
+import { CurrencySelect } from '@/components/ui/currency-select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { useMembers } from '@/hooks/useQueries';
@@ -154,7 +155,7 @@ function ClientsContent() {
   const [form, setForm] = useState({
     name: '', company: '', industry: '', address: '', startDate: '',
     engagementType: '', website: '', city: '', state: '', billingAddress: '', gstNumber: '', scope: '', assetLinks: '', accountManagerId: '',
-    status: 'PROSPECT',
+    status: 'PROSPECT', currency: 'INR',
     contacts: [{ name: '', designation: '', email: '', phone: '', role: '', linkedinUrl: '' }]
   });
   const [formError, setFormError] = useState('');
@@ -230,7 +231,7 @@ function ClientsContent() {
       });
       toast.success('Client created successfully');
       setShowCreate(false);
-      setForm({ name: '', company: '', industry: '', address: '', startDate: '', engagementType: '', website: '', city: '', state: '', billingAddress: '', gstNumber: '', scope: '', assetLinks: '', accountManagerId: '', status: 'PROSPECT', contacts: [{ name: '', designation: '', email: '', phone: '', role: '', linkedinUrl: '' }] });
+      setForm({ name: '', company: '', industry: '', address: '', startDate: '', engagementType: '', website: '', city: '', state: '', billingAddress: '', gstNumber: '', scope: '', assetLinks: '', accountManagerId: '', status: 'PROSPECT', currency: 'INR', contacts: [{ name: '', designation: '', email: '', phone: '', role: '', linkedinUrl: '' }] });
       fetchClients();
     } catch (err: any) {
       toast.error(err.message || 'Failed to create client');
@@ -896,6 +897,11 @@ function ClientsContent() {
                         { label: 'Ad-hoc', value: 'Ad-hoc' }
                       ]}
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Billing Currency</label>
+                    <CurrencySelect value={form.currency} onChange={(v) => setForm({ ...form, currency: v })} />
                   </div>
 
                   <Field label="Website" value={form.website} onChange={(v) => setForm({ ...form, website: v })} />

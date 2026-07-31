@@ -4,6 +4,15 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
+  // This seed WIPES the entire database (every deleteMany below) before reseeding demo data.
+  // Never allow that against production: bail unless explicitly running in a dev context.
+  const env = process.env.NODE_ENV || 'development';
+  if (env === 'production' && process.env.ALLOW_SEED !== 'true') {
+    console.error('✋ Refusing to seed: NODE_ENV=production. This script deletes ALL data.');
+    console.error('   If you truly intend this, set ALLOW_SEED=true explicitly.');
+    process.exit(1);
+  }
+
   console.log('🌱 Seeding ELITE PM database...\n');
 
   // Clean existing data

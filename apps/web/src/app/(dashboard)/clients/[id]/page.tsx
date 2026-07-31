@@ -8,6 +8,7 @@ import { getSSE } from '@/lib/sse';
 import { formatDate, formatCurrency, getInitials, getAvatarColor, getClientDisplayName, formatRelativeDate } from '@/lib/utils';
 import { ArrowLeft, Mail, Phone, MapPin, Building2, DollarSign, X, Plus, Users, Globe, Briefcase, Trash2, Calendar, FolderKanban, Target } from 'lucide-react';
 import { Select } from '@/components/ui/select';
+import { CurrencySelect } from '@/components/ui/currency-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { SafeHtml } from '@/components/ui/safe-html';
 import toast from 'react-hot-toast';
@@ -57,6 +58,7 @@ interface ClientDetail {
   contractType?: string | null;
   healthStatus?: string | null;
   expectedRevenue?: number | null;
+  currency?: string | null;
   dossierJson?: any;
   dossierStatus?: string | null;
   leads?: { id: string; stage: string }[];
@@ -96,7 +98,7 @@ export default function ClientDetailPage() {
     name: '', company: '', industry: '', address: '', contractValue: '', status: 'PROSPECT',
     engagementType: '', website: '', city: '', state: '', billingAddress: '', gstNumber: '', scope: '', assetLinks: '', accountManagerId: '', startDate: '',
     jobTitle: '', linkedinUrl: '', companySize: '', landlinePhone: '', zip: '', country: '',
-    instagramHandle: '', facebookPage: '', source: '', priority: '', contractType: '', healthStatus: '', expectedRevenue: '',
+    instagramHandle: '', facebookPage: '', source: '', priority: '', contractType: '', healthStatus: '', expectedRevenue: '', currency: 'INR',
     contacts: [{ id: '', name: '', designation: '', email: '', phone: '' }] as ClientContact[]
   });
   const [editError, setEditError] = useState('');
@@ -202,6 +204,7 @@ export default function ClientDetailPage() {
       contractType: client!.contractType || '',
       healthStatus: client!.healthStatus || '',
       expectedRevenue: client!.expectedRevenue?.toString() || '',
+      currency: client!.currency || 'INR',
       contacts: client!.contacts?.length ? [...client!.contacts] : [{ id: '', name: '', designation: '', email: '', phone: '' }]
     });
     setShowEdit(true);
@@ -668,6 +671,10 @@ export default function ClientDetailPage() {
                           />
                         </div>
                         <Field label="Expected Revenue" type="number" value={editForm.expectedRevenue} onChange={(v) => setEditForm({ ...editForm, expectedRevenue: v })} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-[#374151] mb-1.5">Currency</label>
+                        <CurrencySelect value={editForm.currency} onChange={(v) => setEditForm({ ...editForm, currency: v })} />
                       </div>
                     </div>
 
