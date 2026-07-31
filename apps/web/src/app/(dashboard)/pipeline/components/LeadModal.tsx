@@ -114,11 +114,23 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    // Lead Entry Gateway — name, email and phone are required.
+    // Lead Entry Gateway — name required + (email OR phone required).
     const newErrors: { contactName?: string; email?: string; phone?: string } = {};
     if (!form.contactName || form.contactName.trim().length < 2) newErrors.contactName = 'Full name is required.';
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email)) newErrors.email = 'A valid email is required.';
-    if (form.phone.replace(/\D/g, '').length < 10) newErrors.phone = 'Phone must be at least 10 digits.';
+
+    const hasEmail = !!form.email.trim();
+    const hasPhone = !!form.phone.trim();
+
+    if (hasEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email.trim())) {
+      newErrors.email = 'A valid email is required.';
+    }
+    if (hasPhone && form.phone.replace(/\D/g, '').length < 10) {
+      newErrors.phone = 'Phone must be at least 10 digits.';
+    }
+    if (!hasEmail && !hasPhone) {
+      newErrors.email = 'Email or phone is required.';
+    }
+
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return;
 
@@ -408,8 +420,8 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field label="Email Address" required error={errors.email} type="email" icon={<Mail className="h-4 w-4 text-secondary" />} value={form.email} onChange={(v) => setForm({ ...form, email: v })} placeholder="john@example.com" />
-                    <Field label="Phone Number" required error={errors.phone} icon={<Phone className="h-4 w-4 text-secondary" />} value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="+1 (555) 000-0000" />
+                    <Field label="Email Address" error={errors.email} type="email" icon={<Mail className="h-4 w-4 text-secondary" />} value={form.email} onChange={(v) => setForm({ ...form, email: v })} placeholder="john@example.com" />
+                    <Field label="Phone Number" error={errors.phone} icon={<Phone className="h-4 w-4 text-secondary" />} value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="+1 (555) 000-0000" />
                   </div>
                 </div>
 
@@ -450,7 +462,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
               <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-white shadow-sm">
                 <div>
                   <h3 className="text-sm font-semibold text-primary">Need a template?</h3>
-                  <p className="text-xs text-secondary mt-1">CSV or Excel (.xlsx). <span className="font-medium text-[#374151]">Name, Email and Phone are required</span> on every row.</p>
+                  <p className="text-xs text-secondary mt-1">CSV or Excel (.xlsx). <span className="font-medium text-[#374151]">Name + Email or Phone required</span> on every row.</p>
                 </div>
                 <button onClick={downloadTemplate} className="flex items-center gap-2 rounded-lg border border-border bg-gray-50 px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-gray-100 transition-all">
                   <FileText className="h-3.5 w-3.5" /> Template
@@ -504,7 +516,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
         </div>
 
         <div className="p-4 pb-safe sm:p-5 border-t border-border bg-white flex flex-row justify-end gap-2 sm:gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)] z-10">
-          <button type="button" onClick={onClose} className="flex-1 sm:flex-none w-full sm:w-auto px-2 sm:px-5 py-2.5 text-sm font-medium text-[#374151] bg-white border border-border rounded-xl hover:bg-gray-50 transition-colors">
+          <button type="button" onClick={guardedClose} className="flex-1 sm:flex-none w-full sm:w-auto px-2 sm:px-5 py-2.5 text-sm font-medium text-[#374151] bg-white border border-border rounded-xl hover:bg-gray-50 transition-colors">
             Cancel
           </button>
           {creationMode === 'MANUAL' ? (

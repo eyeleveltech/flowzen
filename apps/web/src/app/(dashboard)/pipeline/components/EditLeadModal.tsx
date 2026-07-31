@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { X, Save } from 'lucide-react';
@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import { getInitials, toDateInput } from '@/lib/utils';
 import { Select } from '@/components/ui/select';
 import { useMembers } from '@/hooks/useQueries';
+import { useModalSafety } from '@/hooks/useModalSafety';
 
 export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose: () => void; onSuccess: () => void; }) {
   const { data: members = [] } = useMembers();
@@ -43,6 +44,13 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
   const [errors, setErrors] = useState<{ contactName?: string; contactEmail?: string; contactPhone?: string }>({});
   const [submitting, setSubmitting] = useState(false);
 
+  const initialFormRef = useRef(JSON.stringify(form));
+  const isDirty = useCallback(() => {
+    return JSON.stringify(form) !== initialFormRef.current;
+  }, [form]);
+
+  const { guardedClose, panelRef } = useModalSafety({ onClose, isDirty });
+
   // Lock body scroll when EditLeadModal is open
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -57,11 +65,23 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    // Same hard gate as lead creation: name, email and phone are required.
+    // Name required + (email OR phone required)
     const newErrors: { contactName?: string; contactEmail?: string; contactPhone?: string } = {};
     if (!form.contactName || form.contactName.trim().length < 2) newErrors.contactName = 'Full name is required.';
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.contactEmail)) newErrors.contactEmail = 'A valid email is required.';
-    if (form.contactPhone.replace(/\D/g, '').length < 10) newErrors.contactPhone = 'Phone must be at least 10 digits.';
+
+    const hasEmail = !!form.contactEmail.trim();
+    const hasPhone = !!form.contactPhone.trim();
+
+    if (hasEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.contactEmail.trim())) {
+      newErrors.contactEmail = 'A valid email is required.';
+    }
+    if (hasPhone && form.contactPhone.replace(/\D/g, '').length < 10) {
+      newErrors.contactPhone = 'Phone must be at least 10 digits.';
+    }
+    if (!hasEmail && !hasPhone) {
+      newErrors.contactEmail = 'Email or phone is required.';
+    }
+
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return;
 
@@ -90,8 +110,9 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
 
   return (
     <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={onClose} />
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={guardedClose} />
       <motion.div
+        ref={panelRef}
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: 20 }}
@@ -102,7 +123,7 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
             <h2 className="text-lg font-semibold text-primary">Edit Lead Details</h2>
             <p className="text-sm text-secondary">Update information for {leadLabel}</p>
           </div>
-          <button onClick={onClose} className="p-2 text-secondary hover:text-primary rounded-lg hover:bg-[#F3F4F6] transition-colors">
+          <button onClick={guardedClose} className="p-2 text-secondary hover:text-primary rounded-lg hover:bg-[#F3F4F6] transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -112,8 +133,8 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
             <Field id="edit-contactName" label="Contact Name" required value={form.contactName} error={errors.contactName} onChange={(v) => setForm({ ...form, contactName: v })} placeholder="Full Name" />
 
             <div className="grid grid-cols-2 gap-4">
-              <Field id="edit-email" label="Email" type="email" required value={form.contactEmail} error={errors.contactEmail} onChange={(v) => setForm({ ...form, contactEmail: v })} placeholder="john@example.com" />
-              <Field id="edit-phone" label="Phone" required value={form.contactPhone} error={errors.contactPhone} onChange={(v) => setForm({ ...form, contactPhone: v })} placeholder="+91 ..." />
+              <Field id="edit-email" label="Email" type="email" value={form.contactEmail} error={errors.contactEmail} onChange={(v) => setForm({ ...form, contactEmail: v })} placeholder="john@example.com" />
+              <Field id="edit-phone" label="Phone" value={form.contactPhone} error={errors.contactPhone} onChange={(v) => setForm({ ...form, contactPhone: v })} placeholder="+91 ..." />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -233,7 +254,7 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
         </div>
 
         <div className="p-6 pb-safe border-t border-border bg-[#F9FAFB] shrink-0 flex items-center justify-end gap-3">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-[#374151] hover:bg-border rounded-xl transition-all">
+          <button type="button" onClick={guardedClose} className="px-4 py-2 text-sm font-medium text-[#374151] hover:bg-border rounded-xl transition-all">
             Cancel
           </button>
           <button
