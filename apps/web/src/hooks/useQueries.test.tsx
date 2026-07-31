@@ -35,16 +35,16 @@ describe('useQueries', () => {
     const { result } = renderHook(() => useProjects(), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual(mockProjects);
-    expect(api.get).toHaveBeenCalledWith('/projects?limit=100');
+    expect(result.current.data?.pages[0].projects).toEqual(mockProjects);
+    expect(api.get).toHaveBeenCalledWith('/projects?page=1&limit=50');
   });
 
   it('useDashboardData fetches aggregate dashboard data', async () => {
-    vi.mocked(api.get)
-      .mockResolvedValueOnce({ openTasks: 10 }) // stats
-      .mockResolvedValueOnce([]) // activity
-      .mockResolvedValueOnce([]) // deadlines
-      .mockResolvedValueOnce([]); // velocity
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (url.includes('/dashboard/stats')) return { openTasks: 10 };
+      if (url.includes('/projects')) return { projects: [] };
+      return [];
+    });
 
     const queryClient = createTestQueryClient();
     const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -57,6 +57,6 @@ describe('useQueries', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     
     expect(result.current.data?.stats).toEqual({ openTasks: 10 });
-    expect(api.get).toHaveBeenCalledTimes(4); // Only the standard 4 endpoints for TEAM_MEMBER
+    expect(api.get).toHaveBeenCalledWith(expect.stringContaining('/dashboard/stats'));
   });
 });

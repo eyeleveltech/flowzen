@@ -1,3 +1,4 @@
+import { useCallback, useMemo } from 'react';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 
@@ -92,57 +93,173 @@ export function useTemplates(enabled: boolean = true) {
 }
 
 // --- Dashboard ---
-export function useDashboardData(role?: string, dateRange?: { startDate?: string, endDate?: string }) {
-  return useQuery({
-    queryKey: ['dashboard', role, dateRange],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (dateRange?.startDate) params.append('startDate', dateRange.startDate);
-      if (dateRange?.endDate) params.append('endDate', dateRange.endDate);
-      const queryStr = params.toString() ? `?${params.toString()}` : '';
+function buildDashboardQueryStr(dateRange?: { startDate?: string; endDate?: string }) {
+  const params = new URLSearchParams();
+  if (dateRange?.startDate) params.append('startDate', dateRange.startDate);
+  if (dateRange?.endDate) params.append('endDate', dateRange.endDate);
+  return params.toString() ? `?${params.toString()}` : '';
+}
 
-      const [stats, activity, deadlines, velocity, myTasks, leadTasks] = await Promise.all([
-        api.get<any>(`/dashboard/stats${queryStr}`),
-        api.get<any[]>(`/dashboard/activity${queryStr}`),
-        api.get<any[]>(`/dashboard/deadlines${queryStr}`),
-        api.get<any[]>(`/dashboard/velocity${queryStr}`),
-        api.get<any[]>(`/dashboard/my-tasks${queryStr}`),
-        api.get<any[]>(`/dashboard/lead-tasks${queryStr}`)
-      ]);
-      
-      let statusDist: any[] = [];
-      let workload: any[] = [];
-      let pendingApprovals: any[] = [];
-      let clientHealth: any[] = [];
-      
-      if (role && role !== 'TEAM_MEMBER') {
-        const [dist, pending, health] = await Promise.all([
-          api.get<any[]>(`/dashboard/status-distribution${queryStr}`),
-          api.get<any[]>(`/dashboard/pending-approvals${queryStr}`),
-          api.get<any[]>(`/dashboard/client-health${queryStr}`)
-        ]);
-        statusDist = dist;
-        pendingApprovals = pending;
-        clientHealth = health;
-      }
-      let myProjects: any[] = [];
-      if (role === 'TEAM_MEMBER') {
-        const res = await api.get<any>('/projects?status=ACTIVE&limit=5');
-        myProjects = res.projects || [];
-      }
-      if (role === 'PROJECT_MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN') {
-        workload = await api.get<any[]>(`/dashboard/team-workload${queryStr}`);
-      }
-      
-      return { stats, activity, deadlines, velocity, statusDist, workload, myTasks, leadTasks, pendingApprovals, clientHealth, myProjects };
-    },
+export function useDashboardStats(role?: string, dateRange?: { startDate?: string; endDate?: string }) {
+  return useQuery({
+    queryKey: ['dashboard', 'stats', role, dateRange],
+    queryFn: () => api.get<any>(`/dashboard/stats${buildDashboardQueryStr(dateRange)}`),
     enabled: !!role,
-    refetchInterval: 60000,
-    // Always refetch when the dashboard is (re)opened, so changes made on other
-    // pages (e.g. a task moved to REVIEW) show up without a hard refresh.
     refetchOnMount: 'always',
-    staleTime: 0,
   });
+}
+
+export function useDashboardActivity(role?: string, dateRange?: { startDate?: string; endDate?: string }) {
+  return useQuery({
+    queryKey: ['dashboard', 'activity', role, dateRange],
+    queryFn: () => api.get<any[]>(`/dashboard/activity${buildDashboardQueryStr(dateRange)}`),
+    enabled: !!role,
+    refetchOnMount: 'always',
+  });
+}
+
+export function useDashboardDeadlines(role?: string, dateRange?: { startDate?: string; endDate?: string }) {
+  return useQuery({
+    queryKey: ['dashboard', 'deadlines', role, dateRange],
+    queryFn: () => api.get<any[]>(`/dashboard/deadlines${buildDashboardQueryStr(dateRange)}`),
+    enabled: !!role,
+    refetchOnMount: 'always',
+  });
+}
+
+export function useDashboardVelocity(role?: string, dateRange?: { startDate?: string; endDate?: string }) {
+  return useQuery({
+    queryKey: ['dashboard', 'velocity', role, dateRange],
+    queryFn: () => api.get<any[]>(`/dashboard/velocity${buildDashboardQueryStr(dateRange)}`),
+    enabled: !!role,
+    refetchOnMount: 'always',
+  });
+}
+
+export function useDashboardMyTasks(role?: string, dateRange?: { startDate?: string; endDate?: string }) {
+  return useQuery({
+    queryKey: ['dashboard', 'my-tasks', role, dateRange],
+    queryFn: () => api.get<any[]>(`/dashboard/my-tasks${buildDashboardQueryStr(dateRange)}`),
+    enabled: !!role,
+    refetchOnMount: 'always',
+  });
+}
+
+export function useDashboardLeadTasks(role?: string, dateRange?: { startDate?: string; endDate?: string }) {
+  return useQuery({
+    queryKey: ['dashboard', 'lead-tasks', role, dateRange],
+    queryFn: () => api.get<any[]>(`/dashboard/lead-tasks${buildDashboardQueryStr(dateRange)}`),
+    enabled: !!role,
+    refetchOnMount: 'always',
+  });
+}
+
+export function useDashboardStatusDist(role?: string, dateRange?: { startDate?: string; endDate?: string }) {
+  return useQuery({
+    queryKey: ['dashboard', 'status-distribution', role, dateRange],
+    queryFn: () => api.get<any[]>(`/dashboard/status-distribution${buildDashboardQueryStr(dateRange)}`),
+    enabled: !!role && role !== 'TEAM_MEMBER',
+    refetchOnMount: 'always',
+  });
+}
+
+export function useDashboardPendingApprovals(role?: string, dateRange?: { startDate?: string; endDate?: string }) {
+  return useQuery({
+    queryKey: ['dashboard', 'pending-approvals', role, dateRange],
+    queryFn: () => api.get<any[]>(`/dashboard/pending-approvals${buildDashboardQueryStr(dateRange)}`),
+    enabled: !!role && role !== 'TEAM_MEMBER',
+    refetchOnMount: 'always',
+  });
+}
+
+export function useDashboardClientHealth(role?: string, dateRange?: { startDate?: string; endDate?: string }) {
+  return useQuery({
+    queryKey: ['dashboard', 'client-health', role, dateRange],
+    queryFn: () => api.get<any[]>(`/dashboard/client-health${buildDashboardQueryStr(dateRange)}`),
+    enabled: !!role && role !== 'TEAM_MEMBER',
+    refetchOnMount: 'always',
+  });
+}
+
+export function useDashboardMyProjects(role?: string) {
+  return useQuery({
+    queryKey: ['dashboard', 'my-projects', role],
+    queryFn: async () => {
+      const res = await api.get<any>('/projects?status=ACTIVE&limit=5');
+      return res.projects || [];
+    },
+    enabled: role === 'TEAM_MEMBER',
+    refetchOnMount: 'always',
+  });
+}
+
+export function useDashboardWorkload(role?: string, dateRange?: { startDate?: string; endDate?: string }) {
+  return useQuery({
+    queryKey: ['dashboard', 'team-workload', role, dateRange],
+    queryFn: () => api.get<any[]>(`/dashboard/team-workload${buildDashboardQueryStr(dateRange)}`),
+    enabled: role === 'PROJECT_MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN',
+    refetchOnMount: 'always',
+  });
+}
+
+export function useDashboardData(role?: string, dateRange?: { startDate?: string; endDate?: string }) {
+  const queryClient = useQueryClient();
+
+  const statsQ = useDashboardStats(role, dateRange);
+  const activityQ = useDashboardActivity(role, dateRange);
+  const deadlinesQ = useDashboardDeadlines(role, dateRange);
+  const velocityQ = useDashboardVelocity(role, dateRange);
+  const myTasksQ = useDashboardMyTasks(role, dateRange);
+  const leadTasksQ = useDashboardLeadTasks(role, dateRange);
+  const statusDistQ = useDashboardStatusDist(role, dateRange);
+  const pendingApprovalsQ = useDashboardPendingApprovals(role, dateRange);
+  const clientHealthQ = useDashboardClientHealth(role, dateRange);
+  const myProjectsQ = useDashboardMyProjects(role);
+  const workloadQ = useDashboardWorkload(role, dateRange);
+
+  const refetch = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+  }, [queryClient]);
+
+  const isSuccess = statsQ.isSuccess || activityQ.isSuccess;
+  const isLoading = statsQ.isLoading && activityQ.isLoading;
+
+  const data = useMemo(() => {
+    if (!role) return undefined;
+    return {
+      stats: statsQ.data,
+      activity: activityQ.data || [],
+      deadlines: deadlinesQ.data || [],
+      velocity: velocityQ.data || [],
+      statusDist: statusDistQ.data || [],
+      workload: workloadQ.data || [],
+      myTasks: myTasksQ.data || [],
+      leadTasks: leadTasksQ.data || [],
+      pendingApprovals: pendingApprovalsQ.data || [],
+      clientHealth: clientHealthQ.data || [],
+      myProjects: myProjectsQ.data || [],
+    };
+  }, [
+    role,
+    statsQ.data,
+    activityQ.data,
+    deadlinesQ.data,
+    velocityQ.data,
+    statusDistQ.data,
+    workloadQ.data,
+    myTasksQ.data,
+    leadTasksQ.data,
+    pendingApprovalsQ.data,
+    clientHealthQ.data,
+    myProjectsQ.data,
+  ]);
+
+  return {
+    data,
+    refetch,
+    isSuccess,
+    isLoading,
+  };
 }
 
 // --- Executive report (boss view) ---

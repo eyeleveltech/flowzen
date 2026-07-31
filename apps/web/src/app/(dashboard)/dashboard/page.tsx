@@ -8,7 +8,10 @@ import { formatRelativeDate, formatDate, formatShortDate, getInitials } from '@/
 import { TASK_STATUS_OPTIONS } from '@/lib/task-status';
 import { useAuthStore, useTimeTrackingStore } from '@/stores';
 import { useRouter } from 'next/navigation';
+import { useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useDashboardData } from '@/hooks/useQueries';
+import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
 import toast from 'react-hot-toast';
 import { Select } from '@/components/ui/select';
 import { ActivityFeedWidget } from '@/components/dashboard/activity-feed';
@@ -266,12 +269,20 @@ export default function DashboardPage() {
     return { startDate: undefined, endDate: undefined };
   };
 
+  const queryClient = useQueryClient();
+
   const { data, refetch: fetchAll } = useDashboardData(user?.role, getDateRange());
   const {
     stats, activity = [], deadlines = [], velocity = [],
     statusDist = [], workload = [], myTasks = [], leadTasks = [],
     pendingApprovals = [], clientHealth = [], myProjects = []
   } = data || {};
+
+  const invalidateSlices = useCallback((slices: string[]) => {
+    slices.forEach((slice) => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard', slice] });
+    });
+  }, [queryClient]);
 
   const [updatingTask, setUpdatingTask] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'date' | 'client' | 'project'>('date');
@@ -307,7 +318,7 @@ export default function DashboardPage() {
       await api.post('/tasks/bulk-approve', { taskIds });
       toast.success(`Successfully approved ${taskIds.length} task(s)!`);
       setSelectedTaskIds((prev) => prev.filter((id) => !taskIds.includes(id)));
-      fetchAll();
+      invalidateSlices(['pending-approvals', 'stats', 'my-tasks', 'lead-tasks', 'team-workload']);
     } catch (err: any) {
       toast.error(err.message || 'Failed to approve tasks');
     } finally {
@@ -315,16 +326,41 @@ export default function DashboardPage() {
     }
   };
 
+  const handleSseEvent = useDebouncedCallback((eventName: string) => {
+    switch (eventName) {
+      case 'client:created':
+        invalidateSlices(['client-health', 'stats']);
+        break;
+      case 'project:created':
+      case 'project:updated':
+        invalidateSlices(['stats', 'my-projects', 'activity']);
+        break;
+      case 'task:created':
+      case 'task:updated':
+        invalidateSlices(['stats', 'deadlines', 'my-tasks', 'lead-tasks', 'pending-approvals', 'team-workload', 'activity']);
+        break;
+      case 'lead:updated':
+        invalidateSlices(['stats', 'lead-tasks', 'status-distribution', 'activity']);
+        break;
+    }
+  }, 250);
+
   useEffect(() => {
     if (user) {
       const sse = getSSE();
       if (sse) {
-        const events = ['client:created', 'project:created', 'task:created', 'task:updated', 'project:updated', 'lead:updated', 'lead:task:updated'];
-        events.forEach((e) => sse.on(e, fetchAll));
-        return () => { events.forEach((e) => sse.off(e, fetchAll)); };
+        const eventNames = ['client:created', 'project:created', 'task:created', 'task:updated', 'project:updated', 'lead:updated'];
+        const listeners = eventNames.map((name) => {
+          const handler = () => handleSseEvent(name);
+          sse.on(name, handler);
+          return { name, handler };
+        });
+        return () => {
+          listeners.forEach(({ name, handler }) => sse.off(name, handler));
+        };
       }
     }
-  }, [user, fetchAll]);
+  }, [user, handleSseEvent]);
 
   if (!user) return null;
 
@@ -346,7 +382,7 @@ export default function DashboardPage() {
     if (!readAt) {
       try {
         await api.put(`/tasks/${taskId}`, { readAt: new Date().toISOString() });
-        fetchAll();
+        invalidateSlices(['my-tasks', 'lead-tasks']);
       } catch (err) { }
     }
     if (leadId) {
@@ -361,9 +397,7 @@ export default function DashboardPage() {
     try {
       await api.put(`/tasks/${taskId}`, { status });
       toast.success('Task status updated');
-
-
-      fetchAll();
+      invalidateSlices(['my-tasks', 'lead-tasks', 'pending-approvals', 'stats', 'team-workload', 'activity']);
     } catch (err: any) {
       toast.error(err.message || 'Failed to update status');
     } finally {

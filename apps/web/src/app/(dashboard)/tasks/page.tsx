@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
-import { getSSE } from '@/lib/sse';
 import { formatDate, formatShortDate, getInitials, getAvatarColor, triggerHaptic, getClientDisplayName } from '@/lib/utils';
 import { TASK_STATUSES, TASK_STATUS_LABELS, TASK_STATUS_COLORS, TASK_STATUS_OPTIONS } from '@/lib/task-status';
 import { StatusBadge } from '@/components/ui/status-badge';

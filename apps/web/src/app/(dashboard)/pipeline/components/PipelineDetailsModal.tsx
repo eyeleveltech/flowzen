@@ -188,7 +188,7 @@ export function PipelineDetailsModal({ lead, onClose, onSuccess }: PipelineDetai
                     <textarea
                       value={formData[field.key] || ''}
                       onChange={(e) => handleFieldChange(field.key, e.target.value)}
-                      className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary min-h-[80px]"
+                      className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary min-h-20"
                     />
                   ) : field.type === 'select' ? (
                     <Select

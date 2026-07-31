@@ -15,13 +15,16 @@ import { createAuditLog } from '../utils/audit.js';
 export const crmRouter = Router();
 crmRouter.use(authenticate);
 
-// Lead Entry Gateway: name, email and phone are required.
+// Lead Entry Gateway: name is required, plus at least one of email or phone.
 const leadSchema = z.object({
   clientId: z.string().optional(),
   contactName: z.string().min(2, 'Full name is required (min 2 characters)'),
   companyName: z.string().optional(),
-  email: z.string().email('A valid email is required'),
-  phone: z.string().refine((v) => v.replace(/\D/g, '').length >= 10, { message: 'Phone number must be at least 10 digits' }),
+  email: z.union([z.string().email('A valid email is required'), z.literal('')]).optional(),
+  phone: z.union([
+    z.string().refine((v) => !v || v.replace(/\D/g, '').length >= 10, { message: 'Phone number must be at least 10 digits' }),
+    z.literal('')
+  ]).optional(),
   jobTitle: z.string().optional(),
   linkedinUrl: z.string().optional(),
   companySize: z.string().optional(),
@@ -45,6 +48,16 @@ const leadSchema = z.object({
   followUpDate: z.string().refine((v) => !isNaN(Date.parse(v)), { message: 'Follow-up date must be a valid date string' }).optional(),
   notes: z.string().optional(),
   priority: z.enum(['HIGH', 'MEDIUM', 'LOW']).optional(),
+}).superRefine((data, ctx) => {
+  const hasEmail = !!data.email && data.email.trim().length > 0;
+  const hasPhone = !!data.phone && data.phone.trim().length > 0;
+  if (!hasEmail && !hasPhone) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Email or phone number is required.',
+      path: ['email'],
+    });
+  }
 });
 
 // GET /api/crm/leads
@@ -696,16 +709,17 @@ crmRouter.post('/leads/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
     const rejected: any[] = [];
 
     for (const data of leads) {
-      // Lead Entry Gateway: name, email and phone are required on every row.
+      // Lead Entry Gateway: name is required, plus at least one of email or phone.
       const name = (data.contactName || '').toString().trim();
       const email = (data.email || '').toString().trim();
       const digits = normalizePhone(data.phone);
 
       if (name.length < 2) { rejected.push({ ...data, rejection_reason: 'Full name is required (min 2 characters).' }); continue; }
-      if (!emailRe.test(email)) { rejected.push({ ...data, rejection_reason: 'A valid email is required.' }); continue; }
-      if (digits.length < 10) { rejected.push({ ...data, rejection_reason: 'Phone number must be at least 10 digits.' }); continue; }
-      if (seenPhones.has(digits)) { rejected.push({ ...data, rejection_reason: 'Duplicate phone number (already exists).' }); continue; }
-      seenPhones.add(digits);
+      if (email && !emailRe.test(email)) { rejected.push({ ...data, rejection_reason: 'A valid email is required.' }); continue; }
+      if (digits && digits.length < 10) { rejected.push({ ...data, rejection_reason: 'Phone number must be at least 10 digits.' }); continue; }
+      if (!email && !digits) { rejected.push({ ...data, rejection_reason: 'Email or phone number is required.' }); continue; }
+      if (digits && digits.length >= 10 && seenPhones.has(digits)) { rejected.push({ ...data, rejection_reason: 'Duplicate phone number (already exists).' }); continue; }
+      if (digits && digits.length >= 10) { seenPhones.add(digits); }
 
       if (data.assignedToId) {
         const assignee = await prisma.user.findFirst({
