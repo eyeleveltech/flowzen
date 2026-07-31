@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { format } from 'date-fns';
 
 import { ROLE_LABELS } from '@flowzen/shared';
 
@@ -16,6 +17,13 @@ export function safeDate(date: string | Date | number | null | undefined): Date 
   if (!date) return null;
   const d = new Date(date);
   return isNaN(d.getTime()) ? null : d;
+}
+
+export function toDateInput(date: string | Date | number | null | undefined): string {
+  if (!date) return '';
+  const d = safeDate(date);
+  if (!d) return '';
+  return format(d, 'yyyy-MM-dd');
 }
 
 export function formatDate(date: string | Date | number | null | undefined): string {

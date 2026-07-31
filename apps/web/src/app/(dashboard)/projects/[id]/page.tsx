@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
-import { formatDate, formatShortDate, getInitials, formatRelativeDate, getAvatarColor, getClientDisplayName, computeProjectHealth, PROJECT_HEALTH_CONFIG } from '@/lib/utils';
+import { formatDate, formatShortDate, getInitials, formatRelativeDate, getAvatarColor, getClientDisplayName, computeProjectHealth, PROJECT_HEALTH_CONFIG, toDateInput } from '@/lib/utils';
 import { TASK_STATUS_COLORS, TASK_STATUS_OPTIONS } from '@/lib/task-status';
 import { ArrowLeft, Edit2, Plus, Calendar as CalendarIcon, Flag, Clock, Users, Link2, CheckCircle2, Circle, MoreVertical, Trash2, Mail, FileText, ChevronDown, Check, X, File, AlertCircle, TrendingUp, DollarSign, Briefcase, MessageSquare, MoreHorizontal, ChevronRight, Filter, ArrowUpRight, Settings, Kanban, LayoutList, Search } from 'lucide-react';
 import { Select } from '@/components/ui/select';
@@ -211,8 +211,8 @@ export default function ProjectDetailPage() {
       tags: project.tags || [],
       projectNotes: project.projectNotes || '',
       folderLink: project.folderLink || '',
-      startDate: project.startDate ? new Date(project.startDate).toISOString().split('T')[0] : '',
-      endDate: project.endDate ? new Date(project.endDate).toISOString().split('T')[0] : '',
+      startDate: toDateInput(project.startDate),
+      endDate: toDateInput(project.endDate),
       priority: project.priority,
       budget: project.budget?.toString() || '',
       status: project.status,

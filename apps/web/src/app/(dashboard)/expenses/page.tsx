@@ -7,14 +7,20 @@ import { formatCurrency, formatDate } from '@/lib/utils';
 import { FileText, Plus } from 'lucide-react';
 import { ExpenseFormModal } from './components/ExpenseFormModal';
 
+import { ErrorPanel } from '@/components/ui/error-panel';
+
 export default function ExpensesPage() {
   const [showModal, setShowModal] = useState(false);
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['expenses'],
     queryFn: () => api.get<any[]>('/revenue/expenses'),
   });
   const expenses = data || [];
+
+  if (isError) {
+    return <ErrorPanel message={(error as any)?.message || 'Failed to load expenses'} onRetry={refetch} />;
+  }
 
   return (
     <div>

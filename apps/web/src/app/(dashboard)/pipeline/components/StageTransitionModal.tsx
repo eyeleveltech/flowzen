@@ -1,13 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { X, ArrowRight, AlertTriangle } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { STAGE_FIELDS, StageField } from '../lib/stage-config';
+import { useModalSafety } from '@/hooks/useModalSafety';
 import toast from 'react-hot-toast';
 
 import { getStatusLabel } from '@/lib/status';
+import { toDateInput } from '@/lib/utils';
 
 // The exact Lost Reason options per §3.6
 const LOST_REASONS = [
@@ -57,11 +59,32 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
   const isActivationGate = ['ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(targetStage);
 
   const [dealValue, setDealValue] = useState(lead?.dealValue ? String(lead.dealValue) : '');
-  const [expectedCloseDate, setExpectedCloseDate] = useState(lead?.expectedCloseDate ? String(lead.expectedCloseDate).substring(0, 10) : '');
+  const [expectedCloseDate, setExpectedCloseDate] = useState(toDateInput(lead?.expectedCloseDate));
   const [contractType, setContractType] = useState(lead?.contractType || 'RETAINER');
   const [lostReason, setLostReason] = useState(LOST_REASONS[0].value);
-  const [followUpDate, setFollowUpDate] = useState(lead?.followUpDate ? String(lead.followUpDate).substring(0, 10) : '');
-  const [lastContactedDate, setLastContactedDate] = useState(lead?.lastContactedDate ? String(lead.lastContactedDate).substring(0, 10) : '');
+  const [followUpDate, setFollowUpDate] = useState(toDateInput(lead?.followUpDate));
+  const [lastContactedDate, setLastContactedDate] = useState(toDateInput(lead?.lastContactedDate));
+
+  const initialSnapshotRef = useRef({
+    formData: initialFormData,
+    dealValue: lead?.dealValue ? String(lead.dealValue) : '',
+    expectedCloseDate: toDateInput(lead?.expectedCloseDate),
+    followUpDate: toDateInput(lead?.followUpDate),
+    lastContactedDate: toDateInput(lead?.lastContactedDate),
+  });
+
+  const isDirty = useCallback(() => {
+    const snap = initialSnapshotRef.current;
+    return (
+      JSON.stringify(formData) !== JSON.stringify(snap.formData) ||
+      dealValue !== snap.dealValue ||
+      expectedCloseDate !== snap.expectedCloseDate ||
+      followUpDate !== snap.followUpDate ||
+      lastContactedDate !== snap.lastContactedDate
+    );
+  }, [formData, dealValue, expectedCloseDate, followUpDate, lastContactedDate]);
+
+  const { guardedClose, panelRef } = useModalSafety({ onClose, isDirty });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,8 +143,9 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
 
   return (
     <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={onClose} />
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={guardedClose} />
       <motion.div
+        ref={panelRef}
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
@@ -134,7 +158,7 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
               {fromLabel} <ArrowRight className="w-3 h-3" /> {toLabel}
             </p>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
+          <button onClick={guardedClose} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
             <X className="h-4 w-4 text-secondary" />
           </button>
         </div>

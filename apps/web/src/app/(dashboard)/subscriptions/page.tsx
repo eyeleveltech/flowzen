@@ -7,8 +7,10 @@ import { RefreshCw } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TableSkeleton } from '@/components/ui/skeleton-loaders';
 
+import { ErrorPanel } from '@/components/ui/error-panel';
+
 export default function SubscriptionsPage() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['subscriptions'],
     queryFn: () => api.get<any[]>('/revenue/subscriptions'),
   });
@@ -26,6 +28,10 @@ export default function SubscriptionsPage() {
         <TableSkeleton rows={5} />
       </div>
     );
+  }
+
+  if (isError) {
+    return <ErrorPanel message={(error as any)?.message || 'Failed to load subscriptions'} onRetry={refetch} />;
   }
 
   return (

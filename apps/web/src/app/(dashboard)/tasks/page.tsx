@@ -16,6 +16,7 @@ import { ViewSettingsPanel } from '@/components/ui/view-settings-panel';
 import toast from 'react-hot-toast';
 import { useAuthStore, useConfirmStore, useTimeTrackingStore } from '@/stores';
 import { useTasks, useProjects, useMembers, useTeams, useClients } from '@/hooks/useQueries';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useQueryClient } from '@tanstack/react-query';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { TaskDetailDrawer } from '@/components/tasks/task-detail-drawer';
@@ -284,6 +285,8 @@ function TasksContent() {
 
   const { data: clients = [] } = useClients();
 
+  const debouncedSearch = useDebouncedValue(search, 300);
+
   const {
     data,
     isLoading: isLoadingTasks,
@@ -291,7 +294,7 @@ function TasksContent() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage
-  } = useTasks(search, statusParam, projectFilter.join(','), assigneeFilter.join(','), priorityFilter.join(','), teamFilter.join(','), searchParams.get('filter'), sort, dueDateFrom, dueDateTo, clientFilter.join(','));
+  } = useTasks(debouncedSearch, statusParam, projectFilter.join(','), assigneeFilter.join(','), priorityFilter.join(','), teamFilter.join(','), searchParams.get('filter'), sort, dueDateFrom, dueDateTo, clientFilter.join(','));
 
   const tasks = useMemo(() => {
     const rawTasks = data?.pages.flatMap((page) => page.tasks) || [];

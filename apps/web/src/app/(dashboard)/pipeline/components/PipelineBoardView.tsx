@@ -7,7 +7,7 @@ import { getSSE } from '@/lib/sse';
 import { formatCurrency, formatCurrencyCompact } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence } from 'framer-motion';
-import { ChevronDown, Check, Plus, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { ChevronDown, Check, Plus, ChevronsLeft, ChevronsRight, Search, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { StageTransitionModal } from './StageTransitionModal';
 import { stageNeedsTransitionInput } from '../lib/stage-config';
@@ -15,6 +15,10 @@ import { WonCelebrationModal } from './WonCelebrationModal';
 import { useQueryClient } from '@tanstack/react-query';
 import { useConfirmStore } from '@/stores';
 import { LeadModal } from './LeadModal';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useMembers } from '@/hooks/useQueries';
+import { MultiSelect } from '@/components/ui/multi-select';
+import { getInitials } from '@/lib/utils';
 
 // All pipeline stages in chronological order (used by the per-card stage menu)
 const PIPELINE_STAGES = [
@@ -53,8 +57,7 @@ export function PipelineBoardView() {
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
-  // Lead pending a stage transition (drag target or menu pick). When set, the StageTransitionModal opens.
-  const [pendingTransition, setPendingTransition] = useState<{ lead: any; targetStage: string; previousLeads?: any[] } | null>(null);
+  const [pendingTransition, setPendingTransition] = useState<{ lead: any; targetStage: string; previousLeads?: any[]; dropGroupId?: string; dropIndex?: number } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Per-card stage menu: anchored dropdown to pick an exact stage (e.g. LEAD -> MQL within a group).
   const [stageMenu, setStageMenu] = useState<{ lead: any; x: number; y: number; up: boolean } | null>(null);
@@ -63,6 +66,10 @@ export function PipelineBoardView() {
   const [showWonLost, setShowWonLost] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [collapsedColumns, setCollapsedColumns] = useState<string[]>([]);
+  const [search, setSearch] = useState('');
+  const [ownerFilter, setOwnerFilter] = useState<string[]>([]);
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const { data: members = [] } = useMembers();
 
   // Load collapsed columns from sessionStorage
   useEffect(() => {
@@ -148,12 +155,35 @@ export function PipelineBoardView() {
     }
   }
 
-  // Group leads into the 7 visual columns
+  const filteredLeads = useMemo(() => {
+    return leads.filter((lead) => {
+      if (ownerFilter.length > 0 && !ownerFilter.includes(lead.assignedToId)) {
+        return false;
+      }
+      if (debouncedSearch.trim()) {
+        const queryParts = debouncedSearch.toLowerCase().trim().split(/\s+/);
+        const haystack = [
+          lead.company,
+          lead.contactName,
+          lead.contactEmail,
+          lead.contactPhone,
+          lead.client?.name,
+          lead.client?.company,
+        ].filter(Boolean).join(' ').toLowerCase();
+
+        const matchesSearch = queryParts.every((part) => haystack.includes(part));
+        if (!matchesSearch) return false;
+      }
+      return true;
+    });
+  }, [leads, ownerFilter, debouncedSearch]);
+
+  // Group leads into the visual columns
   const columns = useMemo(() => {
     const cols: Record<string, any[]> = {};
     GROUPS.forEach(g => cols[g.id] = []);
 
-    leads.forEach(lead => {
+    filteredLeads.forEach(lead => {
       const group = GROUPS.find(g => g.stages.includes(lead.stage));
       if (group) {
         cols[group.id].push(lead);
@@ -173,19 +203,66 @@ export function PipelineBoardView() {
     });
 
     return cols;
-  }, [leads]);
+  }, [filteredLeads]);
 
-  // Move a lead to an earlier stage. A closed (Churned/Completed) deal can't be reopened
-  // silently — the API returns 409 DEAL_CLOSED and we confirm the reopen, then retry.
-  const moveStageBackward = (leadId: string, newStage: string, previousLeads: any[]) => {
+  const fullColumn = (groupId: string, currentLeads = leads) => {
+    const group = GROUPS.find(g => g.id === groupId);
+    if (!group) return [];
+    const col = currentLeads.filter(l => group.stages.includes(l.stage));
+    col.sort((a, b) => {
+      if (a.position !== undefined && b.position !== undefined && a.position !== b.position) {
+        return a.position - b.position;
+      }
+      return (b.dealValue || 0) - (a.dealValue || 0);
+    });
+    return col;
+  };
+
+  const applyDropPosition = async (leadId: string, dropGroupId: string, dropIndex: number) => {
+    const destGroup = GROUPS.find(g => g.id === dropGroupId);
+    if (!destGroup) return;
+
+    setLeads((currentLeads) => {
+      const colLeads = currentLeads.filter(l => destGroup.stages.includes(l.stage));
+      colLeads.sort((a, b) => {
+        if (a.position !== undefined && b.position !== undefined && a.position !== b.position) {
+          return a.position - b.position;
+        }
+        return (b.dealValue || 0) - (a.dealValue || 0);
+      });
+
+      const targetLead = currentLeads.find(l => l.id === leadId);
+      if (!targetLead) return currentLeads;
+
+      const withoutTarget = colLeads.filter(l => l.id !== leadId);
+      const clampedIndex = Math.max(0, Math.min(dropIndex, withoutTarget.length));
+      withoutTarget.splice(clampedIndex, 0, targetLead);
+
+      const reorderedItems = withoutTarget.map((l, idx) => ({ id: l.id, position: idx }));
+
+      api.patch('/crm/leads/reorder', { items: reorderedItems }).catch(() => {
+        fetchLeads();
+      });
+
+      return currentLeads.map(l => {
+        const item = reorderedItems.find(i => i.id === l.id);
+        return item ? { ...l, position: item.position } : l;
+      });
+    });
+  };
+
+  const moveStageBackward = (leadId: string, newStage: string, previousLeads: any[], dropGroupId?: string, dropIndex?: number) => {
     const submit = (reopen: boolean) => {
       setIsSubmitting(true);
       return api.post(`/crm/leads/${leadId}/stage`, { stage: newStage, fields: {}, ...(reopen ? { reopen: true } : {}) })
-        .then((updatedLead: any) => {
+        .then(async (updatedLead: any) => {
           toast.success(reopen ? 'Deal reopened' : 'Stage updated successfully');
           queryClient.invalidateQueries({ queryKey: ['leads'] });
           queryClient.invalidateQueries({ queryKey: ['clients'] });
           queryClient.setQueryData(['lead', leadId], updatedLead);
+          if (dropGroupId && dropIndex !== undefined) {
+            await applyDropPosition(leadId, dropGroupId, dropIndex);
+          }
           fetchLeads();
         })
         .finally(() => setIsSubmitting(false));
@@ -217,10 +294,24 @@ export function PipelineBoardView() {
 
     if (source.droppableId === destination.droppableId) {
       if (source.index === destination.index) return;
-      const colLeads = [...(columns[source.droppableId] || [])];
-      const [moved] = colLeads.splice(source.index, 1);
-      colLeads.splice(destination.index, 0, moved);
-      const reorderedItems = colLeads.map((l, idx) => ({ id: l.id, position: idx }));
+      const visibleColLeads = columns[source.droppableId] || [];
+      const movedLead = visibleColLeads[source.index];
+      if (!movedLead) return;
+
+      const destVisibleLead = visibleColLeads[destination.index];
+      const fullColLeads = fullColumn(source.droppableId);
+      const withoutMoved = fullColLeads.filter(l => l.id !== movedLead.id);
+
+      let newIndex = 0;
+      if (destVisibleLead) {
+        const destFullIdx = withoutMoved.findIndex(l => l.id === destVisibleLead.id);
+        newIndex = destFullIdx !== -1 ? destFullIdx : destination.index;
+      } else {
+        newIndex = withoutMoved.length;
+      }
+
+      withoutMoved.splice(newIndex, 0, movedLead);
+      const reorderedItems = withoutMoved.map((l, idx) => ({ id: l.id, position: idx }));
 
       setLeads(prev => prev.map(l => {
         const item = reorderedItems.find(i => i.id === l.id);
@@ -245,32 +336,38 @@ export function PipelineBoardView() {
     const currentIndex = PIPELINE_STAGES.indexOf(lead.stage);
     const targetIndex = PIPELINE_STAGES.indexOf(newStage);
 
+    const dropGroupId = destination.droppableId;
+    const dropIndex = destination.index;
+
     if (targetIndex < currentIndex) {
       // Optimistic update for backward move to prevent snap-back
       const previousLeads = [...leads];
       setLeads(leads.map(l => l.id === lead.id ? { ...l, stage: newStage } : l));
-      moveStageBackward(lead.id, newStage, previousLeads);
+      moveStageBackward(lead.id, newStage, previousLeads, dropGroupId, dropIndex);
     } else {
       // Optimistic update for forward move too
       const previousLeads = [...leads];
       setLeads(leads.map(l => l.id === lead.id ? { ...l, stage: newStage } : l));
       if (stageNeedsTransitionInput(newStage)) {
-        setPendingTransition({ lead, targetStage: newStage, previousLeads });
+        setPendingTransition({ lead, targetStage: newStage, previousLeads, dropGroupId, dropIndex });
       } else {
         // §3.4: stages with nothing to ask (e.g. → Outreach) commit instantly — no modal toll gate.
-        quickMoveForward(lead, newStage, previousLeads);
+        quickMoveForward(lead, newStage, previousLeads, dropGroupId, dropIndex);
       }
     }
   };
 
   // Direct forward move for stages that require no input: the drag itself is the confirmation.
-  async function quickMoveForward(lead: any, newStage: string, previousLeads: any[]) {
+  async function quickMoveForward(lead: any, newStage: string, previousLeads: any[], dropGroupId?: string, dropIndex?: number) {
     try {
       const updatedLead = await api.post(`/crm/leads/${lead.id}/stage`, { stage: newStage });
       toast.success('Stage updated');
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       queryClient.setQueryData(['lead', lead.id], updatedLead);
+      if (dropGroupId && dropIndex !== undefined) {
+        await applyDropPosition(lead.id, dropGroupId, dropIndex);
+      }
       fetchLeads();
     } catch (err: any) {
       toast.error(err.message || 'Failed to update stage');
@@ -280,7 +377,7 @@ export function PipelineBoardView() {
 
   async function submitStageTransition(payload: any) {
     if (!pendingTransition) return;
-    const lead = pendingTransition.lead;
+    const { lead, dropGroupId, dropIndex } = pendingTransition;
     setIsSubmitting(true);
     try {
       const updatedLead = await api.post(`/crm/leads/${lead.id}/stage`, payload);
@@ -288,6 +385,9 @@ export function PipelineBoardView() {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       queryClient.setQueryData(['lead', lead.id], updatedLead);
+      if (dropGroupId && dropIndex !== undefined) {
+        await applyDropPosition(lead.id, dropGroupId, dropIndex);
+      }
       await fetchLeads(); // Fetch new data before closing modal
       setPendingTransition(null);
       if (payload?.stage === 'CONTRACT') setWonModalLead(lead);
@@ -313,8 +413,47 @@ export function PipelineBoardView() {
   return (
     <div className="w-full flex flex-col h-[calc(100vh-185px)] min-h-137.5 overflow-hidden">
 
-      <div className="flex items-center justify-end px-1 pb-2 shrink-0">
-        <label className="flex items-center gap-2 text-xs font-medium text-secondary cursor-pointer select-none">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-1 pb-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
+          <div className="relative flex-1 min-w-48 max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search leads…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-xl border border-border bg-white pl-9 pr-8 py-1.5 text-sm outline-none focus:border-primary transition-all placeholder:text-secondary"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-secondary hover:text-primary"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="w-44">
+            <MultiSelect
+              value={ownerFilter}
+              onChange={setOwnerFilter}
+              placeholder="Owners"
+              options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
+            />
+          </div>
+
+          {(search || ownerFilter.length > 0) && (
+            <button
+              onClick={() => { setSearch(''); setOwnerFilter([]); }}
+              className="text-xs font-medium text-secondary hover:text-primary underline px-1 py-1"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+
+        <label className="flex items-center gap-2 text-xs font-medium text-secondary cursor-pointer select-none whitespace-nowrap">
           <input
             type="checkbox"
             checked={showWonLost}
@@ -324,6 +463,12 @@ export function PipelineBoardView() {
           Show Won/Lost
         </label>
       </div>
+
+      {(debouncedSearch || ownerFilter.length > 0) && filteredLeads.length === 0 && (
+        <div className="py-6 text-center text-sm text-secondary bg-white rounded-2xl border border-border mb-3 shrink-0">
+          No leads match your active search or owner filters.
+        </div>
+      )}
 
       <div ref={scrollRef} className="flex flex-1 w-full overflow-x-auto overflow-y-hidden gap-4 pb-2 px-1 custom-scrollbar min-h-0">
         <DragDropContext onDragStart={startAutoScroll} onDragEnd={handleDragEnd}>

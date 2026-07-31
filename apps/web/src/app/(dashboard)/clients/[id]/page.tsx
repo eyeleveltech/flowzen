@@ -5,8 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
-import { formatDate, formatCurrency, getInitials, getAvatarColor, getClientDisplayName, formatRelativeDate } from '@/lib/utils';
-import { ArrowLeft, Mail, Phone, MapPin, Building2, DollarSign, X, Plus, Users, Globe, Briefcase, Trash2, Calendar, FolderKanban, Target } from 'lucide-react';
+import { formatDate, formatCurrency, getInitials, getAvatarColor, getClientDisplayName, formatRelativeDate, toDateInput } from '@/lib/utils';
+import { ArrowLeft, Mail, Phone, MapPin, Building2, DollarSign, X, Plus, Users, Globe, Briefcase, Trash2, Calendar, FolderKanban, Target, Link2 } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { CurrencySelect } from '@/components/ui/currency-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
@@ -180,7 +180,7 @@ export default function ClientDetailPage() {
       industry: client!.industry || '',
       address: client!.address || '',
       contractValue: client!.contractValue?.toString() || '',
-      startDate: client!.startDate ? new Date(client!.startDate).toISOString().split('T')[0] : '',
+      startDate: toDateInput(client!.startDate),
       status: client!.status,
       engagementType: client!.engagementType || '',
       website: client!.website || '',
@@ -344,6 +344,26 @@ export default function ClientDetailPage() {
                     <InfoRow icon={Building2} label="Industry" value={client.industry || '—'} />
                     <InfoRow icon={Globe} label="Website" value={client.website || '—'} />
                     <InfoRow icon={Users} label="Account Manager" value={client.accountManager?.name || '—'} />
+                    {client.assetLinks ? (
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 rounded-lg bg-gray-50 text-secondary border border-border">
+                          <Link2 className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <span className="block text-xs text-secondary font-medium">Asset Links</span>
+                          <a
+                            href={client.assetLinks.startsWith('http') ? client.assetLinks : `https://${client.assetLinks}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm font-medium text-blue-600 hover:underline truncate block max-w-50"
+                          >
+                            {client.assetLinks}
+                          </a>
+                        </div>
+                      </div>
+                    ) : (
+                      <InfoRow icon={Link2} label="Asset Links" value="—" />
+                    )}
                   </div>
                 </div>
 
@@ -352,7 +372,13 @@ export default function ClientDetailPage() {
                   <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-[#F3F4F6]">Billing & Address</h4>
                   <div className="grid grid-cols-2 gap-y-4 gap-x-2 mb-4">
                     <InfoRow icon={MapPin} label="City" value={client.city || '—'} />
+                    <InfoRow icon={MapPin} label="State" value={client.state || '—'} />
                   </div>
+                  {client.gstNumber && (
+                    <div className="mb-4">
+                      <InfoRow icon={Building2} label="GST Number" value={client.gstNumber} />
+                    </div>
+                  )}
                   {client.billingAddress && (
                     <div className="text-sm text-[#374151] bg-gray-50 p-3 rounded-xl border border-gray-100">
                       <span className="block text-xs font-semibold text-secondary mb-1">Billing Address</span>
@@ -367,6 +393,7 @@ export default function ClientDetailPage() {
                   <div className="grid grid-cols-2 gap-y-4 gap-x-2 mb-4">
                     <InfoRow icon={Briefcase} label="Engagement Type" value={client.engagementType || '—'} />
                     <InfoRow icon={Calendar} label="Start Date" value={client.startDate ? formatDate(client.startDate) : '—'} />
+                    <InfoRow icon={DollarSign} label="Contract Value" value={client.contractValue ? formatCurrency(client.contractValue) : '—'} />
                   </div>
 
                   {client.scope ? (
@@ -614,6 +641,7 @@ export default function ClientDetailPage() {
                     {/* Location */}
                     <div className="space-y-3">
                       <p className="text-xs font-medium text-primary">Location</p>
+                      <Field label="State" value={editForm.state} onChange={(v) => setEditForm({ ...editForm, state: v })} />
                       <div className="grid grid-cols-2 gap-3">
                         <Field label="ZIP Code" value={editForm.zip} onChange={(v) => setEditForm({ ...editForm, zip: v })} />
                         <Field label="Country" value={editForm.country} onChange={(v) => setEditForm({ ...editForm, country: v })} />
@@ -676,6 +704,14 @@ export default function ClientDetailPage() {
                         <label className="block text-sm font-medium text-[#374151] mb-1.5">Currency</label>
                         <CurrencySelect value={editForm.currency} onChange={(v) => setEditForm({ ...editForm, currency: v })} />
                       </div>
+                    </div>
+
+                    {/* Billing & Tax */}
+                    <div className="space-y-3">
+                      <p className="text-xs font-medium text-primary">Billing & Tax</p>
+                      <Field label="GST Number" value={editForm.gstNumber} onChange={(v) => setEditForm({ ...editForm, gstNumber: v })} />
+                      <Field label="Contract Value" type="number" value={editForm.contractValue} onChange={(v) => setEditForm({ ...editForm, contractValue: v })} />
+                      <Field label="Asset Links" value={editForm.assetLinks} onChange={(v) => setEditForm({ ...editForm, assetLinks: v })} />
                     </div>
 
                     {/* Account */}

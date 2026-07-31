@@ -35,7 +35,7 @@ This is a running list. New corrections get appended at the bottom of the latest
 
 | # | Item | Correction | Status |
 |---|---|---|---|
-| 10 | Overview fields | The Overview tab must display **every field captured about the client** at creation/edit. No captured field should be hidden from the overview. | OPEN |
+| 10 | Overview fields | The Overview tab must display **every field captured about the client** at creation/edit. No captured field should be hidden from the overview. | DONE |
 | 11 | Top action bar | Add three actions at the top of the client page: **Edit client details**, **Delete client**, and **Create Project** (create a project inside this client directly from here). | OPEN |
 | 12 | Delete confirmation | Deleting a client must trigger a **confirmation popup** before anything is removed. No single-click deletes. | OPEN |
 
@@ -145,7 +145,7 @@ Note: "On Hold" is being ADDED to the CRM pipeline (item 16 below) so the mappin
 
 | # | Item | Correction | Status |
 |---|---|---|---|
-| 39 | Task field spec | The task (create/edit) must carry all the fields below. | OPEN |
+| 39 | Task field spec | The task (create/edit) must carry all the fields below. | DONE |
 
 **Field spec:**
 
@@ -164,7 +164,7 @@ Note: "On Hold" is being ADDED to the CRM pipeline (item 16 below) so the mappin
 | Priority | Dropdown |
 | Assigned Date | Date |
 | Time Spent | Time tracking |
-| Drive Link | URL field (Google Drive link) |
+| Drive Link | URL field (Google Drive link) — implemented in Task forms & detail view |
 
 ---
 

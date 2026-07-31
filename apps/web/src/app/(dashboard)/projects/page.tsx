@@ -19,6 +19,7 @@ import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useProjects, useClients, useMembers, useTeams, useTemplates } from '@/hooks/useQueries';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { projectSchema, type ProjectFormValues } from '@/lib/validations';
 import { CalendarView } from '@/components/projects/calendar-view';
 import { ProjectGanttView } from '@/components/projects/project-gantt-view';
@@ -133,6 +134,8 @@ function ProjectsContent() {
     }
   }, [searchParams, setValue, router]);
 
+  const debouncedSearch = useDebouncedValue(search, 300);
+
   const {
     data,
     isLoading: isLoadingProjects,
@@ -140,7 +143,7 @@ function ProjectsContent() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage
-  } = useProjects(search, view === 'calendar', statusFilter.join(','), clientFilter.join(','), ownerFilter.join(','), dueDateFilter);
+  } = useProjects(debouncedSearch, view === 'calendar', statusFilter.join(','), clientFilter.join(','), ownerFilter.join(','), dueDateFilter);
 
   const projects = data?.pages.flatMap((page) => page.projects) || [];
   const { data: clients = [] } = useClients();

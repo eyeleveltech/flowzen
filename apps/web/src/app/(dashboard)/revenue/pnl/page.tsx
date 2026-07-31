@@ -5,20 +5,25 @@ import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import { PieChart, DollarSign, Receipt, ArrowRightLeft } from 'lucide-react';
 import { NoAccess } from '@/components/ui/no-access';
+import { ErrorPanel } from '@/components/ui/error-panel';
 
 export default function PnLPage() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
 
-  useEffect(() => {
+  const loadPnL = () => {
+    setLoading(true);
     api.get('/revenue/pnl')
       .then((data: any) => { setData(data); setErrorStatus(null); })
       .catch((err: any) => {
-        if (err?.status === 403) setErrorStatus(403);
-        else setErrorStatus(404);
+        setErrorStatus(err?.status || 500);
       })
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadPnL();
   }, []);
 
   if (loading) {
@@ -31,6 +36,10 @@ export default function PnLPage() {
 
   if (errorStatus === 403) {
     return <NoAccess title="Access Restricted" message="You do not have permission or CRM module access to view P&L reports." backHref="/dashboard" backLabel="Back to Dashboard" />;
+  }
+
+  if (errorStatus !== null) {
+    return <ErrorPanel message="Failed to load P&L data" onRetry={loadPnL} />;
   }
 
   const totalRev = data.reduce((acc, curr) => acc + curr.revenue, 0);

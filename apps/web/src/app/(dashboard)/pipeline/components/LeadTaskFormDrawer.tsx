@@ -25,11 +25,12 @@ export function LeadTaskFormDrawer({ isOpen, onClose, leadId, onSuccess }: LeadT
     assigneeId: '',
     dueDate: '',
     priority: 'MEDIUM',
+    driveLink: '',
   });
   const { data: members } = useMembers();
 
   const resetForm = () => {
-    setForm({ title: '', assigneeId: '', dueDate: '', priority: 'MEDIUM' });
+    setForm({ title: '', assigneeId: '', dueDate: '', priority: 'MEDIUM', driveLink: '' });
   };
 
   const handleSubmit = async (e?: React.FormEvent) => {
@@ -47,6 +48,7 @@ export function LeadTaskFormDrawer({ isOpen, onClose, leadId, onSuccess }: LeadT
         priority: form.priority,
         assigneeId: form.assigneeId || null,
         dueDate: form.dueDate || null,
+        driveLink: form.driveLink || null,
       });
       toast.success('Task added');
       resetForm();
@@ -135,6 +137,17 @@ export function LeadTaskFormDrawer({ isOpen, onClose, leadId, onSuccess }: LeadT
                   value={form.dueDate}
                   onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
                   className="w-full rounded-xl border border-border px-3.5 py-2.5 text-sm outline-none focus:border-primary transition-all text-primary bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-primary mb-1.5">Drive Link</label>
+                <input
+                  type="url"
+                  value={form.driveLink}
+                  onChange={(e) => setForm({ ...form, driveLink: e.target.value })}
+                  placeholder="https://drive.google.com/..."
+                  className="w-full rounded-xl border border-border px-3.5 py-2.5 text-sm outline-none focus:border-primary transition-all text-primary bg-white placeholder:text-secondary"
                 />
               </div>
 

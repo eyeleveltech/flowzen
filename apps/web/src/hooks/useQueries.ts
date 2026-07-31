@@ -19,6 +19,7 @@ export function useProjects(search?: string, includeCalendarData?: boolean, stat
     },
     initialPageParam: 1,
     getNextPageParam: (lastPage) => lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined,
+    placeholderData: (previousData) => previousData,
   });
 }
 
@@ -45,6 +46,7 @@ export function useTasks(search?: string, statusFilter?: string, projectFilter?:
     },
     initialPageParam: 1,
     getNextPageParam: (lastPage) => lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined,
+    placeholderData: (previousData) => previousData,
   });
 }
 

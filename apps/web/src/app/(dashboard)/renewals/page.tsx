@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { X, RefreshCw } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
-import { formatCurrency, formatDate, getInitials, getAvatarColor } from '@/lib/utils';
+import { formatCurrency, formatDate, toDateInput, getInitials, getAvatarColor } from '@/lib/utils';
 import { StatusBadge } from '@/components/ui/status-badge';
 import toast from 'react-hot-toast';
 
@@ -108,7 +108,6 @@ export default function RenewalsPage() {
 
 const inputCls = 'w-full rounded-xl border border-border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:bg-white transition-all';
 const labelCls = 'block text-[11px] font-semibold text-secondary uppercase tracking-wider mb-1.5';
-const toDateInput = (d: any) => (d ? new Date(d).toISOString().slice(0, 10) : '');
 
 function RenewalModal({ lead, onClose, onSaved }: { lead: any; onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState<any>({

@@ -237,7 +237,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                 {notifications.length === 0 ? (
                   <div className="py-8 text-center text-sm text-secondary">No notifications yet</div>
                 ) : (
-                  notifications.slice(0, 10).map((n) => {
+                  notifications.map((n) => {
                     const Icon = notificationIcons[n.type] || AlertCircle;
 
                     const handleNotificationClick = async () => {
@@ -292,7 +292,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                     {notifications.length === 0 ? (
                       <div className="py-8 text-center text-sm text-secondary">No notifications yet</div>
                     ) : (
-                      notifications.slice(0, 10).map((n) => {
+                      notifications.map((n) => {
                         const Icon = notificationIcons[n.type] || AlertCircle;
 
                         const handleNotificationClick = async () => {

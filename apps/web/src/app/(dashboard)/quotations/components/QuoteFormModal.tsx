@@ -1,16 +1,17 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { X, Plus, Trash2, Save, FileDown, Search, Check, AlertTriangle } from 'lucide-react';
 import { api } from '@/lib/api';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, toDateInput } from '@/lib/utils';
 import { Select } from '@/components/ui/select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { useMembers } from '@/hooks/useQueries';
 import { useAuthStore } from '@/stores';
 import { TAX_TYPES, resolveTaxType, DEFAULT_TAX_TYPE } from '../lib/tax-catalog';
 import { fileUrl } from '@/lib/files';
+import { useModalSafety } from '@/hooks/useModalSafety';
 import toast from 'react-hot-toast';
 
 const UNITS = ['Hours', 'Days', 'Months', 'Units', 'Lump Sum'];
@@ -42,8 +43,8 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
   const [clientState, setClientState] = useState('');
   const [form, setForm] = useState({
     contactPerson: '', clientEmail: '', clientPhone: '', billingAddress: '',
-    documentDate: new Date().toISOString().split('T')[0],
-    expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    documentDate: toDateInput(new Date()),
+    expirationDate: toDateInput(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)),
     paymentTerms: 'Immediate', customerRef: '',
     salespersonId: user?.id || '', salesTeam: '', onlineSignature: false, onlinePayment: false,
     tags: '', paymentMethod: '', clientGst: '', projectStartDate: '', deliveryDate: '', projectNotes: '', scope: '',
@@ -85,14 +86,14 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
       setClientSearch(q.clientName || '');
       setForm({
         contactPerson: q.contactPerson || '', clientEmail: q.clientEmail || '', clientPhone: q.clientPhone || '', billingAddress: q.billingAddress || '',
-        documentDate: q.documentDate ? new Date(q.documentDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-        expirationDate: q.expirationDate ? new Date(q.expirationDate).toISOString().split('T')[0] : '',
+        documentDate: toDateInput(q.documentDate) || toDateInput(new Date()),
+        expirationDate: toDateInput(q.expirationDate),
         paymentTerms: q.paymentTerms || '50-50', customerRef: q.customerRef || '',
         salespersonId: q.salespersonId || user?.id || '', salesTeam: q.salesTeam || '',
         onlineSignature: q.onlineSignature || false, onlinePayment: q.onlinePayment || false,
         tags: (q.tags || []).join(', '), paymentMethod: q.paymentMethod || '', clientGst: q.clientGst || '',
-        projectStartDate: q.projectStartDate ? new Date(q.projectStartDate).toISOString().split('T')[0] : '',
-        deliveryDate: q.deliveryDate ? new Date(q.deliveryDate).toISOString().split('T')[0] : '',
+        projectStartDate: toDateInput(q.projectStartDate),
+        deliveryDate: toDateInput(q.deliveryDate),
         projectNotes: q.projectNotes || '', scope: q.scope || '', termsConditions: q.termsConditions || DEFAULT_TERMS,
       });
       setLineItems((q.lineItems || []).map((li: any) => ({
@@ -108,6 +109,32 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
+
+  const initialSnapshotRef = useRef<string | null>(null);
+
+  const getFormSnapshotString = useCallback(() => {
+    return JSON.stringify({
+      documentType,
+      clientId,
+      leadId,
+      form,
+      lineItems,
+    });
+  }, [documentType, clientId, leadId, form, lineItems]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      initialSnapshotRef.current = getFormSnapshotString();
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [initialEditId, duplicateOf, prefillLeadId]);
+
+  const isDirty = useCallback(() => {
+    if (!initialSnapshotRef.current) return false;
+    return getFormSnapshotString() !== initialSnapshotRef.current;
+  }, [getFormSnapshotString]);
+
+  const { guardedClose, panelRef } = useModalSafety({ onClose, isDirty });
 
   const filteredClients = clients.filter((c) => {
     const s = clientSearch.toLowerCase();
@@ -251,15 +278,15 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
 
   return (
     <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <motion.div initial={{ opacity: 0, x: '100%' }} animate={{ opacity: 1, x: 0 }} transition={{ type: 'spring', damping: 26, stiffness: 220 }}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={guardedClose} />
+      <motion.div ref={panelRef} initial={{ opacity: 0, x: '100%' }} animate={{ opacity: 1, x: 0 }} transition={{ type: 'spring', damping: 26, stiffness: 220 }}
         className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-4xl bg-white shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div>
             <h2 className="text-lg font-semibold text-primary">{editId ? 'Edit Document' : 'New Document'}</h2>
             <p className="text-sm text-secondary mt-0.5">Quotation or Proforma Invoice</p>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 transition-colors"><X className="h-5 w-5 text-secondary" /></button>
+          <button onClick={guardedClose} className="p-2 rounded-xl hover:bg-gray-100 transition-colors"><X className="h-5 w-5 text-secondary" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gray-50/30">
@@ -452,7 +479,7 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
         </div>
 
         <div className="p-4 sm:p-5 border-t border-border bg-white flex flex-row justify-end gap-2 sm:gap-3">
-          <button onClick={onClose} className="px-4 py-2.5 text-sm font-medium text-[#374151] bg-white border border-border rounded-xl hover:bg-gray-50">Cancel</button>
+          <button onClick={guardedClose} className="px-4 py-2.5 text-sm font-medium text-[#374151] bg-white border border-border rounded-xl hover:bg-gray-50">Cancel</button>
           <button onClick={onSaveDraftStay} disabled={submitting} className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-[#374151] bg-white border border-border rounded-xl hover:bg-gray-50 disabled:opacity-50">
             <Save className="h-4 w-4 shrink-0" />
             <span className="hidden sm:inline">Save Draft</span><span className="inline sm:hidden">Save</span>

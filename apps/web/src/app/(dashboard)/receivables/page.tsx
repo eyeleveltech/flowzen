@@ -3,18 +3,26 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import { Wallet } from 'lucide-react';
+import { ErrorPanel } from '@/components/ui/error-panel';
 
 export default function ReceivablesPage() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchReceivables = () => {
+    setLoading(true);
+    api.get<{ items: any[]; total: number }>('/revenue/receivables')
+      .then((res) => {
+        setData(res.items || []);
+        setError(null);
+      })
+      .catch((err: any) => setError(err?.message || 'Failed to load receivables'))
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
-    // Dedicated endpoint: server computes Paid/Remaining from the same source as the Overview
-    // total, so the two screens can never disagree (FZ-039).
-    api.get<{ items: any[]; total: number }>('/revenue/receivables')
-      .then((res) => setData(res.items || []))
-      .finally(() => setLoading(false));
+    fetchReceivables();
   }, []);
 
   if (loading) {
@@ -23,6 +31,10 @@ export default function ReceivablesPage() {
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
       </div>
     );
+  }
+
+  if (error) {
+    return <ErrorPanel message={error} onRetry={fetchReceivables} />;
   }
 
   return (
