@@ -8,10 +8,12 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import toast from 'react-hot-toast';
 import { fileUrl } from '@/lib/files';
 import { EditInvoiceDraftModal } from './components/EditInvoiceDraftModal';
+import { ErrorPanel } from '@/components/ui/error-panel';
 
 export default function InvoiceDraftsPage() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [generating, setGenerating] = useState<string | null>(null);
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
 
@@ -22,7 +24,11 @@ export default function InvoiceDraftsPage() {
   const fetchDrafts = () => {
     setLoading(true);
     api.get('/revenue/invoice-drafts')
-      .then((data: any) => setData(data))
+      .then((data: any) => {
+        setData(data);
+        setError(null);
+      })
+      .catch((err: any) => setError(err?.message || 'Failed to load invoice drafts'))
       .finally(() => setLoading(false));
   };
 
@@ -59,6 +65,10 @@ export default function InvoiceDraftsPage() {
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
       </div>
     );
+  }
+
+  if (error) {
+    return <ErrorPanel message={error} onRetry={fetchDrafts} />;
   }
 
   return (

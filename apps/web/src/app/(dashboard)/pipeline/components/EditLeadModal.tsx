@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { X, Save } from 'lucide-react';
 import { api } from '@/lib/api';
-import { getInitials } from '@/lib/utils';
+import { getInitials, toDateInput } from '@/lib/utils';
 import { Select } from '@/components/ui/select';
 import { useMembers } from '@/hooks/useQueries';
 
@@ -30,13 +30,13 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
     source: lead.source || 'MANUAL',
     assignedToId: lead.assignedToId || '',
     dealValue: lead.dealValue ? String(lead.dealValue) : '',
-    expectedCloseDate: lead.expectedCloseDate ? new Date(lead.expectedCloseDate).toISOString().split('T')[0] : '',
+    expectedCloseDate: toDateInput(lead.expectedCloseDate),
     priority: lead.priority || 'MEDIUM',
-    followUpDate: lead.followUpDate ? new Date(lead.followUpDate).toISOString().split('T')[0] : '',
+    followUpDate: toDateInput(lead.followUpDate),
     linkedinUrl: lead.linkedinUrl || '',
-    lastContactedDate: lead.lastContactedDate ? new Date(lead.lastContactedDate).toISOString().split('T')[0] : '',
-    contractStartDate: lead.contractStartDate ? new Date(lead.contractStartDate).toISOString().split('T')[0] : '',
-    contractEndDate: lead.contractEndDate ? new Date(lead.contractEndDate).toISOString().split('T')[0] : '',
+    lastContactedDate: toDateInput(lead.lastContactedDate),
+    contractStartDate: toDateInput(lead.contractStartDate),
+    contractEndDate: toDateInput(lead.contractEndDate),
     autoRenewal: Boolean(lead.autoRenewal),
   });
 

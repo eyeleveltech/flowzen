@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useId } from 'react';
+import { useState, useRef, useEffect, useId, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { X, Save, Upload, FileText, User, Briefcase, Mail, Phone, Building2, Calendar, IndianRupee, Search, ChevronDown, Check, AlignLeft } from 'lucide-react';
@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import { getInitials } from '@/lib/utils';
 import { Select } from '@/components/ui/select';
 import { useMembers, useClients } from '@/hooks/useQueries';
+import { useModalSafety } from '@/hooks/useModalSafety';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { useQueryClient } from '@tanstack/react-query';
@@ -57,6 +58,13 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
   const [clientSearch, setClientSearch] = useState('');
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const clientDropdownRef = useRef<HTMLDivElement>(null);
+
+  const initialFormRef = useRef(form);
+  const isDirty = useCallback(() => {
+    return JSON.stringify(form) !== JSON.stringify(initialFormRef.current) || importPreview.length > 0;
+  }, [form, importPreview]);
+
+  const { guardedClose, panelRef } = useModalSafety({ onClose, isDirty });
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -217,8 +225,9 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
 
   return (
     <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={guardedClose} />
       <motion.div
+        ref={panelRef}
         initial={{ opacity: 0, x: '100%' }}
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: '100%' }}
@@ -230,7 +239,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
             <h2 className="text-lg font-semibold text-primary">Add New Lead</h2>
             <p className="text-sm text-secondary mt-0.5">Enter details to add a new prospect to your pipeline.</p>
           </div>
-          <button type="button" onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 transition-colors">
+          <button type="button" onClick={guardedClose} className="p-2 rounded-xl hover:bg-gray-100 transition-colors">
             <X className="h-5 w-5 text-secondary" />
           </button>
         </div>

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { X, Trash2 } from 'lucide-react';
+import { X, Trash2, ExternalLink } from 'lucide-react';
 import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { formatDate } from '@/lib/utils';
@@ -181,6 +181,20 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
               <Row label="Assigned Date" value={formatDate(task.assignedDate)} />
               <Row label="Due Date" value={formatDate(task.dueDate)} highlight danger={dueOverdue} />
               {task.completedAt && <Row label="Completed On" value={formatDate(task.completedAt)} />}
+              {task.driveLink && (
+                <div className="flex items-center justify-between py-2 border-b border-[#F3F4F6]">
+                  <span className="text-sm text-secondary">Drive Link</span>
+                  <a
+                    href={task.driveLink.startsWith('http') ? task.driveLink : `https://${task.driveLink}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1.5 truncate max-w-70"
+                  >
+                    <span>Open Link</span>
+                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                  </a>
+                </div>
+              )}
 
               <Row label="Created" value={formatDate(task.createdAt)} />
             </div>

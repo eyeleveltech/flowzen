@@ -6,16 +6,24 @@ import { formatCurrency, formatDate } from '@/lib/utils';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { DollarSign, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { ErrorPanel } from '@/components/ui/error-panel';
 
 export default function PaymentsPage() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
 
-  const fetchPayments = () =>
+  const fetchPayments = () => {
+    setLoading(true);
     api.get('/revenue/payments')
-      .then((data: any) => setData(data))
+      .then((data: any) => {
+        setData(data);
+        setError(null);
+      })
+      .catch((err: any) => setError(err?.message || 'Failed to load payments'))
       .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
     fetchPayments();
@@ -42,6 +50,10 @@ export default function PaymentsPage() {
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
       </div>
     );
+  }
+
+  if (error) {
+    return <ErrorPanel message={error} onRetry={fetchPayments} />;
   }
 
   return (

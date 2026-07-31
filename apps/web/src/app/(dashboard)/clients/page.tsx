@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 import { useAuthStore, useModuleStore } from '@/stores';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
-import { formatDate, formatCurrency, getInitials, getAvatarColor, getClientDisplayName } from '@/lib/utils';
+import { formatDate, formatCurrency, getInitials, getAvatarColor, getClientDisplayName, toDateInput } from '@/lib/utils';
 import {
   Plus, Search, Filter, Users, Building2, Mail, Phone, X, ChevronRight, FolderKanban, Download, Upload, FileText, List, LayoutGrid, Columns, Check, Settings, Briefcase
 } from 'lucide-react';
@@ -18,6 +18,7 @@ import { CurrencySelect } from '@/components/ui/currency-select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { useMembers } from '@/hooks/useQueries';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { ViewSettingsPanel } from '@/components/ui/view-settings-panel';
 import Papa from 'papaparse';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -169,6 +170,8 @@ function ClientsContent() {
   const [importing, setImporting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
+  const debouncedSearch = useDebouncedValue(search, 300);
+
   useEffect(() => {
     if (user && user.role === 'TEAM_MEMBER') {
       router.push('/dashboard');
@@ -188,18 +191,18 @@ function ClientsContent() {
         sse.off('client:deleted', fetchClients);
       };
     }
-  }, [filtersHydrated, search, statusFilter, accountManagerFilter, engagementTypeFilter, industryFilter, page]);
+  }, [filtersHydrated, debouncedSearch, statusFilter, accountManagerFilter, engagementTypeFilter, industryFilter, page]);
 
   // Any filter change resets back to the first page.
   useEffect(() => {
     setPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, statusFilter, accountManagerFilter, engagementTypeFilter, industryFilter]);
+  }, [debouncedSearch, statusFilter, accountManagerFilter, engagementTypeFilter, industryFilter]);
 
   async function fetchClients() {
     try {
       const params = new URLSearchParams();
-      if (search) params.set('search', search);
+      if (debouncedSearch) params.set('search', debouncedSearch);
       if (statusFilter.length) params.set('status', statusFilter.join(','));
       if (accountManagerFilter.length) params.set('accountManagerId', accountManagerFilter.join(','));
       if (engagementTypeFilter.length) params.set('engagementType', engagementTypeFilter.join(','));
@@ -256,7 +259,7 @@ function ClientsContent() {
         Address: c.address || '',
         Scope: c.scope || '',
         AssetLinks: c.assetLinks || '',
-        StartDate: c.startDate ? new Date(c.startDate).toISOString().split('T')[0] : '',
+        StartDate: toDateInput(c.startDate),
         AccountManagerId: c.accountManagerId || '',
         Website: c.website || '',
         ContactDesignation: c.contacts?.[0]?.designation || '',
@@ -268,7 +271,7 @@ function ClientsContent() {
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);
-      link.setAttribute('download', `clients_export_${new Date().toISOString().split('T')[0]}.csv`);
+      link.setAttribute('download', `clients_export_${toDateInput(new Date())}.csv`);
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();

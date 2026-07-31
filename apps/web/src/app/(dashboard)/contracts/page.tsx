@@ -11,11 +11,13 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { TableSkeleton } from '@/components/ui/skeleton-loaders';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
+import { ErrorPanel } from '@/components/ui/error-panel';
+
 export default function ContractsPage() {
   usePageTitle('Contracts');
   const [showModal, setShowModal] = useState(false);
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['contracts'],
     queryFn: () => api.get<any[]>('/revenue/contracts'),
   });
@@ -33,6 +35,10 @@ export default function ContractsPage() {
         <TableSkeleton rows={5} />
       </div>
     );
+  }
+
+  if (isError) {
+    return <ErrorPanel message={(error as any)?.message || 'Failed to load contracts'} onRetry={refetch} />;
   }
 
   return (

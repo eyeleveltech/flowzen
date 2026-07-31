@@ -7,6 +7,7 @@ import { Select } from '@/components/ui/select';
 import { STAGE_FIELDS, StageField } from '../lib/stage-config';
 import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
+import { toDateInput } from '@/lib/utils';
 
 const PIPELINE_STAGES = [
   'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
@@ -57,7 +58,7 @@ export function PipelineDetailsModal({ lead, onClose, onSuccess }: PipelineDetai
   const isChurned = lead.stage === 'CHURNED';
 
   const [dealValue, setDealValue] = useState(lead.dealValue ? String(lead.dealValue) : '');
-  const [expectedCloseDate, setExpectedCloseDate] = useState(lead.expectedCloseDate ? String(lead.expectedCloseDate).substring(0, 10) : '');
+  const [expectedCloseDate, setExpectedCloseDate] = useState(toDateInput(lead.expectedCloseDate));
   const [contractType, setContractType] = useState(lead.contractType || 'RETAINER');
   const [lostReason, setLostReason] = useState(lead.lostReason || '');
 

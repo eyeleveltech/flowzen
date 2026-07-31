@@ -11,6 +11,7 @@ import { MultiSelect } from '@/components/ui/multi-select';
 import { ColumnDropdown } from '@/components/ui/column-dropdown';
 import { LeadModal } from './LeadModal';
 import { useMembers } from '@/hooks/useQueries';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 const STAGES = [
@@ -63,10 +64,12 @@ export function LeadListView() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'MANUAL' | 'BULK'>('MANUAL');
 
+  const debouncedSearch = useDebouncedValue(search, 300);
+
   // Filter logic trigger
   useEffect(() => {
     const params = new URLSearchParams();
-    if (search) params.set('search', search);
+    if (debouncedSearch) params.set('search', debouncedSearch);
     if (stageFilter.length) params.set('stage', stageFilter.join(','));
     if (ownerFilter.length) params.set('assignedToId', ownerFilter.join(','));
     if (minDealValue) params.set('minDealValue', minDealValue);
@@ -92,7 +95,7 @@ export function LeadListView() {
         sse.off('lead:updated', handleUpdate);
       };
     }
-  }, [search, stageFilter, ownerFilter, minDealValue, maxDealValue, leadSource, priority, closeDateFrom, closeDateTo, dateAddedFrom, dateAddedTo, sort]);
+  }, [debouncedSearch, stageFilter, ownerFilter, minDealValue, maxDealValue, leadSource, priority, closeDateFrom, closeDateTo, dateAddedFrom, dateAddedTo, sort]);
 
   async function fetchLeads(params: URLSearchParams) {
     try {

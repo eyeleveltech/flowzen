@@ -1,19 +1,20 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { z } from 'zod';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, AlertCircle } from 'lucide-react';
 import { api } from '@/lib/api';
-import { getInitials, getAvatarColor } from '@/lib/utils';
+import { getInitials, getAvatarColor, toDateInput } from '@/lib/utils';
 import { TASK_STATUS_OPTIONS } from '@/lib/task-status';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { useAuthStore, useTimeTrackingStore } from '@/stores';
 import { useProjects, useMembers, useClients } from '@/hooks/useQueries';
+import { useModalSafety } from '@/hooks/useModalSafety';
 import { useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { getClientDisplayName, isInternalClient } from '@/lib/utils';
@@ -22,6 +23,7 @@ const taskSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   description: z.string().optional(),
   type: z.string().optional(),
+  driveLink: z.string().optional(),
   clientId: z.string().optional(),
   projectId: z.string().min(1, 'Project is required'),
   assigneeId: z.string().optional(),
@@ -56,6 +58,7 @@ const blankTaskValues = (defaultProjectId = ''): TaskFormValues => ({
   title: '',
   description: '',
   type: 'OTHER',
+  driveLink: '',
   clientId: '',
   projectId: defaultProjectId,
   assigneeId: '',
@@ -65,9 +68,9 @@ const blankTaskValues = (defaultProjectId = ''): TaskFormValues => ({
   priority: 'MEDIUM',
   status: 'TODO',
   dueDate: '',
-  dueDateOnly: new Date().toISOString().split('T')[0],
+  dueDateOnly: toDateInput(new Date()),
   dueTimeOnly: '',
-  assignedDate: new Date().toISOString().split('T')[0],
+  assignedDate: toDateInput(new Date()),
   isRecurring: false,
   recurrenceFrequency: 'WEEKLY',
 });
@@ -118,6 +121,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
     reset,
     watch,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<TaskFormValues>({
     resolver: zodResolver(taskSchema),
@@ -189,6 +193,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
           title: taskToEdit.title,
           description: taskToEdit.description || '',
           type: taskToEdit.type || 'OTHER',
+          driveLink: taskToEdit.driveLink || '',
           clientId: tClientId,
           projectId: tProjId,
           assigneeIds: taskToEdit.assignees?.length
@@ -202,7 +207,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
           dueDate: taskToEdit.dueDate ? formatForDateTimeLocal(taskToEdit.dueDate) : '',
           dueDateOnly: dateStr,
           dueTimeOnly: timeStr,
-          assignedDate: taskToEdit.assignedDate ? new Date(taskToEdit.assignedDate).toISOString().split('T')[0] : '',
+          assignedDate: toDateInput(taskToEdit.assignedDate),
           assignedById: taskToEdit.assignedBy?.id || '',
           isRecurring: taskToEdit.isRecurring || false,
           recurrenceFrequency: taskToEdit.recurrenceFrequency || 'WEEKLY',
@@ -214,8 +219,20 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
           clientId: defaultClientId,
         });
       }
+      snapshotRef.current = JSON.stringify(getValues());
+    } else {
+      snapshotRef.current = null;
     }
-  }, [isOpen, taskToEdit, propProjectId, reset, projects]);
+  }, [isOpen, taskToEdit, propProjectId, reset, projects, getValues]);
+
+  const snapshotRef = useRef<string | null>(null);
+
+  const isDirty = useCallback(() => {
+    if (!snapshotRef.current) return false;
+    return JSON.stringify(getValues()) !== snapshotRef.current;
+  }, [getValues]);
+
+  const { guardedClose, panelRef } = useModalSafety({ onClose, isDirty, active: isOpen });
 
   const availableAssignees = useMemo(() => {
     const addUser = (u: any, enrichedUsers: Map<string, any>) => {
@@ -320,11 +337,12 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-100 bg-black/20 backdrop-blur-sm"
-            onClick={onClose}
+            onClick={guardedClose}
           />
 
           {/* Drawer Panel */}
           <motion.div
+            ref={panelRef}
             id="task-form-drawer-container"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -333,7 +351,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] sticky top-0 bg-white z-10">
               <h2 className="text-lg font-semibold text-primary">{isEditing ? 'Edit Task' : 'New Task'}</h2>
-              <button onClick={onClose} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
+              <button onClick={guardedClose} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
                 <X className="h-4 w-4 text-secondary" />
               </button>
             </div>
@@ -400,6 +418,20 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
                         placeholder="Task details..."
                       />
                     )}
+                  />
+                </div>
+
+                {/* Drive Link */}
+                <div>
+                  <label htmlFor="tfd-driveLink" className="block text-sm font-medium text-[#374151] mb-1.5">
+                    Drive Link
+                  </label>
+                  <input
+                    id="tfd-driveLink"
+                    type="url"
+                    placeholder="https://drive.google.com/..."
+                    {...register('driveLink')}
+                    className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
                   />
                 </div>
 
@@ -591,7 +623,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
                       name="isRecurring"
                       control={control}
                       render={({ field }) => (
-                        <div className="flex items-center justify-between py-2 border border-border rounded-xl px-4 bg-white h-[46px] shadow-sm">
+                        <div className="flex items-center justify-between py-2 border border-border rounded-xl px-4 bg-white h-11.5 shadow-sm">
                           <span className="text-sm font-medium text-[#374151]">Repeat Task</span>
                           <button
                             type="button"
@@ -658,7 +690,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
                 <div className="pt-4 flex gap-3">
                   <button
                     type="button"
-                    onClick={onClose}
+                    onClick={guardedClose}
                     className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all"
                   >
                     Cancel

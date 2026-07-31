@@ -12,6 +12,7 @@ import toast from 'react-hot-toast';
 import { useConfirmStore } from '@/stores';
 import { fileUrl } from '@/lib/files';
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { QuoteFormModal } from './components/QuoteFormModal';
 import { StatusBadge } from '@/components/ui/status-badge';
 
@@ -39,15 +40,18 @@ function QuotationsContent() {
     setShowForm(true);
   }, [searchParams]);
 
+  const debouncedSearch = useDebouncedValue(search, 300);
+
   const { data, isLoading } = useQuery({
-    queryKey: ['quotes', search, typeFilter, statusFilter],
+    queryKey: ['quotes', debouncedSearch, typeFilter, statusFilter],
     queryFn: () => {
       const p = new URLSearchParams();
-      if (search) p.set('search', search);
+      if (debouncedSearch) p.set('search', debouncedSearch);
       if (typeFilter) p.set('type', typeFilter);
       if (statusFilter) p.set('status', statusFilter);
       return api.get<{ quotes: any[] }>(`/crm/quotes?${p}`);
     },
+    placeholderData: (previousData) => previousData,
   });
   const quotes = data?.quotes || [];
 
