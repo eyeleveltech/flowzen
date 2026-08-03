@@ -6,9 +6,9 @@ import toast from 'react-hot-toast';
 import { X, Save } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getInitials, toDateInput } from '@/lib/utils';
-import { Select } from '@/components/ui/select';
 import { useMembers } from '@/hooks/useQueries';
 import { useModalSafety } from '@/hooks/useModalSafety';
+import { Field, FieldSelect, FieldCheckbox } from '@/components/ui/field';
 
 export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose: () => void; onSuccess: () => void; }) {
   const { data: members = [] } = useMembers();
@@ -147,21 +147,20 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="edit-companySize" className="block text-sm font-medium text-[#374151] mb-1.5">Company Size</label>
-                <Select
-                  value={form.companySize}
-                  onChange={(v) => setForm({ ...form, companySize: v })}
-                  options={[
-                    { label: 'Select Size', value: '' },
-                    { label: '1–10', value: '1-10' },
-                    { label: '11–100', value: '11-100' },
-                    { label: '101–500', value: '101-500' },
-                    { label: '501–1,000', value: '501-1000' },
-                    { label: '1,000+', value: '1000+' },
-                  ]}
-                />
-              </div>
+              <FieldSelect
+                id="edit-companySize"
+                label="Company Size"
+                value={form.companySize}
+                onChange={(v) => setForm({ ...form, companySize: v })}
+                options={[
+                  { label: 'Select Size', value: '' },
+                  { label: '1–10', value: '1-10' },
+                  { label: '11–100', value: '11-100' },
+                  { label: '101–500', value: '101-500' },
+                  { label: '501–1,000', value: '501-1000' },
+                  { label: '1,000+', value: '1000+' },
+                ]}
+              />
               <Field id="edit-website" label="Website" value={form.website} onChange={(v) => setForm({ ...form, website: v })} placeholder="example.com" />
             </div>
 
@@ -176,46 +175,43 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="edit-source" className="block text-sm font-medium text-[#374151] mb-1.5">Source</label>
-                <Select
-                  value={form.source}
-                  onChange={(v) => setForm({ ...form, source: v })}
-                  options={[
-                    { label: 'LinkedIn', value: 'LINKEDIN' },
-                    { label: 'Referral', value: 'REFERRAL' },
-                    { label: 'Inbound Form', value: 'INBOUND' },
-                    { label: 'Event', value: 'EVENT' },
-                    { label: 'Manual', value: 'MANUAL' },
-                    { label: 'Other', value: 'OTHER' },
-                  ]}
-                />
-              </div>
-              <div>
-                <label htmlFor="edit-priority" className="block text-sm font-medium text-[#374151] mb-1.5">Priority</label>
-                <Select
-                  value={form.priority}
-                  onChange={(v) => setForm({ ...form, priority: v })}
-                  options={[
-                    { label: 'High', value: 'HIGH' },
-                    { label: 'Medium', value: 'MEDIUM' },
-                    { label: 'Low', value: 'LOW' },
-                  ]}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="edit-assignee" className="block text-sm font-medium text-[#374151] mb-1.5">Assigned To</label>
-              <Select
-                value={form.assignedToId}
-                onChange={(v) => setForm({ ...form, assignedToId: v })}
+              <FieldSelect
+                id="edit-source"
+                label="Source"
+                value={form.source}
+                onChange={(v) => setForm({ ...form, source: v })}
                 options={[
-                  { label: 'Unassigned', value: '' },
-                  ...members.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
+                  { label: 'LinkedIn', value: 'LINKEDIN' },
+                  { label: 'Referral', value: 'REFERRAL' },
+                  { label: 'Inbound Form', value: 'INBOUND' },
+                  { label: 'Event', value: 'EVENT' },
+                  { label: 'Manual', value: 'MANUAL' },
+                  { label: 'Other', value: 'OTHER' },
+                ]}
+              />
+              <FieldSelect
+                id="edit-priority"
+                label="Priority"
+                value={form.priority}
+                onChange={(v) => setForm({ ...form, priority: v })}
+                options={[
+                  { label: 'High', value: 'HIGH' },
+                  { label: 'Medium', value: 'MEDIUM' },
+                  { label: 'Low', value: 'LOW' },
                 ]}
               />
             </div>
+
+            <FieldSelect
+              id="edit-assignee"
+              label="Assigned To"
+              value={form.assignedToId}
+              onChange={(v) => setForm({ ...form, assignedToId: v })}
+              options={[
+                { label: 'Unassigned', value: '' },
+                ...members.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
+              ]}
+            />
 
             <div className="grid grid-cols-2 gap-4">
               <Field id="edit-dealValue" label="Deal Value (₹)" type="number" value={form.dealValue} onChange={(v) => setForm({ ...form, dealValue: v })} placeholder="e.g. 50000" />
@@ -232,18 +228,12 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
               <Field id="edit-contractEndDate" label="Contract End Date" type="date" value={form.contractEndDate} onChange={(v) => setForm({ ...form, contractEndDate: v })} />
             </div>
 
-            <div className="flex items-center gap-3 p-3 bg-gray-50 border border-border rounded-xl">
-              <input
-                id="edit-autoRenewal"
-                type="checkbox"
-                checked={form.autoRenewal}
-                onChange={(e) => setForm({ ...form, autoRenewal: e.target.checked })}
-                className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary cursor-pointer"
-              />
-              <label htmlFor="edit-autoRenewal" className="text-sm font-medium text-[#374151] cursor-pointer">
-                Enable Auto-Renewal (Extends contract & updates billing date on expiry)
-              </label>
-            </div>
+            <FieldCheckbox
+              id="edit-autoRenewal"
+              label="Enable Auto-Renewal (Extends contract & updates billing date on expiry)"
+              checked={form.autoRenewal}
+              onChange={(checked) => setForm({ ...form, autoRenewal: checked })}
+            />
           </form>
         </div>
 
@@ -267,29 +257,5 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
         </div>
       </motion.div>
     </>
-  );
-}
-
-function Field({ id, label, value, onChange, type = 'text', required = false, placeholder, error }: {
-  id: string; label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean; placeholder?: string; error?: string;
-}) {
-  return (
-    <div>
-      <label htmlFor={id} className="block text-sm font-medium text-[#374151] mb-1.5">
-        {label} {required && <span className="text-red-500">*</span>}
-      </label>
-      <input
-        id={id}
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        required={required}
-        placeholder={placeholder}
-        aria-invalid={!!error}
-        aria-describedby={error ? `${id}-error` : undefined}
-        className={`w-full rounded-xl border bg-white px-4 py-2.5 text-sm outline-none focus:ring-1 transition-all ${error ? 'border-red-400 focus:border-red-400 focus:ring-red-100' : 'border-border focus:border-primary focus:ring-primary'}`}
-      />
-      {error && <p id={`${id}-error`} aria-live="polite" className="mt-1 text-xs text-red-500">{error}</p>}
-    </div>
   );
 }

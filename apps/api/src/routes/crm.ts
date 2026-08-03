@@ -65,8 +65,8 @@ const leadSchema = z.object({
 crmRouter.get('/leads', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const { 
-      stage, 
+    const {
+      stage,
       assignedToId,
       minDealValue,
       maxDealValue,
@@ -80,7 +80,7 @@ crmRouter.get('/leads', async (req: AuthRequest, res: Response, next) => {
     } = req.query;
 
     const where: Record<string, unknown> = { organizationId: orgId };
-    
+
     if (stage) where.stage = whereIn(stage);
     if (assignedToId) where.assignedToId = whereIn(assignedToId);
     if (leadSource) where.source = whereIn(leadSource);
@@ -126,16 +126,16 @@ crmRouter.get('/leads', async (req: AuthRequest, res: Response, next) => {
         ...primaryContactListInclude,
       },
       orderBy: sort === 'client_asc' ? [{ companyName: 'asc' }]
-             : sort === 'client_desc' ? [{ companyName: 'desc' }]
-             : sort === 'stage_asc' ? [{ stage: 'asc' }]
-             : sort === 'stage_desc' ? [{ stage: 'desc' }]
-             : sort === 'dealValue_asc' ? [{ dealValue: 'asc' }]
-             : sort === 'dealValue_desc' ? [{ dealValue: 'desc' }]
-             : sort === 'closeDate_asc' ? [{ expectedCloseDate: 'asc' }]
-             : sort === 'closeDate_desc' ? [{ expectedCloseDate: 'desc' }]
-             : sort === 'owner_asc' ? [{ assignedTo: { name: 'asc' } }]
-             : sort === 'owner_desc' ? [{ assignedTo: { name: 'desc' } }]
-             : [{ stage: 'asc' }, { position: 'asc' }, { createdAt: 'desc' }],
+        : sort === 'client_desc' ? [{ companyName: 'desc' }]
+          : sort === 'stage_asc' ? [{ stage: 'asc' }]
+            : sort === 'stage_desc' ? [{ stage: 'desc' }]
+              : sort === 'dealValue_asc' ? [{ dealValue: 'asc' }]
+                : sort === 'dealValue_desc' ? [{ dealValue: 'desc' }]
+                  : sort === 'closeDate_asc' ? [{ expectedCloseDate: 'asc' }]
+                    : sort === 'closeDate_desc' ? [{ expectedCloseDate: 'desc' }]
+                      : sort === 'owner_asc' ? [{ assignedTo: { name: 'asc' } }]
+                        : sort === 'owner_desc' ? [{ assignedTo: { name: 'desc' } }]
+                          : [{ stage: 'asc' }, { position: 'asc' }, { createdAt: 'desc' }],
       ...(skip !== undefined ? { skip } : {}),
       ...(take !== undefined ? { take } : {}),
     });
@@ -914,6 +914,12 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
     // Build update data
     const updateData: any = { stage };
     if (dealValue !== undefined) updateData.dealValue = dealValue;
+    if (fields?.agreedFinalValue !== undefined && fields?.agreedFinalValue !== '' && fields?.agreedFinalValue !== null) {
+      const parsedAgreed = parseFloat(String(fields.agreedFinalValue));
+      if (!isNaN(parsedAgreed) && parsedAgreed >= 0) {
+        updateData.dealValue = parsedAgreed;
+      }
+    }
     // `new Date(null)` is the epoch, not null — without the guard, clearing the close date would
     // silently stamp 1970 onto the lead.
     if (expectedCloseDate !== undefined) updateData.expectedCloseDate = expectedCloseDate ? new Date(expectedCloseDate) : null;
@@ -961,7 +967,7 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
         toStage: stage,
         previousStage,
         notes,
-        dealValue: dealValue ?? existingLead.dealValue ?? undefined,
+        dealValue: updateData.dealValue ?? dealValue ?? existingLead.dealValue ?? undefined,
         contractStartDate,
         contractEndDate,
         billingFrequency: contractType === 'RETAINER' ? fields?.billingFrequency : undefined,
@@ -972,8 +978,8 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
       const reasonLabel = lostReason ? String(lostReason).replace(/_/g, ' ') : null;
       const stageMsg = stage === 'CONTRACT' ? 'signed the contract 🎉'
         : stage === 'CHURNED' ? 'marked this deal as Churned'
-        : `moved this lead to ${stage.replace(/_/g, ' ')}`;
-      
+          : `moved this lead to ${stage.replace(/_/g, ' ')}`;
+
       await tx.activity.create({
         data: {
           type: 'STAGE_CHANGED',
@@ -992,12 +998,12 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
     });
 
     const io = req.app.get('io');
-    
+
     // Log Activity socket emit manually since we bypassed logActivity function
     if (io && typeof io.to === 'function') {
       io.to(orgId).emit('activity:new', { leadId });
     }
-    
+
     emitToOrganization(io, orgId, 'lead:updated', updatedLead);
     if (finalClientId) emitToOrganization(io, orgId, 'client:updated', { id: finalClientId });
     if (newClientId) emitToOrganization(io, orgId, 'client:created', { id: newClientId });
@@ -1138,8 +1144,8 @@ crmRouter.post('/leads/:id/unhold', authorize('SUPER_ADMIN', 'ADMIN'), async (re
       where: { leadId },
       orderBy: { changedAt: 'desc' },
     });
-    const targetStage = (lastHistory && lastHistory.fromStage !== 'ON_HOLD') 
-      ? lastHistory.fromStage 
+    const targetStage = (lastHistory && lastHistory.fromStage !== 'ON_HOLD')
+      ? lastHistory.fromStage
       : 'NEW_LEAD';
 
     if (existingLead.clientId) {
@@ -1292,6 +1298,16 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
       // a deal value, once set, could never be taken back off the lead.
       updateData.dealValue = null;
       changes.push('cleared Deal Value');
+    }
+    const fieldsInput = req.body.fields;
+    if (fieldsInput?.agreedFinalValue !== undefined && fieldsInput?.agreedFinalValue !== '' && fieldsInput?.agreedFinalValue !== null) {
+      const parsedAgreed = parseFloat(String(fieldsInput.agreedFinalValue));
+      if (!isNaN(parsedAgreed) && parsedAgreed >= 0) {
+        if (Number(existingLead.dealValue ?? NaN) !== parsedAgreed) {
+          updateData.dealValue = parsedAgreed;
+          changes.push(`changed Deal Value to agreed final value (${parsedAgreed})`);
+        }
+      }
     }
     if (expectedRevenue !== undefined && expectedRevenue !== null) {
       if (typeof expectedRevenue === 'number' && expectedRevenue < 0) {
@@ -1621,8 +1637,8 @@ crmRouter.post('/leads/:id/fields', authorize('SUPER_ADMIN', 'ADMIN'), async (re
     const fields = req.body.fields; // Expecting { fieldKey: "value" } map
 
     if (!fields || typeof fields !== 'object') {
-       res.status(400).json({ error: 'Invalid fields object' });
-       return;
+      res.status(400).json({ error: 'Invalid fields object' });
+      return;
     }
 
     const existingLead = await prisma.lead.findFirst({

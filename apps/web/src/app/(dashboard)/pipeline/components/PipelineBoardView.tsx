@@ -382,7 +382,7 @@ export function PipelineBoardView() {
       }
       await fetchLeads(); // Fetch new data before closing modal
       setPendingTransition(null);
-      if (payload?.stage === 'CONTRACT') setWonModalLead(lead);
+      if (payload?.stage === 'CONTRACT') setWonModalLead(updatedLead || { ...lead, ...payload });
     } catch (err: any) {
       // Re-throw so the modal can surface the error and stay open.
       throw err;

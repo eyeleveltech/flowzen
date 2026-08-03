@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useRef, useEffect, useId, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { X, Save, Upload, FileText, User, Briefcase, Mail, Phone, Building2, Calendar, IndianRupee, Search, ChevronDown, Check, AlignLeft } from 'lucide-react';
+import { X, Save, Upload, FileText, User, Briefcase, Mail, Phone, Search, Check, AlignLeft } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getInitials } from '@/lib/utils';
+import { Field, FieldSelect } from '@/components/ui/field';
 import { Select } from '@/components/ui/select';
 import { useMembers, useClients } from '@/hooks/useQueries';
 import { useModalSafety } from '@/hooks/useModalSafety';
@@ -17,7 +18,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
   const queryClient = useQueryClient();
   const { data: members = [] } = useMembers();
   const { data: clients = [] } = useClients();
-  
+
   const [form, setForm] = useState({
     clientId: '',
     contactName: '',
@@ -86,8 +87,8 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
     };
   }, []);
 
-  const filteredClients = clients?.filter((c: any) => 
-    c.name.toLowerCase().includes(clientSearch.toLowerCase()) || 
+  const filteredClients = clients?.filter((c: any) =>
+    c.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
     (c.company && c.company.toLowerCase().includes(clientSearch.toLowerCase()))
   ) || [];
 
@@ -260,216 +261,198 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
         </div>
 
         <div className="flex gap-6 px-6 border-b border-border bg-gray-50/50">
-            <button
-              onClick={() => setCreationMode('MANUAL')}
-              className={`pb-3 mt-4 text-sm font-medium border-b-2 transition-colors ${creationMode === 'MANUAL' ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-[#374151]'}`}
-            >
-              Manual Entry
-            </button>
-            <button
-              onClick={() => setCreationMode('BULK')}
-              className={`pb-3 mt-4 text-sm font-medium border-b-2 transition-colors ${creationMode === 'BULK' ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-[#374151]'}`}
-            >
-              Bulk Import
-            </button>
+          <button
+            onClick={() => setCreationMode('MANUAL')}
+            className={`pb-3 mt-4 text-sm font-medium border-b-2 transition-colors ${creationMode === 'MANUAL' ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-[#374151]'}`}
+          >
+            Manual Entry
+          </button>
+          <button
+            onClick={() => setCreationMode('BULK')}
+            className={`pb-3 mt-4 text-sm font-medium border-b-2 transition-colors ${creationMode === 'BULK' ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-[#374151]'}`}
+          >
+            Bulk Import
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 bg-gray-50/30">
           {creationMode === 'MANUAL' ? (
-          <form id="lead-form" onSubmit={handleSubmit} className="space-y-8">
-                
-                {/* SECTION 1: Lead Information */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 border-b border-border pb-2">
-                    <Briefcase className="h-4 w-4 text-primary" />
-                    <h3 className="text-sm font-semibold text-primary">1. Lead Information</h3>
-                  </div>
+            <form id="lead-form" onSubmit={handleSubmit} className="space-y-8">
 
-                  {/* Client Search / Autocomplete */}
-                  <div className="relative" ref={clientDropdownRef}>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Client / Company Name <span className="text-red-500">*</span></label>
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
-                      <input
-                        type="text"
-                        value={clientSearch}
-                        onChange={handleClientSearchChange}
-                        onFocus={() => setShowClientDropdown(true)}
-                        placeholder="Search existing clients or type company name..."
-                        className={`w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all ${form.clientId ? 'bg-blue-50 border-blue-200 text-blue-900' : ''}`}
-                      />
-                      {form.clientId && (
-                        <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-600" />
-                      )}
-                    </div>
-                    {errors.companyName && <p className="mt-1 text-xs text-red-600">{errors.companyName}</p>}
+              {/* SECTION 1: Lead Information */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 border-b border-border pb-2">
+                  <Briefcase className="h-4 w-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-primary">1. Lead Information</h3>
+                </div>
 
-                    {showClientDropdown && clientSearch.length > 0 && filteredClients.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-border rounded-xl shadow-lg max-h-48 overflow-y-auto p-1">
-                        {filteredClients.map((client: any) => (
-                          <button
-                            key={client.id}
-                            type="button"
-                            onClick={() => handleSelectClient(client)}
-                            className="w-full text-left px-3 py-2 text-sm text-[#374151] hover:bg-gray-50 rounded-lg flex flex-col transition-colors"
-                          >
-                            <span className="font-medium">{client.name}</span>
-                            {client.company && <span className="text-xs text-secondary">{client.company}</span>}
-                          </button>
-                        ))}
-                      </div>
+                {/* Client Search / Autocomplete */}
+                <div className="relative" ref={clientDropdownRef}>
+                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Client / Company Name <span className="text-red-500">*</span></label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
+                    <input
+                      type="text"
+                      value={clientSearch}
+                      onChange={handleClientSearchChange}
+                      onFocus={() => setShowClientDropdown(true)}
+                      placeholder="Search existing clients or type company name..."
+                      className={`w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all ${form.clientId ? 'bg-blue-50 border-blue-200 text-blue-900' : ''}`}
+                    />
+                    {form.clientId && (
+                      <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-600" />
                     )}
                   </div>
+                  {errors.companyName && <p className="mt-1 text-xs text-red-600">{errors.companyName}</p>}
 
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority <span className="text-red-500">*</span></label>
-                      <div className="relative">
-                        <select
-                          value={form.priority}
-                          onChange={(e) => setForm({ ...form, priority: e.target.value })}
-                          className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-[#374151] outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all appearance-none"
+                  {showClientDropdown && clientSearch.length > 0 && filteredClients.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-border rounded-xl shadow-lg max-h-48 overflow-y-auto p-1">
+                      {filteredClients.map((client: any) => (
+                        <button
+                          key={client.id}
+                          type="button"
+                          onClick={() => handleSelectClient(client)}
+                          className="w-full text-left px-3 py-2 text-sm text-[#374151] hover:bg-gray-50 rounded-lg flex flex-col transition-colors"
                         >
-                          <option value="HIGH">High</option>
-                          <option value="MEDIUM">Medium</option>
-                          <option value="LOW">Low</option>
-                        </select>
-                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary pointer-events-none" />
-                        <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                          <PriorityDot level={form.priority} />
-                        </div>
-                        <style>{`select { padding-left: 2rem !important; }`}</style>
-                      </div>
+                          <span className="font-medium">{client.name}</span>
+                          {client.company && <span className="text-xs text-secondary">{client.company}</span>}
+                        </button>
+                      ))}
                     </div>
-                  </div>
+                  )}
+                </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field label="Instagram Handle" value={form.instagramHandle} onChange={(v) => setForm({ ...form, instagramHandle: v })} placeholder="@username or URL" />
-                    <Field label="Facebook Page" value={form.facebookPage} onChange={(v) => setForm({ ...form, facebookPage: v })} placeholder="URL or username" />
-                  </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Lead Source <span className="text-red-500">*</span></label>
-                      <Select
-                        value={form.source}
-                        onChange={(v) => setForm({ ...form, source: v })}
-                        options={[
-                          { label: 'LinkedIn', value: 'LINKEDIN' },
-                          { label: 'Referral', value: 'REFERRAL' },
-                          { label: 'Inbound Form', value: 'INBOUND' },
-                          { label: 'Event', value: 'EVENT' },
-                          { label: 'Manual', value: 'MANUAL' },
-                          { label: 'Other', value: 'OTHER' }
-                        ]}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Industry</label>
-                      <Select
-                        value={form.industry}
-                        onChange={(v) => setForm({ ...form, industry: v })}
-                        options={[
-                          { label: 'Select Industry', value: '' },
-                          { label: 'Real Estate', value: 'Real Estate' },
-                          { label: 'IT/SaaS', value: 'IT/SaaS' },
-                          { label: 'Healthcare', value: 'Healthcare' },
-                          { label: 'Automotive', value: 'Automotive' },
-                          { label: 'Manufacturing', value: 'Manufacturing' },
-                          { label: 'Other', value: 'Other' },
-                        ]}
-                      />
-                    </div>
-                  </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FieldSelect
+                    label="Priority"
+                    required
+                    leadingIcon={<PriorityDot level={form.priority} />}
+                    value={form.priority}
+                    onChange={(v) => setForm({ ...form, priority: v })}
+                    options={[
+                      { label: 'High', value: 'HIGH' },
+                      { label: 'Medium', value: 'MEDIUM' },
+                      { label: 'Low', value: 'LOW' },
+                    ]}
+                  />
+                </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Company Size</label>
-                      <Select
-                        value={form.companySize}
-                        onChange={(v) => setForm({ ...form, companySize: v })}
-                        options={[
-                          { label: 'Select Size', value: '' },
-                          { label: '1–10', value: '1-10' },
-                          { label: '11–100', value: '11-100' },
-                          { label: '101–500', value: '101-500' },
-                          { label: '501–1,000', value: '501-1000' },
-                          { label: '1,000+', value: '1000+' },
-                        ]}
-                      />
-                    </div>
-                    <Field label="Website" value={form.website} onChange={(v) => setForm({ ...form, website: v })} placeholder="example.com" />
-                  </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="Instagram Handle" value={form.instagramHandle} onChange={(v) => setForm({ ...form, instagramHandle: v })} placeholder="@username or URL" />
+                  <Field label="Facebook Page" value={form.facebookPage} onChange={(v) => setForm({ ...form, facebookPage: v })} placeholder="URL or username" />
+                </div>
 
-                  {/* City was in the form's state and in the POST payload but had no input — the
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FieldSelect
+                    label="Lead Source"
+                    required
+                    value={form.source}
+                    onChange={(v) => setForm({ ...form, source: v })}
+                    options={[
+                      { label: 'LinkedIn', value: 'LINKEDIN' },
+                      { label: 'Referral', value: 'REFERRAL' },
+                      { label: 'Inbound Form', value: 'INBOUND' },
+                      { label: 'Event', value: 'EVENT' },
+                      { label: 'Manual', value: 'MANUAL' },
+                      { label: 'Other', value: 'OTHER' }
+                    ]}
+                  />
+                  <FieldSelect
+                    label="Industry"
+                    value={form.industry}
+                    onChange={(v) => setForm({ ...form, industry: v })}
+                    options={[
+                      { label: 'Select Industry', value: '' },
+                      { label: 'Real Estate', value: 'Real Estate' },
+                      { label: 'IT/SaaS', value: 'IT/SaaS' },
+                      { label: 'Healthcare', value: 'Healthcare' },
+                      { label: 'Automotive', value: 'Automotive' },
+                      { label: 'Manufacturing', value: 'Manufacturing' },
+                      { label: 'Other', value: 'Other' },
+                    ]}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FieldSelect
+                    label="Company Size"
+                    value={form.companySize}
+                    onChange={(v) => setForm({ ...form, companySize: v })}
+                    options={[
+                      { label: 'Select Size', value: '' },
+                      { label: '1–10', value: '1-10' },
+                      { label: '11–100', value: '11-100' },
+                      { label: '101–500', value: '101-500' },
+                      { label: '501–1,000', value: '501-1000' },
+                      { label: '1,000+', value: '1000+' },
+                    ]}
+                  />
+                  <Field label="Website" value={form.website} onChange={(v) => setForm({ ...form, website: v })} placeholder="example.com" />
+                </div>
+
+                {/* City was in the form's state and in the POST payload but had no input — the
                       only way to set it was to pick an existing client, so a typed-in company
                       always saved with a blank city while the edit form showed the field. */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field label="City" value={form.city} onChange={(v) => setForm({ ...form, city: v })} placeholder="e.g. Chennai" />
-                    <Field label="State" value={form.state} onChange={(v) => setForm({ ...form, state: v })} placeholder="e.g. Tamil Nadu" />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field label="Next Follow-up Date" type="date" value={form.followUpDate} onChange={(v) => setForm({ ...form, followUpDate: v })} />
-                    <Field label="Last Contacted Date" type="date" value={form.lastContactedDate} onChange={(v) => setForm({ ...form, lastContactedDate: v })} />
-                  </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="City" value={form.city} onChange={(v) => setForm({ ...form, city: v })} placeholder="e.g. Chennai" />
+                  <Field label="State" value={form.state} onChange={(v) => setForm({ ...form, state: v })} placeholder="e.g. Tamil Nadu" />
                 </div>
 
-                {/* SECTION 2: Contact Details */}
-                <div className="space-y-4 pt-2">
-                  <div className="flex items-center gap-2 border-b border-border pb-2">
-                    <User className="h-4 w-4 text-primary" />
-                    <h3 className="text-sm font-semibold text-primary">2. Contact Details</h3>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field label="Contact Name" value={form.contactName} onChange={(v) => {
-                      setForm({ ...form, contactName: v });
-                    }} placeholder="Full Name" />
-                    <Field label="Job Title" value={form.jobTitle} onChange={(v) => setForm({ ...form, jobTitle: v })} placeholder="e.g. Marketing Director" />
-                  </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="Next Follow-up Date" type="date" value={form.followUpDate} onChange={(v) => setForm({ ...form, followUpDate: v })} />
+                  <Field label="Last Contacted Date" type="date" value={form.lastContactedDate} onChange={(v) => setForm({ ...form, lastContactedDate: v })} />
+                </div>
+              </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field label="Email Address" error={errors.email} type="email" icon={<Mail className="h-4 w-4 text-secondary" />} value={form.email} onChange={(v) => setForm({ ...form, email: v })} placeholder="john@example.com" />
-                    <Field label="Phone Number" error={errors.phone} icon={<Phone className="h-4 w-4 text-secondary" />} value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="+1 (555) 000-0000" />
-                  </div>
+              {/* SECTION 2: Contact Details */}
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center gap-2 border-b border-border pb-2">
+                  <User className="h-4 w-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-primary">2. Contact Details</h3>
                 </div>
 
-                {/* SECTION 3: Assignment & Notes */}
-                <div className="space-y-4 pt-2">
-                  <div className="flex items-center gap-2 border-b border-border pb-2">
-                    <AlignLeft className="h-4 w-4 text-primary" />
-                    <h3 className="text-sm font-semibold text-primary">3. Assignment & Notes</h3>
-                  </div>
-
-                  <div>
-                    {/* Not required — "Unassigned" is a valid, and common, choice for a new lead,
-                        and the server treats assignedToId as optional. The asterisk was fiction. */}
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Owner</label>
-                    <Select
-                      value={form.assignedToId}
-                      onChange={(v) => setForm({ ...form, assignedToId: v })}
-                      options={[
-                        { label: 'Unassigned', value: '' },
-                        ...members.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
-                      ]}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Notes / Description</label>
-                    <textarea
-                      value={form.notes}
-                      onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                      rows={3}
-                      className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all resize-none"
-                      placeholder="Enter details, background info, or next steps..."
-                    />
-                  </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="Contact Name" value={form.contactName} onChange={(v) => {
+                    setForm({ ...form, contactName: v });
+                  }} placeholder="Full Name" />
+                  <Field label="Job Title" value={form.jobTitle} onChange={(v) => setForm({ ...form, jobTitle: v })} placeholder="e.g. Marketing Director" />
                 </div>
 
-          </form>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="Email Address" error={errors.email} type="email" icon={<Mail className="h-4 w-4 text-secondary" />} value={form.email} onChange={(v) => setForm({ ...form, email: v })} placeholder="john@example.com" />
+                  <Field label="Phone Number" error={errors.phone} icon={<Phone className="h-4 w-4 text-secondary" />} value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="+1 (555) 000-0000" />
+                </div>
+              </div>
+
+              {/* SECTION 3: Assignment & Notes */}
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center gap-2 border-b border-border pb-2">
+                  <AlignLeft className="h-4 w-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-primary">3. Assignment & Notes</h3>
+                </div>
+
+                <FieldSelect
+                  label="Owner"
+                  value={form.assignedToId}
+                  onChange={(v) => setForm({ ...form, assignedToId: v })}
+                  options={[
+                    { label: 'Unassigned', value: '' },
+                    ...members.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
+                  ]}
+                />
+
+                <Field
+                  label="Notes / Description"
+                  textarea
+                  rows={3}
+                  value={form.notes}
+                  onChange={(v) => setForm({ ...form, notes: v })}
+                  placeholder="Enter details, background info, or next steps..."
+                />
+              </div>
+
+            </form>
           ) : (
             <div className="space-y-6">
               <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-white shadow-sm">
@@ -483,7 +466,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
               </div>
 
               <div>
-                <label 
+                <label
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
@@ -550,38 +533,6 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
         </div>
       </motion.div>
     </>
-  );
-}
-
-function Field({ label, value, onChange, type = 'text', required = false, placeholder, icon, error }: {
-  label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean; placeholder?: string; icon?: React.ReactNode; error?: string;
-}) {
-  const id = useId();
-  return (
-    <div>
-      <label htmlFor={id} className="block text-sm font-medium text-[#374151] mb-1.5">
-        {label} {required && <span className="text-red-500">*</span>}
-      </label>
-      <div className="relative">
-        {icon && (
-          <div className="absolute left-3 top-1/2 -translate-y-1/2">
-            {icon}
-          </div>
-        )}
-        <input
-          id={id}
-          type={type}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          required={required}
-          placeholder={placeholder}
-          aria-invalid={!!error}
-          aria-describedby={error ? `${id}-error` : undefined}
-          className={`w-full rounded-xl border bg-white ${icon ? 'pl-9' : 'px-4'} pr-4 py-2.5 text-sm text-[#374151] outline-none focus:ring-1 transition-all ${error ? 'border-red-400 focus:border-red-400 focus:ring-red-100' : 'border-border focus:border-primary focus:ring-primary'}`}
-        />
-      </div>
-      {error && <p id={`${id}-error`} aria-live="polite" className="mt-1 text-xs text-red-500">{error}</p>}
-    </div>
   );
 }
 
