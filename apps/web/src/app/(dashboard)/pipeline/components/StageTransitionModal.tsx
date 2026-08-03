@@ -101,6 +101,12 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
     };
 
     if (requiresDealValue && dealValue) payload.dealValue = parseFloat(dealValue);
+    if (formData.agreedFinalValue !== undefined && formData.agreedFinalValue !== '' && formData.agreedFinalValue !== null) {
+      const parsedAgreed = parseFloat(String(formData.agreedFinalValue));
+      if (!isNaN(parsedAgreed) && parsedAgreed >= 0) {
+        payload.dealValue = parsedAgreed;
+      }
+    }
     if (requiresDealValue && expectedCloseDate) payload.expectedCloseDate = expectedCloseDate;
 
     if (showsContractType) {
@@ -129,6 +135,12 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
 
   const handleFieldChange = (key: string, value: any) => {
     setFormData(prev => ({ ...prev, [key]: value }));
+    if (key === 'agreedFinalValue' && value !== '' && value !== null) {
+      const parsed = parseFloat(String(value));
+      if (!isNaN(parsed) && parsed >= 0) {
+        setDealValue(String(value));
+      }
+    }
   };
 
   const handleChecklistChange = (key: string, option: string, checked: boolean) => {

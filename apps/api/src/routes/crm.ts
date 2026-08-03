@@ -853,6 +853,12 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
     // Build update data
     const updateData: any = { stage };
     if (dealValue !== undefined) updateData.dealValue = dealValue;
+    if (fields?.agreedFinalValue !== undefined && fields?.agreedFinalValue !== '' && fields?.agreedFinalValue !== null) {
+      const parsedAgreed = parseFloat(String(fields.agreedFinalValue));
+      if (!isNaN(parsedAgreed) && parsedAgreed >= 0) {
+        updateData.dealValue = parsedAgreed;
+      }
+    }
     if (expectedCloseDate !== undefined) updateData.expectedCloseDate = new Date(expectedCloseDate);
     if (followUpDate !== undefined) updateData.followUpDate = followUpDate ? new Date(followUpDate) : null;
     if (lastContactedDate !== undefined) updateData.lastContactedDate = lastContactedDate ? new Date(lastContactedDate) : null;
@@ -898,7 +904,7 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
         toStage: stage,
         previousStage,
         notes,
-        dealValue: dealValue ?? existingLead.dealValue ?? undefined,
+        dealValue: updateData.dealValue ?? dealValue ?? existingLead.dealValue ?? undefined,
         contractStartDate,
         contractEndDate,
         billingFrequency: contractType === 'RETAINER' ? fields?.billingFrequency : undefined,
@@ -1202,6 +1208,16 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
       if (Number(existingLead.dealValue ?? NaN) !== dealValue) {
         updateData.dealValue = dealValue;
         changes.push(`changed Deal Value to ${dealValue}`);
+      }
+    }
+    const fieldsInput = req.body.fields;
+    if (fieldsInput?.agreedFinalValue !== undefined && fieldsInput?.agreedFinalValue !== '' && fieldsInput?.agreedFinalValue !== null) {
+      const parsedAgreed = parseFloat(String(fieldsInput.agreedFinalValue));
+      if (!isNaN(parsedAgreed) && parsedAgreed >= 0) {
+        if (Number(existingLead.dealValue ?? NaN) !== parsedAgreed) {
+          updateData.dealValue = parsedAgreed;
+          changes.push(`changed Deal Value to agreed final value (${parsedAgreed})`);
+        }
       }
     }
     if (expectedRevenue !== undefined && expectedRevenue !== null) {

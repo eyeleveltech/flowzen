@@ -103,7 +103,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
       setIsModalOpen(false);
       toast.success('Stage updated successfully');
       if (variables?.stage === 'CONTRACT') {
-        setWonModalLead(data || lead);
+        setWonModalLead(data || { ...lead, ...variables });
       }
     }
   });

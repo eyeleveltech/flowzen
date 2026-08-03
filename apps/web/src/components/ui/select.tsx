@@ -29,9 +29,10 @@ export interface SelectProps {
   rounded?: string;
   ariaLabel?: string; // accessible name for the control (use when there's a visible label nearby)
   buttonClassName?: string; // override trigger styling (e.g. compact padding in a dense table)
+  leadingIcon?: React.ReactNode; // optional icon or visual indicator on the left of trigger
 }
 
-export function Select({ id, value, onChange, options, placeholder = 'Select...', className = '', disabled = false, required = false, rounded = 'rounded-xl', ariaLabel, buttonClassName }: SelectProps) {
+export function Select({ id, value, onChange, options, placeholder = 'Select...', className = '', disabled = false, required = false, rounded = 'rounded-xl', ariaLabel, buttonClassName, leadingIcon }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -62,9 +63,6 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
     return () => window.removeEventListener('scroll', handleScroll, true);
   }, [isOpen]);
 
-  useEffect(() => {
-    if (!isOpen) setSearchQuery('');
-  }, [isOpen]);
 
   const q = searchQuery.trim().toLowerCase();
   const filteredOptions = q
@@ -150,6 +148,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
         className={cn(`flex w-full items-center justify-between ${rounded} border border-border bg-white px-4 py-2.5 text-sm text-[#374151] outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50 transition-all text-left`, buttonClassName)}
       >
         <span className="flex items-center gap-2 min-w-0">
+          {leadingIcon && <span className="shrink-0 flex items-center">{leadingIcon}</span>}
           {selectedOption?.avatar && (
             <span className="h-5 w-5 shrink-0 rounded-full bg-[#F3F4F6] border border-border text-primary text-[9px] font-semibold flex items-center justify-center">{selectedOption.avatar}</span>
           )}

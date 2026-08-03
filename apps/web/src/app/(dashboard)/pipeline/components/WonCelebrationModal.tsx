@@ -16,12 +16,14 @@ export function WonCelebrationModal({ lead, onClose }: WonCelebrationModalProps)
   const router = useRouter();
   const clientName = lead?.client?.company || lead?.client?.name || 'Client';
 
+  const dealAmount = lead?.dealValue ?? lead?.fields?.agreedFinalValue ?? null;
+
   const handleCreateProject = () => {
     const params = new URLSearchParams({ create: 'true' });
     params.set('prefillName', `${clientName} Project`);
     const clientId = lead?.clientId || lead?.client?.id;
     if (clientId) params.set('prefillClientId', clientId);
-    if (lead?.dealValue) params.set('prefillBudget', String(lead.dealValue));
+    if (dealAmount) params.set('prefillBudget', String(dealAmount));
     if (lead?.assignedToId) params.set('prefillOwnerId', lead.assignedToId);
     onClose();
     router.push(`/projects?${params.toString()}`);
@@ -54,8 +56,8 @@ export function WonCelebrationModal({ lead, onClose }: WonCelebrationModalProps)
         <p className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
           ✓ {clientName} marked as Active client
         </p>
-        {lead?.dealValue ? (
-          <p className="mt-3 text-2xl font-bold text-primary">{formatCurrency(lead.dealValue)}</p>
+        {dealAmount ? (
+          <p className="mt-3 text-2xl font-bold text-primary">{formatCurrency(dealAmount)}</p>
         ) : null}
 
         <div className="mt-6 flex flex-col gap-2">
