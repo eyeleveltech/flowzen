@@ -471,8 +471,8 @@ const contactSchema = z.object({
  *   - deleting the primary promotes the next-oldest instead of leaving the lead headless.
  */
 async function promotePrimaryContact(tx: Prisma.TransactionClient, leadId: string, contactId: string) {
-  await tx.leadContact.updateMany({ where: { leadId, id: { not: contactId } }, data: { isPrimary: false } });
-  await tx.leadContact.update({ where: { id: contactId }, data: { isPrimary: true } });
+  await (tx.leadContact as any).updateMany({ where: { leadId, id: { not: contactId } }, data: { isPrimary: false } });
+  await (tx.leadContact as any).update({ where: { id: contactId }, data: { isPrimary: true } });
 }
 const contactData = (b: any) => ({
   name: b.name, designation: b.designation || null, email: b.email || null, phone: b.phone || null,
@@ -486,7 +486,7 @@ crmRouter.get('/leads/:id/contacts', async (req: AuthRequest, res: Response, nex
     const leadId = req.params.id as string;
     const lead = await prisma.lead.findFirst({ where: { id: leadId, organizationId: orgId }, select: { id: true } });
     if (!lead) { res.status(404).json({ error: 'Lead not found' }); return; }
-    const contacts = await prisma.leadContact.findMany({
+    const contacts = await (prisma.leadContact as any).findMany({
       where: { leadId },
       orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
     });
@@ -551,14 +551,14 @@ crmRouter.delete('/leads/:id/contacts/:contactId', authorize('SUPER_ADMIN', 'ADM
   try {
     const orgId = req.user!.organizationId;
     const { id: leadId, contactId } = req.params as { id: string; contactId: string };
-    const existing = await prisma.leadContact.findFirst({ where: { id: contactId, lead: { id: leadId, organizationId: orgId } }, select: { id: true, isPrimary: true } });
+    const existing = await (prisma.leadContact as any).findFirst({ where: { id: contactId, lead: { id: leadId, organizationId: orgId } }, select: { id: true, isPrimary: true } });
     if (!existing) { res.status(404).json({ error: 'Contact not found' }); return; }
 
     await prisma.$transaction(async (tx) => {
       await tx.leadContact.delete({ where: { id: contactId } });
       // Removing the primary must not leave the lead with a contact list but no contact of
       // record — the name, email and phone shown everywhere come from that one row.
-      if (existing.isPrimary) {
+      if ((existing as any)?.isPrimary) {
         const next = await tx.leadContact.findFirst({ where: { leadId }, orderBy: { createdAt: 'asc' }, select: { id: true } });
         if (next) await promotePrimaryContact(tx, leadId, next.id);
       }
@@ -688,7 +688,7 @@ crmRouter.post('/leads', authorize('SUPER_ADMIN', 'ADMIN'), validate(leadSchema)
     await syncPrimaryContact(prisma, lead.id, {
       name: contactName, email, phone, designation: jobTitle, linkedinUrl,
     });
-    lead.contacts = await prisma.leadContact.findMany({
+    lead.contacts = await (prisma.leadContact as any).findMany({
       where: { leadId: lead.id },
       orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
     });
@@ -1032,7 +1032,7 @@ crmRouter.post('/leads/:id/intelligence', authorize('SUPER_ADMIN', 'ADMIN'), asy
     const leadId = req.params.id as string;
     const lead = await prisma.lead.findFirst({
       where: { id: leadId, organizationId: orgId },
-      include: { contacts: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }] } },
+      include: { contacts: { orderBy: [{ isPrimary: 'desc' } as any, { createdAt: 'asc' }] } },
     });
     if (!lead) {
       res.status(404).json({ error: 'Lead not found' });
@@ -1465,7 +1465,7 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
         await syncPrimaryContact(tx, leadId, contactEdit);
         // Re-read the people so the response carries the person as just saved. Without this the
         // edit form would reopen showing the pre-edit contact until the next full refetch.
-        updated.contacts = await tx.leadContact.findMany({
+        updated.contacts = await (tx.leadContact as any).findMany({
           where: { leadId },
           orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
         });
@@ -1925,7 +1925,7 @@ crmRouter.put('/clients/:id', requireModule('CRM'), authorize('SUPER_ADMIN', 'AD
                 linkedinUrl: c.linkedinUrl || null,
                 role: c.role || null,
                 notes: c.notes || null,
-                isPrimary: c.isPrimary ?? prior?.isPrimary ?? false,
+                isPrimary: c.isPrimary ?? (prior as any)?.isPrimary ?? false,
               };
             }).map((c, i, all) => (all.some((x) => x.isPrimary) ? c : { ...c, isPrimary: i === 0 })),
           },
