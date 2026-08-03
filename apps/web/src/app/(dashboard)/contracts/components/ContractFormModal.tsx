@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useClients } from '@/hooks/useQueries';
 import toast from 'react-hot-toast';
 
 interface Props {
@@ -24,10 +25,12 @@ export function ContractFormModal({ onClose, onSaved }: Props) {
   });
 
   const queryClient = useQueryClient();
-  const { data: clients = [] } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => api.get<any[]>('/clients'),
-  });
+  // useClients() owns the ['clients'] key and returns the unwrapped array. Declaring a second
+  // query on the same key with a different queryFn meant whichever component mounted first
+  // decided the cached shape — this one caches the raw { clients, total } envelope, so a
+  // ContractFormModal opened before any consumer of useClients() got an object where it expected
+  // an array and rendered an empty dropdown.
+  const { data: clients = [] } = useClients();
 
   const saveMutation = useMutation({
     mutationFn: (data: any) => api.post('/revenue/contracts', data),

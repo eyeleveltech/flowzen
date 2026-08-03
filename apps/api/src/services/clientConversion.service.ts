@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client';
+import { primaryContactOf } from './leadContact.service.js';
 
 /**
  * Lead → Client conversion.
@@ -17,13 +18,22 @@ import type { Prisma } from '@prisma/client';
 // work (winning a deal also writes stage history, activities and revenue records).
 type Tx = Prisma.TransactionClient;
 
-/** Fields copied from the lead onto the account it becomes. */
-const identityFrom = (lead: any) => ({
-  name: lead.companyName || lead.contactName || 'Unknown',
+/**
+ * Fields copied from the lead onto the account it becomes.
+ *
+ * Contact details come from the lead's PRIMARY CONTACT, falling back to the lead's flat columns
+ * for records written before the contacts backfill. The account's own email/phone matter beyond
+ * display: findMatchingClient dedups on them, so a client created without them can't be
+ * recognised when the same customer's next deal is won.
+ */
+const identityFrom = (lead: any) => {
+  const person = primaryContactOf(lead);
+  return {
+  name: lead.companyName || person.name || 'Unknown',
   company: lead.companyName || null,
-  email: lead.contactEmail || null,
-  phone: lead.contactPhone || null,
-  contactPerson: lead.contactName || null,
+  email: person.email || null,
+  phone: person.phone || null,
+  contactPerson: person.name || null,
   address: lead.address || null,
   city: lead.city || null,
   state: lead.state || null,
@@ -32,8 +42,8 @@ const identityFrom = (lead: any) => ({
   billingAddress: lead.billingAddress || null,
   gstNumber: lead.gstNumber || null,
   contractValue: lead.dealValue ?? null,
-  jobTitle: lead.jobTitle || null,
-  linkedinUrl: lead.linkedinUrl || null,
+  jobTitle: person.designation || null,
+  linkedinUrl: person.linkedinUrl || null,
   companySize: lead.companySize || null,
   landlinePhone: lead.landlinePhone || null,
   zip: lead.zip || null,
@@ -47,7 +57,8 @@ const identityFrom = (lead: any) => ({
   expectedRevenue: lead.expectedRevenue ?? null,
   dossierJson: lead.dossierJson ?? null,
   dossierStatus: lead.dossierStatus || null,
-});
+  };
+};
 
 /**
  * Find an existing account for this lead's company, so a repeat customer's second deal
@@ -56,11 +67,12 @@ const identityFrom = (lead: any) => ({
  * company name. Anything fuzzier risks merging two genuinely different customers.
  */
 async function findMatchingClient(tx: Tx, orgId: string, lead: any) {
+  const person = primaryContactOf(lead);
   const candidates: Prisma.ClientWhereInput[] = [];
-  if (lead.contactEmail) candidates.push({ email: { equals: lead.contactEmail, mode: 'insensitive' } });
-  if (lead.contactPhone) candidates.push({ phone: lead.contactPhone });
+  if (person.email) candidates.push({ email: { equals: person.email, mode: 'insensitive' } });
+  if (person.phone) candidates.push({ phone: person.phone });
 
-  const targetName = (lead.companyName || lead.contactName || '').trim();
+  const targetName = (lead.companyName || person.name || '').trim();
   if (targetName) {
     candidates.push({ name: { equals: targetName, mode: 'insensitive' } });
     candidates.push({ company: { equals: targetName, mode: 'insensitive' } });
@@ -105,7 +117,17 @@ export async function ensureClientForLead(
     return { clientId: lead.clientId, created: false };
   }
 
-  const existing = await findMatchingClient(tx, orgId, lead);
+  // Load the people here rather than trusting every caller to have included them. Four different
+  // routes reach this function; if any one of them forgot the include, primaryContactOf would
+  // quietly fall back to the flat columns and the switch to lead_contacts would look like it
+  // worked while doing nothing. Fetched once and reused for both matching and creation.
+  const leadContacts = await tx.leadContact.findMany({
+    where: { leadId: lead.id },
+    orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+  });
+  const leadWithContacts = { ...lead, contacts: leadContacts };
+
+  const existing = await findMatchingClient(tx, orgId, leadWithContacts);
   if (existing) {
     await tx.lead.update({ where: { id: lead.id }, data: { clientId: existing.id } });
     await repointLeadQuotes(tx, lead.id, existing.id);
@@ -115,11 +137,10 @@ export async function ensureClientForLead(
     return { clientId: existing.id, created: false };
   }
 
-  const leadContacts = await tx.leadContact.findMany({ where: { leadId: lead.id } });
-
-  // The lead's own contact person seeds the account when no contact list was built out.
-  const contacts = leadContacts.length
-    ? leadContacts.map((c: any) => ({
+  // The whole contact list moves to the account, primary flag included, so the main person stays
+  // the main person after the win. The flat-column fallback covers leads written before the
+  // contacts backfill; it disappears with the columns in the final migration step.
+  const contacts = leadContacts.map((c: any) => ({
         name: c.name,
         designation: c.designation || null,
         email: c.email || null,
@@ -129,22 +150,12 @@ export async function ensureClientForLead(
         linkedinUrl: c.linkedinUrl || null,
         role: c.role || null,
         notes: c.notes || null,
-      }))
-    : lead.contactName
-      ? [{
-          name: lead.contactName,
-          designation: lead.jobTitle || null,
-          email: lead.contactEmail || null,
-          phone: lead.contactPhone || null,
-          linkedinUrl: lead.linkedinUrl || null,
-          role: null,
-          notes: null,
-        }]
-      : [];
+        isPrimary: c.isPrimary ?? false,
+  }));
 
   const client = await tx.client.create({
     data: {
-      ...identityFrom(lead),
+      ...identityFrom(leadWithContacts),
       status: 'ACTIVE', // an account only exists once the deal is won
       organizationId: orgId,
       ...(contacts.length ? { contacts: { create: contacts } } : {}),

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useClients } from '@/hooks/useQueries';
 import toast from 'react-hot-toast';
 
 interface Props {
@@ -24,10 +25,8 @@ export function ExpenseFormModal({ onClose, onSaved }: Props) {
   });
 
   const queryClient = useQueryClient();
-  const { data: clients = [] } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => api.get<any[]>('/clients'),
-  });
+  // Shares the ['clients'] cache key with useClients(); see the note in ContractFormModal.
+  const { data: clients = [] } = useClients();
   
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],

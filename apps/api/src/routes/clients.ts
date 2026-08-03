@@ -9,6 +9,8 @@ import { createAuditLog } from '../utils/audit.js';
 import { sanitizeRichText } from '../utils/html.js';
 import { buildSearchFilter } from '../utils/search-utils.js';
 import { createPipelineEntryForClient } from '../services/clientPipelineEntry.service.js';
+import { loadUsedLeadPhones } from '../services/leadContact.service.js';
+import { normalizePhone } from '../utils/leadId.js';
 
 export const clientRouter = Router();
 clientRouter.use(authenticate);
@@ -156,13 +158,10 @@ clientRouter.post('/bulk', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN
     const usersByEmail = new Map(orgUsers.map((u) => [u.email.toLowerCase(), u.id]));
     const orgUserIds = new Set(orgUsers.map((u) => u.id));
 
-    // Lead.contactPhone is unique per org. Preloaded once so the per-row pipeline entry doesn't
-    // issue its own lookup, and so two rows in the same file can't claim the same number.
-    const existingLeadPhones = await prisma.lead.findMany({
-      where: { organizationId: orgId, contactPhone: { not: null } },
-      select: { contactPhone: true },
-    });
-    const takenPhones = new Set(existingLeadPhones.map((l) => (l.contactPhone || '').trim()).filter(Boolean));
+    // Phone numbers already claimed by a lead in this org — across both the lead rows and their
+    // contacts. Preloaded once so the per-row pipeline entry doesn't issue its own lookup, and so
+    // two rows in the same file can't claim the same number.
+    const takenPhones = await loadUsedLeadPhones(prisma, orgId, normalizePhone);
 
     // Client names are unique per org, case-insensitive — the same rule the (now removed) single
     // create enforced, and the one PUT still applies on rename. Without it here, re-uploading a

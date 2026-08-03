@@ -84,8 +84,10 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
     try {
       const payload = {
         ...form,
-        dealValue: form.dealValue ? parseFloat(form.dealValue) : undefined,
-        expectedCloseDate: form.expectedCloseDate || undefined,
+        // null, not undefined — undefined reads as "don't touch this field", so clearing the box
+        // left the old figure in place with no way to remove it.
+        dealValue: form.dealValue ? parseFloat(form.dealValue) : null,
+        expectedCloseDate: form.expectedCloseDate || null,
         followUpDate: form.followUpDate || null,
         lastContactedDate: form.lastContactedDate || null,
         contractStartDate: form.contractStartDate || null,

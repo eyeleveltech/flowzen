@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Mail, Phone, Link2, Sparkles, Loader2, Pencil, Trash2, X, FileText, User } from 'lucide-react';
+import { Plus, Mail, Phone, Link2, Sparkles, Loader2, Pencil, Trash2, X, FileText, User, Star } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getInitials, getAvatarColor } from '@/lib/utils';
 import toast from 'react-hot-toast';
@@ -11,11 +11,12 @@ import { DossierView } from './DossierView';
 
 const roleMeta = (role: string) => CONTACT_ROLES.find((r) => r.v === role);
 
-export function ContactsTab({ leadId, lead }: { leadId: string; lead: any }) {
+export function ContactsTab({ leadId, lead, onChanged }: { leadId: string; lead: any; onChanged?: () => void }) {
   const [contacts, setContacts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<{ open: boolean; contact?: any }>({ open: false });
   const [running, setRunning] = useState<string | null>(null);
+  const [promoting, setPromoting] = useState<string | null>(null);
   const [dossier, setDossier] = useState<any>(null);
 
   const load = useCallback(async () => {
@@ -57,56 +58,59 @@ export function ContactsTab({ leadId, lead }: { leadId: string; lead: any }) {
       await api.delete(`/crm/leads/${leadId}/contacts/${c.id}`);
       toast.success('Contact removed');
       await load();
+      // Removing the primary promotes the next contact server-side, which changes the name and
+      // email shown in the lead header — so the page's own copy of the lead has to refresh too.
+      onChanged?.();
     } catch (e: any) {
       toast.error(e?.message || 'Failed to remove');
     }
   };
 
+  const makePrimary = async (c: any) => {
+    setPromoting(c.id);
+    try {
+      await api.patch(`/crm/leads/${leadId}/contacts/${c.id}`, { isPrimary: true });
+      toast.success(`${c.name} is now the primary contact`);
+      await load();
+      onChanged?.();
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to set primary contact');
+    } finally {
+      setPromoting(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
-      {/* Primary contact (read-only, from the lead) */}
-      <div className="bg-white rounded-2xl border border-border p-5">
-        <div className="flex items-start gap-3">
-          <div className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center text-sm font-bold ${getAvatarColor(lead.contactName || 'Lead')}`}>{getInitials(lead.contactName || lead.companyName || 'L')}</div>
-          <div className="min-w-0 flex-1">
-            {/* Name row: stacks on mobile */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-              <p className="font-semibold text-primary truncate">{lead.contactName || '—'}</p>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex px-2 py-0.5 rounded-md bg-primary text-white text-[10px] font-semibold">Primary</span>
-                {lead.jobTitle && <span className="text-xs text-secondary">{lead.jobTitle}</span>}
-              </div>
-            </div>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-x-4 mt-2 text-xs text-secondary">
-              {lead.contactEmail && <a href={`mailto:${lead.contactEmail}`} className="flex items-center gap-1.5 hover:text-primary break-all"><Mail className="w-3 h-3 shrink-0" /> {lead.contactEmail}</a>}
-              {lead.contactPhone && <a href={`tel:${lead.contactPhone}`} className="flex items-center gap-1.5 hover:text-primary"><Phone className="w-3 h-3 shrink-0" /> {lead.contactPhone}</a>}
-              {lead.linkedinUrl && <a href={lead.linkedinUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-primary"><Link2 className="w-3 h-3" /> LinkedIn</a>}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Secondary contacts */}
+      {/* One list, one source of truth.
+          This used to render a separate read-only "Primary contact" card built from the lead's
+          own contactName/contactEmail/contactPhone, above a list of "secondary" contacts. Those
+          lead columns no longer exist — the person IS a row in this list — so the card showed the
+          same human twice, and after the columns were dropped it showed an empty one. */}
       <div className="bg-white rounded-2xl border border-border p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-y-3 gap-x-4 mb-4">
-          <h2 className="text-base font-semibold text-primary flex items-center gap-2"><User className="w-4 h-4 text-secondary" /> Stakeholders <span className="text-secondary font-normal">({contacts.length})</span></h2>
+          <div>
+            <h2 className="text-base font-semibold text-primary flex items-center gap-2"><User className="w-4 h-4 text-secondary" /> Contacts <span className="text-secondary font-normal">({contacts.length})</span></h2>
+            <p className="text-xs text-secondary mt-0.5">Everyone at {lead.companyName || 'this company'}. The primary contact is the one used on quotations and shown on the board.</p>
+          </div>
           <button onClick={() => setModal({ open: true })} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-gray-800 transition-colors"><Plus className="w-4 h-4" /> Add Contact</button>
         </div>
 
         {loading ? (
           <div className="py-8 flex justify-center"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" /></div>
         ) : contacts.length === 0 ? (
-          <p className="py-8 text-center text-sm text-secondary">No secondary contacts yet. Add the other stakeholders in this deal.</p>
+          <p className="py-8 text-center text-sm text-secondary">No contacts yet. Add the people you deal with at this company.</p>
         ) : (
           <div className="space-y-3">
             {contacts.map((c) => {
               const rm = roleMeta(c.role);
               return (
-                <div key={c.id} className="flex items-start gap-3 p-3 rounded-xl border border-border hover:border-gray-300 transition-colors">
+                <div key={c.id} className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${c.isPrimary ? 'border-primary/30 bg-primary/3' : 'border-border hover:border-gray-300'}`}>
                   <div className={`h-9 w-9 shrink-0 rounded-lg flex items-center justify-center text-xs font-bold ${getAvatarColor(c.name)}`}>{getInitials(c.name)}</div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-medium text-primary truncate">{c.name}</p>
+                      {c.isPrimary && <span className="inline-flex px-2 py-0.5 rounded-md bg-primary text-white text-[10px] font-semibold">Primary</span>}
                       {c.designation && <span className="text-xs text-secondary">· {c.designation}</span>}
                       {rm && <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${rm.color}`} title={rm.desc}>{rm.label}</span>}
                     </div>
@@ -118,6 +122,11 @@ export function ContactsTab({ leadId, lead }: { leadId: string; lead: any }) {
                     {c.notes && <p className="mt-1.5 text-xs text-[#4B5563]">{c.notes}</p>}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
+                    {!c.isPrimary && (
+                      <button onClick={() => makePrimary(c)} disabled={promoting === c.id} className="flex items-center gap-1 text-xs font-medium text-secondary border border-border rounded-lg px-2 py-1.5 hover:text-primary disabled:opacity-50" title="Make this the primary contact">
+                        {promoting === c.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Star className="w-3.5 h-3.5" />}
+                      </button>
+                    )}
                     {c.dossierStatus === 'complete' && (
                       <button onClick={() => setDossier(c)} className="flex items-center gap-1 text-xs font-medium text-primary border border-border rounded-lg px-2 py-1.5 hover:bg-gray-50" title="View dossier"><FileText className="w-3.5 h-3.5" /> Dossier</button>
                     )}
@@ -138,7 +147,7 @@ export function ContactsTab({ leadId, lead }: { leadId: string; lead: any }) {
 
       <AnimatePresence>
         {modal.open && (
-          <ContactModal leadId={leadId} contact={modal.contact} onClose={() => setModal({ open: false })} onSuccess={() => { setModal({ open: false }); load(); }} />
+          <ContactModal leadId={leadId} contact={modal.contact} onClose={() => setModal({ open: false })} onSuccess={() => { setModal({ open: false }); load(); onChanged?.(); }} />
         )}
       </AnimatePresence>
 

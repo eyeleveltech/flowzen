@@ -19,7 +19,7 @@ const startOfDay = (d = new Date()) => new Date(istDayIndex(d) * 86400000 - IST_
 const endOfDay = (d = new Date()) => new Date((istDayIndex(d) + 1) * 86400000 - IST_OFFSET_MS - 1);
 const daysBetween = (a: Date, b: Date) => istDayIndex(a) - istDayIndex(b);
 const prefOn = (user: any, key: string) => ((user?.settings as any)?.notifications?.[key]) !== false;
-const leadName = (l: any) => l.companyName || l.contactName || 'Lead';
+const leadName = (l: any) => l.companyName || 'Lead';
 
 export function addCalendarMonthsAnchored(fromDate: Date, months: number, anchorDay: number): Date {
   const res = new Date(fromDate);
@@ -66,7 +66,7 @@ export async function runFollowUpScan(): Promise<number> {
   const today = new Date();
   const leads = await prisma.lead.findMany({
     where: { followUpDate: { lte: endOfDay(today) }, stage: { not: 'CHURNED' }, assignedToId: { not: null } },
-    select: { id: true, followUpDate: true, assignedToId: true, organizationId: true, companyName: true, contactName: true, stage: true },
+    select: { id: true, followUpDate: true, assignedToId: true, organizationId: true, companyName: true, stage: true },
   });
   if (!leads.length) return 0;
 
@@ -107,7 +107,7 @@ export async function runStaleLeadScan(): Promise<number> {
   const today = new Date();
   const leads = await prisma.lead.findMany({
     where: { stage: { in: ACTIVE_STAGES as any }, assignedToId: { not: null } },
-    select: { id: true, assignedToId: true, organizationId: true, companyName: true, contactName: true, stage: true, updatedAt: true, createdAt: true },
+    select: { id: true, assignedToId: true, organizationId: true, companyName: true, stage: true, updatedAt: true, createdAt: true },
   });
   if (!leads.length) return 0;
 
@@ -149,7 +149,7 @@ export async function sendDailyDigests(): Promise<number> {
 
   for (const u of users) {
     if (!prefOn(u, 'dailyDigest') || !u.email) continue;
-    const myLeads = await prisma.lead.findMany({ where: { assignedToId: u.id, stage: { notIn: ['CHURNED', 'PROJECT_COMPLETED'] } }, select: { id: true, companyName: true, contactName: true, stage: true, followUpDate: true, updatedAt: true, createdAt: true } });
+    const myLeads = await prisma.lead.findMany({ where: { assignedToId: u.id, stage: { notIn: ['CHURNED', 'PROJECT_COMPLETED'] } }, select: { id: true, companyName: true, stage: true, followUpDate: true, updatedAt: true, createdAt: true } });
     if (!myLeads.length) continue;
 
     const dueToday: any[] = [], overdue: any[] = [];
@@ -187,7 +187,7 @@ export async function runRenewalScan(): Promise<number> {
       contractEndDate: { not: null },
       OR: [{ renewalStatus: null }, { renewalStatus: { not: 'CHURNED' } }],
     },
-    select: { id: true, clientId: true, assignedToId: true, organizationId: true, companyName: true, contactName: true, dealValue: true, contractStartDate: true, contractEndDate: true, autoRenewal: true, renewalStatus: true },
+    select: { id: true, clientId: true, assignedToId: true, organizationId: true, companyName: true, dealValue: true, contractStartDate: true, contractEndDate: true, autoRenewal: true, renewalStatus: true },
   });
   if (!leads.length) return 0;
 
@@ -258,7 +258,7 @@ export async function runReactivationScan(): Promise<number> {
   const today = new Date();
   const fields = await prisma.dealField.findMany({
     where: { fieldKey: 'reactivationPotential', fieldValue: { in: ['Yes - 3 months', 'Yes - 6 months'] }, lead: { stage: 'CHURNED' } },
-    select: { fieldValue: true, lead: { select: { id: true, assignedToId: true, companyName: true, contactName: true, updatedAt: true, stageHistory: { where: { toStage: 'CHURNED' }, orderBy: { changedAt: 'desc' }, take: 1, select: { changedAt: true } } } } },
+    select: { fieldValue: true, lead: { select: { id: true, assignedToId: true, companyName: true, updatedAt: true, stageHistory: { where: { toStage: 'CHURNED' }, orderBy: { changedAt: 'desc' }, take: 1, select: { changedAt: true } } } } },
   });
   if (!fields.length) return 0;
 
@@ -275,7 +275,7 @@ export async function runReactivationScan(): Promise<number> {
     const windowDate = new Date(churn); windowDate.setMonth(windowDate.getMonth() + months);
     if (startOfDay(windowDate) > startOfDay(today)) continue; // window not open yet
 
-    const who = l.companyName || l.contactName || 'this lead';
+    const who = l.companyName || 'this lead';
     await prisma.task.create({ data: { title: `Reactivation due — reach out to ${who}`, description: 'The reactivation window has opened for this previously churned lead.', leadId: l.id, assigneeId: l.assignedToId || undefined, type: 'OTHER', status: 'TODO', dueDate: today } });
     if (l.assignedToId) await NotificationService.send({ userId: l.assignedToId, type: 'REACTIVATION_DUE' as any, message: `Reactivation due — reach out to ${who}.`, metadata: { leadId: l.id } });
     done.add(l.id); created++;
@@ -313,7 +313,7 @@ export async function sendOrgCrmDigest(): Promise<number> {
     if (!recipients.length) continue;
 
     // Follow-ups due/overdue (excluding leads already followed up after the date).
-    const fu = await prisma.lead.findMany({ where: { organizationId: org.id, followUpDate: { lte: endOfDay(today) }, stage: { not: 'CHURNED' } }, select: { id: true, companyName: true, contactName: true, stage: true, followUpDate: true, assignedTo: { select: { name: true } } } });
+    const fu = await prisma.lead.findMany({ where: { organizationId: org.id, followUpDate: { lte: endOfDay(today) }, stage: { not: 'CHURNED' } }, select: { id: true, companyName: true, stage: true, followUpDate: true, assignedTo: { select: { name: true } } } });
     const fuContact = await lastActivityMap(fu.map((l) => l.id), CONTACT_ACTIVITY_TYPES);
     const followUps = fu
       .filter((l) => !(fuContact.get(l.id) && l.followUpDate && fuContact.get(l.id)! > l.followUpDate))
@@ -321,14 +321,14 @@ export async function sendOrgCrmDigest(): Promise<number> {
 
     // Stale leads.
     const th = (await orgThresholdsMap([org.id])).get(org.id) || DEFAULT_STALE;
-    const activeLeads = await prisma.lead.findMany({ where: { organizationId: org.id, stage: { in: ACTIVE_STAGES as any } }, select: { id: true, companyName: true, contactName: true, stage: true, createdAt: true, assignedTo: { select: { name: true } } } });
+    const activeLeads = await prisma.lead.findMany({ where: { organizationId: org.id, stage: { in: ACTIVE_STAGES as any } }, select: { id: true, companyName: true, stage: true, createdAt: true, assignedTo: { select: { name: true } } } });
     const staleAct = await lastActivityMap(activeLeads.map((l) => l.id));
     const stale = activeLeads
       .map((l) => ({ name: leadName(l), stage: l.stage, owner: l.assignedTo?.name, idle: daysBetween(today, staleAct.get(l.id) || l.createdAt) }))
       .filter((l) => l.idle > (th[l.stage] ?? 7));
 
     // Renewals within 60 days.
-    const ren = await prisma.lead.findMany({ where: { organizationId: org.id, stage: 'ACTIVE_RETAINER', contractEndDate: { not: null }, renewalStatus: { not: 'CHURNED' } }, select: { companyName: true, contactName: true, dealValue: true, contractEndDate: true, renewalStatus: true, assignedTo: { select: { name: true } } } });
+    const ren = await prisma.lead.findMany({ where: { organizationId: org.id, stage: 'ACTIVE_RETAINER', contractEndDate: { not: null }, renewalStatus: { not: 'CHURNED' } }, select: { companyName: true, dealValue: true, contractEndDate: true, renewalStatus: true, assignedTo: { select: { name: true } } } });
     const renewals = ren
       .map((l) => ({ name: leadName(l), days: daysBetween(new Date(l.contractEndDate!), today), value: Number(l.dealValue) || 0, status: l.renewalStatus || 'UPCOMING', owner: l.assignedTo?.name }))
       .filter((r) => r.days <= 60).sort((a, b) => a.days - b.days);
@@ -336,7 +336,7 @@ export async function sendOrgCrmDigest(): Promise<number> {
     // Reactivations whose window has opened.
     const rfields = await prisma.dealField.findMany({
       where: { fieldKey: 'reactivationPotential', fieldValue: { in: ['Yes - 3 months', 'Yes - 6 months'] }, lead: { stage: 'CHURNED', organizationId: org.id } },
-      select: { fieldValue: true, lead: { select: { id: true, companyName: true, contactName: true, updatedAt: true, assignedTo: { select: { name: true } }, stageHistory: { where: { toStage: 'CHURNED' }, orderBy: { changedAt: 'desc' }, take: 1, select: { changedAt: true } } } } },
+      select: { fieldValue: true, lead: { select: { id: true, companyName: true, updatedAt: true, assignedTo: { select: { name: true } }, stageHistory: { where: { toStage: 'CHURNED' }, orderBy: { changedAt: 'desc' }, take: 1, select: { changedAt: true } } } } },
     });
     const reactivations = rfields
       .map((f) => { const l = f.lead; const churn = l.stageHistory[0]?.changedAt || l.updatedAt; const w = new Date(churn); w.setMonth(w.getMonth() + (/6/.test(f.fieldValue || '') ? 6 : 3)); return { name: leadName(l), window: w, owner: l.assignedTo?.name }; })
