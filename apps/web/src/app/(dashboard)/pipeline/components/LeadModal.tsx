@@ -432,19 +432,15 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                   <h3 className="text-sm font-semibold text-primary">3. Assignment & Notes</h3>
                 </div>
 
-                <div>
-                  {/* Not required — "Unassigned" is a valid, and common, choice for a new lead,
-                        and the server treats assignedToId as optional. The asterisk was fiction. */}
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Owner</label>
-                  <Select
-                    value={form.assignedToId}
-                    onChange={(v) => setForm({ ...form, assignedToId: v })}
-                    options={[
-                      { label: 'Unassigned', value: '' },
-                      ...members.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
-                    ]}
-                  />
-                </div>
+                <FieldSelect
+                  label="Owner"
+                  value={form.assignedToId}
+                  onChange={(v) => setForm({ ...form, assignedToId: v })}
+                  options={[
+                    { label: 'Unassigned', value: '' },
+                    ...members.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
+                  ]}
+                />
 
                 <Field
                   label="Notes / Description"
