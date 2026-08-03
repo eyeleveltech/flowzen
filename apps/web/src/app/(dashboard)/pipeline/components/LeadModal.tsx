@@ -7,6 +7,7 @@ import { X, Save, Upload, FileText, User, Briefcase, Mail, Phone, Search, Check,
 import { api } from '@/lib/api';
 import { getInitials } from '@/lib/utils';
 import { Field, FieldSelect } from '@/components/ui/field';
+import { Select } from '@/components/ui/select';
 import { useMembers, useClients } from '@/hooks/useQueries';
 import { useModalSafety } from '@/hooks/useModalSafety';
 import Papa from 'papaparse';
