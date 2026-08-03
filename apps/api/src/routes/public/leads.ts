@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient, LeadStage, LeadSource, ActivityEntityType, LostReason, ClientStatus } from '@prisma/client';
 import { ensureClientForLead } from '../../services/clientConversion.service.js';
+import { syncPrimaryContact, findLeadByPhone, primaryContactOf } from '../../services/leadContact.service.js';
 import { parsePagination } from '../../utils/query.js';
 import { normalizePhone } from '../../utils/leadId.js';
 
@@ -61,6 +62,8 @@ const mapEnumToSource = (dbSource: LeadSource): string => {
 
 // Formats a DB Lead to match the AI Brief JSON requirement
 const formatLeadResponse = (dbLead: any) => {
+  // The person comes from the lead's contact list; the client (once won) still wins over it.
+  const person = primaryContactOf(dbLead);
   const now = new Date();
   const lastContact = dbLead.activities?.[0]?.createdAt;
   const daysSinceContact = lastContact ? Math.floor((now.getTime() - lastContact.getTime()) / (1000 * 3600 * 24)) : 0;
@@ -84,10 +87,10 @@ const formatLeadResponse = (dbLead: any) => {
   return {
     id: dbLead.id,
     company_name: dbLead.client?.company || dbLead.companyName || 'Unknown Company',
-    contact_name: dbLead.client?.contactPerson || dbLead.client?.name || dbLead.contactName || 'Unknown Lead',
-    contact_email: dbLead.client?.email || dbLead.contactEmail || '',
-    contact_phone: dbLead.client?.phone || dbLead.contactPhone || '',
-    contact_whatsapp: dbLead.client?.phone || dbLead.contactPhone || '',
+    contact_name: dbLead.client?.contactPerson || dbLead.client?.name || person.name || 'Unknown Lead',
+    contact_email: dbLead.client?.email || person.email || '',
+    contact_phone: dbLead.client?.phone || person.phone || '',
+    contact_whatsapp: dbLead.client?.phone || person.phone || '',
     vertical: dbLead.client?.industry || dbLead.industry || '',
     source: mapEnumToSource(dbLead.source),
     stage: mapEnumToStage(dbLead.stage),
@@ -180,7 +183,8 @@ leadRouter.get('/', async (req: Request, res: Response) => {
         client: { include: { notes: { orderBy: { createdAt: 'desc' }, take: 1 } } },
         assignedTo: true,
         activities: { orderBy: { createdAt: 'desc' }, take: 1 },
-        stageHistory: { orderBy: { changedAt: 'desc' }, take: 1 }
+        stageHistory: { orderBy: { changedAt: 'desc' }, take: 1 },
+        contacts: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }] }
       },
       skip,
       take: parsedLimit,
@@ -276,11 +280,7 @@ leadRouter.post('/', async (req: Request, res: Response) => {
     if (contact_phone) {
       const digits = normalizePhone(contact_phone);
       if (digits) {
-        const orgLeads = await prisma.lead.findMany({
-          where: { organizationId: orgId, contactPhone: { not: null } },
-          select: { id: true, leadId: true, contactPhone: true },
-        });
-        const existingLead = orgLeads.find((l) => normalizePhone(l.contactPhone) === digits);
+        const existingLead = await findLeadByPhone(prisma, orgId, digits, normalizePhone);
         if (existingLead) {
           return res.status(409).json({
             success: false,
@@ -302,10 +302,7 @@ leadRouter.post('/', async (req: Request, res: Response) => {
         stage: dbStage,
         dealValue: monthly_value,
         assignedToId,
-        contactName: contact_name || null,
         companyName: company_name || null,
-        contactEmail: contact_email || null,
-        contactPhone: contact_phone || null,
         industry: vertical || null,
         expectedCloseDate: next_followup_date ? new Date(next_followup_date) : undefined,
         notes: notes ? {
@@ -322,6 +319,12 @@ leadRouter.post('/', async (req: Request, res: Response) => {
         stageHistory: true,
         notes: true
       }
+    });
+
+    // Mirror the inbound person into the lead's contact list (dual-write during the contacts
+    // migration — see leadContact.service.ts).
+    await syncPrimaryContact(prisma, lead.id, {
+      name: contact_name, email: contact_email, phone: contact_phone,
     });
 
     await prisma.activity.create({

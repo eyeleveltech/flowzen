@@ -201,6 +201,93 @@ const run = async () => {
   check('lead deleted', del.status === 200, `got ${del.status}`);
   check('client survived lead deletion', (await clientCount(CO)) === 1);
 
+  // A lead is a COMPANY and its people are rows in lead_contacts — there are no flat
+  // contactName/contactEmail/contactPhone columns any more. Everything the UI shows for "the
+  // person on this lead" is re-derived from whichever contact carries isPrimary.
+  //
+  // The ten sections above all passed while three things were badly broken: the list and detail
+  // endpoints returned no person at all (they never included `contacts`, so there was nothing to
+  // derive from), and every lead edit failed outright because the route still tried to write the
+  // dropped columns. None of that was caught because no test above ever asserted on a contact
+  // field coming BACK from the API. That is what this section is for.
+  console.log('\n11. The person on a lead lives in lead_contacts');
+  const PCO = `Primary Contact Co ${RUN}`;
+  const pl = await call('POST', '/crm/leads', {
+    companyName: PCO, contactName: 'Alice First', jobTitle: 'CTO',
+    email: `alice@${RUN}.test`, phone: '7' + String(RUN).slice(-9).padStart(9, '0'),
+  });
+  const plId = pl.data?.id;
+  check('create echoes the person back', pl.data?.contactName === 'Alice First', `got ${JSON.stringify(pl.data?.contactName)}`);
+
+  const listed = await call('GET', '/crm/leads');
+  const boardRow = (listed.data || []).find((l) => l.id === plId);
+  check('board list carries the person', boardRow?.contactName === 'Alice First', `got ${JSON.stringify(boardRow?.contactName)}`);
+  const detail = await call('GET', `/crm/leads/${plId}`);
+  check('detail carries the person', detail.data?.contactName === 'Alice First', `got ${JSON.stringify(detail.data?.contactName)}`);
+
+  // Exactly one contact is primary at all times, and it is the one the lead reads from.
+  const firstContacts = await call('GET', `/crm/leads/${plId}/contacts`);
+  check('the first contact is primary automatically', (firstContacts.data || []).filter((c) => c.isPrimary).length === 1);
+
+  const second = await call('POST', `/crm/leads/${plId}/contacts`, { name: 'Bob Second', role: 'CHAMPION', email: `bob@${RUN}.test` });
+  check('adding a contact does not steal primary', second.data?.isPrimary === false, `got ${second.data?.isPrimary}`);
+
+  await call('PATCH', `/crm/leads/${plId}/contacts/${second.data?.id}`, { isPrimary: true });
+  const promoted = await call('GET', `/crm/leads/${plId}/contacts`);
+  check('promoting demotes the previous primary', (promoted.data || []).filter((c) => c.isPrimary).length === 1);
+  const afterPromote = await call('GET', `/crm/leads/${plId}`);
+  check('the lead follows the new primary', afterPromote.data?.contactEmail === `bob@${RUN}.test`, `got ${afterPromote.data?.contactEmail}`);
+
+  await call('DELETE', `/crm/leads/${plId}/contacts/${second.data?.id}`);
+  const afterDelete = await call('GET', `/crm/leads/${plId}`);
+  check('deleting the primary promotes the next, never headless', afterDelete.data?.contactName === 'Alice First',
+    `got ${JSON.stringify(afterDelete.data?.contactName)}`);
+
+  console.log('\n12. Editing a lead');
+  const edited = await call('PATCH', `/crm/leads/${plId}`, {
+    companyName: PCO, contactName: 'Alice Renamed', contactEmail: `alice2@${RUN}.test`,
+    jobTitle: 'CEO', city: 'Madurai', dealValue: 50000,
+  });
+  check('the edit form payload is accepted', edited.status === 200, `got ${edited.status} ${JSON.stringify(edited.data).slice(0, 120)}`);
+  check('person fields land on the contact row', edited.data?.contactName === 'Alice Renamed', `got ${JSON.stringify(edited.data?.contactName)}`);
+  check('job title lands on the contact row', edited.data?.jobTitle === 'CEO', `got ${JSON.stringify(edited.data?.jobTitle)}`);
+  check('company fields land on the lead row', edited.data?.city === 'Madurai', `got ${JSON.stringify(edited.data?.city)}`);
+
+  // A partial edit must touch only what it sends — the same guarantee section 7 checks for clients.
+  const partialContact = await call('PATCH', `/crm/leads/${plId}`, { contactPhone: '9000000123' });
+  check('a partial edit keeps the other contact fields', partialContact.data?.contactEmail === `alice2@${RUN}.test`,
+    `got ${JSON.stringify(partialContact.data?.contactEmail)}`);
+  check('a partial edit applies what it does send', partialContact.data?.contactPhone === '9000000123',
+    `got ${JSON.stringify(partialContact.data?.contactPhone)}`);
+
+  // Clearing a value has to be possible: sending undefined reads as "leave it alone", so the
+  // forms send an explicit null and the route has to honour it.
+  const clearedDeal = await call('PATCH', `/crm/leads/${plId}`, { dealValue: null, expectedCloseDate: null });
+  check('an emptied deal value is actually cleared', clearedDeal.data?.dealValue === null, `got ${JSON.stringify(clearedDeal.data?.dealValue)}`);
+
+  console.log('\n13. Winning carries the contact list to the account');
+  const pWon = await call('POST', `/crm/leads/${plId}/stage`, { stage: 'CONTRACT', dealValue: 25000, fields: {} });
+  const pClientId = pWon.data?.clientId;
+  check('deal won', pWon.status === 200, `got ${pWon.status}`);
+  if (pClientId) {
+    const pClient = await call('GET', `/crm/clients/${pClientId}`);
+    check('account has exactly one primary contact', (pClient.data?.contacts || []).filter((c) => c.isPrimary).length === 1,
+      JSON.stringify((pClient.data?.contacts || []).map((c) => ({ n: c.name, p: c.isPrimary }))));
+    check('account email came from the primary contact', pClient.data?.email === `alice2@${RUN}.test`,
+      `got ${JSON.stringify(pClient.data?.email)}`);
+
+    // The client edit form replaces the whole contact list (deleteMany + create) and does not
+    // send isPrimary, so without the carry-forward every save silently demoted everyone.
+    const reSaved = await call('PUT', `/crm/clients/${pClientId}`, {
+      name: PCO, city: 'Coimbatore',
+      contacts: (pClient.data?.contacts || []).map((c) => ({ id: c.id, name: c.name, email: c.email, phone: c.phone })),
+    });
+    check('editing the client keeps a primary contact', (reSaved.data?.contacts || []).filter((c) => c.isPrimary).length === 1,
+      JSON.stringify((reSaved.data?.contacts || []).map((c) => ({ n: c.name, p: c.isPrimary }))));
+    await call('DELETE', `/clients/${pClientId}`);
+  }
+  await call('DELETE', `/crm/leads/${plId}`);
+
   console.log(`\n${'='.repeat(46)}\n  ${pass} passed, ${fail} failed\n${'='.repeat(46)}`);
   process.exit(fail ? 1 : 0);
 };

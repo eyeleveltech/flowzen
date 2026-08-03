@@ -100,8 +100,14 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
       fields: formData,
     };
 
-    if (requiresDealValue && dealValue) payload.dealValue = parseFloat(dealValue);
-    if (requiresDealValue && expectedCloseDate) payload.expectedCloseDate = expectedCloseDate;
+    // Send the field whenever the form showed it, including when it was cleared. Gating on a
+    // truthy value meant emptying the box just omitted it, and the old figure survived — the
+    // same trap the quotation form had with its client fallbacks.
+    if (requiresDealValue) {
+      const parsed = dealValue === '' ? null : parseFloat(dealValue);
+      if (parsed === null || !isNaN(parsed)) payload.dealValue = parsed;
+      payload.expectedCloseDate = expectedCloseDate || null;
+    }
 
     if (showsContractType) {
       payload.contractType = contractType;

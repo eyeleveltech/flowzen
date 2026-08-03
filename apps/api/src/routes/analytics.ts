@@ -18,7 +18,7 @@ async function getChurnedLeads(orgId: string, q: Record<string, string>) {
   const leads = await prisma.lead.findMany({
     where,
     select: {
-      id: true, leadId: true, companyName: true, contactName: true, lostReason: true, dealValue: true, industry: true,
+      id: true, leadId: true, companyName: true, lostReason: true, dealValue: true, industry: true,
       assignedToId: true, updatedAt: true,
       assignedTo: { select: { name: true } },
       dealFields: { where: { fieldKey: { in: ['competitorChosen', 'reactivationPotential'] } }, select: { fieldKey: true, fieldValue: true } },
@@ -34,7 +34,7 @@ async function getChurnedLeads(orgId: string, q: Record<string, string>) {
     for (const f of l.dealFields) df[f.fieldKey] = f.fieldValue;
     const churnDate = l.stageHistory[0]?.changedAt || l.updatedAt;
     return {
-      id: l.id, leadId: l.leadId, name: l.companyName || l.contactName || 'Lead', lostReason: l.lostReason,
+      id: l.id, leadId: l.leadId, name: l.companyName || 'Lead', lostReason: l.lostReason,
       value: Number(l.dealValue) || 0, industry: l.industry || null, assignedTo: l.assignedTo?.name || null, assignedToId: l.assignedToId,
       competitor: df.competitorChosen || null, reactivation: df.reactivationPotential || null,
       stageAtLoss: l.stageHistory[0]?.fromStage || null, churnDate,
