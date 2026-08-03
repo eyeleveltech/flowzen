@@ -1,8 +1,6 @@
 import { Router, Response } from 'express';
-import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, authorize, requireModule, AuthRequest } from '../middleware/auth.js';
-import { validate } from '../middleware/validate.js';
 import { emitToOrganization } from '../sse.js';
 import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
 import { NotificationService } from '../services/notifications.js';
@@ -10,41 +8,10 @@ import { whereIn, parsePagination } from '../utils/query.js';
 import { createAuditLog } from '../utils/audit.js';
 import { sanitizeRichText } from '../utils/html.js';
 import { buildSearchFilter } from '../utils/search-utils.js';
+import { createPipelineEntryForClient } from '../services/clientPipelineEntry.service.js';
 
 export const clientRouter = Router();
 clientRouter.use(authenticate);
-
-const clientSchema = z.object({
-  name: z.string().min(1),
-  company: z.string().optional(),
-  industry: z.string().optional(),
-  email: z.string().email().optional().or(z.literal('')),
-  phone: z.string().optional(),
-  address: z.string().optional(),
-  contractValue: z.number().optional(),
-  startDate: z.string().optional(),
-  engagementType: z.string().optional(),
-  website: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  billingAddress: z.string().optional(),
-  gstNumber: z.string().optional(),
-  scope: z.string().optional(),
-  assetLinks: z.string().optional(),
-  accountManagerId: z.string().optional(),
-  status: z.enum(['PROSPECT', 'ACTIVE', 'ONHOLD', 'CHURNED', 'PROJECT_COMPLETED']).optional(),
-  contacts: z.array(z.object({
-    id: z.string().optional(),
-    name: z.string().min(1),
-    designation: z.string().optional(),
-    email: z.string().optional(),
-    phone: z.string().optional(),
-    linkedinUrl: z.string().optional().nullable(),
-    role: z.enum(['DECISION_MAKER', 'INFLUENCER', 'GATEKEEPER', 'CHAMPION', 'CC_ONLY']).or(z.literal('')).optional().nullable(),
-    notes: z.string().optional().nullable(),
-  })).max(5).optional(),
-  currency: z.string().length(3, 'Must be a 3-letter ISO currency code').optional().default('INR'),
-});
 
 // GET /api/clients
 clientRouter.get('/', async (req: AuthRequest, res: Response, next) => {
@@ -149,237 +116,220 @@ clientRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
   }
 });
 
-// POST /api/clients
-clientRouter.post('/', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN'), validate(clientSchema), async (req: AuthRequest, res: Response, next) => {
-  try {
-    const { contacts, startDate, ...data } = req.body;
-    // Scope is rich-text HTML rendered raw in the UI — strip anything executable on write.
-    data.scope = sanitizeRichText(data.scope);
-
-    // Rule: a client must have at least one contact phone number.
-    const hasContactPhone = Array.isArray(contacts) && contacts.some((c: any) => c.phone && String(c.phone).trim());
-    if (!hasContactPhone) {
-      res.status(400).json({ error: 'A contact phone number is required to create a client.' });
-      return;
-    }
-
-    // Rule: client names are unique within the organization (case-insensitive).
-    const clientName = String(data.name || '').trim();
-    const duplicate = await prisma.client.findFirst({
-      where: { organizationId: req.user!.organizationId, name: { equals: clientName, mode: 'insensitive' } },
-      select: { id: true },
-    });
-    if (duplicate) {
-      res.status(409).json({ error: `A client named "${clientName}" already exists.` });
-      return;
-    }
-
-    const client = await prisma.client.create({
-      data: {
-        ...data,
-        name: clientName,
-        accountManagerId: data.accountManagerId || null,
-        startDate: startDate ? new Date(startDate) : undefined,
-        organizationId: req.user!.organizationId,
-        contacts: contacts ? {
-          create: contacts.map((c: any) => ({
-            name: c.name,
-            designation: c.designation,
-            email: c.email,
-            phone: c.phone,
-            linkedinUrl: c.linkedinUrl || null,
-            role: c.role || null,
-            notes: c.notes || null,
-          }))
-        } : undefined,
-      },
-      include: { contacts: true }
-    });
-
-    // Activity log
-    await prisma.activity.create({
-      data: {
-        type: 'CLIENT_CREATED',
-        message: `added client "${client.name}"`,
-        entityType: 'CLIENT',
-        entityId: client.id,
-        userId: req.user!.userId,
-        clientId: client.id,
-      },
-    });
-
-    // Real-time notification
-    const io = req.app.get('io');
-    emitToOrganization(io, req.user!.organizationId, 'client:created', client);
-    await invalidateOrganizationCache(req.user!.organizationId);
-
-    await createAuditLog({
-      organizationId: req.user!.organizationId,
-      userId: req.user!.userId,
-      action: 'CLIENT_CREATE',
-      entityType: 'CLIENT',
-      entityId: client.id,
-      details: { name: client.name, company: client.company }
-    });
-
-    res.status(201).json(client);
-  } catch (error) {
-    next(error);
-  }
+// POST /api/clients — deliberately blocked. Clients are born from the pipeline (a lead being
+// won) or from bulk CSV import (/clients/bulk, for onboarding pre-existing customers); there is
+// no manual "add one client" path. This is an explicit 403, not a removed route, so a direct API
+// call gets a clear reason instead of an ambiguous 404.
+clientRouter.post('/', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN'), (_req: AuthRequest, res: Response) => {
+  res.status(403).json({ error: 'Clients cannot be created directly. Win a deal in the pipeline, or use bulk import to onboard existing clients.' });
 });
 
 // POST /api/clients/bulk
+// Onboards pre-existing customers. Every row is validated individually: valid rows import,
+// invalid rows come back with a rejection_reason so the caller can build a report and re-upload
+// just those. A bad row never blocks the good ones, and never leaves the caller believing the
+// whole import failed when part of it committed (the old behaviour: one throw aborted the loop
+// and returned a blanket 400, so a retry duplicated everything created before the failure).
 clientRouter.post('/bulk', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
+    const orgId = req.user!.organizationId;
     const clientsData = req.body.clients;
+
     if (!Array.isArray(clientsData) || clientsData.length === 0) {
       res.status(400).json({ error: 'Invalid or empty clients array' });
       return;
     }
-
-    let createdCount = 0;
-
-    // Process sequentially or use a transaction depending on complexity. 
-    // Sequential allows us to skip invalid rows easily or handle constraints.
-    for (const data of clientsData) {
-      if (!data.name) continue;
-
-      await prisma.client.create({
-        data: {
-          name: data.name,
-          company: data.company || null,
-          industry: data.industry || null,
-          engagementType: data.engagementType || null,
-          status: ['PROSPECT', 'ACTIVE', 'ONHOLD', 'CHURNED', 'PROJECT_COMPLETED'].includes(data.status?.toUpperCase()) ? data.status.toUpperCase() : 'PROSPECT',
-          website: data.website || null,
-          city: data.city || null,
-          address: data.address || null,
-          scope: sanitizeRichText(data.scope) || null,
-          assetLinks: data.assetLinks || null,
-          startDate: data.startDate ? new Date(data.startDate) : null,
-          contractValue: data.contractValue ? parseFloat(data.contractValue) : null,
-          accountManagerId: data.accountManagerId || null,
-          organizationId: req.user!.organizationId,
-          contacts: (data.contactName || data.contactEmail) ? {
-            create: [{
-              name: data.contactName || 'Primary Contact',
-              designation: data.contactDesignation || null,
-              email: data.contactEmail || null,
-              phone: data.contactPhone || null
-            }]
-          } : undefined
-        }
-      });
-      createdCount++;
+    if (clientsData.length > 500) {
+      res.status(400).json({ error: 'Bulk import limit exceeded. You can import a maximum of 500 clients at a time.' });
+      return;
     }
 
-    // Activity log
-    await prisma.activity.create({
-      data: {
-        type: 'CLIENT_CREATED',
-        message: `bulk imported ${createdCount} clients`,
-        entityType: 'ORGANIZATION',
-        entityId: req.user!.organizationId,
-        userId: req.user!.userId,
-      },
+    const validStatuses = ['PROSPECT', 'ACTIVE', 'ONHOLD', 'CHURNED', 'PROJECT_COMPLETED'];
+    const emailRe = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+    // Account managers are addressed by email in the CSV — nobody filling a spreadsheet knows a
+    // cuid. Resolved once, scoped to the caller's org, so a foreign or unknown id can't attach.
+    const orgUsers = await prisma.user.findMany({
+      where: { organizationId: orgId, status: 'ACTIVE' },
+      select: { id: true, email: true },
     });
+    const usersByEmail = new Map(orgUsers.map((u) => [u.email.toLowerCase(), u.id]));
+    const orgUserIds = new Set(orgUsers.map((u) => u.id));
 
-    const io = req.app.get('io');
-    emitToOrganization(io, req.user!.organizationId, 'client:created', { bulk: true });
-    await invalidateOrganizationCache(req.user!.organizationId);
+    // Lead.contactPhone is unique per org. Preloaded once so the per-row pipeline entry doesn't
+    // issue its own lookup, and so two rows in the same file can't claim the same number.
+    const existingLeadPhones = await prisma.lead.findMany({
+      where: { organizationId: orgId, contactPhone: { not: null } },
+      select: { contactPhone: true },
+    });
+    const takenPhones = new Set(existingLeadPhones.map((l) => (l.contactPhone || '').trim()).filter(Boolean));
 
-    res.status(201).json({ message: `Successfully imported ${createdCount} clients`, count: createdCount });
+    // Client names are unique per org, case-insensitive — the same rule the (now removed) single
+    // create enforced, and the one PUT still applies on rename. Without it here, re-uploading a
+    // file silently minted twin accounts that could never afterwards be renamed, because any
+    // rename would collide with its own twin. Seeded from the DB, then extended as rows land so
+    // one file can't contain its own duplicates either.
+    const existingClients = await prisma.client.findMany({
+      where: { organizationId: orgId },
+      select: { name: true },
+    });
+    const takenNames = new Set(existingClients.map((c) => c.name.trim().toLowerCase()));
+
+    let imported = 0;
+    let pipelineEntries = 0;
+    const rejected: any[] = [];
+
+    for (const data of clientsData) {
+      const name = (data.name || '').toString().trim();
+      const email = (data.email || data.contactEmail || '').toString().trim();
+      const phone = (data.phone || data.contactPhone || '').toString().trim();
+
+      if (name.length < 2) {
+        rejected.push({ ...data, rejection_reason: 'Client name is required (min 2 characters).' });
+        continue;
+      }
+      if (email && !emailRe.test(email)) {
+        rejected.push({ ...data, rejection_reason: 'Email is not a valid address.' });
+        continue;
+      }
+      if (takenNames.has(name.toLowerCase())) {
+        rejected.push({ ...data, rejection_reason: `A client named "${name}" already exists.` });
+        continue;
+      }
+
+      // Money stays a string all the way to Prisma's Decimal — parseFloat would round-trip it
+      // through a binary float (FZ-020).
+      let contractValue: string | null = null;
+      if (data.contractValue !== undefined && data.contractValue !== null && data.contractValue !== '') {
+        const raw = data.contractValue.toString().replace(/[,\s]/g, '');
+        if (!/^\d+(\.\d{1,2})?$/.test(raw)) {
+          rejected.push({ ...data, rejection_reason: 'Contract value must be a non-negative number with at most 2 decimal places.' });
+          continue;
+        }
+        contractValue = raw;
+      }
+
+      let startDate: Date | null = null;
+      if (data.startDate) {
+        const parsed = new Date(data.startDate);
+        if (isNaN(parsed.getTime())) {
+          rejected.push({ ...data, rejection_reason: 'Start date must be a valid date (YYYY-MM-DD).' });
+          continue;
+        }
+        startDate = parsed;
+      }
+
+      let accountManagerId: string | null = null;
+      if (data.accountManagerEmail) {
+        const resolved = usersByEmail.get(data.accountManagerEmail.toString().trim().toLowerCase());
+        if (!resolved) {
+          rejected.push({ ...data, rejection_reason: 'Account manager email does not match an active user in your organization.' });
+          continue;
+        }
+        accountManagerId = resolved;
+      } else if (data.accountManagerId) {
+        if (!orgUserIds.has(data.accountManagerId)) {
+          rejected.push({ ...data, rejection_reason: 'Account manager not found in your organization.' });
+          continue;
+        }
+        accountManagerId = data.accountManagerId;
+      }
+
+      const status = validStatuses.includes(data.status?.toString().toUpperCase())
+        ? data.status.toString().toUpperCase()
+        : 'PROSPECT';
+
+      try {
+        const created = await prisma.client.create({
+          data: {
+            name,
+            company: data.company || null,
+            industry: data.industry || null,
+            engagementType: data.engagementType || null,
+            status,
+            website: data.website || null,
+            // Mirrored onto the client itself, not just the nested contact. findMatchingClient
+            // dedups on client.email / client.phone, so an imported account without them would
+            // never match when the same customer's next deal is won — creating a duplicate.
+            email: email || null,
+            phone: phone || null,
+            city: data.city || null,
+            state: data.state || null,
+            zip: data.zip || null,
+            country: data.country || null,
+            address: data.address || null,
+            // Billing identity — drives quotation auto-fill and the CGST/SGST vs IGST split.
+            billingAddress: data.billingAddress || null,
+            gstNumber: data.gstNumber || null,
+            scope: sanitizeRichText(data.scope) || null,
+            assetLinks: data.assetLinks || null,
+            startDate,
+            contractValue,
+            accountManagerId,
+            organizationId: orgId,
+            contacts: (data.contactName || data.contactEmail || data.contactPhone) ? {
+              create: [{
+                name: data.contactName || 'Primary Contact',
+                designation: data.contactDesignation || null,
+                email: data.contactEmail || null,
+                phone: data.contactPhone || null,
+              }]
+            } : undefined
+          },
+          include: { contacts: true },
+        });
+        imported++;
+        takenNames.add(name.toLowerCase());
+
+        // Give the imported customer its deal card, so it appears on the Pipeline board and —
+        // for retainers — in Renewals. A failure here must not lose the client: the account is
+        // the import's actual product, the pipeline entry is a convenience the backfill script
+        // (scripts/backfill-client-pipeline-entries.ts) can add later.
+        try {
+          const entry = await createPipelineEntryForClient(prisma, created, {
+            takenPhones,
+            changedById: req.user!.userId,
+          });
+          if (entry) pipelineEntries++;
+        } catch (leadErr: any) {
+          console.error(`[Bulk Import (Clients)] pipeline entry failed for "${name}":`, leadErr?.message || leadErr);
+        }
+      } catch (createErr: any) {
+        rejected.push({ ...data, rejection_reason: 'Could not be saved. Check the field formats on this row.' });
+        console.error('[Bulk Import Error (Clients)] row failed:', createErr?.message || createErr);
+      }
+    }
+
+    if (imported > 0) {
+      await prisma.activity.create({
+        data: {
+          type: 'CLIENT_CREATED',
+          message: `bulk imported ${imported} clients`,
+          entityType: 'ORGANIZATION',
+          entityId: orgId,
+          userId: req.user!.userId,
+        },
+      });
+
+      const io = req.app.get('io');
+      emitToOrganization(io, orgId, 'client:created', { bulk: true });
+      if (pipelineEntries > 0) emitToOrganization(io, orgId, 'lead:updated', {});
+      await invalidateOrganizationCache(orgId);
+    }
+
+    res.status(201).json({ imported, pipelineEntries, rejectedCount: rejected.length, rejected, count: imported });
   } catch (error) {
-    console.error('[Bulk Import Error (Clients)]:', error);
-    res.status(400).json({
-      error: 'Failed to process bulk import. Please check your CSV data format, ensure no required fields are missing, and try again.'
-    });
+    next(error);
   }
 });
 
 // PUT /api/clients/:id
-clientRouter.put('/:id', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN'), validate(clientSchema), async (req: AuthRequest, res: Response, next) => {
-  try {
-    const existing = await prisma.client.findFirst({
-      where: { id: (req.params.id as string), organizationId: req.user!.organizationId }
-    });
-
-    if (!existing) {
-      res.status(404).json({ error: 'Client not found' });
-      return;
-    }
-
-    if (existing.name === 'Internal') {
-      res.status(403).json({ error: 'The Internal client syncs automatically and cannot be manually edited' });
-      return;
-    }
-
-    const { contacts, startDate, ...data } = req.body;
-    // Scope is rich-text HTML rendered raw in the UI — strip anything executable on write.
-    data.scope = sanitizeRichText(data.scope);
-
-    // Enforce unique client name when renaming (case-insensitive, excluding self).
-    const newName = String(data.name || '').trim();
-    if (newName && newName.toLowerCase() !== existing.name.toLowerCase()) {
-      const duplicate = await prisma.client.findFirst({
-        where: { organizationId: req.user!.organizationId, name: { equals: newName, mode: 'insensitive' }, id: { not: existing.id } },
-        select: { id: true },
-      });
-      if (duplicate) {
-        res.status(409).json({ error: `A client named "${newName}" already exists.` });
-        return;
-      }
-    }
-
-    const updateData: any = {
-      ...data,
-      name: newName || existing.name,
-      accountManagerId: data.accountManagerId || null,
-      startDate: startDate ? new Date(startDate) : undefined,
-    };
-
-    // Only replace contacts when the request actually sends a contacts array. The previous
-    // unconditional `deleteMany: {}` meant ANY update that omitted contacts (e.g. changing
-    // just the GST number or status) silently deleted every contact on the client. A partial
-    // update must leave contacts it didn't mention untouched.
-    if (Array.isArray(contacts)) {
-      updateData.contacts = {
-        deleteMany: {},
-        create: contacts.map((c: any) => ({
-          name: c.name,
-          designation: c.designation,
-          email: c.email,
-          phone: c.phone,
-          linkedinUrl: c.linkedinUrl || null,
-          role: c.role || null,
-          notes: c.notes || null,
-        })),
-      };
-    }
-
-    const updated = await prisma.client.update({
-      where: { id: existing.id },
-      data: updateData,
-      include: { contacts: true }
-    });
-
-    const io = req.app.get('io');
-    emitToOrganization(io, req.user!.organizationId, 'client:updated', updated);
-    await invalidateOrganizationCache(req.user!.organizationId);
-
-    await createAuditLog({
-      organizationId: req.user!.organizationId,
-      userId: req.user!.userId,
-      action: 'CLIENT_UPDATE',
-      entityType: 'CLIENT',
-      entityId: updated.id,
-      details: { name: updated.name, company: updated.company }
-    });
-
-    res.json(updated);
-  } catch (error) {
-    next(error);
-  }
+// PUT /api/clients/:id — deliberately blocked. This was a dead duplicate of PUT /api/crm/clients/:id
+// (the route the client edit form actually calls) that additionally spread req.body straight into
+// prisma.client.update with no key-stripping — a mass-assignment hole, and another way `status`
+// could be changed with none of the pipeline's cascade logic. Removed rather than left as a landmine.
+clientRouter.put('/:id', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN'), (_req: AuthRequest, res: Response) => {
+  res.status(403).json({ error: 'Use /api/crm/clients/:id to edit a client.' });
 });
 
 // DELETE /api/clients/:id — soft-delete (archive)

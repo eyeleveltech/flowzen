@@ -10,17 +10,14 @@ import { MultiSelect } from '@/components/ui/multi-select';
 import { useMembers } from '@/hooks/useQueries';
 import { startOfMonth, startOfQuarter, startOfYear, subMonths, subQuarters, endOfMonth, endOfQuarter, endOfYear } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
+import { LEAD_STAGES, LEAD_STAGE_LABELS } from '@/lib/lead-stage';
 
 // Strict Monochromatic Palette matching design system
 const COLORS = ['#111827', '#4B5563', '#9CA3AF', '#D1D5DB', '#F3F4F6'];
 
-const STAGE_LABELS: Record<string, string> = {
-  NEW_LEAD: 'New Lead', OUTREACH: 'Outreach', MEETING: 'Meeting', PROPOSAL: 'Proposal', NEGOTIATION: 'Negotiation',
-  CONTRACT: 'Contract', ACTIVE_RETAINER: 'Active Retainer', ACTIVE_PROJECT: 'Active Project',
-  PROJECT_COMPLETED: 'Project Completed', CHURNED: 'Churned'
-};
+const STAGE_LABELS = LEAD_STAGE_LABELS;
 
-const ALL_STAGES = Object.keys(STAGE_LABELS);
+const ALL_STAGES = [...LEAD_STAGES];
 
 export function PipelineDashboard() {
   const { data: members = [] } = useMembers();

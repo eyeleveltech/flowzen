@@ -661,6 +661,9 @@ model ClientContact {
   // Carried over from the LeadContact when the deal is won — who's the decision maker vs.
   // champion vs. gatekeeper. Nullable because manually-added client contacts may not have one.
   role        ContactRole?
+  // Mirrors LeadContact.isPrimary so the main contact survives conversion — a lead and the
+  // client it becomes hold the same contact shape.
+  isPrimary   Boolean      @default(false)
   notes       String?      @db.Text
   clientId    String
   createdAt   DateTime     @default(now())
@@ -767,6 +770,11 @@ model LeadContact {
   phone              String?
   linkedinUrl        String?
   role               ContactRole
+  // The main person on this company — the one shown on the card and carried onto quotations.
+  // A lead is a COMPANY; its people live here rather than on flat columns of the lead itself.
+  // Exactly one contact per lead should carry this; enforced in the service layer, not the DB,
+  // because Postgres needs a partial unique index for it and Prisma can't express one.
+  isPrimary          Boolean     @default(false)
   notes              String?     @db.Text
   dossierJson        Json?
   dossierStatus      String?     // 'pending' | 'complete' | 'failed'

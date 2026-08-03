@@ -45,7 +45,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
     priority: 'MEDIUM',
   });
 
-  const [errors, setErrors] = useState<{ contactName?: string; email?: string; phone?: string }>({});
+  const [errors, setErrors] = useState<{ companyName?: string; email?: string; phone?: string }>({});
   const [submitting, setSubmitting] = useState(false);
   const [creationMode, setCreationMode] = useState<'MANUAL' | 'BULK'>(initialMode);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -114,21 +114,17 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    // Lead Entry Gateway — name required + (email OR phone required).
-    const newErrors: { contactName?: string; email?: string; phone?: string } = {};
-    if (!form.contactName || form.contactName.trim().length < 2) newErrors.contactName = 'Full name is required.';
+    // Lead Entry Gateway — the COMPANY is the lead's identity, so that is the only requirement.
+    // The contact person and their details are optional: a company off a list has none yet, and
+    // demanding one only produced placeholder data. Formats are still checked when supplied.
+    const newErrors: { companyName?: string; email?: string; phone?: string } = {};
+    if (!form.companyName || form.companyName.trim().length < 2) newErrors.companyName = 'Company name is required.';
 
-    const hasEmail = !!form.email.trim();
-    const hasPhone = !!form.phone.trim();
-
-    if (hasEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email.trim())) {
-      newErrors.email = 'A valid email is required.';
+    if (form.email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email.trim())) {
+      newErrors.email = 'Enter a valid email address.';
     }
-    if (hasPhone && form.phone.replace(/\D/g, '').length < 10) {
+    if (form.phone.trim() && form.phone.replace(/\D/g, '').length < 10) {
       newErrors.phone = 'Phone must be at least 10 digits.';
-    }
-    if (!hasEmail && !hasPhone) {
-      newErrors.email = 'Email or phone is required.';
     }
 
     setErrors(newErrors);
@@ -299,7 +295,8 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                         <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-600" />
                       )}
                     </div>
-                    
+                    {errors.companyName && <p className="mt-1 text-xs text-red-600">{errors.companyName}</p>}
+
                     {showClientDropdown && clientSearch.length > 0 && filteredClients.length > 0 && (
                       <div className="absolute z-10 w-full mt-1 bg-white border border-border rounded-xl shadow-lg max-h-48 overflow-y-auto p-1">
                         {filteredClients.map((client: any) => (
@@ -413,7 +410,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                   </div>
                   
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field label="Contact Name" required error={errors.contactName} value={form.contactName} onChange={(v) => {
+                    <Field label="Contact Name" value={form.contactName} onChange={(v) => {
                       setForm({ ...form, contactName: v });
                     }} placeholder="Full Name" />
                     <Field label="Job Title" value={form.jobTitle} onChange={(v) => setForm({ ...form, jobTitle: v })} placeholder="e.g. Marketing Director" />

@@ -19,12 +19,12 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useMembers } from '@/hooks/useQueries';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { getInitials } from '@/lib/utils';
+import { LEAD_STAGES, LEAD_STAGE_GROUPS, LEAD_STAGE_SHORT_LABELS, leadStageLabel } from '@/lib/lead-stage';
 
-// All pipeline stages in chronological order (used by the per-card stage menu)
-const PIPELINE_STAGES = [
-  'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
-  'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'CONTRACT', 'ON_HOLD', 'PROJECT_COMPLETED', 'CHURNED',
-];
+// All pipeline stages in chronological order (used by the per-card stage menu).
+// Widened to string[]: leads arrive from the API typed loosely, and this list is used for
+// index comparisons against those values.
+const PIPELINE_STAGES: string[] = [...LEAD_STAGES];
 
 // Probability weights used to compute weighted deal value per column
 const STAGE_WEIGHTS: Record<string, number> = {
@@ -33,18 +33,7 @@ const STAGE_WEIGHTS: Record<string, number> = {
   PROJECT_COMPLETED: 1.00, CHURNED: 0.00,
 };
 
-const GROUPS = [
-  { id: 'New', title: 'New Lead', color: '#6B7280', stages: ['NEW_LEAD'] },
-  { id: 'Outreach', title: 'Outreach', color: '#6B7280', stages: ['OUTREACH'] },
-  { id: 'Meeting', title: 'Meeting', color: '#6B7280', stages: ['MEETING'] },
-  { id: 'Proposal', title: 'Proposal', color: '#2563EB', stages: ['PROPOSAL'] },
-  { id: 'Negotiation', title: 'Negotiation', color: '#2563EB', stages: ['NEGOTIATION'] },
-  { id: 'Active', title: 'Active', color: '#2563EB', stages: ['ACTIVE_RETAINER', 'ACTIVE_PROJECT'] },
-  { id: 'WonClosed', title: 'Won & Closed', color: '#16A34A', stages: ['CONTRACT'] },
-  { id: 'OnHold', title: 'On Hold', color: '#6B7280', stages: ['ON_HOLD'] },
-  { id: 'Completed', title: 'Project Completed', color: '#16A34A', stages: ['PROJECT_COMPLETED'] },
-  { id: 'Lost', title: 'Lost & Closed', color: '#DC2626', stages: ['CHURNED'] },
-];
+const GROUPS = LEAD_STAGE_GROUPS;
 
 // NOTE: the per-card stage badge was removed (UI audit F-3) — the column the card
 // sits in already conveys its stage, so the badge was redundant. Column colours live
@@ -256,7 +245,7 @@ export function PipelineBoardView() {
       setIsSubmitting(true);
       return api.post(`/crm/leads/${leadId}/stage`, { stage: newStage, fields: {}, ...(reopen ? { reopen: true } : {}) })
         .then(async (updatedLead: any) => {
-          toast.success(reopen ? 'Deal reopened' : 'Stage updated successfully');
+          toast.success(reopen ? 'Confirmed' : 'Stage updated successfully');
           queryClient.invalidateQueries({ queryKey: ['leads'] });
           queryClient.invalidateQueries({ queryKey: ['clients'] });
           queryClient.setQueryData(['lead', leadId], updatedLead);
@@ -269,16 +258,19 @@ export function PipelineBoardView() {
     };
     submit(false).catch(async (err: any) => {
       if (err?.code === 'DEAL_CLOSED') {
+        // Same guard covers two distinct cases (leadStage.service.ts's stageTransitionError):
+        // reopening a closed deal, or unwinding an already-won one — err.message is worded
+        // correctly for whichever fired, so the dialog stays generic and just surfaces it.
         const okReopen = await confirm({
-          title: 'Reopen closed deal?',
-          message: err.message || 'This deal is closed. Reopen it back into the pipeline?',
-          confirmText: 'Reopen',
+          title: 'Confirm stage change',
+          message: err.message || 'This move needs confirmation. Continue?',
+          confirmText: 'Continue',
           cancelText: 'Cancel',
           variant: 'warning',
         });
         if (okReopen) {
           try { await submit(true); return; }
-          catch (e: any) { toast.error(e?.message || 'Failed to reopen'); }
+          catch (e: any) { toast.error(e?.message || 'Failed to update stage'); }
         }
       } else {
         toast.error(err.message || 'Failed to update stage');
@@ -582,7 +574,7 @@ export function PipelineBoardView() {
                                         ? 'bg-blue-50 text-blue-700 border-blue-200'
                                         : 'bg-green-50 text-green-700 border-green-200'
                                       }`}>
-                                      {lead.stage === 'ACTIVE_RETAINER' ? 'Retainer' : 'Project'}
+                                      {LEAD_STAGE_SHORT_LABELS[lead.stage] || leadStageLabel(lead.stage)}
                                     </span>
                                   )}
                                 </div>
@@ -721,7 +713,7 @@ export function PipelineBoardView() {
                   className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left transition-colors ${isCurrent ? 'text-gray-300 cursor-default bg-gray-50/50' : 'text-primary hover:bg-gray-50'
                     }`}
                 >
-                  <span><span className="text-gray-400">{idx + 1}.</span> {stage.replace('_', ' ')}</span>
+                  <span><span className="text-gray-400">{idx + 1}.</span> {leadStageLabel(stage)}</span>
                   {isCurrent && <Check className="w-4 h-4 text-gray-400 shrink-0" />}
                 </button>
               );

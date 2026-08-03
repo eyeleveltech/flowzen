@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatDate, formatCurrency, getInitials, getAvatarColor, getClientDisplayName, formatRelativeDate, toDateInput } from '@/lib/utils';
-import { ArrowLeft, Mail, Phone, MapPin, Building2, DollarSign, X, Plus, Users, Globe, Briefcase, Trash2, Calendar, FolderKanban, Target, Link2 } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MapPin, Building2, DollarSign, X, Plus, Users, Globe, Briefcase, Trash2, Calendar, FolderKanban, Target, Link2, RotateCcw, Archive } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { CurrencySelect } from '@/components/ui/currency-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
@@ -41,7 +41,7 @@ interface ClientDetail {
   address?: string | null; contractValue?: number | null;
   engagementType?: string | null; website?: string | null; city?: string | null; state?: string | null; billingAddress?: string | null; gstNumber?: string | null; scope?: string | null; assetLinks?: string | null; accountManagerId?: string | null;
   accountManager?: { id: string; name: string; avatar?: string | null } | null;
-  startDate?: string | null; status: string; createdAt: string;
+  startDate?: string | null; status: string; createdAt: string; archivedAt?: string | null;
   projects: { id: string; name: string; status: string; progress: number; endDate?: string | null; owner?: { id: string; name: string; avatar?: string | null }; _count?: { tasks: number } }[];
   notes: { id: string; content: string; type: string; createdAt: string; author: { name: string } }[];
   activities: { id: string; type: string; message: string; createdAt: string; user: { name: string } }[];
@@ -155,10 +155,12 @@ export default function ClientDetailPage() {
 
 
   async function handleDelete() {
+    // This archives the client (sets archivedAt + status: CHURNED) — it does NOT delete projects,
+    // contracts, or any other history, and it can be undone via "Restore" while archived.
     const isConfirmed = await confirm({
-      title: 'Delete Client',
-      message: 'This permanently deletes the client and all associated projects. This action cannot be undone.',
-      confirmText: 'Delete Client',
+      title: 'Archive Client',
+      message: 'This archives the client and hides it from the default list. Projects and other records are kept, and you can restore it later from this page.',
+      confirmText: 'Archive Client',
       cancelText: 'Cancel',
       variant: 'danger',
       requireText: getClientDisplayName(client),
@@ -166,10 +168,24 @@ export default function ClientDetailPage() {
     if (!isConfirmed) return;
     try {
       await api.delete(`/clients/${id}`);
-      toast.success('Client deleted successfully');
+      toast.success('Client archived');
       router.push('/clients');
     } catch (err: any) {
-      toast.error(err.message || 'Failed to delete client');
+      toast.error(err.message || 'Failed to archive client');
+    }
+  }
+
+  async function handleRestore() {
+    try {
+      await api.post(`/clients/${id}/restore`, {});
+      // Re-fetch rather than adopting the restore response: that payload is a bare client row
+      // with no contacts/projects/leads/quotes, and the page reads client.projects.length — so
+      // setting it directly blanked the page. Same mutate-then-refetch shape as the edit paths.
+      const updated = await api.get<ClientDetail>(`/clients/${id}`);
+      setClient(updated);
+      toast.success('Client restored');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to restore client');
     }
   }
 
@@ -278,7 +294,7 @@ export default function ClientDetailPage() {
         </div>
         {client.name !== 'Internal' && (
           <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
-            {!['PROJECT_COMPLETED', 'CHURNED'].includes(client.status) && (
+            {!client.archivedAt && !['PROJECT_COMPLETED', 'CHURNED'].includes(client.status) && (
               <button
                 onClick={() => setShowCreateProject(true)}
                 className="flex-1 sm:flex-none justify-center px-4 py-2 bg-primary text-white rounded-xl text-sm font-medium hover:bg-[#1F2937] transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap"
@@ -295,19 +311,33 @@ export default function ClientDetailPage() {
               </button>
             )}
             {activeModule !== 'PM' && canManageClients && (
-              <>
-                <button onClick={openEdit} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-[#374151] hover:bg-gray-50 transition-colors shadow-sm whitespace-nowrap">
-                  Edit Client
+              client.archivedAt ? (
+                <button onClick={handleRestore} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-[#374151] hover:bg-gray-50 transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap">
+                  <RotateCcw className="h-4 w-4" />
+                  Restore Client
                 </button>
-                <button onClick={handleDelete} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-red-200 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap">
-                  <Trash2 className="h-4 w-4" />
-                  Delete
-                </button>
-              </>
+              ) : (
+                <>
+                  <button onClick={openEdit} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-[#374151] hover:bg-gray-50 transition-colors shadow-sm whitespace-nowrap">
+                    Edit Client
+                  </button>
+                  <button onClick={handleDelete} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-red-200 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap">
+                    <Trash2 className="h-4 w-4" />
+                    Archive
+                  </button>
+                </>
+              )
             )}
           </div>
         )}
       </div>
+
+      {client.archivedAt && (
+        <div className="flex items-center gap-2 mb-6 px-4 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-sm text-amber-800">
+          <Archive className="h-4 w-4 shrink-0" />
+          This client is archived and hidden from the default client list. Use "Restore Client" above to bring it back.
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto whitespace-nowrap custom-scrollbar pb-1">
@@ -809,30 +839,19 @@ export default function ClientDetailPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">
-                    {activeModule === 'PM' ? 'Lifecycle Stage' : 'Status'}
+                    Lifecycle Stage
                   </label>
-                  {activeModule === 'PM' ? (
-                    <div className="w-full rounded-xl border border-border bg-gray-50 px-4 py-2.5 text-sm text-secondary cursor-not-allowed select-none">
-                      {editForm.status === 'PROSPECT' ? 'Prospect' :
-                        editForm.status === 'ACTIVE' ? 'Active' :
-                          editForm.status === 'ONHOLD' ? 'On Hold' :
-                            editForm.status === 'PROJECT_COMPLETED' ? 'Completed' :
-                              editForm.status === 'CHURNED' ? 'Churned' : editForm.status}
-                      <span className="ml-2 text-xs text-amber-500 font-medium">(Managed via CRM)</span>
-                    </div>
-                  ) : (
-                    <Select
-                      value={editForm.status}
-                      onChange={(val) => setEditForm({ ...editForm, status: val })}
-                      options={[
-                        { label: 'Prospect', value: 'PROSPECT' },
-                        { label: 'Active', value: 'ACTIVE' },
-                        { label: 'On Hold', value: 'ONHOLD' },
-                        { label: 'Churned', value: 'CHURNED' },
-                        { label: 'Project Completed', value: 'PROJECT_COMPLETED' },
-                      ]}
-                    />
-                  )}
+                  {/* Status is derived entirely from the lead's pipeline stage (win/hold/churn cascades
+                      live in leadStage.service.ts) — never manually editable here, in either module,
+                      so this can't drift out of sync with the pipeline or skip its cascade effects. */}
+                  <div className="w-full rounded-xl border border-border bg-gray-50 px-4 py-2.5 text-sm text-secondary cursor-not-allowed select-none">
+                    {editForm.status === 'PROSPECT' ? 'Prospect' :
+                      editForm.status === 'ACTIVE' ? 'Active' :
+                        editForm.status === 'ONHOLD' ? 'On Hold' :
+                          editForm.status === 'PROJECT_COMPLETED' ? 'Completed' :
+                            editForm.status === 'CHURNED' ? 'Churned' : editForm.status}
+                    <span className="ml-2 text-xs text-amber-500 font-medium">(Managed via CRM pipeline)</span>
+                  </div>
                 </div>
                 <div className="pt-4 flex gap-3">
                   <button type="button" onClick={() => setShowEdit(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">

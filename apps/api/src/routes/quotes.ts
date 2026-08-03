@@ -82,14 +82,25 @@ async function getOrgState(orgId: string): Promise<string | null> {
   return ((org?.settings as any)?.company?.state as string) || null;
 }
 
+/**
+ * A field the caller sent as an empty string means "leave this off the document"; only an
+ * ABSENT field falls back to the client record. Plain `body.x || client.x` could never express
+ * "blank" — clearing GST / email / phone in the form silently refilled it from the client, so
+ * those lines were impossible to remove from a quotation.
+ */
+const explicitOrFallback = (sent: unknown, fallback: unknown): string | null => {
+  if (sent !== undefined) return (String(sent ?? '').trim() || null);
+  return (fallback as string) || null;
+};
+
 function buildDocData(body: z.infer<typeof quoteSchema>, client: any, orgState: string | null, fin: ReturnType<typeof computeQuoteFinancials>) {
   return {
     documentDate: body.documentDate ? new Date(body.documentDate) : new Date(),
     expirationDate: new Date(body.expirationDate),
     clientName: client.company || client.name || 'Client',
     contactPerson: body.contactPerson || client.contactPerson || client.name,
-    clientEmail: body.clientEmail || client.email || null,
-    clientPhone: body.clientPhone || client.phone || null,
+    clientEmail: explicitOrFallback(body.clientEmail, client.email),
+    clientPhone: explicitOrFallback(body.clientPhone, client.phone),
     billingAddress: body.billingAddress || client.billingAddress || client.address || null,
     clientState: client.state || null,
     paymentTerms: body.paymentTerms,
@@ -100,7 +111,7 @@ function buildDocData(body: z.infer<typeof quoteSchema>, client: any, orgState: 
     onlinePayment: body.onlinePayment || false,
     tags: body.tags || [],
     paymentMethod: body.paymentMethod || null,
-    clientGst: body.clientGst || client.gstNumber || null,
+    clientGst: explicitOrFallback(body.clientGst, client.gstNumber),
     projectStartDate: body.projectStartDate ? new Date(body.projectStartDate) : null,
     deliveryDate: body.deliveryDate ? new Date(body.deliveryDate) : null,
     projectNotes: body.projectNotes || null,

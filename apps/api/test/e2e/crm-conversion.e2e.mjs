@@ -126,7 +126,14 @@ const run = async () => {
     `got ${quoteAfter.data?.clientId}`);
 
   console.log('\n6. Drag a WON deal back — client must survive');
-  await call('POST', `/crm/leads/${leadId}/stage`, { stage: 'NEW_LEAD', fields: {} });
+  // Unwinding a won deal past the win line is guarded (leadStage.service.ts stageTransitionError):
+  // without an explicit `reopen` it is a 409 DEAL_CLOSED. Assert the guard fires, then confirm
+  // the move with reopen — otherwise the checks below would "pass" simply because nothing moved.
+  const unguarded = await call('POST', `/crm/leads/${leadId}/stage`, { stage: 'NEW_LEAD', fields: {} });
+  check('unwinding a won deal needs confirmation (409)', unguarded.status === 409, `got ${unguarded.status}`);
+  check('guard identifies itself as DEAL_CLOSED', unguarded.data?.code === 'DEAL_CLOSED', `got ${unguarded.data?.code}`);
+  const unwound = await call('POST', `/crm/leads/${leadId}/stage`, { stage: 'NEW_LEAD', fields: {}, reopen: true });
+  check('confirmed unwind succeeds', unwound.status === 200, `got ${unwound.status}`);
   check('client still exists after backward drag', (await clientCount(CO)) === 1);
   const survived = await call('GET', `/clients/${cid}`);
   check('client data intact (GST)', survived.data?.gstNumber === '27AAAAA0000A1Z5');
@@ -138,17 +145,45 @@ const run = async () => {
   // the account manager or start date) used to unconditionally deleteMany contacts, silently
   // erasing every contact on the account. It must now leave contacts untouched.
   const beforeContacts = (survived.data?.contacts || []).length;
-  // A real partial update: change something (status) and, crucially, do NOT send `contacts`.
-  const partial = await call('PUT', `/clients/${cid}`, { name: survived.data?.name, status: 'ACTIVE' });
+  // Clients are now born only from the pipeline or bulk import, so the old direct edit route is
+  // deliberately sealed. Pin that contract here so it can't regress back to an open endpoint.
+  const sealed = await call('PUT', `/clients/${cid}`, { name: survived.data?.name });
+  check('direct PUT /clients/:id is blocked (403)', sealed.status === 403, `got ${sealed.status}`);
+  // The live edit route is the CRM one — run the contact-wipe regression guard against it, or
+  // the guard covers a route nobody can reach. A partial update changes a field and, crucially,
+  // does NOT send `contacts`.
+  const partial = await call('PUT', `/crm/clients/${cid}`, { name: survived.data?.name, industry: 'Regression Test Industry' });
   check('partial client update succeeds', partial.status === 200, `got ${partial.status} ${JSON.stringify(partial.data).slice(0, 200)}`);
+  check('partial update applied the changed field', partial.data?.industry === 'Regression Test Industry', `got ${partial.data?.industry}`);
   const afterPartial = await call('GET', `/clients/${cid}`);
   check('contacts preserved when not sent in update',
     (afterPartial.data?.contacts || []).length === beforeContacts,
     `had ${beforeContacts}, now ${(afterPartial.data?.contacts || []).length}`);
 
   console.log('\n8. Field ownership after conversion');
+  // A lead and the client it became are ONE company: the pipeline stays a valid place to edit
+  // the company, and the edit lands on the account too. The Client is the master record.
   const edit = await call('PATCH', `/crm/leads/${leadId}`, { companyName: CO + ' RENAMED' });
-  check('editing converted lead identity is rejected (409)', edit.status === 409, `got ${edit.status}`);
+  check('company can still be edited from the pipeline', edit.status === 200, `got ${edit.status}`);
+  const afterEdit = await call('GET', `/clients/${cid}`);
+  check('edit propagated to the client account', afterEdit.data?.name === CO + ' RENAMED',
+    `got ${JSON.stringify(afterEdit.data?.name)}`);
+  // ...but a rename must never mint a second account with an existing name. Client names are
+  // unique per org; this path used to bypass that check entirely.
+  // Pick any OTHER existing account rather than a seeded name, so this holds in any environment.
+  const others = (await call('GET', '/clients?limit=200')).data?.clients || [];
+  const twin = others.find((c) => c.id !== cid && c.name);
+  if (!twin) {
+    console.log('  SKIP  rename-collision (needs a second client in this org)');
+  } else {
+    const collide = await call('PATCH', `/crm/leads/${leadId}`, { companyName: twin.name });
+    check('rename onto an existing client name is rejected (409)', collide.status === 409, `got ${collide.status}`);
+    const afterCollide = await call('GET', `/clients/${cid}`);
+    check('client untouched by the rejected rename', afterCollide.data?.name === CO + ' RENAMED',
+      `got ${JSON.stringify(afterCollide.data?.name)}`);
+  }
+  // Put the name back so the dedup checks below still find the account.
+  await call('PATCH', `/crm/leads/${leadId}`, { companyName: CO });
 
   console.log('\n9. Repeat business → same client, no twin');
   const lead2 = await call('POST', '/crm/leads', {

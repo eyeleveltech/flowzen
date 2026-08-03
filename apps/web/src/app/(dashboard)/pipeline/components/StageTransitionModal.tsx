@@ -8,16 +8,20 @@ import { STAGE_FIELDS, StageField } from '../lib/stage-config';
 import { useModalSafety } from '@/hooks/useModalSafety';
 import toast from 'react-hot-toast';
 
-import { getStatusLabel } from '@/lib/status';
+import { leadStageLabel } from '@/lib/lead-stage';
 import { toDateInput } from '@/lib/utils';
 
-// The exact Lost Reason options per §3.6
+// The exact Lost Reason options per §3.6 — must cover every value in the LostReason enum
+// (apps/api/prisma/schema.prisma), since this modal is the only UI entry point for setting it.
 const LOST_REASONS = [
   { label: 'Quotation too high', value: 'BUDGET' },
   { label: 'Client got a better offer', value: 'COMPETITOR' },
-  { label: "Unknown — client doesn't want to proceed", value: 'NO_BUDGET' },
+  { label: 'Client has no budget', value: 'NO_BUDGET' },
   { label: 'On hold', value: 'TIMING' },
   { label: 'Not responsive — client not answering calls', value: 'UNRESPONSIVE' },
+  { label: 'Requirements/scope mismatch', value: 'SCOPE_MISMATCH' },
+  { label: 'Internal change on client side', value: 'INTERNAL_CHANGE' },
+  { label: 'Other', value: 'OTHER' },
 ];
 
 interface StageTransitionModalProps {
@@ -138,8 +142,10 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
     });
   };
 
-  const fromLabel = getStatusLabel(currentStage);
-  const toLabel = getStatusLabel(targetStage);
+  // Pipeline vocabulary, not the generic status map — a lead moving to CHURNED is
+  // "Lost & Closed" here, even though a *client* with that status reads "Churned".
+  const fromLabel = leadStageLabel(currentStage);
+  const toLabel = leadStageLabel(targetStage);
 
   return (
     <>
@@ -281,7 +287,7 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
         </div>
 
         <div className="p-4 border-t border-border bg-gray-50 flex gap-3 rounded-b-2xl">
-          <button type="button" onClick={onClose} className="flex-1 px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#D1D5DB] rounded-xl hover:bg-gray-50 transition-colors">
+          <button type="button" onClick={guardedClose} className="flex-1 px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#D1D5DB] rounded-xl hover:bg-gray-50 transition-colors">
             Cancel
           </button>
           <button type="submit" form="stage-form" disabled={isLoading} className="flex-1 px-4 py-2 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] transition-colors disabled:opacity-50">

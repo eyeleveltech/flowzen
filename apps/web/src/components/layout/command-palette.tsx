@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore, useAuthStore } from '@/stores';
 import { getClientDisplayName } from '@/lib/utils';
 import { api } from '@/lib/api';
+import { leadStageLabel } from '@/lib/lead-stage';
 import {
   Search,
   Users,
@@ -79,7 +80,7 @@ export function CommandPalette() {
         items: results.leads.map((l) => ({
           id: l.id,
           label: l.companyName || l.contactName || l.leadId || 'Lead',
-          sub: [l.contactName && l.companyName ? l.contactName : null, l.stage.replace(/_/g, ' ')].filter(Boolean).join(' · '),
+          sub: [l.contactName && l.companyName ? l.contactName : null, leadStageLabel(l.stage)].filter(Boolean).join(' · '),
           href: `/pipeline/${l.id}`,
         })),
       });

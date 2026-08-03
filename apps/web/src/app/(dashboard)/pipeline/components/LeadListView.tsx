@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
@@ -13,6 +13,7 @@ import { LeadModal } from './LeadModal';
 import { useMembers } from '@/hooks/useQueries';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { leadStageLabel } from '@/lib/lead-stage';
 
 const STAGES = [
   'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
@@ -31,6 +32,7 @@ export function LeadListView() {
 
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
 
   // Filters State
   const [search, setSearch] = useState(searchParams.get('search') || '');
@@ -98,14 +100,17 @@ export function LeadListView() {
   }, [debouncedSearch, stageFilter, ownerFilter, minDealValue, maxDealValue, leadSource, priority, closeDateFrom, closeDateTo, dateAddedFrom, dateAddedTo, sort]);
 
   async function fetchLeads(params: URLSearchParams) {
+    // Skip the skeleton flash on refetches (search debounce, filter change, SSE update) —
+    // only the very first load should replace the table with skeleton rows.
+    if (!hasLoadedRef.current) setLoading(true);
     try {
-      setLoading(true);
       const data = await api.get<any[]>(`/crm/leads?${params.toString()}`);
       setLeads(data);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
+      hasLoadedRef.current = true;
     }
   }
 
@@ -177,7 +182,7 @@ export function LeadListView() {
                 value={stageFilter}
                 onChange={setStageFilter}
                 placeholder="Stages"
-                options={STAGES.map(s => ({ label: s.replace(/_/g, ' '), value: s }))}
+                options={STAGES.map(s => ({ label: leadStageLabel(s), value: s }))}
               />
             </div>
 
@@ -422,7 +427,7 @@ export function LeadListView() {
                           lead.stage === 'CHURNED' ? 'bg-red-50 text-red-700 border-red-200' :
                             'text-primary bg-[#F3F4F6] border-border'
                         }`}>
-                        {lead.stage.replace(/_/g, ' ')}
+                        {leadStageLabel(lead.stage)}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-[#374151] font-medium">
@@ -504,7 +509,7 @@ export function LeadListView() {
                     lead.stage === 'CHURNED' ? 'bg-red-50 text-red-700 border-red-200' :
                       'text-primary bg-[#F3F4F6] border-border'
                   }`}>
-                  {lead.stage.replace(/_/g, ' ')}
+                  {leadStageLabel(lead.stage)}
                 </span>
               </div>
 

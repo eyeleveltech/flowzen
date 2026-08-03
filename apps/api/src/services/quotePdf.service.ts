@@ -79,7 +79,7 @@ function buildClassicHtml(quote: any, org: any, logoUri: string): string {
     .summary .grand td:first-child { border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
     .summary .grand td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px; }
     .words { margin-top: 8px; font-style: italic; color: #374151; font-size: 11px; }
-    .tc { margin-top: 24px; } .tc h3, .bank h3, .sign h3 { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: ${BRAND}; margin: 0 0 6px; }
+    .tc { margin-top: 24px; } .tc h3, .bank h3 { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: ${BRAND}; margin: 0 0 6px; }
     .bank-details-grid { margin-top: 6px; }
     .bank-row { display: flex; margin-bottom: 4px; font-size: 10px; }
     .bank-lbl { width: 130px; color: #4B5563; font-weight: 600; flex-shrink: 0; }
@@ -90,8 +90,6 @@ function buildClassicHtml(quote: any, org: any, logoUri: string): string {
     .scope-block ul, .scope-block ol { margin: 6px 0 6px 20px; padding: 0; }
     .scope-block p { margin: 4px 0; }
     .bottom { display: flex; justify-content: space-between; margin-top: 28px; gap: 24px; }
-    .sign { width: 210px; text-align: center; }
-    .sign .line { border-top: 1px solid #9CA3AF; margin-top: 46px; padding-top: 4px; color: #6B7280; }
   </style></head><body>
     <div class="brand">
       <div>
@@ -123,13 +121,10 @@ function buildClassicHtml(quote: any, org: any, logoUri: string): string {
             return addr ? `<div style="white-space:pre-line;">${esc(addr)}</div>` : '';
           })()}
           ${quote.clientGst ? `<div>GSTIN: ${esc(quote.clientGst)}</div>` : ''}
-          ${quote.clientEmail ? `<div>${esc(quote.clientEmail)}</div>` : ''}
-          ${quote.clientPhone ? `<div>${esc(quote.clientPhone)}</div>` : ''}
         </div>
         <div class="box r">
           <h3>Details</h3>
           <div>Payment Terms: ${esc(quote.paymentTerms)}</div>
-          ${quote.salesperson?.name ? `<div>Salesperson: ${esc(quote.salesperson.name)}</div>` : ''}
         </div>
       </div>
 
@@ -163,7 +158,6 @@ function buildClassicHtml(quote: any, org: any, logoUri: string): string {
             </div>
           ` : '<div style="color:#9CA3AF">Set bank details in company settings</div>'}
         </div>
-        ${quote.onlineSignature ? `<div class="sign"><h3>Authorised Signature</h3><div class="line">Sign here</div></div>` : `<div class="sign"><h3>For ${esc(companyName)}</h3><div class="line">Authorised Signatory</div></div>`}
       </div>
     </div>
   </body></html>`;
@@ -215,7 +209,7 @@ function buildMinimalHtml(quote: any, org: any, logoUri: string): string {
     .summary td { border: none; padding: 6px 10px; color: #333; }
     .summary .grand td { color: #000; font-weight: 700; font-size: 14px; padding: 12px 10px; border-bottom: 2px solid #000; }
     .words { margin-top: 12px; font-style: italic; color: #666; font-size: 10px; }
-    .tc { margin-top: 40px; } .tc h3, .bank h3, .sign h3 { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin: 0 0 8px; }
+    .tc { margin-top: 40px; } .tc h3, .bank h3 { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin: 0 0 8px; }
     .bank-details-grid { margin-top: 6px; }
     .bank-row { display: flex; margin-bottom: 4px; font-size: 10px; }
     .bank-lbl { width: 130px; color: #666; font-weight: 600; flex-shrink: 0; }
@@ -226,8 +220,6 @@ function buildMinimalHtml(quote: any, org: any, logoUri: string): string {
     .scope-block ul, .scope-block ol { margin: 8px 0 8px 20px; padding: 0; }
     .scope-block p { margin: 6px 0; }
     .bottom { display: flex; justify-content: space-between; margin-top: 40px; gap: 40px; padding-top: 30px; border-top: 1px solid #eee; }
-    .sign { width: 200px; text-align: center; }
-    .sign .line { border-top: 1px solid #000; margin-top: 60px; padding-top: 8px; color: #555; text-transform: uppercase; font-size: 9px; letter-spacing: 1px; }
   </style></head><body>
     <div class="brand">
       <div>
@@ -259,13 +251,10 @@ function buildMinimalHtml(quote: any, org: any, logoUri: string): string {
             return addr ? `<div style="white-space:pre-line;">${esc(addr)}</div>` : '';
           })()}
           ${quote.clientGst ? `<div>GSTIN: ${esc(quote.clientGst)}</div>` : ''}
-          ${quote.clientEmail ? `<div>${esc(quote.clientEmail)}</div>` : ''}
-          ${quote.clientPhone ? `<div>${esc(quote.clientPhone)}</div>` : ''}
         </div>
         <div class="box r">
           <h3>Details</h3>
           <div>Payment Terms: ${esc(quote.paymentTerms)}</div>
-          ${quote.salesperson?.name ? `<div>Salesperson: ${esc(quote.salesperson.name)}</div>` : ''}
         </div>
       </div>
 
@@ -299,7 +288,6 @@ function buildMinimalHtml(quote: any, org: any, logoUri: string): string {
             </div>
           ` : '<div style="color:#888">Set bank details in company settings</div>'}
         </div>
-        ${quote.onlineSignature ? `<div class="sign"><h3>Authorised Signature</h3><div class="line">Sign here</div></div>` : `<div class="sign"><h3>For ${esc(companyName)}</h3><div class="line">Authorised Signatory</div></div>`}
       </div>
     </div>
   </body></html>`;
@@ -352,7 +340,7 @@ function buildModernHtml(quote: any, org: any, logoUri: string): string {
     .summary td { border: none; padding: 8px 16px; color: #4B5563; }
     .summary .grand td { background: #111827; color: #fff; font-weight: 700; font-size: 15px; padding: 14px 16px; }
     .words { margin-top: 12px; color: #6B7280; font-size: 10px; text-align: right; }
-    .tc { margin-top: 30px; } .tc h3, .bank h3, .sign h3 { font-size: 9px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; color: #9CA3AF; margin: 0 0 8px; }
+    .tc { margin-top: 30px; } .tc h3, .bank h3 { font-size: 9px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; color: #9CA3AF; margin: 0 0 8px; }
     .bank-details-grid { margin-top: 6px; }
     .bank-row { display: flex; margin-bottom: 5px; font-size: 11px; }
     .bank-lbl { width: 130px; color: #6B7280; font-weight: 500; flex-shrink: 0; }
@@ -363,8 +351,6 @@ function buildModernHtml(quote: any, org: any, logoUri: string): string {
     .scope-block ul, .scope-block ol { margin: 8px 0 8px 20px; padding: 0; }
     .scope-block p { margin: 6px 0; }
     .bottom { display: flex; justify-content: space-between; margin-top: 30px; gap: 30px; background: #F9FAFB; padding: 20px; border-radius: 12px; }
-    .sign { width: 220px; text-align: center; }
-    .sign .line { border-top: 2px dashed #D1D5DB; margin-top: 50px; padding-top: 8px; color: #6B7280; font-weight: 600; font-size: 10px; }
   </style></head><body>
     <div class="sheet">
       <div class="brand">
@@ -397,13 +383,10 @@ function buildModernHtml(quote: any, org: any, logoUri: string): string {
             return addr ? `<div style="white-space:pre-line; margin-top:4px;">${esc(addr)}</div>` : '';
           })()}
           ${quote.clientGst ? `<div style="margin-top:4px;">GSTIN: ${esc(quote.clientGst)}</div>` : ''}
-          ${quote.clientEmail ? `<div>${esc(quote.clientEmail)}</div>` : ''}
-          ${quote.clientPhone ? `<div>${esc(quote.clientPhone)}</div>` : ''}
         </div>
         <div class="box r" style="flex: 0.6;">
           <h3>Details</h3>
           <div>Payment Terms: <b style="color:#111827;">${esc(quote.paymentTerms)}</b></div>
-          ${quote.salesperson?.name ? `<div style="margin-top:4px;">Salesperson: ${esc(quote.salesperson.name)}</div>` : ''}
         </div>
       </div>
 
@@ -437,7 +420,6 @@ function buildModernHtml(quote: any, org: any, logoUri: string): string {
             </div>
           ` : '<div style="color:#9CA3AF">Set bank details in company settings</div>'}
         </div>
-        ${quote.onlineSignature ? `<div class="sign"><h3>Authorised Signature</h3><div class="line">Sign here</div></div>` : `<div class="sign"><h3>For ${esc(companyName)}</h3><div class="line">Authorised Signatory</div></div>`}
       </div>
     </div>
   </body></html>`;

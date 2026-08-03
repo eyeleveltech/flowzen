@@ -7,12 +7,12 @@ import { api } from '@/lib/api';
 import { formatCurrency, toDateInput } from '@/lib/utils';
 import { Select } from '@/components/ui/select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
-import { useMembers } from '@/hooks/useQueries';
 import { useAuthStore } from '@/stores';
 import { TAX_TYPES, resolveTaxType, DEFAULT_TAX_TYPE } from '../lib/tax-catalog';
 import { fileUrl } from '@/lib/files';
 import { useModalSafety } from '@/hooks/useModalSafety';
 import toast from 'react-hot-toast';
+import { leadStageLabel } from '@/lib/lead-stage';
 
 const UNITS = ['Hours', 'Days', 'Months', 'Units', 'Lump Sum'];
 const PRESET_TERMS = ['Immediate', '100% Advance', '50-50', 'Monthly', 'Milestone-based'];
@@ -26,7 +26,6 @@ const emptyLine = (): Line => ({ description: '', unit: 'Units', quantity: '1', 
 
 export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLeadId, onClose, onSaved }: { editId: string | null; duplicateOf: any; prefillLeadId?: string | null; onClose: () => void; onSaved: () => void }) {
   const { user } = useAuthStore();
-  const { data: members = [] } = useMembers();
   const [clients, setClients] = useState<any[]>([]);
   // Leads still in the pipeline can be quoted too — that's the whole point of not creating a
   // client account until the deal is won. A quote is raised against a lead OR a client.
@@ -46,7 +45,7 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
     documentDate: toDateInput(new Date()),
     expirationDate: toDateInput(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)),
     paymentTerms: 'Immediate', customerRef: '',
-    salespersonId: user?.id || '', salesTeam: '', onlineSignature: false, onlinePayment: false,
+    salesTeam: '', onlinePayment: false,
     tags: '', paymentMethod: '', clientGst: '', projectStartDate: '', deliveryDate: '', projectNotes: '', scope: '',
     termsConditions: DEFAULT_TERMS,
   });
@@ -89,8 +88,8 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
         documentDate: toDateInput(q.documentDate) || toDateInput(new Date()),
         expirationDate: toDateInput(q.expirationDate),
         paymentTerms: q.paymentTerms || '50-50', customerRef: q.customerRef || '',
-        salespersonId: q.salespersonId || user?.id || '', salesTeam: q.salesTeam || '',
-        onlineSignature: q.onlineSignature || false, onlinePayment: q.onlinePayment || false,
+        salesTeam: q.salesTeam || '',
+        onlinePayment: q.onlinePayment || false,
         tags: (q.tags || []).join(', '), paymentMethod: q.paymentMethod || '', clientGst: q.clientGst || '',
         projectStartDate: toDateInput(q.projectStartDate),
         deliveryDate: toDateInput(q.deliveryDate),
@@ -206,10 +205,13 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
       documentType, clientId: clientId || undefined, leadId: leadId || undefined,
       contactPerson: form.contactPerson, clientEmail: form.clientEmail, clientPhone: form.clientPhone,
       billingAddress: form.billingAddress, documentDate: form.documentDate, expirationDate: form.expirationDate,
-      paymentTerms: form.paymentTerms, salespersonId: form.salespersonId || undefined,
-      salesTeam: form.salesTeam || undefined, onlineSignature: form.onlineSignature, onlinePayment: form.onlinePayment,
+      paymentTerms: form.paymentTerms,
+      salesTeam: form.salesTeam || undefined, onlinePayment: form.onlinePayment,
       tags: form.tags ? form.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
-      paymentMethod: form.paymentMethod || undefined, clientGst: form.clientGst || undefined,
+      paymentMethod: form.paymentMethod || undefined,
+      // Sent as-is, never coerced to undefined: '' is a deliberate "omit the GSTIN from this
+      // document", and undefined would make the API fall back to the client's stored number.
+      clientGst: form.clientGst,
       projectStartDate: form.projectStartDate || undefined, deliveryDate: form.deliveryDate || undefined,
       projectNotes: form.projectNotes || undefined, scope: form.scope || undefined, termsConditions: form.termsConditions,
       lineItems: lineItems.map((li) => ({
@@ -339,7 +341,7 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
                             <span className="font-medium text-primary">{l.companyName || l.contactName}</span>
                             {l.contactName && l.companyName && <span className="text-xs text-secondary ml-2">{l.contactName}</span>}
                           </span>
-                          <span className="shrink-0 text-[10px] font-semibold text-secondary/80">{String(l.stage || '').replace(/_/g, ' ')}</span>
+                          <span className="shrink-0 text-[10px] font-semibold text-secondary/80">{leadStageLabel(l.stage)}</span>
                         </button>
                       ))}
                     </>
@@ -451,10 +453,6 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
             {showOther && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Salesperson</label>
-                  <Select ariaLabel="Salesperson" value={form.salespersonId} onChange={(v) => setForm({ ...form, salespersonId: v })} options={[{ label: 'Unassigned', value: '' }, ...members.map((m: any) => ({ label: m.name, value: m.id }))]} />
-                </div>
-                <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Sales Team</label>
                   <Select ariaLabel="Sales Team" value={form.salesTeam} onChange={(v) => setForm({ ...form, salesTeam: v })} options={[{ label: '—', value: '' }, ...SALES_TEAMS.map((t) => ({ label: t, value: t }))]} />
                 </div>
@@ -466,7 +464,6 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
                 <Input label="Delivery / Completion Date" type="date" value={form.deliveryDate} onChange={(v) => setForm({ ...form, deliveryDate: v })} />
                 <Input label="Tags (comma separated)" value={form.tags} onChange={(v) => setForm({ ...form, tags: v })} />
                 <div className="flex items-center gap-6 pt-7">
-                  <label className="flex items-center gap-2 text-sm text-[#374151]"><input type="checkbox" checked={form.onlineSignature} onChange={(e) => setForm({ ...form, onlineSignature: e.target.checked })} /> Online Signature</label>
                   <label className="flex items-center gap-2 text-sm text-[#374151]"><input type="checkbox" checked={form.onlinePayment} onChange={(e) => setForm({ ...form, onlinePayment: e.target.checked })} /> Online Payment</label>
                 </div>
                 <div className="sm:col-span-2">

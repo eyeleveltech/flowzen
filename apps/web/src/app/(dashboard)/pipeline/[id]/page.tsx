@@ -23,6 +23,7 @@ import { OverflowMarquee } from '@/components/ui/overflow-marquee';
 import { useConfirmStore } from '@/stores';
 import { NoAccess } from '@/components/ui/no-access';
 import { NotFoundPanel } from '@/components/ui/not-found-panel';
+import { leadStageLabel } from '@/lib/lead-stage';
 
 function SocialLink({ platform, input }: { platform: 'linkedin' | 'instagram' | 'facebook', input?: string | null }) {
   if (!input) return <span className="text-sm font-medium text-gray-400">—</span>;
@@ -69,7 +70,7 @@ function SocialLink({ platform, input }: { platform: 'linkedin' | 'instagram' | 
 
 const PIPELINE_STAGES = [
   'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
-  'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'CONTRACT', 'ON_HOLD', 'PROJECT_COMPLETED', 'CHURNED'
+  'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'ON_HOLD', 'PROJECT_COMPLETED', 'CHURNED'
 ];
 
 export default function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -249,7 +250,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   </OverflowMarquee>
                   <div className="flex items-center gap-2">
                     <span className="px-2.5 py-1 rounded-md bg-purple-50 text-purple-700 text-[10px] font-bold tracking-wider uppercase border border-purple-200 whitespace-nowrap">
-                      {lead.stage.replace(/_/g, ' ')}
+                      {leadStageLabel(lead.stage)}
                     </span>
                     {lead.client?.status === 'ONHOLD' && (
                       <span className="px-2.5 py-1 rounded-md bg-amber-50 text-amber-700 text-[10px] font-bold tracking-wider uppercase border border-amber-200 whitespace-nowrap">
@@ -318,13 +319,33 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                         } else {
                           // Nothing to ask for this stage (§3.4) — commit directly, no modal.
                           stageMutation.mutate({ stage: val }, {
-                            onError: (err: any) => toast.error(err.message || 'Failed to update stage'),
+                            onError: async (err: any) => {
+                              // Closed deal or a won deal being unwound past Contract — same
+                              // guard the kanban board honors (leadStage.service.ts), so give this
+                              // dropdown the same reopen-confirm path instead of a dead-end toast.
+                              if (err?.code === 'DEAL_CLOSED') {
+                                const okReopen = await confirm({
+                                  title: 'Confirm stage change',
+                                  message: err.message || 'This move needs confirmation. Continue?',
+                                  confirmText: 'Continue',
+                                  cancelText: 'Cancel',
+                                  variant: 'warning',
+                                });
+                                if (okReopen) {
+                                  stageMutation.mutate({ stage: val, reopen: true }, {
+                                    onError: (e: any) => toast.error(e.message || 'Failed to update stage'),
+                                  });
+                                }
+                                return;
+                              }
+                              toast.error(err.message || 'Failed to update stage');
+                            },
                           });
                         }
                       }
                     }}
                     options={PIPELINE_STAGES.map(s => ({
-                      label: `${PIPELINE_STAGES.indexOf(s) + 1}. ${s.replace(/_/g, ' ')}`,
+                      label: `${PIPELINE_STAGES.indexOf(s) + 1}. ${leadStageLabel(s)}`,
                       value: s
                     }))}
                     className="w-40 sm:w-48 text-sm"
@@ -346,7 +367,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                     {idx + 1}
                   </div>
                   <span className={`text-[10px] font-bold uppercase tracking-wider text-center ${isCurrent ? 'text-primary' : isCompleted ? 'text-secondary' : 'text-gray-400'}`}>
-                    {stage.replace(/_/g, ' ')}
+                    {leadStageLabel(stage)}
                   </span>
                   {idx < 7 && (
                     <div className={`absolute top-3.5 left-1/2 w-full h-0.5 z-0 ${isCompleted && !isCurrent ? 'bg-blue-100' : 'bg-gray-100'}`} />
@@ -502,7 +523,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                       </div>
                       <div className="flex items-center justify-between py-2.5 border-b border-gray-50">
                         <span className="text-sm text-secondary font-medium">Current Stage</span>
-                        <span className="text-sm font-bold text-primary">{lead.stage.replace(/_/g, ' ')}</span>
+                        <span className="text-sm font-bold text-primary">{leadStageLabel(lead.stage)}</span>
                       </div>
                       <div className="flex items-center justify-between py-2.5 border-b border-gray-50">
                         <span className="text-sm text-secondary font-medium">Expected Close</span>
@@ -559,7 +580,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                           <div key={history.id || index} className="relative pl-5">
                             <div className="absolute -left-2.25 top-1.5 w-4 h-4 rounded-full bg-blue-50 border-2 border-blue-500 ring-2 ring-white"></div>
                             <div className="flex flex-col">
-                              <span className="text-sm font-bold text-primary">{history.toStage.replace(/_/g, ' ')}</span>
+                              <span className="text-sm font-bold text-primary">{leadStageLabel(history.toStage)}</span>
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span className="text-[11px] font-medium text-secondary">{formatDateTime(history.changedAt)}</span>
                                 <span className="text-[11px] text-gray-300">•</span>
@@ -660,7 +681,25 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
             targetStage={targetStage}
             onClose={() => setIsModalOpen(false)}
             onSubmit={async (payload) => {
-              await stageMutation.mutateAsync(payload);
+              // The reopen-confirm has to live here too, not only on the no-modal branch above:
+              // unwinding a won deal lands on Negotiation / Proposal / Meeting, and those stages
+              // DO collect input — so they always come through the modal, where a DEAL_CLOSED 409
+              // was an inescapable error toast. Mirrors PipelineBoardView's handler.
+              try {
+                await stageMutation.mutateAsync(payload);
+              } catch (err) {
+                const apiErr = err as { code?: string; message?: string };
+                if (apiErr?.code !== 'DEAL_CLOSED') throw err;
+                const okReopen = await confirm({
+                  title: 'Confirm stage change',
+                  message: apiErr.message || 'This move needs confirmation. Continue?',
+                  confirmText: 'Continue',
+                  cancelText: 'Cancel',
+                  variant: 'warning',
+                });
+                if (!okReopen) return;
+                await stageMutation.mutateAsync({ ...payload, reopen: true });
+              }
             }}
             isLoading={stageMutation.isPending}
           />

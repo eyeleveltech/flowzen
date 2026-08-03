@@ -7,7 +7,7 @@ import { emitToOrganization } from '../sse.js';
 import { whereIn } from '../utils/query.js';
 import { generateLeadId, normalizePhone } from '../utils/leadId.js';
 import { runIntelligence } from '../services/intelligence.service.js';
-import { ensureClientForLead, LEAD_IDENTITY_FIELDS } from '../services/clientConversion.service.js';
+import { ensureClientForLead } from '../services/clientConversion.service.js';
 import { applyLeadStageEffects, stageTransitionError } from '../services/leadStage.service.js';
 import { logActivity, ActivityType, ACTIVITY_CATEGORIES } from '../services/activity.service.js';
 import { createAuditLog } from '../utils/audit.js';
@@ -18,8 +18,13 @@ crmRouter.use(authenticate);
 // Lead Entry Gateway: name is required, plus at least one of email or phone.
 const leadSchema = z.object({
   clientId: z.string().optional(),
-  contactName: z.string().min(2, 'Full name is required (min 2 characters)'),
-  companyName: z.string().optional(),
+  // A lead IS a company. The people attached to it are contacts, and a lead can legitimately
+  // exist before you know anyone's name (a company pulled off a list, an inbound form with only
+  // a brand). This is the inverse of the original rule, which required a person and made the
+  // company optional — that let a lead exist as a bare individual and made account naming
+  // ambiguous at the win line.
+  companyName: z.string().min(2, 'Company name is required (min 2 characters)'),
+  contactName: z.string().optional(),
   email: z.union([z.string().email('A valid email is required'), z.literal('')]).optional(),
   phone: z.union([
     z.string().refine((v) => !v || v.replace(/\D/g, '').length >= 10, { message: 'Phone number must be at least 10 digits' }),
@@ -48,17 +53,11 @@ const leadSchema = z.object({
   followUpDate: z.string().refine((v) => !isNaN(Date.parse(v)), { message: 'Follow-up date must be a valid date string' }).optional(),
   notes: z.string().optional(),
   priority: z.enum(['HIGH', 'MEDIUM', 'LOW']).optional(),
-}).superRefine((data, ctx) => {
-  const hasEmail = !!data.email && data.email.trim().length > 0;
-  const hasPhone = !!data.phone && data.phone.trim().length > 0;
-  if (!hasEmail && !hasPhone) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Email or phone number is required.',
-      path: ['email'],
-    });
-  }
 });
+// NOTE: the old "email or phone is required" rule was dropped when the company became the lead's
+// identity. Contact details belong to the *people* attached to a company, and a company you just
+// pulled off a list has none yet — demanding one forced reps to invent placeholder data. Format
+// is still validated above whenever a value IS supplied.
 
 // GET /api/crm/leads
 crmRouter.get('/leads', async (req: AuthRequest, res: Response, next) => {
@@ -604,8 +603,8 @@ crmRouter.post('/leads', authorize('SUPER_ADMIN', 'ADMIN'), validate(leadSchema)
             expectedCloseDate: expectedCloseDate ? new Date(expectedCloseDate) : null,
             followUpDate: followUpDate ? new Date(followUpDate) : null,
             priority: priority || 'MEDIUM',
-            contactName,
-            companyName: companyName || null,
+            contactName: contactName || null,
+            companyName,
             contactEmail: email,
             contactPhone: phone,
             jobTitle: jobTitle || null,
@@ -641,7 +640,7 @@ crmRouter.post('/leads', authorize('SUPER_ADMIN', 'ADMIN'), validate(leadSchema)
     await prisma.activity.create({
       data: {
         type: 'LEAD_CREATED',
-        message: `added lead "${contactName || companyName}" to the pipeline`,
+        message: `added lead "${companyName}" to the pipeline`,
         entityType: 'LEAD',
         entityId: lead.id,
         userId: req.user!.userId,
@@ -709,15 +708,16 @@ crmRouter.post('/leads/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
     const rejected: any[] = [];
 
     for (const data of leads) {
-      // Lead Entry Gateway: name is required, plus at least one of email or phone.
+      // Lead Entry Gateway: the COMPANY is the lead's identity, so that is what's required.
+      // Contact name and details are optional — they describe a person attached to the company.
+      const company = (data.companyName || '').toString().trim();
       const name = (data.contactName || '').toString().trim();
       const email = (data.email || '').toString().trim();
       const digits = normalizePhone(data.phone);
 
-      if (name.length < 2) { rejected.push({ ...data, rejection_reason: 'Full name is required (min 2 characters).' }); continue; }
+      if (company.length < 2) { rejected.push({ ...data, rejection_reason: 'Company name is required (min 2 characters).' }); continue; }
       if (email && !emailRe.test(email)) { rejected.push({ ...data, rejection_reason: 'A valid email is required.' }); continue; }
       if (digits && digits.length < 10) { rejected.push({ ...data, rejection_reason: 'Phone number must be at least 10 digits.' }); continue; }
-      if (!email && !digits) { rejected.push({ ...data, rejection_reason: 'Email or phone number is required.' }); continue; }
       if (digits && digits.length >= 10 && seenPhones.has(digits)) { rejected.push({ ...data, rejection_reason: 'Duplicate phone number (already exists).' }); continue; }
       if (digits && digits.length >= 10) { seenPhones.add(digits); }
 
@@ -757,8 +757,8 @@ crmRouter.post('/leads/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
             assignedToId: data.assignedToId || null,
             dealValue: parsedDealValue,
             expectedCloseDate: data.expectedCloseDate ? new Date(data.expectedCloseDate) : null,
-            contactName: name,
-            companyName: data.companyName || null,
+            contactName: name || null,
+            companyName: company,
             contactEmail: email,
             contactPhone: (data.phone || '').toString(),
             jobTitle: data.jobTitle || null,
@@ -781,7 +781,7 @@ crmRouter.post('/leads/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
       await prisma.activity.create({
         data: {
           type: 'LEAD_CREATED',
-          message: `bulk imported lead "${name}"`,
+          message: `bulk imported lead "${company}"`,
           entityType: 'LEAD',
           entityId: lead.id,
           userId: req.user!.userId,
@@ -1145,6 +1145,33 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
       }
     }
 
+    // Identity after conversion: a lead and the client it became are ONE company, so the pipeline
+    // stays a valid place to edit the company's details — the edit is simply applied to the
+    // account as well (the Client is the master; the lead's copies are kept in step below).
+    //
+    // The one thing that must not happen is a rename creating two accounts with the same name:
+    // client names are unique per org, PUT /crm/clients enforces that, and this path used to
+    // bypass it entirely — renaming through the pipeline could mint a duplicate that could then
+    // never be renamed. Same check, same message, applied here.
+    if (existingLead.clientId && req.body.companyName !== undefined) {
+      const newName = String(req.body.companyName || '').trim();
+      const currentName = (existingLead.companyName || '').trim();
+      if (newName && newName.toLowerCase() !== currentName.toLowerCase()) {
+        const duplicate = await prisma.client.findFirst({
+          where: {
+            organizationId: orgId,
+            name: { equals: newName, mode: 'insensitive' },
+            id: { not: existingLead.clientId },
+          },
+          select: { id: true },
+        });
+        if (duplicate) {
+          res.status(409).json({ error: `A client named "${newName}" already exists.` });
+          return;
+        }
+      }
+    }
+
     const updateData: any = {};
     const changes: string[] = [];
 
@@ -1252,6 +1279,9 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
           updateData[f] = req.body[f] || null;
           changes.push(`updated ${f}`);
 
+          // Mirror onto the account — the Client is the master record for company identity, so an
+          // edit made from the pipeline lands there too and the two can never disagree. The
+          // rename-collision case is rejected before the transaction opens (see above).
           if (currentClientId) {
             const val = req.body[f] || null;
             if (f === 'companyName') {
@@ -1598,8 +1628,15 @@ const crmClientUpdateSchema = z.object({
   gstNumber: z.string().optional().nullable(),
   scope: z.string().optional().nullable(),
   assetLinks: z.string().optional().nullable(),
-  accountManagerId: z.string().optional().nullable(),
-  status: z.enum(['PROSPECT', 'ACTIVE', 'ONHOLD', 'CHURNED', 'PROJECT_COMPLETED']).optional(),
+  // '' is what the edit form sends for an unassigned dropdown (see the enum fields below). Left
+  // as-is it reached Prisma as a real id, which matched no user and failed the FK — surfacing as
+  // a 409 "This action conflicts with related records" on every save of a client that simply had
+  // no account manager. Treat it as null, the same as the enums.
+  accountManagerId: z.string().optional().nullable().transform((v) => (v === '' ? null : v)),
+  // status is deliberately NOT accepted here — it's a side effect of the lead's pipeline stage
+  // (leadStage.service.ts's cascade: subscriptions/contracts pause or cancel with it), never a
+  // manual field. Omitting it from the schema means Zod strips it from any payload that sends it,
+  // so this route can't drift a client out of sync with its pipeline stage.
   jobTitle: z.string().optional().nullable(),
   linkedinUrl: z.string().optional().nullable(),
   companySize: z.string().optional().nullable(),
@@ -1684,6 +1721,20 @@ crmRouter.put('/clients/:id', requireModule('CRM'), authorize('SUPER_ADMIN', 'AD
     // spread straight into prisma.client.update — a mass-assignment hole. Zod's parse strips
     // everything not declared in crmClientUpdateSchema.
     const { contacts, startDate, ...data } = crmClientUpdateSchema.parse(req.body);
+
+    // Account manager must be an active user in the caller's own org — mirrors the check every
+    // lead assignment path already does. Without it an unknown id fails as an opaque FK error,
+    // and a valid id from another organization would attach across the tenant boundary.
+    if (data.accountManagerId) {
+      const manager = await prisma.user.findFirst({
+        where: { id: data.accountManagerId, organizationId: orgId, status: 'ACTIVE' },
+        select: { id: true },
+      });
+      if (!manager) {
+        res.status(400).json({ error: 'Account manager not found in your organization' });
+        return;
+      }
+    }
 
     const newName = data.name ? String(data.name).trim() : existing.name;
     if (newName && newName.toLowerCase() !== existing.name.toLowerCase()) {

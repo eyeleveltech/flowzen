@@ -1,3 +1,17 @@
+import { LEAD_STAGE_LABELS } from './lead-stage';
+
+// Pipeline stages reuse the canonical labels rather than restating them — restating is how the
+// board ("Won & Closed") and this map ("Contract") drifted apart in the first place.
+//
+// CHURNED and PROJECT_COMPLETED are held back because they are *client* statuses too, and there
+// the right words are "Churned" / "Project Completed" (defined below), whereas the same lead
+// stage reads "Lost & Closed". ON_HOLD is dropped only because it is already declared as a
+// client status with an identical label.
+const STAGE_KEYS_OWNED_BY_STATUSES = new Set(['CHURNED', 'PROJECT_COMPLETED', 'ON_HOLD']);
+const PIPELINE_STAGE_LABELS: Record<string, string> = Object.fromEntries(
+  Object.entries(LEAD_STAGE_LABELS).filter(([key]) => !STAGE_KEYS_OWNED_BY_STATUSES.has(key)),
+);
+
 export interface StatusConfig {
   label: string;
   bg: string;
@@ -49,21 +63,18 @@ export const STATUS_LABELS: Record<string, string> = {
   RENEWED: 'Renewed',
   TERMINATED: 'Terminated',
 
-  // Pipeline stages
-  NEW_LEAD: 'New Lead',
+  // Pipeline stages — inherited from lib/lead-stage.ts (see the note at the top of this file).
+  // Anything rendering a lead's stage should call leadStageLabel() directly; these exist so a
+  // stray getStatusLabel(stage) still produces the right words instead of a raw enum.
+  ...PIPELINE_STAGE_LABELS,
+
+  // Legacy values from earlier pipeline shapes, kept so old records still render readably.
   LEAD: 'Lead',
-  OUTREACH: 'Outreach',
   CONTACTED: 'Contacted',
-  MEETING: 'Meeting',
   MEETING_SCHEDULED: 'Meeting Scheduled',
   NEEDS_ANALYSIS: 'Needs Analysis',
-  PROPOSAL: 'Proposal',
   PROPOSAL_SENT: 'Proposal Sent',
-  NEGOTIATION: 'Negotiation',
-  CONTRACT: 'Contract',
   WON: 'Won',
-  ACTIVE_RETAINER: 'Active Retainer',
-  ACTIVE_PROJECT: 'Active Project',
   LOST: 'Lost',
 };
 

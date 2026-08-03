@@ -24,12 +24,18 @@ export const CONVERSION_STAGES = ['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT
 /** Closed/terminal stages. A deal here is done — reopening it needs an explicit action. */
 export const TERMINAL_STAGES = ['CHURNED', 'PROJECT_COMPLETED'] as const;
 
+/** Pre-win funnel stages — a deal here has never been billed yet. */
+const PRE_CONVERSION_STAGES = ['NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION'] as const;
+
 /**
- * The pipeline's ONE state-machine rule. It is otherwise free-form by design — stages can be
- * skipped, jumped, or moved backwards. But a CLOSED deal (CHURNED / PROJECT_COMPLETED) must not
- * be silently dragged back into the active funnel: that requires an explicit `reopen`, because
- * it re-activates a lost/finished deal and (below) resets the client status so the two records
- * don't disagree. Returns an error string to send as 409, or null when the move is allowed.
+ * The pipeline's state-machine rules. It is otherwise free-form by design — stages can be
+ * skipped, jumped, or moved backwards. Two moves need an explicit `reopen` confirmation because
+ * they'd otherwise silently desync the pipeline from the client's billing state:
+ *  - Leaving a CLOSED deal (CHURNED / PROJECT_COMPLETED) back into the active funnel.
+ *  - Dragging an already-WON deal (CONTRACT / ACTIVE_RETAINER / ACTIVE_PROJECT) back past the
+ *    win line into pre-negotiation — without this, the board would show "Negotiation" while the
+ *    client's subscription/contract keeps billing untouched underneath.
+ * Returns an error string to send as 409, or null when the move is allowed.
  */
 export function stageTransitionError(previousStage: string, toStage: string, reopen?: boolean): string | null {
   if (previousStage === toStage) return null;
@@ -38,6 +44,11 @@ export function stageTransitionError(previousStage: string, toStage: string, reo
   if (reopeningIntoFunnel && !reopen) {
     const label = previousStage === 'CHURNED' ? 'lost (Churned)' : 'completed';
     return `This deal is closed as ${label}. Reopen it to move it back into the pipeline.`;
+  }
+  const wasWon = (CONVERSION_STAGES as readonly string[]).includes(previousStage);
+  const unwindingPastWin = wasWon && (PRE_CONVERSION_STAGES as readonly string[]).includes(toStage);
+  if (unwindingPastWin && !reopen) {
+    return 'This deal has already been won and the client is being actively billed. Moving it back will pause the subscription and mark the contract inactive. Continue?';
   }
   return null;
 }
@@ -106,8 +117,43 @@ export async function applyLeadStageEffects(tx: Tx, params: StageEffectParams): 
     const reopeningIntoFunnel = (TERMINAL_STAGES as readonly string[]).includes(previousStage)
       && !(TERMINAL_STAGES as readonly string[]).includes(toStage);
     if (newStatus === null && reopeningIntoFunnel) newStatus = 'ACTIVE';
+    // Unwinding a won deal (dragged back past CONTRACT into pre-negotiation, confirmed via
+    // `reopen` at the route's stageTransitionError guard): pause the account like ON_HOLD rather
+    // than losing it — the deal may well be re-won later.
+    const isUnwind = newStatus === null
+      && (CONVERSION_STAGES as readonly string[]).includes(previousStage)
+      && (PRE_CONVERSION_STAGES as readonly string[]).includes(toStage);
+    if (isUnwind) newStatus = 'ONHOLD';
     if (newStatus) {
       await tx.client.update({ where: { id: clientId }, data: { status: newStatus } });
+
+      // The PM module is entirely client-scoped, but nothing previously told a client's Projects
+      // that its account went CHURNED/ONHOLD — they'd sit there looking untouched indefinitely.
+      // Set them to ON_HOLD too (a visible signal, easy for a PM to reverse); leave COMPLETED /
+      // already-CANCELLED projects alone. This is a one-way nudge — going back to ACTIVE does NOT
+      // auto-resume these, since a project may have been legitimately paused for its own reasons
+      // before the client-level pause; a PM takes it off hold deliberately.
+      //
+      // Projects hang off the CLIENT, not the deal, so this can only run when the account has no
+      // other deal still live. A repeat customer can be won more than once (Lead.clientId is
+      // deliberately non-unique); without this check, parking one deal froze the delivery work of
+      // a sibling deal that is still active — and nothing ever un-froze it.
+      if (newStatus === 'CHURNED' || newStatus === 'ONHOLD') {
+        const otherLiveDeal = await tx.lead.findFirst({
+          where: {
+            clientId,
+            id: { not: lead.id },
+            stage: { in: [...CONVERSION_STAGES] },
+          },
+          select: { id: true },
+        });
+        if (!otherLiveDeal) {
+          await tx.project.updateMany({
+            where: { clientId, status: { notIn: ['COMPLETED', 'CANCELLED', 'ON_HOLD'] } },
+            data: { status: 'ON_HOLD' },
+          });
+        }
+      }
 
       // Keep recurring revenue in step with the account's lifecycle, in the SAME transaction —
       // otherwise a CHURNED client keeps an ACTIVE subscription and MRR never drops (MRR sums
@@ -119,9 +165,43 @@ export async function applyLeadStageEffects(tx: Tx, params: StageEffectParams): 
       } else if (newStatus === 'ONHOLD') {
         // Parked, not gone: pause billing so it's off MRR but can be resumed.
         await tx.subscription.updateMany({ where: { clientId, status: 'ACTIVE' }, data: { status: 'PAUSED' } });
+        // Unwinding specifically also un-wins the one-time project contract this lead created —
+        // "won" no longer holds, so its fee shouldn't still read as active revenue. Scoped to
+        // THIS lead's contract only (sourceLeadId is unique per lead), not the whole client, so a
+        // sibling deal's contract is never touched.
+        if (isUnwind) {
+          await tx.contract.updateMany({ where: { clientId, sourceLeadId: lead.id, status: 'ACTIVE' }, data: { status: 'TERMINATED' } });
+        }
       } else if (newStatus === 'ACTIVE') {
-        // Resuming an account (un-hold or an explicit reopen): reactivate whatever we paused.
+        // Resuming an account: undo what THIS cascade did, and only that.
+        //
+        // PAUSED is a state nothing but the ON_HOLD branch above sets, so reviving it is always
+        // safe and stays symmetric with the client-wide pause.
         await tx.subscription.updateMany({ where: { clientId, status: 'PAUSED' }, data: { status: 'ACTIVE' } });
+
+        // CANCELLED / TERMINATED are different: a human cancels and terminates too, and those
+        // decisions must survive. Only reverse them when we are undoing the exact transition that
+        // set them — coming back from CHURNED (which cancels + terminates), or re-winning a deal
+        // that was unwound past the win line (which terminates this lead's contract). A routine
+        // move between Active stages must NOT resurrect anything.
+        const undoingOurChurn = previousStage === 'CHURNED';
+        const reWinningAfterUnwind = (PRE_CONVERSION_STAGES as readonly string[]).includes(previousStage)
+          && (CONVERSION_STAGES as readonly string[]).includes(toStage);
+
+        if (undoingOurChurn || reWinningAfterUnwind) {
+          // Scoped to this deal's own records (sourceLeadId is unique per lead), never the whole
+          // client. Without the subscription half, a churned retainer that was reopened stayed
+          // CANCELLED forever — and the idempotency guard below refuses to mint a replacement,
+          // so its MRR never came back.
+          await tx.subscription.updateMany({
+            where: { clientId, sourceLeadId: lead.id, status: 'CANCELLED' },
+            data: { status: 'ACTIVE' },
+          });
+          await tx.contract.updateMany({
+            where: { clientId, sourceLeadId: lead.id, status: 'TERMINATED' },
+            data: { status: 'ACTIVE' },
+          });
+        }
       }
     }
 

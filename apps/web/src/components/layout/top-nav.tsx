@@ -126,8 +126,10 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
     };
   }, []);
 
+  // No "New Client" quick-create: clients are pipeline-driven (born from a won deal) or bulk
+  // CSV-imported for onboarding — there's no manual "add one client" path. Start a new deal
+  // via "New Lead" instead.
   const quickCreateItems = [
-    { label: 'New Client', href: '/clients?create=true', icon: Users },
     { label: 'New Project', href: '/projects?create=true', icon: FolderKanban },
     { label: 'New Task', href: '/tasks?create=true', icon: CheckSquare },
     { label: 'New Lead', href: '/pipeline?create=true', icon: Target },

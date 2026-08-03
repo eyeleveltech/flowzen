@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useId, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -13,14 +13,12 @@ import {
   Plus, Search, Filter, Users, Building2, Mail, Phone, X, ChevronRight, FolderKanban, Download, Upload, FileText, List, LayoutGrid, Columns, Check, Settings, Briefcase
 } from 'lucide-react';
 import { ClientTimelineView } from '@/components/clients/client-timeline-view';
-import { Select } from '@/components/ui/select';
-import { CurrencySelect } from '@/components/ui/currency-select';
 import { MultiSelect } from '@/components/ui/multi-select';
-import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { useMembers } from '@/hooks/useQueries';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { ViewSettingsPanel } from '@/components/ui/view-settings-panel';
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 import { StatusBadge } from '@/components/ui/status-badge';
 
 interface ClientContact {
@@ -48,6 +46,7 @@ interface Client {
   startDate?: string | null;
   status: string;
   createdAt: string;
+  archivedAt?: string | null;
   _count?: { projects: number };
 }
 
@@ -84,7 +83,7 @@ function ClientsContent() {
     { id: 'industry', label: 'Industry' },
     { id: 'contact', label: 'Contact' },
     { id: 'projects', label: 'Projects' },
-    { id: 'status', label: activeModule === 'PM' ? 'Lifecycle Stage' : 'Status' }
+    { id: 'status', label: 'Lifecycle Stage' }
   ];
   const [visibleColumns, setVisibleColumns] = useState<string[]>(ALL_COLUMNS.map(c => c.id));
   const [showColumnDropdown, setShowColumnDropdown] = useState(false);
@@ -115,6 +114,7 @@ function ClientsContent() {
   const [accountManagerFilter, setAccountManagerFilter] = useState<string[]>([]);
   const [engagementTypeFilter, setEngagementTypeFilter] = useState<string[]>([]);
   const [industryFilter, setIndustryFilter] = useState<string[]>([]);
+  const [showArchived, setShowArchived] = useState(false);
   const [filtersHydrated, setFiltersHydrated] = useState(false);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
@@ -152,23 +152,14 @@ function ClientsContent() {
 
   const { data: members = [] } = useMembers();
 
-  // Form state
-  const [form, setForm] = useState({
-    name: '', company: '', industry: '', address: '', startDate: '',
-    engagementType: '', website: '', city: '', state: '', billingAddress: '', gstNumber: '', scope: '', assetLinks: '', accountManagerId: '',
-    status: 'PROSPECT', currency: 'INR',
-    contacts: [{ name: '', designation: '', email: '', phone: '', role: '', linkedinUrl: '' }]
-  });
-  const [formError, setFormError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-
-  // Import/Export state
+  // Import/Export state — clients are pipeline-driven (a won deal) or bulk-imported (onboarding
+  // pre-existing customers). There is no manual "add one client" form; see clients.ts POST /.
   const [isExporting, setIsExporting] = useState(false);
-  const [creationMode, setCreationMode] = useState<'MANUAL' | 'BULK'>('MANUAL');
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importPreview, setImportPreview] = useState<any[]>([]);
   const [importing, setImporting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number; rejectedCount: number; rejected: any[] } | null>(null);
 
   const debouncedSearch = useDebouncedValue(search, 300);
 
@@ -191,13 +182,13 @@ function ClientsContent() {
         sse.off('client:deleted', fetchClients);
       };
     }
-  }, [filtersHydrated, debouncedSearch, statusFilter, accountManagerFilter, engagementTypeFilter, industryFilter, page]);
+  }, [filtersHydrated, debouncedSearch, statusFilter, accountManagerFilter, engagementTypeFilter, industryFilter, showArchived, page]);
 
   // Any filter change resets back to the first page.
   useEffect(() => {
     setPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, statusFilter, accountManagerFilter, engagementTypeFilter, industryFilter]);
+  }, [debouncedSearch, statusFilter, accountManagerFilter, engagementTypeFilter, industryFilter, showArchived]);
 
   async function fetchClients() {
     try {
@@ -207,6 +198,7 @@ function ClientsContent() {
       if (accountManagerFilter.length) params.set('accountManagerId', accountManagerFilter.join(','));
       if (engagementTypeFilter.length) params.set('engagementType', engagementTypeFilter.join(','));
       if (industryFilter.length) params.set('industry', industryFilter.join(','));
+      if (showArchived) params.set('includeArchived', 'true');
       // Fetch a growing window (page 1 .. current page) so "Load more" stays consistent with SSE refetches.
       params.set('limit', String(page * PAGE_SIZE));
       const data = await api.get<{ clients: Client[]; total: number }>(`/clients?${params}`);
@@ -214,33 +206,6 @@ function ClientsContent() {
       setTotal(data.total);
     } catch { /* ignore */ } finally {
       setLoading(false);
-    }
-  }
-
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    setFormError('');
-    // Require at least one contact phone number before hitting the server.
-    if (!form.contacts.some((c) => c.phone && c.phone.trim())) {
-      setFormError('A contact phone number is required.');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      await api.post('/clients', {
-        ...form,
-        startDate: form.startDate || undefined,
-        contacts: form.contacts.filter(c => c.name.trim() !== '').map(c => ({ ...c, role: c.role || null })),
-      });
-      toast.success('Client created successfully');
-      setShowCreate(false);
-      setForm({ name: '', company: '', industry: '', address: '', startDate: '', engagementType: '', website: '', city: '', state: '', billingAddress: '', gstNumber: '', scope: '', assetLinks: '', accountManagerId: '', status: 'PROSPECT', currency: 'INR', contacts: [{ name: '', designation: '', email: '', phone: '', role: '', linkedinUrl: '' }] });
-      fetchClients();
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to create client');
-      setFormError(err.message);
-    } finally {
-      setSubmitting(false);
     }
   }
 
@@ -303,16 +268,34 @@ function ClientsContent() {
 
   function processFile(file: File) {
     setImportFile(file);
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        setImportPreview(results.data);
-      },
-      error: () => {
-        toast.error('Failed to parse CSV file');
-      }
-    });
+    setImportResult(null);
+    const name = file.name.toLowerCase();
+    if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          // cellDates + raw:false: without them a real Excel date cell arrives as a serial
+          // number (45778), which Date() reads as milliseconds and stores as 1970 — silently,
+          // since a number is a "valid" date to the server. Formatted strings round-trip instead.
+          const wb = XLSX.read(new Uint8Array(ev.target?.result as ArrayBuffer), { type: 'array', cellDates: true });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          setImportPreview(XLSX.utils.sheet_to_json(ws, { defval: '', raw: false, dateNF: 'yyyy-mm-dd' }) as any[]);
+        } catch { toast.error('Failed to parse Excel file'); }
+      };
+      reader.onerror = () => toast.error('Failed to read file');
+      reader.readAsArrayBuffer(file);
+    } else {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          setImportPreview(results.data);
+        },
+        error: () => {
+          toast.error('Failed to parse CSV file');
+        }
+      });
+    }
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -320,36 +303,57 @@ function ClientsContent() {
     if (file) processFile(file);
   }
 
+  // The account name resolves Company before ContactName, matching how a won deal names the
+  // account (clientConversion.service.ts: `lead.companyName || lead.contactName`). Importing
+  // and winning the same customer must produce the same account name, or the dedup in
+  // findMatchingClient can't recognise them as one company.
+  // `||`, not `??`: a template column that is present but blank arrives as '' (Papa fills every
+  // header, XLSX with defval:''), which is not nullish — `??` would stop at the empty Name and
+  // reject every row of an otherwise valid file.
+  function resolveClientName(row: any) {
+    const first = [row.Name, row.name, row.Company, row.company, row.ContactName, row.contactName]
+      .map((v) => (v ?? '').toString().trim())
+      .find(Boolean);
+    return first || '';
+  }
+
   async function handleBulkImport() {
     if (!importPreview.length) return;
+    if (importPreview.length > 500) { toast.error('Max 500 clients at a time.'); return; }
     setImporting(true);
     try {
+      // Send every row; the server validates each and returns the rejected ones with reasons.
       const payload = importPreview.map((row: any) => ({
-        name: row.Name || row.name || row.ContactName || row.contactName || row.Company || row.company,
-        company: row.Company || row.company,
-        industry: row.Industry || row.industry,
-        status: row.Status || row.status || 'PROSPECT',
-        engagementType: row.EngagementType || row.engagementType,
-        contractValue: row.ContractValue || row.contractValue,
-        city: row.City || row.city,
-        address: row.Address || row.address,
-        scope: row.Scope || row.scope,
-        assetLinks: row.AssetLinks || row.assetLinks,
-        startDate: row.StartDate || row.startDate,
-        accountManagerId: row.AccountManagerId || row.accountManagerId,
-        website: row.Website || row.website,
-        contactName: row.ContactName || row.contactName,
-        contactDesignation: row.ContactDesignation || row.contactDesignation,
-        contactEmail: row.ContactEmail || row.contactEmail,
-        contactPhone: row.ContactPhone || row.contactPhone
-      })).filter(c => c.name); // only include rows with a name
+        name: resolveClientName(row),
+        company: row.Company ?? row.company ?? '',
+        industry: row.Industry ?? row.industry ?? '',
+        status: row.Status ?? row.status ?? 'PROSPECT',
+        engagementType: row.EngagementType ?? row.engagementType ?? '',
+        contractValue: row.ContractValue ?? row.contractValue ?? '',
+        email: row.Email ?? row.email ?? '',
+        phone: row.Phone ?? row.phone ?? '',
+        website: row.Website ?? row.website ?? '',
+        address: row.Address ?? row.address ?? '',
+        city: row.City ?? row.city ?? '',
+        state: row.State ?? row.state ?? '',
+        zip: row.Zip ?? row.zip ?? '',
+        country: row.Country ?? row.country ?? '',
+        gstNumber: row.GstNumber ?? row.gstNumber ?? row.GSTNumber ?? '',
+        billingAddress: row.BillingAddress ?? row.billingAddress ?? '',
+        scope: row.Scope ?? row.scope ?? '',
+        assetLinks: row.AssetLinks ?? row.assetLinks ?? '',
+        startDate: row.StartDate ?? row.startDate ?? '',
+        accountManagerEmail: row.AccountManagerEmail ?? row.accountManagerEmail ?? '',
+        contactName: row.ContactName ?? row.contactName ?? '',
+        contactDesignation: row.ContactDesignation ?? row.contactDesignation ?? '',
+        contactEmail: row.ContactEmail ?? row.contactEmail ?? '',
+        contactPhone: row.ContactPhone ?? row.contactPhone ?? ''
+      }));
 
-      await api.post('/clients/bulk', { clients: payload });
-      toast.success(`Imported ${payload.length} clients`);
-      setShowCreate(false);
-      setCreationMode('MANUAL');
-      setImportFile(null);
-      setImportPreview([]);
+      const res = await api.post<{ imported: number; rejectedCount: number; rejected: any[] }>('/clients/bulk', { clients: payload });
+      setImportResult(res);
+      if (res.imported > 0) toast.success(`Imported ${res.imported} client${res.imported === 1 ? '' : 's'}`);
+      else toast.error('No clients imported — see the rejection report.');
       fetchClients();
     } catch (err: any) {
       toast.error(err.message || 'Failed to import clients');
@@ -358,24 +362,42 @@ function ClientsContent() {
     }
   }
 
+  function downloadRejectionReport() {
+    if (!importResult?.rejected?.length) return;
+    const csv = Papa.unparse(importResult.rejected);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `rejected_clients_${Date.now()}.csv`;
+    link.click();
+  }
+
   function downloadTemplate() {
     const csv = Papa.unparse([{
-      ContactName: 'John Doe',
-      Company: 'Example LLC',
-      Industry: 'Technology',
-      Status: 'PROSPECT',
+      Name: 'Example Retail Pvt Ltd',
+      Company: 'Example Retail Pvt Ltd',
+      Industry: 'Retail',
+      Status: 'ACTIVE',
       EngagementType: 'Retainer',
       ContractValue: '50000',
-      City: 'New York',
-      Address: '123 Business Rd, NY 10001',
+      Email: 'accounts@example.in',
+      Phone: '+91-98400-00000',
+      Website: 'https://example.in',
+      Address: '12 MG Road',
+      City: 'Chennai',
+      State: 'Tamil Nadu',
+      Zip: '600001',
+      Country: 'India',
+      GstNumber: '33AABCE1234F1Z5',
+      BillingAddress: '12 MG Road, Chennai, Tamil Nadu 600001',
       Scope: 'Full service marketing',
       AssetLinks: 'https://drive.google.com/xyz',
       StartDate: '2026-06-01',
-      AccountManagerId: '',
-      Website: 'https://example.com',
-      ContactDesignation: 'CEO',
-      ContactEmail: 'john@example.com',
-      ContactPhone: '+1-555-0100'
+      AccountManagerEmail: '',
+      ContactName: 'Priya Raman',
+      ContactDesignation: 'Marketing Head',
+      ContactEmail: 'priya@example.in',
+      ContactPhone: '+91-98400-00001'
     }]);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -419,7 +441,7 @@ function ClientsContent() {
             <MultiSelect
               value={statusFilter}
               onChange={setStatusFilter}
-              placeholder="Status"
+              placeholder="Lifecycle Stage"
               showSelectAll={true}
               triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
               options={[
@@ -469,6 +491,17 @@ function ClientsContent() {
               options={INDUSTRY_OPTIONS.map((i) => ({ label: i, value: i }))}
             />
           </div>
+
+          {canManageClients && (
+            <button
+              type="button"
+              onClick={() => setShowArchived(v => !v)}
+              className={showArchived ? "h-9 rounded-xl border border-primary bg-primary/[0.02] px-3 text-xs font-semibold text-primary transition-all shrink-0 whitespace-nowrap" : "h-9 rounded-xl border border-border bg-white px-3 text-xs text-secondary hover:bg-gray-50 hover:border-gray-300 transition-all shrink-0 whitespace-nowrap"}
+              title="Archived clients are hidden by default; show them here to restore one"
+            >
+              {showArchived ? 'Hide Archived' : 'Show Archived'}
+            </button>
+          )}
 
           {/* Action buttons on the right corner */}
           <div className="flex items-center gap-2 ml-auto shrink-0">
@@ -575,7 +608,7 @@ function ClientsContent() {
                   {visibleColumns.includes('industry') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Industry</th>}
                   {visibleColumns.includes('contact') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Contact</th>}
                   {visibleColumns.includes('projects') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Projects</th>}
-                  {visibleColumns.includes('status') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">{activeModule === 'PM' ? 'Lifecycle Stage' : 'Status'}</th>}
+                  {visibleColumns.includes('status') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Lifecycle Stage</th>}
                   <th className="px-6 py-3.5 w-10 text-center relative select-none">
                     <button
                       onClick={(e) => { e.stopPropagation(); setShowColumnDropdown(!showColumnDropdown); }}
@@ -643,7 +676,7 @@ function ClientsContent() {
                           onClick={() => setShowCreate(true)}
                           className="bg-primary text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-black transition-colors"
                         >
-                          + Add Client
+                          + Import Clients
                         </button>
                         )}
                         <Link
@@ -715,7 +748,12 @@ function ClientsContent() {
                       )}
                       {visibleColumns.includes('status') && (
                         <td className="px-6 py-4">
-                          <StatusBadge status={client.status} />
+                          <div className="flex items-center gap-1.5">
+                            <StatusBadge status={client.status} />
+                            {client.archivedAt && (
+                              <span className="text-[10px] font-semibold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">Archived</span>
+                            )}
+                          </div>
                         </td>
                       )}
                       <td className="px-6 py-4">
@@ -760,7 +798,7 @@ function ClientsContent() {
                 onClick={() => setShowCreate(true)}
                 className="bg-primary text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-black transition-colors"
               >
-                + Add Client
+                + Import Clients
               </button>
               )}
               <Link
@@ -798,7 +836,12 @@ function ClientsContent() {
                     )}
                   </div>
                 </div>
-                <StatusBadge status={client.status} size="xs" />
+                <div className="flex items-center gap-1.5">
+                  <StatusBadge status={client.status} size="xs" />
+                  {client.archivedAt && (
+                    <span className="text-[10px] font-semibold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">Archived</span>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center justify-between mt-4">
@@ -850,204 +893,89 @@ function ClientsContent() {
             >
               <div className="flex flex-col border-b border-[#F3F4F6]">
                 <div className="flex items-center justify-between px-6 py-4">
-                  <h2 className="text-lg font-semibold text-primary">Add Client</h2>
-                  <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
+                  <div>
+                    <h2 className="text-lg font-semibold text-primary">Import Clients</h2>
+                    <p className="text-xs text-secondary mt-0.5">Bulk-onboard existing clients from a CSV file. New deals still go through the pipeline.</p>
+                  </div>
+                  <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors shrink-0">
                     <X className="h-4 w-4 text-secondary" />
-                  </button>
-                </div>
-                <div className="flex gap-4 px-6">
-                  <button
-                    onClick={() => setCreationMode('MANUAL')}
-                    className={`pb-2 text-sm font-medium border-b-2 transition-colors ${creationMode === 'MANUAL' ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-[#374151]'}`}
-                  >
-                    Manual Entry
-                  </button>
-                  <button
-                    onClick={() => setCreationMode('BULK')}
-                    className={`pb-2 text-sm font-medium border-b-2 transition-colors ${creationMode === 'BULK' ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-[#374151]'}`}
-                  >
-                    Bulk Import
                   </button>
                 </div>
               </div>
 
-              {creationMode === 'MANUAL' ? (
-                <form onSubmit={handleCreate} className="relative p-6 space-y-4">
-                  {formError && <div className="absolute top-0 left-6 right-6 -mt-2 z-10 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 shadow-sm border border-red-100">{formError}</div>}
-                  <Field label="Company Name *" value={form.company} onChange={(v) => setForm({ ...form, name: v, company: v })} required />
+              <div className="p-6 space-y-6">
+                <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-[#F9FAFB]">
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Industry</label>
-                    <Select
-                      value={form.industry}
-                      onChange={(v) => setForm({ ...form, industry: v })}
-                      options={[
-                        { label: 'Select industry', value: '' },
-                        ...INDUSTRY_OPTIONS.map((i) => ({ label: i, value: i })),
-                      ]}
-                    />
+                    <h3 className="text-sm font-semibold text-primary">Need a template?</h3>
+                    <p className="text-xs text-secondary mt-1">CSV or Excel (.xlsx). <span className="font-medium text-[#374151]">Name required</span> on every row.</p>
                   </div>
+                  <button onClick={downloadTemplate} className="flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-gray-50 transition-all">
+                    <FileText className="h-3.5 w-3.5" /> Template
+                  </button>
+                </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Engagement Type</label>
-                    <Select
-                      value={form.engagementType}
-                      onChange={(v) => setForm({ ...form, engagementType: v })}
-                      options={[
-                        { label: 'Select type', value: '' },
-                        { label: 'Retainer', value: 'Retainer' },
-                        { label: 'Project', value: 'Project' },
-                        { label: 'Event', value: 'Event' },
-                        { label: 'Ad-hoc', value: 'Ad-hoc' }
-                      ]}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Billing Currency</label>
-                    <CurrencySelect value={form.currency} onChange={(v) => setForm({ ...form, currency: v })} />
-                  </div>
-
-                  <Field label="Website" value={form.website} onChange={(v) => setForm({ ...form, website: v })} />
-                  <Field label="City" value={form.city} onChange={(v) => setForm({ ...form, city: v })} />
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Billing Address</label>
-                    <textarea value={form.billingAddress} onChange={(e) => setForm({ ...form, billingAddress: e.target.value })} rows={2} placeholder="Used to auto-fill quotations" className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary resize-none" />
-                  </div>
-                  <Field label="Start Date" type="date" value={form.startDate} onChange={(v) => setForm({ ...form, startDate: v })} />
-
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Scope</label>
-                    <RichTextEditor
-                      value={form.scope}
-                      onChange={(val) => setForm({ ...form, scope: val })}
-                      placeholder="Enter the scope of work..."
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Account Manager</label>
-                    <Select
-                      value={form.accountManagerId}
-                      onChange={(v) => setForm({ ...form, accountManagerId: v })}
-                      options={[
-                        { label: 'Unassigned', value: '' },
-                        ...members.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
-                      ]}
-                    />
-                  </div>
-
-
-                  <div className="space-y-3 pt-2 pb-2 border-y border-[#F3F4F6]">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-sm font-medium text-[#374151]">Contacts</label>
-                      {form.contacts.length < 5 && (
-                        <button type="button" onClick={() => setForm({ ...form, contacts: [...form.contacts, { name: '', designation: '', email: '', phone: '', role: '', linkedinUrl: '' }] })} className="text-xs font-medium text-primary flex items-center gap-1 hover:bg-[#F3F4F6] px-2 py-1 rounded transition-colors">
-                          <Plus className="h-3 w-3" /> Add Contact
-                        </button>
-                      )}
-                    </div>
-                    {form.contacts.map((contact, i) => (
-                      <div key={i} className="p-4 border border-border rounded-xl bg-surface relative">
-                        {form.contacts.length > 1 && (
-                          <button type="button" onClick={() => setForm({ ...form, contacts: form.contacts.filter((_, idx) => idx !== i) })} className="absolute top-2 right-2 p-1.5 text-secondary hover:text-red-500 rounded-lg hover:bg-white transition-colors border border-transparent hover:border-red-100 shadow-sm hover:shadow">
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <Field label="Name *" value={contact.name} onChange={(v) => { const c = [...form.contacts]; c[i].name = v; setForm({ ...form, contacts: c }); }} required />
-                          <Field label="Designation" value={contact.designation} onChange={(v) => { const c = [...form.contacts]; c[i].designation = v; setForm({ ...form, contacts: c }); }} />
-                          <Field label="Email" type="email" value={contact.email} onChange={(v) => { const c = [...form.contacts]; c[i].email = v; setForm({ ...form, contacts: c }); }} />
-                          <Field label={i === 0 ? "Phone *" : "Phone"} value={contact.phone} onChange={(v) => { const c = [...form.contacts]; c[i].phone = v; setForm({ ...form, contacts: c }); }} required={i === 0} />
-                          <div>
-                            <label className="block text-xs font-medium text-secondary mb-1">Role</label>
-                            <Select
-                              value={contact.role || ''}
-                              onChange={(val) => { const c = [...form.contacts]; c[i].role = val; setForm({ ...form, contacts: c }); }}
-                              options={[
-                                { label: '— None —', value: '' },
-                                { label: 'Decision Maker', value: 'DECISION_MAKER' },
-                                { label: 'Influencer', value: 'INFLUENCER' },
-                                { label: 'Gatekeeper', value: 'GATEKEEPER' },
-                                { label: 'Champion', value: 'CHAMPION' },
-                                { label: 'CC Only', value: 'CC_ONLY' },
-                              ]}
-                            />
-                          </div>
-                          <Field label="LinkedIn URL" value={contact.linkedinUrl} onChange={(v) => { const c = [...form.contacts]; c[i].linkedinUrl = v; setForm({ ...form, contacts: c }); }} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Status</label>
-                    <Select
-                      value={form.status}
-                      onChange={(val) => setForm({ ...form, status: val })}
-                      options={[
-                        { label: 'Prospect', value: 'PROSPECT' },
-                        { label: 'Active', value: 'ACTIVE' },
-                        { label: 'On Hold', value: 'ONHOLD' },
-                        { label: 'Churned', value: 'CHURNED' },
-                        { label: 'Project Completed', value: 'PROJECT_COMPLETED' },
-                      ]}
-                    />
-                  </div>
-                  <div className="pt-4 flex flex-row gap-2 sm:gap-3">
-                    <button type="button" onClick={() => setShowCreate(false)} className="flex-1 w-full sm:flex-1 rounded-xl border border-border px-2 sm:px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
-                      Cancel
-                    </button>
-                    <button type="submit" disabled={submitting} className="flex-1 w-full sm:flex-1 rounded-xl bg-primary px-2 sm:px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all flex items-center justify-center">
-                      {submitting ? 'Creating...' : <><span className="hidden sm:inline">Create Client</span><span className="inline sm:hidden">Create</span></>}
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <div className="p-6 space-y-6">
-                  <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-[#F9FAFB]">
-                    <div>
-                      <h3 className="text-sm font-semibold text-primary">Need a template?</h3>
-                      <p className="text-xs text-secondary mt-1">Download our CSV template to see the required format.</p>
-                    </div>
-                    <button onClick={downloadTemplate} className="flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-gray-50 transition-all">
-                      <FileText className="h-3.5 w-3.5" /> Template
-                    </button>
-                  </div>
-
-                  <div>
-                    <label
-                      onDragOver={handleDragOver}
-                      onDragLeave={handleDragLeave}
-                      onDrop={handleDrop}
-                      className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed transition-colors rounded-xl cursor-pointer ${isDragging ? 'border-primary bg-gray-50' : 'border-[#D1D5DB] hover:border-primary hover:bg-gray-50'}`}
-                    >
-                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                        <Upload className="w-8 h-8 mb-3 text-secondary" />
-                        <p className="mb-2 text-sm text-[#4B5563]">
-                          <span className="font-semibold">Click to upload</span> or drag and drop
-                        </p>
-                        <p className="text-xs text-secondary">CSV files only</p>
-                      </div>
-                      <input type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
-                    </label>
-                    {importFile && (
-                      <p className="text-xs text-primary mt-2 font-medium flex items-center gap-1.5">
-                        <FileText className="h-3 w-3 text-[#10B981]" /> {importFile.name}
+                <div>
+                  <label
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed transition-colors rounded-xl cursor-pointer ${isDragging ? 'border-primary bg-gray-50' : 'border-[#D1D5DB] hover:border-primary hover:bg-gray-50'}`}
+                  >
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                      <Upload className="w-8 h-8 mb-3 text-secondary" />
+                      <p className="mb-2 text-sm text-[#4B5563]">
+                        <span className="font-semibold">Click to upload</span> or drag and drop
                       </p>
-                    )}
-                  </div>
+                      <p className="text-xs text-secondary">CSV or Excel (.xlsx, .xls)</p>
+                    </div>
+                    <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleFileChange} />
+                  </label>
+                  {importFile && (
+                    <p className="text-xs text-primary mt-2 font-medium flex items-center gap-1.5">
+                      <FileText className="h-3 w-3 text-[#10B981]" /> {importFile.name}
+                    </p>
+                  )}
+                </div>
 
-                  {importPreview.length > 0 && (
+                {importPreview.length > 0 && !importResult && (() => {
+                  const named = importPreview.filter(r => resolveClientName(r).length >= 2).length;
+                  return (
                     <div className="p-4 rounded-xl border border-blue-100 bg-blue-50">
                       <h4 className="text-sm font-semibold text-blue-900 mb-1">Ready to Import</h4>
-                      <p className="text-xs text-blue-700">Found {importPreview.filter(r => r.Name || r.name).length} valid clients in the CSV file.</p>
+                      <p className="text-xs text-blue-700">
+                        Found {importPreview.length} row{importPreview.length === 1 ? '' : 's'}
+                        {named < importPreview.length && <> — {importPreview.length - named} missing a name will be rejected</>}.
+                      </p>
                     </div>
-                  )}
+                  );
+                })()}
 
-                  <div className="pt-4 flex flex-row gap-2 sm:gap-3">
-                    <button type="button" onClick={() => { setShowCreate(false); setImportFile(null); setImportPreview([]); }} className="flex-1 w-full sm:flex-1 rounded-xl border border-border px-2 sm:px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
-                      Cancel
-                    </button>
+                {importResult && (
+                  <div className={`p-4 rounded-xl border ${importResult.rejectedCount > 0 ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
+                    <h4 className={`text-sm font-semibold mb-1 ${importResult.rejectedCount > 0 ? 'text-amber-900' : 'text-emerald-900'}`}>
+                      Imported {importResult.imported} of {importResult.imported + importResult.rejectedCount}
+                    </h4>
+                    {importResult.rejectedCount > 0 ? (
+                      <>
+                        <p className="text-xs text-amber-800">
+                          {importResult.rejectedCount} row{importResult.rejectedCount === 1 ? '' : 's'} rejected. Download the report, fix the rows, and re-upload just those — the imported ones are already saved.
+                        </p>
+                        <button onClick={downloadRejectionReport} className="mt-2 flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100 transition-all">
+                          <Download className="h-3.5 w-3.5" /> Rejection report
+                        </button>
+                      </>
+                    ) : (
+                      <p className="text-xs text-emerald-800">Every row imported cleanly.</p>
+                    )}
+                  </div>
+                )}
+
+                <div className="pt-4 flex flex-row gap-2 sm:gap-3">
+                  <button type="button" onClick={() => { setShowCreate(false); setImportFile(null); setImportPreview([]); setImportResult(null); }} className="flex-1 w-full sm:flex-1 rounded-xl border border-border px-2 sm:px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
+                    {importResult ? 'Done' : 'Cancel'}
+                  </button>
+                  {/* Hidden once a result is in — re-clicking would import the same file twice. */}
+                  {!importResult && (
                     <button
                       onClick={handleBulkImport}
                       disabled={importing || importPreview.length === 0}
@@ -1055,9 +983,9 @@ function ClientsContent() {
                     >
                       {importing ? 'Importing...' : <><span className="hidden sm:inline">Import Clients</span><span className="inline sm:hidden">Import</span></>}
                     </button>
-                  </div>
+                  )}
                 </div>
-              )}
+              </div>
             </motion.div>
           </>
         )}
@@ -1119,24 +1047,5 @@ export default function ClientsPage() {
     }>
       <ClientsContent />
     </Suspense>
-  );
-}
-
-function Field({ label, value, onChange, type = 'text', required = false }: {
-  label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean;
-}) {
-  const id = useId();
-  return (
-    <div>
-      <label htmlFor={id} className="block text-sm font-medium text-[#374151] mb-1.5">{label}</label>
-      <input
-        id={id}
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        required={required}
-        className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-      />
-    </div>
   );
 }

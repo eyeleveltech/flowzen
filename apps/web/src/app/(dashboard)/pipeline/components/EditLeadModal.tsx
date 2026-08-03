@@ -26,22 +26,22 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
     industry: lead.industry || '',
     city: lead.city || '',
     state: lead.state || '',
-    billingAddress: lead.billingAddress || '',
-    gstNumber: lead.gstNumber || '',
+    // billingAddress / gstNumber deliberately absent: they were never rendered here, so the form
+    // was round-tripping values the user could not see or change. They belong on the client's
+    // billing section, which is where quotations read them from.
     source: lead.source || 'MANUAL',
     assignedToId: lead.assignedToId || '',
     dealValue: lead.dealValue ? String(lead.dealValue) : '',
     expectedCloseDate: toDateInput(lead.expectedCloseDate),
     priority: lead.priority || 'MEDIUM',
     followUpDate: toDateInput(lead.followUpDate),
-    linkedinUrl: lead.linkedinUrl || '',
     lastContactedDate: toDateInput(lead.lastContactedDate),
     contractStartDate: toDateInput(lead.contractStartDate),
     contractEndDate: toDateInput(lead.contractEndDate),
     autoRenewal: Boolean(lead.autoRenewal),
   });
 
-  const [errors, setErrors] = useState<{ contactName?: string; contactEmail?: string; contactPhone?: string }>({});
+  const [errors, setErrors] = useState<{ companyName?: string; contactEmail?: string; contactPhone?: string }>({});
   const [submitting, setSubmitting] = useState(false);
 
   const initialFormRef = useRef(JSON.stringify(form));
@@ -65,21 +65,16 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    // Name required + (email OR phone required)
-    const newErrors: { contactName?: string; contactEmail?: string; contactPhone?: string } = {};
-    if (!form.contactName || form.contactName.trim().length < 2) newErrors.contactName = 'Full name is required.';
+    // The company is the lead's identity; the contact person is optional (matches LeadModal
+    // and the server's leadSchema). Formats are still validated when a value is supplied.
+    const newErrors: { companyName?: string; contactEmail?: string; contactPhone?: string } = {};
+    if (!form.companyName || form.companyName.trim().length < 2) newErrors.companyName = 'Company name is required.';
 
-    const hasEmail = !!form.contactEmail.trim();
-    const hasPhone = !!form.contactPhone.trim();
-
-    if (hasEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.contactEmail.trim())) {
-      newErrors.contactEmail = 'A valid email is required.';
+    if (form.contactEmail.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.contactEmail.trim())) {
+      newErrors.contactEmail = 'Enter a valid email address.';
     }
-    if (hasPhone && form.contactPhone.replace(/\D/g, '').length < 10) {
+    if (form.contactPhone.trim() && form.contactPhone.replace(/\D/g, '').length < 10) {
       newErrors.contactPhone = 'Phone must be at least 10 digits.';
-    }
-    if (!hasEmail && !hasPhone) {
-      newErrors.contactEmail = 'Email or phone is required.';
     }
 
     setErrors(newErrors);
@@ -130,26 +125,23 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
 
         <div className="flex-1 overflow-y-auto p-6">
           <form id="editLeadForm" onSubmit={handleSubmit} className="space-y-4">
-            <Field id="edit-contactName" label="Contact Name" required value={form.contactName} error={errors.contactName} onChange={(v) => setForm({ ...form, contactName: v })} placeholder="Full Name" />
+            {/* The company IS the lead, so it leads the form and carries the required marker. */}
+            <Field id="edit-company" label="Company" required value={form.companyName} error={errors.companyName} onChange={(v) => setForm({ ...form, companyName: v })} placeholder="Company name" />
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field id="edit-contactName" label="Contact Name" value={form.contactName} onChange={(v) => setForm({ ...form, contactName: v })} placeholder="Full Name" />
+              <Field id="edit-jobTitle" label="Job Title" value={form.jobTitle} onChange={(v) => setForm({ ...form, jobTitle: v })} placeholder="e.g. Marketing Director" />
+            </div>
 
             <div className="grid grid-cols-2 gap-4">
               <Field id="edit-email" label="Email" type="email" value={form.contactEmail} error={errors.contactEmail} onChange={(v) => setForm({ ...form, contactEmail: v })} placeholder="john@example.com" />
               <Field id="edit-phone" label="Phone" value={form.contactPhone} error={errors.contactPhone} onChange={(v) => setForm({ ...form, contactPhone: v })} placeholder="+91 ..." />
             </div>
 
+            {/* LinkedIn removed here per corrections #53 — it lives on each contact instead. */}
             <div className="grid grid-cols-2 gap-4">
-              <Field id="edit-company" label="Company" value={form.companyName} onChange={(v) => setForm({ ...form, companyName: v })} placeholder="Company name" />
-              <Field id="edit-jobTitle" label="Job Title" value={form.jobTitle} onChange={(v) => setForm({ ...form, jobTitle: v })} placeholder="e.g. Marketing Director" />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <Field id="edit-linkedin" label="LinkedIn Profile URL" value={form.linkedinUrl} onChange={(v) => setForm({ ...form, linkedinUrl: v })} placeholder="https://linkedin.com/..." />
               <Field id="edit-instagram" label="Instagram Handle" value={form.instagramHandle} onChange={(v) => setForm({ ...form, instagramHandle: v })} placeholder="@username or URL" />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
               <Field id="edit-facebook" label="Facebook Page" value={form.facebookPage} onChange={(v) => setForm({ ...form, facebookPage: v })} placeholder="URL or username" />
-              <div />
             </div>
 
             <div className="grid grid-cols-2 gap-4">

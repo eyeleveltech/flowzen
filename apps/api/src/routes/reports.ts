@@ -403,6 +403,7 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
       CONTRACT: 0.9,
       ACTIVE_RETAINER: 1.0,
       ACTIVE_PROJECT: 1.0,
+      ON_HOLD: 0.1,
       PROJECT_COMPLETED: 1.0,
       CHURNED: 0.0,
     };

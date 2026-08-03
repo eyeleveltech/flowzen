@@ -169,11 +169,15 @@ async function repointLeadQuotes(tx: Tx, leadId: string, clientId: string) {
 }
 
 /**
- * Identity and billing fields the Lead owns only until it converts. Afterwards the Client
- * is the single master for them and the lead's copies are frozen, so the two records can
- * never drift apart or disagree about a GST number.
+ * Company identity + billing fields shared by a Lead and the Client it becomes.
+ *
+ * A lead and its client are ONE company: the Client is the master record, and an edit made from
+ * either side is applied to the account (see the propagation block in PATCH /crm/leads/:id).
+ * They are NOT frozen after conversion — an earlier version of this comment claimed they were,
+ * while the code propagated them, and the mismatch cost a real debugging session. If you change
+ * the behaviour, change this sentence with it.
  */
-export const LEAD_IDENTITY_FIELDS = [
+export const SHARED_COMPANY_FIELDS = [
   'companyName', 'contactName', 'contactEmail', 'contactPhone', 'landlinePhone',
   'jobTitle', 'address', 'city', 'state', 'zip', 'country',
   'billingAddress', 'gstNumber', 'website', 'industry',
