@@ -1,5 +1,6 @@
 import type { Prisma, LeadStage } from '@prisma/client';
-import { generateLeadId } from '../utils/leadId.js';
+import { generateLeadId, normalizePhone } from '../utils/leadId.js';
+import { findLeadByPhone, syncPrimaryContact } from './leadContact.service.js';
 
 /**
  * Client → pipeline entry.
@@ -65,21 +66,22 @@ export async function createPipelineEntryForClient(
 
   const stage = stageForClient(client.status, client.engagementType);
 
-  // Lead.contactPhone is unique per organization. A collision (two imported clients sharing a
-  // number, or a number already on a lead) must not cost us the pipeline entry, so the duplicate
-  // is dropped rather than the row. null — never '' — because empty strings DO collide with each
+  // A lead's phone is unique per organization. A collision (two imported clients sharing a number,
+  // or a number already on a lead) must not cost us the pipeline entry, so the duplicate number is
+  // dropped rather than the row. null — never '' — because empty strings DO collide with each
   // other under the unique index, while multiple NULLs are allowed.
+  //
+  // Compared on normalized DIGITS: numbers are stored however they were typed, so
+  // "+91-98400-00001" and "9840000001" are the same phone and must collide.
   const rawPhone = (client.phone || '').toString().trim();
   let contactPhone: string | null = rawPhone || null;
-  if (contactPhone) {
+  const digits = normalizePhone(rawPhone);
+  if (contactPhone && digits) {
     if (opts.takenPhones) {
-      if (opts.takenPhones.has(contactPhone)) contactPhone = null;
-      else opts.takenPhones.add(contactPhone);
+      if (opts.takenPhones.has(digits)) contactPhone = null;
+      else opts.takenPhones.add(digits);
     } else {
-      const clash = await tx.lead.findFirst({
-        where: { organizationId: client.organizationId, contactPhone },
-        select: { id: true },
-      });
+      const clash = await findLeadByPhone(tx, client.organizationId, digits, normalizePhone);
       if (clash) contactPhone = null;
     }
   }
@@ -101,10 +103,6 @@ export async function createPipelineEntryForClient(
         : stage === 'ACTIVE_RETAINER' ? (client.contractType || 'RETAINER')
         : (client.contractType || null),
       companyName: client.company || client.name || null,
-      contactName: primaryContact?.name || client.contactPerson || client.name || null,
-      contactEmail: client.email || primaryContact?.email || null,
-      contactPhone,
-      jobTitle: primaryContact?.designation || client.jobTitle || null,
       landlinePhone: client.landlinePhone || null,
       assignedToId: client.accountManagerId || null,
       dealValue: client.contractValue ?? null,
@@ -120,12 +118,22 @@ export async function createPipelineEntryForClient(
       website: client.website || null,
       industry: client.industry || null,
       companySize: client.companySize || null,
-      linkedinUrl: client.linkedinUrl || null,
+      // linkedinUrl belongs to the PERSON now — it goes onto the contact row below, not the lead.
       instagramHandle: client.instagramHandle || null,
       facebookPage: client.facebookPage || null,
       healthStatus: client.healthStatus || null,
     },
     select: { id: true },
+  });
+
+  // Give the new pipeline entry its contact row too, so it matches every other lead. Sourced from
+  // the client's own primary contact where there is one.
+  await syncPrimaryContact(tx, lead.id, {
+    name: primaryContact?.name || client.contactPerson || null,
+    email: client.email || primaryContact?.email || null,
+    phone: contactPhone,
+    designation: primaryContact?.designation || client.jobTitle || null,
+    linkedinUrl: client.linkedinUrl || null,
   });
 
   if (opts.changedById) {

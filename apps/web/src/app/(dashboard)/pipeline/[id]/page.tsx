@@ -666,7 +666,16 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
 
           {activeTab === 'contacts' && (
             <div className="w-full">
-              <ContactsTab leadId={leadId} lead={lead} />
+              <ContactsTab
+                leadId={leadId}
+                lead={lead}
+                // The lead's displayed name/email/phone come from its primary contact, so any
+                // change in this tab can change the header and the board card too.
+                onChanged={() => {
+                  queryClient.invalidateQueries({ queryKey: ['lead', leadId] });
+                  queryClient.invalidateQueries({ queryKey: ['leads'] });
+                }}
+              />
             </div>
           )}
         </div>

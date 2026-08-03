@@ -17,7 +17,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
   const queryClient = useQueryClient();
   const { data: members = [] } = useMembers();
   const { data: clients = [] } = useClients();
-  
+
   const [form, setForm] = useState({
     clientId: '',
     contactName: '',
@@ -39,8 +39,9 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
     state: '',
     companySize: '',
     website: '',
-    billingAddress: '',
-    gstNumber: '',
+    // billingAddress / gstNumber deliberately absent: they had no input here either, so the form
+    // only ever posted empty strings for them. They belong to the account's billing section,
+    // which is where quotations read them from. (Same reasoning as EditLeadModal.)
     notes: '',
     priority: 'MEDIUM',
   });
@@ -85,8 +86,8 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
     };
   }, []);
 
-  const filteredClients = clients?.filter((c: any) => 
-    c.name.toLowerCase().includes(clientSearch.toLowerCase()) || 
+  const filteredClients = clients?.filter((c: any) =>
+    c.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
     (c.company && c.company.toLowerCase().includes(clientSearch.toLowerCase()))
   ) || [];
 
@@ -192,6 +193,8 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
       const payload = importPreview.map((row: any) => ({
         contactName: row.ContactName ?? row.contactName ?? row['Full Name'] ?? '',
         companyName: row.CompanyName ?? row.companyName ?? row.Company ?? '',
+        // The server already forwards jobTitle to the contact row; the sheet just wasn't read for it.
+        jobTitle: row.JobTitle ?? row.jobTitle ?? row.Designation ?? '',
         email: row.Email ?? row.email ?? '',
         phone: row.Phone ?? row.phone ?? row.Mobile ?? row.mobile ?? '',
         stage: row.Stage ?? row.stage ?? 'NEW_LEAD',
@@ -202,6 +205,8 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
         expectedCloseDate: row.ExpectedCloseDate ?? row.expectedCloseDate ?? '',
         industry: row.Industry ?? row.industry ?? '',
         city: row.City ?? row.city ?? '',
+        state: row.State ?? row.state ?? '',
+        priority: row.Priority ?? row.priority ?? '',
         companySize: row.CompanySize ?? row.companySize ?? '',
         website: row.Website ?? row.website ?? '',
         notes: row.Notes ?? row.notes ?? '',
@@ -226,7 +231,9 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
   }
 
   function downloadTemplate() {
-    const csv = Papa.unparse([{ ContactName: 'John Doe', CompanyName: 'Example LLC', Email: 'john@example.com', Phone: '+1-555-0100', Stage: 'NEW_LEAD', DealValue: '50000', ExpectedCloseDate: '2026-06-01', Industry: 'IT/SaaS', City: 'Chennai', Website: 'example.com', LinkedinUrl: 'linkedin.com/in/johndoe', InstagramHandle: '@johndoe', FacebookPage: 'facebook.com/johndoe', Notes: 'Needs immediate follow up' }]);
+    // CompanyName leads the template because it is the only required column — the lead IS the
+    // company. Every other column, the contact person included, is optional.
+    const csv = Papa.unparse([{ CompanyName: 'Example LLC', ContactName: 'John Doe', JobTitle: 'Marketing Director', Email: 'john@example.com', Phone: '+91-98400-00001', Stage: 'NEW_LEAD', Priority: 'MEDIUM', DealValue: '50000', ExpectedCloseDate: '2026-06-01', Industry: 'IT/SaaS', CompanySize: '11-100', City: 'Chennai', State: 'Tamil Nadu', Website: 'example.com', LinkedinUrl: 'linkedin.com/in/johndoe', InstagramHandle: '@johndoe', FacebookPage: 'facebook.com/johndoe', Notes: 'Needs immediate follow up' }]);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'lead_import_template.csv'; link.click();
   }
@@ -253,173 +260,182 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
         </div>
 
         <div className="flex gap-6 px-6 border-b border-border bg-gray-50/50">
-            <button
-              onClick={() => setCreationMode('MANUAL')}
-              className={`pb-3 mt-4 text-sm font-medium border-b-2 transition-colors ${creationMode === 'MANUAL' ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-[#374151]'}`}
-            >
-              Manual Entry
-            </button>
-            <button
-              onClick={() => setCreationMode('BULK')}
-              className={`pb-3 mt-4 text-sm font-medium border-b-2 transition-colors ${creationMode === 'BULK' ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-[#374151]'}`}
-            >
-              Bulk Import
-            </button>
+          <button
+            onClick={() => setCreationMode('MANUAL')}
+            className={`pb-3 mt-4 text-sm font-medium border-b-2 transition-colors ${creationMode === 'MANUAL' ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-[#374151]'}`}
+          >
+            Manual Entry
+          </button>
+          <button
+            onClick={() => setCreationMode('BULK')}
+            className={`pb-3 mt-4 text-sm font-medium border-b-2 transition-colors ${creationMode === 'BULK' ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-[#374151]'}`}
+          >
+            Bulk Import
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 bg-gray-50/30">
           {creationMode === 'MANUAL' ? (
-          <form id="lead-form" onSubmit={handleSubmit} className="space-y-8">
-                
-                {/* SECTION 1: Lead Information */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 border-b border-border pb-2">
-                    <Briefcase className="h-4 w-4 text-primary" />
-                    <h3 className="text-sm font-semibold text-primary">1. Lead Information</h3>
-                  </div>
+            <form id="lead-form" onSubmit={handleSubmit} className="space-y-8">
 
-                  {/* Client Search / Autocomplete */}
-                  <div className="relative" ref={clientDropdownRef}>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Client / Company Name <span className="text-red-500">*</span></label>
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
-                      <input
-                        type="text"
-                        value={clientSearch}
-                        onChange={handleClientSearchChange}
-                        onFocus={() => setShowClientDropdown(true)}
-                        placeholder="Search existing clients or type company name..."
-                        className={`w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all ${form.clientId ? 'bg-blue-50 border-blue-200 text-blue-900' : ''}`}
-                      />
-                      {form.clientId && (
-                        <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-600" />
-                      )}
-                    </div>
-                    {errors.companyName && <p className="mt-1 text-xs text-red-600">{errors.companyName}</p>}
+              {/* SECTION 1: Lead Information */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 border-b border-border pb-2">
+                  <Briefcase className="h-4 w-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-primary">1. Lead Information</h3>
+                </div>
 
-                    {showClientDropdown && clientSearch.length > 0 && filteredClients.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-border rounded-xl shadow-lg max-h-48 overflow-y-auto p-1">
-                        {filteredClients.map((client: any) => (
-                          <button
-                            key={client.id}
-                            type="button"
-                            onClick={() => handleSelectClient(client)}
-                            className="w-full text-left px-3 py-2 text-sm text-[#374151] hover:bg-gray-50 rounded-lg flex flex-col transition-colors"
-                          >
-                            <span className="font-medium">{client.name}</span>
-                            {client.company && <span className="text-xs text-secondary">{client.company}</span>}
-                          </button>
-                        ))}
-                      </div>
+                {/* Client Search / Autocomplete */}
+                <div className="relative" ref={clientDropdownRef}>
+                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Client / Company Name <span className="text-red-500">*</span></label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
+                    <input
+                      type="text"
+                      value={clientSearch}
+                      onChange={handleClientSearchChange}
+                      onFocus={() => setShowClientDropdown(true)}
+                      placeholder="Search existing clients or type company name..."
+                      className={`w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all ${form.clientId ? 'bg-blue-50 border-blue-200 text-blue-900' : ''}`}
+                    />
+                    {form.clientId && (
+                      <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-600" />
                     )}
                   </div>
+                  {errors.companyName && <p className="mt-1 text-xs text-red-600">{errors.companyName}</p>}
 
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <FieldSelect
-                      label="Priority"
-                      required
-                      leadingIcon={<PriorityDot level={form.priority} />}
-                      value={form.priority}
-                      onChange={(v) => setForm({ ...form, priority: v })}
-                      options={[
-                        { label: 'High', value: 'HIGH' },
-                        { label: 'Medium', value: 'MEDIUM' },
-                        { label: 'Low', value: 'LOW' },
-                      ]}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field label="Instagram Handle" value={form.instagramHandle} onChange={(v) => setForm({ ...form, instagramHandle: v })} placeholder="@username or URL" />
-                    <Field label="Facebook Page" value={form.facebookPage} onChange={(v) => setForm({ ...form, facebookPage: v })} placeholder="URL or username" />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <FieldSelect
-                      label="Lead Source"
-                      required
-                      value={form.source}
-                      onChange={(v) => setForm({ ...form, source: v })}
-                      options={[
-                        { label: 'LinkedIn', value: 'LINKEDIN' },
-                        { label: 'Referral', value: 'REFERRAL' },
-                        { label: 'Inbound Form', value: 'INBOUND' },
-                        { label: 'Event', value: 'EVENT' },
-                        { label: 'Manual', value: 'MANUAL' },
-                        { label: 'Other', value: 'OTHER' }
-                      ]}
-                    />
-                    <FieldSelect
-                      label="Industry"
-                      value={form.industry}
-                      onChange={(v) => setForm({ ...form, industry: v })}
-                      options={[
-                        { label: 'Select Industry', value: '' },
-                        { label: 'Real Estate', value: 'Real Estate' },
-                        { label: 'IT/SaaS', value: 'IT/SaaS' },
-                        { label: 'Healthcare', value: 'Healthcare' },
-                        { label: 'Automotive', value: 'Automotive' },
-                        { label: 'Manufacturing', value: 'Manufacturing' },
-                        { label: 'Other', value: 'Other' },
-                      ]}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <FieldSelect
-                      label="Company Size"
-                      value={form.companySize}
-                      onChange={(v) => setForm({ ...form, companySize: v })}
-                      options={[
-                        { label: 'Select Size', value: '' },
-                        { label: '1–10', value: '1-10' },
-                        { label: '11–100', value: '11-100' },
-                        { label: '101–500', value: '101-500' },
-                        { label: '501–1,000', value: '501-1000' },
-                        { label: '1,000+', value: '1000+' },
-                      ]}
-                    />
-                    <Field label="Website" value={form.website} onChange={(v) => setForm({ ...form, website: v })} placeholder="example.com" />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <Field label="State" value={form.state} onChange={(v) => setForm({ ...form, state: v })} placeholder="e.g. Tamil Nadu" />
-                    <Field label="Next Follow-up Date" type="date" value={form.followUpDate} onChange={(v) => setForm({ ...form, followUpDate: v })} />
-                    <Field label="Last Contacted Date" type="date" value={form.lastContactedDate} onChange={(v) => setForm({ ...form, lastContactedDate: v })} />
-                  </div>
+                  {showClientDropdown && clientSearch.length > 0 && filteredClients.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-border rounded-xl shadow-lg max-h-48 overflow-y-auto p-1">
+                      {filteredClients.map((client: any) => (
+                        <button
+                          key={client.id}
+                          type="button"
+                          onClick={() => handleSelectClient(client)}
+                          className="w-full text-left px-3 py-2 text-sm text-[#374151] hover:bg-gray-50 rounded-lg flex flex-col transition-colors"
+                        >
+                          <span className="font-medium">{client.name}</span>
+                          {client.company && <span className="text-xs text-secondary">{client.company}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {/* SECTION 2: Contact Details */}
-                <div className="space-y-4 pt-2">
-                  <div className="flex items-center gap-2 border-b border-border pb-2">
-                    <User className="h-4 w-4 text-primary" />
-                    <h3 className="text-sm font-semibold text-primary">2. Contact Details</h3>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field label="Contact Name" value={form.contactName} onChange={(v) => {
-                      setForm({ ...form, contactName: v });
-                    }} placeholder="Full Name" />
-                    <Field label="Job Title" value={form.jobTitle} onChange={(v) => setForm({ ...form, jobTitle: v })} placeholder="e.g. Marketing Director" />
-                  </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field label="Email Address" error={errors.email} type="email" icon={<Mail className="h-4 w-4 text-secondary" />} value={form.email} onChange={(v) => setForm({ ...form, email: v })} placeholder="john@example.com" />
-                    <Field label="Phone Number" error={errors.phone} icon={<Phone className="h-4 w-4 text-secondary" />} value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="+1 (555) 000-0000" />
-                  </div>
-                </div>
-
-                {/* SECTION 3: Assignment & Notes */}
-                <div className="space-y-4 pt-2">
-                  <div className="flex items-center gap-2 border-b border-border pb-2">
-                    <AlignLeft className="h-4 w-4 text-primary" />
-                    <h3 className="text-sm font-semibold text-primary">3. Assignment & Notes</h3>
-                  </div>
-
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <FieldSelect
-                    label="Owner"
+                    label="Priority"
                     required
+                    leadingIcon={<PriorityDot level={form.priority} />}
+                    value={form.priority}
+                    onChange={(v) => setForm({ ...form, priority: v })}
+                    options={[
+                      { label: 'High', value: 'HIGH' },
+                      { label: 'Medium', value: 'MEDIUM' },
+                      { label: 'Low', value: 'LOW' },
+                    ]}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="Instagram Handle" value={form.instagramHandle} onChange={(v) => setForm({ ...form, instagramHandle: v })} placeholder="@username or URL" />
+                  <Field label="Facebook Page" value={form.facebookPage} onChange={(v) => setForm({ ...form, facebookPage: v })} placeholder="URL or username" />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FieldSelect
+                    label="Lead Source"
+                    required
+                    value={form.source}
+                    onChange={(v) => setForm({ ...form, source: v })}
+                    options={[
+                      { label: 'LinkedIn', value: 'LINKEDIN' },
+                      { label: 'Referral', value: 'REFERRAL' },
+                      { label: 'Inbound Form', value: 'INBOUND' },
+                      { label: 'Event', value: 'EVENT' },
+                      { label: 'Manual', value: 'MANUAL' },
+                      { label: 'Other', value: 'OTHER' }
+                    ]}
+                  />
+                  <FieldSelect
+                    label="Industry"
+                    value={form.industry}
+                    onChange={(v) => setForm({ ...form, industry: v })}
+                    options={[
+                      { label: 'Select Industry', value: '' },
+                      { label: 'Real Estate', value: 'Real Estate' },
+                      { label: 'IT/SaaS', value: 'IT/SaaS' },
+                      { label: 'Healthcare', value: 'Healthcare' },
+                      { label: 'Automotive', value: 'Automotive' },
+                      { label: 'Manufacturing', value: 'Manufacturing' },
+                      { label: 'Other', value: 'Other' },
+                    ]}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FieldSelect
+                    label="Company Size"
+                    value={form.companySize}
+                    onChange={(v) => setForm({ ...form, companySize: v })}
+                    options={[
+                      { label: 'Select Size', value: '' },
+                      { label: '1–10', value: '1-10' },
+                      { label: '11–100', value: '11-100' },
+                      { label: '101–500', value: '101-500' },
+                      { label: '501–1,000', value: '501-1000' },
+                      { label: '1,000+', value: '1000+' },
+                    ]}
+                  />
+                  <Field label="Website" value={form.website} onChange={(v) => setForm({ ...form, website: v })} placeholder="example.com" />
+                </div>
+
+                {/* City was in the form's state and in the POST payload but had no input — the
+                      only way to set it was to pick an existing client, so a typed-in company
+                      always saved with a blank city while the edit form showed the field. */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="City" value={form.city} onChange={(v) => setForm({ ...form, city: v })} placeholder="e.g. Chennai" />
+                  <Field label="State" value={form.state} onChange={(v) => setForm({ ...form, state: v })} placeholder="e.g. Tamil Nadu" />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="Next Follow-up Date" type="date" value={form.followUpDate} onChange={(v) => setForm({ ...form, followUpDate: v })} />
+                  <Field label="Last Contacted Date" type="date" value={form.lastContactedDate} onChange={(v) => setForm({ ...form, lastContactedDate: v })} />
+                </div>
+              </div>
+
+              {/* SECTION 2: Contact Details */}
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center gap-2 border-b border-border pb-2">
+                  <User className="h-4 w-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-primary">2. Contact Details</h3>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="Contact Name" value={form.contactName} onChange={(v) => {
+                    setForm({ ...form, contactName: v });
+                  }} placeholder="Full Name" />
+                  <Field label="Job Title" value={form.jobTitle} onChange={(v) => setForm({ ...form, jobTitle: v })} placeholder="e.g. Marketing Director" />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="Email Address" error={errors.email} type="email" icon={<Mail className="h-4 w-4 text-secondary" />} value={form.email} onChange={(v) => setForm({ ...form, email: v })} placeholder="john@example.com" />
+                  <Field label="Phone Number" error={errors.phone} icon={<Phone className="h-4 w-4 text-secondary" />} value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="+1 (555) 000-0000" />
+                </div>
+              </div>
+
+              {/* SECTION 3: Assignment & Notes */}
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center gap-2 border-b border-border pb-2">
+                  <AlignLeft className="h-4 w-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-primary">3. Assignment & Notes</h3>
+                </div>
+
+                <div>
+                  {/* Not required — "Unassigned" is a valid, and common, choice for a new lead,
+                        and the server treats assignedToId as optional. The asterisk was fiction. */}
+                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Owner</label>
+                  <Select
                     value={form.assignedToId}
                     onChange={(v) => setForm({ ...form, assignedToId: v })}
                     options={[
@@ -427,24 +443,25 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                       ...members.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
                     ]}
                   />
-
-                  <Field
-                    label="Notes / Description"
-                    textarea
-                    rows={3}
-                    value={form.notes}
-                    onChange={(v) => setForm({ ...form, notes: v })}
-                    placeholder="Enter details, background info, or next steps..."
-                  />
                 </div>
 
-          </form>
+                <Field
+                  label="Notes / Description"
+                  textarea
+                  rows={3}
+                  value={form.notes}
+                  onChange={(v) => setForm({ ...form, notes: v })}
+                  placeholder="Enter details, background info, or next steps..."
+                />
+              </div>
+
+            </form>
           ) : (
             <div className="space-y-6">
               <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-white shadow-sm">
                 <div>
                   <h3 className="text-sm font-semibold text-primary">Need a template?</h3>
-                  <p className="text-xs text-secondary mt-1">CSV or Excel (.xlsx). <span className="font-medium text-[#374151]">Name + Email or Phone required</span> on every row.</p>
+                  <p className="text-xs text-secondary mt-1">CSV or Excel (.xlsx). <span className="font-medium text-[#374151]">CompanyName required</span> on every row — the contact person and their details are optional.</p>
                 </div>
                 <button onClick={downloadTemplate} className="flex items-center gap-2 rounded-lg border border-border bg-gray-50 px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-gray-100 transition-all">
                   <FileText className="h-3.5 w-3.5" /> Template
@@ -452,7 +469,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
               </div>
 
               <div>
-                <label 
+                <label
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}

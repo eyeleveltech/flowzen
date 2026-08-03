@@ -242,7 +242,7 @@ export async function applyLeadStageEffects(tx: Tx, params: StageEffectParams): 
             organizationId: orgId,
             clientId,
             sourceLeadId: lead.id,
-            title: `${lead.companyName || lead.contactName || 'Project'} — Project`,
+            title: `${lead.companyName || 'Project'} — Project`,
             value: dealValue,
             billingFrequency: 'ONE_TIME',
             startDate,

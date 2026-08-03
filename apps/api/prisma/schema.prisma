@@ -705,15 +705,12 @@ model Lead {
   autoRenewal       Boolean        @default(false)
   renewalStatus     RenewalStatus?
   renewalNotes      String?        @db.Text
-  // Lead-owned contact identity (a lead can exist before a Client is created at OUTREACH)
-  contactName       String?
-  companyName       String?
+  // The lead IS the company. Its PEOPLE live in lead_contacts (one flagged primary) — the lead
+  // used to carry a second copy of one person here (contactName / contactEmail / contactPhone /
+  // jobTitle / linkedinUrl), which meant the same human existed twice and could disagree.
+  companyName       String
   companySize       String?      // '1-10' | '11-100' | '101-500' | '501-1000' | '1000+'
-  contactEmail      String?      // brief: email
-  contactPhone      String?      // brief: mobile (unique per organization, enforced in app)
   landlinePhone     String?
-  jobTitle          String?      // brief: designation
-  linkedinUrl       String?
   linkedinChecked   Boolean      @default(false)
   linkedinFound     Boolean?
   // Address
@@ -754,7 +751,9 @@ model Lead {
 
   @@unique([organizationId, leadId])
   @@index([organizationId, stage])
-  @@unique([organizationId, contactPhone])
+  // The old @@unique([organizationId, contactPhone]) went with the column. LeadContact has no
+  // organizationId to rebuild it from (it reaches the org through its lead), so duplicate-phone
+  // detection is enforced in the application — see leadContact.service.ts.
   @@index([clientId]) // replaces the old unique index; still needs to be fast to look up
   @@map("leads")
 }

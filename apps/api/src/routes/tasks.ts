@@ -217,7 +217,7 @@ taskRouter.get('/', async (req: AuthRequest, res: Response, next) => {
         where: where as any,
         include: {
           project: { select: { id: true, name: true, color: true, client: { select: { name: true, company: true } } } },
-          lead: { select: { id: true, leadId: true, companyName: true, contactName: true, stage: true } },
+          lead: { select: { id: true, leadId: true, companyName: true, stage: true } },
           assignee: { select: { id: true, name: true, avatar: true } },
           assignees: { select: { id: true, name: true, avatar: true } },
           assignedBy: { select: { id: true, name: true, avatar: true } },
@@ -465,7 +465,7 @@ taskRouter.post('/', idempotency, validate(taskSchema), async (req: AuthRequest,
       },
       include: {
         project: { select: { id: true, name: true, client: { select: { name: true } } } },
-        lead: { select: { id: true, leadId: true, companyName: true, contactName: true, stage: true } },
+        lead: { select: { id: true, leadId: true, companyName: true, stage: true } },
         assignee: { select: { id: true, name: true, avatar: true } },
         assignees: { select: { id: true, name: true, avatar: true } },
         assignedBy: { select: { id: true, name: true } },

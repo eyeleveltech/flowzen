@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, authorize, requireModule, AuthRequest } from '../middleware/auth.js';
@@ -8,6 +9,7 @@ import { whereIn } from '../utils/query.js';
 import { generateLeadId, normalizePhone } from '../utils/leadId.js';
 import { runIntelligence } from '../services/intelligence.service.js';
 import { ensureClientForLead } from '../services/clientConversion.service.js';
+import { syncPrimaryContact, findLeadByPhone, loadUsedLeadPhones, primaryContactOf, withPrimaryContactFields, primaryContactInclude, primaryContactListInclude } from '../services/leadContact.service.js';
 import { applyLeadStageEffects, stageTransitionError } from '../services/leadStage.service.js';
 import { logActivity, ActivityType, ACTIVITY_CATEGORIES } from '../services/activity.service.js';
 import { createAuditLog } from '../utils/audit.js';
@@ -63,8 +65,8 @@ const leadSchema = z.object({
 crmRouter.get('/leads', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const { 
-      stage, 
+    const {
+      stage,
       assignedToId,
       minDealValue,
       maxDealValue,
@@ -78,7 +80,7 @@ crmRouter.get('/leads', async (req: AuthRequest, res: Response, next) => {
     } = req.query;
 
     const where: Record<string, unknown> = { organizationId: orgId };
-    
+
     if (stage) where.stage = whereIn(stage);
     if (assignedToId) where.assignedToId = whereIn(assignedToId);
     if (leadSource) where.source = whereIn(leadSource);
@@ -121,23 +123,27 @@ crmRouter.get('/leads', async (req: AuthRequest, res: Response, next) => {
           select: { id: true, name: true, avatar: true }
         },
         dealFields: true,
+        ...primaryContactListInclude,
       },
-      orderBy: sort === 'client_asc' ? [{ contactName: 'asc' }]
-             : sort === 'client_desc' ? [{ contactName: 'desc' }]
-             : sort === 'stage_asc' ? [{ stage: 'asc' }]
-             : sort === 'stage_desc' ? [{ stage: 'desc' }]
-             : sort === 'dealValue_asc' ? [{ dealValue: 'asc' }]
-             : sort === 'dealValue_desc' ? [{ dealValue: 'desc' }]
-             : sort === 'closeDate_asc' ? [{ expectedCloseDate: 'asc' }]
-             : sort === 'closeDate_desc' ? [{ expectedCloseDate: 'desc' }]
-             : sort === 'owner_asc' ? [{ assignedTo: { name: 'asc' } }]
-             : sort === 'owner_desc' ? [{ assignedTo: { name: 'desc' } }]
-             : [{ stage: 'asc' }, { position: 'asc' }, { createdAt: 'desc' }],
+      orderBy: sort === 'client_asc' ? [{ companyName: 'asc' }]
+        : sort === 'client_desc' ? [{ companyName: 'desc' }]
+          : sort === 'stage_asc' ? [{ stage: 'asc' }]
+            : sort === 'stage_desc' ? [{ stage: 'desc' }]
+              : sort === 'dealValue_asc' ? [{ dealValue: 'asc' }]
+                : sort === 'dealValue_desc' ? [{ dealValue: 'desc' }]
+                  : sort === 'closeDate_asc' ? [{ expectedCloseDate: 'asc' }]
+                    : sort === 'closeDate_desc' ? [{ expectedCloseDate: 'desc' }]
+                      : sort === 'owner_asc' ? [{ assignedTo: { name: 'asc' } }]
+                        : sort === 'owner_desc' ? [{ assignedTo: { name: 'desc' } }]
+                          : [{ stage: 'asc' }, { position: 'asc' }, { createdAt: 'desc' }],
       ...(skip !== undefined ? { skip } : {}),
       ...(take !== undefined ? { take } : {}),
     });
 
-    res.json(leads);
+    // The board, the list view, the quote picker and the dashboard all read lead.contactName /
+    // contactEmail / contactPhone. Those columns no longer exist, so the person has to be
+    // re-derived from the contact rows on the way out.
+    res.json(leads.map(withPrimaryContactFields));
   } catch (error) {
     next(error);
   }
@@ -255,7 +261,8 @@ crmRouter.get('/leads/:id', async (req: AuthRequest, res: Response, next) => {
         notes: {
           include: { author: { select: { name: true, avatar: true } } },
           orderBy: { createdAt: 'desc' }
-        }
+        },
+        ...primaryContactInclude,
       }
     });
 
@@ -264,7 +271,7 @@ crmRouter.get('/leads/:id', async (req: AuthRequest, res: Response, next) => {
       return;
     }
 
-    res.json(lead);
+    res.json(withPrimaryContactFields(lead));
   } catch (error) {
     next(error);
   }
@@ -355,7 +362,7 @@ crmRouter.post('/leads/:id/activity', validate(manualActivitySchema), async (req
 
 // ── Module K: renewal & retainer expiry tracker ─────────────────────────────
 const renewalSelect = {
-  id: true, leadId: true, companyName: true, contactName: true, dealValue: true,
+  id: true, leadId: true, companyName: true, dealValue: true,
   contractStartDate: true, contractEndDate: true, nextRenewalDate: true, autoRenewal: true,
   renewalStatus: true, renewalNotes: true, clientId: true,
   assignedTo: { select: { id: true, name: true, avatar: true } },
@@ -450,7 +457,23 @@ const contactSchema = z.object({
   linkedinUrl: z.string().optional(),
   role: z.enum(['DECISION_MAKER', 'INFLUENCER', 'GATEKEEPER', 'CHAMPION', 'CC_ONLY']),
   notes: z.string().optional(),
+  isPrimary: z.boolean().optional(),
 });
+
+/**
+ * Exactly one contact per lead carries isPrimary, and it is the one every other part of the CRM
+ * reads: the board card, the lead's contactName/Email/Phone, a quotation's Bill To, and the
+ * dedup that links a repeat customer to an existing account. Since the flat columns were dropped
+ * there is no second copy to fall back on, so these three invariants are enforced here rather
+ * than left to callers:
+ *   - promoting one contact demotes the rest,
+ *   - the first contact on a lead is automatically primary,
+ *   - deleting the primary promotes the next-oldest instead of leaving the lead headless.
+ */
+async function promotePrimaryContact(tx: Prisma.TransactionClient, leadId: string, contactId: string) {
+  await tx.leadContact.updateMany({ where: { leadId, id: { not: contactId } }, data: { isPrimary: false } });
+  await tx.leadContact.update({ where: { id: contactId }, data: { isPrimary: true } });
+}
 const contactData = (b: any) => ({
   name: b.name, designation: b.designation || null, email: b.email || null, phone: b.phone || null,
   linkedinUrl: b.linkedinUrl || null, role: b.role, notes: b.notes || null,
@@ -463,7 +486,10 @@ crmRouter.get('/leads/:id/contacts', async (req: AuthRequest, res: Response, nex
     const leadId = req.params.id as string;
     const lead = await prisma.lead.findFirst({ where: { id: leadId, organizationId: orgId }, select: { id: true } });
     if (!lead) { res.status(404).json({ error: 'Lead not found' }); return; }
-    const contacts = await prisma.leadContact.findMany({ where: { leadId }, orderBy: { createdAt: 'asc' } });
+    const contacts = await prisma.leadContact.findMany({
+      where: { leadId },
+      orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+    });
     res.json(contacts);
   } catch (error) { next(error); }
 });
@@ -475,7 +501,17 @@ crmRouter.post('/leads/:id/contacts', authorize('SUPER_ADMIN', 'ADMIN'), validat
     const leadId = req.params.id as string;
     const lead = await prisma.lead.findFirst({ where: { id: leadId, organizationId: orgId }, select: { id: true } });
     if (!lead) { res.status(404).json({ error: 'Lead not found' }); return; }
-    const contact = await prisma.leadContact.create({ data: { leadId, ...contactData(req.body) } });
+    const contact = await prisma.$transaction(async (tx) => {
+      const created = await tx.leadContact.create({ data: { leadId, ...contactData(req.body) } });
+      // The first person on a company is that company's contact by default — otherwise the lead
+      // would show no contact at all until someone thought to flag one.
+      const isFirst = (await tx.leadContact.count({ where: { leadId } })) === 1;
+      if (req.body.isPrimary === true || isFirst) {
+        await promotePrimaryContact(tx, leadId, created.id);
+        return { ...created, isPrimary: true };
+      }
+      return created;
+    });
 
     const io = req.app.get('io');
     await logActivity({ leadId, type: ActivityType.CONTACT_ADDED, message: `added ${contact.name} as a contact (${String(req.body.role).replace(/_/g, ' ').toLowerCase()})`, userId: req.user!.userId, io, orgId });
@@ -496,7 +532,16 @@ crmRouter.patch('/leads/:id/contacts/:contactId', authorize('SUPER_ADMIN', 'ADMI
     for (const k of ['name', 'designation', 'email', 'phone', 'linkedinUrl', 'role', 'notes']) {
       if (b[k] !== undefined) data[k] = b[k] === '' ? null : b[k];
     }
-    const updated = await prisma.leadContact.update({ where: { id: contactId }, data });
+    const updated = await prisma.$transaction(async (tx) => {
+      const row = await tx.leadContact.update({ where: { id: contactId }, data });
+      if (b.isPrimary === true) {
+        await promotePrimaryContact(tx, leadId, contactId);
+        return { ...row, isPrimary: true };
+      }
+      return row;
+    });
+
+    emitToOrganization(req.app.get('io'), orgId, 'lead:updated', { id: leadId });
     res.json(updated);
   } catch (error) { next(error); }
 });
@@ -506,9 +551,20 @@ crmRouter.delete('/leads/:id/contacts/:contactId', authorize('SUPER_ADMIN', 'ADM
   try {
     const orgId = req.user!.organizationId;
     const { id: leadId, contactId } = req.params as { id: string; contactId: string };
-    const existing = await prisma.leadContact.findFirst({ where: { id: contactId, lead: { id: leadId, organizationId: orgId } }, select: { id: true } });
+    const existing = await prisma.leadContact.findFirst({ where: { id: contactId, lead: { id: leadId, organizationId: orgId } }, select: { id: true, isPrimary: true } });
     if (!existing) { res.status(404).json({ error: 'Contact not found' }); return; }
-    await prisma.leadContact.delete({ where: { id: contactId } });
+
+    await prisma.$transaction(async (tx) => {
+      await tx.leadContact.delete({ where: { id: contactId } });
+      // Removing the primary must not leave the lead with a contact list but no contact of
+      // record — the name, email and phone shown everywhere come from that one row.
+      if (existing.isPrimary) {
+        const next = await tx.leadContact.findFirst({ where: { leadId }, orderBy: { createdAt: 'asc' }, select: { id: true } });
+        if (next) await promotePrimaryContact(tx, leadId, next.id);
+      }
+    });
+
+    emitToOrganization(req.app.get('io'), orgId, 'lead:updated', { id: leadId });
     res.json({ success: true });
   } catch (error) { next(error); }
 });
@@ -551,11 +607,7 @@ crmRouter.post('/leads', authorize('SUPER_ADMIN', 'ADMIN'), validate(leadSchema)
     // Compared on normalized digits so formatting differences still match.
     const digits = normalizePhone(phone);
     if (digits) {
-      const orgLeads = await prisma.lead.findMany({
-        where: { organizationId: orgId, contactPhone: { not: null } },
-        select: { leadId: true, contactPhone: true },
-      });
-      const existing = orgLeads.find((l) => normalizePhone(l.contactPhone) === digits);
+      const existing = await findLeadByPhone(prisma, orgId, digits, normalizePhone);
       if (existing) {
         res.status(409).json({ error: `A lead with this phone number already exists. Lead ID: ${existing.leadId}.` });
         return;
@@ -603,12 +655,7 @@ crmRouter.post('/leads', authorize('SUPER_ADMIN', 'ADMIN'), validate(leadSchema)
             expectedCloseDate: expectedCloseDate ? new Date(expectedCloseDate) : null,
             followUpDate: followUpDate ? new Date(followUpDate) : null,
             priority: priority || 'MEDIUM',
-            contactName: contactName || null,
             companyName,
-            contactEmail: email,
-            contactPhone: phone,
-            jobTitle: jobTitle || null,
-            linkedinUrl: linkedinUrl || null,
             companySize: companySize || null,
             landlinePhone: landlinePhone || null,
             address: address || null,
@@ -636,6 +683,16 @@ crmRouter.post('/leads', authorize('SUPER_ADMIN', 'ADMIN'), validate(leadSchema)
       }
     }
 
+    // The person named on the creation form becomes the lead's primary contact row — the only
+    // place a lead's people are stored.
+    await syncPrimaryContact(prisma, lead.id, {
+      name: contactName, email, phone, designation: jobTitle, linkedinUrl,
+    });
+    lead.contacts = await prisma.leadContact.findMany({
+      where: { leadId: lead.id },
+      orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+    });
+
     // Log Activity
     await prisma.activity.create({
       data: {
@@ -659,10 +716,10 @@ crmRouter.post('/leads', authorize('SUPER_ADMIN', 'ADMIN'), validate(leadSchema)
       action: 'LEAD_CREATE',
       entityType: 'LEAD',
       entityId: lead.id,
-      details: { contactName: lead.contactName, companyName: lead.companyName }
+      details: { companyName: lead.companyName }
     });
 
-    res.status(201).json(lead);
+    res.status(201).json(withPrimaryContactFields(lead));
   } catch (error: any) {
     if (error?.code === 'P2002') {
       res.status(409).json({ error: 'A lead with this phone number already exists in your organization.' });
@@ -697,12 +754,9 @@ crmRouter.post('/leads/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
     ];
     const emailRe = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
-    // Existing phone digits in the org, plus those seen earlier in this batch, for dedup.
-    const orgLeads = await prisma.lead.findMany({
-      where: { organizationId: orgId, contactPhone: { not: null } },
-      select: { contactPhone: true },
-    });
-    const seenPhones = new Set(orgLeads.map((l) => normalizePhone(l.contactPhone)).filter(Boolean));
+    // Existing phone digits in the org (across leads AND their contacts), plus those seen earlier
+    // in this batch, for dedup.
+    const seenPhones = await loadUsedLeadPhones(prisma, orgId, normalizePhone);
 
     let imported = 0;
     const rejected: any[] = [];
@@ -757,16 +811,17 @@ crmRouter.post('/leads/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
             assignedToId: data.assignedToId || null,
             dealValue: parsedDealValue,
             expectedCloseDate: data.expectedCloseDate ? new Date(data.expectedCloseDate) : null,
-            contactName: name || null,
             companyName: company,
-            contactEmail: email,
-            contactPhone: (data.phone || '').toString(),
-            jobTitle: data.jobTitle || null,
-            linkedinUrl: data.linkedinUrl || null,
             companySize: data.companySize || null,
             website: data.website || null,
             industry: data.industry || null,
             city: data.city || null,
+            state: data.state || null,
+            // The import modal has always sent these two; they were being read off the sheet,
+            // shipped over the wire and then dropped on the floor here.
+            instagramHandle: data.instagramHandle || null,
+            facebookPage: data.facebookPage || null,
+            priority: ['HIGH', 'MEDIUM', 'LOW'].includes(data.priority) ? data.priority : 'MEDIUM',
           }
         });
       } catch (createErr: any) {
@@ -777,6 +832,10 @@ crmRouter.post('/leads/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
         }
         throw createErr;
       }
+
+      await syncPrimaryContact(prisma, lead.id, {
+        name, email, phone: data.phone, designation: data.jobTitle, linkedinUrl: data.linkedinUrl,
+      });
 
       await prisma.activity.create({
         data: {
@@ -811,8 +870,10 @@ crmRouter.post('/leads/bulk', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
 const stageUpdateSchema = z.object({
   stage: z.enum(['NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION', 'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'ON_HOLD', 'PROJECT_COMPLETED', 'CHURNED']),
   notes: z.string().optional(),
-  dealValue: z.number().min(0, 'Deal value cannot be negative').optional(),
-  expectedCloseDate: z.string().refine((v) => !isNaN(Date.parse(v)), { message: 'Expected close date must be a valid date string' }).optional(),
+  // Nullable, not just optional: the transition form now sends an explicit null when the user
+  // clears the box, which is the only way to actually unset a value that was set earlier.
+  dealValue: z.number().min(0, 'Deal value cannot be negative').optional().nullable(),
+  expectedCloseDate: z.string().refine((v) => !isNaN(Date.parse(v)), { message: 'Expected close date must be a valid date string' }).optional().nullable(),
   contractType: z.enum(['RETAINER', 'ONE_TIME']).optional(),
   contractStartDate: z.string().optional(),
   contractEndDate: z.string().optional(),
@@ -859,7 +920,9 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
         updateData.dealValue = parsedAgreed;
       }
     }
-    if (expectedCloseDate !== undefined) updateData.expectedCloseDate = new Date(expectedCloseDate);
+    // `new Date(null)` is the epoch, not null — without the guard, clearing the close date would
+    // silently stamp 1970 onto the lead.
+    if (expectedCloseDate !== undefined) updateData.expectedCloseDate = expectedCloseDate ? new Date(expectedCloseDate) : null;
     if (followUpDate !== undefined) updateData.followUpDate = followUpDate ? new Date(followUpDate) : null;
     if (lastContactedDate !== undefined) updateData.lastContactedDate = lastContactedDate ? new Date(lastContactedDate) : null;
     if (contractType !== undefined) updateData.contractType = contractType;
@@ -915,8 +978,8 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
       const reasonLabel = lostReason ? String(lostReason).replace(/_/g, ' ') : null;
       const stageMsg = stage === 'CONTRACT' ? 'signed the contract 🎉'
         : stage === 'CHURNED' ? 'marked this deal as Churned'
-        : `moved this lead to ${stage.replace(/_/g, ' ')}`;
-      
+          : `moved this lead to ${stage.replace(/_/g, ' ')}`;
+
       await tx.activity.create({
         data: {
           type: 'STAGE_CHANGED',
@@ -935,12 +998,12 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
     });
 
     const io = req.app.get('io');
-    
+
     // Log Activity socket emit manually since we bypassed logActivity function
     if (io && typeof io.to === 'function') {
       io.to(orgId).emit('activity:new', { leadId });
     }
-    
+
     emitToOrganization(io, orgId, 'lead:updated', updatedLead);
     if (finalClientId) emitToOrganization(io, orgId, 'client:updated', { id: finalClientId });
     if (newClientId) emitToOrganization(io, orgId, 'client:created', { id: newClientId });
@@ -967,19 +1030,27 @@ crmRouter.post('/leads/:id/intelligence', authorize('SUPER_ADMIN', 'ADMIN'), asy
   try {
     const orgId = req.user!.organizationId;
     const leadId = req.params.id as string;
-    const lead = await prisma.lead.findFirst({ where: { id: leadId, organizationId: orgId } });
+    const lead = await prisma.lead.findFirst({
+      where: { id: leadId, organizationId: orgId },
+      include: { contacts: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }] } },
+    });
     if (!lead) {
       res.status(404).json({ error: 'Lead not found' });
       return;
     }
 
-    const linkedinUrl = (req.body?.linkedinUrl as string) || lead.linkedinUrl || '';
+    // The profile belongs to a PERSON, so it comes from the lead's primary contact. A URL sent in
+    // the request wins and is saved back onto that contact.
+    const linkedinUrl = (req.body?.linkedinUrl as string) || primaryContactOf(lead).linkedinUrl || '';
     if (!linkedinUrl) {
       res.status(400).json({ success: false, error: 'This lead has no LinkedIn URL.' });
       return;
     }
 
-    await prisma.lead.update({ where: { id: leadId }, data: { dossierStatus: 'pending', ...(req.body?.linkedinUrl ? { linkedinUrl } : {}) } });
+    await prisma.lead.update({ where: { id: leadId }, data: { dossierStatus: 'pending' } });
+    if (req.body?.linkedinUrl) {
+      await syncPrimaryContact(prisma, leadId, { linkedinUrl });
+    }
 
     const result = await runIntelligence(linkedinUrl);
 
@@ -1038,7 +1109,7 @@ crmRouter.post('/leads/:id/hold', authorize('SUPER_ADMIN', 'ADMIN'), async (req:
     await prisma.activity.create({
       data: {
         type: 'LEAD_UPDATED',
-        message: `put lead "${existingLead.contactName || existingLead.companyName}" on hold`,
+        message: `put lead "${existingLead.companyName}" on hold`,
         entityType: 'LEAD',
         entityId: leadId,
         userId: req.user!.userId,
@@ -1073,8 +1144,8 @@ crmRouter.post('/leads/:id/unhold', authorize('SUPER_ADMIN', 'ADMIN'), async (re
       where: { leadId },
       orderBy: { changedAt: 'desc' },
     });
-    const targetStage = (lastHistory && lastHistory.fromStage !== 'ON_HOLD') 
-      ? lastHistory.fromStage 
+    const targetStage = (lastHistory && lastHistory.fromStage !== 'ON_HOLD')
+      ? lastHistory.fromStage
       : 'NEW_LEAD';
 
     if (existingLead.clientId) {
@@ -1103,7 +1174,7 @@ crmRouter.post('/leads/:id/unhold', authorize('SUPER_ADMIN', 'ADMIN'), async (re
     await prisma.activity.create({
       data: {
         type: 'LEAD_UPDATED',
-        message: `removed hold from lead "${existingLead.contactName || existingLead.companyName}"`,
+        message: `removed hold from lead "${existingLead.companyName}"`,
         entityType: 'LEAD',
         entityId: leadId,
         userId: req.user!.userId,
@@ -1129,12 +1200,25 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
     const orgId = req.user!.organizationId;
     const leadId = req.params.id as string;
     const { source, assignedToId, dealValue, expectedRevenue, expectedCloseDate, followUpDate, lastContactedDate, contractType, healthStatus, lostReason, priority, stage, contractStartDate, contractEndDate, autoRenewal, renewalStatus, reopen } = req.body;
-    // Editable contact/company identity fields on the lead detail card.
-    const EDITABLE_TEXT_FIELDS = ['contactName', 'companyName', 'contactEmail', 'contactPhone', 'jobTitle', 'linkedinUrl', 'companySize', 'landlinePhone', 'address', 'city', 'state', 'zip', 'country', 'billingAddress', 'gstNumber', 'website', 'instagramHandle', 'facebookPage', 'industry'] as const;
+    // Editable company identity fields — real columns on `leads`, written straight to the row.
+    const EDITABLE_TEXT_FIELDS = ['companyName', 'companySize', 'landlinePhone', 'address', 'city', 'state', 'zip', 'country', 'billingAddress', 'gstNumber', 'website', 'instagramHandle', 'facebookPage', 'industry'] as const;
+
+    // The person's fields are NOT columns on `leads` any more — they live on the primary contact
+    // row. They used to sit in the list above, which meant every edit sent them to lead.update()
+    // as unknown arguments: Prisma raised a validation error and the error handler turned it into
+    // a flat 400, so saving the edit form failed outright. They are diffed against the contact
+    // and applied via syncPrimaryContact instead. Mapped to their contact-row column names.
+    const EDITABLE_CONTACT_FIELDS = {
+      contactName: 'name',
+      contactEmail: 'email',
+      contactPhone: 'phone',
+      jobTitle: 'designation',
+      linkedinUrl: 'linkedinUrl',
+    } as const;
 
     const existingLead = await prisma.lead.findFirst({
       where: { id: leadId, organizationId: orgId },
-      include: { client: true }
+      include: { client: true, ...primaryContactInclude }
     });
 
     if (!existingLead) {
@@ -1209,6 +1293,11 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
         updateData.dealValue = dealValue;
         changes.push(`changed Deal Value to ${dealValue}`);
       }
+    } else if (dealValue === null && existingLead.dealValue !== null) {
+      // An explicit null is the user emptying the field. Treating it the same as "absent" meant
+      // a deal value, once set, could never be taken back off the lead.
+      updateData.dealValue = null;
+      changes.push('cleared Deal Value');
     }
     const fieldsInput = req.body.fields;
     if (fieldsInput?.agreedFinalValue !== undefined && fieldsInput?.agreedFinalValue !== '' && fieldsInput?.agreedFinalValue !== null) {
@@ -1240,6 +1329,9 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
         updateData.expectedCloseDate = newDate;
         changes.push(`changed Close Date`);
       }
+    } else if (expectedCloseDate === null && existingLead.expectedCloseDate !== null) {
+      updateData.expectedCloseDate = null;
+      changes.push('cleared Close Date');
     }
     if (followUpDate !== undefined) {
       const newDate = followUpDate ? new Date(followUpDate) : null;
@@ -1303,16 +1395,32 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
             if (f === 'companyName') {
               clientUpdateData.company = val;
               if (val) clientUpdateData.name = val;
-            } else if (f === 'contactName') {
-              clientUpdateData.contactPerson = val;
-              if (!clientUpdateData.name && val) clientUpdateData.name = val;
-            } else if (f === 'contactEmail') {
-              clientUpdateData.email = val;
-            } else if (f === 'contactPhone') {
-              clientUpdateData.phone = val;
             } else {
               clientUpdateData[f] = val;
             }
+          }
+        }
+      }
+
+      // The person's fields take the same path, but land on the contact row rather than the lead.
+      // Mirroring to the account still matters: findMatchingClient dedups a repeat customer on
+      // client.email / client.phone, so letting those go stale costs us the match later.
+      const priorPerson = primaryContactOf(existingLead);
+      for (const [bodyKey, contactKey] of Object.entries(EDITABLE_CONTACT_FIELDS)) {
+        const incoming = req.body[bodyKey];
+        if (incoming === undefined) continue;
+        if ((priorPerson as any)[contactKey] === (incoming || null)) continue;
+        changes.push(`updated ${bodyKey}`);
+        if (currentClientId) {
+          const val = incoming || null;
+          if (bodyKey === 'contactName') {
+            clientUpdateData.contactPerson = val;
+          } else if (bodyKey === 'contactEmail') {
+            clientUpdateData.email = val;
+          } else if (bodyKey === 'contactPhone') {
+            clientUpdateData.phone = val;
+          } else {
+            clientUpdateData[contactKey === 'designation' ? 'jobTitle' : contactKey] = val;
           }
         }
       }
@@ -1341,8 +1449,27 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
           client: true,
           assignedTo: { select: { id: true, name: true, avatar: true } },
           dealFields: true,
+          ...primaryContactInclude,
         }
       });
+
+      // Keep the primary contact row in step with the person on the lead. Only the keys actually
+      // present in this request are forwarded, so a partial edit can't blank the others.
+      const contactEdit: Record<string, unknown> = {};
+      if (req.body.contactName !== undefined) contactEdit.name = req.body.contactName;
+      if (req.body.contactEmail !== undefined) contactEdit.email = req.body.contactEmail;
+      if (req.body.contactPhone !== undefined) contactEdit.phone = req.body.contactPhone;
+      if (req.body.jobTitle !== undefined) contactEdit.designation = req.body.jobTitle;
+      if (req.body.linkedinUrl !== undefined) contactEdit.linkedinUrl = req.body.linkedinUrl;
+      if (Object.keys(contactEdit).length > 0) {
+        await syncPrimaryContact(tx, leadId, contactEdit);
+        // Re-read the people so the response carries the person as just saved. Without this the
+        // edit form would reopen showing the pre-edit contact until the next full refetch.
+        updated.contacts = await tx.leadContact.findMany({
+          where: { leadId },
+          orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+        });
+      }
 
       // Apply all stage consequences via the shared service (identical to the drag endpoint).
       if (stage !== undefined && existingLead.stage !== stage) {
@@ -1429,13 +1556,12 @@ crmRouter.patch('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Aut
       entityType: 'LEAD',
       entityId: leadId,
       details: {
-        contactName: updatedLead.contactName,
         companyName: updatedLead.companyName,
         changes: changes
       }
     });
 
-    res.json(updatedLead);
+    res.json(withPrimaryContactFields(updatedLead));
   } catch (error: any) {
     // Same concurrency-race guard as POST /leads/:id/stage: the unique sourceLeadId constraint
     // stopped a parallel request from writing a second subscription/contract. No double revenue
@@ -1511,8 +1637,8 @@ crmRouter.post('/leads/:id/fields', authorize('SUPER_ADMIN', 'ADMIN'), async (re
     const fields = req.body.fields; // Expecting { fieldKey: "value" } map
 
     if (!fields || typeof fields !== 'object') {
-       res.status(400).json({ error: 'Invalid fields object' });
-       return;
+      res.status(400).json({ error: 'Invalid fields object' });
+      return;
     }
 
     const existingLead = await prisma.lead.findFirst({
@@ -1571,7 +1697,7 @@ crmRouter.post('/leads/:id/prepare-project', authorize('SUPER_ADMIN', 'ADMIN'), 
     }
 
     const ownerId = lead.assignedToId || req.user!.userId;
-    const suggestedName = `${lead.companyName || lead.contactName || 'New Deal'} Project`;
+    const suggestedName = `${lead.companyName || 'New Deal'} Project`;
 
     res.status(200).json({
       clientId,
@@ -1618,7 +1744,7 @@ crmRouter.delete('/leads/:id', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Au
       action: 'LEAD_DELETE',
       entityType: 'LEAD',
       entityId: leadId,
-      details: { contactName: existingLead.contactName, companyName: existingLead.companyName }
+      details: { companyName: existingLead.companyName }
     });
 
     res.json({ success: true });
@@ -1679,6 +1805,7 @@ const crmClientUpdateSchema = z.object({
     linkedinUrl: z.string().optional().nullable(),
     role: z.enum(['DECISION_MAKER', 'INFLUENCER', 'GATEKEEPER', 'CHAMPION', 'CC_ONLY']).or(z.literal('')).optional().nullable(),
     notes: z.string().optional().nullable(),
+    isPrimary: z.boolean().optional(),
   })).optional(),
 });
 
@@ -1764,6 +1891,15 @@ crmRouter.put('/clients/:id', requireModule('CRM'), authorize('SUPER_ADMIN', 'AD
       }
     }
 
+    // Keyed by id so the replace-the-list write below can carry forward the fields the edit form
+    // never round-trips (see the comment on `create`).
+    const existingContacts = new Map(
+      (contacts
+        ? await prisma.clientContact.findMany({ where: { clientId: existing.id } })
+        : []
+      ).map((c) => [c.id, c] as const),
+    );
+
     const updated = await prisma.client.update({
       where: { id: existing.id },
       data: {
@@ -1773,15 +1909,25 @@ crmRouter.put('/clients/:id', requireModule('CRM'), authorize('SUPER_ADMIN', 'AD
         ...(contacts ? {
           contacts: {
             deleteMany: {},
-            create: contacts.map((c: any) => ({
-              name: c.name,
-              designation: c.designation || null,
-              email: c.email || null,
-              phone: c.phone || null,
-              linkedinUrl: c.linkedinUrl || null,
-              role: c.role || null,
-              notes: c.notes || null,
-            })),
+            // deleteMany + create replaces the whole list, so anything the edit form does not
+            // round-trip is destroyed — and it never sent isPrimary. That flag decides which
+            // person a quotation's Bill To and the conversion dedup read, so recreating every
+            // contact as non-primary silently discarded the choice on any client edit. Carried
+            // across by id here; the first row is promoted when the payload flags nobody, so an
+            // account can never end up with a headless contact list.
+            create: contacts.map((c: any) => {
+              const prior = c.id ? existingContacts.get(c.id) : undefined;
+              return {
+                name: c.name,
+                designation: c.designation || null,
+                email: c.email || null,
+                phone: c.phone || null,
+                linkedinUrl: c.linkedinUrl || null,
+                role: c.role || null,
+                notes: c.notes || null,
+                isPrimary: c.isPrimary ?? prior?.isPrimary ?? false,
+              };
+            }).map((c, i, all) => (all.some((x) => x.isPrimary) ? c : { ...c, isPrimary: i === 0 })),
           },
         } : {}),
       },

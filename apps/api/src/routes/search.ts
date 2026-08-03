@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
 import { getEnabledModuleKeys } from '../lib/modules.js';
 import { buildSearchFilter } from '../utils/search-utils.js';
+import { withPrimaryContactFields } from '../services/leadContact.service.js';
 
 export const searchRouter = Router();
 searchRouter.use(authenticate);
@@ -105,9 +106,31 @@ searchRouter.get('/', async (req: AuthRequest, res: Response, next) => {
         ? prisma.lead.findMany({
             where: {
               organizationId: orgId,
-              ...buildSearchFilter(['companyName', 'contactName', 'contactEmail', 'contactPhone', 'leadId'], query),
+              // Searches the company plus ANY of the lead's contacts — a lead is a company with
+              // several people on it, so finding it by a secondary contact's email is expected.
+              ...buildSearchFilter([
+                'companyName', 'leadId',
+                {
+                  contacts: {
+                    some: {
+                      OR: [
+                        { name: { contains: query.trim(), mode: 'insensitive' as const } },
+                        { email: { contains: query.trim(), mode: 'insensitive' as const } },
+                        { phone: { contains: query.trim(), mode: 'insensitive' as const } },
+                      ],
+                    },
+                  },
+                },
+              ], query),
             },
-            select: { id: true, leadId: true, companyName: true, contactName: true, stage: true },
+            select: {
+              id: true, leadId: true, companyName: true, stage: true,
+              contacts: {
+                select: { name: true, isPrimary: true },
+                orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+                take: 1,
+              },
+            },
             take: 5,
           })
         : Promise.resolve([]),
@@ -123,7 +146,9 @@ searchRouter.get('/', async (req: AuthRequest, res: Response, next) => {
         : Promise.resolve([]),
     ]);
 
-    res.json({ clients, projects, tasks, members, leads, quotes });
+    // Shape contactName from the primary contact so the palette keeps showing a person once the
+    // lead's flat columns are gone.
+    res.json({ clients, projects, tasks, members, leads: leads.map(withPrimaryContactFields), quotes });
   } catch (error) {
     next(error);
   }

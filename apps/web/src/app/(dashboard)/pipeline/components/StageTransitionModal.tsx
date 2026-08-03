@@ -54,7 +54,7 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
   }
 
   const [formData, setFormData] = useState<Record<string, any>>(initialFormData);
-  
+
   // Deal value + expected close date shown when entering NEGOTIATION / CONTRACT
   const requiresDealValue = ['NEGOTIATION', 'CONTRACT'].includes(targetStage);
   // Contract type shown when entering CONTRACT or Active
@@ -100,14 +100,20 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
       fields: formData,
     };
 
-    if (requiresDealValue && dealValue) payload.dealValue = parseFloat(dealValue);
-    if (formData.agreedFinalValue !== undefined && formData.agreedFinalValue !== '' && formData.agreedFinalValue !== null) {
-      const parsedAgreed = parseFloat(String(formData.agreedFinalValue));
-      if (!isNaN(parsedAgreed) && parsedAgreed >= 0) {
-        payload.dealValue = parsedAgreed;
+    // Send the field whenever the form showed it, including when it was cleared. Gating on a
+    // truthy value meant emptying the box just omitted it, and the old figure survived — the
+    // same trap the quotation form had with its client fallbacks.
+    if (requiresDealValue) {
+      const parsed = dealValue === '' ? null : parseFloat(dealValue);
+      if (formData.agreedFinalValue !== undefined && formData.agreedFinalValue !== '' && formData.agreedFinalValue !== null) {
+        const parsedAgreed = parseFloat(String(formData.agreedFinalValue));
+        if (!isNaN(parsedAgreed) && parsedAgreed >= 0) {
+          payload.dealValue = parsedAgreed;
+        }
       }
+      if (parsed === null || !isNaN(parsed)) payload.dealValue = parsed;
+      payload.expectedCloseDate = expectedCloseDate || null;
     }
-    if (requiresDealValue && expectedCloseDate) payload.expectedCloseDate = expectedCloseDate;
 
     if (showsContractType) {
       payload.contractType = contractType;
@@ -183,7 +189,7 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
 
         <div className="flex-1 overflow-y-auto p-6">
           <form id="stage-form" onSubmit={handleSubmit} className="space-y-5">
-            
+
             {/* §3.5 Alert banner for Active gate */}
             {isActivationGate && (
               <div className="flex items-start gap-2 p-3 rounded-xl border border-amber-200 bg-amber-50 text-sm text-amber-800">
@@ -255,7 +261,7 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
                 <label className="block text-sm font-medium text-[#374151] mb-1.5">
                   {field.label} {field.required && <span className="text-red-500">*</span>}
                 </label>
-                
+
                 {field.type === 'text' || field.type === 'number' || field.type === 'date' ? (
                   <input
                     type={field.type}
@@ -294,7 +300,7 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
                 ) : null}
               </div>
             ))}
-            
+
           </form>
         </div>
 

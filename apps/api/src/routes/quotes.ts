@@ -9,6 +9,7 @@ import { generateQuotePdf } from '../services/quotePdf.service.js';
 import { logActivity, ActivityType } from '../services/activity.service.js';
 import { buildSearchFilter } from '../utils/search-utils.js';
 import { ensureClientForLead } from '../services/clientConversion.service.js';
+import { primaryContactOf } from '../services/leadContact.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 export const quoteRouter = Router();
@@ -64,17 +65,22 @@ const quoteSchema = quoteBaseSchema.refine((d) => Boolean(d.clientId) !== Boolea
  * than a Client row. This normalizes a Lead into that shape, letting a quotation go out
  * before the deal is won — which is what keeps an account from being created prematurely.
  */
-const leadAsParty = (lead: any) => ({
-  name: lead.companyName || lead.contactName || 'Lead',
-  company: lead.companyName || null,
-  contactPerson: lead.contactName || null,
-  email: lead.contactEmail || null,
-  phone: lead.contactPhone || null,
-  billingAddress: lead.billingAddress || null,
-  address: lead.address || null,
-  state: lead.state || null,
-  gstNumber: lead.gstNumber || null,
-});
+const leadAsParty = (lead: any) => {
+  // The person on the quotation comes from the lead's primary contact — the same source the
+  // account will use once the deal is won, so the quote and the eventual client agree.
+  const person = primaryContactOf(lead);
+  return {
+    name: lead.companyName || person.name || 'Lead',
+    company: lead.companyName || null,
+    contactPerson: person.name || null,
+    email: person.email || null,
+    phone: person.phone || null,
+    billingAddress: lead.billingAddress || null,
+    address: lead.address || null,
+    state: lead.state || null,
+    gstNumber: lead.gstNumber || null,
+  };
+};
 
 // Read EyeLevel's company state (for the CGST/SGST vs IGST split) from org settings.
 async function getOrgState(orgId: string): Promise<string | null> {
@@ -136,7 +142,10 @@ quoteRouter.post('/', validate(quoteSchema), async (req: AuthRequest, res: Respo
 
     let party: any;
     if (body.leadId) {
-      const lead = await prisma.lead.findFirst({ where: { id: body.leadId, organizationId: orgId } });
+      const lead = await prisma.lead.findFirst({
+        where: { id: body.leadId, organizationId: orgId },
+        include: { contacts: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }] } },
+      });
       if (!lead) {
         res.status(404).json({ error: 'Lead not found.' });
         return;

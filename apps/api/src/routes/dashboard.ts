@@ -504,7 +504,6 @@ dashboardRouter.get('/my-tasks', async (req: AuthRequest, res: Response, next) =
             id: true,
             leadId: true,
             companyName: true,
-            contactName: true,
             stage: true
           }
         }
@@ -539,7 +538,6 @@ dashboardRouter.get('/lead-tasks', async (req: AuthRequest, res: Response, next)
             id: true,
             leadId: true,
             companyName: true,
-            contactName: true,
             stage: true
           }
         }
