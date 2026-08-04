@@ -48,6 +48,7 @@ type ViewMode = 'list' | 'board' | 'timeline' | 'calendar' | 'gantt';
 
 
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { Icon } from '@/components/ui/icon';
 
 function ProjectsContent() {
   usePageTitle('Projects');
@@ -245,12 +246,12 @@ function ProjectsContent() {
         <div className="flex flex-wrap items-center gap-2 w-full">
           {/* Search Box */}
           <div className="relative w-full sm:w-64 md:w-80 shrink-0">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
+            <Icon as={Search} size="md" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-secondary" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search projects..."
-              className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-secondary"
+              className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none placeholder:text-secondary"
             />
           </div>
 
@@ -261,7 +262,7 @@ function ProjectsContent() {
               onChange={setStatusFilter}
               placeholder="Status"
               showSelectAll
-              triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
+              triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
               options={[
                 { label: 'Active', value: 'ACTIVE' },
                 { label: 'Delayed', value: 'DELAYED' },
@@ -281,7 +282,7 @@ function ProjectsContent() {
               onChange={setClientFilter}
               placeholder="Clients"
               showSelectAll
-              triggerClassName={clientFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
+              triggerClassName={clientFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
               options={clients.filter(c => c._count?.projects > 0).map(c => ({ label: getClientDisplayName(c), value: c.id }))}
             />
           </div>
@@ -293,7 +294,7 @@ function ProjectsContent() {
                 onChange={setOwnerFilter}
                 placeholder="Project Managers"
                 showSelectAll
-                triggerClassName={ownerFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
+                triggerClassName={ownerFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
                 options={members.filter(m => m.totalProjects > 0).map(m => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
               />
             </div>
@@ -304,7 +305,7 @@ function ProjectsContent() {
               type="date"
               value={dueDateFilter}
               onChange={(e) => setDueDateFilter(e.target.value)}
-              className="h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer"
+              className="h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none cursor-pointer"
               title="Due Date Filter"
             />
           </div>
@@ -315,15 +316,15 @@ function ProjectsContent() {
               className="p-2 rounded-xl border border-border bg-white hover:bg-gray-50 transition-colors text-secondary hover:text-primary h-9 w-9 flex items-center justify-center shrink-0"
               title="Configure View Settings"
             >
-              <Settings className="h-3.5 w-3.5" />
+              <Icon as={Settings} size="sm" />
             </button>
 
             {user?.role !== 'TEAM_MEMBER' && (
               <button
                 onClick={() => setShowCreate(true)}
-                className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-[#1F2937] transition-all h-9 shrink-0"
+                className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none h-9 shrink-0"
               >
-                <Plus className="h-3.5 w-3.5" /> New Project
+                <Icon as={Plus} size="sm" /> New Project
               </button>
             )}
           </div>
@@ -353,7 +354,7 @@ function ProjectsContent() {
                 }}
                 className="flex items-center gap-1.5 h-9 rounded-xl bg-red-50 px-3 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors border border-red-100"
               >
-                <X className="h-3.5 w-3.5" /> Clear Filters
+                <Icon as={X} size="sm" /> Clear Filters
               </button>
             )}
 
@@ -366,7 +367,7 @@ function ProjectsContent() {
                     setView(v.mode);
                     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ name: viewName, visibleColumns, viewType: v.mode }));
                   }}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${view === v.mode ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors duration-150 motion-reduce:transition-none whitespace-nowrap shrink-0 ${view === v.mode ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
                   title={`${v.label} View`}
                 >
                   <v.icon className="h-3.5 w-3.5" />
@@ -410,7 +411,7 @@ function ProjectsContent() {
                         <th className="px-6 py-3.5 w-10 text-center relative select-none">
                           <button
                             onClick={(e) => { e.stopPropagation(); setShowColumnDropdown(!showColumnDropdown); }}
-                            className="inline-flex items-center justify-center h-6 w-6 rounded-md text-secondary hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
+                            className="inline-flex items-center justify-center h-6 w-6 rounded-md text-secondary hover:bg-gray-100 hover:text-primary transition-colors duration-150 motion-reduce:transition-none text-sm font-bold border border-transparent hover:border-gray-200"
                             title="Toggle visible columns"
                           >
                             +
@@ -441,7 +442,7 @@ function ProjectsContent() {
                                       className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#F9FAFB] transition-colors"
                                     >
                                       <span className="text-[#374151]">{col.label}</span>
-                                      {visibleColumns.includes(col.id) && <Check className="w-4 h-4 text-primary" />}
+                                      {visibleColumns.includes(col.id) && <Icon as={Check} size="md" className="text-primary" />}
                                     </button>
                                   ))}
                                 </motion.div>
@@ -489,7 +490,7 @@ function ProjectsContent() {
                             </td>
                           )}
                           {visibleColumns.includes('dueDate') && <td className="px-6 py-4 text-sm text-secondary">{formatShortDate(p.endDate)}</td>}
-                          <td className="px-6 py-4 text-right w-10 text-secondary"><ChevronRight className="h-4 w-4 inline-block" /></td>
+                          <td className="px-6 py-4 text-right w-10 text-secondary"><Icon as={ChevronRight} size="md" className="inline-block" /></td>
                         </motion.tr>
                       ))}
                     </tbody>
@@ -510,7 +511,7 @@ function ProjectsContent() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       onClick={() => router.push(`/projects/${p.id}`)}
-                      className="p-4 rounded-xl border border-border bg-white hover:shadow-sm cursor-pointer transition-all"
+                      className="p-4 rounded-xl border border-border bg-white hover:shadow-sm cursor-pointer transition-colors duration-150 motion-reduce:transition-none"
                     >
                       <div className="flex items-start justify-between mb-3">
                         <div>
@@ -620,7 +621,7 @@ function ProjectsContent() {
               <button
                 onClick={() => fetchNextPage()}
                 disabled={isFetchingNextPage}
-                className="rounded-xl border border-border bg-white px-6 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50 transition-all"
+                className="rounded-xl border border-border bg-white px-6 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
               >
                 {isFetchingNextPage ? 'Loading...' : 'Load More Projects'}
               </button>
@@ -637,7 +638,7 @@ function ProjectsContent() {
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto">
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
                 <h2 className="text-lg font-semibold text-primary">New Project</h2>
-                <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
+                <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><Icon as={X} size="md" className="text-secondary" /></button>
               </div>
               <form onSubmit={handleCreate} className="relative p-6 pb-24 md:pb-6 space-y-8">
                 {formError && <div className="absolute top-0 left-6 right-6 -mt-2 z-10 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 border border-red-100">{formError}</div>}
@@ -736,7 +737,7 @@ function ProjectsContent() {
                       {formValues.type === 'INTERNAL' ? (
                         // Internal project → no client picker; it's locked to the org's own account.
                         <div className="flex items-center gap-2 h-10 px-3 rounded-lg border border-border bg-[#F9FAFB] text-sm text-secondary">
-                          <Lock className="h-3.5 w-3.5" />
+                          <Icon as={Lock} size="sm" />
                           <span>Internal · {user?.organization?.name || 'your organization'}</span>
                         </div>
                       ) : (
@@ -815,8 +816,8 @@ function ProjectsContent() {
 
 
                 <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
-                  <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submitting ? 'Creating...' : 'Create Project'}</button>
+                  <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none">Cancel</button>
+                  <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none">{submitting ? 'Creating...' : 'Create Project'}</button>
                 </div>
               </form>
             </motion.div>
@@ -890,7 +891,7 @@ function Field({ label, value, onChange, type = 'text', required = false }: {
   return (
     <div>
       <label htmlFor={id} className="block text-sm font-medium text-[#374151] mb-1.5">{label}</label>
-      <input id={id} type={type} value={value} onChange={(e) => onChange(e.target.value)} required={required} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" />
+      <input id={id} type={type} value={value} onChange={(e) => onChange(e.target.value)} required={required} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none" />
     </div>
   );
 }

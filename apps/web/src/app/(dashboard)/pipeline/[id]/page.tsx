@@ -24,6 +24,7 @@ import { useConfirmStore } from '@/stores';
 import { NoAccess } from '@/components/ui/no-access';
 import { NotFoundPanel } from '@/components/ui/not-found-panel';
 import { leadStageLabel } from '@/lib/lead-stage';
+import { Icon } from '@/components/ui/icon';
 
 function SocialLink({ platform, input }: { platform: 'linkedin' | 'instagram' | 'facebook', input?: string | null }) {
   if (!input) return <span className="text-sm font-medium text-gray-400">—</span>;
@@ -165,7 +166,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
         <div className="max-w-7xl mx-auto flex flex-col gap-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <Link href="/pipeline" className="flex items-center gap-2 text-sm font-medium text-secondary hover:text-primary transition-colors">
-              <ArrowLeft className="w-4 h-4" /> Back to Pipeline
+              <Icon as={ArrowLeft} size="md" /> Back to Pipeline
             </Link>
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <button
@@ -175,7 +176,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 }}
                 className="flex items-center justify-center gap-2 px-3.5 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-[#1F2937] transition-colors shadow-sm"
               >
-                <Plus className="w-4 h-4" />
+                <Icon as={Plus} size="md" />
                 <span className="hidden sm:inline">Add Task</span>
               </button>
               {['ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'CONTRACT'].includes(lead.stage) && (
@@ -203,7 +204,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   }}
                   className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-[#1F2937] disabled:opacity-60 transition-colors"
                 >
-                  <FolderPlus className="w-4 h-4" />
+                  <Icon as={FolderPlus} size="md" />
                   <span className="hidden sm:inline">{preparingProject ? 'Preparing…' : 'Create Project'}</span>
                 </button>
               )}
@@ -213,26 +214,26 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 onClick={() => router.push(`/quotations?create=true&leadId=${leadId}`)}
                 className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-[#4B5563] bg-white border border-border rounded-lg hover:bg-gray-50 transition-colors"
               >
-                <Receipt className="w-4 h-4" /> <span className="hidden sm:inline">Raise Quotation</span>
+                <Icon as={Receipt} size="md" /> <span className="hidden sm:inline">Raise Quotation</span>
               </button>
               <button
                 onClick={() => setIsPipelineDetailsModalOpen(true)}
                 className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-[#4B5563] bg-white border border-border rounded-lg hover:bg-gray-50 transition-colors"
               >
-                <Tag className="w-4 h-4" /> <span className="hidden sm:inline">Stage Data</span>
+                <Icon as={Tag} size="md" /> <span className="hidden sm:inline">Stage Data</span>
               </button>
               <button
                 onClick={() => setIsEditModalOpen(true)}
                 className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-[#4B5563] bg-white border border-border rounded-lg hover:bg-gray-50 transition-colors"
               >
-                <Pencil className="w-4 h-4" /> <span className="hidden sm:inline">Edit</span>
+                <Icon as={Pencil} size="md" /> <span className="hidden sm:inline">Edit</span>
               </button>
               <button
                 onClick={handleDelete}
                 disabled={deleteMutation.isPending}
                 className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 border border-red-100 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
               >
-                <Trash2 className="w-4 h-4" /> <span className="hidden sm:inline">{deleteMutation.isPending ? 'Deleting...' : 'Delete'}</span>
+                <Icon as={Trash2} size="md" /> <span className="hidden sm:inline">{deleteMutation.isPending ? 'Deleting...' : 'Delete'}</span>
               </button>
             </div>
           </div>
@@ -240,7 +241,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6 mt-2">
             {/* Avatar & Identity */}
             <div className="flex items-start gap-4 md:gap-5 min-w-0">
-              <div className={`w-16 h-16 shrink-0 rounded-2xl flex items-center justify-center text-2xl font-bold border ${getAvatarColor(displayName)}`}>
+              <div className={`h-16 w-16 shrink-0 rounded-2xl flex items-center justify-center text-2xl font-bold border ${getAvatarColor(displayName)}`}>
                 {getInitials(displayName)}
               </div>
               <div className="flex flex-col gap-1.5 min-w-0">
@@ -270,22 +271,22 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 <div className="flex flex-wrap items-center gap-3 sm:gap-5 mt-1.5">
                   {lead.contactName && (
                     <span className="flex items-center gap-1.5 text-sm text-secondary font-medium">
-                      <User className="w-4 h-4 text-gray-400" /> {lead.contactName}
+                      <Icon as={User} size="md" className="text-gray-400" /> {lead.contactName}
                     </span>
                   )}
                   {(lead.contactEmail || lead.client?.email) && (
                     <a href={`mailto:${lead.contactEmail || lead.client?.email}`} className="flex items-center gap-1.5 text-sm text-secondary font-medium hover:text-primary transition-colors">
-                      <Mail className="w-4 h-4 text-gray-400" /> {lead.contactEmail || lead.client?.email}
+                      <Icon as={Mail} size="md" className="text-gray-400" /> {lead.contactEmail || lead.client?.email}
                     </a>
                   )}
                   {(lead.contactPhone || lead.client?.phone) && (
                     <a href={`tel:${lead.contactPhone || lead.client?.phone}`} className="flex items-center gap-1.5 text-sm text-secondary font-medium hover:text-primary transition-colors">
-                      <Phone className="w-4 h-4 text-gray-400" /> {lead.contactPhone || lead.client?.phone}
+                      <Icon as={Phone} size="md" className="text-gray-400" /> {lead.contactPhone || lead.client?.phone}
                     </a>
                   )}
                   {location && (
                     <span className="flex items-center gap-1.5 text-sm text-secondary font-medium">
-                      <MapPin className="w-4 h-4 text-gray-400" /> {location}
+                      <Icon as={MapPin} size="md" className="text-gray-400" /> {location}
                     </span>
                   )}
                 </div>
@@ -363,7 +364,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
               const isCurrent = lead.stage === stage;
               return (
                 <div key={stage} className="flex flex-col items-center gap-2.5 relative min-w-30 shrink-0">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold z-10 transition-colors ${isCurrent ? 'bg-primary text-white ring-4 ring-primary/10' : isCompleted ? 'bg-blue-50 text-blue-600 ring-4 ring-white' : 'bg-gray-50 text-gray-400 ring-4 ring-white border border-border'}`}>
+                  <div className={`h-7 w-7 rounded-full flex items-center justify-center text-[11px] font-bold z-10 transition-colors ${isCurrent ? 'bg-primary text-white ring-4 ring-primary/10' : isCompleted ? 'bg-blue-50 text-blue-600 ring-4 ring-white' : 'bg-gray-50 text-gray-400 ring-4 ring-white border border-border'}`}>
                     {idx + 1}
                   </div>
                   <span className={`text-[10px] font-bold uppercase tracking-wider text-center ${isCurrent ? 'text-primary' : isCompleted ? 'text-secondary' : 'text-gray-400'}`}>
@@ -388,7 +389,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
         const overdue = fud < today;
         return (
           <div className={`px-5 md:px-8 py-3 text-sm font-medium flex items-center gap-2 ${overdue ? 'bg-red-50 text-red-700 border-b border-red-100' : 'bg-amber-50 text-amber-800 border-b border-amber-100'}`}>
-            <Clock className="w-4 h-4 shrink-0" /> Follow-up {overdue ? 'overdue since' : 'due'} {formatDate(lead.followUpDate)}. Update the follow-up date to clear this.
+            <Icon as={Clock} size="md" className="shrink-0" /> Follow-up {overdue ? 'overdue since' : 'due'} {formatDate(lead.followUpDate)}. Update the follow-up date to clear this.
           </div>
         );
       })()}
@@ -416,7 +417,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   {/* Lead Details Card */}
                   <div className="bg-white rounded-2xl border border-border p-6 shadow-sm">
                     <h2 className="text-xs font-bold text-secondary flex items-center gap-2 mb-6 uppercase tracking-wider">
-                      <Building2 className="w-4 h-4" /> Lead Details
+                      <Icon as={Building2} size="md" /> Lead Details
                     </h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-6 gap-x-4">
                       <Detail label="Company Name" value={lead.companyName || lead.client?.company} />
@@ -425,7 +426,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                       <Detail label="Website">
                         {website ? (
                           <a href={website.startsWith('http') ? website : `https://${website}`} target="_blank" rel="noreferrer" className="text-sm font-medium text-blue-600 hover:underline flex items-center gap-1.5 truncate">
-                            <Globe className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">{website}</span>
+                            <Icon as={Globe} size="sm" className="shrink-0" /> <span className="truncate">{website}</span>
                           </a>
                         ) : <span className="text-sm text-gray-400">—</span>}
                       </Detail>
@@ -433,9 +434,9 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                       <Detail label="Assigned User">
                         <div className="flex items-center gap-2">
                           {lead.assignedTo?.avatar ? (
-                            <img src={lead.assignedTo.avatar} alt="" className="w-6 h-6 rounded-full" />
+                            <img src={lead.assignedTo.avatar} alt="" className="h-6 w-6 rounded-full" />
                           ) : (
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${lead.assignedTo ? getAvatarColor(lead.assignedTo.name) : 'bg-gray-100 text-gray-400'}`}>
+                            <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${lead.assignedTo ? getAvatarColor(lead.assignedTo.name) : 'bg-gray-100 text-gray-400'}`}>
                               {lead.assignedTo ? getInitials(lead.assignedTo.name) : '?'}
                             </div>
                           )}
@@ -444,19 +445,19 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                       </Detail>
                       <Detail label="Expected Close">
                         <p className="text-sm font-medium text-primary flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                          <Icon as={Calendar} size="sm" className="text-gray-400" />
                           {formatDate(lead.expectedCloseDate)}
                         </p>
                       </Detail>
                       <Detail label="Next Follow-up Date">
                         <p className="text-sm font-medium text-primary flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 text-gray-400" />
+                          <Icon as={Clock} size="sm" className="text-gray-400" />
                           {formatDate(lead.followUpDate)}
                         </p>
                       </Detail>
                       <Detail label="Last Contacted Date">
                         <p className="text-sm font-medium text-primary flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                          <Icon as={Calendar} size="sm" className="text-gray-400" />
                           {formatDate(lead.lastContactedDate)}
                         </p>
                       </Detail>
@@ -468,7 +469,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   {(lead.billingAddress || lead.gstNumber || location) && (
                     <div className="bg-white rounded-2xl border border-border p-6 shadow-sm">
                       <h2 className="text-xs font-bold text-secondary flex items-center gap-2 mb-6 uppercase tracking-wider">
-                        <Receipt className="w-4 h-4" /> Company Information
+                        <Icon as={Receipt} size="md" /> Company Information
                       </h2>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-6 gap-x-4">
                         <Detail label="Billing Address" value={lead.billingAddress} />
@@ -481,14 +482,14 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   {/* Social Presence Card */}
                   <div className="bg-white rounded-2xl border border-border p-6 shadow-sm">
                     <h2 className="text-xs font-bold text-secondary flex items-center gap-2 mb-6 uppercase tracking-wider">
-                      <Globe className="w-4 h-4" /> Social Presence
+                      <Icon as={Globe} size="md" /> Social Presence
                     </h2>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-6 gap-x-4">
                       <Detail label="LinkedIn">
                         <div className="flex flex-col gap-1">
                           <SocialLink platform="linkedin" input={lead.linkedinUrl} />
                           <div className="flex items-center gap-1.5 mt-1">
-                            <Globe className={`w-3.5 h-3.5 ${lead.linkedinChecked ? 'text-blue-600' : 'text-gray-300'}`} />
+                            <Globe className={`h-3.5 w-3.5 ${lead.linkedinChecked ? 'text-blue-600' : 'text-gray-300'}`} />
                             <span className="text-[10px] text-secondary font-medium uppercase tracking-wider">{lead.linkedinChecked ? (lead.linkedinFound ? 'Found' : 'Not Found') : 'Not Checked'}</span>
                           </div>
                         </div>
@@ -510,7 +511,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   {/* Deal Summary Card */}
                   <div className="bg-white rounded-2xl border border-border p-6 shadow-sm">
                     <h2 className="text-xs font-bold text-secondary flex items-center gap-2 mb-6 uppercase tracking-wider">
-                      <Briefcase className="w-4 h-4" /> Deal Summary
+                      <Icon as={Briefcase} size="md" /> Deal Summary
                     </h2>
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center justify-between py-2.5 border-b border-gray-50">
@@ -543,7 +544,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   {/* Contract & Renewal Card */}
                   <div className="bg-white rounded-2xl border border-border p-6 shadow-sm">
                     <h2 className="text-xs font-bold text-secondary flex items-center gap-2 mb-6 uppercase tracking-wider">
-                      <Calendar className="w-4 h-4" /> Contract & Renewal
+                      <Icon as={Calendar} size="md" /> Contract & Renewal
                     </h2>
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center justify-between py-2.5 border-b border-gray-50">
@@ -573,12 +574,12 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   {lead.stageHistory && lead.stageHistory.length > 0 && (
                     <div className="bg-white rounded-2xl border border-border p-6 shadow-sm">
                       <h2 className="text-xs font-bold text-secondary flex items-center gap-2 mb-6 uppercase tracking-wider">
-                        <History className="w-4 h-4" /> Pipeline History
+                        <Icon as={History} size="md" /> Pipeline History
                       </h2>
                       <div className="relative border-l-2 border-gray-100 ml-2 space-y-6">
                         {lead.stageHistory.map((history: any, index: number) => (
                           <div key={history.id || index} className="relative pl-5">
-                            <div className="absolute -left-2.25 top-1.5 w-4 h-4 rounded-full bg-blue-50 border-2 border-blue-500 ring-2 ring-white"></div>
+                            <div className="absolute -left-2.25 top-1.5 h-4 w-4 rounded-full bg-blue-50 border-2 border-blue-500 ring-2 ring-white"></div>
                             <div className="flex flex-col">
                               <span className="text-sm font-bold text-primary">{leadStageLabel(history.toStage)}</span>
                               <div className="flex items-center gap-1.5 mt-0.5">
@@ -600,13 +601,13 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   {lead.notes && lead.notes.length > 0 && (
                     <div className="bg-white rounded-2xl border border-border p-6 shadow-sm max-h-125 overflow-y-auto">
                       <h2 className="text-xs font-bold text-secondary flex items-center gap-2 mb-6 uppercase tracking-wider">
-                        <StickyNote className="w-4 h-4" /> Notes
+                        <Icon as={StickyNote} size="md" /> Notes
                       </h2>
                       <div className="flex flex-col gap-4">
                         {lead.notes.map((note: any) => (
                           <div key={note.id} className="bg-amber-50/50 p-4 rounded-xl border border-amber-100/50 relative">
                             <div className="flex items-center gap-2 mb-3">
-                              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold ${note.author ? getAvatarColor(note.author.name) : 'bg-gray-100 text-gray-400'}`}>
+                              <div className={`h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-bold ${note.author ? getAvatarColor(note.author.name) : 'bg-gray-100 text-gray-400'}`}>
                                 {note.author ? getInitials(note.author.name) : 'S'}
                               </div>
                               <span className="text-xs font-bold text-primary">{note.author?.name || 'System'}</span>
@@ -636,7 +637,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 {lead.dealFields && lead.dealFields.length > 0 && (
                   <div className="bg-white rounded-2xl border border-border p-6 shadow-sm">
                     <h2 className="text-xs font-bold text-secondary mb-6 flex items-center gap-2 uppercase tracking-wider">
-                      <Tag className="w-4 h-4" /> Stage Data
+                      <Icon as={Tag} size="md" /> Stage Data
                     </h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                       {lead.dealFields.map((field: any) => (

@@ -18,6 +18,7 @@ import { useModalSafety } from '@/hooks/useModalSafety';
 import { useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { getClientDisplayName, isInternalClient } from '@/lib/utils';
+import { Icon } from '@/components/ui/icon';
 
 const taskSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -352,7 +353,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] sticky top-0 bg-white z-10">
               <h2 className="text-lg font-semibold text-primary">{isEditing ? 'Edit Task' : 'New Task'}</h2>
               <button onClick={guardedClose} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
-                <X className="h-4 w-4 text-secondary" />
+                <Icon as={X} size="md" className="text-secondary" />
               </button>
             </div>
 
@@ -370,7 +371,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
                     aria-describedby={errors.title ? 'tfd-title-error' : undefined}
                     className={`w-full rounded-xl border ${
                       errors.title ? 'border-red-500' : 'border-border'
-                    } bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`}
+                    } bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none`}
                   />
                   {errors.title && (
                     <p id="tfd-title-error" aria-live="polite" className="mt-1 text-xs text-red-500">
@@ -389,7 +390,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
                       id="tfd-dueDateOnly"
                       type="date"
                       {...register('dueDateOnly')}
-                      className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
+                      className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
                     />
                   </div>
                   <div>
@@ -400,7 +401,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
                       id="tfd-dueTimeOnly"
                       type="time"
                       {...register('dueTimeOnly')}
-                      className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
+                      className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
                     />
                   </div>
                 </div>
@@ -431,7 +432,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
                     type="url"
                     placeholder="https://drive.google.com/..."
                     {...register('driveLink')}
-                    className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
+                    className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
                   />
                 </div>
 
@@ -611,7 +612,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
                       id="tfd-assignedDate"
                       type="date"
                       {...register('assignedDate')}
-                      className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
+                      className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
                     />
                   </div>
 
@@ -691,14 +692,14 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
                   <button
                     type="button"
                     onClick={guardedClose}
-                    className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all"
+                    className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all"
+                    className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
                   >
                     {submitting ? 'Saving...' : isEditing ? 'Save Changes' : 'Create Task'}
                   </button>

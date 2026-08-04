@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer } from 'recharts';
 import { DISC_ARCHETYPES, TRAIT_LABELS, PLAYBOOK_STAGES, OCEAN_LABELS } from '../lib/intelligence-config';
+import { axisTick } from '@/lib/chart-theme';
 
 // Renders a behavioural dossier (DISC / OCEAN / traits / context / playbook). Shared by the
 // lead-level Intelligence tab and the per-contact dossier panel (Module G).
@@ -50,7 +51,7 @@ export function DossierView({ d }: { d: any }) {
             <ResponsiveContainer width="100%" height={220}>
               <RadarChart data={oceanData}>
                 <PolarGrid stroke="#E5E7EB" />
-                <PolarAngleAxis dataKey="trait" tick={{ fontSize: 10, fill: '#6B7280' }} />
+                <PolarAngleAxis dataKey="trait" tick={axisTick} />
                 <Radar dataKey="value" stroke="#111827" fill="#111827" fillOpacity={0.15} />
               </RadarChart>
             </ResponsiveContainer>
@@ -69,7 +70,7 @@ export function DossierView({ d }: { d: any }) {
                     <span>{t.right}</span>
                   </div>
                   <div className="relative h-2 rounded-full bg-gradient-to-r from-gray-200 via-gray-300 to-gray-400">
-                    <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary border-2 border-white shadow" style={{ left: `calc(${score}% - 6px)` }} />
+                    <div className="absolute top-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-primary border-2 border-white shadow" style={{ left: `calc(${score}% - 6px)` }} />
                   </div>
                 </div>
               );
@@ -131,7 +132,7 @@ export function DossierView({ d }: { d: any }) {
                   className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-primary hover:bg-gray-50 transition-colors"
                 >
                   {s.label}
-                  <ChevronDown className={`w-4 h-4 text-secondary transition-transform ${openStage === s.key ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`h-4 w-4 text-secondary transition-transform ${openStage === s.key ? 'rotate-180' : ''}`} />
                 </button>
                 {openStage === s.key && (
                   <div className="px-4 pb-3 text-sm text-secondary leading-relaxed">{d.playbook[s.key] || '—'}</div>

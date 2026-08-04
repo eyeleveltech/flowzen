@@ -22,6 +22,7 @@ const GROUPS = [
 ];
 
 import { getPriorityBadge } from '@/lib/priority';
+import { Icon } from '@/components/ui/icon';
 
 export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any[]; onUpdateTask?: () => void; onTaskClick?: (task: any) => void }) {
   const [localTasks, setLocalTasks] = useState<any[]>(tasks);
@@ -104,14 +105,14 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
                   style={{ borderTop: `4px solid ${group.color}` }}
                 >
                   <button type="button" className="p-1 rounded-lg transition-colors text-secondary hover:text-primary">
-                    <ChevronsRight className="w-4 h-4" />
+                    <Icon as={ChevronsRight} size="md" />
                   </button>
                   <div className="flex flex-col items-center justify-center flex-1">
                     <span className="rotate-90 origin-center whitespace-nowrap text-xs font-bold uppercase tracking-wider select-none text-secondary">
                       {group.title}
                     </span>
                   </div>
-                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm" style={{ backgroundColor: group.color }}>
+                  <div className="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm" style={{ backgroundColor: group.color }}>
                     {columnTasks.length}
                   </div>
                 </div>
@@ -128,7 +129,7 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
                       onClick={() => toggleCollapse(group.id)}
                       className="p-0.5 rounded text-secondary hover:text-primary transition-colors"
                     >
-                      <ChevronsLeft className="w-4 h-4" />
+                      <Icon as={ChevronsLeft} size="md" />
                     </button>
                     <h3 className="text-sm font-semibold text-primary">{group.title}</h3>
                   </div>
@@ -171,7 +172,7 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
                               <div className="flex items-center gap-3 mt-3">
                                 {task.dueDate && (
                                   <div className={`flex items-center gap-1 text-[11px] font-medium ${new Date(task.dueDate) < new Date() && task.status !== 'COMPLETED' ? 'text-red-500' : 'text-gray-500'}`}>
-                                    <Clock className="w-3 h-3" />
+                                    <Clock className="h-3 w-3" />
                                     <span>{formatShortDate(task.dueDate)}</span>
                                   </div>
                                 )}
@@ -179,13 +180,13 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
                                   <div className="flex items-center gap-2 text-gray-400">
                                     {task._count?.comments > 0 && (
                                       <div className="flex items-center gap-0.5">
-                                        <MessageSquare className="w-3 h-3" />
+                                        <MessageSquare className="h-3 w-3" />
                                         <span className="text-[10px]">{task._count.comments}</span>
                                       </div>
                                     )}
                                     {task._count?.attachments > 0 && (
                                       <div className="flex items-center gap-0.5">
-                                        <Paperclip className="w-3 h-3" />
+                                        <Paperclip className="h-3 w-3" />
                                         <span className="text-[10px]">{task._count.attachments}</span>
                                       </div>
                                     )}
@@ -198,16 +199,16 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
                                   {task.assignees?.map((assignee: any) => (
                                     <div key={assignee.id} className="relative group/avatar">
                                       {assignee.avatar ? (
-                                        <img src={assignee.avatar} alt={assignee.name} className="w-6 h-6 rounded-full border border-white" />
+                                        <img src={assignee.avatar} alt={assignee.name} className="h-6 w-6 rounded-full border border-white" />
                                       ) : (
-                                        <div className="w-6 h-6 rounded-full border border-white bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary" title={assignee.name}>
+                                        <div className="h-6 w-6 rounded-full border border-white bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary" title={assignee.name}>
                                           {assignee.name.charAt(0)}
                                         </div>
                                       )}
                                     </div>
                                   ))}
                                   {(!task.assignees || task.assignees.length === 0) && (
-                                    <div className="w-6 h-6 rounded-full border border-dashed border-gray-300 flex items-center justify-center text-gray-400 bg-gray-50 text-[10px]">
+                                    <div className="h-6 w-6 rounded-full border border-dashed border-gray-300 flex items-center justify-center text-gray-400 bg-gray-50 text-[10px]">
                                       ?
                                     </div>
                                   )}
@@ -223,7 +224,7 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
                                   }}
                                   className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-secondary bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 hover:text-primary transition-colors"
                                 >
-                                  {task.status.replace('_', ' ')} <ChevronDown className="w-3 h-3" />
+                                  {task.status.replace('_', ' ')} <ChevronDown className="h-3 w-3" />
                                 </button>
                               </div>
                             </div>
@@ -270,7 +271,7 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
                   }`}
                 >
                   <span className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: groupInfo?.color }} />
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: groupInfo?.color }} />
                     {stage.replace('_', ' ')}
                   </span>
                 </button>

@@ -92,6 +92,7 @@ function AssigneeAvatars({ task, size = 26 }: { task: { assignees?: AssigneePers
 }
 
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { Icon } from '@/components/ui/icon';
 
 function TasksContent() {
   usePageTitle('Tasks');
@@ -491,12 +492,12 @@ function TasksContent() {
         <div className="flex flex-wrap items-center gap-2 w-full">
           {/* Search Box */}
           <div className="relative w-full sm:w-64 md:w-80 shrink-0">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
+            <Icon as={Search} size="md" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-secondary" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search tasks..."
-              className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-secondary"
+              className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none placeholder:text-secondary"
             />
           </div>
 
@@ -516,7 +517,7 @@ function TasksContent() {
                 }
               }}
               placeholder="Companies"
-              triggerClassName={clientFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
+              triggerClassName={clientFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
               options={clients.map((c: any) => ({ label: getClientDisplayName(c), value: c.id }))}
             />
           </div>
@@ -527,7 +528,7 @@ function TasksContent() {
               value={projectFilter}
               onChange={setProjectFilter}
               placeholder="Projects"
-              triggerClassName={projectFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
+              triggerClassName={projectFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
               options={filteredProjectsForDropdown.map((p) => ({ label: p.name, value: p.id }))}
             />
           </div>
@@ -538,7 +539,7 @@ function TasksContent() {
               value={statusFilter}
               onChange={setStatusFilter}
               placeholder="Status"
-              triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
+              triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
               options={TASK_STATUS_OPTIONS}
             />
           </div>
@@ -549,7 +550,7 @@ function TasksContent() {
               value={teamFilter}
               onChange={setTeamFilter}
               placeholder="Departments"
-              triggerClassName={teamFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
+              triggerClassName={teamFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
               options={teams.map((t: any) => ({ label: t.name, value: t.id }))}
             />
           </div>
@@ -561,7 +562,7 @@ function TasksContent() {
                 value={assigneeFilter}
                 onChange={setAssigneeFilter}
                 placeholder="Assignees"
-                triggerClassName={assigneeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
+                triggerClassName={assigneeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
                 options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
               />
             </div>
@@ -573,7 +574,7 @@ function TasksContent() {
               value={priorityFilter}
               onChange={setPriorityFilter}
               placeholder="Priority"
-              triggerClassName={priorityFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
+              triggerClassName={priorityFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
               options={[
                 { label: 'Low', value: 'LOW' },
                 { label: 'Medium', value: 'MEDIUM' },
@@ -640,7 +641,7 @@ function TasksContent() {
                 key={tab.id}
                 type="button"
                 onClick={() => setQuickFilter(tab.id)}
-                className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${currentFilter === tab.id
+                className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors duration-150 motion-reduce:transition-none whitespace-nowrap ${currentFilter === tab.id
                   ? tab.activeColor
                   : 'text-secondary hover:text-primary'
                   }`}
@@ -675,7 +676,7 @@ function TasksContent() {
                 }}
                 className="flex items-center gap-1.5 h-8.5 rounded-xl bg-red-50 px-3 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors border border-red-100"
               >
-                <X className="h-3.5 w-3.5" /> Clear Filters
+                <Icon as={X} size="sm" /> Clear Filters
               </button>
             )}
 
@@ -684,27 +685,27 @@ function TasksContent() {
               <button
                 type="button"
                 onClick={() => setView('list')}
-                className={`p-1.5 rounded-lg transition-all ${view === 'list' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
+                className={`p-1.5 rounded-lg transition-colors duration-150 motion-reduce:transition-none ${view === 'list' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
                 title="List View"
               >
-                <LayoutList className="h-3.5 w-3.5" />
+                <Icon as={LayoutList} size="sm" />
               </button>
               <button
                 type="button"
                 onClick={() => setView('board')}
-                className={`p-1.5 rounded-lg transition-all ${view === 'board' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
+                className={`p-1.5 rounded-lg transition-colors duration-150 motion-reduce:transition-none ${view === 'board' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
                 title="Board View"
               >
-                <Kanban className="h-3.5 w-3.5" />
+                <Icon as={Kanban} size="sm" />
               </button>
             </div>
 
             <button onClick={() => setShowViewSettings(true)} className="p-2 rounded-xl border border-border bg-white hover:bg-gray-50 transition-colors text-secondary hover:text-primary h-8.5 w-8.5 flex items-center justify-center" title="View settings">
-              <Settings className="h-3.5 w-3.5" />
+              <Icon as={Settings} size="sm" />
             </button>
 
-            <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-[#1F2937] transition-all h-8.5">
-              <Plus className="h-3.5 w-3.5" /> New Task
+            <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none h-8.5">
+              <Icon as={Plus} size="sm" /> New Task
             </button>
           </div>
         </div>
@@ -881,7 +882,7 @@ function TasksContent() {
                         <th className="px-6 py-3.5 w-10 text-center relative select-none">
                           <button
                             onClick={(e) => { e.stopPropagation(); setShowColumnDropdown(!showColumnDropdown); }}
-                            className="inline-flex items-center justify-center h-6 w-6 rounded-md text-secondary hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
+                            className="inline-flex items-center justify-center h-6 w-6 rounded-md text-secondary hover:bg-gray-100 hover:text-primary transition-colors duration-150 motion-reduce:transition-none text-sm font-bold border border-transparent hover:border-gray-200"
                             title="Toggle visible columns"
                           >
                             +
@@ -912,7 +913,7 @@ function TasksContent() {
                                       className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#F9FAFB] transition-colors"
                                     >
                                       <span className="text-[#374151]">{col.label}</span>
-                                      {visibleColumns.includes(col.id) && <Check className="w-4 h-4 text-primary" />}
+                                      {visibleColumns.includes(col.id) && <Icon as={Check} size="md" className="text-primary" />}
                                     </button>
                                   ))}
                                 </motion.div>
@@ -976,7 +977,7 @@ function TasksContent() {
                             </td>
                           )}
                           <td className="px-6 py-3.5 text-right w-10 text-secondary">
-                            <ChevronRight className="h-4 w-4 inline-block" />
+                            <Icon as={ChevronRight} size="md" className="inline-block" />
                           </td>
                         </tr>
                       ))}
@@ -1027,7 +1028,7 @@ function TasksContent() {
               <button
                 onClick={() => fetchNextPage()}
                 disabled={isFetchingNextPage}
-                className="rounded-xl border border-border bg-white px-6 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50 transition-all"
+                className="rounded-xl border border-border bg-white px-6 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
               >
                 {isFetchingNextPage ? 'Loading...' : 'Load More Tasks'}
               </button>

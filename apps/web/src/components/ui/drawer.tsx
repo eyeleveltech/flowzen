@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { X } from 'lucide-react';
 import { createPortal } from 'react-dom';
+import { Icon } from '@/components/ui/icon';
 
 interface DrawerProps {
   isOpen: boolean;
@@ -123,7 +124,7 @@ export function Drawer({
                   <div className="mt-4 flex w-full items-center justify-between px-6 pb-2">
                     <h2 className="text-lg font-semibold text-primary">{title}</h2>
                     <button onClick={onClose} className="rounded-full p-1 hover:bg-gray-100" aria-label="Close">
-                      <X className="h-5 w-5 text-gray-500" />
+                      <Icon as={X} size="lg" className="text-gray-500" />
                     </button>
                   </div>
                 )}
@@ -148,7 +149,7 @@ export function Drawer({
                 <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface sticky top-0 z-10 shrink-0">
                   <h3 className="text-base font-semibold text-primary">{title}</h3>
                   <button type="button" onClick={onClose} className="text-secondary hover:text-primary p-1.5 rounded-xl hover:bg-gray-100 transition-colors" aria-label="Close">
-                    <X className="h-5 w-5" />
+                    <Icon as={X} size="lg" />
                   </button>
                 </div>
               )}
@@ -173,7 +174,7 @@ export function Drawer({
                   <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
                     <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
                     <button onClick={onClose} className="rounded-full p-1 hover:bg-gray-100" aria-label="Close">
-                      <X className="h-5 w-5 text-gray-500" />
+                      <Icon as={X} size="lg" className="text-gray-500" />
                     </button>
                   </div>
                 )}

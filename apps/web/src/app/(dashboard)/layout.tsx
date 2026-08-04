@@ -12,6 +12,7 @@ import { BottomTabs } from '@/components/layout/bottom-tabs';
 import { CommandPalette } from '@/components/layout/command-palette';
 import { useNotificationStore } from '@/stores/useNotificationStore';
 import { X, Bell } from 'lucide-react';
+import { Icon } from '@/components/ui/icon';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -84,7 +85,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           className={`fixed ${isMobile ? 'bottom-20 left-4 right-4' : 'bottom-6 right-6 w-80'} z-50 flex items-start gap-3 rounded-2xl border border-border bg-white p-4 shadow-xl shadow-black/5`}
         >
           <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-            <Bell className="h-4 w-4" />
+            <Icon as={Bell} size="md" />
           </div>
           <div className="flex-1">
             <p className="text-sm font-medium text-primary">New Notification</p>
@@ -94,7 +95,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             onClick={clearToast}
             className="flex shrink-0 items-center justify-center rounded-lg p-1 text-secondary hover:bg-[#F3F4F6] hover:text-primary transition-colors"
           >
-            <X className="h-4 w-4" />
+            <Icon as={X} size="md" />
           </button>
         </motion.div>
       )}

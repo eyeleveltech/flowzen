@@ -51,6 +51,11 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
     }
   }, [isOpen]);
 
+  // Reset searchQuery on close
+  useEffect(() => {
+    if (!isOpen) setSearchQuery('');
+  }, [isOpen]);
+
   // Close on scroll to prevent detached portaled dropdowns
   useEffect(() => {
     if (!isOpen) return;
@@ -145,7 +150,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
             setIsOpen(false);
           }
         }}
-        className={cn(`flex w-full items-center justify-between ${rounded} border border-border bg-white px-4 py-2.5 text-sm text-[#374151] outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50 transition-all text-left`, buttonClassName)}
+        className={cn(`flex w-full items-center justify-between ${rounded} border border-border bg-white px-4 py-2.5 text-sm text-[#374151] outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none text-left`, buttonClassName)}
       >
         <span className="flex items-center gap-2 min-w-0">
           {leadingIcon && <span className="shrink-0 flex items-center">{leadingIcon}</span>}
@@ -192,6 +197,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                 key={option.value}
                 onClick={() => {
                   onChange(option.value);
+                  setSearchQuery('');
                   setIsOpen(false);
                 }}
                 className={`w-full text-left px-4 py-2 rounded-xl text-sm transition-colors ${value === option.value
@@ -259,6 +265,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                               e.preventDefault();
                               if (filteredOptions[0]) {
                                 onChange(filteredOptions[0].value);
+                                setSearchQuery('');
                                 setIsOpen(false);
                                 containerRef.current?.querySelector('button')?.focus();
                               }
@@ -284,6 +291,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                       tabIndex={isOpen ? 0 : -1}
                       onClick={() => {
                         onChange(option.value);
+                        setSearchQuery('');
                         setIsOpen(false);
                         containerRef.current?.querySelector('button')?.focus();
                       }}
@@ -291,6 +299,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();
                           onChange(option.value);
+                          setSearchQuery('');
                           setIsOpen(false);
                           containerRef.current?.querySelector('button')?.focus();
                         }

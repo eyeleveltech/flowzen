@@ -4,6 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Bold, Italic, Strikethrough, List, ListOrdered, Heading2 } from 'lucide-react';
 import { useEffect } from 'react';
+import { Icon } from '@/components/ui/icon';
 
 interface RichTextEditorProps {
   value: string;
@@ -22,7 +23,7 @@ const MenuBar = ({ editor }: { editor: any }) => {
         disabled={!editor.can().chain().focus().toggleBold().run()}
         className={`p-1.5 rounded-lg transition-colors ${editor.isActive('bold') ? 'bg-border text-primary' : 'text-secondary hover:bg-[#F3F4F6] hover:text-primary'}`}
       >
-        <Bold className="h-4 w-4" />
+        <Icon as={Bold} size="md" />
       </button>
       <button
         type="button"
@@ -30,7 +31,7 @@ const MenuBar = ({ editor }: { editor: any }) => {
         disabled={!editor.can().chain().focus().toggleItalic().run()}
         className={`p-1.5 rounded-lg transition-colors ${editor.isActive('italic') ? 'bg-border text-primary' : 'text-secondary hover:bg-[#F3F4F6] hover:text-primary'}`}
       >
-        <Italic className="h-4 w-4" />
+        <Icon as={Italic} size="md" />
       </button>
       <button
         type="button"
@@ -38,7 +39,7 @@ const MenuBar = ({ editor }: { editor: any }) => {
         disabled={!editor.can().chain().focus().toggleStrike().run()}
         className={`p-1.5 rounded-lg transition-colors ${editor.isActive('strike') ? 'bg-border text-primary' : 'text-secondary hover:bg-[#F3F4F6] hover:text-primary'}`}
       >
-        <Strikethrough className="h-4 w-4" />
+        <Icon as={Strikethrough} size="md" />
       </button>
       
       <div className="w-px h-4 bg-border mx-1" />
@@ -48,21 +49,21 @@ const MenuBar = ({ editor }: { editor: any }) => {
         onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
         className={`p-1.5 rounded-lg transition-colors ${editor.isActive('heading', { level: 2 }) ? 'bg-border text-primary' : 'text-secondary hover:bg-[#F3F4F6] hover:text-primary'}`}
       >
-        <Heading2 className="h-4 w-4" />
+        <Icon as={Heading2} size="md" />
       </button>
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleBulletList().run()}
         className={`p-1.5 rounded-lg transition-colors ${editor.isActive('bulletList') ? 'bg-border text-primary' : 'text-secondary hover:bg-[#F3F4F6] hover:text-primary'}`}
       >
-        <List className="h-4 w-4" />
+        <Icon as={List} size="md" />
       </button>
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
         className={`p-1.5 rounded-lg transition-colors ${editor.isActive('orderedList') ? 'bg-border text-primary' : 'text-secondary hover:bg-[#F3F4F6] hover:text-primary'}`}
       >
-        <ListOrdered className="h-4 w-4" />
+        <Icon as={ListOrdered} size="md" />
       </button>
     </div>
   );

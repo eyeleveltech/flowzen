@@ -108,7 +108,7 @@ export function TimeTrackingPrompt() {
               <button
                 type="button"
                 onClick={onCancel}
-                className="px-4 py-2.5 text-sm font-semibold text-[#4B5563] bg-white border border-border rounded-xl hover:bg-[#F9FAFB] transition-all duration-200 active:scale-95"
+                className="px-4 py-2.5 text-sm font-semibold text-[#4B5563] bg-white border border-border rounded-xl hover:bg-[#F9FAFB] transition-[transform,background-color,border-color,color] duration-200 active:scale-95"
               >
                 Skip
               </button>
@@ -116,7 +116,7 @@ export function TimeTrackingPrompt() {
                 type="button"
                 onClick={handleSubmit}
                 disabled={!hours || isNaN(parseFloat(hours)) || parseFloat(hours) <= 0}
-                className="px-5 py-2.5 text-sm font-semibold text-white bg-primary rounded-xl hover:bg-[#1F2937] transition-all duration-200 shadow-sm active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100"
+                className="px-5 py-2.5 text-sm font-semibold text-white bg-primary rounded-xl hover:bg-[#1F2937] transition-[transform,background-color,border-color,color] duration-200 shadow-sm active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100"
               >
                 Log Time
               </button>

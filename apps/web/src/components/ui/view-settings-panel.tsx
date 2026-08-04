@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Settings, List, LayoutGrid, Link2, Download, Save, RefreshCw, Trash, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { Icon } from '@/components/ui/icon';
 
 interface ColumnOption {
   id: string;
@@ -74,14 +75,14 @@ export function ViewSettingsPanel({
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <div className="flex items-center gap-2">
-                <Settings className="w-5 h-5 text-secondary" />
+                <Icon as={Settings} size="lg" className="text-secondary" />
                 <h2 className="text-base font-bold text-primary">View Settings</h2>
               </div>
               <button
                 onClick={onClose}
                 className="p-1.5 rounded-lg hover:bg-gray-100 text-secondary hover:text-primary transition-colors"
               >
-                <X className="w-4 h-4" />
+                <Icon as={X} size="md" />
               </button>
             </div>
 
@@ -96,7 +97,7 @@ export function ViewSettingsPanel({
                   type="text"
                   value={viewName}
                   onChange={(e) => onViewNameChange(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
                   placeholder="e.g. All Companies"
                 />
               </div>
@@ -109,22 +110,22 @@ export function ViewSettingsPanel({
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => onViewTypeChange('list')}
-                    className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-sm font-medium transition-all ${viewType === 'list'
+                    className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-sm font-medium transition-colors duration-150 motion-reduce:transition-none ${viewType === 'list'
                         ? 'border-primary bg-primary/5 text-primary'
                         : 'border-border text-secondary hover:bg-gray-50'
                       }`}
                   >
-                    <List className="w-4 h-4" />
+                    <Icon as={List} size="md" />
                     List (Table)
                   </button>
                   <button
                     onClick={() => onViewTypeChange('board')}
-                    className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-sm font-medium transition-all ${viewType === 'board'
+                    className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-sm font-medium transition-colors duration-150 motion-reduce:transition-none ${viewType === 'board'
                         ? 'border-primary bg-primary/5 text-primary'
                         : 'border-border text-secondary hover:bg-gray-50'
                       }`}
                   >
-                    <LayoutGrid className="w-4 h-4" />
+                    <Icon as={LayoutGrid} size="md" />
                     Board (Cards)
                   </button>
                 </div>
@@ -152,8 +153,8 @@ export function ViewSettingsPanel({
                         className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#F9FAFB] transition-colors"
                       >
                         <span className="text-[#374151]">{col.label}</span>
-                        <div className={`w-4.5 h-4.5 rounded border flex items-center justify-center transition-colors ${isVisible ? 'bg-primary border-primary' : 'border-border'}`}>
-                          {isVisible && <CheckIcon className="w-3 h-3 text-white" />}
+                        <div className={`h-4.5 w-4.5 rounded border flex items-center justify-center transition-colors ${isVisible ? 'bg-primary border-primary' : 'border-border'}`}>
+                          {isVisible && <CheckIcon className="h-3 w-3 text-white" />}
                         </div>
                       </button>
                     );
@@ -170,10 +171,10 @@ export function ViewSettingsPanel({
                   <button
                     type="button"
                     onClick={handleCopyLink}
-                    className="w-full flex items-center justify-between p-2.5 rounded-xl border border-border text-sm text-secondary hover:text-primary hover:bg-gray-50 transition-all font-medium text-left"
+                    className="w-full flex items-center justify-between p-2.5 rounded-xl border border-border text-sm text-secondary hover:text-primary hover:bg-gray-50 transition-colors duration-150 motion-reduce:transition-none font-medium text-left"
                   >
                     <span className="flex items-center gap-2">
-                      <Link2 className="w-4 h-4 text-secondary" />
+                      <Icon as={Link2} size="md" className="text-secondary" />
                       Copy Link to View
                     </span>
                   </button>
@@ -181,10 +182,10 @@ export function ViewSettingsPanel({
                     <button
                       type="button"
                       onClick={onExport}
-                      className="w-full flex items-center justify-between p-2.5 rounded-xl border border-border text-sm text-secondary hover:text-primary hover:bg-gray-50 transition-all font-medium text-left"
+                      className="w-full flex items-center justify-between p-2.5 rounded-xl border border-border text-sm text-secondary hover:text-primary hover:bg-gray-50 transition-colors duration-150 motion-reduce:transition-none font-medium text-left"
                     >
                       <span className="flex items-center gap-2">
-                        <Download className="w-4 h-4 text-secondary" />
+                        <Icon as={Download} size="md" className="text-secondary" />
                         Export Data (⌘Shift X)
                       </span>
                     </button>
@@ -201,7 +202,7 @@ export function ViewSettingsPanel({
                   onClick={onReset}
                   className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 border border-border rounded-xl text-sm font-medium text-[#374151] bg-white hover:bg-gray-50 transition-colors"
                 >
-                  <RefreshCw className="w-4 h-4" />
+                  <Icon as={RefreshCw} size="md" />
                   Reset View
                 </button>
                 <button
@@ -209,7 +210,7 @@ export function ViewSettingsPanel({
                   onClick={onSave}
                   className="flex-1 flex items-center justify-center gap-1.5 bg-primary text-white rounded-xl text-sm font-medium hover:bg-[#1F2937] transition-colors shadow-sm"
                 >
-                  <Save className="w-4 h-4" />
+                  <Icon as={Save} size="md" />
                   Save (⌘S)
                 </button>
               </div>
@@ -219,7 +220,7 @@ export function ViewSettingsPanel({
                   onClick={onClone}
                   className="w-full flex items-center justify-center gap-1.5 px-4 py-2 border border-border rounded-xl text-sm font-medium text-secondary bg-white hover:bg-gray-50 transition-colors"
                 >
-                  <Copy className="w-4 h-4" />
+                  <Icon as={Copy} size="md" />
                   Clone to New View
                 </button>
               )}
@@ -229,7 +230,7 @@ export function ViewSettingsPanel({
                   onClick={onDelete}
                   className="w-full flex items-center justify-center gap-1.5 px-4 py-2 border border-red-200 rounded-xl text-sm font-medium text-red-600 bg-white hover:bg-red-50 transition-colors"
                 >
-                  <Trash className="w-4 h-4" />
+                  <Icon as={Trash} size="md" />
                   Delete View
                 </button>
               )}

@@ -143,7 +143,7 @@ export function NotificationsTab() {
             value={crmEmail}
             onChange={(e) => setCrmEmail(e.target.value)}
             placeholder="founder@company.com, sales@company.com"
-            className="w-full max-w-md rounded-xl border border-border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:bg-white"
+            className="w-full max-w-md rounded-xl border border-border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 focus:bg-white"
           />
         </div>
       )}
@@ -156,7 +156,7 @@ export function NotificationsTab() {
             {STAGES.map((s) => (
               <div key={s}>
                 <label className="block text-[11px] font-semibold text-secondary uppercase tracking-wider mb-1.5">{s.replace(/_/g, ' ')}</label>
-                <input type="number" min={1} value={thresholds[s] ?? ''} onChange={(e) => setThresholds((t) => ({ ...t, [s]: Number(e.target.value) }))} className="w-full rounded-xl border border-border bg-gray-50 px-3 py-2 text-sm outline-none focus:border-primary focus:bg-white" />
+                <input type="number" min={1} value={thresholds[s] ?? ''} onChange={(e) => setThresholds((t) => ({ ...t, [s]: Number(e.target.value) }))} className="w-full rounded-xl border border-border bg-gray-50 px-3 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 focus:bg-white" />
               </div>
             ))}
           </div>
@@ -172,7 +172,7 @@ export function NotificationsTab() {
             min={1}
             value={overloadThreshold}
             onChange={(e) => setOverloadThreshold(Number(e.target.value))}
-            className="w-full max-w-37.5 rounded-xl border border-border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:bg-white"
+            className="w-full max-w-37.5 rounded-xl border border-border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 focus:bg-white"
           />
         </div>
       )}

@@ -15,6 +15,7 @@ import { usePageTitle } from '@/hooks/usePageTitle';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { QuoteFormModal } from './components/QuoteFormModal';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { Icon } from '@/components/ui/icon';
 
 function QuotationsContent() {
   usePageTitle('Quotations');
@@ -116,16 +117,16 @@ function QuotationsContent() {
           <h1 className="text-2xl font-semibold text-primary tracking-tight">Quotations</h1>
           <p className="text-sm text-secondary mt-1">{quotes.length} document{quotes.length === 1 ? '' : 's'}</p>
         </div>
-        <button onClick={openNew} className="w-full sm:w-auto justify-center flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all">
-          <Plus className="h-4 w-4" /> New Quotation
+        <button onClick={openNew} className="w-full sm:w-auto justify-center flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none">
+          <Icon as={Plus} size="md" /> New Quotation
         </button>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <div className="relative w-full sm:max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search number or client..." className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+          <Icon as={Search} size="md" className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search number or client..." className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none" />
         </div>
         <div className="w-full sm:w-48">
           <Select value={typeFilter} onChange={setTypeFilter} options={[{ label: 'Types', value: '' }, { label: 'Quotation', value: 'QUOTATION' }, { label: 'Proforma Invoice', value: 'PROFORMA_INVOICE' }]} />
@@ -158,7 +159,7 @@ function QuotationsContent() {
                 <tr key={q.id} onClick={() => openEdit(q.id)} className="hover:bg-surface transition-colors cursor-pointer">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-secondary shrink-0" />
+                      <Icon as={FileText} size="md" className="text-secondary shrink-0" />
                       <div>
                         <p className="text-sm font-medium text-primary font-mono">{q.documentNumber}</p>
                         <p className="text-[11px] text-secondary">{q.documentType === 'QUOTATION' ? 'Quotation' : 'Proforma Invoice'}</p>
@@ -174,18 +175,18 @@ function QuotationsContent() {
                   <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                     {/* Desktop Viewport — icon row */}
                     <div className="hidden md:flex items-center justify-end gap-1.5 text-secondary">
-                      <button title="View / Edit" onClick={() => openEdit(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Eye className="h-4 w-4" /></button>
-                      <button title="Generate / Download PDF" onClick={() => q.pdfUrl ? window.open(fileUrl(q.pdfUrl), '_blank') : generatePdf(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Download className="h-4 w-4" /></button>
-                      <button title="Duplicate" onClick={() => duplicate(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Copy className="h-4 w-4" /></button>
+                      <button title="View / Edit" onClick={() => openEdit(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Icon as={Eye} size="md" /></button>
+                      <button title="Generate / Download PDF" onClick={() => q.pdfUrl ? window.open(fileUrl(q.pdfUrl), '_blank') : generatePdf(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Icon as={Download} size="md" /></button>
+                      <button title="Duplicate" onClick={() => duplicate(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Icon as={Copy} size="md" /></button>
                       {q.status === 'ACCEPTED' && (
                         <button title="Move to Invoice Draft" onClick={async () => { if (await confirm({ title: 'Create Invoice', message: 'Move this quote to an Invoice Draft?', confirmText: 'Create Invoice', cancelText: 'Cancel' })) createInvoiceDraft(q); }} className="p-1.5 rounded-lg hover:bg-emerald-50 hover:text-emerald-600 transition-colors">
-                          <FileText className="h-4 w-4" />
+                          <Icon as={FileText} size="md" />
                         </button>
                       )}
                       {q.status !== 'CANCELLED' && (
-                        <button title="Cancel" onClick={async () => { if (await confirm({ title: 'Cancel Document', message: 'Are you sure you want to cancel this document?', confirmText: 'Cancel Document', cancelText: 'Keep', variant: 'warning' })) statusMutation.mutate({ id: q.id, status: 'CANCELLED' }); }} className="p-1.5 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors"><Ban className="h-4 w-4" /></button>
+                        <button title="Cancel" onClick={async () => { if (await confirm({ title: 'Cancel Document', message: 'Are you sure you want to cancel this document?', confirmText: 'Cancel Document', cancelText: 'Keep', variant: 'warning' })) statusMutation.mutate({ id: q.id, status: 'CANCELLED' }); }} className="p-1.5 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors"><Icon as={Ban} size="md" /></button>
                       )}
-                      <button title="Delete" onClick={async () => { if (await confirm({ title: 'Delete Document', message: 'Are you sure you want to delete this document? This cannot be undone.', confirmText: 'Delete', cancelText: 'Cancel', variant: 'danger' })) deleteMutation.mutate(q.id); }} className="p-1.5 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors"><Trash2 className="h-4 w-4" /></button>
+                      <button title="Delete" onClick={async () => { if (await confirm({ title: 'Delete Document', message: 'Are you sure you want to delete this document? This cannot be undone.', confirmText: 'Delete', cancelText: 'Cancel', variant: 'danger' })) deleteMutation.mutate(q.id); }} className="p-1.5 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors"><Icon as={Trash2} size="md" /></button>
                     </div>
 
                     {/* Mobile Viewport — ⋯ menu with text labels */}
@@ -194,7 +195,7 @@ function QuotationsContent() {
                         className="p-1.5 rounded-lg hover:bg-[#F3F4F6] text-secondary hover:text-primary transition-colors"
                         onClick={() => setActiveDropdownId(activeDropdownId === q.id ? null : q.id)}
                       >
-                        <MoreHorizontal className="h-4 w-4" />
+                        <Icon as={MoreHorizontal} size="md" />
                       </button>
                       {activeDropdownId === q.id && (
                         <>
@@ -204,26 +205,26 @@ function QuotationsContent() {
                               onClick={() => { setActiveDropdownId(null); openEdit(q.id); }}
                               className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
                             >
-                              <Eye className="h-4 w-4" /> View / Edit
+                              <Icon as={Eye} size="md" /> View / Edit
                             </button>
                             <button
                               onClick={() => { setActiveDropdownId(null); q.pdfUrl ? window.open(fileUrl(q.pdfUrl), '_blank') : generatePdf(q.id); }}
                               className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
                             >
-                              <Download className="h-4 w-4" /> Download PDF
+                              <Icon as={Download} size="md" /> Download PDF
                             </button>
                             <button
                               onClick={() => { setActiveDropdownId(null); duplicate(q.id); }}
                               className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
                             >
-                              <Copy className="h-4 w-4" /> Duplicate
+                              <Icon as={Copy} size="md" /> Duplicate
                             </button>
                             {q.status === 'ACCEPTED' && (
                               <button
                                 onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Create Invoice', message: 'Move this quote to an Invoice Draft?', confirmText: 'Create Invoice', cancelText: 'Cancel' })) createInvoiceDraft(q); }}
                                 className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-emerald-600 hover:bg-emerald-50 transition-colors text-left"
                               >
-                                <FileText className="h-4 w-4" /> Move to Invoice Draft
+                                <Icon as={FileText} size="md" /> Move to Invoice Draft
                               </button>
                             )}
                             {q.status !== 'CANCELLED' && (
@@ -231,14 +232,14 @@ function QuotationsContent() {
                                 onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Cancel Document', message: 'Are you sure you want to cancel this document?', confirmText: 'Cancel Document', cancelText: 'Keep', variant: 'warning' })) statusMutation.mutate({ id: q.id, status: 'CANCELLED' }); }}
                                 className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-amber-600 hover:bg-amber-50 transition-colors text-left"
                               >
-                                <Ban className="h-4 w-4" /> Cancel
+                                <Icon as={Ban} size="md" /> Cancel
                               </button>
                             )}
                             <button
                               onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Delete Document', message: 'Are you sure you want to delete this document? This cannot be undone.', confirmText: 'Delete', cancelText: 'Cancel', variant: 'danger' })) deleteMutation.mutate(q.id); }}
                               className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors text-left"
                             >
-                              <Trash2 className="h-4 w-4" /> Delete
+                              <Icon as={Trash2} size="md" /> Delete
                             </button>
                           </div>
                         </>
@@ -259,11 +260,11 @@ function QuotationsContent() {
         ) : quotes.length === 0 ? (
           <div className="p-8 text-center text-sm text-secondary bg-white rounded-xl border border-border">No documents yet.</div>
         ) : quotes.map((q) => (
-          <div key={q.id} className="p-4 rounded-xl border border-border bg-white hover:shadow-sm cursor-pointer transition-all" onClick={() => openEdit(q.id)}>
+          <div key={q.id} className="p-4 rounded-xl border border-border bg-white hover:shadow-sm cursor-pointer transition-colors duration-150 motion-reduce:transition-none" onClick={() => openEdit(q.id)}>
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                  <FileText className="h-5 w-5" />
+                  <Icon as={FileText} size="lg" />
                 </div>
                 <div>
                   <p className="text-sm font-medium text-primary leading-tight font-mono">{q.documentNumber}</p>
@@ -286,7 +287,7 @@ function QuotationsContent() {
                   className="p-1.5 rounded-lg hover:bg-[#F3F4F6] text-secondary hover:text-primary transition-colors"
                   onClick={() => setActiveDropdownId(activeDropdownId === q.id ? null : q.id)}
                 >
-                  <MoreHorizontal className="h-4 w-4" />
+                  <Icon as={MoreHorizontal} size="md" />
                 </button>
                 {activeDropdownId === q.id && (
                   <>
@@ -296,26 +297,26 @@ function QuotationsContent() {
                         onClick={() => { setActiveDropdownId(null); openEdit(q.id); }}
                         className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
                       >
-                        <Eye className="h-4 w-4" /> View / Edit
+                        <Icon as={Eye} size="md" /> View / Edit
                       </button>
                       <button
                         onClick={() => { setActiveDropdownId(null); q.pdfUrl ? window.open(fileUrl(q.pdfUrl), '_blank') : generatePdf(q.id); }}
                         className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
                       >
-                        <Download className="h-4 w-4" /> Download PDF
+                        <Icon as={Download} size="md" /> Download PDF
                       </button>
                       <button
                         onClick={() => { setActiveDropdownId(null); duplicate(q.id); }}
                         className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
                       >
-                        <Copy className="h-4 w-4" /> Duplicate
+                        <Icon as={Copy} size="md" /> Duplicate
                       </button>
                       {q.status === 'ACCEPTED' && (
                         <button
                           onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Create Invoice', message: 'Move this quote to an Invoice Draft?', confirmText: 'Create Invoice', cancelText: 'Cancel' })) createInvoiceDraft(q); }}
                           className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-emerald-600 hover:bg-emerald-50 transition-colors text-left"
                         >
-                          <FileText className="h-4 w-4" /> Move to Invoice Draft
+                          <Icon as={FileText} size="md" /> Move to Invoice Draft
                         </button>
                       )}
                       {q.status !== 'CANCELLED' && (
@@ -323,14 +324,14 @@ function QuotationsContent() {
                           onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Cancel Document', message: 'Are you sure you want to cancel this document?', confirmText: 'Cancel Document', cancelText: 'Keep', variant: 'warning' })) statusMutation.mutate({ id: q.id, status: 'CANCELLED' }); }}
                           className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-amber-600 hover:bg-amber-50 transition-colors text-left"
                         >
-                          <Ban className="h-4 w-4" /> Cancel
+                          <Icon as={Ban} size="md" /> Cancel
                         </button>
                       )}
                       <button
                         onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Delete Document', message: 'Are you sure you want to delete this document? This cannot be undone.', confirmText: 'Delete', cancelText: 'Cancel', variant: 'danger' })) deleteMutation.mutate(q.id); }}
                         className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors text-left"
                       >
-                        <Trash2 className="h-4 w-4" /> Delete
+                        <Icon as={Trash2} size="md" /> Delete
                       </button>
                     </div>
                   </>

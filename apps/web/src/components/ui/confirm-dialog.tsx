@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useConfirmStore } from '@/stores';
 import { AlertTriangle, Info, HelpCircle, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Icon } from '@/components/ui/icon';
 
 export function ConfirmDialog() {
   const { isOpen, options, onConfirm, onCancel } = useConfirmStore();
@@ -66,7 +67,7 @@ export function ConfirmDialog() {
 
   // Button styles depending on variant
   const getConfirmButtonClass = () => {
-    const baseClass = "px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200 shadow-sm active:scale-95";
+    const baseClass = "px-4 py-2 text-sm font-semibold rounded-xl transition-[transform,background-color,border-color,color] duration-200 shadow-sm active:scale-95";
     switch (variant) {
       case 'danger':
         return `${baseClass} bg-[#EF4444] text-white hover:bg-[#DC2626] hover:shadow-red-100`;
@@ -104,7 +105,7 @@ export function ConfirmDialog() {
               onClick={onCancel}
               className="absolute right-4 top-4 rounded-lg p-1.5 text-secondary hover:bg-[#F3F4F6] hover:text-[#4B5563] transition-colors"
             >
-              <X className="h-4 w-4" />
+              <Icon as={X} size="md" />
             </button>
 
             {/* Header / Body */}
@@ -148,7 +149,7 @@ export function ConfirmDialog() {
               <button
                 type="button"
                 onClick={onCancel}
-                className="px-4 py-2 text-sm font-semibold text-[#4B5563] bg-white border border-border rounded-xl hover:bg-[#F9FAFB] transition-all duration-200 active:scale-95"
+                className="px-4 py-2 text-sm font-semibold text-[#4B5563] bg-white border border-border rounded-xl hover:bg-[#F9FAFB] transition-[transform,background-color,border-color,color] duration-200 active:scale-95"
               >
                 {cancelText}
               </button>

@@ -26,6 +26,7 @@ interface Project { id: string; name: string; }
 interface Client { id: string; name: string; }
 
 import { getPriorityDot } from '@/lib/priority';
+import { Icon } from '@/components/ui/icon';
 
 export default function CalendarPage() {
   const { user } = useAuthStore();
@@ -219,7 +220,7 @@ export default function CalendarPage() {
             onClick={() => setHideDone(!hideDone)}
             className="flex items-center gap-2 text-xs font-semibold text-secondary ml-auto cursor-pointer select-none focus:outline-none h-9 hover:text-primary transition-colors shrink-0"
           >
-            <div className={`flex items-center justify-center w-4 h-4 rounded-sm border transition-colors ${hideDone ? 'bg-primary border-primary' : 'border-[#D1D5DB] bg-white'}`}>
+            <div className={`flex items-center justify-center h-4 w-4 rounded-sm border transition-colors ${hideDone ? 'bg-primary border-primary' : 'border-[#D1D5DB] bg-white'}`}>
               {hideDone && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
             </div>
             Hide Done Tasks
@@ -237,7 +238,7 @@ export default function CalendarPage() {
           {/* Center Side: Navigation triggers inside calendar view */}
           <div className="flex items-center justify-center gap-2 flex-1 sm:flex-none">
             <button onClick={prevPeriod} className="p-2 rounded-xl hover:bg-gray-50 border border-border bg-white transition-colors h-9 w-9 flex items-center justify-center shrink-0">
-              <ChevronLeft className="h-4 w-4 text-secondary" />
+              <Icon as={ChevronLeft} size="md" className="text-secondary" />
             </button>
             <div className="text-sm font-semibold text-primary px-2 min-w-36 text-center select-none">
               {view === 'month'
@@ -246,7 +247,7 @@ export default function CalendarPage() {
               }
             </div>
             <button onClick={nextPeriod} className="p-2 rounded-xl hover:bg-gray-50 border border-border bg-white transition-colors h-9 w-9 flex items-center justify-center shrink-0">
-              <ChevronRight className="h-4 w-4 text-secondary" />
+              <Icon as={ChevronRight} size="md" className="text-secondary" />
             </button>
           </div>
 

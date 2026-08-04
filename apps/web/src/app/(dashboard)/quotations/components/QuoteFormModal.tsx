@@ -13,6 +13,7 @@ import { fileUrl } from '@/lib/files';
 import { useModalSafety } from '@/hooks/useModalSafety';
 import toast from 'react-hot-toast';
 import { leadStageLabel } from '@/lib/lead-stage';
+import { Icon } from '@/components/ui/icon';
 
 const UNITS = ['Hours', 'Days', 'Months', 'Units', 'Lump Sum'];
 const PRESET_TERMS = ['Immediate', '100% Advance', '50-50', 'Monthly', 'Milestone-based'];
@@ -288,7 +289,7 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
             <h2 className="text-lg font-semibold text-primary">{editId ? 'Edit Document' : 'New Document'}</h2>
             <p className="text-sm text-secondary mt-0.5">Quotation or Proforma Invoice</p>
           </div>
-          <button onClick={guardedClose} className="p-2 rounded-xl hover:bg-gray-100 transition-colors"><X className="h-5 w-5 text-secondary" /></button>
+          <button onClick={guardedClose} className="p-2 rounded-xl hover:bg-gray-100 transition-colors"><Icon as={X} size="lg" className="text-secondary" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gray-50/30">
@@ -310,10 +311,10 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
                 {leadId && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">Lead</span>}
               </label>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
+                <Icon as={Search} size="md" className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary" />
                 <input value={clientSearch} onChange={(e) => { setClientSearch(e.target.value); setShowClientList(true); }} onFocus={() => setShowClientList(true)}
-                  placeholder="Search clients or pipeline leads…" className={`w-full rounded-xl border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary ${clientId || leadId ? 'border-blue-200 bg-blue-50/40' : 'border-border'}`} />
-                {(clientId || leadId) && <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-600" />}
+                  placeholder="Search clients or pipeline leads…" className={`w-full rounded-xl border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 ${clientId || leadId ? 'border-blue-200 bg-blue-50/40' : 'border-border'}`} />
+                {(clientId || leadId) && <Icon as={Check} size="md" className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-600" />}
               </div>
               {showClientList && (
                 <div className="absolute z-20 w-full mt-1 bg-white border border-border rounded-xl shadow-lg max-h-56 overflow-auto p-1">
@@ -370,7 +371,7 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
                         value={form.paymentTerms}
                         onChange={(e) => setForm({ ...form, paymentTerms: e.target.value })}
                         placeholder="Enter custom payment terms (e.g. Net 30)"
-                        className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary"
+                        className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1"
                       />
                     )}
                   </div>
@@ -379,7 +380,7 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
             </div>
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-[#374151] mb-1.5">Billing Address</label>
-              <textarea value={form.billingAddress} onChange={(e) => setForm({ ...form, billingAddress: e.target.value })} rows={2} placeholder="Auto-filled from client — edit if needed" className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary resize-none" />
+              <textarea value={form.billingAddress} onChange={(e) => setForm({ ...form, billingAddress: e.target.value })} rows={2} placeholder="Auto-filled from client — edit if needed" className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 resize-none" />
             </div>
           </div>
 
@@ -388,7 +389,7 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
           <div>
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-semibold text-primary">Order Lines</h3>
-              <button onClick={() => setLineItems((r) => [...r, emptyLine()])} className="flex items-center gap-1.5 text-xs font-medium text-primary border border-border rounded-lg px-2.5 py-1.5 hover:bg-gray-50"><Plus className="h-3.5 w-3.5" /> Add Row</button>
+              <button onClick={() => setLineItems((r) => [...r, emptyLine()])} className="flex items-center gap-1.5 text-xs font-medium text-primary border border-border rounded-lg px-2.5 py-1.5 hover:bg-gray-50"><Icon as={Plus} size="sm" /> Add Row</button>
             </div>
             <div className="overflow-x-auto rounded-xl border border-border bg-white">
               <table className="w-full text-sm min-w-230">
@@ -401,20 +402,20 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
                   {lineItems.map((li, i) => (
                     <tr key={i} className="border-b border-gray-50">
                       <td className="px-2 py-1.5 text-secondary">{i + 1}</td>
-                      <td className="px-2 py-1.5"><input value={li.description} onChange={(e) => setLine(i, 'description', e.target.value)} placeholder="Service description" className="w-full rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus:border-primary" /></td>
+                      <td className="px-2 py-1.5"><input value={li.description} onChange={(e) => setLine(i, 'description', e.target.value)} placeholder="Service description" className="w-full rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1" /></td>
                       <td className="px-2 py-1.5">
-                        <select value={li.unit} onChange={(e) => setLine(i, 'unit', e.target.value)} className="w-full rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus:border-primary bg-white">{UNITS.map((u) => <option key={u} value={u}>{u}</option>)}</select>
+                        <select value={li.unit} onChange={(e) => setLine(i, 'unit', e.target.value)} className="w-full rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 bg-white">{UNITS.map((u) => <option key={u} value={u}>{u}</option>)}</select>
                       </td>
-                      <td className="px-2 py-1.5"><input type="number" value={li.quantity} onChange={(e) => setLine(i, 'quantity', e.target.value)} className="w-full rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus:border-primary text-right" /></td>
-                      <td className="px-2 py-1.5"><input type="number" value={li.unitPrice} onChange={(e) => setLine(i, 'unitPrice', e.target.value)} placeholder="0" className="w-full rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus:border-primary text-right" /></td>
-                      <td className="px-2 py-1.5"><input type="number" value={li.discountPct} onChange={(e) => setLine(i, 'discountPct', e.target.value)} placeholder="0" className="w-full rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus:border-primary text-right" /></td>
-                      <td className="px-2 py-1.5"><input type="number" value={li.taxPct} onChange={(e) => setLine(i, 'taxPct', e.target.value)} placeholder="18" className="w-full rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus:border-primary text-right" /></td>
+                      <td className="px-2 py-1.5"><input type="number" value={li.quantity} onChange={(e) => setLine(i, 'quantity', e.target.value)} className="w-full rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 text-right" /></td>
+                      <td className="px-2 py-1.5"><input type="number" value={li.unitPrice} onChange={(e) => setLine(i, 'unitPrice', e.target.value)} placeholder="0" className="w-full rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 text-right" /></td>
+                      <td className="px-2 py-1.5"><input type="number" value={li.discountPct} onChange={(e) => setLine(i, 'discountPct', e.target.value)} placeholder="0" className="w-full rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 text-right" /></td>
+                      <td className="px-2 py-1.5"><input type="number" value={li.taxPct} onChange={(e) => setLine(i, 'taxPct', e.target.value)} placeholder="18" className="w-full rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 text-right" /></td>
                       <td className="px-2 py-1.5">
                         <Select ariaLabel="Tax Type" rounded="rounded-lg" buttonClassName="px-2.5 py-1.5" value={li.taxType} onChange={(v) => setLine(i, 'taxType', v)} options={TAX_TYPES.map((t) => ({ label: t.label, value: t.value }))} />
                       </td>
                       <td className="px-2 py-1.5 text-right font-medium text-primary tabular-nums">{formatCurrency(fin.amounts[i] || 0)}</td>
                       <td className="px-2 py-1.5 text-right">
-                        {lineItems.length > 1 && <button onClick={() => setLineItems((r) => r.filter((_, idx) => idx !== i))} className="p-1 text-secondary hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>}
+                        {lineItems.length > 1 && <button onClick={() => setLineItems((r) => r.filter((_, idx) => idx !== i))} className="p-1 text-secondary hover:text-red-500"><Icon as={Trash2} size="sm" /></button>}
                       </td>
                     </tr>
                   ))}
@@ -443,7 +444,7 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
             </div>
             <div>
               <label className="block text-sm font-medium text-[#374151] mb-1.5">Terms &amp; Conditions</label>
-              <textarea value={form.termsConditions} onChange={(e) => setForm({ ...form, termsConditions: e.target.value })} rows={4} className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus:border-primary resize-none" />
+              <textarea value={form.termsConditions} onChange={(e) => setForm({ ...form, termsConditions: e.target.value })} rows={4} className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 resize-none" />
             </div>
           </div>
 
@@ -468,7 +469,7 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
                 </div>
                 <div className="sm:col-span-2">
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Project Notes (internal)</label>
-                  <textarea value={form.projectNotes} onChange={(e) => setForm({ ...form, projectNotes: e.target.value })} rows={2} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary resize-none" />
+                  <textarea value={form.projectNotes} onChange={(e) => setForm({ ...form, projectNotes: e.target.value })} rows={2} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 resize-none" />
                 </div>
               </div>
             )}
@@ -478,11 +479,11 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
         <div className="p-4 sm:p-5 border-t border-border bg-white flex flex-row justify-end gap-2 sm:gap-3">
           <button onClick={guardedClose} className="px-4 py-2.5 text-sm font-medium text-[#374151] bg-white border border-border rounded-xl hover:bg-gray-50">Cancel</button>
           <button onClick={onSaveDraftStay} disabled={submitting} className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-[#374151] bg-white border border-border rounded-xl hover:bg-gray-50 disabled:opacity-50">
-            <Save className="h-4 w-4 shrink-0" />
+            <Icon as={Save} size="md" className="shrink-0" />
             <span className="hidden sm:inline">Save Draft</span><span className="inline sm:hidden">Save</span>
           </button>
           <button onClick={onGeneratePdf} disabled={submitting} className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] disabled:opacity-50">
-            <FileDown className="h-4 w-4 shrink-0" />
+            <Icon as={FileDown} size="md" className="shrink-0" />
             <span className="hidden sm:inline">Generate PDF</span><span className="inline sm:hidden">PDF</span>
           </button>
         </div>
@@ -496,7 +497,7 @@ function Input({ label, value, onChange, type = 'text', required = false, placeh
   return (
     <div>
       <label className="block text-sm font-medium text-[#374151] mb-1.5">{label} {required && <span className="text-red-500">*</span>}</label>
-      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary" />
+      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1" />
     </div>
   );
 }

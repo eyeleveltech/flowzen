@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useUIStore, useAuthStore, useModuleStore } from '@/stores';
 import { moduleForPath, accessibleModules, ModuleKey, MODULES } from '@/lib/modules';
 import { cn, getInitials, getAvatarColor } from '@/lib/utils';
@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 
 export function Sidebar({ isMobile }: { isMobile?: boolean }) {
+  const shouldReduceMotion = useReducedMotion();
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
@@ -49,7 +50,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
           ? { x: mobileSidebarOpen ? 0 : '-100%', width: 260 }
           : { x: 0, width: sidebarCollapsed ? 72 : 260 }
       }
-      transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
+      transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
       className={cn(
         "fixed left-0 top-0 bottom-0 flex flex-col border-r border-border bg-white",
         isMobile ? "z-50 shadow-2xl" : "z-40"
@@ -69,7 +70,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
         {/* Module switcher — only when the user can access more than one module */}
         {canSwitch && (
           <Link href="/modules">
-            <div className={cn('group flex items-center gap-3 rounded-xl px-3 py-2.5 mb-2 text-sm font-medium border border-border bg-[#F9FAFB] text-secondary hover:text-primary hover:border-[#D1D5DB] transition-all', sidebarCollapsed && 'justify-center px-0')}>
+            <div className={cn('group flex items-center gap-3 rounded-xl px-3 py-2.5 mb-2 text-sm font-medium border border-border bg-[#F9FAFB] text-secondary hover:text-primary hover:border-[#D1D5DB] transition-colors duration-150 motion-reduce:transition-none', sidebarCollapsed && 'justify-center px-0')}>
               <ArrowLeftRight className="h-4.5 w-4.5 shrink-0 text-secondary group-hover:text-primary" />
               <AnimatePresence>
                 {!sidebarCollapsed && (
@@ -90,7 +91,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
             <Link key={item.href} href={item.href}>
               <div
                 className={cn(
-                  'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150',
+                  'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors duration-150 motion-reduce:transition-none',
                   isActive
                     ? 'bg-primary text-white'
                     : 'text-secondary hover:bg-[#F9FAFB] hover:text-primary'
@@ -103,7 +104,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
                       initial={{ opacity: 0, width: 0 }}
                       animate={{ opacity: 1, width: 'auto' }}
                       exit={{ opacity: 0, width: 0 }}
-                      transition={{ duration: 0.15 }}
+                      transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.15 }}
                       className="whitespace-nowrap overflow-hidden"
                     >
                       {item.label}
@@ -114,7 +115,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
                   <motion.div
                     layoutId="sidebar-indicator"
                     className="absolute inset-0 rounded-xl bg-primary -z-10"
-                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                    transition={shouldReduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 500, damping: 35 }}
                   />
                 )}
               </div>
@@ -131,7 +132,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
             <Link key={item.href} href={item.href}>
               <div
                 className={cn(
-                  'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150',
+                  'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors duration-150 motion-reduce:transition-none',
                   isActive
                     ? 'bg-[#F9FAFB] text-primary'
                     : 'text-secondary hover:bg-[#F9FAFB] hover:text-primary'
@@ -159,9 +160,9 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
         {!isMobile && (
           <button
             onClick={toggleCollapse}
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-secondary hover:bg-[#F9FAFB] hover:text-primary transition-all duration-150"
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-secondary hover:bg-[#F9FAFB] hover:text-primary transition-colors duration-150 motion-reduce:transition-none"
           >
-            <motion.div animate={{ rotate: sidebarCollapsed ? 180 : 0 }} transition={{ duration: 0.2 }}>
+            <motion.div animate={{ rotate: sidebarCollapsed ? 180 : 0 }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2 }}>
               <ChevronLeft className="h-4.5 w-4.5 text-secondary" />
             </motion.div>
             <AnimatePresence>

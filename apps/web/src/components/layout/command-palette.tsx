@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useUIStore, useAuthStore } from '@/stores';
 import { getClientDisplayName } from '@/lib/utils';
 import { api } from '@/lib/api';
@@ -36,6 +36,7 @@ interface FlatItem {
 }
 
 export function CommandPalette() {
+  const shouldReduceMotion = useReducedMotion();
   const router = useRouter();
   const { commandPaletteOpen, setCommandPaletteOpen } = useUIStore();
   const { user: currentUser } = useAuthStore();
@@ -214,7 +215,7 @@ export function CommandPalette() {
             initial={{ opacity: 0, scale: 0.96, y: -20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: -20 }}
-            transition={{ duration: 0.15 }}
+            transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.15 }}
             className="fixed left-1/2 top-[20%] z-50 w-full max-w-xl -translate-x-1/2 rounded-2xl border border-border bg-white shadow-2xl shadow-black/10"
           >
             {/* Search input */}

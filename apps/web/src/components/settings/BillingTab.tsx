@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { Save } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { ErrorPanel } from '@/components/ui/error-panel';
+import { Icon } from '@/components/ui/icon';
 
 interface CompanyBilling {
   state?: string;
@@ -90,7 +91,7 @@ export function BillingTab() {
 
       <div>
         <label htmlFor="billing-standard-terms" className="block text-sm font-medium text-[#374151] mb-1.5">Standard Terms &amp; Conditions</label>
-        <textarea id="billing-standard-terms" value={form.standardTerms} onChange={(e) => setForm({ ...form, standardTerms: e.target.value })} rows={5} placeholder="Pre-filled on every new quotation…" className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus:border-primary resize-none" />
+        <textarea id="billing-standard-terms" value={form.standardTerms} onChange={(e) => setForm({ ...form, standardTerms: e.target.value })} rows={5} placeholder="Pre-filled on every new quotation…" className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 resize-none" />
       </div>
 
       <div>
@@ -114,7 +115,7 @@ export function BillingTab() {
 
       <div className="flex justify-end">
         <button onClick={save} disabled={saving} className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] disabled:opacity-50">
-          <Save className="h-4 w-4" /> {saving ? 'Saving…' : 'Save'}
+          <Icon as={Save} size="md" /> {saving ? 'Saving…' : 'Save'}
         </button>
       </div>
     </div>
@@ -125,7 +126,7 @@ function Field({ id, label, value, onChange, placeholder, hint }: { id?: string;
   return (
     <div>
       <label htmlFor={id} className="block text-sm font-medium text-[#374151] mb-1.5">{label}</label>
-      <input id={id} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary" />
+      <input id={id} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1" />
       {hint && <p className="mt-1 text-[11px] text-secondary">{hint}</p>}
     </div>
   );

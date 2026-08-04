@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { getInitials, getAvatarColor } from '@/lib/utils';
 import toast from 'react-hot-toast';
 import { LeadTaskFormDrawer } from './LeadTaskFormDrawer';
+import { Icon } from '@/components/ui/icon';
 
 // Pre-sales work (audits, research, follow-up prep) hangs off the Lead itself — there is no
 // Client or Project yet at this point in the pipeline, and creating one just to hold a task
@@ -65,7 +66,7 @@ export function LeadTasksTab({ leadId, initialAdding = false }: { leadId: string
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
-        <Loader2 className="h-5 w-5 animate-spin text-secondary" />
+        <Icon as={Loader2} size="lg" className="animate-spin text-secondary" />
       </div>
     );
   }
@@ -83,7 +84,7 @@ export function LeadTasksTab({ leadId, initialAdding = false }: { leadId: string
           onClick={() => setShowDrawer(true)}
           className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#1F2937] transition-all"
         >
-          <Plus className="h-3.5 w-3.5" /> Add Task
+          <Icon as={Plus} size="sm" /> Add Task
         </button>
       </div>
 
@@ -125,7 +126,7 @@ export function LeadTasksTab({ leadId, initialAdding = false }: { leadId: string
                       isDone ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 hover:border-primary'
                     }`}
                   >
-                    {isDone && <Check className="h-3.5 w-3.5" />}
+                    {isDone && <Icon as={Check} size="sm" />}
                   </button>
 
                   <div className="min-w-0 flex-1">
@@ -142,12 +143,12 @@ export function LeadTasksTab({ leadId, initialAdding = false }: { leadId: string
                         </span>
                       ) : (
                         <span className="flex items-center gap-1.5 text-xs text-secondary/70">
-                          <User className="h-3.5 w-3.5" /> Unassigned
+                          <Icon as={User} size="sm" /> Unassigned
                         </span>
                       )}
                       {t.dueDate && (
                         <span className="flex items-center gap-1.5 text-xs text-secondary">
-                          <CalendarDays className="h-3.5 w-3.5" />
+                          <Icon as={CalendarDays} size="sm" />
                           {new Date(t.dueDate).toLocaleDateString()}
                         </span>
                       )}
@@ -164,7 +165,7 @@ export function LeadTasksTab({ leadId, initialAdding = false }: { leadId: string
                     aria-label="Delete task"
                     className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-secondary hover:text-red-600 transition-all"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Icon as={Trash2} size="md" />
                   </button>
                 </div>
               );

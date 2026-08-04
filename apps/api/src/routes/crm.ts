@@ -123,6 +123,7 @@ crmRouter.get('/leads', async (req: AuthRequest, res: Response, next) => {
           select: { id: true, name: true, avatar: true }
         },
         dealFields: true,
+        stageHistory: { orderBy: { changedAt: 'desc' }, take: 1, select: { changedAt: true } },
         ...primaryContactListInclude,
       },
       orderBy: sort === 'client_asc' ? [{ companyName: 'asc' }]

@@ -36,6 +36,7 @@ interface Team {
 }
 
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { Icon } from '@/components/ui/icon';
 
 export default function TeamsPage() {
   usePageTitle('Departments');
@@ -197,9 +198,9 @@ export default function TeamsPage() {
         {isAdmin && (
           <button
             onClick={openCreate}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-[#1F2937] transition-all hover:shadow-sm self-start sm:self-auto"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none hover:shadow-sm self-start sm:self-auto"
           >
-            <Plus className="h-4 w-4" />
+            <Icon as={Plus} size="md" />
             Create Department
           </button>
         )}
@@ -228,7 +229,7 @@ export default function TeamsPage() {
                       <td className="px-6 py-5">
                         <div className="flex items-center gap-3">
                           <div className="h-10 w-10 rounded-xl bg-[#F3F4F6] text-primary flex items-center justify-center border border-border shrink-0">
-                            <Users className="h-5 w-5" />
+                            <Icon as={Users} size="lg" />
                           </div>
                           <div>
                             <h3 className="font-semibold text-primary">{team.name}</h3>
@@ -288,13 +289,13 @@ export default function TeamsPage() {
                         {(canEdit(team) || canDelete) && (
                           <div className="flex gap-2 justify-end opacity-100 lg:opacity-0 lg:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                             {canEdit(team) && (
-                              <button onClick={() => openEdit(team)} className="p-2 text-secondary hover:text-primary bg-white border border-border hover:bg-[#F3F4F6] rounded-xl transition-all hover:shadow-sm">
-                                <Edit2 className="h-4 w-4" />
+                              <button onClick={() => openEdit(team)} className="p-2 text-secondary hover:text-primary bg-white border border-border hover:bg-[#F3F4F6] rounded-xl transition-colors duration-150 motion-reduce:transition-none hover:shadow-sm">
+                                <Icon as={Edit2} size="md" />
                               </button>
                             )}
                             {canDelete && (
-                              <button onClick={() => handleDelete(team.id)} className="p-2 text-secondary hover:text-red-600 bg-white border border-border hover:bg-red-50 hover:border-red-100 rounded-xl transition-all hover:shadow-sm">
-                                <Trash2 className="h-4 w-4" />
+                              <button onClick={() => handleDelete(team.id)} className="p-2 text-secondary hover:text-red-600 bg-white border border-border hover:bg-red-50 hover:border-red-100 rounded-xl transition-colors duration-150 motion-reduce:transition-none hover:shadow-sm">
+                                <Icon as={Trash2} size="md" />
                               </button>
                             )}
                           </div>
@@ -318,7 +319,7 @@ export default function TeamsPage() {
                   <div className="flex items-start justify-between gap-2 mb-3">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="h-9 w-9 rounded-xl bg-linear-to-br from-blue-50 to-indigo-50 text-blue-600 flex items-center justify-center border border-blue-100/50 shrink-0">
-                        <Users className="h-4 w-4" />
+                        <Icon as={Users} size="md" />
                       </div>
                       <div className="min-w-0">
                         <h3 className="font-semibold text-primary text-sm truncate">{team.name}</h3>
@@ -328,13 +329,13 @@ export default function TeamsPage() {
                     {(canEdit(team) || canDelete) && (
                       <div className="flex gap-1.5 shrink-0">
                         {canEdit(team) && (
-                          <button onClick={() => openEdit(team)} className="p-1.5 text-secondary hover:text-primary bg-white border border-border hover:bg-[#F3F4F6] rounded-xl transition-all hover:shadow-sm">
-                            <Edit2 className="h-4 w-4" />
+                          <button onClick={() => openEdit(team)} className="p-1.5 text-secondary hover:text-primary bg-white border border-border hover:bg-[#F3F4F6] rounded-xl transition-colors duration-150 motion-reduce:transition-none hover:shadow-sm">
+                            <Icon as={Edit2} size="md" />
                           </button>
                         )}
                         {canDelete && (
-                          <button onClick={() => handleDelete(team.id)} className="p-1.5 text-secondary hover:text-red-600 bg-white border border-border hover:bg-red-50 hover:border-red-100 rounded-xl transition-all hover:shadow-sm">
-                            <Trash2 className="h-4 w-4" />
+                          <button onClick={() => handleDelete(team.id)} className="p-1.5 text-secondary hover:text-red-600 bg-white border border-border hover:bg-red-50 hover:border-red-100 rounded-xl transition-colors duration-150 motion-reduce:transition-none hover:shadow-sm">
+                            <Icon as={Trash2} size="md" />
                           </button>
                         )}
                       </div>
@@ -398,12 +399,12 @@ export default function TeamsPage() {
 
           <div>
             <label className="block text-sm font-medium text-[#374151] mb-1.5">Department Name *</label>
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" />
+            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none" />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
-            <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all resize-none" />
+            <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none resize-none" />
           </div>
 
           <div>
@@ -446,8 +447,8 @@ export default function TeamsPage() {
           </div>
 
           <div className="pt-4 flex gap-3">
-            <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
-            <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submitting ? 'Saving...' : 'Save Department'}</button>
+            <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none">Cancel</button>
+            <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none">{submitting ? 'Saving...' : 'Save Department'}</button>
           </div>
         </form>
       </Drawer>

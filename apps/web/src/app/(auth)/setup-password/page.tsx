@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { KeyRound, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { api } from '@/lib/api';
 import Link from 'next/link';
+import { Icon } from '@/components/ui/icon';
 
 function SetupPasswordForm() {
   const router = useRouter();
@@ -75,9 +76,9 @@ function SetupPasswordForm() {
             <p className="mt-1">You can now sign in with your new password.</p>
           </div>
           <Link href="/login" className="w-full">
-            <button className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all duration-150 h-11 group flex items-center justify-center">
+            <button className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none h-11 group flex items-center justify-center">
               Go to login
-              <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+              <Icon as={ArrowRight} size="md" className="ml-2 transition-transform group-hover:translate-x-1" />
             </button>
           </Link>
         </div>
@@ -103,7 +104,7 @@ function SetupPasswordForm() {
                   disabled={!token}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full appearance-none rounded-xl border border-border bg-[#F9FAFB] px-4 py-3 pr-10 text-primary placeholder:text-secondary focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-all sm:text-sm disabled:opacity-50"
+                  className="block w-full appearance-none rounded-xl border border-border bg-[#F9FAFB] px-4 py-3 pr-10 text-primary placeholder:text-secondary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-colors duration-150 motion-reduce:transition-none sm:text-sm disabled:opacity-50"
                   placeholder="••••••••"
                 />
                 <button
@@ -111,7 +112,7 @@ function SetupPasswordForm() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-secondary hover:text-primary"
                 >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showPassword ? <Icon as={EyeOff} size="md" /> : <Icon as={Eye} size="md" />}
                 </button>
               </div>
             </div>
@@ -129,7 +130,7 @@ function SetupPasswordForm() {
                   disabled={!token}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="block w-full appearance-none rounded-xl border border-border bg-[#F9FAFB] px-4 py-3 pr-10 text-primary placeholder:text-secondary focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-all sm:text-sm disabled:opacity-50"
+                  className="block w-full appearance-none rounded-xl border border-border bg-[#F9FAFB] px-4 py-3 pr-10 text-primary placeholder:text-secondary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-colors duration-150 motion-reduce:transition-none sm:text-sm disabled:opacity-50"
                   placeholder="••••••••"
                 />
               </div>
@@ -139,7 +140,7 @@ function SetupPasswordForm() {
           <button
             type="submit"
             disabled={loading || !token}
-            className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all duration-150 h-11"
+            className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none h-11"
           >
             {loading ? 'Setting password...' : 'Set password'}
           </button>

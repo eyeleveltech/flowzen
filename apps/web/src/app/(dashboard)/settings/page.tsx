@@ -23,6 +23,7 @@ import { ErrorPanel } from '@/components/ui/error-panel';
 type Tab = 'organization' | 'modules' | 'billing' | 'users' | 'templates' | 'permissions' | 'workflows' | 'notifications' | 'audit' | 'api';
 
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { Icon } from '@/components/ui/icon';
 
 export default function SettingsPage() {
   usePageTitle('Settings');
@@ -156,7 +157,7 @@ export default function SettingsPage() {
               aria-hidden
               className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 shadow-sm"
             >
-              <ChevronRight className="h-3.5 w-3.5 text-secondary" />
+              <Icon as={ChevronRight} size="sm" className="text-secondary" />
             </div>
           </>
         )}

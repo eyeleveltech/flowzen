@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores';
 import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
+import { Icon } from '@/components/ui/icon';
 
 export function ActivityFeedWidget({ itemVariants }: { itemVariants?: any }) {
   const router = useRouter();
@@ -101,14 +102,14 @@ export function ActivityFeedWidget({ itemVariants }: { itemVariants?: any }) {
     <motion.div variants={itemVariants} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-primary shrink-0">
-          <Zap className="w-4 h-4 text-secondary" /> Activity Feed
+          <Icon as={Zap} size="md" className="text-secondary" /> Activity Feed
         </h2>
         <button
           onClick={handleMarkAsRead}
           disabled={markingRead}
           className="text-[11px] font-medium text-secondary hover:text-primary transition-colors flex items-center gap-1 shrink-0"
         >
-          <Check className="w-3 h-3" /> Mark read
+          <Check className="h-3 w-3" /> Mark read
         </button>
       </div>
       <div className="mb-4 flex rounded-xl border border-border p-1 bg-gray-50/50 shadow-inner">

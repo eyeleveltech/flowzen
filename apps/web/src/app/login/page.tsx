@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { Zap, Eye, EyeOff } from 'lucide-react';
+import { Icon } from '@/components/ui/icon';
 
 export default function LoginPage() {
   usePageTitle('Login');
@@ -70,16 +72,16 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com"
                 required
-                className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary placeholder:text-secondary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary placeholder:text-secondary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
               />
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-sm font-medium text-[#374151]">Password</label>
-                <a href="/forgot-password" className="text-xs font-medium text-primary hover:underline">
+                <Link href="/forgot-password" className="text-xs font-medium text-primary hover:underline">
                   Forgot password?
-                </a>
+                </Link>
               </div>
               <div className="relative">
                 <input
@@ -88,14 +90,14 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  className="w-full rounded-xl border border-border bg-white px-4 py-2.5 pr-10 text-sm text-primary placeholder:text-secondary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  className="w-full rounded-xl border border-border bg-white px-4 py-2.5 pr-10 text-sm text-primary placeholder:text-secondary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-secondary hover:text-primary"
                 >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showPassword ? <Icon as={EyeOff} size="md" /> : <Icon as={Eye} size="md" />}
                 </button>
               </div>
             </div>
@@ -103,7 +105,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all duration-150"
+              className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -118,9 +120,9 @@ export default function LoginPage() {
 
           <p className="mt-6 text-center text-sm text-secondary">
             Don&apos;t have an account?{' '}
-            <a href="/register" className="text-primary font-medium hover:underline">
+            <Link href="/register" className="text-primary font-medium hover:underline">
               Create workspace
-            </a>
+            </Link>
           </p>
         </motion.div>
       </div>
@@ -128,8 +130,8 @@ export default function LoginPage() {
       {/* Right - Branding */}
       <div className="hidden lg:flex flex-1 items-center justify-center bg-primary relative overflow-hidden">
         <div className="absolute inset-0">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full bg-white/5 blur-3xl" />
-          <div className="absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full bg-white/3 blur-3xl" />
+          <div className="absolute top-1/4 left-1/4 h-96 w-96 rounded-full bg-white/5 blur-3xl" />
+          <div className="absolute bottom-1/4 right-1/4 h-80 w-80 rounded-full bg-white/3 blur-3xl" />
         </div>
         <div className="relative text-center px-12">
           <motion.div

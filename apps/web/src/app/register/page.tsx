@@ -2,12 +2,14 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores';
 import { Zap, Eye, EyeOff } from 'lucide-react';
 
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { Icon } from '@/components/ui/icon';
 
 export default function RegisterPage() {
   usePageTitle('Register');
@@ -73,7 +75,7 @@ export default function RegisterPage() {
                 onChange={(e) => setOrganizationName(e.target.value)}
                 placeholder="Your company name"
                 required
-                className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary placeholder:text-secondary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary placeholder:text-secondary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
               />
             </div>
 
@@ -84,7 +86,7 @@ export default function RegisterPage() {
                 onChange={(e) => setName(e.target.value)}
                 placeholder="John Doe"
                 required
-                className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary placeholder:text-secondary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary placeholder:text-secondary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
               />
             </div>
 
@@ -96,7 +98,7 @@ export default function RegisterPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com"
                 required
-                className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary placeholder:text-secondary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary placeholder:text-secondary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
               />
             </div>
 
@@ -110,14 +112,14 @@ export default function RegisterPage() {
                   placeholder="Min. 8 characters"
                   required
                   minLength={8}
-                  className="w-full rounded-xl border border-border bg-white px-4 py-2.5 pr-10 text-sm text-primary placeholder:text-secondary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  className="w-full rounded-xl border border-border bg-white px-4 py-2.5 pr-10 text-sm text-primary placeholder:text-secondary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-secondary hover:text-primary"
                 >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showPassword ? <Icon as={EyeOff} size="md" /> : <Icon as={Eye} size="md" />}
                 </button>
               </div>
             </div>
@@ -125,7 +127,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all duration-150"
+              className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
             >
               {loading ? 'Creating workspace...' : 'Create workspace'}
             </button>
@@ -133,17 +135,17 @@ export default function RegisterPage() {
 
           <p className="mt-6 text-center text-sm text-secondary">
             Already have an account?{' '}
-            <a href="/login" className="text-primary font-medium hover:underline">
+            <Link href="/login" className="text-primary font-medium hover:underline">
               Sign in
-            </a>
+            </Link>
           </p>
         </motion.div>
       </div>
 
       <div className="hidden lg:flex flex-1 items-center justify-center bg-primary relative overflow-hidden">
         <div className="absolute inset-0">
-          <div className="absolute top-1/3 right-1/4 w-96 h-96 rounded-full bg-white/5 blur-3xl" />
-          <div className="absolute bottom-1/3 left-1/4 w-80 h-80 rounded-full bg-white/3 blur-3xl" />
+          <div className="absolute top-1/3 right-1/4 h-96 w-96 rounded-full bg-white/5 blur-3xl" />
+          <div className="absolute bottom-1/3 left-1/4 h-80 w-80 rounded-full bg-white/3 blur-3xl" />
         </div>
         <div className="relative text-center px-12">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2 }}>
