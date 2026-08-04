@@ -19,7 +19,9 @@ Six of the audit's highest-impact findings are closed (details struck through in
 | **B14 — command palette dead links / no keyboard / leads unsearchable** | Task links fixed (`?taskId=`), real ↑↓/↵/Esc navigation with visible highlight, **leads + quotation numbers indexed** in global search (admin+CRM gated — also closes roadmap item C-1). |
 | **QA partials batch** (same push) | FZ-048/051/054/067/073/077/097 + payments-status endpoint + prod seed guard — see BUGS_UPDATED.md (97/98). This also closed B-list items 11-partial (receivables still pending month view), the fake-PAID auto-billing, and report-total corruption (B-adjacent FZ-073). |
 
-**Still open from the Week-1 plan:** dead time-tracking UI removal (owner decision recorded), corrections one-liners (#53), receivables month view (Sprint-2).
+**Week 1 is now closed.** The last two items — the dead time-tracking UI and the corrections
+one-liners (#53 / #10) — are done. Everything remaining is Sprint 2 or later; the receivables
+month view (B11) is the highest-value of those and stays the owner's core unanswered question.
 
 ---
 
@@ -102,13 +104,13 @@ badly stale; it should be updated so Akmal sees real progress).
 ## D. Recommended plan — in order
 
 ### Week 1 — quick wins, mostly ≤1 day each (trust + daily friction)
-1. [ ] Remove the dead time-tracking UI (⏱ chips, "logged hrs" in Reports, TimeTrackingPrompt + store) per the owner's no-time-tracking decision; keep due-date/overdue signals as the accountability surface (B6).
+1. [x] ~~Remove the dead time-tracking UI (⏱ chips, "logged hrs" in Reports, TimeTrackingPrompt + store) per the owner's no-time-tracking decision; keep due-date/overdue signals as the accountability surface (B6).~~ **DONE 2026-08-04** — the prompt and its store were imported in five files and called from none, so nothing was ever recorded and every ⏱ chip and "Time Logged" column read 0. Removed the store, the prompt component, its mount in `providers.tsx`, three ⏱ chips (tasks + project detail ×2), and the Reports "Time Logged" column and "Xh logged" subtitle. The reports API no longer aggregates it either. `avgUtilization` survives — it is derived from active task COUNT, not hours. Due dates remain the accountability surface.
 2. [x] ~~Skip the stage modal when the target stage requires nothing; stop accumulating skipped-stage fields (B1).~~ **DONE `00ad3bd`**
 3. [x] ~~Merge Invoices/Invoice Drafts into one page; fix the "Move to Invoice Draft" destination (B10 + B13).~~ **DONE `00ad3bd`**
 4. [x] ~~Command palette: fix `taskId` param, add ↑↓/↵, index leads + quote numbers (B14 + C).~~ **DONE `00ad3bd`**
 5. [x] ~~Fix Quick Create "New Lead" dead end (B3).~~ **DONE `00ad3bd`** (the "New Client" quick-create contradiction with the born-from-deals rule remains a product question for Akmal)
 6. [x] ~~Shared modal primitive: Escape + focus trap + confirm-on-dirty-close; adopt in LeadModal/StageTransition first (B2/B15).~~ **DONE**
-7. [ ] Corrections one-liners: remove LinkedIn from EditLeadModal (#53), show the missing client-overview fields (#10).
+7. [x] ~~Corrections one-liners: remove LinkedIn from EditLeadModal (#53), show the missing client-overview fields (#10).~~ **DONE** — #53 went with the lead-contacts consolidation (LinkedIn belongs to a person, so it lives on the contact row); #10 was already closed and is marked DONE in the section-A table above.
 8. [x] ~~Debounce all search inputs (300ms + keepPreviousData) (B16).~~ **DONE**
 9. [x] ~~Error-panel + retry on the money pages instead of fake empties (B12).~~ **DONE**
 

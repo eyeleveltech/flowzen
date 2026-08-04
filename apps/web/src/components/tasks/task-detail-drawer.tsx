@@ -10,7 +10,7 @@ import { formatDate } from '@/lib/utils';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { SafeHtml } from '@/components/ui/safe-html';
 import { TASK_STATUSES, TASK_STATUS_LABELS, TASK_STATUS_COLORS } from '@/lib/task-status';
-import { useConfirmStore, useTimeTrackingStore } from '@/stores';
+import { useConfirmStore } from '@/stores';
 
 const titleCase = (s?: string | null) =>
   s ? s.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '—';

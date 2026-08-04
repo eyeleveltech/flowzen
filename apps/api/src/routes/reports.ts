@@ -163,7 +163,7 @@ reportRouter.get('/team', async (req: AuthRequest, res: Response, next) => {
           select: { assignedTasks: true },
         },
         assignedTasks: {
-          select: { status: true, loggedHours: true },
+          select: { status: true },
         },
       },
     });
@@ -172,7 +172,6 @@ reportRouter.get('/team', async (req: AuthRequest, res: Response, next) => {
       const completed = m.assignedTasks.filter((t) => t.status === 'COMPLETED').length;
       const active = m.assignedTasks.filter((t) => t.status !== 'COMPLETED').length;
       const total = m._count.assignedTasks;
-      const loggedHours = m.assignedTasks.reduce((sum, t) => sum + (t.loggedHours || 0), 0);
       return {
         id: m.id,
         name: m.name,
@@ -181,7 +180,6 @@ reportRouter.get('/team', async (req: AuthRequest, res: Response, next) => {
         completedTasks: completed,
         activeTasks: active,
         completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
-        loggedHours,
       };
     });
 
@@ -385,7 +383,7 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
       prisma.user.findMany({
         where: { organizationId: orgId, status: 'ACTIVE' },
         take: 500,
-        select: { id: true, name: true, avatar: true, assignedTasks: { select: { status: true, loggedHours: true } } },
+        select: { id: true, name: true, avatar: true, assignedTasks: { select: { status: true } } },
       }),
       prisma.task.findMany({
         where: { project: { client: { organizationId: orgId } }, status: 'COMPLETED', completedAt: { gte: vStart, lte: vEnd } },
@@ -468,16 +466,13 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
       const completed = m.assignedTasks.filter(t => t.status === 'COMPLETED').length;
       const active = m.assignedTasks.filter(t => t.status !== 'COMPLETED').length;
       const total = m.assignedTasks.length;
-      const loggedHours = m.assignedTasks.reduce((s, t) => s + (t.loggedHours || 0), 0);
       return {
         id: m.id, name: m.name, avatar: m.avatar,
         activeTasks: active,
         completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
-        loggedHours,
         capacity: Math.min(100, Math.round((active / 10) * 100)),
       };
     }).sort((a, b) => b.activeTasks - a.activeTasks);
-    const totalLoggedHours = teamMembers.reduce((s, m) => s + m.loggedHours, 0);
     const avgUtilization = teamMembers.length > 0 ? Math.round(teamMembers.reduce((s, m) => s + m.capacity, 0) / teamMembers.length) : 0;
 
     // ── Client Portfolio ──
@@ -510,7 +505,7 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
       period: hasPeriod ? { startDate: periodStart, endDate: periodEnd } : null,
       ...(canSeeRevenue ? { revenue: { activeRevenue, pipelineValue, weightedPipelineValue, wonValue, lostValue, wonCount: won.length, lostCount: lost.length, winRate, lostReasons } } : {}),
       delivery: { onTimeRate, overdueTasks, projectHealth: { onTrack, atRisk: atRiskProjects, delayed, total: activeProjects.length }, velocity },
-      team: { avgUtilization, totalLoggedHours, members: teamMembers },
+      team: { avgUtilization, members: teamMembers },
       clients: {
         totalClients: clients.length,
         active: clients.filter(c => c.status === 'ACTIVE').length,
