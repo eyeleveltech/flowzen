@@ -263,6 +263,24 @@ revenueRouter.get('/pnl', async (req: AuthRequest, res: Response, next: NextFunc
       where: { projectId: { in: projectIds }, ...expenseDateFilter }
     });
 
+    // Labour. Until time entries existed this P&L was payments MINUS VENDOR BILLS ONLY, with no
+    // cost for the team's own effort — so a retainer that ate eighty hours of the month scored
+    // exactly like one that ate eight, and every project looked profitable. Costed at the rate
+    // SNAPSHOTTED on each entry, not the person's rate today, so a pay rise cannot retroactively
+    // change what past work is reported to have cost.
+    const timeEntries = await prisma.timeEntry.findMany({
+      where: { projectId: { in: projectIds }, ...(startDate && endDate ? { date: { gte: new Date(startDate as string), lte: new Date(endDate as string) } } : {}) },
+      select: { projectId: true, hours: true, costRate: true },
+    });
+    const labourByProject = new Map<string, { hours: number; cost: number }>();
+    for (const t of timeEntries) {
+      if (!t.projectId) continue;
+      const b = labourByProject.get(t.projectId) || { hours: 0, cost: 0 };
+      b.hours += Number(t.hours);
+      b.cost += Number(t.hours) * Number(t.costRate || 0);
+      labourByProject.set(t.projectId, b);
+    }
+
     // To get revenue, we will fetch contracts per client
     const contracts = await prisma.contract.findMany({
       where: { organizationId: orgId, clientId: { in: clientIds } },
@@ -288,13 +306,19 @@ revenueRouter.get('/pnl', async (req: AuthRequest, res: Response, next: NextFunc
       const revenue = clientRevenue / projectsForClient;
 
       const client = clientMap.get(p.clientId);
+      const labour = labourByProject.get(p.id) || { hours: 0, cost: 0 };
       return {
         projectId: p.id,
         projectName: p.name,
         clientName: client?.company || client?.name || 'Unknown',
         revenue,
         expenses: totalExpenses,
-        net: revenue - totalExpenses
+        // Reported separately from vendor expenses rather than folded into them: the two are
+        // acted on differently, and a project bleeding on labour needs a different conversation
+        // from one bleeding on subcontractors.
+        labourHours: labour.hours,
+        labourCost: labour.cost,
+        net: revenue - totalExpenses - labour.cost
       };
     });
 

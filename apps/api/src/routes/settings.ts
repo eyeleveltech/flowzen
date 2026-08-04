@@ -295,6 +295,9 @@ settingsRouter.get('/users', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Auth
         avatar: true,
         role: true,
         designation: true,
+        // Safe to return here: this route is authorize('SUPER_ADMIN','ADMIN'). It is salary-
+        // adjacent data and must never appear on an endpoint the whole team can read.
+        hourlyCostRate: true,
         teamId: true,
         team: { select: { id: true, name: true } },
         status: true,
@@ -450,6 +453,11 @@ settingsRouter.put('/users/:id', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimi
       teamId: z.string().nullable().optional(),
       status: z.enum(['ACTIVE', 'PENDING', 'INACTIVE']).optional(),
       reassignTo: z.string().nullable().optional(),
+      // Internal cost of an hour of this person's time, used to price delivery effort into the
+      // P&L. Settable only here, on the admin-gated user route — it is effectively salary data.
+      // Changing it does NOT rewrite past time entries: each entry snapshots the rate it was
+      // logged at, so a pay rise never restates the profitability of finished work.
+      hourlyCostRate: z.number().nonnegative('Cost rate cannot be negative').nullable().optional(),
     }).strict();
 
     let body: any;
@@ -551,6 +559,7 @@ settingsRouter.put('/users/:id', authorize('SUPER_ADMIN', 'ADMIN'), settingsLimi
         email: true,
         role: true,
         designation: true,
+        hourlyCostRate: true,
         teamId: true,
         team: { select: { id: true, name: true } },
         status: true,
