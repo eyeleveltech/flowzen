@@ -18,6 +18,7 @@ import { Select } from '@/components/ui/select';
 import { IntelligenceTab } from '../components/IntelligenceTab';
 import { TimelineTab } from '../components/TimelineTab';
 import { ContactsTab } from '../components/ContactsTab';
+import { Attachments } from '@/components/ui/attachments';
 import { LeadTasksTab } from '../components/LeadTasksTab';
 import { OverflowMarquee } from '@/components/ui/overflow-marquee';
 import { useConfirmStore } from '@/stores';
@@ -661,6 +662,14 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           {activeTab === 'timeline' && (
             <div className="max-w-7xl">
               <TimelineTab leadId={leadId} />
+            </div>
+          )}
+
+          {/* Proposals, briefs and signed contracts belong ON the deal, not in a Drive link that
+              goes stale or that the next person cannot open. */}
+          {activeTab === 'details' && (
+            <div className="max-w-7xl mt-6 bg-white rounded-2xl border border-border p-5">
+              <Attachments owner="leadId" ownerId={leadId} title="Files" compact />
             </div>
           )}
 
