@@ -89,7 +89,6 @@ const taskSchema = z.object({
   assignedDate: z.string().optional().nullable(),
   assignedById: z.string().optional().nullable(),
   parentId: z.string().optional().nullable(),
-  loggedHours: z.number().optional().nullable(),
   estimatedHours: z.number().optional().nullable(),
   isRecurring: z.boolean().optional(),
   recurrenceFrequency: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY']).optional().nullable(),
@@ -536,7 +535,7 @@ taskRouter.put('/:id', async (req: AuthRequest, res: Response, next) => {
     const b = req.body;
     const data: Record<string, unknown> = {};
     const SCALARS = ['title', 'description', 'type', 'priority', 'status', 'order',
-      'reviewerId', 'assignedById', 'parentId', 'loggedHours', 'estimatedHours',
+      'reviewerId', 'assignedById', 'parentId', 'estimatedHours',
       'driveLink', 'isRecurring', 'recurrenceFrequency'] as const;
     for (const f of SCALARS) if (f in b) data[f] = b[f];
     // description is rich-text HTML rendered raw in the UI — strip anything executable.

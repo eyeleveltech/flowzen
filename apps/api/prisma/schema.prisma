@@ -537,7 +537,10 @@ model Task {
   updatedAt   DateTime     @updatedAt
   completedAt DateTime?
   readAt      DateTime?
-  loggedHours Float?       @default(0)
+  // estimatedHours is PLANNING (what we think it will take) and stays. loggedHours was
+  // RECORDING (what it actually took) and is gone — TimeEntry owns that now, as dated rows per
+  // person rather than one overwritable total. Keeping both would have been two homes for one
+  // fact, which is the exact shape of every sync bug this codebase has had.
   estimatedHours Float?    @default(0)
   driveLink   String?
   isRecurring Boolean      @default(false)
