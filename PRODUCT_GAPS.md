@@ -1,6 +1,8 @@
 # Flowzen — Product Gap & UX Audit (2026-07-30, updated 2026-07-31 after fixes)
 
-Three-angle audit: (A) compliance with the owner's standard (`corrections.md`, 65 items),
+Three-angle audit: (A) compliance with the owner's standard (the 65-item `corrections.md`,
+DELETED 2026-08-04 once ~78% of it was built — recoverable from git history, and the items that
+were still outstanding are transcribed into the table in section A below),
 (B) user-journey friction found by walking the code, (C) feature gaps vs industry tools
 (HubSpot/Pipedrive · Asana/ClickUp · Zoho-lite). Every finding is code-verified with file references.
 
@@ -25,10 +27,12 @@ month view (B11) is the highest-value of those and stays the owner's core unansw
 
 ---
 
-## A. Against our own standard — corrections.md scorecard
+## A. Against the owner's standard — final scorecard
 
-**51 DONE · 10 PARTIAL · 2 OPEN · 2 N/A** (~78% implemented — the doc's all-OPEN status column is
-badly stale; it should be updated so Akmal sees real progress).
+**51 DONE · 10 PARTIAL · 2 OPEN · 2 N/A** (~78% implemented). The source document's status column
+never moved off OPEN, so it claimed nothing had been built; rather than maintain two records of
+the same thing, it was deleted and this table is now the only one. The rows below are what is
+genuinely left.
 
 ### Highest-impact remaining items
 | # | Item | State | Gap |
@@ -55,13 +59,13 @@ badly stale; it should be updated so Akmal sees real progress).
 2. ~~Lead form loses everything on a misclick~~ — **FIXED**: Wired `useModalSafety` to `EditLeadModal` (backdrop, X, Cancel, focus trap, dirty-guard) and closed the Cancel button safety gap in `LeadModal`. Relaxed lead validation in client forms, API `leadSchema`, and bulk import to require `contactName` + (`contactEmail` OR `contactPhone`).
 3. ~~Quick Create → New Lead dead end~~ — **FIXED `00ad3bd`**: `?create=true` handled at pipeline page level, opens the Add Lead modal from any tab; param cleaned after open.
 4. ~~The kanban has zero search/filter~~ — **FIXED**: Search input (300ms debounced) + Owner `MultiSelect` filter added to Kanban header in `PipelineBoardView.tsx`; per-column totals, weighted deal values, counts and drag-and-drop all reflect filtered state.
-5. **MED — Won celebration shows stale data** on the board path (pre-transition lead passed, no client attached; Create Project loses the prefill) (`PipelineBoardView.tsx:272`).
+5. ~~Won celebration shows stale data on the board path~~ — **FIXED (verified 2026-08-04)**: the board now passes the POST-transition lead (`setWonModalLead(updatedLead || {...})`), so the client is attached and the Create Project prefill survives.
 
 ### The team member (delivery)
 6. ~~Time tracking display-only~~ — **OWNER DECISION (2026-07-30): no employee time tracking.** Due time is the accountability mechanism; prompting for hours discourages the team. Resolution is to REMOVE the dangling time UI (⏱ chips, "logged hrs" in Reports, the never-called TimeTrackingPrompt), not wire it up.
 7. **MED — Managers' Tasks page silently self-filters** (`tasks/page.tsx:152-157`) — "where did my team's tasks go?" week-one confusion; needs a visible My/Team toggle.
 8. **MED — Mobile swipe-right instantly completes a task, no undo** (`tasks/page.tsx:994`).
-9. **MED — Board view vs pagination**: kanban renders only loaded pages; column counts lie until you spot the "Load More" button *below* the board.
+9. ~~Board view vs pagination~~ — **FIXED (verified 2026-08-04)**: the board no longer paginates. `GET /crm/leads` returns every lead for the org and the pipeline page sends no `limit`, so column counts are the real counts.
 
 ### The owner (money)
 10. ~~"Invoices"/"Invoice Drafts" duplicate pages + wrong CTA~~ — **FIXED `00ad3bd`**: `/invoices` redirects to `/invoice-drafts`, duplicate nav entry removed, Quotations CTA lands on the editable screen.
@@ -139,4 +143,7 @@ badly stale; it should be updated so Akmal sees real progress).
   been applied to production.
 - ~~QA fix batch uncommitted~~ — **everything is pushed**: all session work through 2026-07-31 is
   on `main` at `00ad3bd` (QA partials + stage-modal + invoice merge + search/palette).
-- Update `corrections.md` status column (49 items are DONE but marked OPEN — Akmal can't see progress).
+- ~~Update `corrections.md` status column~~ — moot: the file was deleted 2026-08-04 rather than
+  maintained. Its status column had gone badly stale (49 items built but still marked OPEN, so
+  the document told Akmal nothing had been done), and the remaining work is tracked here instead.
+  Recover it with `git show HEAD~1:corrections.md` if the original wording is ever needed.
