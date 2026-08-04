@@ -40,7 +40,6 @@ const quoteBaseSchema = z.object({
   billingAddress: z.string().optional(),
   paymentTerms: z.string().min(1, 'Payment terms are required'),
   customerRef: z.string().optional(),
-  salespersonId: z.string().optional(),
   salesTeam: z.string().optional(),
   onlineSignature: z.boolean().optional(),
   onlinePayment: z.boolean().optional(),
@@ -107,11 +106,13 @@ function buildDocData(body: z.infer<typeof quoteSchema>, client: any, orgState: 
     contactPerson: body.contactPerson || client.contactPerson || client.name,
     clientEmail: explicitOrFallback(body.clientEmail, client.email),
     clientPhone: explicitOrFallback(body.clientPhone, client.phone),
-    billingAddress: body.billingAddress || client.billingAddress || client.address || null,
+    // Same explicit-vs-absent rule as the email/phone/GST lines above. This one was missed: with
+    // `||`, an address the user had deliberately emptied fell straight back to the client's,
+    // so it could never be removed from a quotation.
+    billingAddress: explicitOrFallback(body.billingAddress, client.billingAddress || client.address),
     clientState: client.state || null,
     paymentTerms: body.paymentTerms,
     customerRef: null,
-    salespersonId: body.salespersonId || null,
     salesTeam: body.salesTeam || null,
     onlineSignature: body.onlineSignature || false,
     onlinePayment: body.onlinePayment || false,
@@ -191,7 +192,7 @@ quoteRouter.post('/', validate(quoteSchema), async (req: AuthRequest, res: Respo
           })),
         },
       },
-      include: { lineItems: { orderBy: { sortOrder: 'asc' } }, salesperson: { select: { id: true, name: true } } },
+      include: { lineItems: { orderBy: { sortOrder: 'asc' } } },
     });
 
     emitToOrganization(req.app.get('io'), orgId, 'quote:updated', { id: quote.id });
@@ -216,7 +217,7 @@ quoteRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     const quotes = await prisma.quoteDocument.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      include: { salesperson: { select: { id: true, name: true } }, _count: { select: { lineItems: true } } },
+      include: { _count: { select: { lineItems: true } } },
     });
     res.json({ quotes });
   } catch (error) {
@@ -230,7 +231,7 @@ quoteRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
     const orgId = req.user!.organizationId;
     const quote = await prisma.quoteDocument.findFirst({
       where: { id: req.params.id as string, organizationId: orgId },
-      include: { lineItems: { orderBy: { sortOrder: 'asc' } }, salesperson: { select: { id: true, name: true } } },
+      include: { lineItems: { orderBy: { sortOrder: 'asc' } } },
     });
     if (!quote) {
       res.status(404).json({ error: 'Quotation not found' });
@@ -260,7 +261,7 @@ quoteRouter.patch('/:id', validate(quoteBaseSchema.partial().extend({ lineItems:
     if (body.lineItems) fin = computeQuoteFinancials(body.lineItems);
 
     const data: any = {};
-    const fields = ['documentType', 'paymentTerms', 'customerRef', 'salespersonId', 'salesTeam', 'onlineSignature', 'onlinePayment', 'tags', 'paymentMethod', 'clientGst', 'projectNotes', 'scope', 'termsConditions', 'contactPerson', 'clientEmail', 'clientPhone', 'billingAddress'];
+    const fields = ['documentType', 'paymentTerms', 'customerRef', 'salesTeam', 'onlineSignature', 'onlinePayment', 'tags', 'paymentMethod', 'clientGst', 'projectNotes', 'scope', 'termsConditions', 'contactPerson', 'clientEmail', 'clientPhone', 'billingAddress'];
     for (const f of fields) if (body[f] !== undefined) data[f] = body[f];
     for (const d of ['documentDate', 'expirationDate', 'projectStartDate', 'deliveryDate']) if (body[d] !== undefined) data[d] = body[d] ? new Date(body[d]) : null;
 
@@ -281,7 +282,7 @@ quoteRouter.patch('/:id', validate(quoteBaseSchema.partial().extend({ lineItems:
 
     const updated = await prisma.quoteDocument.update({
       where: { id }, data,
-      include: { lineItems: { orderBy: { sortOrder: 'asc' } }, salesperson: { select: { id: true, name: true } } },
+      include: { lineItems: { orderBy: { sortOrder: 'asc' } } },
     });
     emitToOrganization(req.app.get('io'), orgId, 'quote:updated', { id });
     res.json(updated);
@@ -401,7 +402,6 @@ quoteRouter.post('/:id/generate-pdf', async (req: AuthRequest, res: Response, ne
       where: { id, organizationId: orgId },
       include: {
         lineItems: { orderBy: { sortOrder: 'asc' } },
-        salesperson: { select: { id: true, name: true } },
         client: { select: { address: true, city: true, state: true, billingAddress: true } },
       },
     });
