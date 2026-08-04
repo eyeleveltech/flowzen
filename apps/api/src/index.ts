@@ -24,6 +24,7 @@ import { crmRouter } from './routes/crm.js';
 import { quoteRouter } from './routes/quotes.js';
 import { revenueRouter } from './routes/revenue.js';
 import { timeEntryRouter } from './routes/timeEntries.js';
+import { attachmentRouter } from './routes/attachments.js';
 import publicApiRouter from './routes/public/index.js';
 import { sseRouter } from './sse.js';
 import './workers/emailWorker.js'; // Initialize BullMQ email worker
@@ -109,6 +110,11 @@ app.use('/api/reports', authenticate, requireModule('PM'), reportRouter);
 // Logged hours: everyone on the PM module records their own; the route itself scopes reads and
 // hides cost from non-admins (see routes/timeEntries.ts).
 app.use('/api/time-entries', authenticate, requireModule('PM'), timeEntryRouter);
+
+// File attachments hang off records in BOTH modules (tasks/projects on PM, leads/clients on
+// CRM), so the route is available whenever either is on; the handler proves org ownership of the
+// specific record before writing or serving anything.
+app.use('/api/attachments', authenticate, requireModule('CRM', 'PM'), attachmentRouter);
 app.use('/api/workflows', authenticate, requireModule('PM'), workflowRouter);
 
 // Public API (external keys):

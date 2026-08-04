@@ -12,6 +12,7 @@ import { SafeHtml } from '@/components/ui/safe-html';
 import { TASK_STATUSES, TASK_STATUS_LABELS, TASK_STATUS_COLORS } from '@/lib/task-status';
 import { useConfirmStore } from '@/stores';
 import { TaskTimeLog } from './task-time-log';
+import { Attachments } from '@/components/ui/attachments';
 
 const titleCase = (s?: string | null) =>
   s ? s.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '—';
@@ -212,6 +213,8 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
                 </div>
               </div>
             )}
+
+            <Attachments owner="taskId" ownerId={taskId} />
 
             <TaskTimeLog taskId={taskId} onChanged={onChanged} />
 

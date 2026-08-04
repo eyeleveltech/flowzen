@@ -11,6 +11,9 @@ import { buildSearchFilter } from '../utils/search-utils.js';
 import { ensureClientForLead } from '../services/clientConversion.service.js';
 import { primaryContactOf } from '../services/leadContact.service.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { EmailService } from '../services/email.js';
+import path from 'path';
+import fs from 'fs';
 
 export const quoteRouter = Router();
 quoteRouter.use(authenticate);
@@ -428,6 +431,113 @@ quoteRouter.post('/:id/generate-pdf', async (req: AuthRequest, res: Response, ne
     }
 
     res.json({ pdfUrl });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/crm/quotes/:id/send — email the document to the client.
+ *
+ * This is what "SENT" is supposed to mean. Before it existed, marking a quote SENT flipped a
+ * status field and nothing left the building: the PDF had to be downloaded and attached to Gmail
+ * by hand on every deal, so the status recorded an intention rather than an event.
+ *
+ * Generates the PDF first if one was never made, so the caller cannot email a document that
+ * doesn't exist yet. The status only moves to SENT if the mail actually went — a failed send
+ * leaves it exactly as it was, because a quote marked SENT that never arrived is worse than one
+ * still marked DRAFT.
+ */
+quoteRouter.post('/:id/send', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const id = req.params.id as string;
+    const quote = await prisma.quoteDocument.findFirst({
+      where: { id, organizationId: orgId },
+      include: {
+        lineItems: { orderBy: { sortOrder: 'asc' } },
+        client: { select: { address: true, city: true, state: true, billingAddress: true } },
+      },
+    });
+    if (!quote) { res.status(404).json({ error: 'Quotation not found' }); return; }
+    if (quote.status === 'CANCELLED') { res.status(400).json({ error: 'Cancelled documents cannot be sent.' }); return; }
+
+    // An explicit recipient wins, so a user can send to a different person without editing the
+    // document; otherwise the address snapshotted on the quote is used.
+    const to = String(req.body?.to || quote.clientEmail || '').trim();
+    if (!to) {
+      res.status(400).json({ error: 'No email address on this document. Add one to the quotation, or supply a recipient.' });
+      return;
+    }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) {
+      res.status(400).json({ error: 'That recipient address is not valid.' });
+      return;
+    }
+
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { name: true, logo: true, address: true, phone: true, website: true, settings: true },
+    });
+
+    // Regenerate whenever the file is missing OR the document has been edited since it was made,
+    // so nobody can email a stale PDF that disagrees with what the system now shows.
+    let pdfUrl = quote.pdfUrl;
+    let abs = pdfUrl ? path.resolve(process.cwd(), pdfUrl.replace(/^\/+/, '')) : null;
+    if (!pdfUrl || !abs || !fs.existsSync(abs)) {
+      pdfUrl = await generateQuotePdf(quote, org);
+      abs = path.resolve(process.cwd(), pdfUrl.replace(/^\/+/, ''));
+      await prisma.quoteDocument.update({ where: { id }, data: { pdfUrl } });
+    }
+    if (!abs || !fs.existsSync(abs)) {
+      res.status(500).json({ error: 'The document PDF could not be prepared.' });
+      return;
+    }
+
+    const sender = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { email: true } });
+
+    const ok = await EmailService.sendQuoteEmail({
+      to,
+      documentNumber: quote.documentNumber,
+      documentType: quote.documentType,
+      clientName: quote.clientName,
+      contactPerson: quote.contactPerson,
+      orgName: org?.name || 'Flowzen',
+      grandTotal: `${quote.currency || 'INR'} ${Number(quote.grandTotal).toLocaleString('en-IN')}`,
+      expirationDate: quote.expirationDate,
+      pdfPath: abs,
+      pdfFilename: `${quote.documentNumber}.pdf`,
+      message: typeof req.body?.message === 'string' ? req.body.message.slice(0, 2000) : null,
+      replyTo: sender?.email || null,
+    });
+
+    if (!ok) {
+      // Deliberately NOT marking it sent. Reporting success for mail that never left is the
+      // failure mode this whole endpoint exists to remove.
+      res.status(502).json({ error: 'The email could not be sent. Check the mail settings and try again.' });
+      return;
+    }
+
+    const updated = await prisma.quoteDocument.update({
+      where: { id },
+      data: { status: quote.status === 'ACCEPTED' ? quote.status : 'SENT' },
+    });
+
+    const lead = quote.leadId
+      ? await prisma.lead.findFirst({ where: { id: quote.leadId, organizationId: orgId }, select: { id: true } })
+      : quote.clientId
+        ? await prisma.lead.findFirst({ where: { clientId: quote.clientId, organizationId: orgId }, select: { id: true } })
+        : null;
+    if (lead) {
+      await logActivity({
+        leadId: lead.id, type: ActivityType.QUOTE_GENERATED,
+        message: `emailed ${quote.documentType === 'QUOTATION' ? 'quotation' : 'proforma invoice'} ${quote.documentNumber} to ${to}`,
+        userId: req.user!.userId, metadata: { quoteId: id, documentNumber: quote.documentNumber, to },
+        io: req.app.get('io'), orgId,
+      });
+    }
+
+    emitToOrganization(req.app.get('io'), orgId, 'quote:updated', { id });
+    res.json({ sent: true, to, status: updated.status, pdfUrl });
   } catch (error) {
     next(error);
   }

@@ -114,5 +114,79 @@ export const EmailService = {
       logger.error('Failed to send setup password email', { error });
       return false;
     }
+  },
+
+  /**
+   * Send a quotation or proforma invoice to the client, with the PDF attached.
+   *
+   * Until this existed, marking a quote SENT changed a status field and nothing left the
+   * building — the PDF had to be downloaded and attached to Gmail by hand on every single deal,
+   * and "SENT" in Flowzen meant "someone intended to send this".
+   *
+   * The PDF is attached rather than linked: the download route is session-authenticated and
+   * org-scoped (see routes/uploads.ts), so a link would be useless to the one person who most
+   * needs to open it. It is read from disk here, so a missing file fails loudly instead of
+   * mailing an empty envelope.
+   */
+  sendQuoteEmail: async (opts: {
+    to: string;
+    documentNumber: string;
+    documentType: 'QUOTATION' | 'PROFORMA_INVOICE' | string;
+    clientName: string;
+    contactPerson?: string | null;
+    orgName: string;
+    grandTotal: string;
+    expirationDate?: Date | string | null;
+    pdfPath: string;
+    pdfFilename: string;
+    message?: string | null;
+    replyTo?: string | null;
+  }): Promise<boolean> => {
+    try {
+      const mailer = await getTransporter();
+      const isQuote = opts.documentType === 'QUOTATION';
+      const label = isQuote ? 'Quotation' : 'Proforma Invoice';
+      const greeting = opts.contactPerson ? `Hi ${opts.contactPerson},` : 'Hello,';
+      const validity = opts.expirationDate
+        ? `<p style="margin:16px 0 0;font-size:13px;color:#6b7280;">This ${label.toLowerCase()} is valid until ${new Date(opts.expirationDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}.</p>`
+        : '';
+
+      const info = await mailer.sendMail({
+        from: `"${opts.orgName}" <noreply@flowzen.app>`,
+        to: opts.to,
+        // Replies belong to the person who sent it, not to a noreply mailbox nobody reads.
+        ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
+        subject: `${label} ${opts.documentNumber} from ${opts.orgName}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; padding: 20px; color:#111827;">
+            <p>${greeting}</p>
+            <p>Please find attached ${isQuote ? 'our quotation' : 'the proforma invoice'} <strong>${opts.documentNumber}</strong> for ${opts.clientName}.</p>
+            ${opts.message ? `<p style="white-space:pre-wrap;">${opts.message}</p>` : ''}
+            <table style="margin:20px 0;border-collapse:collapse;">
+              <tr>
+                <td style="padding:8px 16px 8px 0;font-size:13px;color:#6b7280;">Document</td>
+                <td style="padding:8px 0;font-size:13px;font-weight:600;">${opts.documentNumber}</td>
+              </tr>
+              <tr>
+                <td style="padding:8px 16px 8px 0;font-size:13px;color:#6b7280;">Total</td>
+                <td style="padding:8px 0;font-size:13px;font-weight:600;">${opts.grandTotal}</td>
+              </tr>
+            </table>
+            ${validity}
+            <p style="margin-top:20px;">Thanks,<br/>${opts.orgName}</p>
+          </div>
+        `,
+        attachments: [{ filename: opts.pdfFilename, path: opts.pdfPath, contentType: 'application/pdf' }],
+      });
+
+      logger.info(`Quote ${opts.documentNumber} emailed to ${opts.to}`);
+      if (!process.env.SMTP_USER && !process.env.EMAIL_USER) {
+        logger.info(`[ETHEREAL MAIL URL]: ${nodemailer.getTestMessageUrl(info)}`);
+      }
+      return true;
+    } catch (error) {
+      logger.error('Failed to send quotation email', { error });
+      return false;
+    }
   }
 };

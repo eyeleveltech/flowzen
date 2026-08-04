@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, FileText, Download, Copy, Ban, Search, Eye, Trash2, MoreHorizontal } from 'lucide-react';
+import { Plus, FileText, Download, Copy, Ban, Search, Eye, Trash2, MoreHorizontal, Send } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
@@ -78,6 +78,31 @@ function QuotationsContent() {
     } catch (e: any) {
       toast.dismiss(t);
       toast.error(e.message || 'PDF failed');
+    }
+  }
+
+  /**
+   * Email the document to the client. The server generates the PDF if one is missing, attaches
+   * it, and only flips the status to SENT once the mail actually went — so a failure leaves the
+   * quote honestly marked DRAFT rather than claiming it was sent.
+   */
+  async function sendToClient(q: any) {
+    const to = window.prompt(
+      `Send ${q.documentNumber} to which email address?`,
+      q.clientEmail || ''
+    );
+    if (to === null) return;                 // cancelled
+    if (!to.trim()) { toast.error('Enter an email address'); return; }
+
+    const t = toast.loading('Sending…');
+    try {
+      const res = await api.post<{ to: string }>(`/crm/quotes/${q.id}/send`, { to: to.trim() });
+      toast.dismiss(t);
+      toast.success(`Sent to ${res.to}`);
+      queryClient.invalidateQueries({ queryKey: ['quotes'] });
+    } catch (e: any) {
+      toast.dismiss(t);
+      toast.error(e.message || 'Could not send the email');
     }
   }
 
@@ -176,6 +201,9 @@ function QuotationsContent() {
                     <div className="hidden md:flex items-center justify-end gap-1.5 text-secondary">
                       <button title="View / Edit" onClick={() => openEdit(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Eye className="h-4 w-4" /></button>
                       <button title="Generate / Download PDF" onClick={() => q.pdfUrl ? window.open(fileUrl(q.pdfUrl), '_blank') : generatePdf(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Download className="h-4 w-4" /></button>
+                      {q.status !== 'CANCELLED' && (
+                        <button title="Email to client" onClick={() => sendToClient(q)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Send className="h-4 w-4" /></button>
+                      )}
                       <button title="Duplicate" onClick={() => duplicate(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Copy className="h-4 w-4" /></button>
                       {q.status === 'ACCEPTED' && (
                         <button title="Move to Invoice Draft" onClick={async () => { if (await confirm({ title: 'Create Invoice', message: 'Move this quote to an Invoice Draft?', confirmText: 'Create Invoice', cancelText: 'Cancel' })) createInvoiceDraft(q); }} className="p-1.5 rounded-lg hover:bg-emerald-50 hover:text-emerald-600 transition-colors">

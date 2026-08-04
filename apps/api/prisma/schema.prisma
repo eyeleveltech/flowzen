@@ -250,6 +250,7 @@ model Organization {
   subscriptions Subscription[]
   expenses      Expense[]
   timeEntries   TimeEntry[]
+  attachments   Attachment[]
 
   @@map("organizations")
 }
@@ -305,6 +306,7 @@ model User {
   ownedProjects  Project[]       @relation("ProjectOwner")
   assignedTasks  Task[]          @relation("TaskAssignee")
   timeEntries    TimeEntry[]     @relation("UserTimeEntries")
+  attachments    Attachment[]    @relation("UserAttachments")
   assignedTasksMulti Task[]      @relation("TaskAssignees")
   assignedTasksBy Task[]         @relation("TaskAssigner")
   reviewedTasks  Task[]          @relation("TaskReviewer")
@@ -406,6 +408,7 @@ model Client {
   subscriptions Subscription[] @relation("ClientSubscriptions")
   expenses      Expense[]      @relation("ClientExpenses")
   timeEntries   TimeEntry[]    @relation("ClientTimeEntries")
+  attachments   Attachment[]   @relation("ClientAttachments")
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -451,6 +454,7 @@ model Project {
   comments               Comment[]
   expenses   Expense[]   @relation("ProjectExpenses")
   timeEntries TimeEntry[] @relation("ProjectTimeEntries")
+  attachments Attachment[] @relation("ProjectAttachments")
 
   @@index([clientId, status])
   @@index([ownerId, status])
@@ -533,7 +537,10 @@ model Task {
   updatedAt   DateTime     @updatedAt
   completedAt DateTime?
   readAt      DateTime?
-  loggedHours Float?       @default(0)
+  // estimatedHours is PLANNING (what we think it will take) and stays. loggedHours was
+  // RECORDING (what it actually took) and is gone — TimeEntry owns that now, as dated rows per
+  // person rather than one overwritable total. Keeping both would have been two homes for one
+  // fact, which is the exact shape of every sync bug this codebase has had.
   estimatedHours Float?    @default(0)
   driveLink   String?
   isRecurring Boolean      @default(false)
@@ -552,6 +559,7 @@ model Task {
   checklist  ChecklistItem[]
   activities Activity[]      @relation("TaskActivities")
   timeEntries TimeEntry[]
+  attachments Attachment[]
 
   @@index([projectId, status, assigneeId])
   @@index([assigneeId, status])
@@ -757,6 +765,7 @@ model Lead {
   tasks             Task[]       @relation("LeadTasks")
   notes             Note[]
   contacts          LeadContact[]
+  attachments       Attachment[]
   quotes            QuoteDocument[]
 
   @@unique([organizationId, leadId])
@@ -1162,6 +1171,57 @@ model Subscription {
   @@map("subscriptions")
 }
 
+/// A real file, uploaded and stored on disk.
+///
+/// Everything "file-shaped" in this product was previously a URL string — driveLink,
+/// folderLink, assetLinks, receiptUrl — which meant the work an agency actually delivers lived
+/// in somebody's Drive, and Flowzen only remembered where to look. Anyone outside that Drive's
+/// sharing settings saw a dead link.
+///
+/// `filename` is what the user named it; `storedName` is what it is called on disk. They are
+/// separate on purpose: the on-disk name is generated here and never derived from user input,
+/// so an uploaded "../../.env" or "x.pdf\0.sh" cannot escape the uploads directory or overwrite
+/// anything. Only `storedName` is ever joined to a path.
+///
+/// The owning entity is a set of nullable FKs rather than a polymorphic (type, id) pair, so the
+/// database itself guarantees an attachment points at something real and cascades when that
+/// thing is deleted — a polymorphic id would silently rot into an orphan.
+model Attachment {
+  id             String   @id @default(cuid())
+  organizationId String
+  uploadedById   String?
+  /// The name the user sees and downloads as. Display only — never used to build a path.
+  filename       String
+  /// Randomly generated on-disk name. The ONLY value ever joined to the uploads path.
+  storedName     String   @unique
+  mimeType       String
+  /// Bytes. Stored so a listing can show sizes without stat-ing every file.
+  size           Int
+
+  taskId         String?
+  leadId         String?
+  clientId       String?
+  projectId      String?
+  expenseId      String?
+
+  createdAt      DateTime @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  uploadedBy     User?        @relation("UserAttachments", fields: [uploadedById], references: [id], onDelete: SetNull)
+  task           Task?        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  lead           Lead?        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  client         Client?      @relation("ClientAttachments", fields: [clientId], references: [id], onDelete: Cascade)
+  project        Project?     @relation("ProjectAttachments", fields: [projectId], references: [id], onDelete: Cascade)
+  expense        Expense?     @relation("ExpenseAttachments", fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([taskId])
+  @@index([leadId])
+  @@index([clientId])
+  @@index([projectId])
+  @@map("attachments")
+}
+
 /// Hours a person spent on a piece of work, on a given day.
 ///
 /// This exists to answer "did we make money on this client", not "who worked the fewest hours".
@@ -1226,6 +1286,7 @@ model Expense {
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   project        Project?        @relation("ProjectExpenses", fields: [projectId], references: [id])
   client         Client?         @relation("ClientExpenses", fields: [clientId], references: [id])
+  attachments    Attachment[]    @relation("ExpenseAttachments")
 
   @@index([projectId])
   @@index([organizationId])
