@@ -265,6 +265,24 @@ const run = async () => {
   const clearedDeal = await call('PATCH', `/crm/leads/${plId}`, { dealValue: null, expectedCloseDate: null });
   check('an emptied deal value is actually cleared', clearedDeal.data?.dealValue === null, `got ${JSON.stringify(clearedDeal.data?.dealValue)}`);
 
+  // dealValue must be the ONE number for what a deal is worth. A second field (an
+  // `agreedFinalValue` deal field, captured on the same modal) was briefly copied over it by the
+  // server. The copy only applied when it DIFFERED from the current value, so the first save
+  // looked correct and the next save silently reverted the figure the user had just typed —
+  // taking MRR, the forecast and the auto-created subscription with it. A deal field must never
+  // write a lead column; this is the guard.
+  console.log('\n12b. Deal value survives a second save');
+  const dv1 = await call('PATCH', `/crm/leads/${plId}`, { dealValue: 100000, fields: { agreedFinalValue: '80000' } });
+  check('deal value set to what was typed', Number(dv1.data?.dealValue) === 100000, `got ${dv1.data?.dealValue}`);
+  const dv2 = await call('PATCH', `/crm/leads/${plId}`, { dealValue: 250000, fields: { agreedFinalValue: '80000' } });
+  check('raising the deal value sticks', Number(dv2.data?.dealValue) === 250000, `got ${dv2.data?.dealValue}`);
+  // The save that used to revert it: nothing about the value changed, only an unrelated field.
+  const dv3 = await call('PATCH', `/crm/leads/${plId}`, { dealValue: 250000, fields: { agreedFinalValue: '80000', paymentTerms: '50-50' } });
+  check('an unrelated edit does not revert it', Number(dv3.data?.dealValue) === 250000, `got ${dv3.data?.dealValue}`);
+  const dv4 = await call('PATCH', `/crm/leads/${plId}`, { dealValue: null, fields: { agreedFinalValue: '80000' } });
+  check('it can still be cleared', dv4.data?.dealValue === null, `got ${JSON.stringify(dv4.data?.dealValue)}`);
+  await call('PATCH', `/crm/leads/${plId}`, { dealValue: 25000 });
+
   console.log('\n13. Winning carries the contact list to the account');
   const pWon = await call('POST', `/crm/leads/${plId}/stage`, { stage: 'CONTRACT', dealValue: 25000, fields: {} });
   const pClientId = pWon.data?.clientId;

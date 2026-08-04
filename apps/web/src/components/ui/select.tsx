@@ -63,6 +63,13 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
     return () => window.removeEventListener('scroll', handleScroll, true);
   }, [isOpen]);
 
+  // Clear the filter on close. Nothing else resets searchQuery, so without this the next time the
+  // dropdown opens it is still filtered by whatever was typed before — and every option that
+  // doesn't match looks like it has disappeared. This is the shared Select, so it affected every
+  // dropdown in the app.
+  useEffect(() => {
+    if (!isOpen) setSearchQuery('');
+  }, [isOpen]);
 
   const q = searchQuery.trim().toLowerCase();
   const filteredOptions = q

@@ -37,10 +37,14 @@ export const STAGE_FIELDS: Record<string, StageField[]> = {
     { key: 'proposalSentDate', label: 'Proposal Sent Date', type: 'date', required: false },
   ],
 
-  // NEGOTIATION → CONTRACT: Keep Deal Value, Expected Close Date, Contract Type, Agreed Final Value
-  CONTRACT: [
-    { key: 'agreedFinalValue', label: 'Agreed Final Value (₹)', type: 'number', required: false },
-  ],
+  // NEGOTIATION → CONTRACT: Deal Value, Expected Close Date, Contract Type.
+  //
+  // There is deliberately NO separate "Agreed Final Value" field. It used to live here, next to
+  // the modal's own Deal Value input — two boxes for one number, on the same screen, which the
+  // server then had to keep in sync. It didn't: the sync overwrote the value the user typed on
+  // the following save. The deal's Deal Value input is simply LABELLED "Agreed Final Value" at
+  // this stage (see StageTransitionModal), because by CONTRACT that is what it means.
+  CONTRACT: [],
 
   // CONTRACT → ACTIVE_RETAINER / ACTIVE_PROJECT (Won & Closed → Active).
   // Entering Active is what auto-creates the revenue record (retainer → subscription,
