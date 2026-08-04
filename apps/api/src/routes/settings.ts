@@ -306,7 +306,6 @@ settingsRouter.get('/users', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Auth
             projectMembers: true,
             assignedLeads: true,
             stageChanges: true,
-            quotesAsSalesperson: true,
             activities: true,
             notes: true,
             ownedProjects: true,

@@ -63,7 +63,26 @@ export async function generateLeadId(organizationId: string): Promise<string> {
   return `FL-${yearMonth}-${seq}`;
 }
 
-// Normalize a phone number to digits only, for duplicate detection.
+/**
+ * Canonical key for a phone number, used ONLY to compare two numbers for duplicate detection.
+ * Never stored — numbers are kept exactly as they were typed.
+ *
+ * Stripping non-digits is not enough on its own. The same person written as "+91 98400 00001",
+ * "098400 00001" and "9840000001" produced three different keys, so all three were accepted as
+ * separate leads. That was survivable while the database held a unique index on the phone column;
+ * that index went with the column when a lead's contact details moved to lead_contacts, so this
+ * function is now the ONLY thing standing between a rep and a duplicate lead.
+ *
+ * The subscriber number is what identifies a person, so anything longer than 10 digits is reduced
+ * to its last 10 — which covers a country code (91…), an international prefix (0091…) and a
+ * national trunk prefix (0…) in one rule, without needing to know which one it was.
+ *
+ * The trade-off is deliberate: two numbers from different countries that happen to share their
+ * last 10 digits would be treated as one. For an agency working in Indian numbers that is far
+ * rarer than the duplicate it prevents, and a wrong "this number already exists" is visible and
+ * recoverable, whereas a duplicate lead is silent.
+ */
 export function normalizePhone(phone: string | null | undefined): string {
-  return (phone || '').replace(/\D/g, '');
+  const digits = (phone || '').replace(/\D/g, '');
+  return digits.length > 10 ? digits.slice(-10) : digits;
 }

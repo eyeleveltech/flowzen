@@ -35,7 +35,6 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
     if (u._count.projectMembers > 0) parts.push(`${u._count.projectMembers} project${u._count.projectMembers > 1 ? 's' : ''}`);
     if (u._count.assignedLeads > 0) parts.push(`${u._count.assignedLeads} lead${u._count.assignedLeads > 1 ? 's' : ''}`);
     if (u._count.stageChanges > 0) parts.push(`${u._count.stageChanges} stage change${u._count.stageChanges > 1 ? 's' : ''}`);
-    if (u._count.quotesAsSalesperson > 0) parts.push(`${u._count.quotesAsSalesperson} quote${u._count.quotesAsSalesperson > 1 ? 's' : ''}`);
     if (u._count.activities > 0) parts.push(`${u._count.activities} activit${u._count.activities > 1 ? 'ies' : 'y'}`);
     if (u._count.notes > 0) parts.push(`${u._count.notes} note${u._count.notes > 1 ? 's' : ''}`);
     if (u._count.ownedProjects > 0) parts.push(`${u._count.ownedProjects} project${u._count.ownedProjects > 1 ? 's' : ''}`);

@@ -311,7 +311,6 @@ model User {
   createdWorkflows WorkflowRule[] @relation("WorkflowCreator")
   assignedLeads  Lead[]          @relation("LeadAssignee")
   stageChanges   StageHistory[]  @relation("StageChanger")
-  quotesAsSalesperson QuoteDocument[] @relation("QuoteSalesperson")
   auditLogs           AuditLog[]      @relation("UserAuditLogs")
 
   @@index([organizationId])
@@ -844,7 +843,6 @@ model QuoteDocument {
   clientState      String?      // drives CGST/SGST vs IGST at generation time
   paymentTerms     String
   customerRef      String?
-  salespersonId    String?
   salesTeam        String?
   onlineSignature  Boolean      @default(false)
   onlinePayment    Boolean      @default(false)
@@ -875,7 +873,6 @@ model QuoteDocument {
   organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   client           Client?      @relation(fields: [clientId], references: [id])
   lead             Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  salesperson      User?        @relation("QuoteSalesperson", fields: [salespersonId], references: [id])
   invoiceDraft     InvoiceDraft?
 
   @@unique([organizationId, documentNumber])

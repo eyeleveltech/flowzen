@@ -21,9 +21,16 @@ describe('Utility Functions', () => {
   });
 
   describe('getAvatarColor', () => {
-    it('should return a valid tailwind background class', () => {
+    // getAvatarColor returns a PAIR of classes ("bg-orange-100 text-orange-700") so the initials
+    // stay legible on the tint. The old assertion expected a lone background class and had been
+    // failing ever since the text colour was added.
+    it('should return matching background and text classes', () => {
       const color = getAvatarColor('John Doe');
-      expect(color).toMatch(/^bg-\w+-\d+$/);
+      expect(color).toMatch(/^bg-\w+-\d+ text-\w+-\d+$/);
+    });
+
+    it('should fall back to a neutral swatch for an empty name', () => {
+      expect(getAvatarColor('')).toContain('bg-[#F3F4F6]');
     });
 
     it('should return consistent colors for the same name', () => {
