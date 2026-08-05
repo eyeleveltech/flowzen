@@ -13,6 +13,7 @@ import { useModalSafety } from '@/hooks/useModalSafety';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { useQueryClient } from '@tanstack/react-query';
+import { Icon } from '@/components/ui/icon';
 
 export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onClose: () => void; onSuccess: () => void; initialMode?: 'MANUAL' | 'BULK' }) {
   const queryClient = useQueryClient();
@@ -297,7 +298,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                       onChange={handleClientSearchChange}
                       onFocus={() => setShowClientDropdown(true)}
                       placeholder="Search existing clients or type company name..."
-                      className={`w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all ${form.clientId ? 'bg-blue-50 border-blue-200 text-blue-900' : ''}`}
+                      className={`w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none ${form.clientId ? 'bg-blue-50 border-blue-200 text-blue-900' : ''}`}
                     />
                     {form.clientId && (
                       <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-600" />
@@ -460,7 +461,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                   <h3 className="text-sm font-semibold text-primary">Need a template?</h3>
                   <p className="text-xs text-secondary mt-1">CSV or Excel (.xlsx). <span className="font-medium text-[#374151]">CompanyName required</span> on every row — the contact person and their details are optional.</p>
                 </div>
-                <button onClick={downloadTemplate} className="flex items-center gap-2 rounded-lg border border-border bg-gray-50 px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-gray-100 transition-all">
+                <button onClick={downloadTemplate} className="flex items-center gap-2 rounded-lg border border-border bg-gray-50 px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-gray-100 transition-colors duration-150 motion-reduce:transition-none">
                   <FileText className="h-3.5 w-3.5" /> Template
                 </button>
               </div>
@@ -473,7 +474,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                   className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed transition-colors rounded-xl cursor-pointer bg-white ${isDragging ? 'border-primary bg-primary/5' : 'border-border hover:border-primary hover:bg-gray-50'}`}
                 >
                   <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    <Upload className="w-8 h-8 mb-3 text-secondary" />
+                    <Upload className="h-8 w-8 mb-3 text-secondary" />
                     <p className="mb-2 text-sm text-primary">
                       <span className="font-semibold">Click to upload</span> or drag and drop
                     </p>
@@ -496,7 +497,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                     {importResult.rejectedCount > 0 && <>, <span className="font-semibold text-amber-700">{importResult.rejectedCount} rejected</span></>}.
                   </p>
                   {importResult.rejectedCount > 0 && (
-                    <button onClick={downloadRejectionReport} className="mt-3 flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-50 transition-all">
+                    <button onClick={downloadRejectionReport} className="mt-3 flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-50 transition-colors duration-150 motion-reduce:transition-none">
                       <FileText className="h-3.5 w-3.5" /> Download rejection report
                     </button>
                   )}
@@ -516,16 +517,16 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
             Cancel
           </button>
           {creationMode === 'MANUAL' ? (
-            <button type="submit" form="lead-form" disabled={submitting} className="flex-1 sm:flex-none w-full sm:w-auto justify-center px-2 sm:px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5 sm:gap-2">
+            <button type="submit" form="lead-form" disabled={submitting} className="flex-1 sm:flex-none w-full sm:w-auto justify-center px-2 sm:px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] shadow-sm transition-colors duration-150 motion-reduce:transition-none disabled:opacity-50 flex items-center gap-1.5 sm:gap-2">
               <Save className="h-4 w-4 shrink-0" />
               {submitting ? 'Saving...' : <><span className="hidden sm:inline">Save Lead</span><span className="inline sm:hidden">Save</span></>}
             </button>
           ) : importResult ? (
-            <button onClick={onSuccess} className="w-full sm:w-auto justify-center px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] shadow-sm transition-all flex items-center gap-2">
+            <button onClick={onSuccess} className="w-full sm:w-auto justify-center px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] shadow-sm transition-colors duration-150 motion-reduce:transition-none flex items-center gap-2">
               <Check className="h-4 w-4" /> Done
             </button>
           ) : (
-            <button onClick={handleBulkImport} disabled={importing || importPreview.length === 0} className="flex-1 sm:flex-none w-full sm:w-auto justify-center px-2 sm:px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5 sm:gap-2">
+            <button onClick={handleBulkImport} disabled={importing || importPreview.length === 0} className="flex-1 sm:flex-none w-full sm:w-auto justify-center px-2 sm:px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] shadow-sm transition-colors duration-150 motion-reduce:transition-none disabled:opacity-50 flex items-center gap-1.5 sm:gap-2">
               <Upload className="h-4 w-4 shrink-0" />
               {importing ? 'Importing...' : <><span className="hidden sm:inline">Import Leads</span><span className="inline sm:hidden">Import</span></>}
             </button>
@@ -537,7 +538,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
 }
 
 function PriorityDot({ level }: { level: string }) {
-  if (level === 'HIGH') return <div className="w-2.5 h-2.5 rounded-full bg-red-500" />;
-  if (level === 'MEDIUM') return <div className="w-2.5 h-2.5 rounded-full bg-yellow-500" />;
-  return <div className="w-2.5 h-2.5 rounded-full bg-gray-400" />;
+  if (level === 'HIGH') return <div className="h-2.5 w-2.5 rounded-full bg-red-500" />;
+  if (level === 'MEDIUM') return <div className="h-2.5 w-2.5 rounded-full bg-yellow-500" />;
+  return <div className="h-2.5 w-2.5 rounded-full bg-gray-400" />;
 }

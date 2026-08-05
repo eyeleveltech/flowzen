@@ -12,6 +12,7 @@ import { TableSkeleton } from '@/components/ui/skeleton-loaders';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
 import { ErrorPanel } from '@/components/ui/error-panel';
+import { Icon } from '@/components/ui/icon';
 
 export default function ContractsPage() {
   usePageTitle('Contracts');
@@ -52,7 +53,7 @@ export default function ContractsPage() {
           onClick={() => setShowModal(true)}
           className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-[#1F2937] transition-colors"
         >
-          <Plus className="h-4 w-4" />
+          <Icon as={Plus} size="md" />
           New Contract
         </button>
       </div>
@@ -88,7 +89,7 @@ export default function ContractsPage() {
                 <tr key={c.id} className="hover:bg-surface transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-secondary shrink-0" />
+                      <Icon as={FileText} size="md" className="text-secondary shrink-0" />
                       <span className="text-sm font-medium text-primary">{c.title}</span>
                     </div>
                   </td>

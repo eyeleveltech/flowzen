@@ -4,10 +4,10 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
-import { formatCurrency, formatCurrencyCompact } from '@/lib/utils';
+import { formatCurrency, formatCurrencyCompact, formatShortDate, getInitials, getAvatarColor } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence } from 'framer-motion';
-import { ChevronDown, Check, Plus, ChevronsLeft, ChevronsRight, Search, X } from 'lucide-react';
+import { ChevronDown, Check, Plus, ChevronsLeft, ChevronsRight, Search, X, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { StageTransitionModal } from './StageTransitionModal';
 import { stageNeedsTransitionInput } from '../lib/stage-config';
@@ -19,8 +19,8 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
 import { useMembers } from '@/hooks/useQueries';
 import { MultiSelect } from '@/components/ui/multi-select';
-import { getInitials } from '@/lib/utils';
 import { LEAD_STAGES, LEAD_STAGE_GROUPS, LEAD_STAGE_SHORT_LABELS, leadStageLabel } from '@/lib/lead-stage';
+import { Icon } from '@/components/ui/icon';
 
 // All pipeline stages in chronological order (used by the per-card stage menu).
 // Widened to string[]: leads arrive from the API typed loosely, and this list is used for
@@ -452,7 +452,7 @@ export function PipelineBoardView() {
   if (!isMounted || loading) {
     return (
       <div className="flex items-center justify-center h-96">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -463,20 +463,20 @@ export function PipelineBoardView() {
       <div className="flex flex-wrap items-center justify-between gap-3 px-1 pb-3 shrink-0">
         <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
           <div className="relative flex-1 min-w-48 max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary pointer-events-none" />
+            <Icon as={Search} size="md" className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary pointer-events-none" />
             <input
               type="text"
               placeholder="Search leads…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-xl border border-border bg-white pl-9 pr-8 py-1.5 text-sm outline-none focus:border-primary transition-all placeholder:text-secondary"
+              className="w-full rounded-xl border border-border bg-white pl-9 pr-8 py-1.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none placeholder:text-secondary"
             />
             {search && (
               <button
                 onClick={() => setSearch('')}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-secondary hover:text-primary"
               >
-                <X className="h-3.5 w-3.5" />
+                <Icon as={X} size="sm" />
               </button>
             )}
           </div>
@@ -536,7 +536,7 @@ export function PipelineBoardView() {
                 <div
                   key={group.id}
                   onClick={() => toggleCollapse(group.id)}
-                  className="flex flex-col w-12 h-full shrink-0 border border-gray-200 rounded-xl cursor-pointer py-4 justify-between items-center transition-all select-none group/col shadow-sm hover:shadow"
+                  className="flex flex-col w-12 h-full shrink-0 border border-gray-200 rounded-xl cursor-pointer py-4 justify-between items-center transition-colors duration-150 motion-reduce:transition-none select-none group/col shadow-sm hover:shadow"
                   style={{
                     borderLeft: `4px solid ${group.color}`,
                     backgroundColor: `${group.color}08` // 3% opacity tint of stage color
@@ -547,7 +547,7 @@ export function PipelineBoardView() {
                     className="p-1 rounded-lg transition-colors"
                     style={{ color: group.color }}
                   >
-                    <ChevronsRight className="w-4 h-4 hover:scale-110 transition-transform" />
+                    <Icon as={ChevronsRight} size="md" className="hover:scale-110 transition-transform" />
                   </button>
 
                   <div className="flex flex-col items-center justify-center flex-1">
@@ -560,7 +560,7 @@ export function PipelineBoardView() {
                   </div>
 
                   <div
-                    className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm"
+                    className="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm"
                     style={{ backgroundColor: group.color }}
                   >
                     {columnLeads.length}
@@ -586,7 +586,7 @@ export function PipelineBoardView() {
                       className="p-0.5 rounded text-white/70 hover:text-white hover:bg-white/10 transition-colors"
                       title="Collapse column"
                     >
-                      <ChevronsLeft className="w-3.5 h-3.5" />
+                      <Icon as={ChevronsLeft} size="sm" />
                     </button>
                     <h3 className="text-sm font-semibold text-white tracking-wide">{group.title}</h3>
                   </div>
@@ -614,7 +614,7 @@ export function PipelineBoardView() {
                                 {...provided.dragHandleProps}
                                 onClick={() => router.push(`/pipeline/${lead.id}`)}
                                 className={`bg-white rounded-xl p-4 border border-gray-200 cursor-pointer group ${snapshot.isDragging ? 'shadow-2xl shadow-black/10 scale-105 z-50 ring-2 ring-primary' : 'shadow-sm hover:shadow-md hover:border-gray-300'
-                                  } transition-all relative`}
+                                  } transition-colors duration-150 motion-reduce:transition-none relative`}
                               >
                                 {/* Top Header: ID & Stage Badge */}
                                 <div className="flex items-center justify-between gap-2 mb-3 select-none">
@@ -649,7 +649,7 @@ export function PipelineBoardView() {
                                         </h4>
                                       </div>
                                       <div className="mt-1">
-                                        {displaySubtitle && (
+                                        {displaySubtitle && displaySubtitle !== displayTitle && (
                                           <p className="text-sm font-medium text-secondary truncate" title={displaySubtitle}>
                                             {displaySubtitle}
                                           </p>
@@ -660,22 +660,51 @@ export function PipelineBoardView() {
                                           </p>
                                         )}
                                       </div>
+                                      <div className="mt-2.5 flex items-center justify-between gap-1 text-[10px] text-gray-400 font-medium">
+                                        <span>
+                                          {(() => {
+                                            const stageDate = lead.stageHistory?.[0]?.changedAt ? new Date(lead.stageHistory[0].changedAt) : (lead.createdAt ? new Date(lead.createdAt) : null);
+                                            const days = stageDate ? Math.max(0, Math.floor((Date.now() - stageDate.getTime()) / (1000 * 60 * 60 * 24))) : 0;
+                                            return `${days}d in stage`;
+                                          })()}
+                                        </span>
+                                        {lead.followUpDate && (() => {
+                                          const followUp = new Date(lead.followUpDate);
+                                          const isOverdue = followUp.getTime() < new Date().setHours(0, 0, 0, 0);
+                                          return (
+                                            <span className={`inline-flex items-center gap-1 ${isOverdue ? 'text-red-500 font-semibold' : 'text-secondary'}`} title={`Follow-up: ${formatShortDate(followUp)}`}>
+                                              <Clock className="h-2.5 w-2.5" />
+                                              {isOverdue ? 'Overdue' : formatShortDate(followUp)}
+                                            </span>
+                                          );
+                                        })()}
+                                      </div>
                                     </>
                                   );
                                 })()}
 
-                                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between gap-2 min-w-0">
+                                <div className="mt-3 pt-2.5 border-t border-gray-100 flex items-center justify-between gap-2 min-w-0">
                                   <p className="text-sm font-bold text-primary truncate" title={lead.dealValue ? formatCurrency(lead.dealValue) : ''}>
                                     {lead.dealValue ? formatCurrencyCompact(lead.dealValue) : 'TBD'}
                                   </p>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => openStageMenu(e, lead)}
-                                    onMouseDown={(e) => e.stopPropagation()}
-                                    className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-secondary bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 hover:text-primary transition-colors"
-                                  >
-                                    Stage <ChevronDown className="w-3 h-3" />
-                                  </button>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    {lead.assignedTo?.name && (
+                                      <span
+                                        className={`h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white ${getAvatarColor(lead.assignedTo.name)}`}
+                                        title={`Owner: ${lead.assignedTo.name}`}
+                                      >
+                                        {getInitials(lead.assignedTo.name)}
+                                      </span>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => openStageMenu(e, lead)}
+                                      onMouseDown={(e) => e.stopPropagation()}
+                                      className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-secondary bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 hover:text-primary transition-colors"
+                                    >
+                                      Stage <ChevronDown className="h-3 w-3" />
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
                             )}
@@ -713,7 +742,7 @@ export function PipelineBoardView() {
                     className="flex items-center justify-center text-primary hover:text-blue-600 transition-colors p-1.5 rounded-lg hover:bg-gray-50 border border-gray-200"
                     title="Add Lead"
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Icon as={Plus} size="sm" />
                   </button>
                 </div>
               </div>
@@ -769,7 +798,7 @@ export function PipelineBoardView() {
                     }`}
                 >
                   <span><span className="text-gray-400">{idx + 1}.</span> {leadStageLabel(stage)}</span>
-                  {isCurrent && <Check className="w-4 h-4 text-gray-400 shrink-0" />}
+                  {isCurrent && <Icon as={Check} size="md" className="text-gray-400 shrink-0" />}
                 </button>
               );
             })}

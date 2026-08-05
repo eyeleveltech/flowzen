@@ -1,5 +1,6 @@
 import { Check, Minus } from 'lucide-react';
 import { USER_ROLES, ROLE_LABELS } from '@flowzen/shared';
+import { Icon } from '@/components/ui/icon';
 
 export function PermissionsTab() {
   const roles = USER_ROLES.map((r) => ROLE_LABELS[r]);
@@ -43,9 +44,9 @@ export function PermissionsTab() {
                 {p.values.map((v, j) => (
                   <td key={j} className="px-6 py-4 text-center">
                     {v ? (
-                      <Check className="h-4 w-4 text-emerald-600 mx-auto" strokeWidth={3} />
+                      <Icon as={Check} size="md" className="text-emerald-600 mx-auto" strokeWidth={3} />
                     ) : (
-                      <Minus className="h-4 w-4 text-secondary/40 mx-auto" />
+                      <Icon as={Minus} size="md" className="text-secondary/40 mx-auto" />
                     )}
                   </td>
                 ))}

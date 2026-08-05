@@ -7,9 +7,12 @@ import { api } from '@/lib/api';
 import { formatDate, formatShortDate, getInitials, getAvatarColor, triggerHaptic, getClientDisplayName } from '@/lib/utils';
 import { TASK_STATUSES, TASK_STATUS_LABELS, TASK_STATUS_COLORS, TASK_STATUS_OPTIONS } from '@/lib/task-status';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { Search, Plus, Filter, MessageSquare, X, Trash2, Settings, Check, ChevronRight, LayoutList, Kanban } from 'lucide-react';
+import { Search, Plus, Filter, MessageSquare, X, Trash2, Settings, Check, ChevronRight, LayoutList, Kanban, SlidersHorizontal } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
+import { Drawer } from '@/components/ui/drawer';
+import { useIsMobile } from '@/hooks/use-breakpoint';
+import { ActiveFilterChip } from '@/components/ui/active-filter-chip';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ViewSettingsPanel } from '@/components/ui/view-settings-panel';
 import toast from 'react-hot-toast';
@@ -91,6 +94,7 @@ function AssigneeAvatars({ task, size = 26 }: { task: { assignees?: AssigneePers
 }
 
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { Icon } from '@/components/ui/icon';
 
 function TasksContent() {
   usePageTitle('Tasks');
@@ -235,6 +239,8 @@ function TasksContent() {
 
   const [view, setView] = useState<'list' | 'board'>('list');
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
@@ -470,6 +476,15 @@ function TasksContent() {
     isAssigneeCleared
   );
 
+  const activeCount = (clientFilter.length > 0 ? 1 : 0) +
+    (projectFilter.length > 0 ? 1 : 0) +
+    (statusFilter.length > 0 ? 1 : 0) +
+    (teamFilter.length > 0 ? 1 : 0) +
+    ((isAssigneeCustom || isAssigneeCleared) ? 1 : 0) +
+    (priorityFilter.length > 0 ? 1 : 0) +
+    (isCustomSortActive ? 1 : 0) +
+    (showCompleted ? 1 : 0);
+
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="h-full flex flex-col space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -487,140 +502,312 @@ function TasksContent() {
       {/* Redesigned Clean Tasks Toolbar */}
       <div className="bg-white border border-border rounded-2xl p-4 shadow-sm flex flex-col gap-4 w-full mb-6">
         {/* Row 1: Search + Active Filter Pills */}
-        <div className="flex flex-wrap items-center gap-2 w-full">
-          {/* Search Box */}
-          <div className="relative w-full sm:w-64 md:w-80 shrink-0">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search tasks..."
-              className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-secondary"
-            />
-          </div>
+        {isMobile ? (
+          <div className="flex flex-col gap-2.5 w-full">
+            <div className="flex items-center gap-2 w-full">
+              <div className="relative w-full shrink">
+                <Icon as={Search} size="md" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-secondary" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search tasks..."
+                  className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none placeholder:text-secondary"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setFilterSheetOpen(true)}
+                className="flex items-center gap-1.5 h-9 rounded-xl border border-border bg-white hover:bg-gray-50 px-3 text-xs font-semibold text-secondary shrink-0 transition-colors"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                <span>Filters</span>
+                {activeCount > 0 && (
+                  <span className="ml-0.5 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-white">
+                    {activeCount}
+                  </span>
+                )}
+              </button>
+            </div>
 
-          {/* Filter Pills */}
-          <div className="shrink-0">
-            <MultiSelect
-              showSelectAll
-              value={clientFilter}
-              onChange={(val) => {
-                setClientFilter(val);
-                // Clear any selected projects that don't belong to the newly selected companies
-                if (val.length > 0) {
-                  setProjectFilter(prev => prev.filter(projId => {
-                    const p = projects.find(proj => proj.id === projId);
-                    return val.includes(p?.client?.id || p?.clientId);
-                  }));
-                }
-              }}
-              placeholder="Companies"
-              triggerClassName={clientFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
-              options={clients.map((c: any) => ({ label: getClientDisplayName(c), value: c.id }))}
-            />
-          </div>
+            {/* Active Chips Row */}
+            {activeCount > 0 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                {clientFilter.length > 0 && <ActiveFilterChip label={`Companies: ${clientFilter.length}`} onRemove={() => setClientFilter([])} />}
+                {projectFilter.length > 0 && <ActiveFilterChip label={`Projects: ${projectFilter.length}`} onRemove={() => setProjectFilter([])} />}
+                {statusFilter.length > 0 && <ActiveFilterChip label={`Status: ${statusFilter.length}`} onRemove={() => setStatusFilter([])} />}
+                {teamFilter.length > 0 && <ActiveFilterChip label={`Departments: ${teamFilter.length}`} onRemove={() => setTeamFilter([])} />}
+                {(isAssigneeCustom || isAssigneeCleared) && <ActiveFilterChip label={`Assignees: ${assigneeFilter.length}`} onRemove={() => {
+                  if (user?.id && user.role !== 'TEAM_MEMBER') {
+                    setAssigneeFilter([user.id]);
+                  } else {
+                    setAssigneeFilter([]);
+                  }
+                }} />}
+                {priorityFilter.length > 0 && <ActiveFilterChip label={`Priority: ${priorityFilter.length}`} onRemove={() => setPriorityFilter([])} />}
+                {isCustomSortActive && <ActiveFilterChip label="Custom Sort" onRemove={() => setSort('createdAt_desc')} />}
+                {showCompleted && <ActiveFilterChip label="Show Done" onRemove={() => setShowCompleted(false)} />}
+              </div>
+            )}
 
-          <div className="shrink-0">
-            <MultiSelect
-              showSelectAll
-              value={projectFilter}
-              onChange={setProjectFilter}
-              placeholder="Projects"
-              triggerClassName={projectFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
-              options={filteredProjectsForDropdown.map((p) => ({ label: p.name, value: p.id }))}
-            />
+            {/* Mobile Filter Drawer */}
+            <Drawer isOpen={filterSheetOpen} onClose={() => setFilterSheetOpen(false)} title="Filter Tasks">
+              <div className="p-4 space-y-4">
+                <div>
+                  <label className="text-xs font-medium text-secondary mb-1.5 block">Companies</label>
+                  <MultiSelect
+                    showSelectAll
+                    value={clientFilter}
+                    onChange={(val) => {
+                      setClientFilter(val);
+                      if (val.length > 0) {
+                        setProjectFilter(prev => prev.filter(projId => {
+                          const p = projects.find(proj => proj.id === projId);
+                          return val.includes(p?.client?.id || p?.clientId);
+                        }));
+                      }
+                    }}
+                    placeholder="Companies"
+                    triggerClassName="w-full h-9 rounded-xl border border-border bg-white px-3 text-xs"
+                    options={clients.map((c: any) => ({ label: getClientDisplayName(c), value: c.id }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-secondary mb-1.5 block">Projects</label>
+                  <MultiSelect
+                    showSelectAll
+                    value={projectFilter}
+                    onChange={setProjectFilter}
+                    placeholder="Projects"
+                    triggerClassName="w-full h-9 rounded-xl border border-border bg-white px-3 text-xs"
+                    options={filteredProjectsForDropdown.map((p) => ({ label: p.name, value: p.id }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-secondary mb-1.5 block">Status</label>
+                  <MultiSelect
+                    showSelectAll
+                    value={statusFilter}
+                    onChange={setStatusFilter}
+                    placeholder="Status"
+                    triggerClassName="w-full h-9 rounded-xl border border-border bg-white px-3 text-xs"
+                    options={TASK_STATUS_OPTIONS}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-secondary mb-1.5 block">Departments</label>
+                  <MultiSelect
+                    showSelectAll
+                    value={teamFilter}
+                    onChange={setTeamFilter}
+                    placeholder="Departments"
+                    triggerClassName="w-full h-9 rounded-xl border border-border bg-white px-3 text-xs"
+                    options={teams.map((t: any) => ({ label: t.name, value: t.id }))}
+                  />
+                </div>
+                {user?.role !== 'TEAM_MEMBER' && (
+                  <div>
+                    <label className="text-xs font-medium text-secondary mb-1.5 block">Assignees</label>
+                    <MultiSelect
+                      showSelectAll
+                      value={assigneeFilter}
+                      onChange={setAssigneeFilter}
+                      placeholder="Assignees"
+                      triggerClassName="w-full h-9 rounded-xl border border-border bg-white px-3 text-xs"
+                      options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="text-xs font-medium text-secondary mb-1.5 block">Priority</label>
+                  <MultiSelect
+                    showSelectAll
+                    value={priorityFilter}
+                    onChange={setPriorityFilter}
+                    placeholder="Priority"
+                    triggerClassName="w-full h-9 rounded-xl border border-border bg-white px-3 text-xs"
+                    options={[
+                      { label: 'Low', value: 'LOW' },
+                      { label: 'Medium', value: 'MEDIUM' },
+                      { label: 'High', value: 'HIGH' },
+                      { label: 'Urgent', value: 'URGENT' },
+                    ]}
+                  />
+                </div>
+                {view === 'list' && (
+                  <div>
+                    <label className="text-xs font-medium text-secondary mb-1.5 block">Sort By</label>
+                    <Select
+                      ariaLabel="Sort Tasks"
+                      value={sort}
+                      onChange={setSort}
+                      buttonClassName="w-full px-3 h-9 rounded-xl border border-border bg-white text-secondary text-xs font-medium"
+                      options={[
+                        { label: 'Sort: Created (New)', value: 'createdAt_desc' },
+                        { label: 'Sort: Project A-Z', value: 'project_asc' },
+                        { label: 'Sort: Project Z-A', value: 'project_desc' },
+                        { label: 'Sort: Priority (Low-High)', value: 'priority_asc' },
+                        { label: 'Sort: Priority (High-Low)', value: 'priority_desc' },
+                        { label: 'Sort: Status (To Do-Done)', value: 'status_asc' },
+                        { label: 'Sort: Status (Done-To Do)', value: 'status_desc' },
+                        { label: 'Sort: Name A-Z', value: 'title_asc' },
+                        { label: 'Sort: Name Z-A', value: 'title_desc' },
+                        { label: 'Sort: Created (Old)', value: 'createdAt_asc' },
+                        { label: 'Sort: Due Date', value: 'dueDate_desc' },
+                        { label: 'Sort: Updated', value: 'updatedAt_desc' },
+                      ]}
+                    />
+                  </div>
+                )}
+                <div className="flex items-center justify-between pt-2 border-t border-border">
+                  <span className="text-xs font-semibold text-secondary">Show Done Tasks</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={showCompleted}
+                    onClick={() => setShowCompleted(!showCompleted)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors ${showCompleted ? 'bg-primary border-primary' : 'bg-gray-200 border-gray-300'}`}
+                  >
+                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${showCompleted ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
+              </div>
+            </Drawer>
           </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2 w-full">
+            {/* Search Box */}
+            <div className="relative w-full sm:w-64 md:w-80 shrink-0">
+              <Icon as={Search} size="md" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-secondary" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search tasks..."
+                className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none placeholder:text-secondary"
+              />
+            </div>
 
-          <div className="shrink-0">
-            <MultiSelect
-              showSelectAll
-              value={statusFilter}
-              onChange={setStatusFilter}
-              placeholder="Status"
-              triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
-              options={TASK_STATUS_OPTIONS}
-            />
-          </div>
-
-          <div className="shrink-0">
-            <MultiSelect
-              showSelectAll
-              value={teamFilter}
-              onChange={setTeamFilter}
-              placeholder="Departments"
-              triggerClassName={teamFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
-              options={teams.map((t: any) => ({ label: t.name, value: t.id }))}
-            />
-          </div>
-
-          {user?.role !== 'TEAM_MEMBER' && (
+            {/* Filter Pills */}
             <div className="shrink-0">
               <MultiSelect
                 showSelectAll
-                value={assigneeFilter}
-                onChange={setAssigneeFilter}
-                placeholder="Assignees"
-                triggerClassName={assigneeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
-                options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
+                value={clientFilter}
+                onChange={(val) => {
+                  setClientFilter(val);
+                  if (val.length > 0) {
+                    setProjectFilter(prev => prev.filter(projId => {
+                      const p = projects.find(proj => proj.id === projId);
+                      return val.includes(p?.client?.id || p?.clientId);
+                    }));
+                  }
+                }}
+                placeholder="Companies"
+                triggerClassName={clientFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
+                options={clients.map((c: any) => ({ label: getClientDisplayName(c), value: c.id }))}
               />
             </div>
-          )}
 
-          <div className="shrink-0">
-            <MultiSelect
-              showSelectAll
-              value={priorityFilter}
-              onChange={setPriorityFilter}
-              placeholder="Priority"
-              triggerClassName={priorityFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
-              options={[
-                { label: 'Low', value: 'LOW' },
-                { label: 'Medium', value: 'MEDIUM' },
-                { label: 'High', value: 'HIGH' },
-                { label: 'Urgent', value: 'URGENT' },
-              ]}
-            />
-          </div>
-
-          {view === 'list' && (
             <div className="shrink-0">
-              <Select
-                ariaLabel="Sort Tasks"
-                value={sort}
-                onChange={setSort}
-                buttonClassName="px-3 h-9 rounded-xl border border-border bg-white text-secondary text-xs font-medium focus:ring-1 focus:ring-primary shadow-none"
+              <MultiSelect
+                showSelectAll
+                value={projectFilter}
+                onChange={setProjectFilter}
+                placeholder="Projects"
+                triggerClassName={projectFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
+                options={filteredProjectsForDropdown.map((p) => ({ label: p.name, value: p.id }))}
+              />
+            </div>
+
+            <div className="shrink-0">
+              <MultiSelect
+                showSelectAll
+                value={statusFilter}
+                onChange={setStatusFilter}
+                placeholder="Status"
+                triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
+                options={TASK_STATUS_OPTIONS}
+              />
+            </div>
+
+            <div className="shrink-0">
+              <MultiSelect
+                showSelectAll
+                value={teamFilter}
+                onChange={setTeamFilter}
+                placeholder="Departments"
+                triggerClassName={teamFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
+                options={teams.map((t: any) => ({ label: t.name, value: t.id }))}
+              />
+            </div>
+
+            {user?.role !== 'TEAM_MEMBER' && (
+              <div className="shrink-0">
+                <MultiSelect
+                  showSelectAll
+                  value={assigneeFilter}
+                  onChange={setAssigneeFilter}
+                  placeholder="Assignees"
+                  triggerClassName={assigneeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
+                  options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
+                />
+              </div>
+            )}
+
+            <div className="shrink-0">
+              <MultiSelect
+                showSelectAll
+                value={priorityFilter}
+                onChange={setPriorityFilter}
+                placeholder="Priority"
+                triggerClassName={priorityFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
                 options={[
-                  { label: 'Sort: Created (New)', value: 'createdAt_desc' },
-                  { label: 'Sort: Project A-Z', value: 'project_asc' },
-                  { label: 'Sort: Project Z-A', value: 'project_desc' },
-                  { label: 'Sort: Priority (Low-High)', value: 'priority_asc' },
-                  { label: 'Sort: Priority (High-Low)', value: 'priority_desc' },
-                  { label: 'Sort: Status (To Do-Done)', value: 'status_asc' },
-                  { label: 'Sort: Status (Done-To Do)', value: 'status_desc' },
-                  { label: 'Sort: Name A-Z', value: 'title_asc' },
-                  { label: 'Sort: Name Z-A', value: 'title_desc' },
-                  { label: 'Sort: Created (Old)', value: 'createdAt_asc' },
-                  { label: 'Sort: Due Date', value: 'dueDate_desc' },
-                  { label: 'Sort: Updated', value: 'updatedAt_desc' },
+                  { label: 'Low', value: 'LOW' },
+                  { label: 'Medium', value: 'MEDIUM' },
+                  { label: 'High', value: 'HIGH' },
+                  { label: 'Urgent', value: 'URGENT' },
                 ]}
               />
             </div>
-          )}
 
-          <div className="flex items-center gap-1.5 border border-border rounded-xl px-3 h-9 bg-white shadow-sm shrink-0">
-            <label htmlFor="show-completed" className="text-xs font-semibold text-[#4B5563] cursor-pointer select-none">Show Done</label>
-            <button
-              id="show-completed"
-              type="button"
-              role="switch"
-              aria-checked={showCompleted}
-              onClick={() => setShowCompleted(!showCompleted)}
-              className={`relative inline-flex h-4.5 w-8 shrink-0 items-center rounded-full border transition-colors ${showCompleted ? 'bg-primary border-primary' : 'bg-gray-200 border-gray-300'}`}
-            >
-              <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform ${showCompleted ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
-            </button>
+            {view === 'list' && (
+              <div className="shrink-0">
+                <Select
+                  ariaLabel="Sort Tasks"
+                  value={sort}
+                  onChange={setSort}
+                  buttonClassName="px-3 h-9 rounded-xl border border-border bg-white text-secondary text-xs font-medium focus:ring-1 focus:ring-primary shadow-none"
+                  options={[
+                    { label: 'Sort: Created (New)', value: 'createdAt_desc' },
+                    { label: 'Sort: Project A-Z', value: 'project_asc' },
+                    { label: 'Sort: Project Z-A', value: 'project_desc' },
+                    { label: 'Sort: Priority (Low-High)', value: 'priority_asc' },
+                    { label: 'Sort: Priority (High-Low)', value: 'priority_desc' },
+                    { label: 'Sort: Status (To Do-Done)', value: 'status_asc' },
+                    { label: 'Sort: Status (Done-To Do)', value: 'status_desc' },
+                    { label: 'Sort: Name A-Z', value: 'title_asc' },
+                    { label: 'Sort: Name Z-A', value: 'title_desc' },
+                    { label: 'Sort: Created (Old)', value: 'createdAt_asc' },
+                    { label: 'Sort: Due Date', value: 'dueDate_desc' },
+                    { label: 'Sort: Updated', value: 'updatedAt_desc' },
+                  ]}
+                />
+              </div>
+            )}
+
+            <div className="flex items-center gap-1.5 border border-border rounded-xl px-3 h-9 bg-white shadow-sm shrink-0">
+              <label htmlFor="show-completed" className="text-xs font-semibold text-[#4B5563] cursor-pointer select-none">Show Done</label>
+              <button
+                id="show-completed"
+                type="button"
+                role="switch"
+                aria-checked={showCompleted}
+                onClick={() => setShowCompleted(!showCompleted)}
+                className={`relative inline-flex h-4.5 w-8 shrink-0 items-center rounded-full border transition-colors ${showCompleted ? 'bg-primary border-primary' : 'bg-gray-200 border-gray-300'}`}
+              >
+                <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform ${showCompleted ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Separator line */}
         <div className="h-px bg-border/60 w-full" />
@@ -639,7 +826,7 @@ function TasksContent() {
                 key={tab.id}
                 type="button"
                 onClick={() => setQuickFilter(tab.id)}
-                className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${currentFilter === tab.id
+                className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors duration-150 motion-reduce:transition-none whitespace-nowrap ${currentFilter === tab.id
                   ? tab.activeColor
                   : 'text-secondary hover:text-primary'
                   }`}
@@ -674,7 +861,7 @@ function TasksContent() {
                 }}
                 className="flex items-center gap-1.5 h-8.5 rounded-xl bg-red-50 px-3 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors border border-red-100"
               >
-                <X className="h-3.5 w-3.5" /> Clear Filters
+                <Icon as={X} size="sm" /> Clear Filters
               </button>
             )}
 
@@ -683,27 +870,27 @@ function TasksContent() {
               <button
                 type="button"
                 onClick={() => setView('list')}
-                className={`p-1.5 rounded-lg transition-all ${view === 'list' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
+                className={`p-1.5 rounded-lg transition-colors duration-150 motion-reduce:transition-none ${view === 'list' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
                 title="List View"
               >
-                <LayoutList className="h-3.5 w-3.5" />
+                <Icon as={LayoutList} size="sm" />
               </button>
               <button
                 type="button"
                 onClick={() => setView('board')}
-                className={`p-1.5 rounded-lg transition-all ${view === 'board' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
+                className={`p-1.5 rounded-lg transition-colors duration-150 motion-reduce:transition-none ${view === 'board' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
                 title="Board View"
               >
-                <Kanban className="h-3.5 w-3.5" />
+                <Icon as={Kanban} size="sm" />
               </button>
             </div>
 
             <button onClick={() => setShowViewSettings(true)} className="p-2 rounded-xl border border-border bg-white hover:bg-gray-50 transition-colors text-secondary hover:text-primary h-8.5 w-8.5 flex items-center justify-center" title="View settings">
-              <Settings className="h-3.5 w-3.5" />
+              <Icon as={Settings} size="sm" />
             </button>
 
-            <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-[#1F2937] transition-all h-8.5">
-              <Plus className="h-3.5 w-3.5" /> New Task
+            <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none h-8.5">
+              <Icon as={Plus} size="sm" /> New Task
             </button>
           </div>
         </div>
@@ -875,7 +1062,7 @@ function TasksContent() {
                         <th className="px-6 py-3.5 w-10 text-center relative select-none">
                           <button
                             onClick={(e) => { e.stopPropagation(); setShowColumnDropdown(!showColumnDropdown); }}
-                            className="inline-flex items-center justify-center h-6 w-6 rounded-md text-secondary hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
+                            className="inline-flex items-center justify-center h-6 w-6 rounded-md text-secondary hover:bg-gray-100 hover:text-primary transition-colors duration-150 motion-reduce:transition-none text-sm font-bold border border-transparent hover:border-gray-200"
                             title="Toggle visible columns"
                           >
                             +
@@ -906,7 +1093,7 @@ function TasksContent() {
                                       className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#F9FAFB] transition-colors"
                                     >
                                       <span className="text-[#374151]">{col.label}</span>
-                                      {visibleColumns.includes(col.id) && <Check className="w-4 h-4 text-primary" />}
+                                      {visibleColumns.includes(col.id) && <Icon as={Check} size="md" className="text-primary" />}
                                     </button>
                                   ))}
                                 </motion.div>
@@ -970,7 +1157,7 @@ function TasksContent() {
                             </td>
                           )}
                           <td className="px-6 py-3.5 text-right w-10 text-secondary">
-                            <ChevronRight className="h-4 w-4 inline-block" />
+                            <Icon as={ChevronRight} size="md" className="inline-block" />
                           </td>
                         </tr>
                       ))}
@@ -1021,7 +1208,7 @@ function TasksContent() {
               <button
                 onClick={() => fetchNextPage()}
                 disabled={isFetchingNextPage}
-                className="rounded-xl border border-border bg-white px-6 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50 transition-all"
+                className="rounded-xl border border-border bg-white px-6 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
               >
                 {isFetchingNextPage ? 'Loading...' : 'Load More Tasks'}
               </button>

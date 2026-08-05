@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 import { fileUrl } from '@/lib/files';
 import { EditInvoiceDraftModal } from './components/EditInvoiceDraftModal';
 import { ErrorPanel } from '@/components/ui/error-panel';
+import { Icon } from '@/components/ui/icon';
 
 export default function InvoiceDraftsPage() {
   const [data, setData] = useState<any[]>([]);
@@ -102,7 +103,7 @@ export default function InvoiceDraftsPage() {
                 data.map((draft: any) => (
                   <tr key={draft.id} className="hover:bg-[#F9FAFB] transition-colors">
                     <td className="px-6 py-4 font-medium text-primary flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-blue-500" />
+                      <Icon as={FileText} size="md" className="text-blue-500" />
                       {draft.draftNumber}
                     </td>
                     <td className="px-6 py-4 text-secondary">{draft.clientName}</td>
@@ -115,7 +116,7 @@ export default function InvoiceDraftsPage() {
                       <div className="flex items-center justify-end gap-2">
                         {draft.pdfUrl && (
                           <a href={fileUrl(draft.pdfUrl)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50">
-                            <Download className="h-4 w-4" /> Download
+                            <Icon as={Download} size="md" /> Download
                           </a>
                         )}
                         {/* While DRAFT the invoice stays workable — generating a PDF doesn't lock it.
@@ -127,14 +128,14 @@ export default function InvoiceDraftsPage() {
                               onClick={() => setEditingDraftId(draft.id)}
                               className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-sm font-medium text-secondary hover:bg-gray-50 hover:text-primary transition-colors"
                             >
-                              <Edit2 className="h-4 w-4" /> Edit
+                              <Icon as={Edit2} size="md" /> Edit
                             </button>
                             <button
                               onClick={() => generatePDF(draft.id)}
                               disabled={generating === draft.id}
                               className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
                             >
-                              {generating === draft.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                              {generating === draft.id ? <Icon as={Loader2} size="md" className="animate-spin" /> : <Icon as={FileText} size="md" />}
                               {draft.pdfUrl ? 'Regenerate' : 'Generate PDF'}
                             </button>
                             {draft.pdfUrl && (
@@ -143,7 +144,7 @@ export default function InvoiceDraftsPage() {
                                 className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors"
                                 title="Locks the draft — it can no longer be edited"
                               >
-                                <Send className="h-4 w-4" /> Mark Sent
+                                <Icon as={Send} size="md" /> Mark Sent
                               </button>
                             )}
                           </>

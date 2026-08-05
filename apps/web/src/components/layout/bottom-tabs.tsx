@@ -3,7 +3,7 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useAuthStore, useModuleStore } from '@/stores';
 import { moduleForPath, accessibleModules, ModuleKey } from '@/lib/modules';
 import { NAV_ITEMS, BOTTOM_NAV_ITEMS, NavItem } from '@/config/navigation';
@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 
 export function BottomTabs() {
+  const shouldReduceMotion = useReducedMotion();
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
   const { activeModule: storeModule, setActiveModule } = useModuleStore();
@@ -55,7 +56,7 @@ export function BottomTabs() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
+              transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2 }}
               className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
               onClick={() => setShowMore(false)}
             />
@@ -63,7 +64,7 @@ export function BottomTabs() {
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              transition={shouldReduceMotion ? { duration: 0 } : { type: 'spring', damping: 28, stiffness: 300 }}
               className="fixed bottom-0 left-0 right-0 z-50 rounded-t-3xl bg-white shadow-2xl"
             >
               {/* Handle */}
@@ -86,7 +87,7 @@ export function BottomTabs() {
               <nav className="px-3 pb-2">
                 {canSwitch && (
                   <Link href="/modules" onClick={() => setShowMore(false)}>
-                    <div className="flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all border border-border mb-1">
+                    <div className="flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none border border-border mb-1">
                       <ArrowLeftRight className="h-5 w-5 text-secondary" />
                       Switch module
                     </div>
@@ -101,7 +102,7 @@ export function BottomTabs() {
                       onClick={() => setShowMore(false)}
                     >
                       <div
-                        className={`flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-medium transition-all duration-150 ${isActive
+                        className={`flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-medium transition-colors duration-150 motion-reduce:transition-none ${isActive
                           ? 'bg-primary text-white'
                           : 'text-[#374151] hover:bg-[#F9FAFB]'
                           }`}
@@ -153,7 +154,7 @@ export function BottomTabs() {
                   <motion.div
                     layoutId="bottom-tab-indicator"
                     className="absolute -top-1.5 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-primary"
-                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                    transition={shouldReduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 500, damping: 35 }}
                   />
                 )}
                 <tab.icon
@@ -179,7 +180,7 @@ export function BottomTabs() {
               <motion.div
                 layoutId="bottom-tab-indicator"
                 className="absolute -top-1.5 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-primary"
-                transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                transition={shouldReduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 500, damping: 35 }}
               />
             )}
             <MoreHorizontal

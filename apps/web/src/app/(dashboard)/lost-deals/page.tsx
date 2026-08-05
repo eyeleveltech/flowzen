@@ -7,6 +7,7 @@ import { TrendingDown, Download } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import { axisTick, gridStroke } from '@/lib/chart-theme';
 
 const COLORS = ['#163027', '#2f6b53', '#5a9e7f', '#9ccdb4', '#cfe8db', '#E2FEA5'];
 const fmtDate = formatDate;
@@ -96,9 +97,9 @@ export default function LostDealsPage() {
             <h2 className="text-sm font-semibold text-primary mb-4">Loss by Stage</h2>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={data.lossByStage} layout="vertical" margin={{ left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-                <XAxis type="number" tick={{ fontSize: 11, fill: '#6B7280' }} />
-                <YAxis type="category" dataKey="stage" tickFormatter={label} tick={{ fontSize: 11, fill: '#6B7280' }} width={90} />
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis type="number" tick={axisTick} />
+                <YAxis type="category" dataKey="stage" tickFormatter={label} tick={axisTick} width={90} />
                 <Tooltip formatter={(v: any, n: any) => (n === 'avgValue' ? formatCurrency(v) : v)} />
                 <Bar dataKey="count" fill="#163027" radius={[0, 4, 4, 0]} name="Count" />
               </BarChart>
@@ -125,9 +126,9 @@ export default function LostDealsPage() {
             <h2 className="text-sm font-semibold text-primary mb-4">Won vs Lost Over Time</h2>
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={data.lossOverTime}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#6B7280' }} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#6B7280' }} />
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis dataKey="month" tick={axisTick} />
+                <YAxis allowDecimals={false} tick={axisTick} />
                 <Tooltip /><Legend />
                 <Line type="monotone" dataKey="won" stroke="#2f6b53" strokeWidth={2} name="Won" />
                 <Line type="monotone" dataKey="lost" stroke="#dc2626" strokeWidth={2} name="Lost" />

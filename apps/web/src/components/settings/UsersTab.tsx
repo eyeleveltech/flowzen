@@ -8,6 +8,7 @@ import { Drawer } from '@/components/ui/drawer';
 import { getInitials, getAvatarColor, toProperCase, getRoleLabel } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useConfirmStore, useAuthStore } from '@/stores';
+import { Icon } from '@/components/ui/icon';
 
 export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any[], fetchUsers: () => void, teams: any[], currentUser?: any }) {
   const [showInvite, setShowInvite] = useState(false);
@@ -214,7 +215,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
           onClick={() => setShowInvite(true)}
           className="bg-primary text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-black transition-colors flex items-center justify-center gap-2 shrink-0 self-start sm:self-auto"
         >
-          <Plus className="h-4 w-4" /> Invite Member
+          <Icon as={Plus} size="md" /> Invite Member
         </button>
       </div>
 
@@ -267,7 +268,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                           title="Transfer Super Admin"
                           className="p-1.5 text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded-md transition-colors"
                         >
-                          <Shield className="h-4 w-4" />
+                          <Icon as={Shield} size="md" />
                         </button>
                       )}
                       {u.status === 'PENDING' && (
@@ -276,7 +277,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                           title="Resend invite email"
                           className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors"
                         >
-                          <Mail className="h-4 w-4" />
+                          <Icon as={Mail} size="md" />
                         </button>
                       )}
                       <button
@@ -284,7 +285,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                         title="Edit user"
                         className="p-1.5 text-secondary hover:text-primary hover:bg-[#F3F4F6] rounded-md transition-colors"
                       >
-                        <Edit2 className="h-4 w-4" />
+                        <Icon as={Edit2} size="md" />
                       </button>
                       {u.status !== 'INACTIVE' && (
                         <button
@@ -292,7 +293,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                           title="Deactivate user"
                           className="px-2.5 py-1 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 rounded-lg transition-colors flex items-center gap-1.5 shrink-0"
                         >
-                          <UserX className="h-3.5 w-3.5" />
+                          <Icon as={UserX} size="sm" />
 
                         </button>
                       )}
@@ -305,7 +306,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                               title={disabledReason}
                               className="p-1.5 text-gray-300 bg-gray-50 border border-gray-100 rounded-md cursor-not-allowed opacity-50"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Icon as={Trash2} size="md" />
                             </button>
                           );
                         }
@@ -315,7 +316,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                             title="Permanently Delete"
                             className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Icon as={Trash2} size="md" />
                           </button>
                         );
                       })()}
@@ -346,25 +347,25 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                     <button
                       onClick={() => { setTransferTarget(u); setConfirmOrgInput(''); }}
                       title="Transfer Super Admin"
-                      className="p-1.5 text-amber-600 hover:text-amber-800 bg-white border border-border hover:bg-amber-50 rounded-xl transition-all"
+                      className="p-1.5 text-amber-600 hover:text-amber-800 bg-white border border-border hover:bg-amber-50 rounded-xl transition-colors duration-150 motion-reduce:transition-none"
                     >
-                      <Shield className="h-4 w-4" />
+                      <Icon as={Shield} size="md" />
                     </button>
                   )}
                   <button
                     onClick={() => setEditingUser(u)}
                     title="Edit user"
-                    className="p-1.5 text-secondary hover:text-primary bg-white border border-border hover:bg-[#F3F4F6] rounded-xl transition-all"
+                    className="p-1.5 text-secondary hover:text-primary bg-white border border-border hover:bg-[#F3F4F6] rounded-xl transition-colors duration-150 motion-reduce:transition-none"
                   >
-                    <Edit2 className="h-4 w-4" />
+                    <Icon as={Edit2} size="md" />
                   </button>
                   {u.status !== 'INACTIVE' && (
                     <button
                       onClick={() => handleDeactivate(u)}
                       title="Deactivate user"
-                      className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 rounded-xl transition-all flex items-center gap-1 shrink-0"
+                      className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 rounded-xl transition-colors duration-150 motion-reduce:transition-none flex items-center gap-1 shrink-0"
                     >
-                      <UserX className="h-3.5 w-3.5" />
+                      <Icon as={UserX} size="sm" />
                     </button>
                   )}
                   {(() => {
@@ -376,7 +377,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                           title={disabledReason}
                           className="p-1.5 text-gray-300 bg-gray-50 border border-gray-200 rounded-xl cursor-not-allowed opacity-50"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Icon as={Trash2} size="md" />
                         </button>
                       );
                     }
@@ -384,9 +385,9 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                       <button
                         onClick={() => handleDelete(u.id)}
                         title="Permanently Delete"
-                        className="p-1.5 text-red-500 hover:text-red-700 bg-white border border-border hover:bg-red-50 rounded-xl transition-all"
+                        className="p-1.5 text-red-500 hover:text-red-700 bg-white border border-border hover:bg-red-50 rounded-xl transition-colors duration-150 motion-reduce:transition-none"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Icon as={Trash2} size="md" />
                       </button>
                     );
                   })()}
@@ -425,11 +426,11 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
         <form onSubmit={handleInvite} className="space-y-4">
           <div className="space-y-1.5">
             <label htmlFor="invite-name" className="text-sm font-medium text-[#374151]">Full Name</label>
-            <input id="invite-name" required value={inviteForm.name} onChange={(e) => setInviteForm({ ...inviteForm, name: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
+            <input id="invite-name" required value={inviteForm.name} onChange={(e) => setInviteForm({ ...inviteForm, name: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none transition-colors duration-150 motion-reduce:transition-none" />
           </div>
           <div className="space-y-1.5">
             <label htmlFor="invite-email" className="text-sm font-medium text-[#374151]">Email Address</label>
-            <input id="invite-email" required type="email" value={inviteForm.email} onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
+            <input id="invite-email" required type="email" value={inviteForm.email} onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none transition-colors duration-150 motion-reduce:transition-none" />
           </div>
           <div className="space-y-1.5 z-30 relative">
             <label htmlFor="invite-role" className="text-sm font-medium text-[#374151]">Role</label>
@@ -447,7 +448,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
           </div>
           <div className="space-y-1.5 relative">
             <label htmlFor="invite-designation" className="text-sm font-medium text-[#374151]">Designation (Optional)</label>
-            <input id="invite-designation" list="designation-options" placeholder="Select or type a designation…" value={inviteForm.designation || ''} onChange={(e) => setInviteForm({ ...inviteForm, designation: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
+            <input id="invite-designation" list="designation-options" placeholder="Select or type a designation…" value={inviteForm.designation || ''} onChange={(e) => setInviteForm({ ...inviteForm, designation: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none transition-colors duration-150 motion-reduce:transition-none" />
           </div>
           <div className="pt-8 flex gap-3">
             <button type="button" onClick={() => setShowInvite(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-border text-[#374151] font-medium hover:bg-surface transition-colors">Cancel</button>
@@ -463,7 +464,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
           <form onSubmit={handleUpdateUser} className="space-y-4">
             <div className="space-y-1.5">
               <label htmlFor="edit-name" className="text-sm font-medium text-[#374151]">Full Name</label>
-              <input id="edit-name" required value={editingUser.name} onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
+              <input id="edit-name" required value={editingUser.name} onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none transition-colors duration-150 motion-reduce:transition-none" />
             </div>
             <div className="space-y-1.5 z-40 relative">
               <label htmlFor="edit-role" className="text-sm font-medium text-[#374151]">Role</label>
@@ -481,7 +482,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
             </div>
             <div className="space-y-1.5 relative">
               <label htmlFor="edit-designation" className="text-sm font-medium text-[#374151]">Designation (Optional)</label>
-              <input id="edit-designation" list="designation-options" placeholder="Select or type a designation…" value={editingUser.designation || ''} onChange={(e) => setEditingUser({ ...editingUser, designation: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
+              <input id="edit-designation" list="designation-options" placeholder="Select or type a designation…" value={editingUser.designation || ''} onChange={(e) => setEditingUser({ ...editingUser, designation: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none transition-colors duration-150 motion-reduce:transition-none" />
             </div>
 
             <div className="space-y-1.5">
@@ -526,7 +527,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
             >
               <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-border bg-surface shrink-0">
                 <div className="flex items-center gap-2 text-amber-600 font-semibold">
-                  <Shield className="h-5 w-5" />
+                  <Icon as={Shield} size="lg" />
                   <h3 className="text-base text-primary font-semibold">Transfer Super Admin</h3>
                 </div>
                 <button
@@ -534,7 +535,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                   onClick={() => setTransferTarget(null)}
                   className="text-secondary hover:text-primary p-1 rounded-md hover:bg-border transition-colors"
                 >
-                  <X className="h-5 w-5" />
+                  <Icon as={X} size="lg" />
                 </button>
               </div>
 
@@ -557,7 +558,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                     value={confirmOrgInput}
                     onChange={(e) => setConfirmOrgInput(e.target.value)}
                     placeholder={orgName}
-                    className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none transition-all"
+                    className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none transition-colors duration-150 motion-reduce:transition-none"
                   />
                 </div>
               </div>
@@ -596,7 +597,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
             >
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-primary">Reassign Open Tasks</h3>
-                <button onClick={() => setReassignModal(null)} className="text-secondary hover:text-primary"><X className="h-5 w-5" /></button>
+                <button onClick={() => setReassignModal(null)} className="text-secondary hover:text-primary"><Icon as={X} size="lg" /></button>
               </div>
 
               <p className="text-sm text-secondary">

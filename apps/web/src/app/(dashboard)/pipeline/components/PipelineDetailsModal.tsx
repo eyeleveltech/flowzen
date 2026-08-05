@@ -8,6 +8,7 @@ import { STAGE_FIELDS, StageField } from '../lib/stage-config';
 import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
 import { toDateInput } from '@/lib/utils';
+import { Icon } from '@/components/ui/icon';
 
 const PIPELINE_STAGES = [
   'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
@@ -122,7 +123,7 @@ export function PipelineDetailsModal({ lead, onClose, onSuccess }: PipelineDetai
             <p className="text-sm text-secondary mt-0.5">Missing info for {lead.contactName || lead.companyName}</p>
           </div>
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
-            <X className="h-4 w-4 text-secondary" />
+            <Icon as={X} size="md" className="text-secondary" />
           </button>
         </div>
 
@@ -137,11 +138,11 @@ export function PipelineDetailsModal({ lead, onClose, onSuccess }: PipelineDetai
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-4 border-b border-border">
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Deal Value (₹)</label>
-                      <input type="number" value={dealValue} onChange={e => setDealValue(e.target.value)} required className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary" />
+                      <input type="number" value={dealValue} onChange={e => setDealValue(e.target.value)} required className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Expected Close Date</label>
-                      <input type="date" value={expectedCloseDate} onChange={e => setExpectedCloseDate(e.target.value)} required className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary" />
+                      <input type="date" value={expectedCloseDate} onChange={e => setExpectedCloseDate(e.target.value)} required className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1" />
                     </div>
                   </div>
                 )}
@@ -182,13 +183,13 @@ export function PipelineDetailsModal({ lead, onClose, onSuccess }: PipelineDetai
                       type={field.type}
                       value={formData[field.key] || ''}
                       onChange={(e) => handleFieldChange(field.key, e.target.value)}
-                      className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary"
+                      className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1"
                     />
                   ) : field.type === 'textarea' ? (
                     <textarea
                       value={formData[field.key] || ''}
                       onChange={(e) => handleFieldChange(field.key, e.target.value)}
-                      className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary min-h-20"
+                      className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 min-h-20"
                     />
                   ) : field.type === 'select' ? (
                     <Select
@@ -231,7 +232,7 @@ export function PipelineDetailsModal({ lead, onClose, onSuccess }: PipelineDetai
           >
             {submitting ? 'Saving...' : (
               <>
-                <Save className="w-4 h-4" />
+                <Icon as={Save} size="md" />
                 Save Details
               </>
             )}

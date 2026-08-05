@@ -8,6 +8,7 @@ import { formatCurrency } from '@/lib/utils';
 import { Select } from '@/components/ui/select';
 import { TAX_TYPES, DEFAULT_TAX_TYPE } from '@/app/(dashboard)/quotations/lib/tax-catalog';
 import toast from 'react-hot-toast';
+import { Icon } from '@/components/ui/icon';
 
 const UNITS = ['Hours', 'Days', 'Months', 'Units', 'Lump Sum'];
 
@@ -130,7 +131,7 @@ export function EditInvoiceDraftModal({ draftId, onClose, onSaved }: { draftId: 
       <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex h-full max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <h2 className="text-lg font-semibold text-primary">Edit Invoice Draft</h2>
-          <button onClick={onClose} className="rounded-lg p-2 text-secondary hover:bg-[#F3F4F6] transition-colors"><X className="h-5 w-5" /></button>
+          <button onClick={onClose} className="rounded-lg p-2 text-secondary hover:bg-[#F3F4F6] transition-colors"><Icon as={X} size="lg" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-[#F9FAFB]">
@@ -150,21 +151,21 @@ export function EditInvoiceDraftModal({ draftId, onClose, onSaved }: { draftId: 
               <div className="space-y-4">
                 {lineItems.map((item, i) => (
                   <div key={i} className="grid grid-cols-1 lg:grid-cols-[2fr_1fr_1fr_1.5fr_1fr_1.5fr_0.5fr] gap-4 items-start relative bg-white p-4 lg:p-0 rounded-xl border border-border lg:border-none shadow-sm lg:shadow-none">
-                    <div className="lg:hidden absolute top-4 right-4"><button onClick={() => setLineItems(lineItems.filter((_, idx) => idx !== i))} className="text-secondary hover:text-red-500"><Trash2 className="h-4 w-4" /></button></div>
-                    <div className="space-y-1"><label className="lg:hidden text-xs font-medium text-secondary">Description</label><input type="text" value={item.description} onChange={e => updateLine(i, 'description', e.target.value)} placeholder="Item description" className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus:border-primary" /></div>
+                    <div className="lg:hidden absolute top-4 right-4"><button onClick={() => setLineItems(lineItems.filter((_, idx) => idx !== i))} className="text-secondary hover:text-red-500"><Icon as={Trash2} size="md" /></button></div>
+                    <div className="space-y-1"><label className="lg:hidden text-xs font-medium text-secondary">Description</label><input type="text" value={item.description} onChange={e => updateLine(i, 'description', e.target.value)} placeholder="Item description" className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1" /></div>
                     <div className="space-y-1"><label className="lg:hidden text-xs font-medium text-secondary">Unit</label><Select value={item.unit} onChange={v => updateLine(i, 'unit', v)} options={UNITS.map(u => ({ label: u, value: u }))} /></div>
                     <div className="grid grid-cols-2 lg:grid-cols-1 gap-4">
-                      <div className="space-y-1"><label className="lg:hidden text-xs font-medium text-secondary">Qty</label><input type="number" min="0" step="0.01" value={item.quantity} onChange={e => updateLine(i, 'quantity', e.target.value)} className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus:border-primary" /></div>
+                      <div className="space-y-1"><label className="lg:hidden text-xs font-medium text-secondary">Qty</label><input type="number" min="0" step="0.01" value={item.quantity} onChange={e => updateLine(i, 'quantity', e.target.value)} className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1" /></div>
                     </div>
-                    <div className="space-y-1"><label className="lg:hidden text-xs font-medium text-secondary">Price (₹)</label><input type="number" min="0" step="0.01" value={item.unitPrice} onChange={e => updateLine(i, 'unitPrice', e.target.value)} className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus:border-primary" /></div>
-                    <div className="space-y-1"><label className="lg:hidden text-xs font-medium text-secondary">Disc %</label><input type="number" min="0" max="100" step="0.01" value={item.discountPct} onChange={e => updateLine(i, 'discountPct', e.target.value)} placeholder="0" className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus:border-primary" /></div>
+                    <div className="space-y-1"><label className="lg:hidden text-xs font-medium text-secondary">Price (₹)</label><input type="number" min="0" step="0.01" value={item.unitPrice} onChange={e => updateLine(i, 'unitPrice', e.target.value)} className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1" /></div>
+                    <div className="space-y-1"><label className="lg:hidden text-xs font-medium text-secondary">Disc %</label><input type="number" min="0" max="100" step="0.01" value={item.discountPct} onChange={e => updateLine(i, 'discountPct', e.target.value)} placeholder="0" className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1" /></div>
                     <div className="space-y-1"><label className="lg:hidden text-xs font-medium text-secondary">Tax</label><Select value={item.taxType} onChange={v => updateLine(i, 'taxType', v)} options={TAX_TYPES} /></div>
-                    <div className="hidden lg:flex items-center justify-center pt-1"><button onClick={() => setLineItems(lineItems.filter((_, idx) => idx !== i))} className="p-2 text-secondary hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors"><Trash2 className="h-4 w-4" /></button></div>
+                    <div className="hidden lg:flex items-center justify-center pt-1"><button onClick={() => setLineItems(lineItems.filter((_, idx) => idx !== i))} className="p-2 text-secondary hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors"><Icon as={Trash2} size="md" /></button></div>
                   </div>
                 ))}
               </div>
 
-              <button onClick={() => setLineItems([...lineItems, emptyLine()])} className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 p-2 rounded-lg hover:bg-blue-50 transition-colors w-max"><Plus className="h-4 w-4" /> Add Item</button>
+              <button onClick={() => setLineItems([...lineItems, emptyLine()])} className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 p-2 rounded-lg hover:bg-blue-50 transition-colors w-max"><Icon as={Plus} size="md" /> Add Item</button>
 
               <div className="mt-8 flex flex-col items-end border-t border-border pt-6">
                 <div className="w-full max-w-sm space-y-3">
@@ -190,15 +191,15 @@ export function EditInvoiceDraftModal({ draftId, onClose, onSaved }: { draftId: 
           <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
              <div className="border-b border-border bg-[#F9FAFB] px-4 py-3"><h3 className="font-semibold text-primary">Notes</h3></div>
              <div className="p-4">
-                 <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Additional notes..." className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus:border-primary resize-none" />
+                 <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Additional notes..." className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 resize-none" />
              </div>
           </div>
         </div>
 
         <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4 bg-[#F9FAFB]">
           <button onClick={onClose} disabled={submitting} className="rounded-xl px-5 py-2.5 text-sm font-medium text-secondary hover:bg-border transition-colors disabled:opacity-50">Cancel</button>
-          <button onClick={handleSave} disabled={submitting} className="flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all shadow-sm disabled:opacity-50">
-            {submitting ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> : <Save className="h-4 w-4" />}
+          <button onClick={handleSave} disabled={submitting} className="flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none shadow-sm disabled:opacity-50">
+            {submitting ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> : <Icon as={Save} size="md" />}
             Save Draft
           </button>
         </div>

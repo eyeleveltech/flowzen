@@ -64,9 +64,9 @@ export function TimelineTab({ leadId }: { leadId: string }) {
   return (
     <div className="bg-white rounded-2xl border border-border p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-y-3 gap-x-4 mb-5">
-        <h2 className="text-base font-semibold text-primary flex items-center gap-2"><ActivityIcon className="w-4 h-4 text-secondary" /> Activity Timeline</h2>
+        <h2 className="text-base font-semibold text-primary flex items-center gap-2"><ActivityIcon className="h-4 w-4 text-secondary" /> Activity Timeline</h2>
         <button onClick={() => setModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-gray-800 transition-colors">
-          <Plus className="w-4 h-4" /> Add Activity
+          <Plus className="h-4 w-4" /> Add Activity
         </button>
       </div>
 
@@ -96,11 +96,11 @@ export function TimelineTab({ leadId }: { leadId: string }) {
             ].filter(Boolean);
             return (
               <div key={a.id} className="relative pl-6">
-                <div className="absolute -left-3.25 top-0 w-6 h-6 rounded-full bg-white border border-border flex items-center justify-center ring-4 ring-white">
-                  <Icon className="w-3 h-3 text-secondary" />
+                <div className="absolute -left-3.25 top-0 h-6 w-6 rounded-full bg-white border border-border flex items-center justify-center ring-4 ring-white">
+                  <Icon className="h-3 w-3 text-secondary" />
                 </div>
                 <div className="flex items-center gap-2 mb-0.5">
-                  <div className={`hidden md:flex w-5 h-5 rounded-full items-center justify-center text-[9px] font-bold ${a.user ? getAvatarColor(a.user.name) : 'bg-gray-100 text-gray-400'}`}>{a.user ? getInitials(a.user.name) : '•'}</div>
+                  <div className={`hidden md:flex h-5 w-5 rounded-full items-center justify-center text-[9px] font-bold ${a.user ? getAvatarColor(a.user.name) : 'bg-gray-100 text-gray-400'}`}>{a.user ? getInitials(a.user.name) : '•'}</div>
                   <p className="text-sm text-primary"><span className="font-medium">{a.user?.name || 'System'}</span> <span className="text-[#4B5563]">{a.message}</span></p>
                 </div>
                 <p className="text-xs text-secondary ml-7" title={formatDateTime(a.createdAt)}>{formatDistanceToNow(new Date(a.createdAt), { addSuffix: true })}</p>

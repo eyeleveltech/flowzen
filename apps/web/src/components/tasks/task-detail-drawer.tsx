@@ -17,6 +17,7 @@ const titleCase = (s?: string | null) =>
   s ? s.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '—';
 
 import { getPriorityDot } from '@/lib/priority';
+import { Icon } from '@/components/ui/icon';
 
 interface TaskDetailDrawerProps {
   taskId: string;
@@ -144,7 +145,7 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] sticky top-0 bg-white z-10">
           <h2 className="text-lg font-semibold text-primary">Task Details</h2>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors"><X className="h-4 w-4 text-secondary" /></button>
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors"><Icon as={X} size="md" className="text-secondary" /></button>
         </div>
 
         {loading || !task ? (
@@ -159,10 +160,10 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
               {manage && (
                 <div className="flex items-center gap-2">
                   {onEdit && (
-                    <button onClick={() => onEdit(task)} className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Edit</button>
+                    <button onClick={() => onEdit(task)} className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none">Edit</button>
                   )}
-                  <button onClick={deleteTask} className="rounded-xl border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 hover:border-red-300 transition-all flex items-center gap-1.5">
-                    <Trash2 className="h-3.5 w-3.5" /> Delete
+                  <button onClick={deleteTask} className="rounded-xl border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 hover:border-red-300 transition-colors duration-150 motion-reduce:transition-none flex items-center gap-1.5">
+                    <Icon as={Trash2} size="sm" /> Delete
                   </button>
                 </div>
               )}
@@ -192,7 +193,7 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
                     className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1.5 truncate max-w-70"
                   >
                     <span>Open Link</span>
-                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                    <Icon as={ExternalLink} size="sm" className="shrink-0" />
                   </a>
                 </div>
               )}
@@ -205,7 +206,7 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
                 <p className="block text-sm font-medium text-[#374151] mb-2">Update Status</p>
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Update Status">
                   {TASK_STATUSES.map((s) => (
-                    <button key={s} onClick={() => updateStatus(s)} className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${task.status === s ? 'bg-primary text-white' : 'border border-border text-secondary hover:bg-[#F9FAFB]'}`}>
+                    <button key={s} onClick={() => updateStatus(s)} className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors duration-150 motion-reduce:transition-none ${task.status === s ? 'bg-primary text-white' : 'border border-border text-secondary hover:bg-[#F9FAFB]'}`}>
                       {TASK_STATUS_LABELS[s]}
                     </button>
                   ))}
@@ -224,7 +225,7 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
                   onChange={(e) => setComment(e.target.value)}
                   placeholder="Post an update or question..."
                   aria-label="Comment"
-                  className="w-full min-h-20 rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus:border-primary transition-all resize-none"
+                  className="w-full min-h-20 rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none resize-none"
                 />
                 <div className="mt-2 flex justify-end">
                   <button onClick={addComment} disabled={posting || !comment.trim()} className="bg-primary text-white px-4 py-1.5 rounded-lg text-xs font-medium hover:bg-black transition-colors disabled:opacity-50">{posting ? 'Posting...' : 'Post Comment'}</button>

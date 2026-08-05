@@ -17,6 +17,7 @@ import toast from 'react-hot-toast';
 
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
+import { Icon } from '@/components/ui/icon';
 
 function PipelineContent() {
   usePageTitle('Pipeline');
@@ -117,7 +118,7 @@ function PipelineContent() {
               className="flex items-center justify-center rounded-xl bg-primary h-9.5 w-9.5 shrink-0 text-white hover:bg-[#1F2937] transition-all shadow-sm"
               title="Add Lead"
             >
-              <Plus className="h-4 w-4" />
+              <Icon as={Plus} size="md" />
             </button>
           )}
           <div className="flex items-center gap-2 shrink-0">
@@ -146,7 +147,7 @@ function PipelineContent() {
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-secondary hover:text-primary bg-white border border-border rounded-lg shadow-sm transition-colors hover:bg-gray-50 h-9.5"
               title="Configure View Settings"
             >
-              <Settings className="w-3.5 h-3.5" /> View Settings
+              <Icon as={Settings} size="sm" /> View Settings
             </button>
           </div>
         </div>

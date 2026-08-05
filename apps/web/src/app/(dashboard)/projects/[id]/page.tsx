@@ -46,6 +46,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { NoAccess } from '@/components/ui/no-access';
 import { NotFoundPanel } from '@/components/ui/not-found-panel';
 import { getPriorityDot } from '@/lib/priority';
+import { Icon } from '@/components/ui/icon';
 
 type Tab = 'tasks' | 'team' | 'activity' | 'comments';
 
@@ -468,7 +469,7 @@ export default function ProjectDetailPage() {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
       <button onClick={() => router.push('/projects')} className="flex items-center gap-1.5 text-sm text-secondary hover:text-primary mb-4 md:mb-6 transition-colors">
-        <ArrowLeft className="h-4 w-4" /> Back to Projects
+        <Icon as={ArrowLeft} size="md" /> Back to Projects
       </button>
 
       {/* Header Top Row */}
@@ -497,22 +498,22 @@ export default function ProjectDetailPage() {
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
           {project.client?.lead?.id && (
-            <button onClick={() => router.push(`/pipeline/${project.client!.lead!.id}`)} className="w-full sm:w-auto justify-center rounded-xl border border-border px-4 py-2 text-sm font-medium text-primary bg-white hover:bg-primary/5 transition-all flex items-center gap-1.5">
-              Pipeline <ArrowUpRight className="h-4 w-4" />
+            <button onClick={() => router.push(`/pipeline/${project.client!.lead!.id}`)} className="w-full sm:w-auto justify-center rounded-xl border border-border px-4 py-2 text-sm font-medium text-primary bg-white hover:bg-primary/5 transition-colors duration-150 motion-reduce:transition-none flex items-center gap-1.5">
+              Pipeline <Icon as={ArrowUpRight} size="md" />
             </button>
           )}
           {project.folderLink && (
-            <a href={project.folderLink} target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto justify-center rounded-xl border border-border px-4 py-2 text-sm font-medium text-[#2563EB] bg-white hover:bg-blue-50 transition-all flex items-center gap-1.5">
+            <a href={project.folderLink} target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto justify-center rounded-xl border border-border px-4 py-2 text-sm font-medium text-[#2563EB] bg-white hover:bg-blue-50 transition-colors duration-150 motion-reduce:transition-none flex items-center gap-1.5">
               Drive Folder
             </a>
           )}
           {user?.role !== 'TEAM_MEMBER' && (
             <div className="flex items-center gap-2 w-full sm:w-auto">
-              <button onClick={startEditingProject} className="flex-1 sm:flex-none justify-center rounded-xl border border-border px-4 py-2 text-sm font-medium text-[#374151] bg-white hover:bg-[#F9FAFB] transition-all whitespace-nowrap">
+              <button onClick={startEditingProject} className="flex-1 sm:flex-none justify-center rounded-xl border border-border px-4 py-2 text-sm font-medium text-[#374151] bg-white hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none whitespace-nowrap">
                 Edit Project
               </button>
-              <button onClick={handleDeleteProject} className="flex-1 sm:flex-none justify-center rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 hover:border-red-300 transition-all flex items-center gap-1.5 whitespace-nowrap">
-                <Trash2 className="h-4 w-4" /> Delete
+              <button onClick={handleDeleteProject} className="flex-1 sm:flex-none justify-center rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 hover:border-red-300 transition-colors duration-150 motion-reduce:transition-none flex items-center gap-1.5 whitespace-nowrap">
+                <Icon as={Trash2} size="md" /> Delete
               </button>
             </div>
           )}
@@ -524,7 +525,7 @@ export default function ProjectDetailPage() {
         {/* Key Dates Card */}
         <div className="bg-white rounded-2xl border border-border p-5">
           <div className="flex items-center gap-2 mb-4">
-            <Clock className="h-4 w-4 text-secondary" />
+            <Icon as={Clock} size="md" className="text-secondary" />
             <span className="text-xs font-medium text-secondary uppercase tracking-wide">Key Dates</span>
           </div>
           <div className="space-y-3">
@@ -542,7 +543,7 @@ export default function ProjectDetailPage() {
         {/* Client Details Card */}
         <div className="bg-white rounded-2xl border border-border p-5">
           <div className="flex items-center gap-2 mb-4">
-            <Briefcase className="h-4 w-4 text-secondary" />
+            <Icon as={Briefcase} size="md" className="text-secondary" />
             <span className="text-xs font-medium text-secondary uppercase tracking-wide">Client Details</span>
           </div>
           <div className="space-y-3">
@@ -562,7 +563,7 @@ export default function ProjectDetailPage() {
         {/* Progress Card */}
         <div className="bg-white rounded-2xl border border-border p-5">
           <div className="flex items-center gap-2 mb-4">
-            <CheckCircle2 className="h-4 w-4 text-secondary" />
+            <Icon as={CheckCircle2} size="md" className="text-secondary" />
             <span className="text-xs font-medium text-secondary uppercase tracking-wide">Progress</span>
           </div>
           <div className="mt-1">
@@ -579,7 +580,7 @@ export default function ProjectDetailPage() {
         {/* Assigned Team Card */}
         <div className="bg-white rounded-2xl border border-border p-5">
           <div className="flex items-center gap-2 mb-4">
-            <Users className="h-4 w-4 text-secondary" />
+            <Icon as={Users} size="md" className="text-secondary" />
             <span className="text-xs font-medium text-secondary uppercase tracking-wide">Assigned Team</span>
           </div>
           <div className="flex items-center gap-1 -space-x-2 mt-2">
@@ -655,9 +656,9 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto scrollbar-hide whitespace-nowrap">
+      <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto no-scrollbar whitespace-nowrap -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 pr-8">
         {tabs.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)} className={`px-3 md:px-4 py-2.5 text-sm font-medium border-b-2 transition-all shrink-0 ${tab === t.id ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-primary'}`}>
+          <button key={t.id} onClick={() => setTab(t.id)} className={`px-3 md:px-4 py-2.5 text-sm font-medium border-b-2 transition-colors duration-150 motion-reduce:transition-none shrink-0 ${tab === t.id ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-primary'}`}>
             {t.label}
           </button>
         ))}
@@ -671,12 +672,12 @@ export default function ProjectDetailPage() {
             <div className="flex flex-wrap items-center gap-2 w-full">
               {/* Search Box */}
               <div className="relative w-full sm:w-64 md:w-80 shrink-0">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
+                <Icon as={Search} size="md" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-secondary" />
                 <input
                   value={taskSearch}
                   onChange={(e) => setTaskSearch(e.target.value)}
                   placeholder="Search tasks..."
-                  className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-secondary"
+                  className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none placeholder:text-secondary"
                 />
               </div>
 
@@ -686,7 +687,7 @@ export default function ProjectDetailPage() {
                   value={taskStatusFilter}
                   onChange={setTaskStatusFilter}
                   placeholder="Status"
-                  triggerClassName={taskStatusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
+                  triggerClassName={taskStatusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
                   options={TASK_STATUS_OPTIONS}
                 />
               </div>
@@ -696,7 +697,7 @@ export default function ProjectDetailPage() {
                   value={taskTypeFilter}
                   onChange={setTaskTypeFilter}
                   placeholder="Department"
-                  triggerClassName={taskTypeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
+                  triggerClassName={taskTypeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
                   options={teams.map((t: any) => ({ label: t.name, value: t.id }))}
                 />
               </div>
@@ -706,7 +707,7 @@ export default function ProjectDetailPage() {
                   value={taskPriorityFilter}
                   onChange={setTaskPriorityFilter}
                   placeholder="Priority"
-                  triggerClassName={taskPriorityFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
+                  triggerClassName={taskPriorityFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
                   options={[
                     { label: 'Low', value: 'LOW' },
                     { label: 'Medium', value: 'MEDIUM' },
@@ -721,7 +722,7 @@ export default function ProjectDetailPage() {
                   value={taskAssigneeFilter}
                   onChange={setTaskAssigneeFilter}
                   placeholder="Assignee"
-                  triggerClassName={taskAssigneeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
+                  triggerClassName={taskAssigneeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
                   options={allProjectMembers.map((a: any) => ({ value: a.id, label: a.name, image: getInitials(a.name), colorClass: getAvatarColor(a.name) }))}
                 />
               </div>
@@ -731,7 +732,7 @@ export default function ProjectDetailPage() {
                   type="date"
                   value={taskDueDateFilter}
                   onChange={(e) => setTaskDueDateFilter(e.target.value)}
-                  className="h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer"
+                  className="h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none cursor-pointer"
                   title="Filter by due date"
                 />
               </div>
@@ -768,7 +769,7 @@ export default function ProjectDetailPage() {
                     onClick={() => { setTaskSearch(''); setTaskStatusFilter([]); setTaskAssigneeFilter([]); setTaskTypeFilter([]); setTaskDueDateFilter(''); setShowCompleted(false); setTaskPriorityFilter([]); setTaskSort(''); }}
                     className="flex items-center gap-1.5 h-9 rounded-xl bg-red-50 px-3 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors border border-red-100"
                   >
-                    <X className="h-3.5 w-3.5" /> Clear Filters
+                    <Icon as={X} size="sm" /> Clear Filters
                   </button>
                 )}
 
@@ -780,10 +781,10 @@ export default function ProjectDetailPage() {
                       setTaskView('list');
                       localStorage.setItem(`flowzen_view_tasks_${id}`, JSON.stringify({ name: viewName, visibleColumns: visibleTaskColumns, viewType: 'list' }));
                     }}
-                    className={`p-1.5 rounded-lg transition-all ${taskView === 'list' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
+                    className={`p-1.5 rounded-lg transition-colors duration-150 motion-reduce:transition-none ${taskView === 'list' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
                     title="List View"
                   >
-                    <LayoutList className="h-3.5 w-3.5" />
+                    <Icon as={LayoutList} size="sm" />
                   </button>
                   <button
                     type="button"
@@ -791,19 +792,19 @@ export default function ProjectDetailPage() {
                       setTaskView('board');
                       localStorage.setItem(`flowzen_view_tasks_${id}`, JSON.stringify({ name: viewName, visibleColumns: visibleTaskColumns, viewType: 'board' }));
                     }}
-                    className={`p-1.5 rounded-lg transition-all ${taskView === 'board' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
+                    className={`p-1.5 rounded-lg transition-colors duration-150 motion-reduce:transition-none ${taskView === 'board' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
                     title="Board View"
                   >
-                    <Kanban className="h-3.5 w-3.5" />
+                    <Icon as={Kanban} size="sm" />
                   </button>
                 </div>
 
                 <button onClick={() => setShowViewSettings(true)} className="p-2 rounded-xl border border-border bg-white hover:bg-gray-50 transition-colors text-secondary hover:text-primary h-9 w-9 flex items-center justify-center" title="Customize View">
-                  <Settings className="h-3.5 w-3.5" />
+                  <Icon as={Settings} size="sm" />
                 </button>
 
-                <button onClick={openCreateTask} className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-[#1F2937] transition-all h-9">
-                  <Plus className="h-3.5 w-3.5" /> Add Task
+                <button onClick={openCreateTask} className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none h-9">
+                  <Icon as={Plus} size="sm" /> Add Task
                 </button>
               </div>
             </div>
@@ -879,7 +880,7 @@ export default function ProjectDetailPage() {
                       <th className="px-4 py-3 w-10 text-center relative select-none">
                         <button
                           onClick={(e) => { e.stopPropagation(); setShowColumnDropdown(!showColumnDropdown); }}
-                          className="inline-flex items-center justify-center h-6 w-6 rounded-md text-secondary hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
+                          className="inline-flex items-center justify-center h-6 w-6 rounded-md text-secondary hover:bg-gray-100 hover:text-primary transition-colors duration-150 motion-reduce:transition-none text-sm font-bold border border-transparent hover:border-gray-200"
                           title="Toggle visible columns"
                         >
                           +
@@ -910,7 +911,7 @@ export default function ProjectDetailPage() {
                                     className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#F9FAFB] transition-colors"
                                   >
                                     <span className="text-[#374151]">{col.label}</span>
-                                    {visibleTaskColumns.includes(col.id) && <Check className="w-4 h-4 text-primary" />}
+                                    {visibleTaskColumns.includes(col.id) && <Icon as={Check} size="md" className="text-primary" />}
                                   </button>
                                 ))}
                               </motion.div>
@@ -1008,7 +1009,7 @@ export default function ProjectDetailPage() {
                                   Edit
                                 </button>
                                 <button onClick={(e) => handleDeleteTask(t.id, e)} className="text-secondary hover:text-red-600 transition-colors bg-white border border-border rounded-lg p-1.5 hover:bg-red-50 hover:border-red-100">
-                                  <Trash2 className="h-3.5 w-3.5" />
+                                  <Icon as={Trash2} size="sm" />
                                 </button>
                               </div>
                             )}
@@ -1085,7 +1086,7 @@ export default function ProjectDetailPage() {
                               Edit
                             </button>
                             <button onClick={(e) => handleDeleteTask(t.id, e)} className="text-secondary hover:text-red-600 transition-colors bg-white border border-border rounded-lg p-1.5 hover:bg-red-50 hover:border-red-100">
-                              <Trash2 className="h-3.5 w-3.5" />
+                              <Icon as={Trash2} size="sm" />
                             </button>
                           </div>
                         )}
@@ -1127,9 +1128,9 @@ export default function ProjectDetailPage() {
                 <button
                   type="submit"
                   disabled={submittingComment || !commentContent.trim()}
-                  className="rounded-xl bg-primary px-4 py-2 text-xs font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all flex items-center gap-1.5"
+                  className="rounded-xl bg-primary px-4 py-2 text-xs font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none flex items-center gap-1.5"
                 >
-                  <MessageSquare className="h-3.5 w-3.5" />
+                  <Icon as={MessageSquare} size="sm" />
                   {submittingComment ? 'Posting...' : 'Post Comment'}
                 </button>
               </div>
@@ -1197,7 +1198,7 @@ export default function ProjectDetailPage() {
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto">
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
                 <h2 className="text-lg font-semibold text-primary">Edit Project</h2>
-                <button onClick={() => setShowEditProject(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
+                <button onClick={() => setShowEditProject(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><Icon as={X} size="md" className="text-secondary" /></button>
               </div>
               <form onSubmit={handleEditProject} className="p-6 pb-24 md:pb-6 space-y-8">
                 {/* Basic Info */}
@@ -1205,7 +1206,7 @@ export default function ProjectDetailPage() {
                   <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Basic Info</h3>
                   <div>
                     <label htmlFor="pe-name" className="block text-sm font-medium text-[#374151] mb-1.5">Project Name *</label>
-                    <input id="pe-name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                    <input id="pe-name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
@@ -1316,11 +1317,11 @@ export default function ProjectDetailPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label htmlFor="pe-startDate" className="block text-sm font-medium text-[#374151] mb-1.5">Start Date</label>
-                      <input id="pe-startDate" type="date" value={editForm.startDate} onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                      <input id="pe-startDate" type="date" value={editForm.startDate} onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none" />
                     </div>
                     <div>
                       <label htmlFor="pe-endDate" className="block text-sm font-medium text-[#374151] mb-1.5">End Date {(editForm.type === 'ONE_TIME' || editForm.type === 'EVENT') && '*'}</label>
-                      <input id="pe-endDate" type="date" value={editForm.endDate} onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} required={editForm.type === 'ONE_TIME' || editForm.type === 'EVENT'} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
+                      <input id="pe-endDate" type="date" value={editForm.endDate} onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} required={editForm.type === 'ONE_TIME' || editForm.type === 'EVENT'} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none" />
                     </div>
                   </div>
                 </div>
@@ -1343,8 +1344,8 @@ export default function ProjectDetailPage() {
 
 
                 <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setShowEditProject(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
-                  <button type="submit" disabled={submittingEdit} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submittingEdit ? 'Saving...' : 'Save Changes'}</button>
+                  <button type="button" onClick={() => setShowEditProject(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none">Cancel</button>
+                  <button type="submit" disabled={submittingEdit} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none">{submittingEdit ? 'Saving...' : 'Save Changes'}</button>
                 </div>
               </form>
             </motion.div>
@@ -1361,7 +1362,7 @@ export default function ProjectDetailPage() {
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 flex flex-col">
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] shrink-0">
                 <h2 className="text-lg font-semibold text-primary">{viewModalContent.title}</h2>
-                <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
+                <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><Icon as={X} size="md" className="text-secondary" /></button>
               </div>
               <div className="p-6 pb-24 md:pb-6 overflow-y-auto flex-1">
                 <SafeHtml

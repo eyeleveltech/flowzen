@@ -159,7 +159,7 @@ export function CalendarView({ projects }: CalendarViewProps) {
                         <div
                           key={event.id}
                           onClick={() => router.push(`/projects/${event.projectId}`)}
-                          className={`p-3 text-sm rounded-xl border cursor-pointer active:scale-[0.98] transition-all
+                          className={`p-3 text-sm rounded-xl border cursor-pointer active:scale-[0.98] transition-[transform,background-color,border-color,color] duration-200
                                 ${isProject ? `${getStatusColor(event.status).bg} ${getStatusColor(event.status).text} ${getStatusColor(event.status).border} shadow-sm` : ''}
                           `}
                         >

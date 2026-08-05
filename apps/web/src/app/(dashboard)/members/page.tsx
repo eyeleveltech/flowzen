@@ -67,6 +67,7 @@ interface MemberDetail {
 import { StatusBadge } from '@/components/ui/status-badge';
 
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { Icon } from '@/components/ui/icon';
 
 export default function TeamPage() {
   usePageTitle('Team Members');
@@ -240,7 +241,7 @@ export default function TeamPage() {
         <div className="flex bg-[#F3F4F6] p-1 rounded-xl">
           <button
             onClick={() => setActiveTab('tasks')}
-            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${activeTab === 'tasks'
+            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-colors duration-150 motion-reduce:transition-none ${activeTab === 'tasks'
                 ? 'bg-white text-primary shadow-xs'
                 : 'text-secondary hover:text-primary'
               }`}
@@ -249,7 +250,7 @@ export default function TeamPage() {
           </button>
           <button
             onClick={() => setActiveTab('profile')}
-            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${activeTab === 'profile'
+            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-colors duration-150 motion-reduce:transition-none ${activeTab === 'profile'
                 ? 'bg-white text-primary shadow-xs'
                 : 'text-secondary hover:text-primary'
               }`}
@@ -284,20 +285,20 @@ export default function TeamPage() {
                 </div>
                 <div className="h-2 w-full rounded-full bg-border overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${isOverloaded ? 'bg-red-500' : stats.capacity > 80 ? 'bg-red-500' : stats.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                    className={`h-full rounded-full transition-colors duration-150 motion-reduce:transition-none duration-500 ${isOverloaded ? 'bg-red-500' : stats.capacity > 80 ? 'bg-red-500' : stats.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'
                       }`}
                     style={{ width: `${stats.capacity}%` }}
                   />
                 </div>
                 <div className="flex items-center text-xs text-secondary mt-2.5 font-medium">
                   {isOverloaded ? (
-                    <><AlertCircle className="w-3.5 h-3.5 text-red-500 mr-1.5 animate-bounce" /> Overloaded: active tasks ({activeTasks.length}) exceeds threshold ({overloadThreshold}).</>
+                    <><Icon as={AlertCircle} size="sm" className="text-red-500 mr-1.5 animate-bounce" /> Overloaded: active tasks ({activeTasks.length}) exceeds threshold ({overloadThreshold}).</>
                   ) : stats.capacity > 80 ? (
-                    <><AlertCircle className="w-3.5 h-3.5 text-red-500 mr-1.5" /> Critical capacity. Nearing overload, consider offloading.</>
+                    <><Icon as={AlertCircle} size="sm" className="text-red-500 mr-1.5" /> Critical capacity. Nearing overload, consider offloading.</>
                   ) : stats.capacity > 50 ? (
-                    <><Zap className="w-3.5 h-3.5 text-amber-500 mr-1.5" /> Active workload. Capable of handling smaller tasks.</>
+                    <><Icon as={Zap} size="sm" className="text-amber-500 mr-1.5" /> Active workload. Capable of handling smaller tasks.</>
                   ) : (
-                    <><Leaf className="w-3.5 h-3.5 text-emerald-500 mr-1.5" /> High availability. Ready for assignments.</>
+                    <><Icon as={Leaf} size="sm" className="text-emerald-500 mr-1.5" /> High availability. Ready for assignments.</>
                   )}
                 </div>
               </div>
@@ -305,7 +306,7 @@ export default function TeamPage() {
               {/* Active Tasks List */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
-                  <Activity className="h-4 w-4 text-primary" />
+                  <Icon as={Activity} size="md" className="text-primary" />
                   <h3 className="text-xs font-bold text-primary uppercase tracking-wider">Active Tasks ({activeTasks.length})</h3>
                 </div>
                 <div className="space-y-2.5 max-h-55 overflow-y-auto pr-1">
@@ -343,7 +344,7 @@ export default function TeamPage() {
               {/* Led Projects List */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
-                  <FileText className="h-4 w-4 text-primary" />
+                  <Icon as={FileText} size="md" className="text-primary" />
                   <h3 className="text-xs font-bold text-primary uppercase tracking-wider">Led Projects ({ownedProjects.length})</h3>
                 </div>
                 <div className="space-y-2.5 max-h-45 overflow-y-auto pr-1">
@@ -385,18 +386,18 @@ export default function TeamPage() {
               <div className="bg-surface rounded-2xl p-5 border border-border/80 space-y-3.5 text-xs text-[#4B5563]">
                 <h4 className="text-xs text-secondary font-medium uppercase tracking-wide mb-1">Contact Information</h4>
                 <div className="flex items-center gap-3">
-                  <Mail className="h-4 w-4 text-secondary" />
+                  <Icon as={Mail} size="md" className="text-secondary" />
                   <a href={`mailto:${email}`} className="hover:underline hover:text-primary font-medium truncate">{email}</a>
                 </div>
                 {phone && (
                   <div className="flex items-center gap-3">
-                    <Phone className="h-4 w-4 text-secondary" />
+                    <Icon as={Phone} size="md" className="text-secondary" />
                     <span className="tabular-nums font-medium">{phone}</span>
                   </div>
                 )}
                 {joiningDate && (
                   <div className="flex items-center gap-3">
-                    <Calendar className="h-4 w-4 text-secondary" />
+                    <Icon as={Calendar} size="md" className="text-secondary" />
                     <span className="font-medium">Joined {formatDate(joiningDate)}</span>
                   </div>
                 )}
@@ -446,13 +447,13 @@ export default function TeamPage() {
           <div className="bg-white border border-border rounded-2xl p-4 shadow-sm flex flex-wrap items-center gap-2 w-full">
             {/* Search Input */}
             <div className="relative w-full sm:w-64 md:w-80 shrink-0">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
+              <Icon as={Search} size="md" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-secondary" />
               <input
                 type="text"
                 placeholder="Search team by name, email..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-secondary"
+                className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none placeholder:text-secondary"
               />
             </div>
 
@@ -462,7 +463,7 @@ export default function TeamPage() {
                 value={selectedDept}
                 onChange={setSelectedDept}
                 placeholder="Departments"
-                triggerClassName={selectedDept.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
+                triggerClassName={selectedDept.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
                 options={departments.map((d) => ({ label: d, value: d }))}
               />
             </div>
@@ -473,7 +474,7 @@ export default function TeamPage() {
                 value={selectedRole}
                 onChange={setSelectedRole}
                 placeholder="Roles"
-                triggerClassName={selectedRole.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
+                triggerClassName={selectedRole.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
                 options={Object.entries(ROLE_LABELS).map(([val, label]) => ({ label: label as string, value: val }))}
               />
             </div>
@@ -489,7 +490,7 @@ export default function TeamPage() {
                   }}
                   className="flex items-center gap-1.5 h-9 rounded-xl bg-red-50 px-3 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors border border-red-100 whitespace-nowrap"
                 >
-                  <X className="h-3.5 w-3.5" /> Clear Filters
+                  <Icon as={X} size="sm" /> Clear Filters
                 </button>
               </div>
             )}
@@ -518,7 +519,7 @@ export default function TeamPage() {
                     type="button"
                     onClick={() => setSelectedId(m.id)}
                     aria-label={`View ${m.name}'s workload`}
-                    className={`group relative flex flex-col p-6 rounded-3xl bg-white text-left w-full transition-all duration-300 border focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${isSelected
+                    className={`group relative flex flex-col p-6 rounded-3xl bg-white text-left w-full transition-colors duration-150 motion-reduce:transition-none duration-300 border focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${isSelected
                         ? 'border-primary ring-1 ring-primary'
                         : 'border-border hover:shadow-sm'
                       }`}
@@ -551,7 +552,7 @@ export default function TeamPage() {
                           <span className="font-semibold text-primary">{m.activeTasks}</span>
                           <span className="opacity-80">tasks</span>
                         </span>
-                        <span className="w-0.5 h-0.5 rounded-full bg-[#D1D5DB]"></span>
+                        <span className="h-0.5 w-0.5 rounded-full bg-[#D1D5DB]"></span>
                         <span className="flex items-center gap-1">
                           <span className="font-semibold text-primary">{m.totalProjects}</span>
                           <span className="opacity-80">projects</span>
@@ -560,7 +561,7 @@ export default function TeamPage() {
 
                       {/* Minimal Capacity Dot */}
                       <div className="flex items-center gap-1.5" title={`Capacity: ${m.capacity}%`}>
-                        <div className={`w-2 h-2 rounded-full ${m.capacity > 80 ? 'bg-red-500' : m.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                        <div className={`h-2 w-2 rounded-full ${m.capacity > 80 ? 'bg-red-500' : m.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'
                           }`} />
                         <span className="text-secondary font-medium">{m.capacity}%</span>
                       </div>

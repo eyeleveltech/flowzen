@@ -6,6 +6,7 @@ import { X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useClients } from '@/hooks/useQueries';
 import toast from 'react-hot-toast';
+import { Icon } from '@/components/ui/icon';
 
 interface Props {
   onClose: () => void;
@@ -64,7 +65,7 @@ export function ExpenseFormModal({ onClose, onSaved }: Props) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
           <h2 className="text-lg font-semibold text-primary">Log Expense</h2>
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-[#F3F4F6]">
-            <X className="h-4 w-4 text-secondary" />
+            <Icon as={X} size="md" className="text-secondary" />
           </button>
         </div>
         
@@ -76,7 +77,7 @@ export function ExpenseFormModal({ onClose, onSaved }: Props) {
               type="text"
               value={formData.vendor}
               onChange={(e) => setFormData(f => ({ ...f, vendor: e.target.value }))}
-              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-primary transition-all"
+              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
               placeholder="e.g. AWS, Adobe, Freelancer Name"
             />
           </div>
@@ -91,7 +92,7 @@ export function ExpenseFormModal({ onClose, onSaved }: Props) {
                 step="0.01"
                 value={formData.amount}
                 onChange={(e) => setFormData(f => ({ ...f, amount: e.target.value }))}
-                className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-primary transition-all"
+                className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
               />
             </div>
             <div>
@@ -101,7 +102,7 @@ export function ExpenseFormModal({ onClose, onSaved }: Props) {
                 type="date"
                 value={formData.date}
                 onChange={(e) => setFormData(f => ({ ...f, date: e.target.value }))}
-                className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-primary transition-all"
+                className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
               />
             </div>
           </div>
@@ -112,7 +113,7 @@ export function ExpenseFormModal({ onClose, onSaved }: Props) {
               required
               value={formData.category}
               onChange={(e) => setFormData(f => ({ ...f, category: e.target.value }))}
-              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-primary transition-all"
+              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
             >
               <option value="VENDOR">Vendor / Software / Tools</option>
               <option value="TRAVEL">Travel</option>
@@ -127,7 +128,7 @@ export function ExpenseFormModal({ onClose, onSaved }: Props) {
             <select
               value={formData.projectId}
               onChange={(e) => setFormData(f => ({ ...f, projectId: e.target.value }))}
-              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-primary transition-all"
+              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
             >
               <option value="">None</option>
               {projects.map(p => (
@@ -141,7 +142,7 @@ export function ExpenseFormModal({ onClose, onSaved }: Props) {
             <select
               value={formData.clientId}
               onChange={(e) => setFormData(f => ({ ...f, clientId: e.target.value }))}
-              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-primary transition-all"
+              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
             >
               <option value="">None</option>
               {clients.map(c => (
@@ -156,7 +157,7 @@ export function ExpenseFormModal({ onClose, onSaved }: Props) {
               rows={3}
               value={formData.description}
               onChange={(e) => setFormData(f => ({ ...f, description: e.target.value }))}
-              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-primary transition-all resize-none"
+              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none resize-none"
               placeholder="Internal notes about this expense..."
             />
           </div>

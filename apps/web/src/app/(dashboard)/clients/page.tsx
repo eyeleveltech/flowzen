@@ -10,16 +10,20 @@ import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatDate, formatCurrency, getInitials, getAvatarColor, getClientDisplayName, toDateInput } from '@/lib/utils';
 import {
-  Plus, Search, Filter, Users, Building2, Mail, Phone, X, ChevronRight, FolderKanban, Download, Upload, FileText, List, LayoutGrid, Columns, Check, Settings, Briefcase
+  Plus, Search, Filter, Users, Building2, Mail, Phone, X, ChevronRight, FolderKanban, Download, Upload, FileText, List, LayoutGrid, Columns, Check, Settings, Briefcase, SlidersHorizontal
 } from 'lucide-react';
 import { ClientTimelineView } from '@/components/clients/client-timeline-view';
 import { MultiSelect } from '@/components/ui/multi-select';
+import { Drawer } from '@/components/ui/drawer';
+import { useIsMobile } from '@/hooks/use-breakpoint';
+import { ActiveFilterChip } from '@/components/ui/active-filter-chip';
 import { useMembers } from '@/hooks/useQueries';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { ViewSettingsPanel } from '@/components/ui/view-settings-panel';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { Icon } from '@/components/ui/icon';
 
 interface ClientContact {
   id: string;
@@ -147,6 +151,8 @@ function ClientsContent() {
   }, [filtersHydrated, search, statusFilter, accountManagerFilter, engagementTypeFilter, industryFilter, currentView, visibleColumns]);
 
   const [showCreate, setShowCreate] = useState(searchParams.get('create') === 'true');
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  const isMobile = useIsMobile();
   const [loading, setLoading] = useState(true);
   const [orgProfile, setOrgProfile] = useState<any>(null);
 
@@ -406,6 +412,12 @@ function ClientsContent() {
     link.click();
   }
 
+  const activeCount = (statusFilter.length > 0 ? 1 : 0) +
+    (engagementTypeFilter.length > 0 ? 1 : 0) +
+    (accountManagerFilter.length > 0 ? 1 : 0) +
+    (industryFilter.length > 0 ? 1 : 0) +
+    (showArchived ? 1 : 0);
+
   return (
     <div>
       {/* Header */}
@@ -424,119 +436,261 @@ function ClientsContent() {
       {/* Redesigned Clean Clients Toolbar */}
       <div className="bg-white border border-border rounded-2xl p-4 shadow-sm flex flex-col gap-4 w-full mb-6">
         {/* Row 1: Search + Active Filter Pills */}
-        <div className="flex flex-wrap items-center gap-2 w-full">
-          {/* Search Box */}
-          <div className="relative w-full sm:w-64 md:w-80 shrink-0">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search clients..."
-              className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-secondary"
-            />
-          </div>
-
-          {/* Filter Pills */}
-          <div className="shrink-0">
-            <MultiSelect
-              value={statusFilter}
-              onChange={setStatusFilter}
-              placeholder="Lifecycle Stage"
-              showSelectAll={true}
-              triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
-              options={[
-                { label: 'Prospect', value: 'PROSPECT' },
-                { label: 'Active', value: 'ACTIVE' },
-                { label: 'On Hold', value: 'ONHOLD' },
-                { label: 'Churned', value: 'CHURNED' },
-                { label: 'Completed', value: 'PROJECT_COMPLETED' },
-              ]}
-            />
-          </div>
-
-          <div className="shrink-0">
-            <MultiSelect
-              value={engagementTypeFilter}
-              onChange={setEngagementTypeFilter}
-              placeholder="Engagements"
-              showSelectAll={true}
-              triggerClassName={engagementTypeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
-              options={[
-                { label: 'Retainer', value: 'Retainer' },
-                { label: 'Project', value: 'Project' },
-                { label: 'Event', value: 'Event' },
-                { label: 'Ad-hoc', value: 'Ad-hoc' }
-              ]}
-            />
-          </div>
-
-          <div className="shrink-0">
-            <MultiSelect
-              value={accountManagerFilter}
-              onChange={setAccountManagerFilter}
-              placeholder="Account Manager"
-              showSelectAll={true}
-              triggerClassName={accountManagerFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
-              options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
-            />
-          </div>
-
-          <div className="shrink-0">
-            <MultiSelect
-              value={industryFilter}
-              onChange={setIndustryFilter}
-              placeholder="Industries"
-              showSelectAll={true}
-              triggerClassName={industryFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
-              options={INDUSTRY_OPTIONS.map((i) => ({ label: i, value: i }))}
-            />
-          </div>
-
-          {canManageClients && (
-            <button
-              type="button"
-              onClick={() => setShowArchived(v => !v)}
-              className={showArchived ? "h-9 rounded-xl border border-primary bg-primary/[0.02] px-3 text-xs font-semibold text-primary transition-all shrink-0 whitespace-nowrap" : "h-9 rounded-xl border border-border bg-white px-3 text-xs text-secondary hover:bg-gray-50 hover:border-gray-300 transition-all shrink-0 whitespace-nowrap"}
-              title="Archived clients are hidden by default; show them here to restore one"
-            >
-              {showArchived ? 'Hide Archived' : 'Show Archived'}
-            </button>
-          )}
-
-          {/* Action buttons on the right corner */}
-          <div className="flex items-center gap-2 ml-auto shrink-0">
-            <button
-              type="button"
-              onClick={() => setShowViewSettings(true)}
-              className="p-2 rounded-xl border border-border bg-white hover:bg-gray-50 transition-colors text-secondary hover:text-primary h-9 w-9 flex items-center justify-center shrink-0"
-              title="Configure View Settings"
-            >
-              <Settings className="h-3.5 w-3.5" />
-            </button>
-
-            {activeModule !== 'PM' && (
+        {isMobile ? (
+          <div className="flex flex-col gap-2.5 w-full">
+            <div className="flex items-center gap-2 w-full">
+              <div className="relative w-full shrink">
+                <Icon as={Search} size="md" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-secondary" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search clients..."
+                  className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none placeholder:text-secondary"
+                />
+              </div>
               <button
-                onClick={handleExport}
-                disabled={isExporting}
-                className="flex items-center gap-2 rounded-xl border border-border bg-white px-3 text-xs font-semibold text-[#374151] hover:bg-[#F9FAFB] transition-all disabled:opacity-50 h-9 shrink-0 whitespace-nowrap"
+                type="button"
+                onClick={() => setFilterSheetOpen(true)}
+                className="flex items-center gap-1.5 h-9 rounded-xl border border-border bg-white hover:bg-gray-50 px-3 text-xs font-semibold text-secondary shrink-0 transition-colors"
               >
-                <Download className="h-3.5 w-3.5" /> Export CSV
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                <span>Filters</span>
+                {activeCount > 0 && (
+                  <span className="ml-0.5 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-white">
+                    {activeCount}
+                  </span>
+                )}
+              </button>
+              {/* Action buttons on mobile right corner */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowViewSettings(true)}
+                  className="p-2 rounded-xl border border-border bg-white hover:bg-gray-50 transition-colors text-secondary hover:text-primary h-9 w-9 flex items-center justify-center shrink-0"
+                  title="Configure View Settings"
+                >
+                  <Settings className="h-3.5 w-3.5" />
+                </button>
+                {activeModule !== 'PM' && (
+                  <button
+                    onClick={handleExport}
+                    disabled={isExporting}
+                    className="flex items-center justify-center rounded-xl border border-border bg-white h-9 w-9 text-xs font-semibold text-[#374151] hover:bg-[#F9FAFB] transition-colors disabled:opacity-50 shrink-0"
+                    title="Export CSV"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                {activeModule !== 'PM' && (
+                  <Link
+                    href="/pipeline"
+                    className="flex items-center justify-center rounded-xl bg-primary h-9 w-9 text-white hover:bg-[#1F2937] transition-colors shrink-0"
+                    title="New Lead"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Link>
+                )}
+              </div>
+            </div>
+
+            {/* Active Chips Row */}
+            {activeCount > 0 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                {statusFilter.length > 0 && <ActiveFilterChip label={`Lifecycle: ${statusFilter.length}`} onRemove={() => setStatusFilter([])} />}
+                {engagementTypeFilter.length > 0 && <ActiveFilterChip label={`Engagements: ${engagementTypeFilter.length}`} onRemove={() => setEngagementTypeFilter([])} />}
+                {accountManagerFilter.length > 0 && <ActiveFilterChip label={`Manager: ${accountManagerFilter.length}`} onRemove={() => setAccountManagerFilter([])} />}
+                {industryFilter.length > 0 && <ActiveFilterChip label={`Industry: ${industryFilter.length}`} onRemove={() => setIndustryFilter([])} />}
+                {showArchived && <ActiveFilterChip label="Show Archived" onRemove={() => setShowArchived(false)} />}
+              </div>
+            )}
+
+            {/* Mobile Filter Drawer */}
+            <Drawer isOpen={filterSheetOpen} onClose={() => setFilterSheetOpen(false)} title="Filter Clients">
+              <div className="p-4 space-y-4">
+                <div>
+                  <label className="text-xs font-medium text-secondary mb-1.5 block">Lifecycle Stage</label>
+                  <MultiSelect
+                    value={statusFilter}
+                    onChange={setStatusFilter}
+                    placeholder="Lifecycle Stage"
+                    showSelectAll={true}
+                    triggerClassName="w-full h-9 rounded-xl border border-border bg-white px-3 text-xs"
+                    options={[
+                      { label: 'Prospect', value: 'PROSPECT' },
+                      { label: 'Active', value: 'ACTIVE' },
+                      { label: 'On Hold', value: 'ONHOLD' },
+                      { label: 'Churned', value: 'CHURNED' },
+                      { label: 'Completed', value: 'PROJECT_COMPLETED' },
+                    ]}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-secondary mb-1.5 block">Engagements</label>
+                  <MultiSelect
+                    value={engagementTypeFilter}
+                    onChange={setEngagementTypeFilter}
+                    placeholder="Engagements"
+                    showSelectAll={true}
+                    triggerClassName="w-full h-9 rounded-xl border border-border bg-white px-3 text-xs"
+                    options={[
+                      { label: 'Retainer', value: 'Retainer' },
+                      { label: 'Project', value: 'Project' },
+                      { label: 'Event', value: 'Event' },
+                      { label: 'Ad-hoc', value: 'Ad-hoc' }
+                    ]}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-secondary mb-1.5 block">Account Manager</label>
+                  <MultiSelect
+                    value={accountManagerFilter}
+                    onChange={setAccountManagerFilter}
+                    placeholder="Account Manager"
+                    showSelectAll={true}
+                    triggerClassName="w-full h-9 rounded-xl border border-border bg-white px-3 text-xs"
+                    options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-secondary mb-1.5 block">Industries</label>
+                  <MultiSelect
+                    value={industryFilter}
+                    onChange={setIndustryFilter}
+                    placeholder="Industries"
+                    showSelectAll={true}
+                    triggerClassName="w-full h-9 rounded-xl border border-border bg-white px-3 text-xs"
+                    options={INDUSTRY_OPTIONS.map((i) => ({ label: i, value: i }))}
+                  />
+                </div>
+                {canManageClients && (
+                  <div className="flex items-center justify-between pt-2 border-t border-border">
+                    <span className="text-xs font-semibold text-secondary">Show Archived Clients</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={showArchived}
+                      onClick={() => setShowArchived(v => !v)}
+                      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors ${showArchived ? 'bg-primary border-primary' : 'bg-gray-200 border-gray-300'}`}
+                    >
+                      <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${showArchived ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </Drawer>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2 w-full">
+            {/* Search Box */}
+            <div className="relative w-full sm:w-64 md:w-80 shrink-0">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search clients..."
+                className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none placeholder:text-secondary"
+              />
+            </div>
+
+            {/* Filter Pills */}
+            <div className="shrink-0">
+              <MultiSelect
+                value={statusFilter}
+                onChange={setStatusFilter}
+                placeholder="Lifecycle Stage"
+                showSelectAll={true}
+                triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
+                options={[
+                  { label: 'Prospect', value: 'PROSPECT' },
+                  { label: 'Active', value: 'ACTIVE' },
+                  { label: 'On Hold', value: 'ONHOLD' },
+                  { label: 'Churned', value: 'CHURNED' },
+                  { label: 'Completed', value: 'PROJECT_COMPLETED' },
+                ]}
+              />
+            </div>
+
+            <div className="shrink-0">
+              <MultiSelect
+                value={engagementTypeFilter}
+                onChange={setEngagementTypeFilter}
+                placeholder="Engagements"
+                showSelectAll={true}
+                triggerClassName={engagementTypeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
+                options={[
+                  { label: 'Retainer', value: 'Retainer' },
+                  { label: 'Project', value: 'Project' },
+                  { label: 'Event', value: 'Event' },
+                  { label: 'Ad-hoc', value: 'Ad-hoc' }
+                ]}
+              />
+            </div>
+
+            <div className="shrink-0">
+              <MultiSelect
+                value={accountManagerFilter}
+                onChange={setAccountManagerFilter}
+                placeholder="Account Manager"
+                showSelectAll={true}
+                triggerClassName={accountManagerFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
+                options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
+              />
+            </div>
+
+            <div className="shrink-0">
+              <MultiSelect
+                value={industryFilter}
+                onChange={setIndustryFilter}
+                placeholder="Industries"
+                showSelectAll={true}
+                triggerClassName={industryFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
+                options={INDUSTRY_OPTIONS.map((i) => ({ label: i, value: i }))}
+              />
+            </div>
+
+            {canManageClients && (
+              <button
+                type="button"
+                onClick={() => setShowArchived(v => !v)}
+                className={showArchived ? "h-9 rounded-xl border border-primary bg-primary/2 px-3 text-xs font-semibold text-primary transition-colors duration-150 motion-reduce:transition-none shrink-0 whitespace-nowrap" : "h-9 rounded-xl border border-border bg-white px-3 text-xs text-secondary hover:bg-gray-50 hover:border-gray-300 transition-colors duration-150 motion-reduce:transition-none shrink-0 whitespace-nowrap"}
+                title="Archived clients are hidden by default; show them here to restore one"
+              >
+                {showArchived ? 'Hide Archived' : 'Show Archived'}
               </button>
             )}
 
-            {/* No "Add Client" here by design: every client is born from the pipeline, when a
-                deal is won or a project starts. That keeps one company from existing as two
-                records. Bulk onboarding of existing customers still goes through Import. */}
-            {activeModule !== 'PM' && (
-              <Link
-                href="/pipeline"
-                className="flex items-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-semibold text-white hover:bg-[#1F2937] transition-all h-9 shrink-0 whitespace-nowrap"
+            {/* Action buttons on the right corner */}
+            <div className="flex items-center gap-2 ml-auto shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowViewSettings(true)}
+                className="p-2 rounded-xl border border-border bg-white hover:bg-gray-50 transition-colors text-secondary hover:text-primary h-9 w-9 flex items-center justify-center shrink-0"
+                title="Configure View Settings"
               >
-                <Plus className="h-3.5 w-3.5" /> New Lead
-              </Link>
-            )}
+                <Settings className="h-3.5 w-3.5" />
+              </button>
+
+              {activeModule !== 'PM' && (
+                <button
+                  onClick={handleExport}
+                  disabled={isExporting}
+                  className="flex items-center gap-2 rounded-xl border border-border bg-white px-3 text-xs font-semibold text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none disabled:opacity-50 h-9 shrink-0 whitespace-nowrap"
+                >
+                  <Download className="h-3.5 w-3.5" /> Export CSV
+                </button>
+              )}
+
+              {activeModule !== 'PM' && (
+                <Link
+                  href="/pipeline"
+                  className="flex items-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-semibold text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none h-9 shrink-0 whitespace-nowrap"
+                >
+                  <Plus className="h-3.5 w-3.5" /> New Lead
+                </Link>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Separator line */}
         <div className="h-px bg-border/60 w-full" />
@@ -574,10 +728,10 @@ function ClientsContent() {
                   setCurrentView('table');
                   localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ name: viewName, visibleColumns, viewType: 'table' }));
                 }}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${currentView === 'table' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors duration-150 motion-reduce:transition-none whitespace-nowrap shrink-0 ${currentView === 'table' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
                 title="Table View"
               >
-                <List className="w-3.5 h-3.5 shrink-0" />
+                <Icon as={List} size="sm" className="shrink-0" />
                 <span>Table</span>
               </button>
               <button
@@ -586,10 +740,10 @@ function ClientsContent() {
                   setCurrentView('timeline');
                   localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ name: viewName, visibleColumns, viewType: 'timeline' }));
                 }}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${currentView === 'timeline' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors duration-150 motion-reduce:transition-none whitespace-nowrap shrink-0 ${currentView === 'timeline' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
                 title="Timeline View"
               >
-                <LayoutGrid className="w-3.5 h-3.5 shrink-0" />
+                <Icon as={LayoutGrid} size="sm" className="shrink-0" />
                 <span>Timeline</span>
               </button>
             </div>
@@ -612,7 +766,7 @@ function ClientsContent() {
                   <th className="px-6 py-3.5 w-10 text-center relative select-none">
                     <button
                       onClick={(e) => { e.stopPropagation(); setShowColumnDropdown(!showColumnDropdown); }}
-                      className="inline-flex items-center justify-center h-6 w-6 rounded-md text-secondary hover:bg-gray-100 hover:text-primary transition-all text-sm font-bold border border-transparent hover:border-gray-200"
+                      className="inline-flex items-center justify-center h-6 w-6 rounded-md text-secondary hover:bg-gray-100 hover:text-primary transition-colors duration-150 motion-reduce:transition-none text-sm font-bold border border-transparent hover:border-gray-200"
                       title="Toggle visible columns"
                     >
                       +
@@ -643,7 +797,7 @@ function ClientsContent() {
                                 className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#F9FAFB] transition-colors"
                               >
                                 <span className="text-[#374151]">{col.label}</span>
-                                {visibleColumns.includes(col.id) && <Check className="w-4 h-4 text-primary" />}
+                                {visibleColumns.includes(col.id) && <Icon as={Check} size="md" className="text-primary" />}
                               </button>
                             ))}
                           </motion.div>
@@ -816,7 +970,7 @@ function ClientsContent() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               onClick={() => router.push(`/clients/${client.id}`)}
-              className="p-4 rounded-xl border border-border bg-white hover:shadow-sm cursor-pointer transition-all"
+              className="p-4 rounded-xl border border-border bg-white hover:shadow-sm cursor-pointer transition-colors duration-150 motion-reduce:transition-none"
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
@@ -873,7 +1027,7 @@ function ClientsContent() {
           <p className="text-xs text-secondary">Showing {clients.length} of {total}</p>
           <button
             onClick={() => setPage((p) => p + 1)}
-            className="rounded-xl border border-border bg-white px-5 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all"
+            className="rounded-xl border border-border bg-white px-5 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none"
           >
             Load more
           </button>
@@ -909,7 +1063,7 @@ function ClientsContent() {
                     <h3 className="text-sm font-semibold text-primary">Need a template?</h3>
                     <p className="text-xs text-secondary mt-1">CSV or Excel (.xlsx). <span className="font-medium text-[#374151]">Name required</span> on every row.</p>
                   </div>
-                  <button onClick={downloadTemplate} className="flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-gray-50 transition-all">
+                  <button onClick={downloadTemplate} className="flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-gray-50 transition-colors duration-150 motion-reduce:transition-none">
                     <FileText className="h-3.5 w-3.5" /> Template
                   </button>
                 </div>
@@ -922,7 +1076,7 @@ function ClientsContent() {
                     className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed transition-colors rounded-xl cursor-pointer ${isDragging ? 'border-primary bg-gray-50' : 'border-[#D1D5DB] hover:border-primary hover:bg-gray-50'}`}
                   >
                     <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                      <Upload className="w-8 h-8 mb-3 text-secondary" />
+                      <Upload className="h-8 w-8 mb-3 text-secondary" />
                       <p className="mb-2 text-sm text-[#4B5563]">
                         <span className="font-semibold">Click to upload</span> or drag and drop
                       </p>
@@ -960,7 +1114,7 @@ function ClientsContent() {
                         <p className="text-xs text-amber-800">
                           {importResult.rejectedCount} row{importResult.rejectedCount === 1 ? '' : 's'} rejected. Download the report, fix the rows, and re-upload just those — the imported ones are already saved.
                         </p>
-                        <button onClick={downloadRejectionReport} className="mt-2 flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100 transition-all">
+                        <button onClick={downloadRejectionReport} className="mt-2 flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100 transition-colors duration-150 motion-reduce:transition-none">
                           <Download className="h-3.5 w-3.5" /> Rejection report
                         </button>
                       </>
@@ -971,7 +1125,7 @@ function ClientsContent() {
                 )}
 
                 <div className="pt-4 flex flex-row gap-2 sm:gap-3">
-                  <button type="button" onClick={() => { setShowCreate(false); setImportFile(null); setImportPreview([]); setImportResult(null); }} className="flex-1 w-full sm:flex-1 rounded-xl border border-border px-2 sm:px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
+                  <button type="button" onClick={() => { setShowCreate(false); setImportFile(null); setImportPreview([]); setImportResult(null); }} className="flex-1 w-full sm:flex-1 rounded-xl border border-border px-2 sm:px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none">
                     {importResult ? 'Done' : 'Cancel'}
                   </button>
                   {/* Hidden once a result is in — re-clicking would import the same file twice. */}
@@ -979,7 +1133,7 @@ function ClientsContent() {
                     <button
                       onClick={handleBulkImport}
                       disabled={importing || importPreview.length === 0}
-                      className="flex-1 w-full sm:flex-1 rounded-xl bg-primary px-2 sm:px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all flex items-center justify-center"
+                      className="flex-1 w-full sm:flex-1 rounded-xl bg-primary px-2 sm:px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none flex items-center justify-center"
                     >
                       {importing ? 'Importing...' : <><span className="hidden sm:inline">Import Clients</span><span className="inline sm:hidden">Import</span></>}
                     </button>

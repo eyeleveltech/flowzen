@@ -10,6 +10,7 @@ import toast from 'react-hot-toast';
 
 import { leadStageLabel } from '@/lib/lead-stage';
 import { toDateInput } from '@/lib/utils';
+import { Icon } from '@/components/ui/icon';
 
 // The exact Lost Reason options per §3.6 — must cover every value in the LostReason enum
 // (apps/api/prisma/schema.prisma), since this modal is the only UI entry point for setting it.
@@ -167,11 +168,11 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
           <div>
             <h2 className="text-lg font-semibold text-primary">Move to {toLabel}</h2>
             <p className="text-xs text-secondary flex items-center gap-2 mt-1">
-              {fromLabel} <ArrowRight className="w-3 h-3" /> {toLabel}
+              {fromLabel} <ArrowRight className="h-3 w-3" /> {toLabel}
             </p>
           </div>
           <button onClick={guardedClose} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
-            <X className="h-4 w-4 text-secondary" />
+            <Icon as={X} size="md" className="text-secondary" />
           </button>
         </div>
 
@@ -181,7 +182,7 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
             {/* §3.5 Alert banner for Active gate */}
             {isActivationGate && (
               <div className="flex items-start gap-2 p-3 rounded-xl border border-amber-200 bg-amber-50 text-sm text-amber-800">
-                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                <Icon as={AlertTriangle} size="md" className="mt-0.5 shrink-0" />
                 <span>The signed contract must be uploaded below before this deal can be activated.</span>
               </div>
             )}
@@ -198,7 +199,7 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Expected Close Date</label>
-                  <input type="date" value={expectedCloseDate} onChange={e => setExpectedCloseDate(e.target.value)} className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary" />
+                  <input type="date" value={expectedCloseDate} onChange={e => setExpectedCloseDate(e.target.value)} className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1" />
                 </div>
               </div>
             )}
@@ -232,7 +233,7 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
                     type="date"
                     value={followUpDate}
                     onChange={e => setFollowUpDate(e.target.value)}
-                    className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary"
+                    className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1"
                   />
                 </div>
                 <div>
@@ -241,7 +242,7 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
                     type="date"
                     value={lastContactedDate}
                     onChange={e => setLastContactedDate(e.target.value)}
-                    className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary"
+                    className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1"
                   />
                 </div>
               </div>
@@ -260,14 +261,14 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
                     required={field.required}
                     value={formData[field.key] || ''}
                     onChange={(e) => handleFieldChange(field.key, e.target.value)}
-                    className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary"
+                    className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1"
                   />
                 ) : field.type === 'textarea' ? (
                   <textarea
                     required={field.required}
                     value={formData[field.key] || ''}
                     onChange={(e) => handleFieldChange(field.key, e.target.value)}
-                    className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary min-h-20"
+                    className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 min-h-20"
                   />
                 ) : field.type === 'select' ? (
                   <Select

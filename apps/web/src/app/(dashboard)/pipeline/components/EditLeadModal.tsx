@@ -9,6 +9,7 @@ import { getInitials, toDateInput } from '@/lib/utils';
 import { useMembers } from '@/hooks/useQueries';
 import { useModalSafety } from '@/hooks/useModalSafety';
 import { Field, FieldSelect, FieldCheckbox } from '@/components/ui/field';
+import { Icon } from '@/components/ui/icon';
 
 export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose: () => void; onSuccess: () => void; }) {
   const { data: members = [] } = useMembers();
@@ -121,7 +122,7 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
             <p className="text-sm text-secondary">Update information for {leadLabel}</p>
           </div>
           <button onClick={guardedClose} className="p-2 text-secondary hover:text-primary rounded-lg hover:bg-[#F3F4F6] transition-colors">
-            <X className="w-5 h-5" />
+            <Icon as={X} size="lg" />
           </button>
         </div>
 
@@ -250,7 +251,7 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
             {submitting ? (
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
             ) : (
-              <Save className="w-4 h-4" />
+              <Icon as={Save} size="md" />
             )}
             Save Changes
           </button>

@@ -15,6 +15,7 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { leadStageLabel } from '@/lib/lead-stage';
+import { Icon } from '@/components/ui/icon';
 
 const STAGES = [
   'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
@@ -167,12 +168,12 @@ export function LeadListView() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto flex-1">
             <div className="relative w-full sm:max-w-60 md:max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
+              <Icon as={Search} size="md" className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search leads..."
-                className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus:border-primary transition-all"
+                className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
               />
             </div>
 
@@ -213,10 +214,10 @@ export function LeadListView() {
 
             <button
               onClick={() => setShowMoreFilters(!showMoreFilters)}
-              className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-all ${showMoreFilters || activeFilterCount > 0 ? 'bg-primary text-white border-primary' : 'bg-white border-border text-secondary hover:bg-gray-50'
+              className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors duration-150 motion-reduce:transition-none ${showMoreFilters || activeFilterCount > 0 ? 'bg-primary text-white border-primary' : 'bg-white border-border text-secondary hover:bg-gray-50'
                 }`}
             >
-              <Filter className="h-4 w-4" />
+              <Icon as={Filter} size="md" />
               More Filters {activeFilterCount > 0 && `(${activeFilterCount})`}
             </button>
 
@@ -240,16 +241,16 @@ export function LeadListView() {
           <div className="flex flex-row items-center gap-3 w-full sm:w-auto">
             <button
               onClick={() => { setModalMode('BULK'); setIsModalOpen(true); }}
-              className="flex items-center gap-2 rounded-xl bg-white border border-border px-4 py-2.5 text-sm font-medium text-secondary hover:text-primary hover:bg-gray-50 transition-all flex-1 sm:flex-none justify-center shrink-0"
+              className="flex items-center gap-2 rounded-xl bg-white border border-border px-4 py-2.5 text-sm font-medium text-secondary hover:text-primary hover:bg-gray-50 transition-colors duration-150 motion-reduce:transition-none flex-1 sm:flex-none justify-center shrink-0"
             >
-              <Upload className="h-4 w-4" /> Import
+              <Icon as={Upload} size="md" /> Import
             </button>
             <button
               onClick={() => { setModalMode('MANUAL'); setIsModalOpen(true); }}
-              className="flex items-center justify-center rounded-xl bg-primary h-10.5 w-10.5 text-white hover:bg-[#1F2937] transition-all shrink-0"
+              className="flex items-center justify-center rounded-xl bg-primary h-10.5 w-10.5 text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none shrink-0"
               title="Add Lead"
             >
-              <Plus className="h-4 w-4" />
+              <Icon as={Plus} size="md" />
             </button>
           </div>
         </div>
@@ -290,9 +291,9 @@ export function LeadListView() {
                 <div className="space-y-1.5 w-full sm:w-auto min-w-70">
                   <label className="text-xs font-semibold text-secondary uppercase tracking-wider">Close Date Range</label>
                   <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
-                    <input type="date" value={closeDateFrom} onChange={(e) => setCloseDateFrom(e.target.value)} className="w-full rounded-lg border border-border p-2 text-sm focus:border-primary outline-none text-[#374151]" />
+                    <input type="date" value={closeDateFrom} onChange={(e) => setCloseDateFrom(e.target.value)} className="w-full rounded-lg border border-border p-2 text-sm focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none text-[#374151]" />
                     <span className="text-secondary hidden sm:inline">-</span>
-                    <input type="date" value={closeDateTo} onChange={(e) => setCloseDateTo(e.target.value)} className="w-full rounded-lg border border-border p-2 text-sm focus:border-primary outline-none text-[#374151]" />
+                    <input type="date" value={closeDateTo} onChange={(e) => setCloseDateTo(e.target.value)} className="w-full rounded-lg border border-border p-2 text-sm focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none text-[#374151]" />
                   </div>
                 </div>
 
@@ -302,12 +303,12 @@ export function LeadListView() {
                   <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
                     <div className="relative w-full">
                       <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-secondary text-sm">₹</span>
-                      <input type="number" placeholder="Min" value={minDealValue} onChange={(e) => setMinDealValue(e.target.value)} className="w-full rounded-lg border border-border py-2 pl-6 pr-2 text-sm focus:border-primary outline-none" />
+                      <input type="number" placeholder="Min" value={minDealValue} onChange={(e) => setMinDealValue(e.target.value)} className="w-full rounded-lg border border-border py-2 pl-6 pr-2 text-sm focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none" />
                     </div>
                     <span className="text-secondary hidden sm:inline">-</span>
                     <div className="relative w-full">
                       <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-secondary text-sm">₹</span>
-                      <input type="number" placeholder="Max" value={maxDealValue} onChange={(e) => setMaxDealValue(e.target.value)} className="w-full rounded-lg border border-border py-2 pl-6 pr-2 text-sm focus:border-primary outline-none" />
+                      <input type="number" placeholder="Max" value={maxDealValue} onChange={(e) => setMaxDealValue(e.target.value)} className="w-full rounded-lg border border-border py-2 pl-6 pr-2 text-sm focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none" />
                     </div>
                   </div>
                 </div>
@@ -316,9 +317,9 @@ export function LeadListView() {
                 <div className="space-y-1.5 w-full sm:w-auto min-w-70">
                   <label className="text-xs font-semibold text-secondary uppercase tracking-wider">Date Added Range</label>
                   <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
-                    <input type="date" value={dateAddedFrom} onChange={(e) => setDateAddedFrom(e.target.value)} className="w-full rounded-lg border border-border p-2 text-sm focus:border-primary outline-none text-[#374151]" />
+                    <input type="date" value={dateAddedFrom} onChange={(e) => setDateAddedFrom(e.target.value)} className="w-full rounded-lg border border-border p-2 text-sm focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none text-[#374151]" />
                     <span className="text-secondary hidden sm:inline">-</span>
-                    <input type="date" value={dateAddedTo} onChange={(e) => setDateAddedTo(e.target.value)} className="w-full rounded-lg border border-border p-2 text-sm focus:border-primary outline-none text-[#374151]" />
+                    <input type="date" value={dateAddedTo} onChange={(e) => setDateAddedTo(e.target.value)} className="w-full rounded-lg border border-border p-2 text-sm focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none text-[#374151]" />
                   </div>
                 </div>
               </div>
@@ -428,7 +429,7 @@ export function LeadListView() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         {lead.priority && (
-                          <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${lead.priority === 'HIGH' ? 'bg-red-500' : lead.priority === 'MEDIUM' ? 'bg-yellow-500' : 'bg-gray-300'}`} title={`Priority: ${lead.priority}`} />
+                          <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${lead.priority === 'HIGH' ? 'bg-red-500' : lead.priority === 'MEDIUM' ? 'bg-yellow-500' : 'bg-gray-300'}`} title={`Priority: ${lead.priority}`} />
                         )}
                         <div className="flex flex-col">
                           <span className="text-sm font-medium text-primary">{lead.contactName || lead.companyName || getClientDisplayName(lead.client)}</span>
@@ -469,7 +470,7 @@ export function LeadListView() {
                       )}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <ChevronRight className="h-4 w-4 text-[#D1D5DB] inline" />
+                      <Icon as={ChevronRight} size="md" className="text-[#D1D5DB] inline" />
                     </td>
                   </motion.tr>
                 ))
@@ -505,7 +506,7 @@ export function LeadListView() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               onClick={() => router.push(`/pipeline/${lead.id}`)}
-              className="bg-white border border-border rounded-xl p-4 cursor-pointer hover:border-primary/30 hover:shadow-sm transition-all"
+              className="bg-white border border-border rounded-xl p-4 cursor-pointer hover:border-primary/30 hover:shadow-sm transition-colors duration-150 motion-reduce:transition-none"
             >
               <div className="flex justify-between items-start mb-3 gap-3">
                 <div className="flex items-center gap-3 min-w-0">

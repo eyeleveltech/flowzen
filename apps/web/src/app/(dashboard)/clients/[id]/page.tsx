@@ -351,9 +351,9 @@ export default function ClientDetailPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto whitespace-nowrap custom-scrollbar pb-1">
+      <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto no-scrollbar whitespace-nowrap -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 pr-8 pb-1">
         {tabs.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-all ${tab === t.id ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-primary'}`}>
+          <button key={t.id} onClick={() => setTab(t.id)} className={`px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 transition-colors duration-150 motion-reduce:transition-none ${tab === t.id ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-primary'}`}>
             {t.label}
           </button>
         ))}
@@ -541,7 +541,7 @@ export default function ClientDetailPage() {
                 <div
                   key={p.id}
                   onClick={() => router.push(`/projects/${p.id}`)}
-                  className="group rounded-2xl border border-border bg-white p-5 hover:shadow-sm hover:border-gray-300 cursor-pointer transition-all"
+                  className="group rounded-2xl border border-border bg-white p-5 hover:shadow-sm hover:border-gray-300 cursor-pointer transition-colors duration-150 motion-reduce:transition-none"
                 >
                   {/* Header */}
                   <div className="flex items-start justify-between gap-3 mb-4">
@@ -611,8 +611,8 @@ export default function ClientDetailPage() {
       {tab === 'notes' && (
         <div>
           <div className="flex gap-3 mb-6">
-            <input value={noteContent} onChange={(e) => setNoteContent(e.target.value)} placeholder="Add a note..." className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm outline-none focus:border-primary transition-all" />
-            <button onClick={addNote} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all">Add Note</button>
+            <input value={noteContent} onChange={(e) => setNoteContent(e.target.value)} placeholder="Add a note..." className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none" />
+            <button onClick={addNote} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none">Add Note</button>
           </div>
           <div className="space-y-3">
             {client.notes.map((n) => (
@@ -666,7 +666,7 @@ export default function ClientDetailPage() {
                 <Field label="City" value={editForm.city} onChange={(v) => setEditForm({ ...editForm, city: v })} />
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Billing Address</label>
-                  <textarea value={editForm.billingAddress} onChange={(e) => setEditForm({ ...editForm, billingAddress: e.target.value })} rows={2} placeholder="Used to auto-fill quotations" className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary resize-none" />
+                  <textarea value={editForm.billingAddress} onChange={(e) => setEditForm({ ...editForm, billingAddress: e.target.value })} rows={2} placeholder="Used to auto-fill quotations" className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 resize-none" />
                 </div>
                 <Field label="Start Date" type="date" value={editForm.startDate} onChange={(v) => setEditForm({ ...editForm, startDate: v })} />
 
@@ -889,10 +889,10 @@ export default function ClientDetailPage() {
                   </div>
                 </div>
                 <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setShowEdit(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">
+                  <button type="button" onClick={() => setShowEdit(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none">
                     Cancel
                   </button>
-                  <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">
+                  <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none">
                     {submitting ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
@@ -965,7 +965,7 @@ function Field({ label, value, onChange, type = 'text', required = false }: {
         value={value}
         onChange={(e) => onChange(e.target.value)}
         required={required}
-        className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+        className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
       />
     </div>
   );

@@ -10,6 +10,7 @@ import { getSSE } from '@/lib/sse';
 import { formatCurrency, formatDate, toDateInput, getInitials, getAvatarColor } from '@/lib/utils';
 import { StatusBadge } from '@/components/ui/status-badge';
 import toast from 'react-hot-toast';
+import { Icon } from '@/components/ui/icon';
 
 const STATUSES = ['UPCOMING', 'IN_DISCUSSION', 'RENEWED', 'AT_RISK', 'CHURNED'] as const;
 const fmtDate = formatDate;
@@ -38,7 +39,7 @@ export default function RenewalsPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-primary tracking-tight flex items-center gap-2"><RefreshCw className="w-5 h-5 text-secondary" /> Renewal Tracker</h1>
+        <h1 className="text-2xl font-semibold text-primary tracking-tight flex items-center gap-2"><Icon as={RefreshCw} size="lg" className="text-secondary" /> Renewal Tracker</h1>
         <p className="text-sm text-secondary mt-1">Retainer contracts and when they come up for renewal.</p>
       </div>
 
@@ -89,7 +90,7 @@ export default function RenewalsPage() {
                     <td className="px-4 py-3 text-secondary">{fmtDate(r.contractEndDate)}</td>
                     <td className={`px-4 py-3 text-right font-medium tabular-nums ${d != null && d <= 7 ? 'text-red-600' : d != null && d <= 30 ? 'text-amber-600' : 'text-primary'}`}>{d == null ? '—' : d < 0 ? `${Math.abs(d)}d overdue` : `${d}d`}</td>
                     <td className="px-4 py-3">{r.renewalStatus ? <StatusBadge status={r.renewalStatus} size="xs" /> : <span className="text-secondary">—</span>}</td>
-                    <td className="px-4 py-3">{r.assignedTo ? <span className="flex items-center gap-1.5"><span className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold ${getAvatarColor(r.assignedTo.name)}`}>{getInitials(r.assignedTo.name)}</span><span className="text-secondary">{r.assignedTo.name}</span></span> : <span className="text-secondary">—</span>}</td>
+                    <td className="px-4 py-3">{r.assignedTo ? <span className="flex items-center gap-1.5"><span className={`h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-bold ${getAvatarColor(r.assignedTo.name)}`}>{getInitials(r.assignedTo.name)}</span><span className="text-secondary">{r.assignedTo.name}</span></span> : <span className="text-secondary">—</span>}</td>
                     <td className="px-4 py-3 text-right"><button onClick={() => setEditing(r)} className="text-xs font-medium text-primary border border-border rounded-lg px-3 py-1.5 hover:bg-gray-50">Update</button></td>
                   </tr>
                 );
@@ -106,7 +107,7 @@ export default function RenewalsPage() {
   );
 }
 
-const inputCls = 'w-full rounded-xl border border-border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:bg-white transition-all';
+const inputCls = 'w-full rounded-xl border border-border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 focus:bg-white transition-colors duration-150 motion-reduce:transition-none';
 const labelCls = 'block text-[11px] font-semibold text-secondary uppercase tracking-wider mb-1.5';
 
 function RenewalModal({ lead, onClose, onSaved }: { lead: any; onClose: () => void; onSaved: () => void }) {
@@ -129,7 +130,7 @@ function RenewalModal({ lead, onClose, onSaved }: { lead: any; onClose: () => vo
       <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-101 w-full max-w-md bg-white border-l border-border shadow-2xl overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-white z-10">
           <h2 className="text-lg font-semibold text-primary">Update Renewal</h2>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100"><X className="h-4 w-4 text-secondary" /></button>
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100"><Icon as={X} size="md" className="text-secondary" /></button>
         </div>
         <div className="p-6 space-y-4">
           <div><label className={labelCls}>Renewal Status</label>

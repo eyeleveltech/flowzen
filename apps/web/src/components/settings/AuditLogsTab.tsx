@@ -3,6 +3,7 @@ import { api } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import { Shield, Search, FileText } from 'lucide-react';
 import { Select } from '@/components/ui/select';
+import { Icon } from '@/components/ui/icon';
 
 interface AuditLog {
   id: string;
@@ -133,7 +134,7 @@ export function AuditLogsTab() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-primary flex items-center gap-2">
-            <Shield className="h-5 w-5 text-amber-500" /> System Audit Logs
+            <Icon as={Shield} size="lg" className="text-amber-500" /> System Audit Logs
           </h2>
           <p className="text-sm text-secondary mt-0.5">Track administrative and state modifications across the workspace.</p>
         </div>

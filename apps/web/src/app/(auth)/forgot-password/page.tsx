@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ArrowLeft, Mail } from 'lucide-react';
 import { api } from '@/lib/api';
 import Link from 'next/link';
+import { Icon } from '@/components/ui/icon';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -68,7 +69,7 @@ export default function ForgotPasswordPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full appearance-none rounded-xl border border-border bg-[#F9FAFB] px-4 py-3 text-primary placeholder:text-secondary focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-all sm:text-sm"
+                  className="block w-full appearance-none rounded-xl border border-border bg-[#F9FAFB] px-4 py-3 text-primary placeholder:text-secondary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-colors duration-150 motion-reduce:transition-none sm:text-sm"
                   placeholder="you@company.com"
                 />
               </div>
@@ -77,7 +78,7 @@ export default function ForgotPasswordPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all duration-150 h-11"
+              className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none h-11"
             >
               {loading ? 'Sending link...' : 'Send reset link'}
             </button>
@@ -86,7 +87,7 @@ export default function ForgotPasswordPage() {
 
         <div className="mt-6 text-center">
           <Link href="/login" className="inline-flex items-center text-sm font-medium text-secondary hover:text-primary transition-colors">
-            <ArrowLeft className="mr-2 h-4 w-4" />
+            <Icon as={ArrowLeft} size="md" className="mr-2" />
             Back to login
           </Link>
         </div>
