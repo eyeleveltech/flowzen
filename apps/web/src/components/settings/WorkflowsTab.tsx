@@ -180,7 +180,7 @@ export function WorkflowsTab({ workflows, fetchWorkflows, users }: { workflows: 
       <AnimatePresence>
         {showModal && (
           <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-2xl shadow-2xl shadow-black/10 w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-2xl shadow-modal shadow-black/10 w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
               <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-border bg-surface shrink-0">
                 <h3 className="text-base font-semibold text-primary">{editingWorkflow ? 'Edit Workflow' : 'Create Workflow Rule'}</h3>
                 <button onClick={() => setShowModal(false)} className="text-secondary hover:text-primary"><Icon as={X} size="lg" /></button>

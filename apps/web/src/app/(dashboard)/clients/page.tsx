@@ -92,7 +92,7 @@ function ClientsContent() {
   const [visibleColumns, setVisibleColumns] = useState<string[]>(ALL_COLUMNS.map(c => c.id));
   const [showColumnDropdown, setShowColumnDropdown] = useState(false);
   const [showViewSettings, setShowViewSettings] = useState(false);
-  const [viewName, setViewName] = useState('All Companies');
+  const [viewName, setViewName] = useState('All clients');
 
   const LOCAL_STORAGE_KEY = 'flowzen_view_clients';
 
@@ -425,7 +425,7 @@ function ClientsContent() {
         <div>
           <h1 className="text-2xl font-semibold text-primary tracking-tight flex items-center gap-2">
             Clients
-            <span className="text-xs font-normal text-secondary bg-[#F3F4F6] px-2 py-0.5 rounded-lg border border-border">
+            <span className="text-xs font-normal text-text-on-sunken bg-surface-sunken px-2 py-0.5 rounded-lg border border-border">
               {viewName}
             </span>
           </h1>
@@ -848,8 +848,7 @@ function ClientsContent() {
                       key={client.id}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      className="hover:bg-surface cursor-pointer transition-colors"
-                      onClick={() => router.push(`/clients/${client.id}`)}
+                      className="hover:bg-surface transition-colors relative"
                     >
                       {visibleColumns.includes('client') && (
                         <td className="px-6 py-4">
@@ -858,9 +857,12 @@ function ClientsContent() {
                               {getInitials(getClientDisplayName(client))}
                             </div>
                             <div>
-                              <p className="text-sm font-medium text-primary">
+                              <Link
+                                href={`/clients/${client.id}`}
+                                className="text-sm font-medium text-primary hover:underline after:absolute after:inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
+                              >
                                 {getClientDisplayName(client)}
-                              </p>
+                              </Link>
                               {client.name !== 'Internal' && client.company && (client.contacts?.[0]?.name || client.name !== client.company) && (
                                 <p className="text-xs text-secondary">{client.contacts?.[0]?.name || client.name}</p>
                               )}
@@ -911,7 +913,7 @@ function ClientsContent() {
                         </td>
                       )}
                       <td className="px-6 py-4">
-                        <ChevronRight className="h-4 w-4 text-[#D1D5DB]" />
+                        <ChevronRight className="h-4 w-4 text-[#D1D5DB]" aria-hidden="true" />
                       </td>
                     </motion.tr>
                   ))
@@ -965,12 +967,10 @@ function ClientsContent() {
           </div>
         ) : (
           clients.map((client) => (
-            <motion.div
+            <Link
               key={client.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              onClick={() => router.push(`/clients/${client.id}`)}
-              className="p-4 rounded-xl border border-border bg-white hover:shadow-sm cursor-pointer transition-colors duration-150 motion-reduce:transition-none"
+              href={`/clients/${client.id}`}
+              className="block p-4 rounded-xl border border-border bg-white hover:shadow-sm transition-colors duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
@@ -1011,12 +1011,12 @@ function ClientsContent() {
                     <p className="text-xs text-secondary">No contacts</p>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5 text-xs font-medium text-secondary bg-[#F3F4F6] px-2 py-1 rounded-md">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-text-on-sunken bg-surface-sunken px-2 py-1 rounded-md">
                   <FolderKanban className="h-3 w-3" />
                   {client._count?.projects ?? 0}
                 </div>
               </div>
-            </motion.div>
+            </Link>
           ))
         )}
       </div>
@@ -1043,7 +1043,7 @@ function ClientsContent() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
-              className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto"
+              className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-modal shadow-black/10 overflow-y-auto"
             >
               <div className="flex flex-col border-b border-[#F3F4F6]">
                 <div className="flex items-center justify-between px-6 py-4">
@@ -1169,7 +1169,7 @@ function ClientsContent() {
           if (typeof window !== 'undefined') {
             localStorage.removeItem(LOCAL_STORAGE_KEY);
           }
-          setViewName('All Companies');
+          setViewName('All clients');
           setCurrentView('table');
           setVisibleColumns(ALL_COLUMNS.map(c => c.id));
           toast.success('View Settings reset to defaults');

@@ -114,7 +114,7 @@ export function Drawer({
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className={`fixed bottom-0 left-0 right-0 z-201 max-h-[90dvh] overflow-y-auto rounded-t-2xl bg-white shadow-2xl ${className}`}
+              className={`fixed bottom-0 left-0 right-0 z-201 max-h-[90dvh] overflow-y-auto rounded-t-2xl bg-white shadow-modal ${className}`}
               role="dialog"
               aria-modal="true"
               aria-label={title || ariaLabel || 'Drawer'}
@@ -141,7 +141,7 @@ export function Drawer({
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-              className={`fixed right-0 top-0 bottom-0 z-201 w-full max-w-md bg-white border-l border-border shadow-2xl overflow-y-auto flex flex-col ${className}`}
+              className={`fixed right-0 top-0 bottom-0 z-201 w-full max-w-md bg-white border-l border-border shadow-modal overflow-y-auto flex flex-col ${className}`}
               role="dialog"
               aria-modal="true"
               aria-label={title || ariaLabel || 'Drawer'}

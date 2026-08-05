@@ -1048,7 +1048,7 @@ crmRouter.post('/leads/:id/stage', authorize('SUPER_ADMIN', 'ADMIN'), validate(s
 
       const reasonLabel = lostReason ? String(lostReason).replace(/_/g, ' ') : null;
       const stageMsg = stage === 'CONTRACT' ? 'signed the contract 🎉'
-        : stage === 'CHURNED' ? 'marked this deal as Churned'
+        : stage === 'CHURNED' ? 'marked this lead as churned'
           : `moved this lead to ${stage.replace(/_/g, ' ')}`;
 
       await tx.activity.create({

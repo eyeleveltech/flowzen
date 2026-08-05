@@ -52,8 +52,8 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
       }
       transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
       className={cn(
-        "fixed left-0 top-0 bottom-0 flex flex-col border-r border-border bg-white",
-        isMobile ? "z-50 shadow-2xl" : "z-40"
+        "fixed left-0 top-0 bottom-0 flex flex-col border-r border-border bg-white overflow-hidden",
+        isMobile ? "z-50 shadow-modal" : "z-40"
       )}
     >
       {/* Logo */}
@@ -69,7 +69,11 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
         {/* Module switcher — only when the user can access more than one module */}
         {canSwitch && (
-          <Link href="/modules">
+          <Link
+            href="/modules"
+            title={sidebarCollapsed ? activeLabel : undefined}
+            aria-label={activeLabel}
+          >
             <div className={cn('group flex items-center gap-3 rounded-xl px-3 py-2.5 mb-2 text-sm font-medium border border-border bg-[#F9FAFB] text-secondary hover:text-primary hover:border-[#D1D5DB] transition-colors duration-150 motion-reduce:transition-none', sidebarCollapsed && 'justify-center px-0')}>
               <ArrowLeftRight className="h-4.5 w-4.5 shrink-0 text-secondary group-hover:text-primary" />
               <AnimatePresence>
@@ -88,7 +92,13 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
             ? pathname === item.href
             : (pathname === item.href || pathname.startsWith(item.href + '/'));
           return (
-            <Link key={item.href} href={item.href}>
+            <Link
+              key={item.href}
+              href={item.href}
+              title={sidebarCollapsed ? item.label : undefined}
+              aria-label={item.label}
+              aria-current={isActive ? 'page' : undefined}
+            >
               <div
                 className={cn(
                   'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors duration-150 motion-reduce:transition-none',
@@ -129,7 +139,13 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
         {BOTTOM_NAV_ITEMS.filter(item => item.href !== '/profile' && (!item.roles || item.roles.includes(userRole))).map((item) => {
           const isActive = pathname.startsWith(item.href);
           return (
-            <Link key={item.href} href={item.href}>
+            <Link
+              key={item.href}
+              href={item.href}
+              title={sidebarCollapsed ? item.label : undefined}
+              aria-label={item.label}
+              aria-current={isActive ? 'page' : undefined}
+            >
               <div
                 className={cn(
                   'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors duration-150 motion-reduce:transition-none',
@@ -160,6 +176,8 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
         {!isMobile && (
           <button
             onClick={toggleCollapse}
+            title={sidebarCollapsed ? 'Expand' : 'Collapse'}
+            aria-label={sidebarCollapsed ? 'Expand' : 'Collapse'}
             className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-secondary hover:bg-[#F9FAFB] hover:text-primary transition-colors duration-150 motion-reduce:transition-none"
           >
             <motion.div animate={{ rotate: sidebarCollapsed ? 180 : 0 }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2 }}>
@@ -176,8 +194,11 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
         )}
 
         {/* User */}
-        <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 mt-2">
-          <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${user ? getAvatarColor(user.name) : 'bg-primary text-white'}`}>
+        <div className={cn("flex items-center gap-3 rounded-xl px-3 py-2.5 mt-2", sidebarCollapsed && "flex-col justify-center px-0 gap-2")}>
+          <div
+            title={sidebarCollapsed ? user?.name : undefined}
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${user ? getAvatarColor(user.name) : 'bg-primary text-white'}`}
+          >
             {user ? getInitials(user.name) : '??'}
           </div>
           <AnimatePresence>
@@ -193,22 +214,17 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
               </motion.div>
             )}
           </AnimatePresence>
-          <AnimatePresence>
-            {!sidebarCollapsed && (
-              <motion.button
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => {
-                  logout();
-                  window.location.href = '/login';
-                }}
-                className="p-1.5 rounded-lg text-secondary hover:text-danger hover:bg-red-50 transition-colors"
-              >
-                <LogOut className="h-4 w-4" />
-              </motion.button>
-            )}
-          </AnimatePresence>
+          <button
+            title="Sign out"
+            aria-label="Sign out"
+            onClick={() => {
+              logout();
+              window.location.href = '/login';
+            }}
+            className="p-1.5 rounded-lg text-secondary hover:text-danger hover:bg-red-50 transition-colors shrink-0"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         </div>
       </div>
     </motion.aside>

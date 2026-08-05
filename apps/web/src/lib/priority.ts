@@ -18,7 +18,7 @@ export function getPriorityBadge(priority?: string | null): string {
 
 export function getPriorityColor(priority?: string | null): string {
   if (!priority || !PRIORITY_CONFIG[priority]) {
-    return 'text-gray-400';
+    return 'text-secondary';
   }
   return PRIORITY_CONFIG[priority].color;
 }

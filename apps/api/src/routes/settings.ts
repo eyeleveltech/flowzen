@@ -315,7 +315,6 @@ settingsRouter.get('/users', authorize('SUPER_ADMIN', 'ADMIN'), async (req: Auth
             assignedTasksBy: true,
             reviewedTasks: true,
             managedClients: true,
-            createdWorkflows: true,
           },
         },
       },

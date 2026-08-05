@@ -6,6 +6,7 @@ import { useActivityFeed } from '@/hooks/useActivityFeed';
 import { formatRelativeDate, getInitials } from '@/lib/utils';
 import { Zap, Check } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuthStore } from '@/stores';
 import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
@@ -144,13 +145,16 @@ export function ActivityFeedWidget({ itemVariants }: { itemVariants?: any }) {
 
         {activities.map((item: any) => {
           const isUnread = new Date(item.createdAt).getTime() > lastReadAt;
+          const href = item.entityType === 'TASK' && item.entityId
+            ? `/tasks?taskId=${item.entityId}`
+            : item.entityType === 'PROJECT' && item.entityId
+              ? `/projects/${item.entityId}`
+              : item.entityType === 'CLIENT' && item.entityId
+                ? `/clients/${item.entityId}`
+                : null;
 
-          return (
-            <div
-              key={item.id}
-              onClick={() => handleClick(item)}
-              className="flex gap-3 relative z-0 p-2 -mx-2 rounded-xl hover:bg-surface cursor-pointer transition-colors group"
-            >
+          const innerContent = (
+            <>
               <div className="relative">
                 <div className="h-5 w-5 rounded-full bg-white border border-border text-primary text-[8px] font-bold flex items-center justify-center shrink-0 shadow-sm mt-0.5 group-hover:border-[#D1D5DB] transition-colors">
                   {getInitials(item.user?.name || '?')}
@@ -168,6 +172,27 @@ export function ActivityFeedWidget({ itemVariants }: { itemVariants?: any }) {
                 </p>
                 <p className="text-xs text-secondary mt-1 font-medium">{formatRelativeDate(item.createdAt)}</p>
               </div>
+            </>
+          );
+
+          if (href) {
+            return (
+              <Link
+                key={item.id}
+                href={href}
+                className="flex gap-3 relative z-0 p-2 -mx-2 rounded-xl hover:bg-surface transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                {innerContent}
+              </Link>
+            );
+          }
+
+          return (
+            <div
+              key={item.id}
+              className="flex gap-3 relative z-0 p-2 -mx-2 rounded-xl transition-colors group"
+            >
+              {innerContent}
             </div>
           );
         })}

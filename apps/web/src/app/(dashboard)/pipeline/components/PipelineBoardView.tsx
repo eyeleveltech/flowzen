@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatCurrency, formatCurrencyCompact, formatShortDate, getInitials, getAvatarColor } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { AnimatePresence } from 'framer-motion';
 import { ChevronDown, Check, Plus, ChevronsLeft, ChevronsRight, Search, X, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -21,6 +22,7 @@ import { useMembers } from '@/hooks/useQueries';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { LEAD_STAGES, LEAD_STAGE_GROUPS, LEAD_STAGE_SHORT_LABELS, leadStageLabel } from '@/lib/lead-stage';
 import { Icon } from '@/components/ui/icon';
+import { Toggle } from '@/components/ui/toggle';
 
 // All pipeline stages in chronological order (used by the per-card stage menu).
 // Widened to string[]: leads arrive from the API typed loosely, and this list is used for
@@ -459,10 +461,10 @@ export function PipelineBoardView() {
 
   return (
     <div className="w-full flex flex-col h-[calc(100vh-185px)] min-h-137.5 overflow-hidden">
-
-      <div className="flex flex-wrap items-center justify-between gap-3 px-1 pb-3 shrink-0">
-        <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
-          <div className="relative flex-1 min-w-48 max-w-xs">
+      {/* Search & Filter Toolbar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4 bg-white p-3 rounded-2xl border border-border shadow-sm shrink-0">
+        <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 sm:gap-3 flex-1 min-w-0">
+          <div className="relative w-full sm:w-auto sm:flex-1 sm:min-w-48 sm:max-w-xs">
             <Icon as={Search} size="md" className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary pointer-events-none" />
             <input
               type="text"
@@ -481,7 +483,7 @@ export function PipelineBoardView() {
             )}
           </div>
 
-          <div className="w-44">
+          <div className="w-full sm:w-44">
             <MultiSelect
               value={ownerFilter}
               onChange={setOwnerFilter}
@@ -493,22 +495,16 @@ export function PipelineBoardView() {
           {(search || ownerFilter.length > 0) && (
             <button
               onClick={() => { setSearch(''); setOwnerFilter([]); }}
-              className="text-xs font-medium text-secondary hover:text-primary underline px-1 py-1"
+              className="text-xs font-medium text-secondary hover:text-primary underline px-1 py-1 align-self-start sm:align-self-auto"
             >
               Clear filters
             </button>
           )}
         </div>
 
-        <label className="flex items-center gap-2 text-xs font-medium text-secondary cursor-pointer select-none whitespace-nowrap">
-          <input
-            type="checkbox"
-            checked={showWonLost}
-            onChange={(e) => setShowWonLost(e.target.checked)}
-            className="rounded border-gray-300 text-primary focus:ring-primary"
-          />
-          Show Won/Lost
-        </label>
+        <div className="flex items-center justify-between sm:justify-start w-full sm:w-auto pt-2 sm:pt-0 border-t border-border/60 sm:border-t-0 shrink-0">
+          <Toggle label="Show Won/Lost" checked={showWonLost} onChange={setShowWonLost} />
+        </div>
       </div>
 
       {(debouncedSearch || ownerFilter.length > 0) && filteredLeads.length === 0 && (
@@ -517,7 +513,7 @@ export function PipelineBoardView() {
         </div>
       )}
 
-      <div ref={scrollRef} className="flex flex-1 w-full overflow-x-auto overflow-y-hidden gap-4 pb-2 px-1 custom-scrollbar min-h-0">
+      <div ref={scrollRef} className="flex flex-1 w-full overflow-x-auto overflow-y-hidden gap-3 sm:gap-4 pb-2 px-0.5 custom-scrollbar min-h-0 touch-pan-x">
         <DragDropContext onDragStart={startAutoScroll} onDragEnd={handleDragEnd}>
           {visibleGroups.map((group) => {
             const columnLeads = columns[group.id] || [];
@@ -570,7 +566,7 @@ export function PipelineBoardView() {
             }
 
             return (
-              <div key={group.id} className="flex flex-col flex-1 min-w-65 max-w-85 h-full shrink-0 border border-gray-200 bg-gray-50/80 rounded-xl overflow-hidden shadow-sm">
+              <div key={group.id} className="flex flex-col flex-1 min-w-[270px] sm:min-w-65 max-w-85 h-full shrink-0 border border-gray-200 bg-gray-50/80 rounded-xl overflow-hidden shadow-sm">
                 {/* Column Header */}
                 <div
                   className="px-4 py-3 flex items-center justify-between shrink-0 animate-fade-in"
@@ -583,14 +579,14 @@ export function PipelineBoardView() {
                         e.stopPropagation();
                         toggleCollapse(group.id);
                       }}
-                      className="p-0.5 rounded text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+                      className="p-0.5 rounded text-white/90 hover:text-white hover:bg-white/10 transition-colors"
                       title="Collapse column"
                     >
                       <Icon as={ChevronsLeft} size="sm" />
                     </button>
                     <h3 className="text-sm font-semibold text-white tracking-wide">{group.title}</h3>
                   </div>
-                  <div className="bg-white/25 px-2.5 py-0.5 rounded-full text-xs font-bold text-white shadow-sm backdrop-blur-sm">
+                  <div className="bg-black/10 px-2.5 py-0.5 rounded-full text-xs font-bold text-white shadow-sm backdrop-blur-sm">
                     {columnLeads.length}
                   </div>
                 </div>
@@ -612,14 +608,13 @@ export function PipelineBoardView() {
                                 ref={provided.innerRef}
                                 {...provided.draggableProps}
                                 {...provided.dragHandleProps}
-                                onClick={() => router.push(`/pipeline/${lead.id}`)}
-                                className={`bg-white rounded-xl p-4 border border-gray-200 cursor-pointer group ${snapshot.isDragging ? 'shadow-2xl shadow-black/10 scale-105 z-50 ring-2 ring-primary' : 'shadow-sm hover:shadow-md hover:border-gray-300'
+                                className={`bg-white rounded-xl p-4 border border-gray-200 group ${snapshot.isDragging ? 'shadow-modal shadow-black/10 scale-105 z-50 ring-2 ring-primary' : 'shadow-sm hover:shadow-md hover:border-gray-300'
                                   } transition-colors duration-150 motion-reduce:transition-none relative`}
                               >
                                 {/* Top Header: ID & Stage Badge */}
                                 <div className="flex items-center justify-between gap-2 mb-3 select-none">
                                   {lead.leadId ? (
-                                    <span className="text-[10px] font-mono text-gray-400 tracking-wide">{lead.leadId}</span>
+                                    <span className="text-[10px] font-mono text-secondary tracking-wide">{lead.leadId}</span>
                                   ) : (
                                     <span />
                                   )}
@@ -644,8 +639,14 @@ export function PipelineBoardView() {
                                   return (
                                     <>
                                       <div>
-                                        <h4 className="text-[15px] font-bold text-primary truncate" title={displayTitle}>
-                                          {displayTitle}
+                                        <h4 className="text-[15px] font-bold text-primary truncate">
+                                          <Link
+                                            href={`/pipeline/${lead.id}`}
+                                            className="relative z-10 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
+                                            title={displayTitle}
+                                          >
+                                            {displayTitle}
+                                          </Link>
                                         </h4>
                                       </div>
                                       <div className="mt-1">
@@ -655,12 +656,12 @@ export function PipelineBoardView() {
                                           </p>
                                         )}
                                         {lead.jobTitle && (
-                                          <p className="text-[11px] text-gray-400 truncate mt-0.5" title={lead.jobTitle}>
+                                          <p className="text-[11px] text-secondary truncate mt-0.5" title={lead.jobTitle}>
                                             {lead.jobTitle}
                                           </p>
                                         )}
                                       </div>
-                                      <div className="mt-2.5 flex items-center justify-between gap-1 text-[10px] text-gray-400 font-medium">
+                                      <div className="mt-2.5 flex items-center justify-between gap-1 text-[10px] text-secondary font-medium">
                                         <span>
                                           {(() => {
                                             const stageDate = lead.stageHistory?.[0]?.changedAt ? new Date(lead.stageHistory[0].changedAt) : (lead.createdAt ? new Date(lead.createdAt) : null);
@@ -721,13 +722,13 @@ export function PipelineBoardView() {
                   <div className="flex flex-col gap-0.5 min-w-0">
                     <div className="flex items-center gap-3">
                       <div className="min-w-0">
-                        <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider block">Total</span>
+                        <span className="text-xs font-semibold text-secondary uppercase tracking-wider block">Total</span>
                         <span className="text-xs font-bold text-primary truncate block max-w-37.5" title={formatCurrency(columnValue)}>
                           {formatCurrencyCompact(columnValue)}
                         </span>
                       </div>
                       <div className="border-l border-gray-100 pl-3 min-w-0">
-                        <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider block">Weighted</span>
+                        <span className="text-xs font-semibold text-secondary uppercase tracking-wider block">Weighted</span>
                         <span className="text-xs font-bold text-emerald-600 truncate block max-w-37.5" title={formatCurrency(columnWeightedValue)}>
                           {formatCurrencyCompact(columnWeightedValue)}
                         </span>
@@ -758,7 +759,7 @@ export function PipelineBoardView() {
         <>
           <div className="fixed inset-0 z-60" onClick={() => setStageMenu(null)} />
           <div
-            className="fixed z-61 w-56 max-h-80 overflow-y-auto bg-white rounded-xl shadow-2xl border border-border py-1"
+            className="fixed z-61 w-56 max-h-80 overflow-y-auto bg-white rounded-xl shadow-modal border border-border py-1"
             style={{
               top: stageMenu.up ? stageMenu.y - 6 : stageMenu.y + 6,
               left: stageMenu.x,
@@ -797,8 +798,8 @@ export function PipelineBoardView() {
                   className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left transition-colors ${isCurrent ? 'text-gray-300 cursor-default bg-gray-50/50' : 'text-primary hover:bg-gray-50'
                     }`}
                 >
-                  <span><span className="text-gray-400">{idx + 1}.</span> {leadStageLabel(stage)}</span>
-                  {isCurrent && <Icon as={Check} size="md" className="text-gray-400 shrink-0" />}
+                  <span><span className="text-secondary">{idx + 1}.</span> {leadStageLabel(stage)}</span>
+                  {isCurrent && <Icon as={Check} size="md" className="text-secondary shrink-0" />}
                 </button>
               );
             })}

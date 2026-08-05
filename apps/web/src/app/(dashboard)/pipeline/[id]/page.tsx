@@ -27,7 +27,7 @@ import { leadStageLabel } from '@/lib/lead-stage';
 import { Icon } from '@/components/ui/icon';
 
 function SocialLink({ platform, input }: { platform: 'linkedin' | 'instagram' | 'facebook', input?: string | null }) {
-  if (!input) return <span className="text-sm font-medium text-gray-400">—</span>;
+  if (!input) return <span className="text-sm font-medium text-muted">—</span>;
 
   let cleanInput = input.trim();
   let handle = cleanInput;
@@ -271,22 +271,22 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 <div className="flex flex-wrap items-center gap-3 sm:gap-5 mt-1.5">
                   {lead.contactName && (
                     <span className="flex items-center gap-1.5 text-sm text-secondary font-medium">
-                      <Icon as={User} size="md" className="text-gray-400" /> {lead.contactName}
+                      <Icon as={User} size="md" className="text-secondary" /> {lead.contactName}
                     </span>
                   )}
                   {(lead.contactEmail || lead.client?.email) && (
                     <a href={`mailto:${lead.contactEmail || lead.client?.email}`} className="flex items-center gap-1.5 text-sm text-secondary font-medium hover:text-primary transition-colors">
-                      <Icon as={Mail} size="md" className="text-gray-400" /> {lead.contactEmail || lead.client?.email}
+                      <Icon as={Mail} size="md" className="text-secondary" /> {lead.contactEmail || lead.client?.email}
                     </a>
                   )}
                   {(lead.contactPhone || lead.client?.phone) && (
                     <a href={`tel:${lead.contactPhone || lead.client?.phone}`} className="flex items-center gap-1.5 text-sm text-secondary font-medium hover:text-primary transition-colors">
-                      <Icon as={Phone} size="md" className="text-gray-400" /> {lead.contactPhone || lead.client?.phone}
+                      <Icon as={Phone} size="md" className="text-secondary" /> {lead.contactPhone || lead.client?.phone}
                     </a>
                   )}
                   {location && (
                     <span className="flex items-center gap-1.5 text-sm text-secondary font-medium">
-                      <Icon as={MapPin} size="md" className="text-gray-400" /> {location}
+                      <Icon as={MapPin} size="md" className="text-secondary" /> {location}
                     </span>
                   )}
                 </div>
@@ -364,10 +364,10 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
               const isCurrent = lead.stage === stage;
               return (
                 <div key={stage} className="flex flex-col items-center gap-2.5 relative min-w-30 shrink-0">
-                  <div className={`h-7 w-7 rounded-full flex items-center justify-center text-[11px] font-bold z-10 transition-colors ${isCurrent ? 'bg-primary text-white ring-4 ring-primary/10' : isCompleted ? 'bg-blue-50 text-blue-600 ring-4 ring-white' : 'bg-gray-50 text-gray-400 ring-4 ring-white border border-border'}`}>
+                  <div className={`h-7 w-7 rounded-full flex items-center justify-center text-[11px] font-bold z-10 transition-colors ${isCurrent ? 'bg-primary text-white ring-4 ring-primary/10' : isCompleted ? 'bg-blue-50 text-blue-600 ring-4 ring-white' : 'bg-gray-50 text-secondary ring-4 ring-white border border-border'}`}>
                     {idx + 1}
                   </div>
-                  <span className={`text-[10px] font-bold uppercase tracking-wider text-center ${isCurrent ? 'text-primary' : isCompleted ? 'text-secondary' : 'text-gray-400'}`}>
+                  <span className={`text-[10px] font-bold uppercase tracking-wider text-center ${isCurrent ? 'text-primary' : isCompleted ? 'text-secondary' : 'text-secondary'}`}>
                     {leadStageLabel(stage)}
                   </span>
                   {idx < 7 && (
@@ -420,7 +420,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                       <Icon as={Building2} size="md" /> Lead Details
                     </h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-6 gap-x-4">
-                      <Detail label="Company Name" value={lead.companyName || lead.client?.company} />
+                      <Detail label="Client" value={lead.companyName || lead.client?.company} />
                       <Detail label="Industry" value={lead.industry || lead.client?.industry} />
                       <Detail label="Company Size" value={lead.companySize} />
                       <Detail label="Website">
@@ -428,7 +428,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                           <a href={website.startsWith('http') ? website : `https://${website}`} target="_blank" rel="noreferrer" className="text-sm font-medium text-blue-600 hover:underline flex items-center gap-1.5 truncate">
                             <Icon as={Globe} size="sm" className="shrink-0" /> <span className="truncate">{website}</span>
                           </a>
-                        ) : <span className="text-sm text-gray-400">—</span>}
+                        ) : <span className="text-sm text-muted">—</span>}
                       </Detail>
                       <Detail label="Source" value={lead.source?.replace(/_/g, ' ')} />
                       <Detail label="Assigned User">
@@ -436,7 +436,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                           {lead.assignedTo?.avatar ? (
                             <img src={lead.assignedTo.avatar} alt="" className="h-6 w-6 rounded-full" />
                           ) : (
-                            <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${lead.assignedTo ? getAvatarColor(lead.assignedTo.name) : 'bg-gray-100 text-gray-400'}`}>
+                            <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${lead.assignedTo ? getAvatarColor(lead.assignedTo.name) : 'bg-gray-100 text-text-on-sunken'}`}>
                               {lead.assignedTo ? getInitials(lead.assignedTo.name) : '?'}
                             </div>
                           )}
@@ -445,19 +445,19 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                       </Detail>
                       <Detail label="Expected Close">
                         <p className="text-sm font-medium text-primary flex items-center gap-1.5">
-                          <Icon as={Calendar} size="sm" className="text-gray-400" />
+                          <Icon as={Calendar} size="sm" className="text-secondary" />
                           {formatDate(lead.expectedCloseDate)}
                         </p>
                       </Detail>
                       <Detail label="Next Follow-up Date">
                         <p className="text-sm font-medium text-primary flex items-center gap-1.5">
-                          <Icon as={Clock} size="sm" className="text-gray-400" />
+                          <Icon as={Clock} size="sm" className="text-secondary" />
                           {formatDate(lead.followUpDate)}
                         </p>
                       </Detail>
                       <Detail label="Last Contacted Date">
                         <p className="text-sm font-medium text-primary flex items-center gap-1.5">
-                          <Icon as={Calendar} size="sm" className="text-gray-400" />
+                          <Icon as={Calendar} size="sm" className="text-secondary" />
                           {formatDate(lead.lastContactedDate)}
                         </p>
                       </Detail>
@@ -607,7 +607,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                         {lead.notes.map((note: any) => (
                           <div key={note.id} className="bg-amber-50/50 p-4 rounded-xl border border-amber-100/50 relative">
                             <div className="flex items-center gap-2 mb-3">
-                              <div className={`h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-bold ${note.author ? getAvatarColor(note.author.name) : 'bg-gray-100 text-gray-400'}`}>
+                              <div className={`h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-bold ${note.author ? getAvatarColor(note.author.name) : 'bg-gray-100 text-text-on-sunken'}`}>
                                 {note.author ? getInitials(note.author.name) : 'S'}
                               </div>
                               <span className="text-xs font-bold text-primary">{note.author?.name || 'System'}</span>

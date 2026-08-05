@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
-import { ChevronLeft, ChevronRight, Check, SlidersHorizontal } from 'lucide-react';
+import { ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { Drawer } from '@/components/ui/drawer';
@@ -11,6 +11,7 @@ import { ActiveFilterChip } from '@/components/ui/active-filter-chip';
 import { getClientDisplayName, getInitials } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
 import { useTeams } from '@/hooks/useQueries';
+import { Toggle } from '@/components/ui/toggle';
 
 interface CalendarTask {
   id: string;
@@ -49,7 +50,7 @@ export default function CalendarPage() {
   const [projectIdFilter, setProjectIdFilter] = useState<string[]>([]);
   const [clientIdFilter, setClientIdFilter] = useState<string[]>([]);
   const [departmentFilter, setDepartmentFilter] = useState<string[]>([]);
-  const [hideDone, setHideDone] = useState(true);
+  const [showCompleted, setShowCompleted] = useState(false);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const isMobile = useIsMobile();
 
@@ -59,7 +60,7 @@ export default function CalendarPage() {
 
   useEffect(() => {
     fetchTasks();
-  }, [assigneeFilter, projectIdFilter, clientIdFilter, departmentFilter, hideDone, date, view]);
+  }, [assigneeFilter, projectIdFilter, clientIdFilter, departmentFilter, showCompleted, date, view]);
 
   useEffect(() => {
     if (!isStaff) {
@@ -82,7 +83,7 @@ export default function CalendarPage() {
     api.get<{ tasks: CalendarTask[] }>(`/tasks?${params}`)
       .then((d) => {
         let filtered = d.tasks.filter((t) => t.dueDate);
-        if (hideDone) {
+        if (!showCompleted) {
           filtered = filtered.filter((t) => t.status !== 'COMPLETED');
         }
         setTasks(filtered);
@@ -162,7 +163,7 @@ export default function CalendarPage() {
     (clientIdFilter.length > 0 ? 1 : 0) +
     (departmentFilter.length > 0 ? 1 : 0) +
     (isAssigneeOther ? 1 : 0) +
-    (!hideDone ? 1 : 0);
+    (showCompleted ? 1 : 0);
 
   return (
     <div className="h-full flex flex-col space-y-6">
@@ -202,7 +203,7 @@ export default function CalendarPage() {
                   {clientIdFilter.length > 0 && <ActiveFilterChip label={`Clients: ${clientIdFilter.length}`} onRemove={() => setClientIdFilter([])} />}
                   {departmentFilter.length > 0 && <ActiveFilterChip label={`Departments: ${departmentFilter.length}`} onRemove={() => setDepartmentFilter([])} />}
                   {isAssigneeOther && <ActiveFilterChip label={`Assignees: ${assigneeFilter.length}`} onRemove={() => setAssigneeFilter([])} />}
-                  {!hideDone && <ActiveFilterChip label="Show Done" onRemove={() => setHideDone(true)} />}
+                  {showCompleted && <ActiveFilterChip label="Show Done" onRemove={() => setShowCompleted(false)} />}
                 </div>
               )}
             </div>
@@ -264,17 +265,8 @@ export default function CalendarPage() {
                     />
                   </div>
                 )}
-                <div className="flex items-center justify-between pt-2 border-t border-border">
-                  <span className="text-xs font-semibold text-secondary">Hide Done Tasks</span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={hideDone}
-                    onClick={() => setHideDone(!hideDone)}
-                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors ${hideDone ? 'bg-primary border-primary' : 'bg-gray-200 border-gray-300'}`}
-                  >
-                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${hideDone ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
-                  </button>
+                <div className="pt-2 border-t border-border">
+                  <Toggle label="Show Done" checked={showCompleted} onChange={setShowCompleted} className="w-full justify-between flex-row-reverse" />
                 </div>
               </div>
             </Drawer>
@@ -333,17 +325,7 @@ export default function CalendarPage() {
               </div>
             )}
 
-            {/* Hide Done Tasks Checkbox */}
-            <button
-              type="button"
-              onClick={() => setHideDone(!hideDone)}
-              className="flex items-center gap-2 text-xs font-semibold text-secondary ml-auto cursor-pointer select-none focus:outline-none h-9 hover:text-primary transition-colors shrink-0"
-            >
-              <div className={`flex items-center justify-center h-4 w-4 rounded-sm border transition-colors ${hideDone ? 'bg-primary border-primary' : 'border-[#D1D5DB] bg-white'}`}>
-                {hideDone && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
-              </div>
-              Hide Done Tasks
-            </button>
+            <Toggle size="sm" label="Show Done" checked={showCompleted} onChange={setShowCompleted} className="ml-auto shrink-0 h-9" />
           </div>
         )}
 
@@ -362,8 +344,8 @@ export default function CalendarPage() {
             </button>
             <div className="text-sm font-semibold text-primary px-2 min-w-36 text-center select-none">
               {view === 'month'
-                ? date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-                : `Week of ${startOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                ? new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(date)
+                : `Week of ${new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(startOfWeek)}`
               }
             </div>
             <button onClick={nextPeriod} className="p-2 rounded-xl hover:bg-gray-50 border border-border bg-white transition-colors h-9 w-9 flex items-center justify-center shrink-0">
@@ -401,7 +383,7 @@ export default function CalendarPage() {
             <div className="hidden md:grid grid-cols-7 border-b border-[#F3F4F6]">
               {(view === 'month' ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] : weekDays).map((d, i) => (
                 <div key={i} className="px-2 py-2.5 text-center text-xs font-medium text-secondary uppercase tracking-wide">
-                  {view === 'month' ? d as string : (d as Date).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })}
+                  {view === 'month' ? d as string : new Intl.DateTimeFormat('en-US', { weekday: 'short', day: 'numeric' }).format(d as Date)}
                 </div>
               ))}
             </div>
@@ -470,7 +452,7 @@ export default function CalendarPage() {
                 return agendaDays.map((day, i) => (
                   <div key={i} className="flex flex-col gap-3 bg-white p-4 rounded-xl border border-border">
                     <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">
-                      {day.date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                      {new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'short', day: 'numeric' }).format(day.date)}
                     </h3>
                     <div className="flex flex-col gap-2">
                       {day.tasks.map(t => {

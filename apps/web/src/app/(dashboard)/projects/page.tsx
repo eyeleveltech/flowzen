@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useId, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
@@ -73,7 +74,7 @@ function ProjectsContent() {
 
   const ALL_PROJECT_COLUMNS = [
     { id: 'project', label: 'Project' },
-    { id: 'client', label: 'Company' },
+    { id: 'client', label: 'Client' },
     { id: 'progress', label: 'Progress' },
     { id: 'status', label: 'Status' },
     { id: 'owner', label: 'Owner' },
@@ -241,7 +242,7 @@ function ProjectsContent() {
         <div>
           <h1 className="text-2xl font-semibold text-primary tracking-tight flex items-center gap-2">
             Projects
-            <span className="text-xs font-normal text-secondary bg-[#F3F4F6] px-2 py-0.5 rounded-lg border border-border">
+            <span className="text-xs font-normal text-text-on-sunken bg-surface-sunken px-2 py-0.5 rounded-lg border border-border">
               {viewName}
             </span>
           </h1>
@@ -527,7 +528,7 @@ function ProjectsContent() {
                     <thead>
                       <tr className="border-b border-[#F3F4F6]">
                         {visibleColumns.includes('project') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Project</th>}
-                        {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Company</th>}
+                        {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>}
                         {visibleColumns.includes('progress') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Progress</th>}
                         {visibleColumns.includes('status') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Status</th>}
                         {visibleColumns.includes('owner') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Owner</th>}
@@ -578,10 +579,10 @@ function ProjectsContent() {
                     </thead>
                     <tbody className="divide-y divide-[#F3F4F6]">
                       {projects.map((p) => (
-                        <motion.tr key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="hover:bg-surface cursor-pointer transition-colors" onClick={() => router.push(`/projects/${p.id}`)}>
+                        <motion.tr key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="hover:bg-surface transition-colors relative">
                           {visibleColumns.includes('project') && (
                             <td className="px-6 py-4">
-                              <p className="text-sm font-medium text-primary">{p.name}</p>
+                              <Link href={`/projects/${p.id}`} className="text-sm font-medium text-primary hover:underline after:absolute after:inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm">{p.name}</Link>
                               <p className="text-xs text-secondary">{p._count?.tasks ?? 0} tasks</p>
                             </td>
                           )}
@@ -630,12 +631,10 @@ function ProjectsContent() {
                   </div>
                 ) : (
                   projects.map((p) => (
-                    <motion.div
+                    <Link
                       key={p.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      onClick={() => router.push(`/projects/${p.id}`)}
-                      className="p-4 rounded-xl border border-border bg-white hover:shadow-sm cursor-pointer transition-colors duration-150 motion-reduce:transition-none"
+                      href={`/projects/${p.id}`}
+                      className="block p-4 rounded-xl border border-border bg-white hover:shadow-sm transition-colors duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       <div className="flex items-start justify-between mb-3">
                         <div>
@@ -679,7 +678,7 @@ function ProjectsContent() {
                           )}
                         </div>
                       </div>
-                    </motion.div>
+                    </Link>
                   ))
                 )}
               </div>
@@ -706,7 +705,7 @@ function ProjectsContent() {
                   const pct = Math.min(100, (elapsed / totalDays) * 100);
 
                   return (
-                    <div key={p.id} className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4 py-3 md:py-2 cursor-pointer hover:bg-surface rounded-xl px-3 -mx-3 transition-colors border-b border-[#F3F4F6] last:border-0 md:border-0" onClick={() => router.push(`/projects/${p.id}`)}>
+                    <Link key={p.id} href={`/projects/${p.id}`} className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4 py-3 md:py-2 hover:bg-surface rounded-xl px-3 -mx-3 transition-colors border-b border-[#F3F4F6] last:border-0 md:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                       <div className="w-full md:w-48 shrink-0">
                         <p className="text-sm font-medium text-primary truncate">{p.name}</p>
                         <p className="text-xs text-secondary">{p.client ? getClientDisplayName(p.client) : 'Internal Project'}</p>
@@ -724,7 +723,7 @@ function ProjectsContent() {
                           <span className="text-xs text-secondary">{formatShortDate(p.endDate)}</span>
                         </div>
                       </div>
-                    </div>
+                    </Link>
                   );
                 })}
               </div>
@@ -759,7 +758,7 @@ function ProjectsContent() {
         {showCreate && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setShowCreate(false)} />
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto">
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-modal shadow-black/10 overflow-y-auto">
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
                 <h2 className="text-lg font-semibold text-primary">New Project</h2>
                 <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><Icon as={X} size="md" className="text-secondary" /></button>

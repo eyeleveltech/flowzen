@@ -61,7 +61,7 @@ export function ExpenseFormModal({ onClose, onSaved }: Props) {
   return (
     <>
       <div className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-2xl flex flex-col">
+      <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-modal flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
           <h2 className="text-lg font-semibold text-primary">Log Expense</h2>
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-[#F3F4F6]">

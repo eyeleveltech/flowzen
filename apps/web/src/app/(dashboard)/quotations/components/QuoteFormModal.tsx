@@ -289,7 +289,7 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={guardedClose} />
       <motion.div ref={panelRef} initial={{ opacity: 0, x: '100%' }} animate={{ opacity: 1, x: 0 }} transition={{ type: 'spring', damping: 26, stiffness: 220 }}
-        className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-4xl bg-white shadow-2xl flex flex-col">
+        className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-4xl bg-white shadow-modal flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div>
             <h2 className="text-lg font-semibold text-primary">{editId ? 'Edit Document' : 'New Document'}</h2>

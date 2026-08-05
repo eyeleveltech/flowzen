@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   format, addMonths, subMonths, startOfMonth, endOfMonth,
   startOfWeek, endOfWeek, addDays, isSameMonth, isSameDay, isToday
@@ -111,12 +112,10 @@ export function CalendarView({ projects }: CalendarViewProps) {
                     const isProject = event.type === 'PROJECT_START' || event.type === 'PROJECT_DUE';
                     const Icon = event.type === 'PROJECT_START' ? PlayCircle : event.type === 'PROJECT_DUE' ? Flag : MapPin;
                     return (
-                      <motion.div
-                        initial={{ opacity: 0, y: 5 }}
-                        animate={{ opacity: 1, y: 0 }}
+                      <Link
                         key={event.id}
-                        onClick={() => router.push(`/projects/${event.projectId}`)}
-                        className={`px-2.5 py-1.5 text-xs rounded-lg border cursor-pointer hover:shadow-md transition-all truncate group
+                        href={`/projects/${event.projectId}`}
+                        className={`block px-2.5 py-1.5 text-xs rounded-lg border hover:shadow-md transition-all truncate group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary
                         ${isProject ? `${getStatusColor(event.status).bg} ${getStatusColor(event.status).text} ${getStatusColor(event.status).border} shadow-sm` : ''}
                       `}
                         title={event.title}
@@ -125,7 +124,7 @@ export function CalendarView({ projects }: CalendarViewProps) {
                           <Icon className={`h-3.5 w-3.5 shrink-0 ${event.type === 'PROJECT_START' ? 'text-blue-500' : event.type === 'PROJECT_DUE' ? 'text-red-500' : 'text-emerald-600'}`} />
                           <span className="truncate font-medium">{event.title}</span>
                         </div>
-                      </motion.div>
+                      </Link>
                     )
                   })}
                 </div>
@@ -156,10 +155,10 @@ export function CalendarView({ projects }: CalendarViewProps) {
                       const isProject = event.type === 'PROJECT_START' || event.type === 'PROJECT_DUE';
                       const Icon = event.type === 'PROJECT_START' ? PlayCircle : event.type === 'PROJECT_DUE' ? Flag : MapPin;
                       return (
-                        <div
+                        <Link
                           key={event.id}
-                          onClick={() => router.push(`/projects/${event.projectId}`)}
-                          className={`p-3 text-sm rounded-xl border cursor-pointer active:scale-[0.98] transition-[transform,background-color,border-color,color] duration-200
+                          href={`/projects/${event.projectId}`}
+                          className={`block p-3 text-sm rounded-xl border transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary
                                 ${isProject ? `${getStatusColor(event.status).bg} ${getStatusColor(event.status).text} ${getStatusColor(event.status).border} shadow-sm` : ''}
                           `}
                         >
@@ -170,7 +169,7 @@ export function CalendarView({ projects }: CalendarViewProps) {
                           <span className="text-[10px] uppercase tracking-wider font-bold opacity-60 ml-6 mt-1 block">
                             {event.type.replace('_', ' ')}
                           </span>
-                        </div>
+                        </Link>
                       );
                     })}
                   </div>

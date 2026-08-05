@@ -37,7 +37,7 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
     try {
       const saved = sessionStorage.getItem('flowzen:tasks:collapsed-columns');
       if (saved) setCollapsedColumns(JSON.parse(saved));
-    } catch (e) {}
+    } catch (e) { }
   }, []);
 
   const toggleCollapse = (columnId: string) => {
@@ -62,7 +62,7 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
     if (task.status === newStatus) return;
     const prev = [...localTasks];
     setLocalTasks(localTasks.map(t => t.id === task.id ? { ...t, status: newStatus } : t));
-    
+
     try {
       await api.put(`/tasks/${task.id}`, { status: newStatus });
       toast.success('Task status updated');
@@ -144,9 +144,8 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
                     <div
                       ref={provided.innerRef}
                       {...provided.droppableProps}
-                      className={`flex-1 p-3 overflow-y-auto space-y-3 transition-colors custom-scrollbar min-h-0 ${
-                        snapshot.isDraggingOver ? 'bg-gray-100/50' : ''
-                      }`}
+                      className={`flex-1 p-3 overflow-y-auto space-y-3 transition-colors custom-scrollbar min-h-0 ${snapshot.isDraggingOver ? 'bg-gray-100/50' : ''
+                        }`}
                     >
                       {columnTasks.map((task, index) => (
                         <Draggable key={task.id} draggableId={task.id} index={index}>
@@ -158,17 +157,16 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
                               onClick={() => {
                                 if (onTaskClick) onTaskClick(task);
                               }}
-                              className={`bg-white rounded-xl p-3 border border-border cursor-pointer group ${
-                                snapshot.isDragging ? 'shadow-2xl scale-105 z-50 ring-2 ring-primary' : 'shadow-sm hover:shadow-md hover:border-gray-300'
-                              } transition-all relative`}
+                              className={`bg-white rounded-xl p-3 border border-border cursor-pointer group ${snapshot.isDragging ? 'shadow-modal scale-105 z-50 ring-2 ring-primary' : 'shadow-sm hover:shadow-md hover:border-gray-300'
+                                } transition-all relative`}
                             >
                               <div className="flex justify-between items-start mb-2 gap-2">
                                 <h4 className="text-sm font-medium text-primary leading-tight line-clamp-2">{task.title}</h4>
                                 <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${getPriorityBadge(task.priority)}`}>
                                   {task.priority}
-                               </span>
+                                </span>
                               </div>
-                              
+
                               <div className="flex items-center gap-3 mt-3">
                                 {task.dueDate && (
                                   <div className={`flex items-center gap-1 text-[11px] font-medium ${new Date(task.dueDate) < new Date() && task.status !== 'COMPLETED' ? 'text-red-500' : 'text-gray-500'}`}>
@@ -177,7 +175,7 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
                                   </div>
                                 )}
                                 {task._count?.comments > 0 && (
-                                  <div className="flex items-center gap-2 text-gray-400">
+                                  <div className="flex items-center gap-2 text-secondary">
                                     <div className="flex items-center gap-0.5">
                                       <MessageSquare className="h-3 w-3" />
                                       <span className="text-[10px]">{task._count.comments}</span>
@@ -200,12 +198,12 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
                                     </div>
                                   ))}
                                   {(!task.assignees || task.assignees.length === 0) && (
-                                    <div className="h-6 w-6 rounded-full border border-dashed border-gray-300 flex items-center justify-center text-gray-400 bg-gray-50 text-[10px]">
+                                    <div className="h-6 w-6 rounded-full border border-dashed border-gray-300 flex items-center justify-center text-secondary bg-gray-50 text-[10px]">
                                       ?
                                     </div>
                                   )}
                                 </div>
-                                
+
                                 <button
                                   type="button"
                                   onClick={(e) => {
@@ -237,7 +235,7 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
         <>
           <div className="fixed inset-0 z-60" onClick={() => setStageMenu(null)} />
           <div
-            className="fixed z-61 w-48 max-h-80 overflow-y-auto bg-white rounded-xl shadow-2xl border border-border py-1"
+            className="fixed z-61 w-48 max-h-80 overflow-y-auto bg-white rounded-xl shadow-modal border border-border py-1"
             style={{
               top: stageMenu.up ? stageMenu.y - 6 : stageMenu.y + 6,
               left: stageMenu.x,
@@ -258,9 +256,8 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
                     setStageMenu(null);
                     updateStatus(stageMenu.task, stage);
                   }}
-                  className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left transition-colors ${
-                    isCurrent ? 'text-gray-300 cursor-default bg-gray-50/50' : 'text-primary hover:bg-gray-50'
-                  }`}
+                  className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left transition-colors ${isCurrent ? 'text-gray-300 cursor-default bg-gray-50/50' : 'text-primary hover:bg-gray-50'
+                    }`}
                 >
                   <span className="flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full" style={{ backgroundColor: groupInfo?.color }} />

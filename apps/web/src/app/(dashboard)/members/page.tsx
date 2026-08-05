@@ -75,7 +75,7 @@ export default function TeamPage() {
 
   if (currentUser?.role === 'TEAM_MEMBER') {
     return (
-      <div className="max-w-350 mx-auto p-4 md:p-8">
+      <div>
         <div className="flex flex-col items-center justify-center py-24 text-center">
           <Shield className="h-12 w-12 text-secondary mb-4" />
           <h2 className="text-lg font-semibold text-primary">Access Restricted</h2>
@@ -285,7 +285,7 @@ export default function TeamPage() {
                 </div>
                 <div className="h-2 w-full rounded-full bg-border overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-colors duration-150 motion-reduce:transition-none duration-500 ${isOverloaded ? 'bg-red-500' : stats.capacity > 80 ? 'bg-red-500' : stats.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                    className={`h-full rounded-full transition-all duration-500 ease-out motion-reduce:transition-none ${isOverloaded ? 'bg-red-500' : stats.capacity > 80 ? 'bg-red-500' : stats.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'
                       }`}
                     style={{ width: `${stats.capacity}%` }}
                   />
@@ -433,7 +433,7 @@ export default function TeamPage() {
   };
 
   return (
-    <div className="max-w-350 mx-auto p-4 md:p-8">
+    <div>
       {/* Page Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-primary tracking-tight">Team Workspace</h1>
@@ -519,7 +519,7 @@ export default function TeamPage() {
                     type="button"
                     onClick={() => setSelectedId(m.id)}
                     aria-label={`View ${m.name}'s workload`}
-                    className={`group relative flex flex-col p-6 rounded-3xl bg-white text-left w-full transition-colors duration-150 motion-reduce:transition-none duration-300 border focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${isSelected
+                    className={`group relative flex flex-col p-6 rounded-3xl bg-white text-left w-full transition-all duration-300 motion-reduce:transition-none border focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${isSelected
                         ? 'border-primary ring-1 ring-primary'
                         : 'border-border hover:shadow-sm'
                       }`}

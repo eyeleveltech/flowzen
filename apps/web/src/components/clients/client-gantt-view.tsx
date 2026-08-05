@@ -3,6 +3,7 @@
 import { useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { getClientDisplayName, getInitials, getAvatarColor } from '@/lib/utils';
 import { BarChart2 } from 'lucide-react';
 
@@ -145,10 +146,10 @@ export function ClientGanttView({ clients, loading }: { clients: any[]; loading:
                   style={{ height: ROW_HEIGHT, borderBottom: '1px solid #F3F4F6' }}
                 >
                   {/* Sidebar cell – sticky left, always aligned with its chart row */}
-                  <div
-                    className="sticky left-0 z-20 bg-white border-r border-[#F3F4F6] flex items-center px-4 shrink-0 cursor-pointer hover:bg-surface transition-colors"
+                  <Link
+                    href={`/clients/${client.id}`}
+                    className="sticky left-0 z-20 bg-white border-r border-[#F3F4F6] flex items-center px-4 shrink-0 hover:bg-surface transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
                     style={{ width: SIDEBAR_WIDTH }}
-                    onClick={() => router.push(`/clients/${client.id}`)}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className={`h-2 w-2 rounded-full shrink-0 ${cfg.dot}`} />
@@ -162,24 +163,21 @@ export function ClientGanttView({ clients, loading }: { clients: any[]; loading:
                         <p className="text-[10px] text-secondary">{label}</p>
                       </div>
                     </div>
-                  </div>
+                  </Link>
 
                   {/* Chart cell for this row */}
                   <div className="flex-1 relative overflow-hidden flex items-center">
                     {start && (
-                      <motion.div
-                        initial={{ opacity: 0, scaleX: 0.5 }}
-                        animate={{ opacity: 1, scaleX: 1 }}
-                        transition={{ delay: idx * 0.035, ease: 'easeOut' }}
-                        style={{ originX: 'left', left: `${startPct}%`, width: `${widthPct}%`, minWidth: '150px' }}
-                        className={`absolute h-8 z-10 rounded-full border flex items-center px-3 gap-2 cursor-pointer transition-all group-hover:brightness-95 hover:shadow-md ${cfg.bar}`}
-                        onClick={() => router.push(`/clients/${client.id}`)}
+                      <Link
+                        href={`/clients/${client.id}`}
+                        style={{ transformOrigin: 'left', left: `${startPct}%`, width: `${widthPct}%`, minWidth: '150px' }}
+                        className={`absolute h-8 z-10 rounded-full border flex items-center px-3 gap-2 transition-all group-hover:brightness-95 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${cfg.bar}`}
                       >
                         <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${cfg.dot}`} />
                         <span className={`text-xs font-semibold truncate ${cfg.text}`}>
                           {getClientDisplayName(client)}
                         </span>
-                      </motion.div>
+                      </Link>
                     )}
                   </div>
                 </div>

@@ -13,6 +13,11 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    rules: {
+      'no-restricted-properties': ['error', { property: 'toLocaleDateString', message: 'Use formatDate() from lib/utils' }],
+    },
+  },
 ]);
 
 export default eslintConfig;
