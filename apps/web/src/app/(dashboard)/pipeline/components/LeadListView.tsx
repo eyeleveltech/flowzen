@@ -13,8 +13,10 @@ import { LeadModal } from './LeadModal';
 import { useMembers } from '@/hooks/useQueries';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { leadStageLabel } from '@/lib/lead-stage';
 import { Icon } from '@/components/ui/icon';
+import { Toggle } from '@/components/ui/toggle';
 
 const STAGES = [
   'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
@@ -178,7 +180,7 @@ export function LeadListView() {
               />
             </div>
 
-            <div className="flex-1 min-w-35 sm:w-40 md:w-45 sm:flex-initial">
+            <div className="w-full sm:w-40 md:w-45 sm:flex-initial">
               <MultiSelect
                 value={stageFilter}
                 onChange={setStageFilter}
@@ -187,7 +189,7 @@ export function LeadListView() {
               />
             </div>
 
-            <div className="flex-1 min-w-35 sm:w-40 md:w-45 sm:flex-initial">
+            <div className="w-full sm:w-40 md:w-45 sm:flex-initial">
               <MultiSelect
                 value={ownerFilter}
                 onChange={setOwnerFilter}
@@ -205,15 +207,7 @@ export function LeadListView() {
               More Filters {activeFilterCount > 0 && `(${activeFilterCount})`}
             </button>
 
-            <label className="flex items-center gap-2 text-sm font-medium text-secondary cursor-pointer select-none whitespace-nowrap px-1">
-              <input
-                type="checkbox"
-                checked={showWonLost}
-                onChange={(e) => setShowWonLost(e.target.checked)}
-                className="rounded border-gray-300 text-primary focus:ring-primary"
-              />
-              Show Won/Lost
-            </label>
+            <Toggle label="Show Won/Lost" checked={showWonLost} onChange={setShowWonLost} />
 
             {hasAnyFilter && (
               <button onClick={clearAllFilters} className="text-sm text-secondary hover:text-primary underline px-2 py-2 whitespace-nowrap">
@@ -407,8 +401,7 @@ export function LeadListView() {
                     key={lead.id}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="hover:bg-surface cursor-pointer transition-colors relative"
-                    onClick={() => router.push(`/pipeline/${lead.id}`)}
+                    className="hover:bg-surface transition-colors relative"
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -416,7 +409,12 @@ export function LeadListView() {
                           <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${lead.priority === 'HIGH' ? 'bg-red-500' : lead.priority === 'MEDIUM' ? 'bg-yellow-500' : 'bg-gray-300'}`} title={`Priority: ${lead.priority}`} />
                         )}
                         <div className="flex flex-col">
-                          <span className="text-sm font-medium text-primary">{lead.contactName || lead.companyName || getClientDisplayName(lead.client)}</span>
+                          <Link
+                            href={`/pipeline/${lead.id}`}
+                            className="text-sm font-medium text-primary hover:underline after:absolute after:inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
+                          >
+                            {lead.contactName || lead.companyName || getClientDisplayName(lead.client)}
+                          </Link>
                           {(lead.companyName || lead.jobTitle) && (
                             <span className="text-xs text-secondary">{lead.companyName || lead.jobTitle}</span>
                           )}
@@ -437,7 +435,7 @@ export function LeadListView() {
                     <td className="px-6 py-4 text-sm text-secondary">
                       {lead.expectedCloseDate ? (
                         <span className={new Date(lead.expectedCloseDate) < new Date() && !['PROJECT_COMPLETED', 'CHURNED'].includes(lead.stage) ? 'text-red-600 font-medium' : ''}>
-                          {new Date(lead.expectedCloseDate).toLocaleDateString()}
+                          {formatDate(lead.expectedCloseDate)}
                         </span>
                       ) : '—'}
                     </td>
@@ -485,12 +483,10 @@ export function LeadListView() {
           </div>
         ) : (
           filteredLeads.map((lead) => (
-            <motion.div
+            <Link
               key={lead.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              onClick={() => router.push(`/pipeline/${lead.id}`)}
-              className="bg-white border border-border rounded-xl p-4 cursor-pointer hover:border-primary/30 hover:shadow-sm transition-colors duration-150 motion-reduce:transition-none"
+              href={`/pipeline/${lead.id}`}
+              className="block bg-white border border-border rounded-xl p-4 hover:border-primary/30 hover:shadow-sm transition-colors duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <div className="flex justify-between items-start mb-3 gap-3">
                 <div className="flex items-center gap-3 min-w-0">
@@ -530,14 +526,14 @@ export function LeadListView() {
                   )}
                 </div>
                 {lead.assignedTo ? (
-                  <div className="flex items-center gap-1 text-[11px] text-secondary bg-[#F3F4F6] px-2 py-0.5 rounded border border-border">
+                  <div className="flex items-center gap-1 text-[11px] text-text-on-sunken bg-surface-sunken px-2 py-0.5 rounded border border-border">
                     <span className="font-medium">{lead.assignedTo.name}</span>
                   </div>
                 ) : (
                   <span className="text-xs text-secondary">Unassigned</span>
                 )}
               </div>
-            </motion.div>
+            </Link>
           ))
         )}
       </div>

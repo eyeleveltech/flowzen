@@ -159,7 +159,7 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
                                 if (onTaskClick) onTaskClick(task);
                               }}
                               className={`bg-white rounded-xl p-3 border border-border cursor-pointer group ${
-                                snapshot.isDragging ? 'shadow-2xl scale-105 z-50 ring-2 ring-primary' : 'shadow-sm hover:shadow-md hover:border-gray-300'
+                                snapshot.isDragging ? 'shadow-modal scale-105 z-50 ring-2 ring-primary' : 'shadow-sm hover:shadow-md hover:border-gray-300'
                               } transition-all relative`}
                             >
                               <div className="flex justify-between items-start mb-2 gap-2">
@@ -177,7 +177,7 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
                                   </div>
                                 )}
                                 {(task._count?.comments > 0 || task._count?.attachments > 0) && (
-                                  <div className="flex items-center gap-2 text-gray-400">
+                                  <div className="flex items-center gap-2 text-secondary">
                                     {task._count?.comments > 0 && (
                                       <div className="flex items-center gap-0.5">
                                         <MessageSquare className="h-3 w-3" />
@@ -208,7 +208,7 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
                                     </div>
                                   ))}
                                   {(!task.assignees || task.assignees.length === 0) && (
-                                    <div className="h-6 w-6 rounded-full border border-dashed border-gray-300 flex items-center justify-center text-gray-400 bg-gray-50 text-[10px]">
+                                    <div className="h-6 w-6 rounded-full border border-dashed border-gray-300 flex items-center justify-center text-secondary bg-gray-50 text-[10px]">
                                       ?
                                     </div>
                                   )}
@@ -245,7 +245,7 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
         <>
           <div className="fixed inset-0 z-60" onClick={() => setStageMenu(null)} />
           <div
-            className="fixed z-61 w-48 max-h-80 overflow-y-auto bg-white rounded-xl shadow-2xl border border-border py-1"
+            className="fixed z-61 w-48 max-h-80 overflow-y-auto bg-white rounded-xl shadow-modal border border-border py-1"
             style={{
               top: stageMenu.up ? stageMenu.y - 6 : stageMenu.y + 6,
               left: stageMenu.x,

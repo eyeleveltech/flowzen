@@ -62,10 +62,10 @@ export const LEAD_STAGE_GROUPS: { id: string; title: string; color: string; stag
   { id: 'Meeting', title: 'Meeting', color: '#6B7280', stages: ['MEETING'] },
   { id: 'Proposal', title: 'Proposal', color: '#2563EB', stages: ['PROPOSAL'] },
   { id: 'Negotiation', title: 'Negotiation', color: '#2563EB', stages: ['NEGOTIATION'] },
-  { id: 'WonClosed', title: 'Won & Closed', color: '#16A34A', stages: ['CONTRACT'] },
+  { id: 'WonClosed', title: 'Won & Closed', color: '#15803D', stages: ['CONTRACT'] },
   { id: 'Active', title: 'Active', color: '#2563EB', stages: ['ACTIVE_RETAINER', 'ACTIVE_PROJECT'] },
   { id: 'OnHold', title: 'On Hold', color: '#6B7280', stages: ['ON_HOLD'] },
-  { id: 'Completed', title: 'Project Completed', color: '#16A34A', stages: ['PROJECT_COMPLETED'] },
+  { id: 'Completed', title: 'Project Completed', color: '#15803D', stages: ['PROJECT_COMPLETED'] },
   { id: 'Lost', title: 'Lost & Closed', color: '#DC2626', stages: ['CHURNED'] },
 ];
 

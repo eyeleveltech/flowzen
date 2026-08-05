@@ -142,7 +142,7 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: 20 }}
-        className="fixed right-0 top-0 bottom-0 z-101 w-full max-w-2xl bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto"
+        className="fixed right-0 top-0 bottom-0 z-101 w-full max-w-2xl bg-white border-l border-border shadow-modal shadow-black/10 overflow-y-auto"
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] sticky top-0 bg-white z-10">
           <h2 className="text-lg font-semibold text-primary">Task Details</h2>

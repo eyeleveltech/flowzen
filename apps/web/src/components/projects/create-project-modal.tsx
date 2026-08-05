@@ -12,6 +12,7 @@ import { MultiSelect } from '@/components/ui/multi-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { TagsInput } from '@/components/ui/tags-input';
 import { useMembers, useClients } from '@/hooks/useQueries';
+import { useModalSafety } from '@/hooks/useModalSafety';
 import { getInitials, getAvatarColor, getClientDisplayName, getProjectStatusFromClient } from '@/lib/utils';
 import { projectSchema, type ProjectFormValues } from '@/lib/validations';
 import { Icon } from '@/components/ui/icon';
@@ -42,7 +43,7 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
     return Array.from(opts.values());
   })();
 
-  const { handleSubmit, watch, setValue, formState: { errors } } = useForm<ProjectFormValues>({
+  const { handleSubmit, watch, setValue, formState: { errors, isDirty } } = useForm<ProjectFormValues>({
     resolver: zodResolver(projectSchema),
     defaultValues: {
       name: '', description: '', clientId, ownerId: '',
@@ -51,6 +52,8 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
       priority: 'MEDIUM', status: 'PLANNING', memberIds: [], teamIds: [],
     },
   });
+
+  const { guardedClose, panelRef } = useModalSafety({ onClose, isDirty: () => isDirty });
 
   const formValues = watch();
 
@@ -89,16 +92,17 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
 
   return (
     <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-100 bg-black/20 backdrop-blur-sm" onClick={onClose} />
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-100 bg-black/20 backdrop-blur-sm" onClick={guardedClose} />
       <motion.div
+        ref={panelRef}
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: 20 }}
-        className="fixed right-0 top-0 bottom-0 z-101 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto"
+        className="fixed right-0 top-0 bottom-0 z-101 w-full max-w-lg bg-white border-l border-border shadow-modal shadow-black/10 overflow-y-auto"
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] sticky top-0 bg-white z-10">
           <h2 className="text-lg font-semibold text-primary">New Project</h2>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
+          <button onClick={guardedClose} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
             <Icon as={X} size="md" className="text-secondary" />
           </button>
         </div>
@@ -221,7 +225,7 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
 
 
           <div className="pt-4 flex gap-3">
-            <button type="button" onClick={onClose} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none">Cancel</button>
+            <button type="button" onClick={guardedClose} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none">Cancel</button>
             <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none">{submitting ? 'Creating...' : 'Create Project'}</button>
           </div>
         </form>

@@ -50,11 +50,11 @@ export default function LostDealsPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-primary tracking-tight flex items-center gap-2"><TrendingDown className="w-5 h-5 text-secondary" /> Lost Deal Analysis</h1>
-          <p className="text-sm text-secondary mt-1">Where and why deals are being lost{data ? ` · ${data.total} churned` : ''}.</p>
+          <h1 className="text-2xl font-semibold text-primary tracking-tight flex items-center gap-2"><TrendingDown className="w-5 h-5 text-secondary" /> Lost leads</h1>
+          <p className="text-sm text-secondary mt-1">Where and why leads are being lost{data ? ` · ${data.total} churned` : ''}.</p>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-end gap-2 w-full md:w-auto">
           <div className="w-full sm:w-auto"><label className="block text-[10px] font-semibold text-secondary uppercase mb-1">From</label><input type="date" value={range.from} onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))} className="w-full sm:w-auto rounded-lg border border-border bg-gray-50 px-3 py-1.5 text-sm" /></div>
@@ -142,7 +142,7 @@ export default function LostDealsPage() {
             {data.reactivation.length === 0 ? <p className="text-sm text-secondary py-6 text-center">No leads flagged for reactivation.</p> : (
               <div className="overflow-x-auto w-full">
                 <table className="w-full text-sm min-w-150">
-                  <thead><tr className="text-left text-[11px] uppercase text-secondary border-b border-border"><th className="py-2">Company</th><th className="py-2">Lost Date</th><th className="py-2">Reactivation Window</th><th className="py-2 text-right">Value</th><th className="py-2">Assigned To</th></tr></thead>
+                  <thead><tr className="text-left text-[11px] uppercase text-secondary border-b border-border"><th className="py-2">Client</th><th className="py-2">Lost Date</th><th className="py-2">Reactivation Window</th><th className="py-2 text-right">Value</th><th className="py-2">Assigned To</th></tr></thead>
                   <tbody>{data.reactivation.map((r: any) => (
                     <tr key={r.id} className="border-b border-gray-50"><td className="py-2 font-medium text-primary">{r.name}</td><td className="py-2 text-secondary">{fmtDate(r.lostDate)}</td><td className="py-2 text-amber-700 font-medium">{fmtDate(r.window)}</td><td className="py-2 text-right">{formatCurrency(r.value)}</td><td className="py-2 text-secondary">{r.assignedTo || '—'}</td></tr>
                   ))}</tbody>

@@ -114,7 +114,7 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: 20 }}
-        className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white shadow-2xl flex flex-col border-l border-border"
+        className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white shadow-modal flex flex-col border-l border-border"
       >
         <div className="flex items-center justify-between px-6 py-5 border-b border-border">
           <div>
@@ -129,7 +129,7 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
         <div className="flex-1 overflow-y-auto p-6">
           <form id="editLeadForm" onSubmit={handleSubmit} className="space-y-4">
             {/* The company IS the lead, so it leads the form and carries the required marker. */}
-            <Field id="edit-company" label="Company" required value={form.companyName} error={errors.companyName} onChange={(v) => setForm({ ...form, companyName: v })} placeholder="Company name" />
+            <Field id="edit-company" label="Client" required value={form.companyName} error={errors.companyName} onChange={(v) => setForm({ ...form, companyName: v })} placeholder="Client name" />
 
             <div className="grid grid-cols-2 gap-4">
               <Field id="edit-contactName" label="Contact Name" value={form.contactName} onChange={(v) => setForm({ ...form, contactName: v })} placeholder="Full Name" />

@@ -7,6 +7,8 @@
   --color-border: #E5E7EB;
   --color-primary: #111827;
   --color-secondary: #6B7280;
+  --color-surface-sunken: #F3F4F6;
+  --color-text-on-sunken: #4B5563;
   /* Placeholder / hint / de-emphasised icon text. Must stay >= 4.5:1 on white
      (WCAG AA for normal text). The previous inline #9CA3AF measured 2.54:1 and
      failed; #6B7280 measures 4.84:1. Change it here, not per-usage. */
@@ -18,6 +20,9 @@
   --radius-card: 16px;
   --radius-button: 12px;
   --radius-input: 12px;
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.04);
+  --shadow-overlay: 0 8px 24px rgb(0 0 0 / 0.08);
+  --shadow-modal: 0 24px 48px rgb(0 0 0 / 0.12);
   --z-100: 100;
   --z-101: 101;
   --ease-out: cubic-bezier(0.25, 0.1, 0.25, 1);

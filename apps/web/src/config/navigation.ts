@@ -47,7 +47,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Receivables', href: '/receivables', icon: Wallet, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
   { label: 'Expenses', href: '/expenses', icon: CreditCard, roles: ['SUPER_ADMIN'], module: 'REVENUE' },
   { label: 'Renewals', href: '/renewals', icon: RefreshCw, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
-  { label: 'Lost Deals', href: '/lost-deals', icon: TrendingDown, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
+  { label: 'Lost leads', href: '/lost-deals', icon: TrendingDown, roles: ['SUPER_ADMIN', 'ADMIN'], module: 'CRM' },
   { label: 'Projects', href: '/projects', icon: FolderKanban, module: 'PM', isPrimaryMobile: true },
   { label: 'Tasks', href: '/tasks', icon: CheckSquare, module: 'PM', isPrimaryMobile: true },
   { label: 'Calendar', href: '/calendar', icon: CalendarDays, module: 'PM' },
