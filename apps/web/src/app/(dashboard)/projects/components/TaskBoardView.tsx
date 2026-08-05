@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { formatShortDate } from '@/lib/utils';
-import { ChevronsLeft, ChevronsRight, Clock, MessageSquare, Paperclip, ChevronDown } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, Clock, MessageSquare, ChevronDown } from 'lucide-react';
 import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
 
@@ -175,20 +175,12 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
                                     <span>{formatShortDate(task.dueDate)}</span>
                                   </div>
                                 )}
-                                {(task._count?.comments > 0 || task._count?.attachments > 0) && (
+                                {task._count?.comments > 0 && (
                                   <div className="flex items-center gap-2 text-gray-400">
-                                    {task._count?.comments > 0 && (
-                                      <div className="flex items-center gap-0.5">
-                                        <MessageSquare className="w-3 h-3" />
-                                        <span className="text-[10px]">{task._count.comments}</span>
-                                      </div>
-                                    )}
-                                    {task._count?.attachments > 0 && (
-                                      <div className="flex items-center gap-0.5">
-                                        <Paperclip className="w-3 h-3" />
-                                        <span className="text-[10px]">{task._count.attachments}</span>
-                                      </div>
-                                    )}
+                                    <div className="flex items-center gap-0.5">
+                                      <MessageSquare className="w-3 h-3" />
+                                      <span className="text-[10px]">{task._count.comments}</span>
+                                    </div>
                                   </div>
                                 )}
                               </div>

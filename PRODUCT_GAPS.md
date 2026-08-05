@@ -91,7 +91,7 @@ genuinely left.
 |---|---|---|
 | **No email to clients** — marking a quote SENT sends nothing; email is transactional-only (reset/invite/digest) | HIGH | `services/email.ts`; no mail call in `quotes.ts` |
 | ~~Leads not in global search~~ — **FIXED `00ad3bd`**: leads (company/contact/email/phone/leadId) + quotes (doc number/client) now indexed, role-gated | ✅ | `search.ts` |
-| **No file attachments** anywhere — URL strings only (driveLink/folderLink/assetLinks/receiptUrl) | HIGH | no multer/S3 in API; only server-generated quote PDFs |
+| ~~No file attachments~~ — built, then **withdrawn by owner 2026-08-05**: uploads had no per-org quota, and on a single VPS a full disk also stops Postgres writing. URL strings stay (driveLink/folderLink/assetLinks/receiptUrl) | N/A | `20260805100000_drop_attachments`; revisit only with a storage cap |
 | ~~TimeEntry/rates~~ — **rejected by owner**: no employee time tracking; due dates drive accountability | N/A | decision 2026-07-30 |
 | **Workflow engine is PM-notifications-only** — no lead-stage triggers, no auto-assign/round-robin; `CHANGE_TASK_STATUS`/`REASSIGN_TASK` are dead enum values | MED-HIGH | `workflowEngine.ts:42-74` |
 | **Recurring billing mints payment rows, not sendable invoices** | MED-HIGH | `processSubscriptionBilling` creates PENDING payments; no invoice PDF/email |
@@ -127,7 +127,7 @@ genuinely left.
 15. Manager team-scoped task view (My/Team toggle backed by real team scoping) (corrections #29).
 
 ### Sprint 3+ — capability gaps
-16. File attachments (Attachment model + local uploads reusing the org-check pattern) — tasks, leads, expenses first.
+16. ~~File attachments~~ — rejected (owner decision 2026-08-05: unbounded server storage). Only revisit with a per-org quota enforced on upload.
 17. CRM automations: LEAD_STAGE_CHANGE/LEAD_CREATED triggers, round-robin assignment; implement or delete the dead action enums.
 18. ~~TimeEntry model~~ — rejected (owner decision: no employee time tracking).
 19. Public lead-capture endpoint (rate-limited, org-token) for website forms.
