@@ -11,6 +11,8 @@ import { useMembers } from '@/hooks/useQueries';
 import { startOfMonth, startOfQuarter, startOfYear, subMonths, subQuarters, endOfMonth, endOfQuarter, endOfYear } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LEAD_STAGES, LEAD_STAGE_LABELS } from '@/lib/lead-stage';
+import { Icon } from '@/components/ui/icon';
+import { axisTick, gridStroke } from '@/lib/chart-theme';
 
 // Strict Monochromatic Palette matching design system
 const COLORS = ['#111827', '#4B5563', '#9CA3AF', '#D1D5DB', '#F3F4F6'];
@@ -257,9 +259,9 @@ export function PipelineDashboard() {
 
         {dateRange === 'CUSTOM' && (
           <div className="flex items-center gap-2">
-            <input type="date" value={customDateFrom} onChange={(e) => setCustomDateFrom(e.target.value)} className="rounded-lg border border-border p-2 text-sm outline-none focus:border-primary text-secondary" />
+            <input type="date" value={customDateFrom} onChange={(e) => setCustomDateFrom(e.target.value)} className="rounded-lg border border-border p-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 text-secondary" />
             <span className="text-secondary">-</span>
-            <input type="date" value={customDateTo} onChange={(e) => setCustomDateTo(e.target.value)} className="rounded-lg border border-border p-2 text-sm outline-none focus:border-primary text-secondary" />
+            <input type="date" value={customDateTo} onChange={(e) => setCustomDateTo(e.target.value)} className="rounded-lg border border-border p-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 text-secondary" />
           </div>
         )}
 
@@ -280,7 +282,7 @@ export function PipelineDashboard() {
             className="flex items-center gap-2 px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-secondary hover:text-primary transition-colors min-w-40 justify-between"
           >
             <span>Stages ({selectedStages.length === ALL_STAGES.length ? 'All' : selectedStages.length})</span>
-            <ChevronDown className="w-4 h-4" />
+            <Icon as={ChevronDown} size="md" />
           </button>
 
           <AnimatePresence>
@@ -306,9 +308,9 @@ export function PipelineDashboard() {
                       className="w-full text-left px-3 py-2 text-sm text-secondary hover:bg-gray-50 rounded-lg flex items-center gap-3 transition-colors"
                     >
                       {selectedStages.includes(stage) ? (
-                        <CheckSquare className="w-4 h-4 text-primary" />
+                        <Icon as={CheckSquare} size="md" className="text-primary" />
                       ) : (
-                        <Square className="w-4 h-4 text-gray-300" />
+                        <Icon as={Square} size="md" className="text-gray-300" />
                       )}
                       {STAGE_LABELS[stage] || stage}
                     </button>
@@ -322,12 +324,12 @@ export function PipelineDashboard() {
 
       {/* Metrics Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 relative">
-        {isFiltering && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-2xl"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}
+        {isFiltering && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-2xl"><div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}
 
         <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full relative overflow-hidden">
           <div className="flex items-start justify-between gap-2 mb-3">
             <p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Total Pipeline Value</p>
-            <IndianRupee className="w-4 h-4 shrink-0 text-secondary" />
+            <Icon as={IndianRupee} size="md" className="shrink-0 text-secondary" />
           </div>
           <p className="text-3xl font-semibold text-primary">{formatCurrency(metrics.pipelineValue)}</p>
         </div>
@@ -335,7 +337,7 @@ export function PipelineDashboard() {
         <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full">
           <div className="flex items-start justify-between gap-2 mb-3">
             <p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Closed / Won Value</p>
-            <TrendingUp className="w-4 h-4 shrink-0 text-secondary" />
+            <Icon as={TrendingUp} size="md" className="shrink-0 text-secondary" />
           </div>
           <p className="text-3xl font-semibold text-primary">{formatCurrency(metrics.wonValue)}</p>
         </div>
@@ -343,7 +345,7 @@ export function PipelineDashboard() {
         <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full">
           <div className="flex items-start justify-between gap-2 mb-3">
             <p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Active Deals</p>
-            <Target className="w-4 h-4 shrink-0 text-secondary" />
+            <Icon as={Target} size="md" className="shrink-0 text-secondary" />
           </div>
           <p className="text-3xl font-semibold text-primary">{metrics.activeLeads}</p>
         </div>
@@ -351,7 +353,7 @@ export function PipelineDashboard() {
         <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full">
           <div className="flex items-start justify-between gap-2 mb-3">
             <p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Total Leads Tracked</p>
-            <Briefcase className="w-4 h-4 shrink-0 text-secondary" />
+            <Icon as={Briefcase} size="md" className="shrink-0 text-secondary" />
           </div>
           <p className="text-3xl font-semibold text-primary">{metrics.totalLeads}</p>
         </div>
@@ -360,16 +362,16 @@ export function PipelineDashboard() {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative">
-        {isFiltering && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-2xl"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}
+        {isFiltering && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-2xl"><div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}
 
         <div className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-6">Leads by Stage</h2>
           <div className="h-70 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={metrics.barData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={axisTick} dy={10} />
+                <YAxis axisLine={false} tickLine={false} tick={axisTick} />
                 <Tooltip content={<CustomTooltip />} cursor={{ fill: '#FAFAFA' }} />
                 <Bar dataKey="count" name="Leads" radius={[2, 2, 0, 0]}>
                   {metrics.barData.map((entry: any, index: number) => (
@@ -407,7 +409,7 @@ export function PipelineDashboard() {
                 <div className="flex flex-wrap justify-center gap-4 mt-2">
                   {metrics.pieData.map((entry: any, index: number) => (
                     <div key={index} className="flex items-center gap-1.5 text-xs font-medium text-secondary">
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></span>
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></span>
                       {entry.name}
                     </div>
                   ))}
@@ -423,12 +425,12 @@ export function PipelineDashboard() {
 
       {/* Won & Lost Deals */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative">
-        {isFiltering && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-2xl"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}
+        {isFiltering && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-2xl"><div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}
 
         {/* Won Deals */}
         <div className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4">
-            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" /> Won Deals
+            <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" /> Won Deals
           </h2>
           <div className="flex items-end gap-8">
             <div>
@@ -445,7 +447,7 @@ export function PipelineDashboard() {
         {/* Lost Deals + Reason for Loss breakdown */}
         <div className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4">
-            <span className="inline-block w-2 h-2 rounded-full bg-red-500" /> Lost Deals
+            <span className="inline-block h-2 w-2 rounded-full bg-red-500" /> Lost Deals
           </h2>
           <div className="flex items-end gap-8 mb-4">
             <div>
@@ -463,7 +465,7 @@ export function PipelineDashboard() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={metrics.lostReasonData} layout="vertical" margin={{ top: 0, right: 12, left: 10, bottom: 0 }}>
                   <XAxis type="number" hide />
-                  <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} width={90} tick={{ fontSize: 10, fill: '#6B7280' }} />
+                  <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} width={90} tick={axisTick} />
                   <Tooltip cursor={{ fill: '#FAFAFA' }} />
                   <Bar dataKey="count" name="Lost" radius={[0, 4, 4, 0]} fill="#dc2626" />
                 </BarChart>
@@ -477,10 +479,10 @@ export function PipelineDashboard() {
 
       {/* Recent Activity Table */}
       <div className="rounded-2xl bg-white border border-border overflow-hidden relative">
-        {isFiltering && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}
+        {isFiltering && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center"><div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}
 
         <div className="p-5 border-b border-border flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Clock className="w-4 h-4 text-secondary" /> Recent Leads</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Icon as={Clock} size="md" className="text-secondary" /> Recent Leads</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left min-w-150">

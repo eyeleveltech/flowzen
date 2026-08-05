@@ -25,6 +25,7 @@ import {
   PieChart, Pie, Cell, BarChart, Bar
 } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
+import { axisTick, gridStroke } from '@/lib/chart-theme';
 
 // Strict Monochromatic Palette for Charts
 const COLORS = ['#111827', '#4B5563', '#9CA3AF', '#D1D5DB', '#F3F4F6'];
@@ -113,7 +114,7 @@ const PendingApprovalItem = ({
   };
 
   return (
-    <div className="flex border border-transparent hover:border-border rounded-xl transition-all hover:bg-surface mb-1 items-center px-2">
+    <div className="flex border border-transparent hover:border-border rounded-xl transition-colors duration-150 motion-reduce:transition-none hover:bg-surface mb-1 items-center px-2">
       <input
         type="checkbox"
         checked={selected}
@@ -165,7 +166,7 @@ const PendingApprovalItem = ({
                 className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
                 title="Approve"
               >
-                <CheckCircle2 className="w-4 h-4" />
+                <Icon as={CheckCircle2} size="md" />
               </button>
               <button
                 disabled={submitting}
@@ -173,7 +174,7 @@ const PendingApprovalItem = ({
                 className={`flex items-center justify-center h-8 w-8 rounded-lg transition-colors ${isRequestingChanges ? 'bg-amber-100 text-amber-700' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}
                 title="Request Changes"
               >
-                <AlertTriangle className="w-4 h-4" />
+                <Icon as={AlertTriangle} size="md" />
               </button>
             </div>
           </div>
@@ -186,7 +187,7 @@ const PendingApprovalItem = ({
               value={commentText}
               onChange={(e) => setCommentText(e.target.value)}
               placeholder="What needs to be changed?"
-              className="w-full text-sm border border-border rounded-lg p-2.5 outline-none focus:border-primary resize-none h-20 bg-white"
+              className="w-full text-sm border border-border rounded-lg p-2.5 outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 resize-none h-20 bg-white"
             />
             <div className="flex justify-end gap-2 mt-2">
               <button
@@ -212,6 +213,7 @@ const PendingApprovalItem = ({
 };
 
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { Icon } from '@/components/ui/icon';
 
 export default function DashboardPage() {
   usePageTitle('Dashboard');
@@ -423,14 +425,14 @@ export default function DashboardPage() {
                 type="date"
                 value={customRange.start}
                 onChange={(e) => setCustomRange(prev => ({ ...prev, start: e.target.value }))}
-                className="text-xs sm:text-sm px-3 py-2 rounded-xl border border-border bg-gray-50 outline-none focus:border-primary focus:bg-white transition-all w-32 sm:w-36 text-primary font-medium"
+                className="text-xs sm:text-sm px-3 py-2 rounded-xl border border-border bg-gray-50 outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 focus:bg-white transition-colors duration-150 motion-reduce:transition-none w-32 sm:w-36 text-primary font-medium"
               />
               <span className="text-secondary text-xs sm:text-sm font-semibold">-</span>
               <input
                 type="date"
                 value={customRange.end}
                 onChange={(e) => setCustomRange(prev => ({ ...prev, end: e.target.value }))}
-                className="text-xs sm:text-sm px-3 py-2 rounded-xl border border-border bg-gray-50 outline-none focus:border-primary focus:bg-white transition-all w-32 sm:w-36 text-primary font-medium"
+                className="text-xs sm:text-sm px-3 py-2 rounded-xl border border-border bg-gray-50 outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 focus:bg-white transition-colors duration-150 motion-reduce:transition-none w-32 sm:w-36 text-primary font-medium"
               />
             </div>
           )}
@@ -455,23 +457,23 @@ export default function DashboardPage() {
       {isManager ? (
         <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
           <div onClick={() => router.push('/clients?status=ACTIVE')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Active Clients</p><Building2 className="w-4 h-4 shrink-0 text-secondary group-hover:text-primary transition-colors" /></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Active Clients</p><Icon as={Building2} size="md" className="shrink-0 text-secondary group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.activeClients}</p>
           </div>
           <div onClick={() => router.push('/projects?status=ACTIVE')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Active Projects</p><FolderKanban className="w-4 h-4 shrink-0 text-secondary group-hover:text-primary transition-colors" /></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Active Projects</p><Icon as={FolderKanban} size="md" className="shrink-0 text-secondary group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.activeProjects}</p>
           </div>
           <div onClick={() => router.push('/projects?status=DELAYED')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Delayed Projects</p><AlertTriangle className="w-4 h-4 shrink-0 text-secondary group-hover:text-primary transition-colors" /></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Delayed Projects</p><Icon as={AlertTriangle} size="md" className="shrink-0 text-secondary group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.delayedProjects}</p>
           </div>
           <div onClick={() => router.push('/members')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Team Members</p><UsersRound className="w-4 h-4 shrink-0 text-secondary group-hover:text-primary transition-colors" /></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Team Members</p><Icon as={UsersRound} size="md" className="shrink-0 text-secondary group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.totalMembers}</p>
           </div>
-          <div onClick={() => router.push('/tasks?filter=overdue')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow cursor-pointer hover:bg-surface group h-full">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Overdue Tasks</p><Clock className="w-4 h-4 shrink-0 text-secondary" /></div>
+          <div onClick={() => router.push('/tasks?filter=overdue')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow cursor-pointer hover:bg-surface group h-full max-md:col-span-2">
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Overdue Tasks</p><Icon as={Clock} size="md" className="shrink-0 text-secondary" /></div>
             <div className="flex items-center gap-2">
               <span className={`h-2.5 w-2.5 rounded-full ${stats.overdueTasks > 0 ? 'bg-red-500' : 'bg-border'}`} />
               <p className={`text-3xl font-semibold ${stats.overdueTasks > 0 ? 'text-red-500' : 'text-primary'}`}>{stats.overdueTasks || 0}</p>
@@ -481,26 +483,26 @@ export default function DashboardPage() {
       ) : (
         <motion.div variants={item} className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <div onClick={() => router.push('/projects')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Projects</p><FolderKanban className="w-4 h-4 shrink-0 text-secondary group-hover:text-primary transition-colors" /></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Projects</p><Icon as={FolderKanban} size="md" className="shrink-0 text-secondary group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.activeProjects || 0}</p>
           </div>
           <div onClick={() => router.push('/tasks')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Open Tasks</p><CheckSquare className="w-4 h-4 shrink-0 text-secondary group-hover:text-primary transition-colors" /></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Open Tasks</p><Icon as={CheckSquare} size="md" className="shrink-0 text-secondary group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.openTasks || 0}</p>
           </div>
           <div onClick={() => router.push('/tasks?filter=completed')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Completed Tasks</p><CheckCircle2 className="w-4 h-4 shrink-0 text-secondary group-hover:text-primary transition-colors" /></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Completed Tasks</p><Icon as={CheckCircle2} size="md" className="shrink-0 text-secondary group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.completedTasks || 0}</p>
           </div>
           <div onClick={() => router.push('/tasks?filter=overdue')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Overdue Tasks</p><Clock className="w-4 h-4 shrink-0 text-secondary" /></div>
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Overdue Tasks</p><Icon as={Clock} size="md" className="shrink-0 text-secondary" /></div>
             <div className="flex items-center gap-2">
               <span className={`h-2.5 w-2.5 rounded-full ${stats.overdueTasks > 0 ? 'bg-red-500' : 'bg-border'}`} />
               <p className={`text-3xl font-semibold ${stats.overdueTasks > 0 ? 'text-red-500' : 'text-primary'}`}>{stats.overdueTasks || 0}</p>
             </div>
           </div>
-          <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full">
-            <div className="flex items-start justify-between gap-2 mb-3"><p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">My Completion Rate</p><Zap className="w-4 h-4 shrink-0 text-secondary" /></div>
+          <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full max-lg:col-span-2">
+            <div className="flex items-start justify-between gap-2 mb-3"><p className="min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">My Completion Rate</p><Icon as={Zap} size="md" className="shrink-0 text-secondary" /></div>
             <p className="text-3xl font-semibold text-primary">
               {stats.openTasks + stats.completedTasks > 0 ? Math.round((stats.completedTasks / (stats.openTasks + stats.completedTasks)) * 100) : 0}%
             </p>
@@ -540,12 +542,12 @@ export default function DashboardPage() {
             return (
               <motion.div
                 variants={item}
-                className="rounded-2xl bg-white border border-border hover:shadow-md flex flex-col transition-all"
+                className="rounded-2xl bg-white border border-border hover:shadow-md flex flex-col transition-colors duration-150 motion-reduce:transition-none"
               >
                 {/* Header */}
                 <div className="p-5 border-b border-border flex justify-between items-center">
                   <h2 className="flex items-center gap-2 text-base font-bold text-primary">
-                    <BellDot className="w-4.5 h-4.5 text-primary" />
+                    <BellDot className="h-4.5 w-4.5 text-primary" />
                     Pending Tasks
                   </h2>
                   <div className="flex items-center gap-3">
@@ -591,7 +593,7 @@ export default function DashboardPage() {
                           <div
                             key={t.id}
                             onClick={() => handleOpenTask(t.id, t.readAt, t.leadId || leadInfo?.id)}
-                            className="group flex flex-col sm:flex-row sm:items-center justify-between py-2.5 px-4 rounded-xl border border-border/80 bg-white hover:bg-surface hover:border-border hover:shadow-sm cursor-pointer transition-all gap-2 sm:gap-4"
+                            className="group flex flex-col sm:flex-row sm:items-center justify-between py-2.5 px-4 rounded-xl border border-border/80 bg-white hover:bg-surface hover:border-border hover:shadow-sm cursor-pointer transition-colors duration-150 motion-reduce:transition-none gap-2 sm:gap-4"
                           >
                             <div className="flex items-center min-w-0 flex-1 gap-3">
                               {/* Urgent priority dot indicator */}
@@ -605,18 +607,18 @@ export default function DashboardPage() {
                                 <div className="flex flex-wrap items-center gap-2.5 text-xs text-secondary">
                                   {leadInfo ? (
                                     <span className="flex items-center gap-1 text-purple-700 font-medium truncate">
-                                      <Target className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                                      <Icon as={Target} size="sm" className="text-purple-600 shrink-0" />
                                       {leadInfo.companyName || leadInfo.contactName || leadInfo.leadId || 'Lead Task'}
                                     </span>
                                   ) : (
                                     <span className="flex items-center gap-1 truncate">
-                                      <FolderKanban className="w-3.5 h-3.5 text-secondary shrink-0" />
+                                      <Icon as={FolderKanban} size="sm" className="text-secondary shrink-0" />
                                       {t.project?.name || 'No project'}
                                     </span>
                                   )}
                                   {t.dueDate && (
                                     <span className={`flex items-center gap-1 ${isOverdue ? 'text-red-500 font-medium' : ''}`}>
-                                      <Calendar className="w-3.5 h-3.5 text-secondary shrink-0" />
+                                      <Icon as={Calendar} size="sm" className="text-secondary shrink-0" />
                                       {formatShortDate(t.dueDate)}
                                     </span>
                                   )}
@@ -665,7 +667,7 @@ export default function DashboardPage() {
                 className="p-5 border-b border-border flex flex-col gap-3 md:flex-row md:items-center justify-between"
               >
                 <div className="flex items-center gap-2 cursor-pointer" onClick={() => router.push('/tasks?filter=approval')}>
-                  <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><CheckCircle2 className="w-4 h-4 text-secondary" /> Pending Approvals</h2>
+                  <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Icon as={CheckCircle2} size="md" className="text-secondary" /> Pending Approvals</h2>
                   {pendingApprovals.length > 0 && <span className="text-xs font-medium text-primary bg-[#F3F4F6] border border-border px-2 py-0.5 rounded-md">{pendingApprovals.length}</span>}
                 </div>
 
@@ -748,7 +750,7 @@ export default function DashboardPage() {
           {isManager && (
             <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow overflow-hidden">
               <div className="p-5 border-b border-border">
-                <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Activity className="w-4 h-4 text-secondary" /> Client Health</h2>
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Icon as={Activity} size="md" className="text-secondary" /> Client Health</h2>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left min-w-150">
@@ -801,7 +803,7 @@ export default function DashboardPage() {
 
           {/* UPCOMING DEADLINES */}
           <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4"><Clock className="w-4 h-4 text-secondary" /> Upcoming Deadlines</h2>
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4"><Icon as={Clock} size="md" className="text-secondary" /> Upcoming Deadlines</h2>
             <div className="space-y-3 max-h-62.5 overflow-y-auto custom-scrollbar pr-1 flex-1">
               {deadlines.length === 0 ? (
                 <p className="text-sm text-secondary py-4">No deadlines in next 7 days.</p>
@@ -817,10 +819,10 @@ export default function DashboardPage() {
                       key={d.id}
                       onClick={() => handleOpenTask(d.id, null)}
                       title={`${d.title} (${d.project?.name || 'No project'})`}
-                      className="flex justify-between items-start p-2.5 hover:bg-surface rounded-xl cursor-pointer border border-border group transition-all"
+                      className="flex justify-between items-start p-2.5 hover:bg-surface rounded-xl cursor-pointer border border-border group transition-colors duration-150 motion-reduce:transition-none"
                     >
                       <div className="min-w-0 pr-3 flex gap-2.5 items-start">
-                        <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${dotColor}`} />
+                        <div className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${dotColor}`} />
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-primary truncate group-hover:text-black transition-colors">{d.title}</p>
                           <p className="text-xs text-secondary truncate">{d.project?.name || 'No project'}</p>
@@ -837,7 +839,7 @@ export default function DashboardPage() {
             {deadlines.length > 0 && (
               <div className="mt-4 pt-3 border-t border-border flex justify-center">
                 <button onClick={() => router.push('/calendar')} className="text-xs font-semibold text-secondary hover:text-primary transition-colors flex items-center gap-1">
-                  View All in Calendar <ChevronRight className="w-3 h-3" />
+                  View All in Calendar <ChevronRight className="h-3 w-3" />
                 </button>
               </div>
             )}
@@ -845,7 +847,7 @@ export default function DashboardPage() {
 
           {/* OVERDUE TASKS */}
           <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4"><AlertTriangle className="w-4 h-4 text-red-500" /> Overdue Tasks</h2>
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4"><Icon as={AlertTriangle} size="md" className="text-red-500" /> Overdue Tasks</h2>
             <div className="space-y-3 max-h-62.5 overflow-y-auto custom-scrollbar pr-1 flex-1">
               {(() => {
                 const list = myTasks.filter((t: any) => t.dueDate && new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED' && t.status !== 'APPROVED');
@@ -862,7 +864,7 @@ export default function DashboardPage() {
                     <div
                       key={t.id}
                       onClick={() => handleOpenTask(t.id, null)}
-                      className="flex justify-between items-start p-2.5 hover:bg-surface rounded-xl cursor-pointer border border-border group transition-all"
+                      className="flex justify-between items-start p-2.5 hover:bg-surface rounded-xl cursor-pointer border border-border group transition-colors duration-150 motion-reduce:transition-none"
                     >
                       <div className="min-w-0 pr-3 flex gap-2.5 items-start">
                         <span className="flex h-1.5 w-1.5 rounded-full bg-red-500 mt-2 shrink-0 animate-pulse" />
@@ -884,13 +886,13 @@ export default function DashboardPage() {
           {/* MY PROJECTS (TEAM_MEMBER ONLY) */}
           {!isManager && myProjects.length > 0 && (
             <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4"><FolderKanban className="w-4 h-4 text-secondary" /> My Projects</h2>
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4"><Icon as={FolderKanban} size="md" className="text-secondary" /> My Projects</h2>
               <div className="space-y-3 flex-1">
                 {myProjects.map((p: any) => (
                   <div
                     key={p.id}
                     onClick={() => router.push(`/projects/${p.id}`)}
-                    className="flex justify-between items-center p-3 hover:bg-surface rounded-xl cursor-pointer border border-border group transition-all"
+                    className="flex justify-between items-center p-3 hover:bg-surface rounded-xl cursor-pointer border border-border group transition-colors duration-150 motion-reduce:transition-none"
                   >
                     <div className="min-w-0 pr-3">
                       <p className="text-sm font-semibold text-primary truncate group-hover:text-black transition-colors">{p.name}</p>
@@ -904,7 +906,7 @@ export default function DashboardPage() {
               </div>
               <div className="mt-4 pt-3 border-t border-border flex justify-center">
                 <button onClick={() => router.push('/projects')} className="text-xs font-semibold text-secondary hover:text-primary transition-colors flex items-center gap-1">
-                  View All Projects <ChevronRight className="w-3 h-3" />
+                  View All Projects <ChevronRight className="h-3 w-3" />
                 </button>
               </div>
             </motion.div>
@@ -913,7 +915,7 @@ export default function DashboardPage() {
           {/* MY PERFORMANCE (TEAM_MEMBER ONLY) */}
           {!isManager && (
             <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4"><Zap className="w-4 h-4 text-secondary" /> My Performance</h2>
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4"><Icon as={Zap} size="md" className="text-secondary" /> My Performance</h2>
 
               <div className="space-y-4">
                 {/* Completion Rate Progress Bar */}
@@ -926,7 +928,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-primary rounded-full transition-all duration-500"
+                      className="h-full bg-primary rounded-full transition-colors duration-150 motion-reduce:transition-none duration-500"
                       style={{
                         width: `${stats.openTasks + stats.completedTasks > 0 ? Math.round((stats.completedTasks / (stats.openTasks + stats.completedTasks)) * 100) : 0}%`
                       }}
@@ -954,7 +956,7 @@ export default function DashboardPage() {
           {/* TASK STATUS CHART */}
           {isManager && statusDist.length > 0 && (
             <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5">
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-2"><PieIcon className="w-4 h-4 text-secondary" /> Task Status Distribution</h2>
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-2"><PieIcon className="h-4 w-4 text-secondary" /> Task Status Distribution</h2>
               <div className="h-50 w-full flex items-center justify-center">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -968,7 +970,7 @@ export default function DashboardPage() {
               <div className="flex flex-wrap justify-center gap-3 mt-2">
                 {statusDist.map((entry: any, index: number) => (
                   <div key={entry.name} className="flex items-center gap-1.5 text-xs font-medium text-secondary">
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color || COLORS[index % COLORS.length] }} />
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color || COLORS[index % COLORS.length] }} />
                     {entry.name} — {entry.value}
                   </div>
                 ))}
@@ -988,7 +990,7 @@ export default function DashboardPage() {
       {isManager && velocity.length > 0 && (
         <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Activity className="w-4 h-4 text-secondary" /> Task Completion Velocity</h2>
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Icon as={Activity} size="md" className="text-secondary" /> Task Completion Velocity</h2>
             <span className="text-xs font-medium text-secondary">Last 30 Days</span>
           </div>
           <div className="w-full relative" style={{ height: 256 }}>
@@ -1000,19 +1002,19 @@ export default function DashboardPage() {
                     <stop offset="95%" stopColor="#111827" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
                 <XAxis
                   dataKey="name"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                  tick={axisTick}
                   dy={10}
                   minTickGap={20}
                 />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                  tick={axisTick}
                   allowDecimals={false}
                 />
                 <RechartsTooltip content={<CustomTooltip />} cursor={{ stroke: '#D1D5DB', strokeWidth: 1, strokeDasharray: '4 4' }} />
@@ -1035,7 +1037,7 @@ export default function DashboardPage() {
       {/* TEAM WORKLOAD CHART */}
       {isManager && workload.length > 0 && (
         <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-6"><BarIcon className="w-4 h-4 text-secondary" /> Team Workload</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-6"><BarIcon className="h-4 w-4 text-secondary" /> Team Workload</h2>
           <div className="h-60 w-full overflow-x-auto scrollbar-thin pb-2">
             <div
               className="h-full"
@@ -1046,19 +1048,19 @@ export default function DashboardPage() {
             >
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={workload} margin={{ top: 10, right: 10, left: 25, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
                   <XAxis
                     dataKey="name"
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fontSize: 10, fill: '#6B7280' }}
+                    tick={axisTick}
                     dy={10}
                     tickFormatter={(name) => typeof name === 'string' ? name.split(' ')[0] : name}
                   />
                   <YAxis
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fontSize: 10, fill: '#6B7280' }}
+                    tick={axisTick}
                     label={{ value: 'Active Tasks', angle: -90, position: 'insideLeft', offset: -10, style: { fontSize: 10, fill: '#6B7280' } }}
                   />
                   <RechartsTooltip

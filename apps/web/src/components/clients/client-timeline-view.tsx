@@ -55,7 +55,7 @@ export function ClientTimelineView({ clients, loading }: { clients: any[]; loadi
   if (!clients.length) {
     return (
       <div className="rounded-2xl border border-border bg-white p-16 text-center">
-        <CalendarDays className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+        <CalendarDays className="h-10 w-10 text-gray-200 mx-auto mb-3" />
         <p className="text-sm text-secondary">No clients to display on the timeline.</p>
       </div>
     );
@@ -167,7 +167,7 @@ export function ClientTimelineView({ clients, loading }: { clients: any[]; loadi
                       className="absolute -translate-y-1/2 top-1/2 z-10"
                       style={{ left: `${pct}%` }}
                     >
-                      <div className={`w-2.5 h-2.5 rounded-full border-2 border-white shadow-md ${cfg.dot} ring-2 ring-offset-1 ring-white`} />
+                      <div className={`h-2.5 w-2.5 rounded-full border-2 border-white shadow-md ${cfg.dot} ring-2 ring-offset-1 ring-white`} />
                     </div>
 
                     {/* Floating label */}
@@ -179,7 +179,7 @@ export function ClientTimelineView({ clients, loading }: { clients: any[]; loadi
                       style={{ left: `${pct}%` }}
                       onClick={() => router.push(`/clients/${client.id}`)}
                     >
-                      <div className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+                      <div className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
                       <span className="text-xs font-medium text-primary whitespace-nowrap">
                         {formatDate(d)}
                       </span>

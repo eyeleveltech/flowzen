@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ArrowDownAZ, ArrowUpZA } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Icon } from '@/components/ui/icon';
 
 interface ColumnDropdownProps {
   title: string;
@@ -137,7 +138,7 @@ export function ColumnDropdown({
                       currentSort === sortAscValue ? "bg-surface font-medium text-primary" : "text-[#374151]"
                     )}
                   >
-                    <ArrowDownAZ className="h-4 w-4 text-secondary" /> {sortAscLabel}
+                    <Icon as={ArrowDownAZ} size="md" className="text-secondary" /> {sortAscLabel}
                   </button>
                 )}
                 {sortDescValue && (
@@ -148,7 +149,7 @@ export function ColumnDropdown({
                       currentSort === sortDescValue ? "bg-surface font-medium text-primary" : "text-[#374151]"
                     )}
                   >
-                    <ArrowUpZA className="h-4 w-4 text-secondary" /> {sortDescLabel}
+                    <Icon as={ArrowUpZA} size="md" className="text-secondary" /> {sortDescLabel}
                   </button>
                 )}
               </div>

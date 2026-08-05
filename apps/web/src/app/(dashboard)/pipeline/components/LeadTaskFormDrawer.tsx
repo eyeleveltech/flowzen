@@ -8,6 +8,7 @@ import { useMembers } from '@/hooks/useQueries';
 import { getInitials } from '@/lib/utils';
 import { Select } from '@/components/ui/select';
 import toast from 'react-hot-toast';
+import { Icon } from '@/components/ui/icon';
 
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
 
@@ -92,7 +93,7 @@ export function LeadTaskFormDrawer({ isOpen, onClose, leadId, onSuccess }: LeadT
                 onClick={onClose}
                 className="rounded-full p-2 text-secondary hover:bg-gray-100 hover:text-primary transition-colors"
               >
-                <X className="w-5 h-5" />
+                <Icon as={X} size="lg" />
               </button>
             </div>
 
@@ -107,7 +108,7 @@ export function LeadTaskFormDrawer({ isOpen, onClose, leadId, onSuccess }: LeadT
                   value={form.title}
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
                   placeholder="e.g. Run website audit"
-                  className="w-full rounded-xl border border-border px-4 py-2.5 text-sm outline-none focus:border-primary transition-all placeholder:text-secondary"
+                  className="w-full rounded-xl border border-border px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none placeholder:text-secondary"
                 />
               </div>
 
@@ -136,7 +137,7 @@ export function LeadTaskFormDrawer({ isOpen, onClose, leadId, onSuccess }: LeadT
                   type="date"
                   value={form.dueDate}
                   onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
-                  className="w-full rounded-xl border border-border px-3.5 py-2.5 text-sm outline-none focus:border-primary transition-all text-primary bg-white"
+                  className="w-full rounded-xl border border-border px-3.5 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none text-primary bg-white"
                 />
               </div>
 
@@ -147,7 +148,7 @@ export function LeadTaskFormDrawer({ isOpen, onClose, leadId, onSuccess }: LeadT
                   value={form.driveLink}
                   onChange={(e) => setForm({ ...form, driveLink: e.target.value })}
                   placeholder="https://drive.google.com/..."
-                  className="w-full rounded-xl border border-border px-3.5 py-2.5 text-sm outline-none focus:border-primary transition-all text-primary bg-white placeholder:text-secondary"
+                  className="w-full rounded-xl border border-border px-3.5 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none text-primary bg-white placeholder:text-secondary"
                 />
               </div>
 
@@ -178,7 +179,7 @@ export function LeadTaskFormDrawer({ isOpen, onClose, leadId, onSuccess }: LeadT
                 type="button"
                 onClick={() => handleSubmit()}
                 disabled={saving}
-                className="rounded-xl bg-primary px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#1F2937] disabled:opacity-60 transition-all flex items-center gap-1.5 shadow-sm"
+                className="rounded-xl bg-primary px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#1F2937] disabled:opacity-60 transition-colors duration-150 motion-reduce:transition-none flex items-center gap-1.5 shadow-sm"
               >
                 {saving ? 'Creating…' : 'Create Task'}
               </button>

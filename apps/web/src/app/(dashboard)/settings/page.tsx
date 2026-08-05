@@ -23,6 +23,7 @@ import { ErrorPanel } from '@/components/ui/error-panel';
 type Tab = 'organization' | 'modules' | 'billing' | 'users' | 'templates' | 'permissions' | 'workflows' | 'notifications' | 'audit' | 'api';
 
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { Icon } from '@/components/ui/icon';
 
 export default function SettingsPage() {
   usePageTitle('Settings');
@@ -128,13 +129,13 @@ export default function SettingsPage() {
         <div
           ref={tabStripRef}
           onScroll={updateTabScroll}
-          className="flex gap-2 p-1 bg-[#F3F4F6] rounded-xl overflow-x-auto"
+          className="flex gap-2 p-1 bg-[#F3F4F6] rounded-xl overflow-x-auto no-scrollbar pr-10"
         >
           {tabs.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id as Tab)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === t.id
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 motion-reduce:transition-none ${tab === t.id
                   ? 'bg-white text-primary shadow-sm'
                   : 'text-secondary hover:text-primary hover:bg-white/50'
                 }`}
@@ -145,19 +146,21 @@ export default function SettingsPage() {
           ))}
         </div>
 
-        {/* Scroll affordance: only rendered when there are tabs still off-screen. */}
+        {/* Scroll affordance fade & interactive button */}
         {canScrollRight && (
           <>
             <div
               aria-hidden
-              className="pointer-events-none absolute inset-y-0 right-0 w-12 rounded-r-xl bg-linear-to-l from-[#F3F4F6] to-transparent"
+              className="pointer-events-none absolute inset-y-0 right-0 w-12 rounded-r-xl bg-linear-to-l from-[#F3F4F6] via-[#F3F4F6]/80 to-transparent"
             />
-            <div
-              aria-hidden
-              className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 shadow-sm"
+            <button
+              type="button"
+              aria-label="Scroll tab list right"
+              onClick={() => tabStripRef.current?.scrollBy({ left: 160, behavior: 'smooth' })}
+              className="absolute right-1 top-1/2 -translate-y-1/2 z-10 flex h-7 w-7 items-center justify-center rounded-lg bg-white shadow-xs border border-border/50 text-secondary hover:text-primary hover:bg-[#F9FAFB] active:scale-95 transition-all"
             >
-              <ChevronRight className="h-3.5 w-3.5 text-secondary" />
-            </div>
+              <Icon as={ChevronRight} size="sm" />
+            </button>
           </>
         )}
       </div>

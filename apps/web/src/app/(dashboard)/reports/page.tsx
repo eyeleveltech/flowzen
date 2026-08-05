@@ -11,6 +11,7 @@ import { Select } from '@/components/ui/select';
 import { useExecutiveReport } from '@/hooks/useQueries';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer, PieChart as RPieChart, Pie, Cell, AreaChart, Area } from 'recharts';
+import { axisTick, gridStroke } from '@/lib/chart-theme';
 
 const COLORS = ['#111827', '#4B5563', '#9CA3AF', '#D1D5DB', '#F3F4F6'];
 
@@ -150,7 +151,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 mb-8 overflow-x-auto pb-2 w-max max-w-full">
+      <div className="flex items-center gap-2 mb-8 overflow-x-auto no-scrollbar w-max max-w-full -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 pb-2 pr-8 snap-x scroll-px-4">
         {tabs.map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;
@@ -158,7 +159,7 @@ export default function ReportsPage() {
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all border ${active
+              className={`flex items-center gap-2 px-3 sm:px-5 py-2.5 rounded-xl text-sm font-medium transition-colors duration-150 motion-reduce:transition-none border snap-start ${active
                 ? 'bg-primary text-white border-primary shadow-sm'
                 : 'bg-white text-secondary border-border hover:text-primary hover:bg-[#F9FAFB] hover:border-[#D1D5DB]'
                 }`}
@@ -188,12 +189,12 @@ export default function ReportsPage() {
           {user?.teamId && (
             <button
               onClick={() => setSelectedDepartment(user.teamId || '')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all flex items-center gap-1.5 ${selectedDepartment === user.teamId
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors duration-150 motion-reduce:transition-none flex items-center gap-1.5 ${selectedDepartment === user.teamId
                   ? 'bg-primary text-white border-primary shadow-sm'
                   : 'bg-white text-secondary border-border hover:text-primary hover:bg-[#F9FAFB]'
                 }`}
             >
-              <Users className="w-3.5 h-3.5" />
+              <Users className="h-3.5 w-3.5" />
               My Department
             </button>
           )}
@@ -208,13 +209,13 @@ export default function ReportsPage() {
               <Select value={datePreset} onChange={setDatePreset} options={datePresetOptions} className="w-44" />
               {datePreset === 'custom' && (
                 <div className="flex items-center gap-2">
-                  <input type="date" value={customRange.start} onChange={(e) => setCustomRange({ ...customRange, start: e.target.value })} className="rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary" />
+                  <input type="date" value={customRange.start} onChange={(e) => setCustomRange({ ...customRange, start: e.target.value })} className="rounded-lg border border-border px-3 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1" />
                   <span className="text-secondary">–</span>
-                  <input type="date" value={customRange.end} onChange={(e) => setCustomRange({ ...customRange, end: e.target.value })} className="rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary" />
+                  <input type="date" value={customRange.end} onChange={(e) => setCustomRange({ ...customRange, end: e.target.value })} className="rounded-lg border border-border px-3 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1" />
                 </div>
               )}
             </div>
-            <button onClick={() => window.print()} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-all">
+            <button onClick={() => window.print()} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none">
               <Download className="h-4 w-4" /> Export PDF
             </button>
           </div>
@@ -475,10 +476,10 @@ export default function ReportsPage() {
 
 function MetricCard({ label, value, suffix, danger, icon: Icon }: { label: string; value: string | number; suffix?: string; danger?: boolean; icon?: any }) {
   return (
-    <div className={`flex flex-col p-4 sm:p-5 rounded-2xl border ${danger ? 'border-red-200 bg-red-50' : 'border-border bg-white'} hover:shadow-sm transition-shadow`}>
+    <div className={`flex flex-col justify-between h-full p-4 sm:p-5 rounded-2xl border ${danger ? 'border-red-200 bg-red-50' : 'border-border bg-white'} hover:shadow-sm transition-shadow`}>
       <div className="flex items-start justify-between gap-2 mb-3">
-        <p className={`text-[11px] sm:text-xs font-medium uppercase tracking-wide ${danger ? 'text-red-600' : 'text-secondary'}`}>{label}</p>
-        {Icon && <Icon className={`w-4 h-4 shrink-0 ${danger ? 'text-red-500' : 'text-secondary'}`} />}
+        <p className={`min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium uppercase tracking-wide ${danger ? 'text-red-600' : 'text-secondary'}`}>{label}</p>
+        {Icon && <Icon className={`h-4 w-4 shrink-0 ${danger ? 'text-red-500' : 'text-secondary'}`} />}
       </div>
       <p title={String(value)} className={`${String(value).length > 12 ? 'text-lg sm:text-xl' : String(value).length > 8 ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-3xl'} font-semibold tabular-nums tracking-tight ${danger ? 'text-red-600' : 'text-primary'}`}>
         {value}
@@ -569,7 +570,9 @@ function ExecutiveTab({ data, periodLabel }: { data: any; periodLabel: string })
         <MetricCard label="Win Rate" value={`${revenue.winRate}%`} icon={Trophy} />
         <MetricCard label="On-Time Delivery" value={`${delivery.onTimeRate}%`} icon={Target} danger={delivery.onTimeRate < 70} />
         <MetricCard label="Overdue Tasks" value={delivery.overdueTasks} icon={AlertTriangle} danger={delivery.overdueTasks > 0} />
-        <MetricCard label="Churned (period)" value={clients.churnedInPeriod} icon={Users} danger={clients.churnedInPeriod > 0} />
+        <div className="max-lg:col-span-2">
+          <MetricCard label="Churned (period)" value={clients.churnedInPeriod} icon={Users} danger={clients.churnedInPeriod > 0} />
+        </div>
       </motion.div>
 
       {/* REVENUE & SALES */}
@@ -589,7 +592,7 @@ function ExecutiveTab({ data, periodLabel }: { data: any; periodLabel: string })
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={revenue.lostReasons.map((r: any) => ({ name: titleCase(r.reason), count: r.count }))} layout="vertical" margin={{ left: 10, right: 12 }}>
                     <XAxis type="number" hide allowDecimals={false} />
-                    <YAxis type="category" dataKey="name" width={120} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#6B7280' }} />
+                    <YAxis type="category" dataKey="name" width={120} axisLine={false} tickLine={false} tick={axisTick} />
                     <RTooltip cursor={{ fill: '#FAFAFA' }} />
                     <Bar dataKey="count" radius={[0, 4, 4, 0]} fill="#dc2626" />
                   </BarChart>
@@ -615,9 +618,9 @@ function ExecutiveTab({ data, periodLabel }: { data: any; periodLabel: string })
                       <stop offset="100%" stopColor="#111827" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} interval="preserveStartEnd" minTickGap={24} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} allowDecimals={false} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={axisTick} interval="preserveStartEnd" minTickGap={24} />
+                  <YAxis axisLine={false} tickLine={false} tick={axisTick} allowDecimals={false} />
                   <RTooltip cursor={{ stroke: '#E5E7EB' }} />
                   <Area type="monotone" dataKey="tasks" name="Completed" stroke="#111827" strokeWidth={2} fill="url(#execVel)" />
                 </AreaChart>
@@ -660,9 +663,9 @@ function ExecutiveTab({ data, periodLabel }: { data: any; periodLabel: string })
             <div className="h-65">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={team.members.slice(0, 10).map((m: any) => ({ name: (m.name || '').split(' ')[0], capacity: m.capacity }))} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} domain={[0, 100]} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={axisTick} />
+                  <YAxis axisLine={false} tickLine={false} tick={axisTick} domain={[0, 100]} />
                   <RTooltip cursor={{ fill: '#FAFAFA' }} />
                   <Bar dataKey="capacity" name="Utilization %" radius={[2, 2, 0, 0]}>
                     {team.members.slice(0, 10).map((m: any, i: number) => (<Cell key={i} fill={m.capacity >= 90 ? '#6B7280' : '#111827'} />))}

@@ -66,7 +66,7 @@ export function SwipeableCard({
           className="flex items-center text-white"
           style={{ opacity: leftIconOpacity, scale: leftIconScale }}
         >
-          <Check className="w-6 h-6" />
+          <Check className="h-6 w-6" />
         </motion.div>
 
         {/* Right Icon (Swiping Left) */}
@@ -74,7 +74,7 @@ export function SwipeableCard({
           className="flex items-center text-white"
           style={{ opacity: rightIconOpacity, scale: rightIconScale }}
         >
-          <Trash2 className="w-6 h-6" />
+          <Trash2 className="h-6 w-6" />
         </motion.div>
       </motion.div>
 

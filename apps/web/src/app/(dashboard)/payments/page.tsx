@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { DollarSign, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ErrorPanel } from '@/components/ui/error-panel';
+import { Icon } from '@/components/ui/icon';
 
 export default function PaymentsPage() {
   const [data, setData] = useState<any[]>([]);
@@ -88,7 +89,7 @@ export default function PaymentsPage() {
                 data.map((p: any) => (
                   <tr key={p.id} className="hover:bg-[#F9FAFB] transition-colors">
                     <td className="px-6 py-4 font-medium text-primary flex items-center gap-2">
-                      <DollarSign className="h-4 w-4 text-emerald-500" />
+                      <Icon as={DollarSign} size="md" className="text-emerald-500" />
                       {p.id.slice(-6).toUpperCase()}
                     </td>
                     <td className="px-6 py-4 text-secondary">{p.client?.company || p.client?.name}</td>

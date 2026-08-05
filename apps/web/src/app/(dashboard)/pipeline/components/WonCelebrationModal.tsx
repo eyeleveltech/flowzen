@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { Trophy, FolderPlus, X } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
+import { Icon } from '@/components/ui/icon';
 
 interface WonCelebrationModalProps {
   lead: any;
@@ -48,7 +49,7 @@ export function WonCelebrationModal({ lead, onClose }: WonCelebrationModalProps)
         className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-white rounded-2xl shadow-2xl border border-border p-6 text-center"
       >
         <button onClick={onClose} className="absolute top-4 right-4 p-2 rounded-xl hover:bg-gray-100 transition-colors">
-          <X className="h-4 w-4 text-secondary" />
+          <Icon as={X} size="md" className="text-secondary" />
         </button>
 
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50">
@@ -68,7 +69,7 @@ export function WonCelebrationModal({ lead, onClose }: WonCelebrationModalProps)
             onClick={handleCreateProject}
             className="flex items-center justify-center gap-2 w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-colors"
           >
-            <FolderPlus className="h-4 w-4" /> Create Project
+            <Icon as={FolderPlus} size="md" /> Create Project
           </button>
           <button
             onClick={onClose}

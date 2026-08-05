@@ -7,6 +7,7 @@ import { formatCurrency, formatShortDate } from '@/lib/utils';
 import { ChevronDown, ChevronsLeft, ChevronsRight, Clock } from 'lucide-react';
 import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
+import { Icon } from '@/components/ui/icon';
 
 const PROJECT_STAGES = [
   'PLANNING', 'IN_PROGRESS', 'REVIEW', 'ON_HOLD', 'CANCELLED', 'COMPLETED',
@@ -113,14 +114,14 @@ export function ProjectBoardView({ projects, onUpdateProject, userRole }: { proj
                   style={{ borderTop: `4px solid ${group.color}` }}
                 >
                   <button type="button" className="p-1 rounded-lg transition-colors text-secondary hover:text-primary">
-                    <ChevronsRight className="w-4 h-4" />
+                    <Icon as={ChevronsRight} size="md" />
                   </button>
                   <div className="flex flex-col items-center justify-center flex-1">
                     <span className="rotate-90 origin-center whitespace-nowrap text-xs font-bold uppercase tracking-wider select-none text-secondary">
                       {group.title}
                     </span>
                   </div>
-                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm" style={{ backgroundColor: group.color }}>
+                  <div className="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm" style={{ backgroundColor: group.color }}>
                     {columnProjects.length}
                   </div>
                 </div>
@@ -137,7 +138,7 @@ export function ProjectBoardView({ projects, onUpdateProject, userRole }: { proj
                       onClick={() => toggleCollapse(group.id)}
                       className="p-0.5 rounded text-secondary hover:text-primary transition-colors"
                     >
-                      <ChevronsLeft className="w-4 h-4" />
+                      <Icon as={ChevronsLeft} size="md" />
                     </button>
                     <h3 className="text-sm font-semibold text-primary">{group.title}</h3>
                   </div>
@@ -185,7 +186,7 @@ export function ProjectBoardView({ projects, onUpdateProject, userRole }: { proj
 
                                 {project.endDate && (
                                   <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3">
-                                    <Clock className="w-3.5 h-3.5" />
+                                    <Icon as={Clock} size="sm" />
                                     <span>Due {formatShortDate(project.endDate)}</span>
                                   </div>
                                 )}
@@ -194,9 +195,9 @@ export function ProjectBoardView({ projects, onUpdateProject, userRole }: { proj
                                   {project.owner && (
                                     <div className="flex items-center gap-2">
                                       {project.owner.avatar ? (
-                                        <img src={project.owner.avatar} alt="" className="w-6 h-6 rounded-full" />
+                                        <img src={project.owner.avatar} alt="" className="h-6 w-6 rounded-full" />
                                       ) : (
-                                        <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">
+                                        <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">
                                           {project.owner.name.charAt(0)}
                                         </div>
                                       )}
@@ -214,7 +215,7 @@ export function ProjectBoardView({ projects, onUpdateProject, userRole }: { proj
                                     }}
                                     className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-secondary bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 hover:text-primary transition-colors"
                                   >
-                                    Stage <ChevronDown className="w-3 h-3" />
+                                    Stage <ChevronDown className="h-3 w-3" />
                                   </button>
                                 </div>
                               </div>
@@ -262,7 +263,7 @@ export function ProjectBoardView({ projects, onUpdateProject, userRole }: { proj
                   }`}
                 >
                   <span className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: groupInfo?.color }} />
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: groupInfo?.color }} />
                     {stage.replace('_', ' ')}
                   </span>
                 </button>

@@ -6,6 +6,7 @@ import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '@/stores';
+import { Icon } from '@/components/ui/icon';
 
 export function WorkflowsTab({ workflows, fetchWorkflows, users }: { workflows: any[], fetchWorkflows: () => void, users: any[] }) {
   const { user } = useAuthStore();
@@ -111,7 +112,7 @@ export function WorkflowsTab({ workflows, fetchWorkflows, users }: { workflows: 
           onClick={() => openModal()}
           className="bg-primary text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-black transition-colors flex items-center justify-center gap-2 shrink-0 self-start sm:self-auto"
         >
-          <Plus className="h-4 w-4" /> Add Rule
+          <Icon as={Plus} size="md" /> Add Rule
         </button>
       </div>
 
@@ -133,7 +134,7 @@ export function WorkflowsTab({ workflows, fetchWorkflows, users }: { workflows: 
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-3">
                       <div className="h-8 w-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
-                        <Zap className="h-4 w-4" />
+                        <Icon as={Zap} size="md" />
                       </div>
                       <span className="font-semibold text-primary">{w.name}</span>
                     </div>
@@ -152,13 +153,13 @@ export function WorkflowsTab({ workflows, fetchWorkflows, users }: { workflows: 
                     <div className="flex items-center justify-end gap-4">
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" className="sr-only peer" checked={w.isActive} onChange={() => handleToggleActive(w)} />
-                        <div className="w-9 h-5 bg-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-[#D1D5DB] after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                        <div className="h-5 w-9 bg-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-[#D1D5DB] after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
                       </label>
                       <button onClick={() => openModal(w)} className="p-1.5 text-secondary hover:text-primary hover:bg-[#F3F4F6] rounded-md transition-colors">
-                        <Edit2 className="h-4 w-4" />
+                        <Icon as={Edit2} size="md" />
                       </button>
                       <button onClick={() => handleDelete(w.id)} className="p-1.5 text-secondary hover:text-red-600 hover:bg-red-50 rounded-md transition-colors">
-                        <Trash2 className="h-4 w-4" />
+                        <Icon as={Trash2} size="md" />
                       </button>
                     </div>
                   </td>
@@ -182,13 +183,13 @@ export function WorkflowsTab({ workflows, fetchWorkflows, users }: { workflows: 
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-2xl shadow-2xl shadow-black/10 w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
               <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-border bg-surface shrink-0">
                 <h3 className="text-base font-semibold text-primary">{editingWorkflow ? 'Edit Workflow' : 'Create Workflow Rule'}</h3>
-                <button onClick={() => setShowModal(false)} className="text-secondary hover:text-primary"><X className="h-5 w-5" /></button>
+                <button onClick={() => setShowModal(false)} className="text-secondary hover:text-primary"><Icon as={X} size="lg" /></button>
               </div>
               <div className="p-4 sm:p-6 overflow-y-auto">
                 <form id="workflow-form" onSubmit={handleSave} className="space-y-5">
                   <div className="space-y-1.5">
                     <label htmlFor="wf-name" className="text-xs font-medium text-secondary uppercase tracking-wide">Rule Name</label>
-                    <input id="wf-name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Notify Manager on Review" className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" />
+                    <input id="wf-name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Notify Manager on Review" className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none transition-colors duration-150 motion-reduce:transition-none" />
                   </div>
                   
                   <div className="space-y-1.5 z-40 relative">

@@ -1,4 +1,5 @@
 import { AlertCircle, RefreshCw } from 'lucide-react';
+import { Icon } from '@/components/ui/icon';
 
 export function ErrorPanel({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
@@ -10,7 +11,7 @@ export function ErrorPanel({ message, onRetry }: { message: string; onRetry?: ()
       <p className="text-xs text-secondary mb-5 max-w-xs">{message}</p>
       {onRetry && (
         <button onClick={onRetry} className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2 text-sm font-medium text-primary hover:bg-[#F3F4F6] transition-all">
-          <RefreshCw className="h-3.5 w-3.5" /> Try Again
+          <Icon as={RefreshCw} size="sm" /> Try Again
         </button>
       )}
     </div>

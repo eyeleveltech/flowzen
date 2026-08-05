@@ -8,6 +8,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { TableSkeleton } from '@/components/ui/skeleton-loaders';
 
 import { ErrorPanel } from '@/components/ui/error-panel';
+import { Icon } from '@/components/ui/icon';
 
 export default function SubscriptionsPage() {
   const { data, isLoading, isError, error, refetch } = useQuery({
@@ -65,7 +66,7 @@ export default function SubscriptionsPage() {
                 <tr key={s.id} className="hover:bg-surface transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <RefreshCw className="h-4 w-4 text-secondary shrink-0" />
+                      <Icon as={RefreshCw} size="md" className="text-secondary shrink-0" />
                       <div>
                         <span className="text-sm font-medium text-primary block">{s.client?.company || s.client?.name || '-'}</span>
                       </div>

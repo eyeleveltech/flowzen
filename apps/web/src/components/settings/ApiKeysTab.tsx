@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { Key, Trash2, Copy, Check, Clock, AlertCircle } from 'lucide-react';
 import { formatRelativeDate } from '@/lib/utils';
+import { Icon } from '@/components/ui/icon';
 
 export function ApiKeysTab() {
   const [keys, setKeys] = useState<any[]>([]);
@@ -89,7 +90,7 @@ export function ApiKeysTab() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
-            className="flex-1 rounded-xl border border-border bg-white px-3.5 py-2 text-sm outline-none focus:border-primary"
+            className="flex-1 rounded-xl border border-border bg-white px-3.5 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1"
           />
           <button
             type="submit"
@@ -105,7 +106,7 @@ export function ApiKeysTab() {
       {newKey && (
         <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-5 max-w-xl space-y-3">
           <div className="flex items-start gap-2.5">
-            <AlertCircle className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+            <Icon as={AlertCircle} size="lg" className="text-emerald-600 shrink-0 mt-0.5" />
             <div>
               <h5 className="text-xs font-bold text-emerald-800">Copy your API Key</h5>
               <p className="text-[11px] text-emerald-700 mt-0.5">
@@ -121,7 +122,7 @@ export function ApiKeysTab() {
               className="p-2 hover:bg-emerald-50 rounded-lg text-emerald-600 transition-colors shrink-0"
               title="Copy to Clipboard"
             >
-              {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+              {copied ? <Icon as={Check} size="md" className="text-emerald-600" /> : <Icon as={Copy} size="md" />}
             </button>
           </div>
         </div>
@@ -140,7 +141,7 @@ export function ApiKeysTab() {
               <div key={k.id} className="flex items-center justify-between p-4 hover:bg-surface transition-colors">
                 <div className="flex items-start gap-3 min-w-0 pr-4">
                   <div className="h-9 w-9 rounded-xl bg-gray-50 border border-border flex items-center justify-center text-secondary shrink-0">
-                    <Key className="w-4 h-4" />
+                    <Icon as={Key} size="md" />
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-primary truncate">{k.name}</p>
@@ -150,7 +151,7 @@ export function ApiKeysTab() {
                       <span>Created {formatRelativeDate(k.createdAt)}</span>
                       <span>•</span>
                       <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
+                        <Clock className="h-3 w-3" />
                         {k.lastUsedAt ? `Last used ${formatRelativeDate(k.lastUsedAt)}` : 'Never used'}
                       </span>
                     </div>
@@ -162,7 +163,7 @@ export function ApiKeysTab() {
                   className="p-2 text-secondary hover:text-red-600 border border-border hover:border-red-100 rounded-xl hover:bg-red-50 transition-colors shrink-0"
                   title="Revoke Key"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Icon as={Trash2} size="md" />
                 </button>
               </div>
             ))}

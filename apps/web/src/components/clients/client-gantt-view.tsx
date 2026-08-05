@@ -51,7 +51,7 @@ export function ClientGanttView({ clients, loading }: { clients: any[]; loading:
   if (!clients.length) {
     return (
       <div className="rounded-2xl border border-border bg-white p-16 text-center">
-        <BarChart2 className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+        <BarChart2 className="h-10 w-10 text-gray-200 mx-auto mb-3" />
         <p className="text-sm text-secondary">No clients to display in the Gantt view.</p>
       </div>
     );
@@ -151,7 +151,7 @@ export function ClientGanttView({ clients, loading }: { clients: any[]; loading:
                     onClick={() => router.push(`/clients/${client.id}`)}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
+                      <div className={`h-2 w-2 rounded-full shrink-0 ${cfg.dot}`} />
                       <div className={`h-7 w-7 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(getClientDisplayName(client))}`}>
                         {getInitials(getClientDisplayName(client))}
                       </div>
@@ -175,7 +175,7 @@ export function ClientGanttView({ clients, loading }: { clients: any[]; loading:
                         className={`absolute h-8 z-10 rounded-full border flex items-center px-3 gap-2 cursor-pointer transition-all group-hover:brightness-95 hover:shadow-md ${cfg.bar}`}
                         onClick={() => router.push(`/clients/${client.id}`)}
                       >
-                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dot}`} />
+                        <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${cfg.dot}`} />
                         <span className={`text-xs font-semibold truncate ${cfg.text}`}>
                           {getClientDisplayName(client)}
                         </span>

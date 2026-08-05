@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
+import { Icon } from '@/components/ui/icon';
 
 export const CONTACT_ROLES = [
   { v: 'DECISION_MAKER', label: 'Decision Maker', desc: 'Final sign-off authority — the person who says yes or no', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -14,7 +15,7 @@ export const CONTACT_ROLES = [
   { v: 'CC_ONLY', label: 'CC Only', desc: 'Kept in the loop but not in the conversation', color: 'bg-gray-100 text-gray-600 border-gray-200' },
 ] as const;
 
-const inputCls = 'w-full rounded-xl border border-border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:bg-white transition-all';
+const inputCls = 'w-full rounded-xl border border-border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 focus:bg-white transition-colors duration-150 motion-reduce:transition-none';
 const labelCls = 'block text-[11px] font-semibold text-secondary uppercase tracking-wider mb-1.5';
 
 export function ContactModal({ leadId, contact, onClose, onSuccess }: { leadId: string; contact?: any; onClose: () => void; onSuccess: () => void }) {
@@ -55,7 +56,7 @@ export function ContactModal({ leadId, contact, onClose, onSuccess }: { leadId: 
       <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-101 w-full max-w-md bg-white border-l border-border shadow-2xl overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-white z-10">
           <h2 className="text-lg font-semibold text-primary">{isEdit ? 'Edit Contact' : 'Add Contact'}</h2>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100"><X className="h-4 w-4 text-secondary" /></button>
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100"><Icon as={X} size="md" className="text-secondary" /></button>
         </div>
 
         <div className="p-6 space-y-4">

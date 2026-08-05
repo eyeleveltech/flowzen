@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useUIStore, useAuthStore } from '@/stores';
 import { api } from '@/lib/api';
 import { useNotifications } from '@/hooks/useQueries';
@@ -58,6 +58,7 @@ const notificationIcons: Record<string, typeof CheckSquare> = {
 };
 
 export function TopNav({ isMobile }: { isMobile?: boolean }) {
+  const shouldReduceMotion = useReducedMotion();
   const router = useRouter();
   const { setCommandPaletteOpen, setMobileSidebarOpen } = useUIStore();
   const { user, logout } = useAuthStore();
@@ -143,7 +144,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
         {/* Search */}
         <button
           onClick={() => setCommandPaletteOpen(true)}
-          className="flex items-center gap-2.5 rounded-xl border border-border bg-surface px-3 sm:px-4 py-2 text-sm text-secondary hover:bg-white hover:border-[#D1D5DB] transition-all duration-150 w-auto sm:w-80"
+          className="flex items-center gap-2.5 rounded-xl border border-border bg-surface px-3 sm:px-4 py-2 text-sm text-secondary hover:bg-white hover:border-[#D1D5DB] transition-colors duration-150 motion-reduce:transition-none w-auto sm:w-80"
         >
           <Search className="h-4 w-4 shrink-0" />
           <span className="hidden sm:inline truncate">Search clients, projects, tasks, team...</span>
@@ -160,7 +161,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
         <div className="relative">
           <button
             onClick={() => { setShowQuickCreate(!showQuickCreate); setShowNotifications(false); setShowUserMenu(false); }}
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-border text-secondary hover:bg-[#F9FAFB] hover:text-primary transition-all duration-150"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-border text-secondary hover:bg-[#F9FAFB] hover:text-primary transition-colors duration-150 motion-reduce:transition-none"
           >
             <Plus className="h-4 w-4" />
           </button>
@@ -189,7 +190,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                   initial={{ opacity: 0, y: 8, scale: 0.96 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.96 }}
-                  transition={{ duration: 0.15 }}
+                  transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.15 }}
                   className="absolute right-0 mt-2 w-48 rounded-2xl border border-border bg-white p-1.5 shadow-lg shadow-black/5"
                 >
                   {quickCreateItems.map((item) => (
@@ -212,7 +213,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
         <div className="relative">
           <button
             onClick={() => { setShowNotifications(!showNotifications); setShowQuickCreate(false); setShowUserMenu(false); }}
-            className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-border text-secondary hover:bg-[#F9FAFB] hover:text-primary transition-all duration-150"
+            className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-border text-secondary hover:bg-[#F9FAFB] hover:text-primary transition-colors duration-150 motion-reduce:transition-none"
           >
             <Bell className="h-4 w-4" />
             {unreadCount > 0 && (
@@ -276,7 +277,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                   initial={{ opacity: 0, y: 8, scale: 0.96 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.96 }}
-                  transition={{ duration: 0.15 }}
+                  transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.15 }}
                   className="absolute right-0 mt-2 w-96 rounded-2xl border border-border bg-white shadow-lg shadow-black/5"
                 >
                   <div className="flex items-center justify-between px-4 py-3 border-b border-[#F3F4F6]">
@@ -333,7 +334,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
         <div className="relative ml-1">
           <button
             onClick={() => { setShowUserMenu(!showUserMenu); setShowNotifications(false); setShowQuickCreate(false); }}
-            className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-[#F9FAFB] transition-all duration-150"
+            className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none"
           >
             <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${user ? getAvatarColor(user.name) : 'bg-primary text-white'}`}>
               {user ? getInitials(user.name) : '??'}
@@ -391,7 +392,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                   initial={{ opacity: 0, y: 8, scale: 0.96 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.96 }}
-                  transition={{ duration: 0.15 }}
+                  transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.15 }}
                   className="absolute right-0 mt-2 w-56 rounded-2xl border border-border bg-white p-1.5 shadow-lg shadow-black/5"
                 >
                   <div className="px-3 py-2 mb-1">

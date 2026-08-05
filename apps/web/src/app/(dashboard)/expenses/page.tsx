@@ -8,6 +8,7 @@ import { FileText, Plus } from 'lucide-react';
 import { ExpenseFormModal } from './components/ExpenseFormModal';
 
 import { ErrorPanel } from '@/components/ui/error-panel';
+import { Icon } from '@/components/ui/icon';
 
 export default function ExpensesPage() {
   const [showModal, setShowModal] = useState(false);
@@ -33,7 +34,7 @@ export default function ExpensesPage() {
           onClick={() => setShowModal(true)}
           className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-[#1F2937] transition-colors"
         >
-          <Plus className="h-4 w-4" />
+          <Icon as={Plus} size="md" />
           Log Expense
         </button>
       </div>
@@ -69,7 +70,7 @@ export default function ExpensesPage() {
                 <tr key={e.id} className="hover:bg-surface transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-secondary shrink-0" />
+                      <Icon as={FileText} size="md" className="text-secondary shrink-0" />
                       <div>
                         <span className="text-sm font-medium text-primary block">{e.vendor}</span>
                         {e.description && <span className="text-[11px] text-secondary">{e.description}</span>}

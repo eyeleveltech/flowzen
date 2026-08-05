@@ -20,6 +20,7 @@
   --radius-input: 12px;
   --z-100: 100;
   --z-101: 101;
+  --ease-out: cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 @layer base {

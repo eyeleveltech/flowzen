@@ -14,6 +14,7 @@ import { TagsInput } from '@/components/ui/tags-input';
 import { useMembers, useClients } from '@/hooks/useQueries';
 import { getInitials, getAvatarColor, getClientDisplayName, getProjectStatusFromClient } from '@/lib/utils';
 import { projectSchema, type ProjectFormValues } from '@/lib/validations';
+import { Icon } from '@/components/ui/icon';
 
 interface CreateProjectModalProps {
   clientId: string;
@@ -84,7 +85,7 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
     }
   });
 
-  const inputClass = 'w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all';
+  const inputClass = 'w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none';
 
   return (
     <>
@@ -98,7 +99,7 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] sticky top-0 bg-white z-10">
           <h2 className="text-lg font-semibold text-primary">New Project</h2>
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
-            <X className="h-4 w-4 text-secondary" />
+            <Icon as={X} size="md" className="text-secondary" />
           </button>
         </div>
 
@@ -110,7 +111,7 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
             <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Basic Info</h3>
             <div>
               <label htmlFor="cp-name" className="block text-sm font-medium text-[#374151] mb-1.5">Project Name *</label>
-              <input id="cp-name" value={formValues.name} onChange={(e) => setValue('name', e.target.value, { shouldValidate: true })} aria-invalid={!!errors.name} aria-describedby={errors.name ? 'cp-name-error' : undefined} className={`w-full rounded-xl border ${errors.name ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus:border-primary transition-all`} />
+              <input id="cp-name" value={formValues.name} onChange={(e) => setValue('name', e.target.value, { shouldValidate: true })} aria-invalid={!!errors.name} aria-describedby={errors.name ? 'cp-name-error' : undefined} className={`w-full rounded-xl border ${errors.name ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none`} />
               {errors.name && <p id="cp-name-error" aria-live="polite" className="mt-1 text-xs text-red-500">{errors.name.message}</p>}
             </div>
             <div>
@@ -220,8 +221,8 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
 
 
           <div className="pt-4 flex gap-3">
-            <button type="button" onClick={onClose} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-all">Cancel</button>
-            <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all">{submitting ? 'Creating...' : 'Create Project'}</button>
+            <button type="button" onClick={onClose} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none">Cancel</button>
+            <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none">{submitting ? 'Creating...' : 'Create Project'}</button>
           </div>
         </form>
       </motion.div>

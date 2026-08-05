@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Search } from 'lucide-react';
 import { useMediaQuery } from '@/hooks/use-media-query';
+import { useIsMobile } from '@/hooks/use-breakpoint';
 import { Drawer } from '@/components/ui/drawer';
 import { cn } from '@/lib/utils';
 
@@ -35,7 +36,7 @@ export interface SelectProps {
 export function Select({ id, value, onChange, options, placeholder = 'Select...', className = '', disabled = false, required = false, rounded = 'rounded-xl', ariaLabel, buttonClassName, leadingIcon }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const isMobile = useMediaQuery('(max-width: 768px)');
+  const isMobile = useIsMobile();
 
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -49,6 +50,11 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
     if (isOpen && containerRef.current) {
       setRect(containerRef.current.getBoundingClientRect());
     }
+  }, [isOpen]);
+
+  // Reset searchQuery on close
+  useEffect(() => {
+    if (!isOpen) setSearchQuery('');
   }, [isOpen]);
 
   // Close on scroll to prevent detached portaled dropdowns
@@ -152,7 +158,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
             setIsOpen(false);
           }
         }}
-        className={cn(`flex w-full items-center justify-between ${rounded} border border-border bg-white px-4 py-2.5 text-sm text-[#374151] outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50 transition-all text-left`, buttonClassName)}
+        className={cn(`flex w-full items-center justify-between ${rounded} border border-border bg-white px-4 py-2.5 text-sm text-[#374151] outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none text-left`, buttonClassName)}
       >
         <span className="flex items-center gap-2 min-w-0">
           {leadingIcon && <span className="shrink-0 flex items-center">{leadingIcon}</span>}
@@ -199,6 +205,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                 key={option.value}
                 onClick={() => {
                   onChange(option.value);
+                  setSearchQuery('');
                   setIsOpen(false);
                 }}
                 className={`w-full text-left px-4 py-2 rounded-xl text-sm transition-colors ${value === option.value
@@ -266,6 +273,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                               e.preventDefault();
                               if (filteredOptions[0]) {
                                 onChange(filteredOptions[0].value);
+                                setSearchQuery('');
                                 setIsOpen(false);
                                 containerRef.current?.querySelector('button')?.focus();
                               }
@@ -291,6 +299,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                       tabIndex={isOpen ? 0 : -1}
                       onClick={() => {
                         onChange(option.value);
+                        setSearchQuery('');
                         setIsOpen(false);
                         containerRef.current?.querySelector('button')?.focus();
                       }}
@@ -298,6 +307,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();
                           onChange(option.value);
+                          setSearchQuery('');
                           setIsOpen(false);
                           containerRef.current?.querySelector('button')?.focus();
                         }

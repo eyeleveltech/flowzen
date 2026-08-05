@@ -8,6 +8,7 @@ import { getInitials, getAvatarColor } from '@/lib/utils';
 import toast from 'react-hot-toast';
 import { ContactModal, CONTACT_ROLES } from './ContactModal';
 import { DossierView } from './DossierView';
+import { Icon } from '@/components/ui/icon';
 
 const roleMeta = (role: string) => CONTACT_ROLES.find((r) => r.v === role);
 
@@ -90,10 +91,10 @@ export function ContactsTab({ leadId, lead, onChanged }: { leadId: string; lead:
       <div className="bg-white rounded-2xl border border-border p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-y-3 gap-x-4 mb-4">
           <div>
-            <h2 className="text-base font-semibold text-primary flex items-center gap-2"><User className="w-4 h-4 text-secondary" /> Contacts <span className="text-secondary font-normal">({contacts.length})</span></h2>
+            <h2 className="text-base font-semibold text-primary flex items-center gap-2"><Icon as={User} size="md" className="text-secondary" /> Contacts <span className="text-secondary font-normal">({contacts.length})</span></h2>
             <p className="text-xs text-secondary mt-0.5">Everyone at {lead.companyName || 'this company'}. The primary contact is the one used on quotations and shown on the board.</p>
           </div>
-          <button onClick={() => setModal({ open: true })} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-gray-800 transition-colors"><Plus className="w-4 h-4" /> Add Contact</button>
+          <button onClick={() => setModal({ open: true })} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-gray-800 transition-colors"><Icon as={Plus} size="md" /> Add Contact</button>
         </div>
 
         {loading ? (
@@ -115,28 +116,28 @@ export function ContactsTab({ leadId, lead, onChanged }: { leadId: string; lead:
                       {rm && <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${rm.color}`} title={rm.desc}>{rm.label}</span>}
                     </div>
                     <div className="flex items-center gap-x-4 gap-y-1 mt-1 text-xs text-secondary flex-wrap">
-                      {c.email && <a href={`mailto:${c.email}`} className="flex items-center gap-1 hover:text-primary"><Mail className="w-3 h-3" /> {c.email}</a>}
-                      {c.phone && <a href={`tel:${c.phone}`} className="flex items-center gap-1 hover:text-primary"><Phone className="w-3 h-3" /> {c.phone}</a>}
-                      {c.linkedinUrl && <a href={c.linkedinUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-primary"><Link2 className="w-3 h-3" /> LinkedIn</a>}
+                      {c.email && <a href={`mailto:${c.email}`} className="flex items-center gap-1 hover:text-primary"><Mail className="h-3 w-3" /> {c.email}</a>}
+                      {c.phone && <a href={`tel:${c.phone}`} className="flex items-center gap-1 hover:text-primary"><Phone className="h-3 w-3" /> {c.phone}</a>}
+                      {c.linkedinUrl && <a href={c.linkedinUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-primary"><Link2 className="h-3 w-3" /> LinkedIn</a>}
                     </div>
                     {c.notes && <p className="mt-1.5 text-xs text-[#4B5563]">{c.notes}</p>}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     {!c.isPrimary && (
                       <button onClick={() => makePrimary(c)} disabled={promoting === c.id} className="flex items-center gap-1 text-xs font-medium text-secondary border border-border rounded-lg px-2 py-1.5 hover:text-primary disabled:opacity-50" title="Make this the primary contact">
-                        {promoting === c.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Star className="w-3.5 h-3.5" />}
+                        {promoting === c.id ? <Icon as={Loader2} size="sm" className="animate-spin" /> : <Icon as={Star} size="sm" />}
                       </button>
                     )}
                     {c.dossierStatus === 'complete' && (
-                      <button onClick={() => setDossier(c)} className="flex items-center gap-1 text-xs font-medium text-primary border border-border rounded-lg px-2 py-1.5 hover:bg-gray-50" title="View dossier"><FileText className="w-3.5 h-3.5" /> Dossier</button>
+                      <button onClick={() => setDossier(c)} className="flex items-center gap-1 text-xs font-medium text-primary border border-border rounded-lg px-2 py-1.5 hover:bg-gray-50" title="View dossier"><Icon as={FileText} size="sm" /> Dossier</button>
                     )}
                     {c.linkedinUrl && c.dossierStatus !== 'complete' && (
                       <button onClick={() => runIntelligence(c)} disabled={running === c.id} className="flex items-center gap-1 text-xs font-medium text-secondary border border-border rounded-lg px-2 py-1.5 hover:text-primary disabled:opacity-50" title="Run Intelligence">
-                        {running === c.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                        {running === c.id ? <Icon as={Loader2} size="sm" className="animate-spin" /> : <Icon as={Sparkles} size="sm" />}
                       </button>
                     )}
-                    <button onClick={() => setModal({ open: true, contact: c })} className="p-1.5 text-secondary hover:text-primary rounded-lg hover:bg-gray-50"><Pencil className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => remove(c)} className="p-1.5 text-secondary hover:text-red-500 rounded-lg hover:bg-gray-50"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => setModal({ open: true, contact: c })} className="p-1.5 text-secondary hover:text-primary rounded-lg hover:bg-gray-50"><Icon as={Pencil} size="sm" /></button>
+                    <button onClick={() => remove(c)} className="p-1.5 text-secondary hover:text-red-500 rounded-lg hover:bg-gray-50"><Icon as={Trash2} size="sm" /></button>
                   </div>
                 </div>
               );
@@ -158,8 +159,8 @@ export function ContactsTab({ leadId, lead, onChanged }: { leadId: string; lead:
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-100 bg-black/20 backdrop-blur-sm" onClick={() => setDossier(null)} />
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-101 w-full max-w-2xl bg-white border-l border-border shadow-2xl overflow-y-auto">
               <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-white z-10">
-                <h2 className="text-lg font-semibold text-primary flex items-center gap-2"><Sparkles className="w-5 h-5 text-secondary" /> {dossier.name} — Dossier</h2>
-                <button onClick={() => setDossier(null)} className="p-2 rounded-xl hover:bg-gray-100"><X className="h-4 w-4 text-secondary" /></button>
+                <h2 className="text-lg font-semibold text-primary flex items-center gap-2"><Icon as={Sparkles} size="lg" className="text-secondary" /> {dossier.name} — Dossier</h2>
+                <button onClick={() => setDossier(null)} className="p-2 rounded-xl hover:bg-gray-100"><Icon as={X} size="md" className="text-secondary" /></button>
               </div>
               <div className="p-6 pb-24 md:pb-6"><DossierView d={dossier.dossierJson} /></div>
             </motion.div>

@@ -2,9 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
-import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, SlidersHorizontal } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
+import { Drawer } from '@/components/ui/drawer';
+import { useIsMobile } from '@/hooks/use-breakpoint';
+import { ActiveFilterChip } from '@/components/ui/active-filter-chip';
 import { getClientDisplayName, getInitials } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
 import { useTeams } from '@/hooks/useQueries';
@@ -26,6 +29,7 @@ interface Project { id: string; name: string; }
 interface Client { id: string; name: string; }
 
 import { getPriorityDot } from '@/lib/priority';
+import { Icon } from '@/components/ui/icon';
 
 export default function CalendarPage() {
   const { user } = useAuthStore();
@@ -46,6 +50,8 @@ export default function CalendarPage() {
   const [clientIdFilter, setClientIdFilter] = useState<string[]>([]);
   const [departmentFilter, setDepartmentFilter] = useState<string[]>([]);
   const [hideDone, setHideDone] = useState(true);
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  const isMobile = useIsMobile();
 
   const year = date.getFullYear();
   const month = date.getMonth();
@@ -148,8 +154,19 @@ export default function CalendarPage() {
     );
   }
 
+  const isMyTasksOnly = assigneeFilter.length === 1 && assigneeFilter[0] === user?.id;
+  const isAssigneeOther = assigneeFilter.length > 0 && !isMyTasksOnly;
+
+  const activeCount = (isMyTasksOnly ? 1 : 0) +
+    (projectIdFilter.length > 0 ? 1 : 0) +
+    (clientIdFilter.length > 0 ? 1 : 0) +
+    (departmentFilter.length > 0 ? 1 : 0) +
+    (isAssigneeOther ? 1 : 0) +
+    (!hideDone ? 1 : 0);
+
   return (
-    <div>
+    <div className="h-full flex flex-col space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-semibold text-primary tracking-tight">Calendar</h1>
@@ -160,71 +177,175 @@ export default function CalendarPage() {
       {/* Redesigned Clean Calendar Toolbar */}
       <div className="bg-white border border-border rounded-2xl p-4 shadow-sm flex flex-col gap-4 w-full mb-6">
         {/* Row 1: Active Filter Pills */}
-        <div className="flex flex-wrap items-center gap-2 w-full">
-          <button
-            onClick={() => setAssigneeFilter(assigneeFilter.length === 1 && assigneeFilter[0] === user?.id ? [] : (user?.id ? [user.id] : []))}
-            className={assigneeFilter.length === 1 && assigneeFilter[0] === user?.id
-              ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold"
-              : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"
-            }
-          >
-            My Tasks
-          </button>
+        {isMobile ? (
+          <div className="flex flex-col gap-2.5 w-full">
+            <div className="flex items-center justify-between gap-2 w-full">
+              <button
+                type="button"
+                onClick={() => setFilterSheetOpen(true)}
+                className="flex items-center gap-1.5 h-9 rounded-xl border border-border bg-white hover:bg-gray-50 px-3 text-xs font-semibold text-secondary shrink-0 transition-colors"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                <span>Filters</span>
+                {activeCount > 0 && (
+                  <span className="ml-0.5 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-white">
+                    {activeCount}
+                  </span>
+                )}
+              </button>
 
-          <div className="shrink-0">
-            <MultiSelect
-              value={projectIdFilter}
-              onChange={setProjectIdFilter}
-              placeholder="Projects"
-              triggerClassName={projectIdFilter.length > 0 ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
-              options={projects.map(p => ({ label: p.name, value: p.id }))}
-            />
+              {/* Active Chips Row */}
+              {activeCount > 0 && (
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 ml-auto">
+                  {isMyTasksOnly && <ActiveFilterChip label="My Tasks" onRemove={() => setAssigneeFilter([])} />}
+                  {projectIdFilter.length > 0 && <ActiveFilterChip label={`Projects: ${projectIdFilter.length}`} onRemove={() => setProjectIdFilter([])} />}
+                  {clientIdFilter.length > 0 && <ActiveFilterChip label={`Clients: ${clientIdFilter.length}`} onRemove={() => setClientIdFilter([])} />}
+                  {departmentFilter.length > 0 && <ActiveFilterChip label={`Departments: ${departmentFilter.length}`} onRemove={() => setDepartmentFilter([])} />}
+                  {isAssigneeOther && <ActiveFilterChip label={`Assignees: ${assigneeFilter.length}`} onRemove={() => setAssigneeFilter([])} />}
+                  {!hideDone && <ActiveFilterChip label="Show Done" onRemove={() => setHideDone(true)} />}
+                </div>
+              )}
+            </div>
+
+            {/* Mobile Filter Drawer */}
+            <Drawer isOpen={filterSheetOpen} onClose={() => setFilterSheetOpen(false)} title="Filter Calendar">
+              <div className="p-4 space-y-4">
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setAssigneeFilter(assigneeFilter.length === 1 && assigneeFilter[0] === user?.id ? [] : (user?.id ? [user.id] : []))}
+                    className={assigneeFilter.length === 1 && assigneeFilter[0] === user?.id
+                      ? "w-full border border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold"
+                      : "w-full h-9 rounded-xl border border-border bg-white text-secondary px-3 text-xs font-semibold"
+                    }
+                  >
+                    My Tasks
+                  </button>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-secondary mb-1.5 block">Projects</label>
+                  <MultiSelect
+                    value={projectIdFilter}
+                    onChange={setProjectIdFilter}
+                    placeholder="Projects"
+                    triggerClassName="w-full h-9 rounded-xl border border-border bg-white px-3 text-xs"
+                    options={projects.map(p => ({ label: p.name, value: p.id }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-secondary mb-1.5 block">Clients / Owners</label>
+                  <MultiSelect
+                    value={clientIdFilter}
+                    onChange={setClientIdFilter}
+                    placeholder="Clients/Owners"
+                    triggerClassName="w-full h-9 rounded-xl border border-border bg-white px-3 text-xs"
+                    options={clients.map(c => ({ label: getClientDisplayName(c), value: c.id }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-secondary mb-1.5 block">Departments</label>
+                  <MultiSelect
+                    value={departmentFilter}
+                    onChange={setDepartmentFilter}
+                    placeholder="Departments"
+                    triggerClassName="w-full h-9 rounded-xl border border-border bg-white px-3 text-xs"
+                    options={teams.map((t: any) => ({ label: t.name, value: t.id }))}
+                  />
+                </div>
+                {!isStaff && (
+                  <div>
+                    <label className="text-xs font-medium text-secondary mb-1.5 block">Assignees</label>
+                    <MultiSelect
+                      value={assigneeFilter}
+                      onChange={setAssigneeFilter}
+                      placeholder="Assignees"
+                      triggerClassName="w-full h-9 rounded-xl border border-border bg-white px-3 text-xs"
+                      options={members.map(m => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
+                    />
+                  </div>
+                )}
+                <div className="flex items-center justify-between pt-2 border-t border-border">
+                  <span className="text-xs font-semibold text-secondary">Hide Done Tasks</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={hideDone}
+                    onClick={() => setHideDone(!hideDone)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors ${hideDone ? 'bg-primary border-primary' : 'bg-gray-200 border-gray-300'}`}
+                  >
+                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${hideDone ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
+              </div>
+            </Drawer>
           </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2 w-full">
+            <button
+              onClick={() => setAssigneeFilter(assigneeFilter.length === 1 && assigneeFilter[0] === user?.id ? [] : (user?.id ? [user.id] : []))}
+              className={assigneeFilter.length === 1 && assigneeFilter[0] === user?.id
+                ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold"
+                : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"
+              }
+            >
+              My Tasks
+            </button>
 
-          <div className="shrink-0">
-            <MultiSelect
-              value={clientIdFilter}
-              onChange={setClientIdFilter}
-              placeholder="Clients/Owners"
-              triggerClassName={clientIdFilter.length > 0 ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
-              options={clients.map(c => ({ label: getClientDisplayName(c), value: c.id }))}
-            />
-          </div>
-
-          <div className="shrink-0">
-            <MultiSelect
-              value={departmentFilter}
-              onChange={setDepartmentFilter}
-              placeholder="Departments"
-              triggerClassName={departmentFilter.length > 0 ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
-              options={teams.map((t: any) => ({ label: t.name, value: t.id }))}
-            />
-          </div>
-
-          {!isStaff && (
             <div className="shrink-0">
               <MultiSelect
-                value={assigneeFilter}
-                onChange={setAssigneeFilter}
-                placeholder="Assignees"
-                triggerClassName={assigneeFilter.length > 0 ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
-                options={members.map(m => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
+                value={projectIdFilter}
+                onChange={setProjectIdFilter}
+                placeholder="Projects"
+                triggerClassName={projectIdFilter.length > 0 ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
+                options={projects.map(p => ({ label: p.name, value: p.id }))}
               />
             </div>
-          )}
 
-          {/* Hide Done Tasks Checkbox */}
-          <button
-            type="button"
-            onClick={() => setHideDone(!hideDone)}
-            className="flex items-center gap-2 text-xs font-semibold text-secondary ml-auto cursor-pointer select-none focus:outline-none h-9 hover:text-primary transition-colors shrink-0"
-          >
-            <div className={`flex items-center justify-center w-4 h-4 rounded-sm border transition-colors ${hideDone ? 'bg-primary border-primary' : 'border-[#D1D5DB] bg-white'}`}>
-              {hideDone && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
+            <div className="shrink-0">
+              <MultiSelect
+                value={clientIdFilter}
+                onChange={setClientIdFilter}
+                placeholder="Clients/Owners"
+                triggerClassName={clientIdFilter.length > 0 ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
+                options={clients.map(c => ({ label: getClientDisplayName(c), value: c.id }))}
+              />
             </div>
-            Hide Done Tasks
-          </button>
-        </div>
+
+            <div className="shrink-0">
+              <MultiSelect
+                value={departmentFilter}
+                onChange={setDepartmentFilter}
+                placeholder="Departments"
+                triggerClassName={departmentFilter.length > 0 ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
+                options={teams.map((t: any) => ({ label: t.name, value: t.id }))}
+              />
+            </div>
+
+            {!isStaff && (
+              <div className="shrink-0">
+                <MultiSelect
+                  value={assigneeFilter}
+                  onChange={setAssigneeFilter}
+                  placeholder="Assignees"
+                  triggerClassName={assigneeFilter.length > 0 ? "border-primary bg-primary/5 text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-all"}
+                  options={members.map(m => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
+                />
+              </div>
+            )}
+
+            {/* Hide Done Tasks Checkbox */}
+            <button
+              type="button"
+              onClick={() => setHideDone(!hideDone)}
+              className="flex items-center gap-2 text-xs font-semibold text-secondary ml-auto cursor-pointer select-none focus:outline-none h-9 hover:text-primary transition-colors shrink-0"
+            >
+              <div className={`flex items-center justify-center h-4 w-4 rounded-sm border transition-colors ${hideDone ? 'bg-primary border-primary' : 'border-[#D1D5DB] bg-white'}`}>
+                {hideDone && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
+              </div>
+              Hide Done Tasks
+            </button>
+          </div>
+        )}
 
         {/* Separator line */}
         <div className="h-px bg-border/60 w-full" />
@@ -237,7 +358,7 @@ export default function CalendarPage() {
           {/* Center Side: Navigation triggers inside calendar view */}
           <div className="flex items-center justify-center gap-2 flex-1 sm:flex-none">
             <button onClick={prevPeriod} className="p-2 rounded-xl hover:bg-gray-50 border border-border bg-white transition-colors h-9 w-9 flex items-center justify-center shrink-0">
-              <ChevronLeft className="h-4 w-4 text-secondary" />
+              <Icon as={ChevronLeft} size="md" className="text-secondary" />
             </button>
             <div className="text-sm font-semibold text-primary px-2 min-w-36 text-center select-none">
               {view === 'month'
@@ -246,7 +367,7 @@ export default function CalendarPage() {
               }
             </div>
             <button onClick={nextPeriod} className="p-2 rounded-xl hover:bg-gray-50 border border-border bg-white transition-colors h-9 w-9 flex items-center justify-center shrink-0">
-              <ChevronRight className="h-4 w-4 text-secondary" />
+              <Icon as={ChevronRight} size="md" className="text-secondary" />
             </button>
           </div>
 

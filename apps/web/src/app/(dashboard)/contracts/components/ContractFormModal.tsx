@@ -6,6 +6,7 @@ import { X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useClients } from '@/hooks/useQueries';
 import toast from 'react-hot-toast';
+import { Icon } from '@/components/ui/icon';
 
 interface Props {
   onClose: () => void;
@@ -61,7 +62,7 @@ export function ContractFormModal({ onClose, onSaved }: Props) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
           <h2 className="text-lg font-semibold text-primary">New Contract</h2>
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-[#F3F4F6]">
-            <X className="h-4 w-4 text-secondary" />
+            <Icon as={X} size="md" className="text-secondary" />
           </button>
         </div>
         
@@ -72,7 +73,7 @@ export function ContractFormModal({ onClose, onSaved }: Props) {
               required
               value={formData.clientId}
               onChange={(e) => setFormData(f => ({ ...f, clientId: e.target.value }))}
-              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-primary transition-all"
+              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
             >
               <option value="">Select Client</option>
               {clients.map(c => (
@@ -88,7 +89,7 @@ export function ContractFormModal({ onClose, onSaved }: Props) {
               type="text"
               value={formData.title}
               onChange={(e) => setFormData(f => ({ ...f, title: e.target.value }))}
-              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-primary transition-all"
+              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
               placeholder="e.g. Social Media Retainer Q3"
             />
           </div>
@@ -103,7 +104,7 @@ export function ContractFormModal({ onClose, onSaved }: Props) {
                 step="0.01"
                 value={formData.value}
                 onChange={(e) => setFormData(f => ({ ...f, value: e.target.value }))}
-                className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-primary transition-all"
+                className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
               />
             </div>
             <div>
@@ -112,7 +113,7 @@ export function ContractFormModal({ onClose, onSaved }: Props) {
                 required
                 value={formData.billingFrequency}
                 onChange={(e) => setFormData(f => ({ ...f, billingFrequency: e.target.value }))}
-                className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-primary transition-all"
+                className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
               >
                 <option value="ONCE">Once</option>
                 <option value="WEEKLY">Weekly</option>
@@ -131,7 +132,7 @@ export function ContractFormModal({ onClose, onSaved }: Props) {
                 type="date"
                 value={formData.startDate}
                 onChange={(e) => setFormData(f => ({ ...f, startDate: e.target.value }))}
-                className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-primary transition-all"
+                className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
               />
             </div>
             <div>
@@ -140,7 +141,7 @@ export function ContractFormModal({ onClose, onSaved }: Props) {
                 type="date"
                 value={formData.endDate}
                 onChange={(e) => setFormData(f => ({ ...f, endDate: e.target.value }))}
-                className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-primary transition-all"
+                className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
               />
             </div>
           </div>
@@ -151,7 +152,7 @@ export function ContractFormModal({ onClose, onSaved }: Props) {
               rows={3}
               value={formData.notes}
               onChange={(e) => setFormData(f => ({ ...f, notes: e.target.value }))}
-              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-primary transition-all resize-none"
+              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none resize-none"
               placeholder="Internal notes..."
             />
           </div>

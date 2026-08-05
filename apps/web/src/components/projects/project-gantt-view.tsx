@@ -59,7 +59,7 @@ export function ProjectGanttView({ projects, loading = false }: ProjectGanttView
   if (!projects.length) {
     return (
       <div className="rounded-2xl border border-border bg-white p-16 text-center">
-        <BarChart2 className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+        <BarChart2 className="h-10 w-10 text-gray-200 mx-auto mb-3" />
         <p className="text-sm text-secondary">No projects to display in the Gantt view.</p>
       </div>
     );
@@ -161,7 +161,7 @@ export function ProjectGanttView({ projects, loading = false }: ProjectGanttView
                     onClick={() => router.push(`/projects/${project.id}`)}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
+                      <div className={`h-2 w-2 rounded-full shrink-0 ${cfg.dot}`} />
                       <div className={`h-7 w-7 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 ${getAvatarColor(project.name)}`}>
                         {getInitials(project.name)}
                       </div>
@@ -185,7 +185,7 @@ export function ProjectGanttView({ projects, loading = false }: ProjectGanttView
                         className={`absolute h-8 z-10 rounded-xl border flex items-center px-3 gap-2 cursor-pointer transition-all group-hover:brightness-95 hover:shadow-md ${cfg.bar}`}
                         onClick={() => router.push(`/projects/${project.id}`)}
                       >
-                        <Calendar className={`w-3.5 h-3.5 shrink-0 ${cfg.text}`} />
+                        <Calendar className={`h-3.5 w-3.5 shrink-0 ${cfg.text}`} />
                         <span className={`text-xs font-bold truncate ${cfg.text}`}>
                           {project.name}
                         </span>

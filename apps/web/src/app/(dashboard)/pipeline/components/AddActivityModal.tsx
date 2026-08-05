@@ -14,7 +14,7 @@ const KINDS: { k: Kind; label: string; icon: any }[] = [
   { k: 'email', label: 'Email', icon: Mail },
 ];
 
-const inputCls = 'w-full rounded-xl border border-border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:bg-white transition-all';
+const inputCls = 'w-full rounded-xl border border-border bg-gray-50 px-3.5 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 focus:bg-white transition-colors duration-150 motion-reduce:transition-none';
 const labelCls = 'block text-[11px] font-semibold text-secondary uppercase tracking-wider mb-1.5';
 
 export function AddActivityModal({ leadId, onClose, onSuccess }: { leadId: string; onClose: () => void; onSuccess: () => void }) {
@@ -62,7 +62,7 @@ export function AddActivityModal({ leadId, onClose, onSuccess }: { leadId: strin
           {/* Kind picker */}
           <div className="grid grid-cols-4 gap-2">
             {KINDS.map(({ k, label, icon: Icon }) => (
-              <button key={k} onClick={() => setKind(k)} className={`flex flex-col items-center gap-1.5 py-3 rounded-xl border text-xs font-medium transition-all ${kind === k ? 'bg-primary text-white border-primary' : 'bg-white text-secondary border-border hover:border-primary'}`}>
+              <button key={k} onClick={() => setKind(k)} className={`flex flex-col items-center gap-1.5 py-3 rounded-xl border text-xs font-medium transition-colors duration-150 motion-reduce:transition-none ${kind === k ? 'bg-primary text-white border-primary' : 'bg-white text-secondary border-border hover:border-primary'}`}>
                 <Icon className="h-4 w-4" /> {label}
               </button>
             ))}

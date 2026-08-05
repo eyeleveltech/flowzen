@@ -10,6 +10,7 @@ import { useTeams, useMembers } from '@/hooks/useQueries';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { Icon } from '@/components/ui/icon';
 
 export default function ProfilePage() {
   usePageTitle('Profile');
@@ -124,7 +125,7 @@ export default function ProfilePage() {
 
       {profileError && (
         <div className="flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
-          <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
+          <Icon as={AlertCircle} size="md" className="shrink-0 text-amber-600" />
           <span>Could not refresh latest profile data: {profileError}. Showing cached profile information.</span>
         </div>
       )}
@@ -134,7 +135,7 @@ export default function ProfilePage() {
         <section className="rounded-2xl border border-border bg-white shadow-sm">
           <div className="border-b border-border px-4 sm:px-6 py-4 sm:py-5 flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F3F4F6] shrink-0">
-              <User className="h-5 w-5 text-secondary" />
+              <Icon as={User} size="lg" className="text-secondary" />
             </div>
             <div>
               <h2 className="text-base font-semibold text-primary">Personal Information</h2>
@@ -152,7 +153,7 @@ export default function ProfilePage() {
                     required
                     value={profileForm.name}
                     onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
-                    className="w-full rounded-xl border border-border px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    className="w-full rounded-xl border border-border px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -175,7 +176,7 @@ export default function ProfilePage() {
                     placeholder="Select or type a designation…"
                     value={profileForm.designation}
                     onChange={(e) => setProfileForm({ ...profileForm, designation: e.target.value })}
-                    className="w-full rounded-xl border border-border px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    className="w-full rounded-xl border border-border px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
                   />
                   <datalist id="designation-options">
                     {designationOptions.map((d) => <option key={d} value={d} />)}
@@ -193,9 +194,9 @@ export default function ProfilePage() {
                 <button
                   type="submit"
                   disabled={savingProfile}
-                  className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all"
+                  className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
                 >
-                  <Save className="h-4 w-4" />
+                  <Icon as={Save} size="md" />
                   {savingProfile ? 'Saving...' : 'Save Profile'}
                 </button>
               </div>
@@ -207,7 +208,7 @@ export default function ProfilePage() {
         <section className="rounded-2xl border border-border bg-white shadow-sm overflow-hidden">
           <div className="border-b border-border px-4 sm:px-6 py-4 sm:py-5 flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F3F4F6] shrink-0">
-              <KeyRound className="h-5 w-5 text-secondary" />
+              <Icon as={KeyRound} size="lg" className="text-secondary" />
             </div>
             <div>
               <h2 className="text-base font-semibold text-primary">Security & Password</h2>
@@ -225,14 +226,14 @@ export default function ProfilePage() {
                     required
                     value={passwordForm.currentPassword}
                     onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                    className="w-full rounded-xl border border-border px-4 py-2.5 pr-10 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    className="w-full rounded-xl border border-border px-4 py-2.5 pr-10 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-secondary hover:text-primary"
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showPassword ? <Icon as={EyeOff} size="md" /> : <Icon as={Eye} size="md" />}
                   </button>
                 </div>
               </div>
@@ -245,7 +246,7 @@ export default function ProfilePage() {
                     required
                     value={passwordForm.newPassword}
                     onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                    className="w-full rounded-xl border border-border px-4 py-2.5 pr-10 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    className="w-full rounded-xl border border-border px-4 py-2.5 pr-10 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
                   />
                 </div>
               </div>
@@ -258,7 +259,7 @@ export default function ProfilePage() {
                     required
                     value={passwordForm.confirmNewPassword}
                     onChange={(e) => setPasswordForm({ ...passwordForm, confirmNewPassword: e.target.value })}
-                    className="w-full rounded-xl border border-border px-4 py-2.5 pr-10 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    className="w-full rounded-xl border border-border px-4 py-2.5 pr-10 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
                   />
                 </div>
               </div>
@@ -266,9 +267,9 @@ export default function ProfilePage() {
                 <button
                   type="submit"
                   disabled={savingPassword}
-                  className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-all"
+                  className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
                 >
-                  <Save className="h-4 w-4" />
+                  <Icon as={Save} size="md" />
                   {savingPassword ? 'Updating...' : 'Update Password'}
                 </button>
               </div>
