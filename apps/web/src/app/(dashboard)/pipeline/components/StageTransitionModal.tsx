@@ -106,12 +106,6 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
     // same trap the quotation form had with its client fallbacks.
     if (requiresDealValue) {
       const parsed = dealValue === '' ? null : parseFloat(dealValue);
-      if (formData.agreedFinalValue !== undefined && formData.agreedFinalValue !== '' && formData.agreedFinalValue !== null) {
-        const parsedAgreed = parseFloat(String(formData.agreedFinalValue));
-        if (!isNaN(parsedAgreed) && parsedAgreed >= 0) {
-          payload.dealValue = parsedAgreed;
-        }
-      }
       if (parsed === null || !isNaN(parsed)) payload.dealValue = parsed;
       payload.expectedCloseDate = expectedCloseDate || null;
     }
@@ -142,12 +136,6 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
 
   const handleFieldChange = (key: string, value: any) => {
     setFormData(prev => ({ ...prev, [key]: value }));
-    if (key === 'agreedFinalValue' && value !== '' && value !== null) {
-      const parsed = parseFloat(String(value));
-      if (!isNaN(parsed) && parsed >= 0) {
-        setDealValue(String(value));
-      }
-    }
   };
 
   const handleChecklistChange = (key: string, option: string, checked: boolean) => {
@@ -202,8 +190,12 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
             {requiresDealValue && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-4 border-b border-border">
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Deal Value (₹)</label>
-                  <input type="number" value={dealValue} onChange={e => setDealValue(e.target.value)} className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1" />
+                  {/* One input, named for what the number MEANS at this point in the funnel: an
+                      estimate while the deal is being chased, the agreed figure once it is won. */}
+                  <label className="block text-sm font-medium text-[#374151] mb-1.5">
+                    {targetStage === 'CONTRACT' ? 'Agreed Final Value (₹)' : 'Deal Value (₹)'}
+                  </label>
+                  <input type="number" value={dealValue} onChange={e => setDealValue(e.target.value)} className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Expected Close Date</label>

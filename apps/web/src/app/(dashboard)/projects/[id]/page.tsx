@@ -20,7 +20,7 @@ import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { SafeHtml } from '@/components/ui/safe-html';
 import { TagsInput } from '@/components/ui/tags-input';
 import toast from 'react-hot-toast';
-import { useAuthStore, useConfirmStore, useTimeTrackingStore } from '@/stores';
+import { useAuthStore, useConfirmStore } from '@/stores';
 
 interface ProjectDetail {
   id: string; name: string; description?: string | null; status: string; priority: string; progress: number;
@@ -33,7 +33,6 @@ interface ProjectDetail {
   teams?: { id: string; team: { id: string; name: string; members: { id: string; name: string; avatar?: string | null; role?: string }[] } }[];
   tasks?: {
     id: string; title: string; status: string; priority: string; dueDate?: string | null; order: number;
-    loggedHours?: number | null;
     assignee?: { id: string; name: string; avatar?: string | null } | null;
     assignees?: { id: string; name: string; avatar?: string | null }[];
     assignedBy?: { id: string; name: string; avatar?: string | null } | null;
@@ -933,11 +932,6 @@ export default function ProjectDetailPage() {
                               <div className="flex items-center gap-2">
                                 <div className={`h-2 w-2 rounded-full shrink-0 ${getPriorityDot(t.priority)}`} />
                                 <span className="text-sm font-medium text-primary">{t.title}</span>
-                                {(t.loggedHours ?? 0) > 0 && (
-                                  <div className="flex flex-col gap-1 ml-2">
-                                    <span className="text-[10px] text-secondary bg-[#F3F4F6] px-1.5 py-0.5 rounded-md font-medium tabular-nums border border-border leading-none whitespace-nowrap">⏱ {t.loggedHours || 0}h</span>
-                                  </div>
-                                )}
                                 {(t._count?.comments ?? 0) > 0 && (
                                   <span className="flex items-center gap-0.5 text-xs text-secondary ml-1"><MessageSquare className="h-3 w-3" />{t._count?.comments}</span>
                                 )}
@@ -1053,11 +1047,6 @@ export default function ProjectDetailPage() {
                                   ? `Overdue (${getDaysLate(t)} ${getDaysLate(t) === 1 ? 'day' : 'days'} late)`
                                   : formatShortDate(t.dueDate)}
                               </span>
-                              {(t.loggedHours ?? 0) > 0 && (
-                                <span className="text-[10px] text-secondary bg-[#F3F4F6] px-1.5 py-0.5 rounded-md font-medium tabular-nums border border-border">
-                                  ⏱ {t.loggedHours || 0}h
-                                </span>
-                              )}
                               {(t._count?.comments ?? 0) > 0 && (
                                 <span className="flex items-center gap-0.5 text-xs text-secondary">
                                   <MessageSquare className="h-3 w-3" />

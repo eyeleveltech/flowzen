@@ -36,7 +36,6 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
     if (u._count.projectMembers > 0) parts.push(`${u._count.projectMembers} project${u._count.projectMembers > 1 ? 's' : ''}`);
     if (u._count.assignedLeads > 0) parts.push(`${u._count.assignedLeads} lead${u._count.assignedLeads > 1 ? 's' : ''}`);
     if (u._count.stageChanges > 0) parts.push(`${u._count.stageChanges} stage change${u._count.stageChanges > 1 ? 's' : ''}`);
-    if (u._count.quotesAsSalesperson > 0) parts.push(`${u._count.quotesAsSalesperson} quote${u._count.quotesAsSalesperson > 1 ? 's' : ''}`);
     if (u._count.activities > 0) parts.push(`${u._count.activities} activit${u._count.activities > 1 ? 'ies' : 'y'}`);
     if (u._count.notes > 0) parts.push(`${u._count.notes} note${u._count.notes > 1 ? 's' : ''}`);
     if (u._count.ownedProjects > 0) parts.push(`${u._count.ownedProjects} project${u._count.ownedProjects > 1 ? 's' : ''}`);
@@ -128,7 +127,12 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
         role: editingUser.role,
         designation: editingUser.designation,
         teamId: editingUser.teamId,
-        status: editingUser.status
+        status: editingUser.status,
+        // '' means "clear it" -> null (uncosted). Anything else goes as a number, because the
+        // API takes a numeric rate and a string would be rejected by the schema.
+        hourlyCostRate: editingUser.hourlyCostRate === '' || editingUser.hourlyCostRate == null
+          ? null
+          : Number(editingUser.hourlyCostRate),
       });
       toast.success('User updated');
       setEditingUser(null);
@@ -479,6 +483,23 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
             <div className="space-y-1.5 relative">
               <label htmlFor="edit-designation" className="text-sm font-medium text-[#374151]">Designation (Optional)</label>
               <input id="edit-designation" list="designation-options" placeholder="Select or type a designation…" value={editingUser.designation || ''} onChange={(e) => setEditingUser({ ...editingUser, designation: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none transition-colors duration-150 motion-reduce:transition-none" />
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="edit-cost-rate" className="text-sm font-medium text-[#374151]">Hourly Cost Rate (₹)</label>
+              <input
+                id="edit-cost-rate" type="number" min="0" step="1" placeholder="e.g. 500"
+                value={editingUser.hourlyCostRate ?? ''}
+                onChange={(e) => setEditingUser({ ...editingUser, hourlyCostRate: e.target.value })}
+                className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+              />
+              {/* Says what it is AND what it is not — an internal costing figure is easily
+                  mistaken for a client billing rate, and the two are never the same number. */}
+              <p className="text-xs text-secondary">
+                What an hour of this person&apos;s time costs the agency — used to price delivery
+                effort into the per-project P&amp;L. Not a client billing rate. Leave blank if
+                they aren&apos;t costed; past time entries keep the rate they were logged at.
+              </p>
             </div>
             <div className="space-y-1.5 z-10 relative">
               <label htmlFor="edit-status" className="text-sm font-medium text-[#374151]">Status</label>

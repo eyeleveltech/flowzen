@@ -249,6 +249,8 @@ model Organization {
   payments      Payment[]
   subscriptions Subscription[]
   expenses      Expense[]
+  timeEntries   TimeEntry[]
+  attachments   Attachment[]
 
   @@map("organizations")
 }
@@ -287,6 +289,12 @@ model User {
   resetToken       String?  @unique
   resetTokenExpiry DateTime?
   lastActivityReadAt DateTime?
+  // Internal cost of an hour of this person's time — what the agency pays, NOT what a client is
+  // billed. It exists so delivery effort can be priced into the P&L, which until now compared
+  // payments against vendor expenses only and therefore reported every retainer as pure margin.
+  // Decimal, never Float, for the reason in FZ-020. Null means "not costed yet", which is
+  // treated as zero cost rather than blocking the entry.
+  hourlyCostRate   Decimal?
   settings         Json     @default("{}") // per-user prefs (e.g. notifications)
   organizationId   String
   teamId           String?
@@ -297,6 +305,8 @@ model User {
   team           Team?           @relation("TeamMembers", fields: [teamId], references: [id])
   ownedProjects  Project[]       @relation("ProjectOwner")
   assignedTasks  Task[]          @relation("TaskAssignee")
+  timeEntries    TimeEntry[]     @relation("UserTimeEntries")
+  attachments    Attachment[]    @relation("UserAttachments")
   assignedTasksMulti Task[]      @relation("TaskAssignees")
   assignedTasksBy Task[]         @relation("TaskAssigner")
   reviewedTasks  Task[]          @relation("TaskReviewer")
@@ -311,7 +321,6 @@ model User {
   createdWorkflows WorkflowRule[] @relation("WorkflowCreator")
   assignedLeads  Lead[]          @relation("LeadAssignee")
   stageChanges   StageHistory[]  @relation("StageChanger")
-  quotesAsSalesperson QuoteDocument[] @relation("QuoteSalesperson")
   auditLogs           AuditLog[]      @relation("UserAuditLogs")
 
   @@index([organizationId])
@@ -398,6 +407,8 @@ model Client {
   payments      Payment[]      @relation("ClientPayments")
   subscriptions Subscription[] @relation("ClientSubscriptions")
   expenses      Expense[]      @relation("ClientExpenses")
+  timeEntries   TimeEntry[]    @relation("ClientTimeEntries")
+  attachments   Attachment[]   @relation("ClientAttachments")
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -442,6 +453,8 @@ model Project {
   teams      ProjectTeam[]
   comments               Comment[]
   expenses   Expense[]   @relation("ProjectExpenses")
+  timeEntries TimeEntry[] @relation("ProjectTimeEntries")
+  attachments Attachment[] @relation("ProjectAttachments")
 
   @@index([clientId, status])
   @@index([ownerId, status])
@@ -524,7 +537,10 @@ model Task {
   updatedAt   DateTime     @updatedAt
   completedAt DateTime?
   readAt      DateTime?
-  loggedHours Float?       @default(0)
+  // estimatedHours is PLANNING (what we think it will take) and stays. loggedHours was
+  // RECORDING (what it actually took) and is gone — TimeEntry owns that now, as dated rows per
+  // person rather than one overwritable total. Keeping both would have been two homes for one
+  // fact, which is the exact shape of every sync bug this codebase has had.
   estimatedHours Float?    @default(0)
   driveLink   String?
   isRecurring Boolean      @default(false)
@@ -542,6 +558,8 @@ model Task {
   comments   Comment[]
   checklist  ChecklistItem[]
   activities Activity[]      @relation("TaskActivities")
+  timeEntries TimeEntry[]
+  attachments Attachment[]
 
   @@index([projectId, status, assigneeId])
   @@index([assigneeId, status])
@@ -747,6 +765,7 @@ model Lead {
   tasks             Task[]       @relation("LeadTasks")
   notes             Note[]
   contacts          LeadContact[]
+  attachments       Attachment[]
   quotes            QuoteDocument[]
 
   @@unique([organizationId, leadId])
@@ -844,7 +863,6 @@ model QuoteDocument {
   clientState      String?      // drives CGST/SGST vs IGST at generation time
   paymentTerms     String
   customerRef      String?
-  salespersonId    String?
   salesTeam        String?
   onlineSignature  Boolean      @default(false)
   onlinePayment    Boolean      @default(false)
@@ -875,7 +893,6 @@ model QuoteDocument {
   organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   client           Client?      @relation(fields: [clientId], references: [id])
   lead             Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  salesperson      User?        @relation("QuoteSalesperson", fields: [salespersonId], references: [id])
   invoiceDraft     InvoiceDraft?
 
   @@unique([organizationId, documentNumber])
@@ -1154,6 +1171,103 @@ model Subscription {
   @@map("subscriptions")
 }
 
+/// A real file, uploaded and stored on disk.
+///
+/// Everything "file-shaped" in this product was previously a URL string — driveLink,
+/// folderLink, assetLinks, receiptUrl — which meant the work an agency actually delivers lived
+/// in somebody's Drive, and Flowzen only remembered where to look. Anyone outside that Drive's
+/// sharing settings saw a dead link.
+///
+/// `filename` is what the user named it; `storedName` is what it is called on disk. They are
+/// separate on purpose: the on-disk name is generated here and never derived from user input,
+/// so an uploaded "../../.env" or "x.pdf\0.sh" cannot escape the uploads directory or overwrite
+/// anything. Only `storedName` is ever joined to a path.
+///
+/// The owning entity is a set of nullable FKs rather than a polymorphic (type, id) pair, so the
+/// database itself guarantees an attachment points at something real and cascades when that
+/// thing is deleted — a polymorphic id would silently rot into an orphan.
+model Attachment {
+  id             String   @id @default(cuid())
+  organizationId String
+  uploadedById   String?
+  /// The name the user sees and downloads as. Display only — never used to build a path.
+  filename       String
+  /// Randomly generated on-disk name. The ONLY value ever joined to the uploads path.
+  storedName     String   @unique
+  mimeType       String
+  /// Bytes. Stored so a listing can show sizes without stat-ing every file.
+  size           Int
+
+  taskId         String?
+  leadId         String?
+  clientId       String?
+  projectId      String?
+  expenseId      String?
+
+  createdAt      DateTime @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  uploadedBy     User?        @relation("UserAttachments", fields: [uploadedById], references: [id], onDelete: SetNull)
+  task           Task?        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  lead           Lead?        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  client         Client?      @relation("ClientAttachments", fields: [clientId], references: [id], onDelete: Cascade)
+  project        Project?     @relation("ProjectAttachments", fields: [projectId], references: [id], onDelete: Cascade)
+  expense        Expense?     @relation("ExpenseAttachments", fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([taskId])
+  @@index([leadId])
+  @@index([clientId])
+  @@index([projectId])
+  @@map("attachments")
+}
+
+/// Hours a person spent on a piece of work, on a given day.
+///
+/// This exists to answer "did we make money on this client", not "who worked the fewest hours".
+/// The P&L compared payments received against vendor expenses and had NO labour cost in it at
+/// all, so a retainer that consumed eighty hours of the team's month scored identically to one
+/// that consumed eight. These entries are what put delivery effort on the cost side.
+///
+/// One row per person, per day, per piece of work — deliberately NOT a single running total on
+/// the task. A total can only be overwritten; rows can be corrected, attributed and summed by
+/// day, person, project or client, which is what every question worth asking actually needs.
+///
+/// `hours` is the fact; `costRate` is a SNAPSHOT of the person's rate when the entry was saved,
+/// copied rather than joined so that giving someone a raise doesn't silently rewrite the
+/// profitability of every project they have ever touched.
+model TimeEntry {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  /// Work is attached to a task where there is one; projectId is denormalized alongside it so a
+  /// project roll-up never has to walk every task, and so time can be logged against a project
+  /// that has no task yet.
+  taskId         String?
+  projectId      String?
+  clientId       String?
+  /// The DAY the work happened — not when it was typed in. Someone filling in Friday's hours on
+  /// Monday must land on Friday, or every weekly report is wrong.
+  date           DateTime
+  hours          Decimal
+  note           String?
+  costRate       Decimal? // snapshot of User.hourlyCostRate at save time; see above
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation("UserTimeEntries", fields: [userId], references: [id], onDelete: Cascade)
+  task           Task?        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  project        Project?     @relation("ProjectTimeEntries", fields: [projectId], references: [id], onDelete: Cascade)
+  client         Client?      @relation("ClientTimeEntries", fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, date])
+  @@index([userId, date])
+  @@index([projectId])
+  @@index([taskId])
+  @@map("time_entries")
+}
+
 model Expense {
   id             String          @id @default(cuid())
   organizationId String
@@ -1172,6 +1286,7 @@ model Expense {
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   project        Project?        @relation("ProjectExpenses", fields: [projectId], references: [id])
   client         Client?         @relation("ClientExpenses", fields: [clientId], references: [id])
+  attachments    Attachment[]    @relation("ExpenseAttachments")
 
   @@index([projectId])
   @@index([organizationId])

@@ -56,7 +56,7 @@ interface TaskReport {
 
 interface TeamReport {
   overallCompletionRate: number; totalTasks: number; totalCompleted: number;
-  members: { id: string; name: string; avatar?: string | null; totalTasks: number; completedTasks: number; activeTasks: number; completionRate: number; loggedHours: number }[];
+  members: { id: string; name: string; avatar?: string | null; totalTasks: number; completedTasks: number; activeTasks: number; completionRate: number }[];
 }
 
 interface ClientReport {
@@ -359,7 +359,6 @@ export default function ReportsPage() {
                   <tr className="border-b border-[#F3F4F6] bg-surface">
                     <th className="px-6 py-4 text-left text-xs font-medium text-secondary uppercase tracking-wide">Member</th>
                     <th className="px-6 py-4 text-center text-xs font-medium text-secondary uppercase tracking-wide">Active Workload</th>
-                    <th className="px-6 py-4 text-center text-xs font-medium text-secondary uppercase tracking-wide">Time Logged</th>
                     <th className="px-6 py-4 text-center text-xs font-medium text-secondary uppercase tracking-wide">Completion Rate</th>
                   </tr>
                 </thead>
@@ -376,9 +375,6 @@ export default function ReportsPage() {
                         <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-sm font-semibold bg-blue-50 text-blue-700 border border-blue-100">
                           {m.activeTasks} tasks
                         </span>
-                      </td>
-                      <td className="px-6 py-4 text-center text-sm font-medium text-secondary">
-                        {m.loggedHours} hrs
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-center gap-3">
@@ -661,7 +657,7 @@ function ExecutiveTab({ data, periodLabel }: { data: any; periodLabel: string })
 
       {/* TEAM & UTILIZATION */}
       <motion.div variants={item}>
-        <SectionTitle icon={Users} title="Team & Utilization" subtitle={`Avg utilization ${team.avgUtilization}% · ${Math.round(team.totalLoggedHours)}h logged`} />
+        <SectionTitle icon={Users} title="Team & Utilization" subtitle={`Avg utilization ${team.avgUtilization}%`} />
         <div className="rounded-2xl border border-border bg-white p-5">
           {team.members.length ? (
             <div className="h-65">

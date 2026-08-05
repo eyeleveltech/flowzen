@@ -12,7 +12,7 @@ import { TASK_STATUS_OPTIONS } from '@/lib/task-status';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
-import { useAuthStore, useTimeTrackingStore } from '@/stores';
+import { useAuthStore } from '@/stores';
 import { useProjects, useMembers, useClients } from '@/hooks/useQueries';
 import { useModalSafety } from '@/hooks/useModalSafety';
 import { useQueryClient } from '@tanstack/react-query';

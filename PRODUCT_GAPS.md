@@ -1,6 +1,8 @@
 # Flowzen — Product Gap & UX Audit (2026-07-30, updated 2026-07-31 after fixes)
 
-Three-angle audit: (A) compliance with the owner's standard (`corrections.md`, 65 items),
+Three-angle audit: (A) compliance with the owner's standard (the 65-item `corrections.md`,
+DELETED 2026-08-04 once ~78% of it was built — recoverable from git history, and the items that
+were still outstanding are transcribed into the table in section A below),
 (B) user-journey friction found by walking the code, (C) feature gaps vs industry tools
 (HubSpot/Pipedrive · Asana/ClickUp · Zoho-lite). Every finding is code-verified with file references.
 
@@ -19,14 +21,18 @@ Six of the audit's highest-impact findings are closed (details struck through in
 | **B14 — command palette dead links / no keyboard / leads unsearchable** | Task links fixed (`?taskId=`), real ↑↓/↵/Esc navigation with visible highlight, **leads + quotation numbers indexed** in global search (admin+CRM gated — also closes roadmap item C-1). |
 | **QA partials batch** (same push) | FZ-048/051/054/067/073/077/097 + payments-status endpoint + prod seed guard — see BUGS_UPDATED.md (97/98). This also closed B-list items 11-partial (receivables still pending month view), the fake-PAID auto-billing, and report-total corruption (B-adjacent FZ-073). |
 
-**Still open from the Week-1 plan:** dead time-tracking UI removal (owner decision recorded), corrections one-liners (#53), receivables month view (Sprint-2).
+**Week 1 is now closed.** The last two items — the dead time-tracking UI and the corrections
+one-liners (#53 / #10) — are done. Everything remaining is Sprint 2 or later; the receivables
+month view (B11) is the highest-value of those and stays the owner's core unanswered question.
 
 ---
 
-## A. Against our own standard — corrections.md scorecard
+## A. Against the owner's standard — final scorecard
 
-**51 DONE · 10 PARTIAL · 2 OPEN · 2 N/A** (~78% implemented — the doc's all-OPEN status column is
-badly stale; it should be updated so Akmal sees real progress).
+**51 DONE · 10 PARTIAL · 2 OPEN · 2 N/A** (~78% implemented). The source document's status column
+never moved off OPEN, so it claimed nothing had been built; rather than maintain two records of
+the same thing, it was deleted and this table is now the only one. The rows below are what is
+genuinely left.
 
 ### Highest-impact remaining items
 | # | Item | State | Gap |
@@ -53,13 +59,13 @@ badly stale; it should be updated so Akmal sees real progress).
 2. ~~Lead form loses everything on a misclick~~ — **FIXED**: Wired `useModalSafety` to `EditLeadModal` (backdrop, X, Cancel, focus trap, dirty-guard) and closed the Cancel button safety gap in `LeadModal`. Relaxed lead validation in client forms, API `leadSchema`, and bulk import to require `contactName` + (`contactEmail` OR `contactPhone`).
 3. ~~Quick Create → New Lead dead end~~ — **FIXED `00ad3bd`**: `?create=true` handled at pipeline page level, opens the Add Lead modal from any tab; param cleaned after open.
 4. ~~The kanban has zero search/filter~~ — **FIXED**: Search input (300ms debounced) + Owner `MultiSelect` filter added to Kanban header in `PipelineBoardView.tsx`; per-column totals, weighted deal values, counts and drag-and-drop all reflect filtered state.
-5. **MED — Won celebration shows stale data** on the board path (pre-transition lead passed, no client attached; Create Project loses the prefill) (`PipelineBoardView.tsx:272`).
+5. ~~Won celebration shows stale data on the board path~~ — **FIXED (verified 2026-08-04)**: the board now passes the POST-transition lead (`setWonModalLead(updatedLead || {...})`), so the client is attached and the Create Project prefill survives.
 
 ### The team member (delivery)
 6. ~~Time tracking display-only~~ — **OWNER DECISION (2026-07-30): no employee time tracking.** Due time is the accountability mechanism; prompting for hours discourages the team. Resolution is to REMOVE the dangling time UI (⏱ chips, "logged hrs" in Reports, the never-called TimeTrackingPrompt), not wire it up.
 7. **MED — Managers' Tasks page silently self-filters** (`tasks/page.tsx:152-157`) — "where did my team's tasks go?" week-one confusion; needs a visible My/Team toggle.
 8. **MED — Mobile swipe-right instantly completes a task, no undo** (`tasks/page.tsx:994`).
-9. **MED — Board view vs pagination**: kanban renders only loaded pages; column counts lie until you spot the "Load More" button *below* the board.
+9. ~~Board view vs pagination~~ — **FIXED (verified 2026-08-04)**: the board no longer paginates. `GET /crm/leads` returns every lead for the org and the pipeline page sends no `limit`, so column counts are the real counts.
 
 ### The owner (money)
 10. ~~"Invoices"/"Invoice Drafts" duplicate pages + wrong CTA~~ — **FIXED `00ad3bd`**: `/invoices` redirects to `/invoice-drafts`, duplicate nav entry removed, Quotations CTA lands on the editable screen.
@@ -102,13 +108,13 @@ badly stale; it should be updated so Akmal sees real progress).
 ## D. Recommended plan — in order
 
 ### Week 1 — quick wins, mostly ≤1 day each (trust + daily friction)
-1. [ ] Remove the dead time-tracking UI (⏱ chips, "logged hrs" in Reports, TimeTrackingPrompt + store) per the owner's no-time-tracking decision; keep due-date/overdue signals as the accountability surface (B6).
+1. [x] ~~Remove the dead time-tracking UI (⏱ chips, "logged hrs" in Reports, TimeTrackingPrompt + store) per the owner's no-time-tracking decision; keep due-date/overdue signals as the accountability surface (B6).~~ **DONE 2026-08-04** — the prompt and its store were imported in five files and called from none, so nothing was ever recorded and every ⏱ chip and "Time Logged" column read 0. Removed the store, the prompt component, its mount in `providers.tsx`, three ⏱ chips (tasks + project detail ×2), and the Reports "Time Logged" column and "Xh logged" subtitle. The reports API no longer aggregates it either. `avgUtilization` survives — it is derived from active task COUNT, not hours. Due dates remain the accountability surface.
 2. [x] ~~Skip the stage modal when the target stage requires nothing; stop accumulating skipped-stage fields (B1).~~ **DONE `00ad3bd`**
 3. [x] ~~Merge Invoices/Invoice Drafts into one page; fix the "Move to Invoice Draft" destination (B10 + B13).~~ **DONE `00ad3bd`**
 4. [x] ~~Command palette: fix `taskId` param, add ↑↓/↵, index leads + quote numbers (B14 + C).~~ **DONE `00ad3bd`**
 5. [x] ~~Fix Quick Create "New Lead" dead end (B3).~~ **DONE `00ad3bd`** (the "New Client" quick-create contradiction with the born-from-deals rule remains a product question for Akmal)
 6. [x] ~~Shared modal primitive: Escape + focus trap + confirm-on-dirty-close; adopt in LeadModal/StageTransition first (B2/B15).~~ **DONE**
-7. [ ] Corrections one-liners: remove LinkedIn from EditLeadModal (#53), show the missing client-overview fields (#10).
+7. [x] ~~Corrections one-liners: remove LinkedIn from EditLeadModal (#53), show the missing client-overview fields (#10).~~ **DONE** — #53 went with the lead-contacts consolidation (LinkedIn belongs to a person, so it lives on the contact row); #10 was already closed and is marked DONE in the section-A table above.
 8. [x] ~~Debounce all search inputs (300ms + keepPreviousData) (B16).~~ **DONE**
 9. [x] ~~Error-panel + retry on the money pages instead of fake empties (B12).~~ **DONE**
 
@@ -137,4 +143,7 @@ badly stale; it should be updated so Akmal sees real progress).
   been applied to production.
 - ~~QA fix batch uncommitted~~ — **everything is pushed**: all session work through 2026-07-31 is
   on `main` at `00ad3bd` (QA partials + stage-modal + invoice merge + search/palette).
-- Update `corrections.md` status column (49 items are DONE but marked OPEN — Akmal can't see progress).
+- ~~Update `corrections.md` status column~~ — moot: the file was deleted 2026-08-04 rather than
+  maintained. Its status column had gone badly stale (49 items built but still marked OPEN, so
+  the document told Akmal nothing had been done), and the remaining work is tracked here instead.
+  Recover it with `git show HEAD~1:corrections.md` if the original wording is ever needed.

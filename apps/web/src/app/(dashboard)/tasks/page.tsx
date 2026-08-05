@@ -16,7 +16,7 @@ import { ActiveFilterChip } from '@/components/ui/active-filter-chip';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ViewSettingsPanel } from '@/components/ui/view-settings-panel';
 import toast from 'react-hot-toast';
-import { useAuthStore, useConfirmStore, useTimeTrackingStore } from '@/stores';
+import { useAuthStore, useConfirmStore } from '@/stores';
 import { useTasks, useProjects, useMembers, useTeams, useClients } from '@/hooks/useQueries';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useQueryClient } from '@tanstack/react-query';
@@ -29,7 +29,6 @@ import { SwipeableCard } from '@/components/ui/swipeable-card';
 interface Task {
   id: string; title: string; description?: string | null; priority: string; status: string;
   dueDate?: string | null; assignedDate?: string | null; completedAt?: string | null; createdAt: string; projectId: string;
-  loggedHours?: number | null;
   type: string; driveLink?: string | null; reviewerId?: string | null;
   project?: { id: string; name: string; client?: { name: string; company?: string } };
   // Pre-sales tasks hang off a Lead instead of a Project, so both are optional.
@@ -974,11 +973,6 @@ function TasksContent() {
                                           </span>
                                         )}
                                         <span className="text-[11px] font-medium text-[#4B5563]">{assigneeLabel(t)}</span>
-                                        {(t.loggedHours ?? 0) > 0 && (
-                                          <span className="text-[10px] text-secondary bg-[#F3F4F6] px-1.5 py-0.5 rounded-md font-medium tabular-nums border border-border">
-                                            ⏱ {t.loggedHours}h
-                                          </span>
-                                        )}
                                       </div>
                                     </div>
                                     {t.dueDate && (

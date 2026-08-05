@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatRelativeDate, formatDate, formatShortDate, getInitials } from '@/lib/utils';
 import { TASK_STATUS_OPTIONS } from '@/lib/task-status';
-import { useAuthStore, useTimeTrackingStore } from '@/stores';
+import { useAuthStore } from '@/stores';
 import { useRouter } from 'next/navigation';
 import { useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';

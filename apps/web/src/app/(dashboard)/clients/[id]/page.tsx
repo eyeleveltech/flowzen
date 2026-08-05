@@ -33,6 +33,14 @@ const roleLabel = (r?: ContactRole | null) => CONTACT_ROLES.find((x) => x.value 
 interface ClientContact {
   id: string; name: string; designation?: string | null; email?: string | null; phone?: string | null;
   linkedinUrl?: string | null; role?: ContactRole | null; notes?: string | null;
+  // Exactly one contact per account carries this; it is the person a quotation is addressed to.
+  isPrimary?: boolean;
+}
+
+/** The account's contact of record — the flagged one, falling back to the first. */
+function primaryContactName(client: { contacts?: ClientContact[] } | null): string | null {
+  const contacts = client?.contacts || [];
+  return (contacts.find((c) => c.isPrimary) || contacts[0])?.name || null;
 }
 
 interface ClientDetail {
@@ -282,9 +290,12 @@ export default function ClientDetailPage() {
               {getClientDisplayName(client)}
             </h1>
             <div className="flex items-center gap-3 mt-1">
-              {client.name !== 'Internal' && client.company && (client.contacts?.[0]?.name || client.name !== client.company) && (
+              {/* The primary contact, not simply the first one — contacts arrive primary-first
+                  from the API, but relying on position would put the wrong name in the header the
+                  moment that ordering changed. */}
+              {client.name !== 'Internal' && client.company && (primaryContactName(client) || client.name !== client.company) && (
                 <span className="text-sm text-secondary font-medium">
-                  {client.contacts?.[0]?.name || client.name}
+                  {primaryContactName(client) || client.name}
                 </span>
               )}
               {client.name === 'Internal' && <span className="text-sm font-medium text-secondary">(Internal)</span>}
@@ -473,9 +484,14 @@ export default function ClientDetailPage() {
                 <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3">Contacts</h4>
                 <div className="space-y-3">
                   {client.contacts.map((c) => (
-                    <div key={c.id} className="p-3 bg-surface rounded-xl border border-border">
+                    <div key={c.id} className={`p-3 rounded-xl border ${c.isPrimary ? 'border-primary/30 bg-primary/3' : 'bg-surface border-border'}`}>
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-primary">{c.name}</p>
+                        <p className="text-sm font-semibold text-primary flex items-center gap-2">
+                          {c.name}
+                          {/* Shown here too, not just in the edit form — this is the person a
+                              quotation for this account is addressed to. */}
+                          {c.isPrimary && <span className="shrink-0 px-1.5 py-0.5 rounded bg-primary text-white text-[9px] font-semibold uppercase tracking-wide">Primary</span>}
+                        </p>
                         {roleLabel(c.role) && (
                           <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-primary/10 text-primary">{roleLabel(c.role)}</span>
                         )}
@@ -812,12 +828,31 @@ export default function ClientDetailPage() {
                     )}
                   </div>
                   {editForm.contacts.map((contact, i) => (
-                    <div key={i} className="p-4 border border-border rounded-xl bg-surface relative">
+                    <div key={i} className={`p-4 border rounded-xl relative ${contact.isPrimary ? 'border-primary/30 bg-primary/3' : 'border-border bg-surface'}`}>
                       {editForm.contacts.length > 1 && (
                         <button type="button" onClick={() => setEditForm({ ...editForm, contacts: editForm.contacts.filter((_, idx) => idx !== i) })} className="absolute top-2 right-2 p-1.5 text-secondary hover:text-red-500 rounded-lg hover:bg-white transition-colors border border-transparent hover:border-red-100 shadow-sm hover:shadow">
                           <X className="h-3.5 w-3.5" />
                         </button>
                       )}
+                      {/* Which contact is primary decides whose name, email and phone go on this
+                          account's quotations. The API preserves the flag, but until now nothing
+                          could SET it once a lead had converted — the choice was frozen at
+                          whatever it was at the win. Exactly one is primary, so this is a radio. */}
+                      <label className="inline-flex items-center gap-2 mb-3 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="client-primary-contact"
+                          checked={Boolean(contact.isPrimary)}
+                          onChange={() => setEditForm({
+                            ...editForm,
+                            contacts: editForm.contacts.map((c, idx) => ({ ...c, isPrimary: idx === i })),
+                          })}
+                          className="w-3.5 h-3.5 text-primary border-gray-300 focus:ring-primary cursor-pointer"
+                        />
+                        <span className={`text-xs font-semibold ${contact.isPrimary ? 'text-primary' : 'text-secondary'}`}>
+                          {contact.isPrimary ? 'Primary contact' : 'Make primary'}
+                        </span>
+                      </label>
                       <div className="grid grid-cols-2 gap-3">
                         <Field label="Name *" value={contact.name} onChange={(v) => { const c = [...editForm.contacts]; c[i].name = v; setEditForm({ ...editForm, contacts: c }); }} required />
                         <Field label="Designation" value={contact.designation || ''} onChange={(v) => { const c = [...editForm.contacts]; c[i].designation = v; setEditForm({ ...editForm, contacts: c }); }} />

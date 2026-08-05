@@ -118,7 +118,12 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
               <label htmlFor="cp-description" className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
               <RichTextEditor value={formValues.description || ''} onChange={(val) => setValue('description', val)} placeholder="Project description..." />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Two columns, never four. Tailwind breakpoints measure the VIEWPORT, but this form
+                lives in a fixed max-w-lg (512px) slide-over — so `md:grid-cols-4` fired on any
+                normal monitor and squeezed four dropdowns into ~115px each, truncating their
+                values to "One-…", "In Pro…" and "Medi…". The panel width is what matters here,
+                and it never changes. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-[#374151] mb-1.5">Project Type</label>
                 <Select ariaLabel="Project Type" value={formValues.type} onChange={(val) => setValue('type', val as any, { shouldValidate: true })} options={[

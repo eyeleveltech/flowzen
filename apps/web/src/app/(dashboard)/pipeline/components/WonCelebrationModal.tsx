@@ -17,7 +17,10 @@ export function WonCelebrationModal({ lead, onClose }: WonCelebrationModalProps)
   const router = useRouter();
   const clientName = lead?.client?.company || lead?.client?.name || 'Client';
 
-  const dealAmount = lead?.dealValue ?? lead?.fields?.agreedFinalValue ?? null;
+  // dealValue is the only figure — the `lead.fields.agreedFinalValue` fallback that used to sit
+  // here could never fire anyway: the API returns `dealFields` as an array of
+  // { fieldKey, fieldValue }, never a `fields` object keyed by name.
+  const dealAmount = lead?.dealValue ?? null;
 
   const handleCreateProject = () => {
     const params = new URLSearchParams({ create: 'true' });
