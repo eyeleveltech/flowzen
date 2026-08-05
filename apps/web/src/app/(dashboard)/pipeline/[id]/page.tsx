@@ -358,7 +358,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           </div>
 
           {/* Stepper Component (Refined) */}
-          <div className="mt-2 flex items-center justify-between overflow-x-auto scrollbar-hide py-2">
+          <div className="mt-2 flex items-center justify-between overflow-x-auto no-scrollbar py-2">
             {PIPELINE_STAGES.slice(0, 8).map((stage, idx) => {
               const isCompleted = PIPELINE_STAGES.indexOf(lead.stage) >= idx;
               const isCurrent = lead.stage === stage;
@@ -396,7 +396,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
 
       {/* Tabs */}
       <div className="border-b border-border bg-white px-5 md:px-8 sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto flex gap-8 overflow-x-auto scrollbar-hide">
+        <div className="max-w-7xl mx-auto flex gap-8 overflow-x-auto no-scrollbar">
           {([['details', 'Details'], ['tasks', 'Tasks'], ['timeline', 'Timeline'], ['contacts', 'Contacts']] as const).map(([k, label]) => (
             <button key={k} onClick={() => setActiveTab(k)} className={`py-4 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${activeTab === k ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-primary'}`}>
               {label}

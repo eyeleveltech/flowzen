@@ -6,7 +6,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
 import { formatDate, formatShortDate, getInitials, getAvatarColor, getClientDisplayName, getProjectStatusFromClient } from '@/lib/utils';
-import { Plus, LayoutList, GanttChartSquare, Calendar, ChevronRight, BarChart3, Clock, LayoutGrid, Search, X, Check, Settings, Kanban, Filter, Lock } from 'lucide-react';
+import { Plus, LayoutList, GanttChartSquare, Calendar, ChevronRight, BarChart3, Clock, LayoutGrid, Search, X, Check, Settings, Kanban, Filter, Lock, SlidersHorizontal } from 'lucide-react';
+import { Drawer } from '@/components/ui/drawer';
+import { useIsMobile } from '@/hooks/use-breakpoint';
+import { ActiveFilterChip } from '@/components/ui/active-filter-chip';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '@/stores';
 import { useProjectFilters } from '@/stores/projectFilters';
@@ -56,11 +59,17 @@ function ProjectsContent() {
   const searchParams = useSearchParams();
   const { user } = useAuthStore();
   const [view, setView] = useState<ViewMode>('list');
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const isMobile = useIsMobile();
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const urlStatus = searchParams.get('status');
   // Filters live in an in-memory store so they persist while navigating into a
   // project and back, but reset on a full page refresh.
   const { search, setSearch, statusFilter, setStatusFilter, clientFilter, setClientFilter, ownerFilter, setOwnerFilter, dueDateFilter, setDueDateFilter } = useProjectFilters();
+
+  const activeCount = (statusFilter.length > 0 ? 1 : 0) +
+    (clientFilter.length > 0 ? 1 : 0) +
+    (ownerFilter.length > 0 ? 1 : 0) +
+    (dueDateFilter ? 1 : 0);
 
   const ALL_PROJECT_COLUMNS = [
     { id: 'project', label: 'Project' },
@@ -243,92 +252,207 @@ function ProjectsContent() {
       {/* Redesigned Clean Projects Toolbar */}
       <div className="bg-white border border-border rounded-2xl p-4 shadow-sm flex flex-col gap-4 w-full mb-6">
         {/* Row 1: Search + Active Filter Pills */}
-        <div className="flex flex-wrap items-center gap-2 w-full">
-          {/* Search Box */}
-          <div className="relative w-full sm:w-64 md:w-80 shrink-0">
-            <Icon as={Search} size="md" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-secondary" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search projects..."
-              className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none placeholder:text-secondary"
-            />
-          </div>
+        {isMobile ? (
+          <div className="flex flex-col gap-2.5 w-full">
+            <div className="flex items-center gap-2 w-full">
+              <div className="relative w-full shrink">
+                <Icon as={Search} size="md" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-secondary" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search projects..."
+                  className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none placeholder:text-secondary"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setFilterSheetOpen(true)}
+                className="flex items-center gap-1.5 h-9 rounded-xl border border-border bg-white hover:bg-gray-50 px-3 text-xs font-semibold text-secondary shrink-0 transition-colors"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                <span>Filters</span>
+                {activeCount > 0 && (
+                  <span className="ml-0.5 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-white">
+                    {activeCount}
+                  </span>
+                )}
+              </button>
+              {/* Action buttons on mobile right corner */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowViewSettings(true)}
+                  className="p-2 rounded-xl border border-border bg-white hover:bg-gray-50 transition-colors text-secondary hover:text-primary h-9 w-9 flex items-center justify-center shrink-0"
+                  title="Configure View Settings"
+                >
+                  <Icon as={Settings} size="sm" />
+                </button>
+                {user?.role !== 'TEAM_MEMBER' && (
+                  <button
+                    onClick={() => setShowCreate(true)}
+                    className="flex items-center justify-center rounded-xl bg-primary h-9 w-9 text-white hover:bg-[#1F2937] transition-colors shrink-0"
+                    title="New Project"
+                  >
+                    <Icon as={Plus} size="sm" />
+                  </button>
+                )}
+              </div>
+            </div>
 
-          {/* Filter Pills */}
-          <div className="shrink-0">
-            <MultiSelect
-              value={statusFilter}
-              onChange={setStatusFilter}
-              placeholder="Status"
-              showSelectAll
-              triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
-              options={[
-                { label: 'Active', value: 'ACTIVE' },
-                { label: 'Delayed', value: 'DELAYED' },
-                { label: 'Planning', value: 'PLANNING' },
-                { label: 'In Progress', value: 'IN_PROGRESS' },
-                { label: 'In Review', value: 'REVIEW' },
-                { label: 'Completed', value: 'COMPLETED' },
-                { label: 'On Hold', value: 'ON_HOLD' },
-                { label: 'Cancelled', value: 'CANCELLED' }
-              ]}
-            />
-          </div>
+            {/* Active Chips Row */}
+            {activeCount > 0 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                {statusFilter.length > 0 && <ActiveFilterChip label={`Status: ${statusFilter.length}`} onRemove={() => setStatusFilter([])} />}
+                {clientFilter.length > 0 && <ActiveFilterChip label={`Clients: ${clientFilter.length}`} onRemove={() => setClientFilter([])} />}
+                {ownerFilter.length > 0 && <ActiveFilterChip label={`Managers: ${ownerFilter.length}`} onRemove={() => setOwnerFilter([])} />}
+                {dueDateFilter && <ActiveFilterChip label={`Due: ${dueDateFilter}`} onRemove={() => setDueDateFilter('')} />}
+              </div>
+            )}
 
-          <div className="shrink-0">
-            <MultiSelect
-              value={clientFilter}
-              onChange={setClientFilter}
-              placeholder="Clients"
-              showSelectAll
-              triggerClassName={clientFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
-              options={clients.filter(c => c._count?.projects > 0).map(c => ({ label: getClientDisplayName(c), value: c.id }))}
-            />
+            {/* Mobile Filter Drawer */}
+            <Drawer isOpen={filterSheetOpen} onClose={() => setFilterSheetOpen(false)} title="Filter Projects">
+              <div className="p-4 space-y-4">
+                <div>
+                  <label className="text-xs font-medium text-secondary mb-1.5 block">Status</label>
+                  <MultiSelect
+                    value={statusFilter}
+                    onChange={setStatusFilter}
+                    placeholder="Status"
+                    showSelectAll
+                    options={[
+                      { label: 'Active', value: 'ACTIVE' },
+                      { label: 'Delayed', value: 'DELAYED' },
+                      { label: 'Planning', value: 'PLANNING' },
+                      { label: 'In Progress', value: 'IN_PROGRESS' },
+                      { label: 'In Review', value: 'REVIEW' },
+                      { label: 'Completed', value: 'COMPLETED' },
+                      { label: 'On Hold', value: 'ON_HOLD' },
+                      { label: 'Cancelled', value: 'CANCELLED' }
+                    ]}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-secondary mb-1.5 block">Clients</label>
+                  <MultiSelect
+                    value={clientFilter}
+                    onChange={setClientFilter}
+                    placeholder="Clients"
+                    showSelectAll
+                    options={clients.filter(c => c._count?.projects > 0).map(c => ({ label: getClientDisplayName(c), value: c.id }))}
+                  />
+                </div>
+                {user?.role !== 'TEAM_MEMBER' && (
+                  <div>
+                    <label className="text-xs font-medium text-secondary mb-1.5 block">Project Managers</label>
+                    <MultiSelect
+                      value={ownerFilter}
+                      onChange={setOwnerFilter}
+                      placeholder="Project Managers"
+                      showSelectAll
+                      options={members.filter(m => m.totalProjects > 0).map(m => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="text-xs font-medium text-secondary mb-1.5 block">Due Date</label>
+                  <input
+                    type="date"
+                    value={dueDateFilter}
+                    onChange={(e) => setDueDateFilter(e.target.value)}
+                    className="w-full h-9 rounded-xl border border-border bg-white text-secondary px-3 text-xs outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 cursor-pointer"
+                  />
+                </div>
+              </div>
+            </Drawer>
           </div>
-
-          {user?.role !== 'TEAM_MEMBER' && (
-            <div className="shrink-0">
-              <MultiSelect
-                value={ownerFilter}
-                onChange={setOwnerFilter}
-                placeholder="Project Managers"
-                showSelectAll
-                triggerClassName={ownerFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
-                options={members.filter(m => m.totalProjects > 0).map(m => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
+        ) : (
+          <div className="flex flex-wrap items-center gap-2 w-full">
+            {/* Search Box */}
+            <div className="relative w-full sm:w-64 md:w-80 shrink-0">
+              <Icon as={Search} size="md" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-secondary" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search projects..."
+                className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none placeholder:text-secondary"
               />
             </div>
-          )}
 
-          <div className="shrink-0">
-            <input
-              type="date"
-              value={dueDateFilter}
-              onChange={(e) => setDueDateFilter(e.target.value)}
-              className="h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none cursor-pointer"
-              title="Due Date Filter"
-            />
-          </div>
+            {/* Filter Pills */}
+            <div className="shrink-0">
+              <MultiSelect
+                value={statusFilter}
+                onChange={setStatusFilter}
+                placeholder="Status"
+                showSelectAll
+                triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
+                options={[
+                  { label: 'Active', value: 'ACTIVE' },
+                  { label: 'Delayed', value: 'DELAYED' },
+                  { label: 'Planning', value: 'PLANNING' },
+                  { label: 'In Progress', value: 'IN_PROGRESS' },
+                  { label: 'In Review', value: 'REVIEW' },
+                  { label: 'Completed', value: 'COMPLETED' },
+                  { label: 'On Hold', value: 'ON_HOLD' },
+                  { label: 'Cancelled', value: 'CANCELLED' }
+                ]}
+              />
+            </div>
 
-          <div className="flex items-center gap-2 ml-auto shrink-0">
-            <button
-              onClick={() => setShowViewSettings(true)}
-              className="p-2 rounded-xl border border-border bg-white hover:bg-gray-50 transition-colors text-secondary hover:text-primary h-9 w-9 flex items-center justify-center shrink-0"
-              title="Configure View Settings"
-            >
-              <Icon as={Settings} size="sm" />
-            </button>
+            <div className="shrink-0">
+              <MultiSelect
+                value={clientFilter}
+                onChange={setClientFilter}
+                placeholder="Clients"
+                showSelectAll
+                triggerClassName={clientFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
+                options={clients.filter(c => c._count?.projects > 0).map(c => ({ label: getClientDisplayName(c), value: c.id }))}
+              />
+            </div>
 
             {user?.role !== 'TEAM_MEMBER' && (
-              <button
-                onClick={() => setShowCreate(true)}
-                className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none h-9 shrink-0"
-              >
-                <Icon as={Plus} size="sm" /> New Project
-              </button>
+              <div className="shrink-0">
+                <MultiSelect
+                  value={ownerFilter}
+                  onChange={setOwnerFilter}
+                  placeholder="Project Managers"
+                  showSelectAll
+                  triggerClassName={ownerFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
+                  options={members.filter(m => m.totalProjects > 0).map(m => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
+                />
+              </div>
             )}
+
+            <div className="shrink-0">
+              <input
+                type="date"
+                value={dueDateFilter}
+                onChange={(e) => setDueDateFilter(e.target.value)}
+                className="h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none cursor-pointer"
+                title="Due Date Filter"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 ml-auto shrink-0">
+              <button
+                onClick={() => setShowViewSettings(true)}
+                className="p-2 rounded-xl border border-border bg-white hover:bg-gray-50 transition-colors text-secondary hover:text-primary h-9 w-9 flex items-center justify-center shrink-0"
+                title="Configure View Settings"
+              >
+                <Icon as={Settings} size="sm" />
+              </button>
+
+              {user?.role !== 'TEAM_MEMBER' && (
+                <button
+                  onClick={() => setShowCreate(true)}
+                  className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none h-9 shrink-0"
+                >
+                  <Icon as={Plus} size="sm" /> New Project
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Separator line */}
         <div className="h-px bg-border/60 w-full" />

@@ -151,7 +151,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 mb-8 overflow-x-auto pb-2 w-max max-w-full">
+      <div className="flex items-center gap-2 mb-8 overflow-x-auto no-scrollbar w-max max-w-full -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 pb-2 pr-8 snap-x scroll-px-4">
         {tabs.map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;
@@ -159,7 +159,7 @@ export default function ReportsPage() {
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-colors duration-150 motion-reduce:transition-none border ${active
+              className={`flex items-center gap-2 px-3 sm:px-5 py-2.5 rounded-xl text-sm font-medium transition-colors duration-150 motion-reduce:transition-none border snap-start ${active
                 ? 'bg-primary text-white border-primary shadow-sm'
                 : 'bg-white text-secondary border-border hover:text-primary hover:bg-[#F9FAFB] hover:border-[#D1D5DB]'
                 }`}

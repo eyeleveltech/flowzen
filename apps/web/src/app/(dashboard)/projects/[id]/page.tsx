@@ -657,7 +657,7 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto scrollbar-hide whitespace-nowrap">
+      <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto no-scrollbar whitespace-nowrap -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 pr-8">
         {tabs.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)} className={`px-3 md:px-4 py-2.5 text-sm font-medium border-b-2 transition-colors duration-150 motion-reduce:transition-none shrink-0 ${tab === t.id ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-primary'}`}>
             {t.label}

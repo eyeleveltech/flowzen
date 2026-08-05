@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Check, ChevronsUpDown } from 'lucide-react';
 import { useMediaQuery } from '@/hooks/use-media-query';
+import { useIsMobile } from '@/hooks/use-breakpoint';
 import { Drawer } from '@/components/ui/drawer';
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/ui/icon';
@@ -34,7 +35,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [rect, setRect] = useState<DOMRect | null>(null);
-  const isMobile = useMediaQuery('(max-width: 768px)');
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

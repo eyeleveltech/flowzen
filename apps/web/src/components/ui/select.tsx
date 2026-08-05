@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Search } from 'lucide-react';
 import { useMediaQuery } from '@/hooks/use-media-query';
+import { useIsMobile } from '@/hooks/use-breakpoint';
 import { Drawer } from '@/components/ui/drawer';
 import { cn } from '@/lib/utils';
 
@@ -35,7 +36,7 @@ export interface SelectProps {
 export function Select({ id, value, onChange, options, placeholder = 'Select...', className = '', disabled = false, required = false, rounded = 'rounded-xl', ariaLabel, buttonClassName, leadingIcon }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const isMobile = useMediaQuery('(max-width: 768px)');
+  const isMobile = useIsMobile();
 
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);

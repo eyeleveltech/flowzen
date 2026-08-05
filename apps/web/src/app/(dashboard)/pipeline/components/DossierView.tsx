@@ -69,7 +69,7 @@ export function DossierView({ d }: { d: any }) {
                     <span className="font-medium text-[#374151]">{d.traits?.[t.key]?.label || ''}</span>
                     <span>{t.right}</span>
                   </div>
-                  <div className="relative h-2 rounded-full bg-gradient-to-r from-gray-200 via-gray-300 to-gray-400">
+                  <div className="relative h-2 rounded-full bg-linear-to-r from-gray-200 via-gray-300 to-gray-400">
                     <div className="absolute top-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-primary border-2 border-white shadow" style={{ left: `calc(${score}% - 6px)` }} />
                   </div>
                 </div>

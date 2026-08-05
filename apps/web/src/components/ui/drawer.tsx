@@ -3,6 +3,7 @@
 import React, { ReactNode, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMediaQuery } from '@/hooks/use-media-query';
+import { useIsMobile } from '@/hooks/use-breakpoint';
 import { X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { Icon } from '@/components/ui/icon';
@@ -26,7 +27,7 @@ export function Drawer({
   variant = 'modal',
   ariaLabel
 }: DrawerProps) {
-  const isMobile = useMediaQuery('(max-width: 768px)');
+  const isMobile = useIsMobile();
   const panelRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
