@@ -306,6 +306,96 @@ const run = async () => {
   }
   await call('DELETE', `/crm/leads/${plId}`);
 
+
+  console.log('\n14. Lead list scaling: count endpoint and targeted ?ids= refetch');
+  // The pipeline header used to download every lead just to read .length off the array.
+  const allLeads = await call('GET', '/crm/leads');
+  const countRes = await call('GET', '/crm/leads/count');
+  check('count endpoint responds', countRes.status === 200, `got ${countRes.status}`);
+  check('count matches the full list length', countRes.data?.count === (allLeads.data || []).length,
+    `count=${countRes.data?.count} list=${(allLeads.data || []).length}`);
+  // /leads/count must not be swallowed by /leads/:id, which would 404 or return a lead.
+  check('count is not parsed as a lead id', countRes.data?.id === undefined && typeof countRes.data?.count === 'number',
+    JSON.stringify(countRes.data).slice(0, 120));
+
+  const sample = (allLeads.data || []).slice(0, 2);
+  if (sample.length === 2) {
+    const idsRes = await call('GET', `/crm/leads?ids=${sample.map((l) => l.id).join(',')}`);
+    check('?ids= returns exactly the requested leads', idsRes.status === 200 && (idsRes.data || []).length === 2,
+      `got ${idsRes.status} len=${(idsRes.data || []).length}`);
+    const returned = (idsRes.data || []).map((l) => l.id).sort();
+    check('?ids= returns the right rows', JSON.stringify(returned) === JSON.stringify(sample.map((l) => l.id).sort()));
+    // Shape parity is the whole point: the board patches these rows into a list loaded from
+    // GET /crm/leads, so a missing field would blank out a card.
+    const a = idsRes.data[0];
+    check('?ids= rows carry the list shape', 'contactName' in a && 'contacts' in a && 'assignedTo' in a && 'dealFields' in a,
+      Object.keys(a || {}).join(','));
+  } else {
+    check('?ids= sample available', false, 'need at least 2 leads in the org');
+  }
+  // An unknown id must return nothing — never fall through to "no filter" and dump the table.
+  const bogus = await call('GET', '/crm/leads?ids=does-not-exist');
+  check('?ids= with an unknown id returns empty', bogus.status === 200 && (bogus.data || []).length === 0,
+    `len=${(bogus.data || []).length}`);
+  const emptyIds = await call('GET', '/crm/leads?ids=,,');
+  check('?ids= with a junk value does not return every lead', (emptyIds.data || []).length === 0,
+    `len=${(emptyIds.data || []).length}`);
+
+
+  console.log('\n15. Lead search runs in the database, not the browser');
+  // A lead deliberately named so it cannot be confused with seed data.
+  const SCO = `Zzz Searchable Optics ${RUN}`;
+  // NB: create takes `email`/`phone`, not the contactEmail/contactPhone names that READS return
+  // (withPrimaryContactFields renames them on the way out). Sending the read names silently
+  // stores a contact with no email — which is exactly what this fixture did at first.
+  const sLead = await call('POST', '/crm/leads', {
+    companyName: SCO, contactName: 'Wilhelmina Searchtest', email: `wilhelmina@${RUN}.test`,
+    // Leading digit 6: phone is unique per org, and 9/8/7 are already taken by the fixtures above.
+    phone: '6' + String(RUN).slice(-9).padStart(9, '0'), stage: 'NEW_LEAD',
+  });
+  const sId = sLead.data?.id;
+  check('search fixture created', sLead.status === 201 || sLead.status === 200, `got ${sLead.status}`);
+
+  if (sId) {
+    const byCompany = await call('GET', `/crm/leads?search=${encodeURIComponent('Zzz Searchable Optics')}`);
+    check('search matches company name', (byCompany.data || []).some((l) => l.id === sId),
+      `len=${(byCompany.data || []).length}`);
+    // Server-side search must be a SUPERSET of the old browser filter, which knew company and
+    // contact name. Contact rows live in a separate table, so this is a relation match.
+    const byContact = await call('GET', '/crm/leads?search=Wilhelmina');
+    check('search matches a contact name', (byContact.data || []).some((l) => l.id === sId),
+      `len=${(byContact.data || []).length}`);
+    const byEmail = await call('GET', `/crm/leads?search=${encodeURIComponent(`wilhelmina@${RUN}.test`)}`);
+    check('search matches a contact email', (byEmail.data || []).some((l) => l.id === sId),
+      `len=${(byEmail.data || []).length}`);
+    check('search is case-insensitive',
+      ((await call('GET', '/crm/leads?search=wilhelmina')).data || []).some((l) => l.id === sId));
+
+    // The bug this whole change exists for: the picker asked for 200, silently got 100, and
+    // anything past that became unquotable. Narrowing must happen server-side, so a search that
+    // matches one lead returns one lead — not a capped page that has to be filtered again.
+    const narrow = await call('GET', `/crm/leads?search=${encodeURIComponent(SCO)}`);
+    check('search narrows in the query, not the page', (narrow.data || []).length === 1,
+      `len=${(narrow.data || []).length}`);
+
+    const noMatch = await call('GET', '/crm/leads?search=qqzzxx-no-such-lead');
+    check('a non-matching search returns nothing', (noMatch.data || []).length === 0,
+      `len=${(noMatch.data || []).length}`);
+    // An empty search must not be read as "match nothing".
+    const blank = await call('GET', '/crm/leads?search=');
+    check('an empty search returns the full list', (blank.data || []).length === (await call('GET', '/crm/leads')).data.length);
+
+    // excludeConverted powers the quote picker: a won lead is quoted through its account.
+    const unconverted = await call('GET', '/crm/leads?excludeConverted=1');
+    check('excludeConverted drops leads that became accounts',
+      (unconverted.data || []).every((l) => !l.clientId) && (unconverted.data || []).some((l) => l.id === sId),
+      `len=${(unconverted.data || []).length}`);
+    check('search and excludeConverted combine',
+      ((await call('GET', `/crm/leads?excludeConverted=1&search=${encodeURIComponent(SCO)}`)).data || []).length === 1);
+
+    await call('DELETE', `/crm/leads/${sId}`);
+  }
+
   console.log(`\n${'='.repeat(46)}\n  ${pass} passed, ${fail} failed\n${'='.repeat(46)}`);
   process.exit(fail ? 1 : 0);
 };

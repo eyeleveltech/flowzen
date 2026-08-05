@@ -17,14 +17,8 @@ class ApiClient {
     const method = options.method || 'GET';
     const isMutation = ['POST', 'PUT', 'PATCH'].includes(method.toUpperCase());
     
-    // A file upload sends FormData, which must NOT be JSON-stringified and must NOT carry a
-    // hand-written Content-Type: multipart bodies need a boundary parameter that only the browser
-    // can generate, and setting the header ourselves omits it — the server then fails to parse a
-    // body that looks perfectly fine from the outside.
-    const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
-
     const headers: Record<string, string> = {
-      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+      'Content-Type': 'application/json',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
       ...(isMutation ? { 'X-Idempotency-Key': crypto.randomUUID() } : {}),
@@ -36,9 +30,7 @@ class ApiClient {
       headers,
       credentials: 'include',
       cache: 'no-store',
-      body: options.body
-        ? (isFormData ? (options.body as FormData) : JSON.stringify(options.body))
-        : undefined,
+      body: options.body ? JSON.stringify(options.body) : undefined,
     });
 
     if (response.status === 401) {
