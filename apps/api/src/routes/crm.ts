@@ -6,6 +6,7 @@ import { authenticate, authorize, requireModule, AuthRequest } from '../middlewa
 import { validate } from '../middleware/validate.js';
 import { emitToOrganization } from '../sse.js';
 import { whereIn } from '../utils/query.js';
+import { buildSearchFilter } from '../utils/search-utils.js';
 import { generateLeadId, normalizePhone } from '../utils/leadId.js';
 import { runIntelligence } from '../services/intelligence.service.js';
 import { ensureClientForLead } from '../services/clientConversion.service.js';
@@ -76,10 +77,59 @@ crmRouter.get('/leads', async (req: AuthRequest, res: Response, next) => {
       closeDateTo,
       dateAddedFrom,
       dateAddedTo,
-      sort
+      sort,
+      search
     } = req.query;
 
     const where: Record<string, unknown> = { organizationId: orgId };
+
+    // ?search=… — matched in the DATABASE, across every field a person might type.
+    //
+    // The list view and the quote picker both used to send this and both were silently ignored:
+    // they downloaded leads and filtered the array in the browser. That works right up until the
+    // org has more leads than one response carries (the cap is 100), at which point the leads
+    // beyond it become unfindable — no error, they simply are not offered.
+    //
+    // The field list must stay a SUPERSET of what those client-side filters covered, or moving
+    // the work here would quietly lose matches: companyName and contact name were already
+    // searchable in the browser, and the converted account's name was too.
+    if (search && String(search).trim()) {
+      where.AND = [
+        buildSearchFilter(
+          [
+            'companyName',
+            'leadId',
+            { contacts: { some: { name: { contains: String(search).trim(), mode: 'insensitive' } } } },
+            { contacts: { some: { email: { contains: String(search).trim(), mode: 'insensitive' } } } },
+            { contacts: { some: { phone: { contains: String(search).trim(), mode: 'insensitive' } } } },
+            { client: { name: { contains: String(search).trim(), mode: 'insensitive' } } },
+            { client: { company: { contains: String(search).trim(), mode: 'insensitive' } } },
+          ],
+          String(search).trim(),
+        ),
+      ];
+    }
+
+    // ?excludeConverted=1 — only leads that have not become an account yet.
+    // The quote picker needs this: once a lead is won you quote the client, not the lead. It
+    // belongs here rather than in the browser, because filtering after the fact would silently
+    // shrink an already-capped page down to nothing.
+    if (req.query.excludeConverted === '1' || req.query.excludeConverted === 'true') {
+      where.clientId = null;
+    }
+
+    // ?ids=a,b,c — fetch specific leads with EXACTLY the shape the list returns.
+    //
+    // This exists so a client that already holds a list can refresh one row after a realtime
+    // event instead of re-downloading the whole pipeline. Deliberately served by this handler
+    // rather than GET /leads/:id: that route returns a different, much heavier shape (activities,
+    // stage history), and anything assembled separately would drift out of sync with the list.
+    // Capped at 100 so it cannot be turned into an unpaginated table read.
+    if (req.query.ids) {
+      const ids = String(req.query.ids).split(',').map((s) => s.trim()).filter(Boolean).slice(0, 100);
+      // An empty/garbage ids param must match nothing, not everything.
+      where.id = { in: ids };
+    }
 
     if (stage) where.stage = whereIn(stage);
     if (assignedToId) where.assignedToId = whereIn(assignedToId);
@@ -144,6 +194,23 @@ crmRouter.get('/leads', async (req: AuthRequest, res: Response, next) => {
     // contactEmail / contactPhone. Those columns no longer exist, so the person has to be
     // re-derived from the contact rows on the way out.
     res.json(leads.map(withPrimaryContactFields));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/crm/leads/count — how many leads the org has, and nothing else.
+//
+// The pipeline header used to get this by fetching every lead and reading `.length`. At a
+// measured ~1.6 KB per lead that is 780 KB downloaded to render one number at 500 leads, and it
+// ran again on every realtime lead event. This does it in the database.
+//
+// Declared BEFORE /leads/:id: Express matches in definition order, so the param route would
+// otherwise capture "count" and try to look up a lead with that id.
+crmRouter.get('/leads/count', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const count = await prisma.lead.count({ where: { organizationId: req.user!.organizationId } });
+    res.json({ count });
   } catch (error) {
     next(error);
   }

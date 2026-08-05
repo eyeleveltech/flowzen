@@ -11,6 +11,7 @@ import { useAuthStore } from '@/stores';
 import { TAX_TYPES, resolveTaxType, DEFAULT_TAX_TYPE } from '../lib/tax-catalog';
 import { fileUrl } from '@/lib/files';
 import { useModalSafety } from '@/hooks/useModalSafety';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import toast from 'react-hot-toast';
 import { leadStageLabel } from '@/lib/lead-stage';
 
@@ -54,12 +55,25 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
 
   // Client lookup combobox
   const [clientSearch, setClientSearch] = useState('');
+  const debouncedClientSearch = useDebouncedValue(clientSearch, 300);
   const [showClientList, setShowClientList] = useState(false);
   const clientRef = useRef<HTMLDivElement>(null);
 
+  // Both lists are searched by the SERVER, debounced as you type.
+  //
+  // This used to request ?limit=200 for each and match substrings in the browser. Both endpoints
+  // cap a page at 100, silently — so past 100 clients or 100 leads, the rest simply could not be
+  // picked, and the box said "No match" as if they did not exist.
   useEffect(() => {
-    api.get<{ clients: any[] }>('/clients?limit=200').then((d) => setClients(d.clients || [])).catch(() => { });
-    api.get<any>('/crm/leads?limit=200').then((d) => setLeads(d?.leads || d || [])).catch(() => { });
+    const q = debouncedClientSearch.trim();
+    const qs = q ? `&search=${encodeURIComponent(q)}` : '';
+    api.get<{ clients: any[] }>(`/clients?limit=50${qs}`).then((d) => setClients(d.clients || [])).catch(() => { });
+    // excludeConverted: once a lead is won you quote the account, not the lead. Filtered in the
+    // query rather than after the fact, so it cannot empty out an already-capped page.
+    api.get<any>(`/crm/leads?limit=50&excludeConverted=1${qs}`).then((d) => setLeads(d?.leads || d || [])).catch(() => { });
+  }, [debouncedClientSearch]);
+
+  useEffect(() => {
     api.get<any>('/settings/company/quote-context').then((c) => {
       setOrgState(c?.state || '');
       if (!editId && !duplicateOf && c?.standardTerms) setForm((f) => ({ ...f, termsConditions: c.standardTerms }));
@@ -135,17 +149,9 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
 
   const { guardedClose, panelRef } = useModalSafety({ onClose, isDirty });
 
-  const filteredClients = clients.filter((c) => {
-    const s = clientSearch.toLowerCase();
-    return [c.company, c.name].filter(Boolean).some((v: string) => v.toLowerCase().includes(s));
-  }).slice(0, 8);
-
-  // Only leads that haven't converted yet — once a lead has a client, quote the client.
-  const filteredLeads = leads.filter((l) => {
-    if (l.clientId) return false;
-    const s = clientSearch.toLowerCase();
-    return [l.companyName, l.contactName].filter(Boolean).some((v: string) => v.toLowerCase().includes(s));
-  }).slice(0, 6);
+  // Already matched and narrowed by the server — these only cap how many rows the dropdown shows.
+  const filteredClients = clients.slice(0, 8);
+  const filteredLeads = leads.slice(0, 6);
 
   function selectClient(c: any) {
     setClientId(c.id);
@@ -319,7 +325,9 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
                 <div className="absolute z-20 w-full mt-1 bg-white border border-border rounded-xl shadow-lg max-h-56 overflow-auto p-1">
                   {filteredClients.length === 0 && filteredLeads.length === 0 ? (
                     <div className="px-3 py-2 text-sm text-secondary">
-                      {clients.length === 0 && leads.length === 0 ? 'Nothing to quote yet — add a lead in the Pipeline first.' : `No match for “${clientSearch}”.`}
+                      {/* With server-side search an empty list means "nothing matched", not
+                          "nothing exists" — only say the org is empty when nothing was typed. */}
+                      {clientSearch.trim() ? `No match for “${clientSearch}”.` : 'Nothing to quote yet — add a lead in the Pipeline first.'}
                     </div>
                   ) : (
                     <>

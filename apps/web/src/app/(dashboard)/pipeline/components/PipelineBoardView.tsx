@@ -16,6 +16,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useConfirmStore } from '@/stores';
 import { LeadModal } from './LeadModal';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
 import { useMembers } from '@/hooks/useQueries';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { getInitials } from '@/lib/utils';
@@ -122,16 +123,70 @@ export function PipelineBoardView() {
     setStageMenu({ lead, x: rect.right, y: up ? rect.top : rect.bottom, up });
   };
 
+  // Ids waiting to be refreshed, collected between debounce ticks. A burst of lead:updated
+  // events (a bulk delete, a colleague dragging several cards) collapses into ONE request.
+  const pendingIdsRef = useRef<Set<string>>(new Set());
+  // Set when an event arrives that names no lead — those say "something changed, I won't tell
+  // you what", so the only correct response is to reload the board.
+  const needsFullRefetchRef = useRef(false);
+
+  const flushLeadUpdates = useDebouncedCallback(() => {
+    const ids = Array.from(pendingIdsRef.current);
+    pendingIdsRef.current.clear();
+
+    // Over 100 changed rows is a bulk operation, and ?ids= is capped at 100 anyway — reloading
+    // is both cheaper and simpler than paging through the ids.
+    if (needsFullRefetchRef.current || ids.length > 100) {
+      needsFullRefetchRef.current = false;
+      fetchLeads();
+      return;
+    }
+    if (!ids.length) return;
+
+    // Re-read only the rows that changed, through the SAME endpoint the board loads from, so the
+    // patched rows are shaped exactly like the ones already in state. The event payload itself is
+    // not trusted for this: different emitters send different shapes (some send {id}, some send a
+    // lead built with a different include), and one of those would quietly drop fields.
+    api.get<any[]>(`/crm/leads?ids=${ids.join(',')}`)
+      .then((fresh) => {
+        const byId = new Map(fresh.map((l) => [l.id, l]));
+        setLeads((prev) => {
+          const next = prev
+            // An id we asked about that came back missing was deleted — drop it.
+            .filter((l) => !ids.includes(l.id) || byId.has(l.id))
+            .map((l) => byId.get(l.id) ?? l);
+          // Anything brand new (created by someone else) is not in prev yet.
+          const known = new Set(next.map((l) => l.id));
+          return [...next, ...fresh.filter((l) => !known.has(l.id))];
+        });
+      })
+      .catch(() => { /* a missed realtime patch self-corrects on the next full load */ });
+  }, 300);
+
   useEffect(() => {
     setIsMounted(true);
     fetchLeads();
 
     const sse = getSSE();
     if (sse) {
-      sse.on('lead:updated', fetchLeads);
-      return () => { sse.off('lead:updated', fetchLeads); };
+      // The board used to re-download every lead on every lead:updated event — ~780 KB per event
+      // at 500 leads, for every open browser, on every drag anyone made.
+      const handleUpdate = (payload: any) => {
+        const id = payload?.id;
+        if (payload?.deleted && id) {
+          // A deletion needs no round trip at all: remove it and stop.
+          setLeads((prev) => prev.filter((l) => l.id !== id));
+          pendingIdsRef.current.delete(id);
+          return;
+        }
+        if (id) pendingIdsRef.current.add(id);
+        else needsFullRefetchRef.current = true;
+        flushLeadUpdates();
+      };
+      sse.on('lead:updated', handleUpdate);
+      return () => { sse.off('lead:updated', handleUpdate); };
     }
-  }, []);
+  }, [flushLeadUpdates]);
 
   async function fetchLeads() {
     try {

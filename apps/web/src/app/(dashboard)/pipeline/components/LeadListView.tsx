@@ -12,6 +12,7 @@ import { ColumnDropdown } from '@/components/ui/column-dropdown';
 import { LeadModal } from './LeadModal';
 import { useMembers } from '@/hooks/useQueries';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { leadStageLabel } from '@/lib/lead-stage';
 
@@ -68,6 +69,11 @@ export function LeadListView() {
 
   const debouncedSearch = useDebouncedValue(search, 300);
 
+  // The filters in force right now, so a debounced refetch fired by a realtime event uses the
+  // current query rather than whichever one was active when the listener was attached.
+  const paramsRef = useRef<URLSearchParams>(new URLSearchParams());
+  const refetchCurrent = useDebouncedCallback(() => { fetchLeads(paramsRef.current); }, 300);
+
   // Filter logic trigger
   useEffect(() => {
     const params = new URLSearchParams();
@@ -87,17 +93,29 @@ export function LeadListView() {
     const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
     window.history.replaceState(null, '', newUrl);
 
+    paramsRef.current = params;
     fetchLeads(params);
 
     const sse = getSSE();
     if (sse) {
-      const handleUpdate = () => fetchLeads(params);
+      // This list is filtered by the SERVER, so a changed lead can't just be patched in — it may
+      // no longer match the active filters, and re-deciding that here would mean duplicating the
+      // query logic in the browser. So updates still refetch, but debounced, and deletions are
+      // handled locally: a row that is gone is gone under any filter. That is what makes clearing
+      // a bad import cheap — 200 deletions now cost 0 refetches instead of 200.
+      const handleUpdate = (payload: any) => {
+        if (payload?.deleted && payload.id) {
+          setLeads((prev) => prev.filter((l) => l.id !== payload.id));
+          return;
+        }
+        refetchCurrent();
+      };
       sse.on('lead:updated', handleUpdate);
       return () => {
         sse.off('lead:updated', handleUpdate);
       };
     }
-  }, [debouncedSearch, stageFilter, ownerFilter, minDealValue, maxDealValue, leadSource, priority, closeDateFrom, closeDateTo, dateAddedFrom, dateAddedTo, sort]);
+  }, [debouncedSearch, stageFilter, ownerFilter, minDealValue, maxDealValue, leadSource, priority, closeDateFrom, closeDateTo, dateAddedFrom, dateAddedTo, sort, refetchCurrent]);
 
   async function fetchLeads(params: URLSearchParams) {
     // Skip the skeleton flash on refetches (search debounce, filter change, SSE update) —
@@ -132,13 +150,11 @@ export function LeadListView() {
     setDateAddedTo('');
   };
 
+  // Searching happens in the database now (the `search` param this view already sent was being
+  // ignored by the API, so it re-filtered the array here). Keeping a browser-side pass as well
+  // would re-narrow the server's results to the fewer fields it knew about — a lead matched on a
+  // contact's email or phone would be fetched and then thrown away before it could be shown.
   const filteredLeads = leads.filter(lead => {
-    if (!search) return true;
-    const term = search.toLowerCase();
-    const haystack = [lead.contactName, lead.companyName, lead.client?.name, lead.client?.company]
-      .filter(Boolean).join(' ').toLowerCase();
-    return haystack.includes(term);
-  }).filter(lead => {
     // Hide closed leads by default unless the toggle is on or the user filtered to a closed stage.
     if (showWonLost || stageFilter.includes('PROJECT_COMPLETED') || stageFilter.includes('CHURNED')) return true;
     return lead.stage !== 'PROJECT_COMPLETED' && lead.stage !== 'CHURNED';

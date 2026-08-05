@@ -16,6 +16,7 @@ import { ViewSettingsPanel } from '@/components/ui/view-settings-panel';
 import toast from 'react-hot-toast';
 
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
 
 function PipelineContent() {
   usePageTitle('Pipeline');
@@ -67,21 +68,27 @@ function PipelineContent() {
   ];
   const [visibleColumns, setVisibleColumns] = useState<string[]>(PIPELINE_COLUMNS.map(c => c.id));
 
+  // Debounced because a bulk action (importing 500 leads, deleting a selection) fires one
+  // lead:updated per row. Without this the header would re-count once per event.
+  const refreshTotal = useDebouncedCallback(() => { fetchTotal(); }, 300);
+
   useEffect(() => {
     fetchTotal();
     const sse = getSSE();
     if (sse) {
-      sse.on('lead:updated', fetchTotal);
-      return () => { sse.off('lead:updated', fetchTotal); };
+      sse.on('lead:updated', refreshTotal);
+      return () => { sse.off('lead:updated', refreshTotal); };
     }
-  }, []);
+  }, [refreshTotal]);
 
   // Removed mobile view-override useEffect to default to BOARD view on both desktop and mobile.
 
   async function fetchTotal() {
     try {
-      const data = await api.get<any[]>('/crm/leads');
-      setTotalLeads(data.length || 0);
+      // Counts in the database. This used to fetch every lead with all its relations and read
+      // `.length` off the array — ~780 KB at 500 leads, to render one number.
+      const data = await api.get<{ count: number }>('/crm/leads/count');
+      setTotalLeads(data.count || 0);
     } catch (err) { }
   }
 
