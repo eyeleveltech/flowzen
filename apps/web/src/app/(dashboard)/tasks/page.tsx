@@ -133,7 +133,7 @@ function TasksContent() {
     return !!searchParams.get('assignees');
   });
 
-  // Restore saved localStorage filters after mount to prevent hydration mismatch
+  // Restore saved localStorage filters after mount if query params are not present
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('flowzen_tasks_filters');
@@ -153,12 +153,37 @@ function TasksContent() {
     }
   }, []);
 
+  // Sync state with URL searchParams when navigation or URL changes occur
   useEffect(() => {
-    if (isMounted && user?.id && user.role !== 'TEAM_MEMBER' && !hasSetDefaultAssignee) {
+    const statusParam = searchParams.get('statuses');
+    const clientParam = searchParams.get('clients');
+    const projectParam = searchParams.get('projects');
+    const assigneeParam = searchParams.get('assignees');
+    const teamParam = searchParams.get('teams');
+
+    if (assigneeParam !== null) {
+      setHasSetDefaultAssignee(true);
+    }
+
+    const newStatuses = statusParam ? statusParam.split(',') : [];
+    const newClients = clientParam ? clientParam.split(',') : [];
+    const newProjects = projectParam ? projectParam.split(',') : [];
+    const newAssignees = assigneeParam ? assigneeParam.split(',') : [];
+    const newTeams = teamParam ? teamParam.split(',') : [];
+
+    setStatusFilter(prev => prev.join(',') !== newStatuses.join(',') ? newStatuses : prev);
+    setClientFilter(prev => prev.join(',') !== newClients.join(',') ? newClients : prev);
+    setProjectFilter(prev => prev.join(',') !== newProjects.join(',') ? newProjects : prev);
+    setAssigneeFilter(prev => prev.join(',') !== newAssignees.join(',') ? newAssignees : prev);
+    setTeamFilter(prev => prev.join(',') !== newTeams.join(',') ? newTeams : prev);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (isMounted && user?.id && user.role !== 'TEAM_MEMBER' && !hasSetDefaultAssignee && !searchParams.get('assignees')) {
       setAssigneeFilter([user.id]);
       setHasSetDefaultAssignee(true);
     }
-  }, [user, hasSetDefaultAssignee, isMounted]);
+  }, [user, hasSetDefaultAssignee, isMounted, searchParams]);
 
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
   const [teamFilter, setTeamFilter] = useState<string[]>(() => {
@@ -459,9 +484,6 @@ function TasksContent() {
   };
 
   const isCustomSortActive = sort && sort !== 'createdAt_desc';
-  const isDefaultAssigneeActive = !!(user?.id && user.role !== 'TEAM_MEMBER' && assigneeFilter.length === 1 && assigneeFilter[0] === user.id);
-  const isAssigneeCustom = assigneeFilter.length > 0 && !isDefaultAssigneeActive;
-  const isAssigneeCleared = assigneeFilter.length === 0 && !!(user?.id && user.role !== 'TEAM_MEMBER');
 
   const hasActiveFilters = isMounted && !!(
     search ||
@@ -470,18 +492,17 @@ function TasksContent() {
     statusFilter.length > 0 ||
     priorityFilter.length > 0 ||
     teamFilter.length > 0 ||
+    assigneeFilter.length > 0 ||
     isCustomSortActive ||
     showCompleted ||
-    searchParams.get('filter') ||
-    isAssigneeCustom ||
-    isAssigneeCleared
+    searchParams.get('filter')
   );
 
   const activeCount = (clientFilter.length > 0 ? 1 : 0) +
     (projectFilter.length > 0 ? 1 : 0) +
     (statusFilter.length > 0 ? 1 : 0) +
     (teamFilter.length > 0 ? 1 : 0) +
-    ((isAssigneeCustom || isAssigneeCleared) ? 1 : 0) +
+    (assigneeFilter.length > 0 ? 1 : 0) +
     (priorityFilter.length > 0 ? 1 : 0) +
     (isCustomSortActive ? 1 : 0) +
     (showCompleted ? 1 : 0);
@@ -537,13 +558,16 @@ function TasksContent() {
                 {projectFilter.length > 0 && <ActiveFilterChip label={`Projects: ${projectFilter.length}`} onRemove={() => setProjectFilter([])} />}
                 {statusFilter.length > 0 && <ActiveFilterChip label={`Status: ${statusFilter.length}`} onRemove={() => setStatusFilter([])} />}
                 {teamFilter.length > 0 && <ActiveFilterChip label={`Departments: ${teamFilter.length}`} onRemove={() => setTeamFilter([])} />}
-                {(isAssigneeCustom || isAssigneeCleared) && <ActiveFilterChip label={`Assignees: ${assigneeFilter.length}`} onRemove={() => {
-                  if (user?.id && user.role !== 'TEAM_MEMBER') {
-                    setAssigneeFilter([user.id]);
-                  } else {
-                    setAssigneeFilter([]);
-                  }
-                }} />}
+                {assigneeFilter.length > 0 && (
+                  <ActiveFilterChip
+                    label={
+                      assigneeFilter.length === 1
+                        ? `Assignee: ${members.find((m: any) => m.id === assigneeFilter[0])?.name || '1 selected'}`
+                        : `Assignees: ${assigneeFilter.length}`
+                    }
+                    onRemove={() => setAssigneeFilter([])}
+                  />
+                )}
                 {priorityFilter.length > 0 && <ActiveFilterChip label={`Priority: ${priorityFilter.length}`} onRemove={() => setPriorityFilter([])} />}
                 {isCustomSortActive && <ActiveFilterChip label="Custom Sort" onRemove={() => setSort('createdAt_desc')} />}
                 {showCompleted && <ActiveFilterChip label="Show Done" onRemove={() => setShowCompleted(false)} />}
@@ -795,9 +819,9 @@ function TasksContent() {
         <div className="h-px bg-border/60 w-full" />
 
         {/* Row 2: Tabs + Actions */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 w-full max-w-full">
           {/* Left Side: Segmented tabs */}
-          <div className="flex bg-subtle p-1 rounded-xl gap-0.5 border border-border/50 self-start shrink-0 overflow-x-auto no-scrollbar">
+          <div className="flex bg-subtle p-1 rounded-xl gap-0.5 border border-border/50 w-full sm:w-auto max-w-full overflow-x-auto no-scrollbar">
             {[
               { id: '', label: 'All', activeColor: 'bg-white text-primary shadow-sm border border-black/5' },
               { id: 'today', label: 'Today', activeColor: 'bg-white text-primary shadow-sm border border-black/5' },
@@ -808,7 +832,7 @@ function TasksContent() {
                 key={tab.id}
                 type="button"
                 onClick={() => setQuickFilter(tab.id)}
-                className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors duration-150 motion-reduce:transition-none whitespace-nowrap ${currentFilter === tab.id
+                className={`flex-1 sm:flex-none text-center px-3 sm:px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors duration-150 motion-reduce:transition-none whitespace-nowrap ${currentFilter === tab.id
                   ? tab.activeColor
                   : 'text-secondary hover:text-primary'
                   }`}
@@ -819,7 +843,7 @@ function TasksContent() {
           </div>
 
           {/* Right Side: View toggle, settings, new task, and clear filters */}
-          <div className="flex items-center justify-end gap-2.5 ml-auto sm:ml-0">
+          <div className="flex items-center justify-between sm:justify-end gap-2.5 w-full sm:w-auto">
             {hasActiveFilters && (
               <button
                 onClick={() => {
@@ -829,12 +853,8 @@ function TasksContent() {
                   setStatusFilter([]);
                   setPriorityFilter([]);
                   setTeamFilter([]);
+                  setAssigneeFilter([]);
                   setSort('createdAt_desc');
-                  if (user?.id && user.role !== 'TEAM_MEMBER') {
-                    setAssigneeFilter([user.id]);
-                  } else {
-                    setAssigneeFilter([]);
-                  }
                   setShowCompleted(false);
                   if (typeof window !== 'undefined') {
                     localStorage.removeItem('flowzen_tasks_filters');
@@ -954,7 +974,7 @@ function TasksContent() {
                                             <MessageSquare className="h-3 w-3" /> {t._count?.comments}
                                           </span>
                                         )}
-                                        <span className="text-[11px] font-medium text-body-soft">{assigneeLabel(t)}</span>
+                                        <span className="text-[11px] font-medium text-text-on-sunken">{assigneeLabel(t)}</span>
                                       </div>
                                     </div>
                                     {t.dueDate && (
@@ -1169,7 +1189,7 @@ function TasksContent() {
                       <div className="flex items-center justify-between">
                         <StatusBadge status={t.status} size="xs" />
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-medium text-body-soft">{assigneeLabel(t)}</span>
+                          <span className="text-[11px] font-medium text-text-on-sunken">{assigneeLabel(t)}</span>
                         </div>
                       </div>
                       {t.dueDate && (

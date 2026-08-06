@@ -585,7 +585,7 @@ export default function ClientDetailPage() {
                       <span className="text-xs font-semibold text-primary tabular-nums">{p.progress}%</span>
                     </div>
                     <div className="h-2 w-full rounded-full bg-subtle overflow-hidden">
-                      <div className={`h-full rounded-full ${p.status === 'COMPLETED' ? 'bg-green-500' : 'bg-primary'}`} style={{ width: `${p.progress}%` }} />
+                      <div className={`h-full rounded-full ${p.status === 'COMPLETED' ? 'bg-emerald-500' : 'bg-primary'}`} style={{ width: `${p.progress}%` }} />
                     </div>
                   </div>
                 </Link>

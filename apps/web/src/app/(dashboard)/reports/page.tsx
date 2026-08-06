@@ -144,14 +144,14 @@ export default function ReportsPage() {
   const periodLabel = datePresetOptions.find(o => o.value === datePreset)?.label || '';
 
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-primary tracking-tight">Reports & Analytics</h1>
-        <p className="text-sm text-secondary mt-1">Deep operational visibility and performance metrics</p>
+    <div className="w-full max-w-full overflow-x-hidden">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-xl sm:text-2xl font-semibold text-primary tracking-tight">Reports & Analytics</h1>
+        <p className="text-xs sm:text-sm text-secondary mt-1">Deep operational visibility and performance metrics</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 mb-8 overflow-x-auto no-scrollbar w-max max-w-full -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 pb-2 pr-8 snap-x scroll-px-4">
+      <div className="flex items-center gap-2 mb-6 sm:mb-8 overflow-x-auto no-scrollbar w-full max-w-full pb-2 snap-x scroll-px-4">
         {tabs.map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;
@@ -173,9 +173,9 @@ export default function ReportsPage() {
 
       {/* Department Filter (Only for Projects, Tasks, and Team reports) */}
       {['projects', 'tasks', 'team'].includes(tab) && (
-        <div className="no-print flex flex-wrap items-center gap-3 mb-6 bg-surface border border-border rounded-2xl p-4">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-secondary uppercase tracking-wider">Filter by Department:</span>
+        <div className="no-print flex flex-col sm:flex-row sm:items-center gap-3 mb-6 bg-[#F9FAFB] border border-border rounded-2xl p-3.5 sm:p-4 w-full max-w-full">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
+            <span className="text-xs font-semibold text-secondary uppercase tracking-wider shrink-0">Filter by Department:</span>
             <Select
               value={selectedDepartment}
               onChange={setSelectedDepartment}
@@ -183,13 +183,13 @@ export default function ReportsPage() {
                 { label: 'All Departments', value: '' },
                 ...departments.map((d) => ({ label: d.name, value: d.id }))
               ]}
-              className="w-48"
+              className="w-full sm:w-48"
             />
           </div>
           {user?.teamId && (
             <button
               onClick={() => setSelectedDepartment(user.teamId || '')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors duration-150 motion-reduce:transition-none flex items-center gap-1.5 ${selectedDepartment === user.teamId
+              className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-colors duration-150 motion-reduce:transition-none flex items-center justify-center gap-1.5 w-full sm:w-auto shrink-0 ${selectedDepartment === user.teamId
                   ? 'bg-primary text-white border-primary shadow-sm'
                   : 'bg-white text-secondary border-border hover:text-primary hover:bg-surface'
                 }`}
@@ -203,19 +203,19 @@ export default function ReportsPage() {
 
       {/* ---------------- EXECUTIVE (BOSS VIEW) ---------------- */}
       {tab === 'executive' && (
-        <div id="exec-report">
-          <div className="no-print flex flex-wrap items-center justify-between gap-3 mb-6">
-            <div className="flex flex-wrap items-center gap-2">
-              <Select value={datePreset} onChange={setDatePreset} options={datePresetOptions} className="w-44" />
+        <div id="exec-report" className="w-full max-w-full">
+          <div className="no-print flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
+              <Select value={datePreset} onChange={setDatePreset} options={datePresetOptions} className="w-full sm:w-44" />
               {datePreset === 'custom' && (
-                <div className="flex items-center gap-2">
-                  <input type="date" value={customRange.start} onChange={(e) => setCustomRange({ ...customRange, start: e.target.value })} className="rounded-lg border border-border px-3 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1" />
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                  <input type="date" value={customRange.start} onChange={(e) => setCustomRange({ ...customRange, start: e.target.value })} className="flex-1 sm:flex-none rounded-lg border border-border px-3 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 min-w-32" />
                   <span className="text-secondary">–</span>
-                  <input type="date" value={customRange.end} onChange={(e) => setCustomRange({ ...customRange, end: e.target.value })} className="rounded-lg border border-border px-3 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1" />
+                  <input type="date" value={customRange.end} onChange={(e) => setCustomRange({ ...customRange, end: e.target.value })} className="flex-1 sm:flex-none rounded-lg border border-border px-3 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 min-w-32" />
                 </div>
               )}
             </div>
-            <button onClick={() => window.print()} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover transition-colors duration-150 motion-reduce:transition-none">
+            <button onClick={() => window.print()} className="flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none w-full sm:w-auto shrink-0">
               <Download className="h-4 w-4" /> Export PDF
             </button>
           </div>
@@ -233,8 +233,8 @@ export default function ReportsPage() {
       {/* ---------------- PROJECT REPORTS ---------------- */}
       {tab === 'projects' && !projectReport && <ReportSkeleton />}
       {tab === 'projects' && projectReport && (
-        <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
-          <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <motion.div variants={container} initial="hidden" animate="show" className="space-y-6 w-full max-w-full">
+          <motion.div variants={item} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             <MetricCard label="Total Projects" value={projectReport.total} icon={FolderKanban} />
             <MetricCard label="Completed" value={projectReport.completed} suffix={`(${projectReport.completionRate}%)`} icon={TrendingUp} />
             <MetricCard label="Active" value={projectReport.active} icon={Clock} />
@@ -242,12 +242,12 @@ export default function ReportsPage() {
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <motion.div variants={item} className="rounded-2xl border border-border bg-white p-6 hover:shadow-sm transition-shadow">
+            <motion.div variants={item} className="rounded-2xl border border-border bg-white p-4 sm:p-6 hover:shadow-sm transition-shadow">
               <h3 className="text-sm font-semibold text-primary mb-6">Status Distribution</h3>
               <div className="space-y-4">
                 {projectReport.statusDistribution.map((s) => (
-                  <div key={s.status} className="flex items-center gap-4">
-                    <span className="text-sm text-secondary font-medium w-24">{s.status}</span>
+                  <div key={s.status} className="flex items-center gap-3 sm:gap-4">
+                    <span className="text-xs sm:text-sm text-secondary font-medium w-20 sm:w-24 truncate">{s.status}</span>
                     <div className="flex-1 h-2 rounded-full bg-subtle overflow-hidden">
                       <motion.div
                         initial={{ width: 0 }}
@@ -295,8 +295,8 @@ export default function ReportsPage() {
       {/* ---------------- TASK REPORTS ---------------- */}
       {tab === 'tasks' && !taskReport && <ReportSkeleton />}
       {tab === 'tasks' && taskReport && (
-        <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
-          <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <motion.div variants={container} initial="hidden" animate="show" className="space-y-6 w-full max-w-full">
+          <motion.div variants={item} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             <MetricCard label="Total Tasks" value={taskReport.total} icon={ListTodo} />
             <MetricCard label="Completed" value={taskReport.completed} suffix={`(${taskReport.completionRate}%)`} icon={TrendingUp} />
             <MetricCard label="Open" value={taskReport.total - taskReport.completed} icon={Clock} />
@@ -304,12 +304,12 @@ export default function ReportsPage() {
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <motion.div variants={item} className="rounded-2xl border border-border bg-white p-6 hover:shadow-sm transition-shadow">
+            <motion.div variants={item} className="rounded-2xl border border-border bg-white p-4 sm:p-6 hover:shadow-sm transition-shadow">
               <h3 className="text-sm font-semibold text-primary mb-6">Open Tasks Workload by Assignee</h3>
               <div className="space-y-4">
                 {taskReport.tasksByAssignee.map((a) => (
-                  <div key={a.assignee} className="flex items-center gap-4">
-                    <span className="text-sm text-secondary font-medium w-32 truncate">{a.assignee}</span>
+                  <div key={a.assignee} className="flex items-center gap-3 sm:gap-4">
+                    <span className="text-xs sm:text-sm text-secondary font-medium w-24 sm:w-32 truncate">{a.assignee}</span>
                     <div className="flex-1 h-2 rounded-full bg-subtle overflow-hidden">
                       <motion.div
                         initial={{ width: 0 }}
@@ -344,17 +344,17 @@ export default function ReportsPage() {
       {/* ---------------- TEAM REPORTS ---------------- */}
       {tab === 'team' && !teamReport && <ReportSkeleton />}
       {tab === 'team' && teamReport && (
-        <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
-          <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <motion.div variants={container} initial="hidden" animate="show" className="space-y-6 w-full max-w-full">
+          <motion.div variants={item} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             <MetricCard label="Overall Completion" value={`${teamReport.overallCompletionRate}%`} icon={TrendingUp} />
             <MetricCard label="Total Tasks" value={teamReport.totalTasks} icon={ListTodo} />
             <MetricCard label="Completed" value={teamReport.totalCompleted} icon={Clock} />
             <MetricCard label="Active Workload" value={teamReport.totalTasks - teamReport.totalCompleted} icon={Users} />
           </motion.div>
 
-          <motion.div variants={item} className="rounded-2xl border border-border bg-white overflow-hidden hover:shadow-sm transition-shadow">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-175">
+          <motion.div variants={item} className="rounded-2xl border border-border bg-white overflow-hidden hover:shadow-sm transition-shadow w-full max-w-full">
+            <div className="overflow-x-auto max-w-full">
+              <table className="w-full min-w-140 sm:min-w-175">
                 <thead>
                   <tr className="border-b border-subtle bg-surface">
                     <th className="px-6 py-4 text-left text-xs font-medium text-secondary uppercase tracking-wide">Member</th>
@@ -399,15 +399,15 @@ export default function ReportsPage() {
       {/* ---------------- CLIENT REPORTS ---------------- */}
       {tab === 'clients' && !clientReport && <ReportSkeleton />}
       {tab === 'clients' && clientReport && (
-        <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
-          <motion.div variants={item} className="grid grid-cols-2 gap-4">
+        <motion.div variants={container} initial="hidden" animate="show" className="space-y-6 w-full max-w-full">
+          <motion.div variants={item} className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <MetricCard label="Total Clients" value={clientReport.totalClients} icon={Users} />
             <MetricCard label="Avg Completion Rate" value={`${Math.round(clientReport.clients.reduce((sum, c) => sum + c.completionRate, 0) / (clientReport.totalClients || 1))}%`} icon={TrendingUp} />
           </motion.div>
 
-          <motion.div variants={item} className="rounded-2xl border border-border bg-white overflow-hidden hover:shadow-sm transition-shadow">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-225">
+          <motion.div variants={item} className="rounded-2xl border border-border bg-white overflow-hidden hover:shadow-sm transition-shadow w-full max-w-full">
+            <div className="overflow-x-auto max-w-full">
+              <table className="w-full min-w-180 sm:min-w-225">
                 <thead>
                   <tr className="border-b border-subtle bg-surface">
                     <th className="px-6 py-4 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>
@@ -476,14 +476,14 @@ export default function ReportsPage() {
 
 function MetricCard({ label, value, suffix, danger, icon: Icon }: { label: string; value: string | number; suffix?: string; danger?: boolean; icon?: any }) {
   return (
-    <div className={`flex flex-col justify-between h-full p-4 sm:p-5 rounded-2xl border ${danger ? 'border-red-200 bg-red-50' : 'border-border bg-white'} hover:shadow-sm transition-shadow`}>
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <p className={`min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium uppercase tracking-wide ${danger ? 'text-red-600' : 'text-secondary'}`}>{label}</p>
+    <div className={`flex flex-col justify-between h-full p-3.5 sm:p-5 rounded-2xl border ${danger ? 'border-red-200 bg-red-50' : 'border-border bg-white'} hover:shadow-sm transition-shadow min-w-0`}>
+      <div className="flex items-start justify-between gap-2 mb-2 sm:mb-3">
+        <p className={`min-h-[2em] sm:min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium uppercase tracking-wide truncate ${danger ? 'text-red-600' : 'text-secondary'}`}>{label}</p>
         {Icon && <Icon className={`h-4 w-4 shrink-0 ${danger ? 'text-red-500' : 'text-secondary'}`} />}
       </div>
-      <p title={String(value)} className={`${String(value).length > 12 ? 'text-lg sm:text-xl' : String(value).length > 8 ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-3xl'} font-semibold tabular-nums tracking-tight ${danger ? 'text-red-600' : 'text-primary'}`}>
+      <p title={String(value)} className={`truncate ${String(value).length > 12 ? 'text-base sm:text-xl' : String(value).length > 8 ? 'text-lg sm:text-2xl' : 'text-xl sm:text-3xl'} font-semibold tabular-nums tracking-tight ${danger ? 'text-red-600' : 'text-primary'}`}>
         {value}
-        {suffix && <span className={`text-sm font-medium ml-2 ${danger ? 'text-red-400' : 'text-secondary'}`}>{suffix}</span>}
+        {suffix && <span className={`text-xs sm:text-sm font-medium ml-1.5 ${danger ? 'text-red-400' : 'text-secondary'}`}>{suffix}</span>}
       </p>
     </div>
   );
@@ -563,14 +563,14 @@ function ExecutiveTab({ data, periodLabel }: { data: any; periodLabel: string })
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-8">
 
       {/* KPI ROW */}
-      <motion.div variants={item} className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-4">
+      <motion.div variants={item} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <MetricCard label="Active Revenue" value={formatCurrency(revenue.activeRevenue)} icon={IndianRupee} />
         <MetricCard label="Weighted Forecast" value={formatCurrency(revenue.weightedPipelineValue || 0)} icon={PieChart} />
         <MetricCard label="Raw Pipeline" value={formatCurrency(revenue.pipelineValue)} icon={TrendingUp} />
         <MetricCard label="Win Rate" value={`${revenue.winRate}%`} icon={Trophy} />
         <MetricCard label="On-Time Delivery" value={`${delivery.onTimeRate}%`} icon={Target} danger={delivery.onTimeRate < 70} />
         <MetricCard label="Overdue Tasks" value={delivery.overdueTasks} icon={AlertTriangle} danger={delivery.overdueTasks > 0} />
-        <div className="max-lg:col-span-2">
+        <div className="col-span-1 sm:col-span-2 lg:col-span-1">
           <MetricCard label="Churned (period)" value={clients.churnedInPeriod} icon={Users} danger={clients.churnedInPeriod > 0} />
         </div>
       </motion.div>
@@ -585,14 +585,14 @@ function ExecutiveTab({ data, periodLabel }: { data: any; periodLabel: string })
             <StatRow label="Weighted forecast" value={formatCurrency(revenue.weightedPipelineValue || 0)} sub="probability adjusted" tone="green" />
             <StatRow label="Open pipeline" value={formatCurrency(revenue.pipelineValue)} sub="raw active leads" />
           </div>
-          <div className="lg:col-span-2 rounded-2xl border border-border bg-white p-5">
+          <div className="lg:col-span-2 rounded-2xl border border-border bg-white p-4 sm:p-5 overflow-hidden">
             <h3 className="text-sm font-semibold text-primary mb-4">Reasons for Loss</h3>
             {revenue.lostReasons.length ? (
-              <div className="h-55">
+              <div className="h-55 w-full max-w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={revenue.lostReasons.map((r: any) => ({ name: titleCase(r.reason), count: r.count }))} layout="vertical" margin={{ left: 10, right: 12 }}>
+                  <BarChart data={revenue.lostReasons.map((r: any) => ({ name: titleCase(r.reason), count: r.count }))} layout="vertical" margin={{ left: 0, right: 12 }}>
                     <XAxis type="number" hide allowDecimals={false} />
-                    <YAxis type="category" dataKey="name" width={120} axisLine={false} tickLine={false} tick={axisTick} />
+                    <YAxis type="category" dataKey="name" width={90} axisLine={false} tickLine={false} tick={axisTick} />
                     <RTooltip cursor={{ fill: '#FAFAFA' }} />
                     <Bar dataKey="count" radius={[0, 4, 4, 0]} fill="#dc2626" />
                   </BarChart>

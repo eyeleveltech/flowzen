@@ -229,7 +229,7 @@ export function CommandPalette() {
                 className="flex-1 text-sm text-primary placeholder:text-secondary outline-none bg-transparent"
               />
               {query && (
-                <button onClick={() => { setQuery(''); setResults(null); }} className="p-1 rounded-lg hover:bg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1">
+                <button onClick={() => { setQuery(''); setResults(null); }} className="p-1 rounded-lg hover:bg-subtle">
                   <X className="h-4 w-4 text-secondary" />
                 </button>
               )}

@@ -438,16 +438,19 @@ function ClientsContent() {
         {/* Row 1: Search + Active Filter Pills */}
         {isMobile ? (
           <div className="flex flex-col gap-2.5 w-full">
-            <div className="flex items-center gap-2 w-full">
-              <div className="relative w-full shrink">
-                <Icon as={Search} size="md" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-secondary" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search clients..."
-                  className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none placeholder:text-secondary"
-                />
-              </div>
+            {/* Search Box - Full Width */}
+            <div className="relative w-full">
+              <Icon as={Search} size="md" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-secondary" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search clients..."
+                className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none placeholder:text-secondary"
+              />
+            </div>
+
+            {/* Filter & Action Buttons Row */}
+            <div className="flex items-center justify-between gap-2 w-full">
               <button
                 type="button"
                 onClick={() => setFilterSheetOpen(true)}
@@ -461,7 +464,7 @@ function ClientsContent() {
                   </span>
                 )}
               </button>
-              {/* Action buttons on mobile right corner */}
+
               <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
@@ -495,7 +498,7 @@ function ClientsContent() {
 
             {/* Active Chips Row */}
             {activeCount > 0 && (
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 max-w-full">
                 {statusFilter.length > 0 && <ActiveFilterChip label={`Lifecycle: ${statusFilter.length}`} onRemove={() => setStatusFilter([])} />}
                 {engagementTypeFilter.length > 0 && <ActiveFilterChip label={`Engagements: ${engagementTypeFilter.length}`} onRemove={() => setEngagementTypeFilter([])} />}
                 {accountManagerFilter.length > 0 && <ActiveFilterChip label={`Manager: ${accountManagerFilter.length}`} onRemove={() => setAccountManagerFilter([])} />}
@@ -580,7 +583,7 @@ function ClientsContent() {
             </Drawer>
           </div>
         ) : (
-          <div className="flex flex-wrap items-center gap-2 w-full">
+          <div className="flex flex-wrap items-center gap-2 w-full max-w-full overflow-x-auto no-scrollbar pb-1">
             {/* Search Box */}
             <div className="relative w-full sm:w-64 md:w-80 shrink-0">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
@@ -660,7 +663,7 @@ function ClientsContent() {
             )}
 
             {/* Action buttons on the right corner */}
-            <div className="flex items-center gap-2 ml-auto shrink-0">
+            <div className="flex items-center gap-2 sm:ml-auto shrink-0">
               <button
                 type="button"
                 onClick={() => setShowViewSettings(true)}
@@ -696,14 +699,14 @@ function ClientsContent() {
         <div className="h-px bg-border/60 w-full" />
 
         {/* Row 2: Actions */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
           {/* Left Side: Count summary */}
           <div className="text-xs font-medium text-secondary">
             Showing {clients.length} of {total} clients
           </div>
 
           {/* Right Side: View Toggles & Clear Filters */}
-          <div className="flex items-center justify-end gap-2.5 ml-auto sm:ml-0">
+          <div className="flex items-center justify-between sm:justify-end gap-2.5 w-full sm:w-auto">
             {(!!search || statusFilter.length > 0 || industryFilter.length > 0 || engagementTypeFilter.length > 0 || accountManagerFilter.length > 0) && (
               <button
                 onClick={() => {
@@ -888,7 +891,7 @@ function ClientsContent() {
                               <p className="text-sm text-body font-medium">{client.contacts[0].name}</p>
                               {client.contacts[0].designation && <p className="text-[11px] text-secondary">{client.contacts[0].designation}</p>}
                               {client.contacts.length > 1 && (
-                                <span className="text-[10px] font-medium bg-subtle text-body-soft px-1.5 py-0.5 rounded mt-1 inline-block">
+                                <span className="text-[10px] font-medium bg-subtle text-text-on-sunken px-1.5 py-0.5 rounded mt-1 inline-block">
                                   +{client.contacts.length - 1} more
                                 </span>
                               )}
@@ -926,100 +929,102 @@ function ClientsContent() {
 
       {currentView === 'timeline' && <ClientTimelineView clients={clients} loading={loading} />}
 
-      {/* Mobile Card View */}
-      <div className="md:hidden flex flex-col gap-3 pb-4">
-        {loading ? (
-          Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="p-4 rounded-xl border border-border bg-white">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="h-10 w-10 rounded-full skeleton" />
-                <div className="space-y-2">
-                  <div className="h-4 w-24 rounded skeleton" />
-                  <div className="h-3 w-16 rounded skeleton" />
-                </div>
-              </div>
-              <div className="h-3 w-32 rounded skeleton" />
-            </div>
-          ))
-        ) : clients.length === 0 ? (
-          <div className="p-8 text-center bg-white rounded-xl border border-border">
-            <Briefcase className="h-10 w-10 text-secondary/40 mx-auto mb-3" />
-            <h3 className="text-sm font-semibold text-primary mb-1">No clients yet</h3>
-            <p className="text-xs text-secondary mb-4">
-              Add your first client to start tracking projects and revenue.
-            </p>
-            <div className="flex flex-col gap-2">
-              {canManageClients && (
-              <button
-                onClick={() => setShowCreate(true)}
-                className="bg-primary text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-black transition-colors"
-              >
-                + Import Clients
-              </button>
-              )}
-              <Link
-                href="/pipeline?create=true"
-                className="border border-border text-primary text-xs font-semibold px-4 py-2 rounded-xl hover:bg-gray-50 transition-colors"
-              >
-                + Add Lead Instead
-              </Link>
-            </div>
-          </div>
-        ) : (
-          clients.map((client) => (
-            <Link
-              key={client.id}
-              href={`/clients/${client.id}`}
-              className="block p-4 rounded-xl border border-border bg-white hover:shadow-sm transition-colors duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className={`h-10 w-10 rounded-full text-xs font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(getClientDisplayName(client))}`}>
-                    {getInitials(getClientDisplayName(client))}
+      {/* Mobile Card View (Table Mode Only) */}
+      {currentView === 'table' && (
+        <div className="md:hidden flex flex-col gap-3 pb-4">
+          {loading ? (
+            Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="p-4 rounded-xl border border-border bg-white">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="h-10 w-10 rounded-full skeleton" />
+                  <div className="space-y-2">
+                    <div className="h-4 w-24 rounded skeleton" />
+                    <div className="h-3 w-16 rounded skeleton" />
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-primary leading-tight">
-                      {getClientDisplayName(client)}
-                    </p>
-                    {client.name === 'Internal' ? (
-                      <p className="text-xs font-medium text-secondary mt-0.5">(Internal)</p>
-                    ) : client.company && client.name !== client.company ? (
-                      <p className="text-xs text-secondary mt-0.5">{client.name}</p>
-                    ) : (
-                      <p className="text-xs text-secondary mt-0.5">{client.industry || '—'}</p>
+                </div>
+                <div className="h-3 w-32 rounded skeleton" />
+              </div>
+            ))
+          ) : clients.length === 0 ? (
+            <div className="p-8 text-center bg-white rounded-xl border border-border">
+              <Briefcase className="h-10 w-10 text-secondary/40 mx-auto mb-3" />
+              <h3 className="text-sm font-semibold text-primary mb-1">No clients yet</h3>
+              <p className="text-xs text-secondary mb-4">
+                Add your first client to start tracking projects and revenue.
+              </p>
+              <div className="flex flex-col gap-2">
+                {canManageClients && (
+                <button
+                  onClick={() => setShowCreate(true)}
+                  className="bg-primary text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-black transition-colors"
+                >
+                  + Import Clients
+                </button>
+                )}
+                <Link
+                  href="/pipeline?create=true"
+                  className="border border-border text-primary text-xs font-semibold px-4 py-2 rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  + Add Lead Instead
+                </Link>
+              </div>
+            </div>
+          ) : (
+            clients.map((client) => (
+              <Link
+                key={client.id}
+                href={`/clients/${client.id}`}
+                className="block p-4 rounded-xl border border-border bg-white hover:shadow-sm transition-colors duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className={`h-10 w-10 rounded-full text-xs font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(getClientDisplayName(client))}`}>
+                      {getInitials(getClientDisplayName(client))}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-primary leading-tight">
+                        {getClientDisplayName(client)}
+                      </p>
+                      {client.name === 'Internal' ? (
+                        <p className="text-xs font-medium text-secondary mt-0.5">(Internal)</p>
+                      ) : client.company && client.name !== client.company ? (
+                        <p className="text-xs text-secondary mt-0.5">{client.name}</p>
+                      ) : (
+                        <p className="text-xs text-secondary mt-0.5">{client.industry || '—'}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <StatusBadge status={client.status} size="xs" />
+                    {client.archivedAt && (
+                      <span className="text-[10px] font-semibold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">Archived</span>
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <StatusBadge status={client.status} size="xs" />
-                  {client.archivedAt && (
-                    <span className="text-[10px] font-semibold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">Archived</span>
-                  )}
-                </div>
-              </div>
 
-              <div className="flex items-center justify-between mt-4">
-                <div className="flex flex-col">
-                  {client.contacts && client.contacts.length > 0 ? (
-                    <>
-                      <p className="text-[11px] font-medium text-body">{client.contacts[0].name}</p>
-                      {client.contacts.length > 1 && (
-                        <p className="text-[10px] text-secondary">+{client.contacts.length - 1} more</p>
-                      )}
-                    </>
-                  ) : (
-                    <p className="text-xs text-secondary">No contacts</p>
-                  )}
+                <div className="flex items-center justify-between mt-4">
+                  <div className="flex flex-col">
+                    {client.contacts && client.contacts.length > 0 ? (
+                      <>
+                        <p className="text-[11px] font-medium text-body">{client.contacts[0].name}</p>
+                        {client.contacts.length > 1 && (
+                          <p className="text-[10px] text-secondary">+{client.contacts.length - 1} more</p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-xs text-secondary">No contacts</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-text-on-sunken bg-subtle px-2 py-1 rounded-md">
+                    <FolderKanban className="h-3 w-3" />
+                    {client._count?.projects ?? 0}
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5 text-xs font-medium text-body-soft bg-subtle px-2 py-1 rounded-md">
-                  <FolderKanban className="h-3 w-3" />
-                  {client._count?.projects ?? 0}
-                </div>
-              </div>
-            </Link>
-          ))
-        )}
-      </div>
+              </Link>
+            ))
+          )}
+        </div>
+      )}
 
       {/* Load more */}
       {!loading && clients.length < total && (
@@ -1077,7 +1082,7 @@ function ClientsContent() {
                   >
                     <div className="flex flex-col items-center justify-center pt-5 pb-6">
                       <Upload className="h-8 w-8 mb-3 text-secondary" />
-                      <p className="mb-2 text-sm text-body-soft">
+                      <p className="mb-2 text-sm text-text-on-sunken">
                         <span className="font-semibold">Click to upload</span> or drag and drop
                       </p>
                       <p className="text-xs text-secondary">CSV or Excel (.xlsx, .xls)</p>

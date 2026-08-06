@@ -169,7 +169,6 @@ export function TemplatesTab({ templates, fetchTemplates }: { templates: any[], 
           </div>
         ))}
       </div>
-
       <AnimatePresence>
         {showModal && (
           <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">

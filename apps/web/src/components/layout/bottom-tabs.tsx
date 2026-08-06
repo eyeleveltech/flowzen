@@ -39,7 +39,7 @@ export function BottomTabs() {
     ...BOTTOM_NAV_ITEMS,
   ];
 
-  const visiblePrimary = primaryNavItems.filter(allowed);
+  const visiblePrimary = primaryNavItems.filter(allowed).slice(0, 4);
   const filteredMoreItems = moreNavItems.filter(allowed);
 
   const isMoreActive = filteredMoreItems.some(

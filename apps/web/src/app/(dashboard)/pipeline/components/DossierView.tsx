@@ -37,7 +37,7 @@ export function DossierView({ d }: { d: any }) {
         {Array.isArray(d.disc?.tags) && d.disc.tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-3">
             {d.disc.tags.map((t: string, i: number) => (
-              <span key={i} className="text-[11px] font-medium bg-white border border-border text-body-soft px-2 py-0.5 rounded-full">{t}</span>
+              <span key={i} className="text-[11px] font-medium bg-white border border-border text-text-on-sunken px-2 py-0.5 rounded-full">{t}</span>
             ))}
           </div>
         )}
@@ -104,7 +104,7 @@ export function DossierView({ d }: { d: any }) {
             {Array.isArray(d.writing_style.hooks) && (
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {d.writing_style.hooks.map((h: string, i: number) => (
-                  <span key={i} className="text-[11px] bg-gray-100 text-body-soft px-2 py-0.5 rounded-full">{h}</span>
+                  <span key={i} className="text-[11px] bg-gray-100 text-text-on-sunken px-2 py-0.5 rounded-full">{h}</span>
                 ))}
               </div>
             )}

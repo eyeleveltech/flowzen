@@ -106,6 +106,12 @@ function ProjectsContent() {
   useEffect(() => {
     if (urlStatus) setStatusFilter([urlStatus]);
   }, [urlStatus]);
+
+  useEffect(() => {
+    if (isMobile && view === 'gantt') {
+      setView('list');
+    }
+  }, [isMobile, view]);
   const showCreate = searchParams.get('create') === 'true';
   const setShowCreate = (open: boolean) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -233,7 +239,7 @@ function ProjectsContent() {
     { mode: 'board' as ViewMode, icon: Kanban, label: 'Board' },
     { mode: 'timeline' as ViewMode, icon: BarChart3, label: 'Timeline' },
     { mode: 'calendar' as ViewMode, icon: Calendar, label: 'Calendar' },
-    { mode: 'gantt' as ViewMode, icon: GanttChartSquare, label: 'Gantt' },
+    ...(!isMobile ? [{ mode: 'gantt' as ViewMode, icon: GanttChartSquare, label: 'Gantt' }] : []),
   ];
 
   return (
@@ -734,7 +740,7 @@ function ProjectsContent() {
             <CalendarView projects={projects} />
           )}
 
-          {view === 'gantt' && (
+          {view === 'gantt' && !isMobile && (
             <ProjectGanttView projects={projects} loading={loading} />
           )}
 
@@ -769,7 +775,7 @@ function ProjectsContent() {
                 {templates.length > 0 && (
                   <div className="mb-2 pb-4 border-b border-subtle">
                     <label className="flex text-sm font-medium text-body mb-1.5 items-center gap-2">
-                      Start from a Template <span className="text-[10px] font-semibold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">New</span>
+                      Start from a Template <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">New</span>
                     </label>
                     <Select
                       value={selectedTemplateId}

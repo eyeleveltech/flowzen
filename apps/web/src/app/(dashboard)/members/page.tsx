@@ -383,7 +383,7 @@ export default function TeamPage() {
               className="space-y-6"
             >
               {/* Contact Info Card */}
-              <div className="bg-surface rounded-2xl p-5 border border-border/80 space-y-3.5 text-xs text-body-soft">
+              <div className="bg-surface rounded-2xl p-5 border border-border/80 space-y-3.5 text-xs text-text-on-sunken">
                 <h4 className="text-xs text-secondary font-medium uppercase tracking-wide mb-1">Contact Information</h4>
                 <div className="flex items-center gap-3">
                   <Icon as={Mail} size="md" className="text-secondary" />

@@ -369,7 +369,7 @@ export default function TeamsPage() {
                         ))}
                         {team.members.length > 4 && (
                           <div
-                            className="relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-2 ring-surface bg-subtle text-primary border border-border text-[7px] font-semibold"
+                            className="relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-2 ring-[#F9FAFB] bg-subtle text-primary border border-border text-[7px] font-semibold"
                             style={{ zIndex: 0 }}
                           >
                             +{team.members.length - 4}
