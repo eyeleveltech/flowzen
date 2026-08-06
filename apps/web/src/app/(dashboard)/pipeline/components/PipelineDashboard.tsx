@@ -344,7 +344,7 @@ export function PipelineDashboard() {
 
         <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full">
           <div className="flex items-start justify-between gap-2 mb-3">
-            <p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Active Deals</p>
+            <p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Active leads</p>
             <Icon as={Target} size="md" className="shrink-0 text-secondary" />
           </div>
           <p className="text-3xl font-semibold text-primary">{metrics.activeLeads}</p>
@@ -423,19 +423,19 @@ export function PipelineDashboard() {
 
       </div>
 
-      {/* Won & Lost Deals */}
+      {/* Won & Lost leads */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative">
         {isFiltering && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-2xl"><div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}
 
-        {/* Won Deals */}
+        {/* Won leads */}
         <div className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4">
-            <span className="inline-block h-2 w-2 rounded-full bg-green-500" /> Won Deals
+            <span className="inline-block h-2 w-2 rounded-full bg-green-500" /> Won leads
           </h2>
           <div className="flex items-end gap-8">
             <div>
               <p className="text-3xl font-semibold text-green-600">{metrics.wonCount}</p>
-              <p className="text-xs text-secondary mt-1">deals won</p>
+              <p className="text-xs text-secondary mt-1">leads won</p>
             </div>
             <div>
               <p className="text-2xl font-semibold text-primary">{formatCurrency(metrics.wonClosedValue)}</p>
@@ -444,15 +444,15 @@ export function PipelineDashboard() {
           </div>
         </div>
 
-        {/* Lost Deals + Reason for Loss breakdown */}
+        {/* Lost leads + Reason for Loss breakdown */}
         <div className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4">
-            <span className="inline-block h-2 w-2 rounded-full bg-red-500" /> Lost Deals
+            <span className="inline-block h-2 w-2 rounded-full bg-red-500" /> Lost leads
           </h2>
           <div className="flex items-end gap-8 mb-4">
             <div>
               <p className="text-3xl font-semibold text-red-600">{metrics.lostCount}</p>
-              <p className="text-xs text-secondary mt-1">deals lost</p>
+              <p className="text-xs text-secondary mt-1">leads lost</p>
             </div>
             <div>
               <p className="text-2xl font-semibold text-primary">{formatCurrency(metrics.lostValue)}</p>
@@ -472,7 +472,7 @@ export function PipelineDashboard() {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-40 flex items-center justify-center text-sm text-secondary">No lost deals in range</div>
+            <div className="h-40 flex items-center justify-center text-sm text-secondary">No lost leads in range</div>
           )}
         </div>
       </div>
@@ -488,7 +488,7 @@ export function PipelineDashboard() {
           <table className="w-full text-left min-w-150">
             <thead>
               <tr className="border-b border-border bg-surface">
-                <th className="px-5 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Client / Company</th>
+                <th className="px-5 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Client</th>
                 <th className="px-5 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Stage</th>
                 <th className="px-5 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Value</th>
                 <th className="px-5 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Added On</th>

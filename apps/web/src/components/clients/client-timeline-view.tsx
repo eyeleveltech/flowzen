@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { getClientDisplayName, getInitials, getAvatarColor, formatDate } from '@/lib/utils';
 import { CalendarDays } from 'lucide-react';
 
@@ -76,10 +77,10 @@ export function ClientTimelineView({ clients, loading }: { clients: any[]; loadi
           {/* Rows */}
           <div className="flex-1 overflow-y-auto custom-scrollbar">
             {clients.map((client) => (
-              <div
+              <Link
                 key={client.id}
-                className="h-16 px-4 flex items-center border-b border-subtle hover:bg-white cursor-pointer transition-colors group"
-                onClick={() => router.push(`/clients/${client.id}`)}
+                href={`/clients/${client.id}`}
+                className="h-16 px-4 flex items-center border-b border-subtle hover:bg-white transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className={`h-7 w-7 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(getClientDisplayName(client))}`}>
@@ -89,7 +90,7 @@ export function ClientTimelineView({ clients, loading }: { clients: any[]; loadi
                     {getClientDisplayName(client)}
                   </span>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>
@@ -171,20 +172,17 @@ export function ClientTimelineView({ clients, loading }: { clients: any[]; loadi
                     </div>
 
                     {/* Floating label */}
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: idx * 0.03 + 0.1 }}
-                      className={`absolute ml-4 z-20 flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm cursor-pointer hover:shadow-md transition-all ${cfg.bg}`}
+                    <Link
+                      href={`/clients/${client.id}`}
+                      className={`absolute ml-4 z-20 flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm hover:shadow-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${cfg.bg}`}
                       style={{ left: `${pct}%` }}
-                      onClick={() => router.push(`/clients/${client.id}`)}
                     >
                       <div className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
                       <span className="text-xs font-medium text-primary whitespace-nowrap">
                         {formatDate(d)}
                       </span>
                       <span className={`text-[10px] font-semibold`}>{cfg.label}</span>
-                    </motion.div>
+                    </Link>
                   </motion.div>
                 );
               })}

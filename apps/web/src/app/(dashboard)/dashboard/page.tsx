@@ -4,10 +4,11 @@ import { useEffect, useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
-import { formatRelativeDate, formatDate, formatShortDate, getInitials } from '@/lib/utils';
+import { formatRelativeDate, formatDate, formatShortDate, getInitials, getRoleLabel } from '@/lib/utils';
 import { TASK_STATUS_OPTIONS } from '@/lib/task-status';
 import { useAuthStore } from '@/stores';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDashboardData } from '@/hooks/useQueries';
@@ -30,6 +31,12 @@ import { getPriorityDot, getPriorityBadge } from '@/lib/priority';
 
 // Strict Monochromatic Palette for Charts
 const COLORS = ['#111827', '#4B5563', '#9CA3AF', '#D1D5DB', '#F3F4F6'];
+
+const HEALTH_CONFIG: Record<string, { label: string; dot: string }> = {
+  Green: { label: 'Healthy', dot: 'bg-green-500' },
+  Amber: { label: 'Watch', dot: 'bg-amber-500' },
+  Red: { label: 'At risk', dot: 'bg-red-500' },
+};
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.03 } } };
 const item = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] as const } } };
@@ -124,9 +131,9 @@ const PendingApprovalItem = ({
         className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary mr-2 cursor-pointer shrink-0"
       />
       <div className="flex-1 min-w-0">
-        <div
-          onClick={() => router.push(`/tasks?taskId=${task.id}`)}
-          className="flex flex-col py-3 cursor-pointer"
+        <Link
+          href={`/tasks?taskId=${task.id}`}
+          className="flex flex-col py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-lg"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3 min-w-0">
@@ -179,7 +186,7 @@ const PendingApprovalItem = ({
               </button>
             </div>
           </div>
-        </div>
+        </Link>
 
         {isRequestingChanges && (
           <div className="pb-3 pt-1" onClick={(e) => e.stopPropagation()}>
@@ -369,7 +376,7 @@ export default function DashboardPage() {
 
   if (!stats) {
     return (
-      <div className="pb-8 max-w-350 mx-auto p-4 md:p-8">
+      <div className="space-y-6">
         <Skeleton className="h-8 w-48 mb-8" />
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
           {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-30 rounded-2xl" />)}
@@ -395,6 +402,14 @@ export default function DashboardPage() {
     }
   };
 
+  const handleMarkTaskRead = (taskId: string, readAt?: string | null) => {
+    if (!readAt) {
+      api.put(`/tasks/${taskId}`, { readAt: new Date().toISOString() })
+        .then(() => invalidateSlices(['my-tasks', 'lead-tasks']))
+        .catch(() => {});
+    }
+  };
+
   const updateTaskStatus = async (taskId: string, status: string) => {
     setUpdatingTask(taskId);
     try {
@@ -409,13 +424,15 @@ export default function DashboardPage() {
   };
 
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="px-4 pt-4 md:px-8 md:pt-8 w-full max-w-7xl mx-auto space-y-8 pb-10">
+    <motion.div variants={container} initial="hidden" animate="show" className="space-y-8 pb-10">
 
       {/* HEADER */}
       <motion.div variants={item} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-baseline gap-3">
           <h1 className="text-2xl font-semibold text-primary tracking-tight">Overview</h1>
-          <p className="text-sm font-medium text-secondary">{user.role.replace('_', ' ').toLowerCase()}</p>
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-md bg-gray-100 text-gray-800 border border-gray-200">
+            {getRoleLabel(user.role)}
+          </span>
         </div>
 
         {/* DATE RANGE FILTER */}
@@ -457,51 +474,51 @@ export default function DashboardPage() {
       {/* KPI GRID */}
       {isManager ? (
         <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
-          <div onClick={() => router.push('/clients?status=ACTIVE')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
+          <Link href="/clients?status=ACTIVE" className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full hover:bg-surface group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
             <div className="flex items-start justify-between gap-2 mb-3"><p className="min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Active Clients</p><Icon as={Building2} size="md" className="shrink-0 text-secondary group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.activeClients}</p>
-          </div>
-          <div onClick={() => router.push('/projects?status=ACTIVE')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
+          </Link>
+          <Link href="/projects?status=ACTIVE" className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full hover:bg-surface group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
             <div className="flex items-start justify-between gap-2 mb-3"><p className="min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Active Projects</p><Icon as={FolderKanban} size="md" className="shrink-0 text-secondary group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.activeProjects}</p>
-          </div>
-          <div onClick={() => router.push('/projects?status=DELAYED')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
+          </Link>
+          <Link href="/projects?status=DELAYED" className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full hover:bg-surface group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
             <div className="flex items-start justify-between gap-2 mb-3"><p className="min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Delayed Projects</p><Icon as={AlertTriangle} size="md" className="shrink-0 text-secondary group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.delayedProjects}</p>
-          </div>
-          <div onClick={() => router.push('/members')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
+          </Link>
+          <Link href="/members" className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full hover:bg-surface group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
             <div className="flex items-start justify-between gap-2 mb-3"><p className="min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">Team Members</p><Icon as={UsersRound} size="md" className="shrink-0 text-secondary group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.totalMembers}</p>
-          </div>
-          <div onClick={() => router.push('/tasks?filter=overdue')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow cursor-pointer hover:bg-surface group h-full max-md:col-span-2">
+          </Link>
+          <Link href="/tasks?filter=overdue" className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow hover:bg-surface group h-full max-md:col-span-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
             <div className="flex items-start justify-between gap-2 mb-3"><p className="min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Overdue Tasks</p><Icon as={Clock} size="md" className="shrink-0 text-secondary" /></div>
             <div className="flex items-center gap-2">
               <span className={`h-2.5 w-2.5 rounded-full ${stats.overdueTasks > 0 ? 'bg-red-500' : 'bg-border'}`} />
               <p className={`text-3xl font-semibold ${stats.overdueTasks > 0 ? 'text-red-500' : 'text-primary'}`}>{stats.overdueTasks || 0}</p>
             </div>
-          </div>
+          </Link>
         </motion.div>
       ) : (
         <motion.div variants={item} className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <div onClick={() => router.push('/projects')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
+          <Link href="/projects" className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full hover:bg-surface group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
             <div className="flex items-start justify-between gap-2 mb-3"><p className="min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Projects</p><Icon as={FolderKanban} size="md" className="shrink-0 text-secondary group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.activeProjects || 0}</p>
-          </div>
-          <div onClick={() => router.push('/tasks')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
+          </Link>
+          <Link href="/tasks" className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full hover:bg-surface group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
             <div className="flex items-start justify-between gap-2 mb-3"><p className="min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Open Tasks</p><Icon as={CheckSquare} size="md" className="shrink-0 text-secondary group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.openTasks || 0}</p>
-          </div>
-          <div onClick={() => router.push('/tasks?filter=completed')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
+          </Link>
+          <Link href="/tasks?filter=completed" className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full hover:bg-surface group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
             <div className="flex items-start justify-between gap-2 mb-3"><p className="min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Completed Tasks</p><Icon as={CheckCircle2} size="md" className="shrink-0 text-secondary group-hover:text-primary transition-colors" /></div>
             <p className="text-3xl font-semibold text-primary">{stats.completedTasks || 0}</p>
-          </div>
-          <div onClick={() => router.push('/tasks?filter=overdue')} className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full cursor-pointer hover:bg-surface group">
+          </Link>
+          <Link href="/tasks?filter=overdue" className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full hover:bg-surface group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
             <div className="flex items-start justify-between gap-2 mb-3"><p className="min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide group-hover:text-primary transition-colors">My Overdue Tasks</p><Icon as={Clock} size="md" className="shrink-0 text-secondary" /></div>
             <div className="flex items-center gap-2">
               <span className={`h-2.5 w-2.5 rounded-full ${stats.overdueTasks > 0 ? 'bg-red-500' : 'bg-border'}`} />
               <p className={`text-3xl font-semibold ${stats.overdueTasks > 0 ? 'text-red-500' : 'text-primary'}`}>{stats.overdueTasks || 0}</p>
             </div>
-          </div>
+          </Link>
           <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full max-lg:col-span-2">
             <div className="flex items-start justify-between gap-2 mb-3"><p className="min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">My Completion Rate</p><Icon as={Zap} size="md" className="shrink-0 text-secondary" /></div>
             <p className="text-3xl font-semibold text-primary">
@@ -555,7 +572,7 @@ export default function DashboardPage() {
                     {hasTasks && (
                       <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-lg border ${hasOverdue
                         ? 'bg-red-50 text-red-600 border-red-100'
-                        : 'bg-subtle text-secondary border-border'
+                        : 'bg-subtle text-body-soft border-border'
                         }`}>
                         {hasOverdue ? `${overdueCount} overdue` : `${allPendingTasks.length} pending`}
                       </span>
@@ -584,12 +601,15 @@ export default function DashboardPage() {
                         const priorityChipStyle = getPriorityBadge(t.priority);
 
                         const leadInfo = t.lead;
+                        const targetLeadId = t.leadId || leadInfo?.id;
+                        const taskHref = targetLeadId ? `/pipeline/${targetLeadId}?tab=tasks` : `/tasks?taskId=${t.id}`;
 
                         return (
-                          <div
+                          <Link
                             key={t.id}
-                            onClick={() => handleOpenTask(t.id, t.readAt, t.leadId || leadInfo?.id)}
-                            className="group flex flex-col sm:flex-row sm:items-center justify-between py-2.5 px-4 rounded-xl border border-border/80 bg-white hover:bg-surface hover:border-border hover:shadow-sm cursor-pointer transition-colors duration-150 motion-reduce:transition-none gap-2 sm:gap-4"
+                            href={taskHref}
+                            onClick={() => handleMarkTaskRead(t.id, t.readAt)}
+                            className="group flex flex-col sm:flex-row sm:items-center justify-between py-2.5 px-4 rounded-xl border border-border/80 bg-[#FFFFFF] hover:bg-surface hover:border-border hover:shadow-sm transition-colors duration-150 motion-reduce:transition-none gap-2 sm:gap-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                           >
                             <div className="flex items-center min-w-0 flex-1 gap-3">
                               {/* Urgent priority dot indicator */}
@@ -634,8 +654,6 @@ export default function DashboardPage() {
                                   Overdue
                                 </span>
                               )}
-                              {/* "Pipeline" says where a task came from — a category, not a
-                                  state. Nothing to act on, so it stays neutral. */}
                               {leadInfo && (
                                 <span className="text-[10px] font-semibold px-2 py-0.5 rounded border border-border bg-subtle text-body uppercase tracking-wide">
                                   Pipeline
@@ -647,7 +665,7 @@ export default function DashboardPage() {
                                 </span>
                               )}
                             </div>
-                          </div>
+                          </Link>
                         );
                       })}
                     </div>
@@ -664,10 +682,10 @@ export default function DashboardPage() {
               <div
                 className="p-5 border-b border-border flex flex-col gap-3 md:flex-row md:items-center justify-between"
               >
-                <div className="flex items-center gap-2 cursor-pointer" onClick={() => router.push('/tasks?filter=approval')}>
+                <Link href="/tasks?filter=approval" className="flex items-center gap-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm">
                   <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Icon as={CheckCircle2} size="md" className="text-secondary" /> Pending Approvals</h2>
                   {pendingApprovals.length > 0 && <span className="text-xs font-medium text-primary bg-subtle border border-border px-2 py-0.5 rounded-md">{pendingApprovals.length}</span>}
-                </div>
+                </Link>
 
                 {pendingApprovals.length > 0 && (
                   <div className="flex flex-wrap items-center gap-3" onClick={(e) => e.stopPropagation()}>
@@ -706,7 +724,7 @@ export default function DashboardPage() {
                       <button
                         onClick={() => handleBulkApprove(selectedTaskIds)}
                         disabled={bulkApproving}
-                        className="px-2.5 py-1 text-xs font-bold text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 transition-colors rounded-lg flex items-center gap-1 shadow-sm"
+                        className="px-2.5 py-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 transition-colors rounded-lg flex items-center gap-1 shadow-sm"
                       >
                         {bulkApproving ? 'Approving…' : `Approve Selected (${selectedTaskIds.length})`}
                       </button>
@@ -749,12 +767,15 @@ export default function DashboardPage() {
             <motion.div variants={item} className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow overflow-hidden">
               <div className="p-5 border-b border-border">
                 <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Icon as={Activity} size="md" className="text-secondary" /> Client Health</h2>
+                <p className="mt-1 text-xs text-secondary">
+                  At risk = 4+ overdue tasks or a project past its end date &middot; Watch = 1–3 overdue tasks
+                </p>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left min-w-150">
                   <thead>
                     <tr className="border-b border-border bg-surface">
-                      <th className="px-5 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Company Name</th>
+                      <th className="px-5 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Client</th>
                       <th className="px-5 py-3 text-xs font-semibold text-secondary uppercase tracking-wider text-center">Active Projects</th>
                       <th className="px-5 py-3 text-xs font-semibold text-secondary uppercase tracking-wider text-center">Overdue Tasks</th>
                       <th className="px-5 py-3 text-xs font-semibold text-secondary uppercase tracking-wider text-left">Next Deadline</th>
@@ -763,21 +784,22 @@ export default function DashboardPage() {
                   </thead>
                   <tbody className="divide-y divide-border">
                     {clientHealth.map((c: any) => {
-                      // Health indicators mapped to plain minimal dots
-                      let dotColor = 'bg-green-500';
-                      if (c.health === 'Amber') dotColor = 'bg-amber-500';
-                      if (c.health === 'Red') dotColor = 'bg-red-500';
+                      const h = HEALTH_CONFIG[c.health] ?? { label: c.health, dot: 'bg-gray-400' };
 
                       return (
-                        <tr key={c.id} onClick={() => router.push('/reports')} className="hover:bg-surface cursor-pointer transition-colors">
-                          <td className="px-5 py-3 text-sm font-semibold text-primary">{c.company || c.name}</td>
+                        <tr key={c.id} className="hover:bg-surface transition-colors relative">
+                          <td className="px-5 py-3 text-sm font-semibold text-primary">
+                            <Link href="/reports" className="hover:underline after:absolute after:inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm">
+                              {c.company || c.name}
+                            </Link>
+                          </td>
                           <td className="px-5 py-3 text-sm text-primary text-center font-medium">{c.activeProjects}</td>
                           <td className="px-5 py-3 text-sm text-center text-primary">{c.overdueTasks > 0 ? c.overdueTasks : '-'}</td>
                           <td className="px-5 py-3 text-sm text-secondary">{c.nextDueDate ? formatDate(c.nextDueDate) : '-'}</td>
                           <td className="px-5 py-3 text-center">
                             <span className="flex items-center justify-center gap-1.5 text-xs text-primary font-medium">
-                              <span className={`h-2 w-2 rounded-full ${dotColor}`} />
-                              {c.health}
+                              <span className={`h-2 w-2 rounded-full ${h.dot}`} />
+                              {h.label}
                             </span>
                           </td>
                         </tr>
@@ -813,11 +835,12 @@ export default function DashboardPage() {
                   else if (daysRemaining <= 3) dotColor = 'bg-warning'; // Orange for <= 3 days
 
                   return (
-                    <div
+                    <Link
                       key={d.id}
-                      onClick={() => handleOpenTask(d.id, null)}
+                      href={d.leadId ? `/pipeline/${d.leadId}?tab=tasks` : `/tasks?taskId=${d.id}`}
+                      onClick={() => handleMarkTaskRead(d.id, d.readAt)}
                       title={`${d.title} (${d.project?.name || 'No project'})`}
-                      className="flex justify-between items-start p-2.5 hover:bg-surface rounded-xl cursor-pointer border border-border group transition-colors duration-150 motion-reduce:transition-none"
+                      className="flex justify-between items-start p-2.5 hover:bg-surface rounded-xl border border-border group transition-colors duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       <div className="min-w-0 pr-3 flex gap-2.5 items-start">
                         <div className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${dotColor}`} />
@@ -829,7 +852,7 @@ export default function DashboardPage() {
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 border rounded-sm shrink-0 ${new Date(d.dueDate) < todayStart ? 'bg-red-50 text-red-600 border-red-200' : 'bg-subtle text-primary border-border'}`}>
                         {new Date(d.dueDate) < todayStart ? `OVERDUE: ${formatShortDate(d.dueDate)}` : formatShortDate(d.dueDate)}
                       </span>
-                    </div>
+                    </Link>
                   );
                 })
               )}
@@ -859,10 +882,11 @@ export default function DashboardPage() {
                 return list.map((t: any) => {
                   const daysOverdue = Math.ceil((todayStart.getTime() - new Date(t.dueDate).getTime()) / (1000 * 60 * 60 * 24));
                   return (
-                    <div
+                    <Link
                       key={t.id}
-                      onClick={() => handleOpenTask(t.id, null)}
-                      className="flex justify-between items-start p-2.5 hover:bg-surface rounded-xl cursor-pointer border border-border group transition-colors duration-150 motion-reduce:transition-none"
+                      href={t.leadId ? `/pipeline/${t.leadId}?tab=tasks` : `/tasks?taskId=${t.id}`}
+                      onClick={() => handleMarkTaskRead(t.id, t.readAt)}
+                      className="flex justify-between items-start p-2.5 hover:bg-surface rounded-xl border border-border group transition-colors duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       <div className="min-w-0 pr-3 flex gap-2.5 items-start">
                         <span className="flex h-1.5 w-1.5 rounded-full bg-red-500 mt-2 shrink-0 animate-pulse" />
@@ -874,7 +898,7 @@ export default function DashboardPage() {
                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-sm shrink-0 bg-red-50 text-red-600 border border-red-200">
                         {daysOverdue <= 0 ? 'Overdue' : `${daysOverdue}d overdue`}
                       </span>
-                    </div>
+                    </Link>
                   );
                 });
               })()}
@@ -887,19 +911,19 @@ export default function DashboardPage() {
               <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4"><Icon as={FolderKanban} size="md" className="text-secondary" /> My Projects</h2>
               <div className="space-y-3 flex-1">
                 {myProjects.map((p: any) => (
-                  <div
+                  <Link
                     key={p.id}
-                    onClick={() => router.push(`/projects/${p.id}`)}
-                    className="flex justify-between items-center p-3 hover:bg-surface rounded-xl cursor-pointer border border-border group transition-colors duration-150 motion-reduce:transition-none"
+                    href={`/projects/${p.id}`}
+                    className="flex justify-between items-center p-3 hover:bg-surface rounded-xl border border-border group transition-colors duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     <div className="min-w-0 pr-3">
                       <p className="text-sm font-semibold text-primary truncate group-hover:text-black transition-colors">{p.name}</p>
                       <p className="text-xs text-secondary truncate">{p.client?.company || p.client?.name || 'No Client'}</p>
                     </div>
                     <span className="text-[10px] font-bold px-1.5 py-0.5 border rounded-sm bg-subtle text-primary border-border shrink-0">
-                      {p.status.replace(/_/g, ' ').toLowerCase()}
+                      {p.progress}%
                     </span>
-                  </div>
+                  </Link>
                 ))}
               </div>
               <div className="mt-4 pt-3 border-t border-border flex justify-center">
@@ -926,7 +950,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-primary rounded-full transition-colors duration-150 motion-reduce:transition-none duration-500"
+                      className="h-full bg-primary rounded-full transition-all duration-500 ease-out motion-reduce:transition-none"
                       style={{
                         width: `${stats.openTasks + stats.completedTasks > 0 ? Math.round((stats.completedTasks / (stats.openTasks + stats.completedTasks)) * 100) : 0}%`
                       }}

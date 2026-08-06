@@ -81,21 +81,21 @@ export function ApiKeysTab() {
       </div>
 
       {/* Generate API Key Form */}
-      <form onSubmit={handleGenerate} className="bg-gray-50 border border-border p-5 rounded-2xl space-y-4 max-w-xl">
+      <form onSubmit={handleGenerate} className="bg-gray-50 border border-border p-4 sm:p-5 rounded-2xl space-y-4 max-w-xl">
         <h4 className="text-xs font-semibold text-primary uppercase tracking-wider">Generate New Key</h4>
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <input
             type="text"
             placeholder="e.g. Make.com Integration, Zapier Connection"
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
-            className="flex-1 rounded-xl border border-border bg-white px-3.5 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1"
+            className="flex-1 min-w-0 rounded-xl border border-border bg-white px-3.5 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1"
           />
           <button
             type="submit"
             disabled={generating || !name.trim()}
-            className="px-4 py-2 text-xs font-bold text-white bg-primary rounded-xl hover:bg-gray-800 disabled:opacity-50 transition-colors shrink-0"
+            className="w-full sm:w-auto px-4 py-2.5 text-xs font-bold text-white bg-primary rounded-xl hover:bg-gray-800 disabled:opacity-50 transition-colors shrink-0 flex items-center justify-center"
           >
             {generating ? 'Generating…' : 'Generate Key'}
           </button>
@@ -104,7 +104,7 @@ export function ApiKeysTab() {
 
       {/* Newly Generated Key Banner */}
       {newKey && (
-        <div className="bg-green-50 border border-green-100 rounded-2xl p-5 max-w-xl space-y-3">
+        <div className="bg-green-50 border border-green-100 rounded-2xl p-4 sm:p-5 max-w-xl space-y-3">
           <div className="flex items-start gap-2.5">
             <Icon as={AlertCircle} size="lg" className="text-green-600 shrink-0 mt-0.5" />
             <div>
@@ -114,8 +114,8 @@ export function ApiKeysTab() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 bg-white border border-green-100 rounded-xl p-2.5">
-            <code className="text-xs font-mono select-all break-all flex-1 text-primary">{newKey}</code>
+          <div className="flex items-center gap-2 bg-white border border-green-100 rounded-xl p-2.5 min-w-0">
+            <code className="text-xs font-mono select-all break-all flex-1 text-primary overflow-x-auto min-w-0">{newKey}</code>
             <button
               type="button"
               onClick={handleCopy}
@@ -145,7 +145,7 @@ export function ApiKeysTab() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-primary truncate">{k.name}</p>
-                    <div className="flex items-center gap-2 text-[10px] text-secondary mt-1 font-medium">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-secondary mt-1 font-medium">
                       <span>Created by {k.user?.name}</span>
                       <span>•</span>
                       <span>Created {formatRelativeDate(k.createdAt)}</span>

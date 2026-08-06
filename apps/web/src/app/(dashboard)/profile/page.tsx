@@ -11,6 +11,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { Icon } from '@/components/ui/icon';
+import { NarrowPage } from '@/components/layout/narrow-page';
 
 export default function ProfilePage() {
   usePageTitle('Profile');
@@ -115,7 +116,7 @@ export default function ProfilePage() {
   if (!user) return null;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 sm:space-y-8 p-3 sm:p-6 lg:p-8">
+    <NarrowPage className="space-y-6 sm:space-y-8">
       <div>
         <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-primary">My Profile</h1>
         <p className="mt-1 sm:mt-2 text-xs sm:text-sm text-secondary">
@@ -277,6 +278,6 @@ export default function ProfilePage() {
           </div>
         </section>
       </div>
-    </div>
+    </NarrowPage>
   );
 }

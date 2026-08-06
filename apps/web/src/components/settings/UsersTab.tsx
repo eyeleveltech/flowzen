@@ -42,7 +42,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
     if (u._count.assignedTasksBy > 0) parts.push(`${u._count.assignedTasksBy} assigned task${u._count.assignedTasksBy > 1 ? 's' : ''}`);
     if (u._count.reviewedTasks > 0) parts.push(`${u._count.reviewedTasks} review${u._count.reviewedTasks > 1 ? 's' : ''}`);
     if (u._count.managedClients > 0) parts.push(`${u._count.managedClients} client${u._count.managedClients > 1 ? 's' : ''}`);
-    if (u._count.createdWorkflows > 0) parts.push(`${u._count.createdWorkflows} workflow${u._count.createdWorkflows > 1 ? 's' : ''}`);
+    if (u._count?.createdWorkflows > 0) parts.push(`${u._count.createdWorkflows} workflow${u._count.createdWorkflows > 1 ? 's' : ''}`);
     return parts.length > 0 ? parts.join(', ') : null;
   };
 
@@ -257,7 +257,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                   </td>
                   <td className="px-5 py-3">
                     {u.status === 'ACTIVE' && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-subtle text-primary border border-border uppercase tracking-wide">Active</span>}
-                    {u.status === 'PENDING' && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-subtle text-secondary border border-border uppercase tracking-wide">Pending</span>}
+                    {u.status === 'PENDING' && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-subtle text-body-soft border border-border uppercase tracking-wide">Pending</span>}
                     {u.status === 'INACTIVE' && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-surface text-secondary border border-border uppercase tracking-wide">Inactive</span>}
                   </td>
                   <td className="px-5 py-3 text-right">
@@ -523,7 +523,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-2xl shadow-black/10 w-full max-w-md overflow-hidden flex flex-col"
+              className="bg-white rounded-2xl shadow-modal shadow-black/10 w-full max-w-md overflow-hidden flex flex-col"
             >
               <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-border bg-surface shrink-0">
                 <div className="flex items-center gap-2 text-amber-600 font-semibold">
@@ -593,7 +593,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-border space-y-4"
+              className="bg-white rounded-2xl p-6 max-w-md w-full shadow-modal border border-border space-y-4"
             >
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-primary">Reassign Open Tasks</h3>

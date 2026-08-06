@@ -23,6 +23,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { TaskDetailDrawer } from '@/components/tasks/task-detail-drawer';
 import { TaskFormDrawer } from '@/components/tasks/task-form-drawer';
+import { Toggle } from '@/components/ui/toggle';
 import { ColumnDropdown } from '@/components/ui/column-dropdown';
 import { SwipeableCard } from '@/components/ui/swipeable-card';
 
@@ -87,7 +88,7 @@ function AssigneeAvatars({ task, size = 26 }: { task: { assignees?: AssigneePers
         </div>
       ))}
       {extra > 0 && (
-        <div style={{ height: size, width: size }} className="flex items-center justify-center rounded-full text-[10px] font-medium ring-2 ring-white bg-subtle text-secondary">+{extra}</div>
+        <div style={{ height: size, width: size }} className="flex items-center justify-center rounded-full text-[10px] font-medium ring-2 ring-white bg-subtle text-body-soft">+{extra}</div>
       )}
     </div>
   );
@@ -207,7 +208,7 @@ function TasksContent() {
 
   const ALL_TASK_COLUMNS = [
     { id: 'task', label: 'Task' },
-    { id: 'client', label: 'Company' },
+    { id: 'client', label: 'Client' },
     { id: 'project', label: 'Project' },
     { id: 'assignee', label: 'Assignee' },
     { id: 'priority', label: 'Priority' },
@@ -491,7 +492,7 @@ function TasksContent() {
         <div>
           <h1 className="text-2xl font-semibold text-primary tracking-tight flex items-center gap-2">
             Tasks
-            <span className="text-xs font-normal text-secondary bg-subtle px-2 py-0.5 rounded-lg border border-border">
+            <span className="text-xs font-normal text-body-soft bg-subtle px-2 py-0.5 rounded-lg border border-border">
               {viewName}
             </span>
           </h1>
@@ -532,7 +533,7 @@ function TasksContent() {
             {/* Active Chips Row */}
             {activeCount > 0 && (
               <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-                {clientFilter.length > 0 && <ActiveFilterChip label={`Companies: ${clientFilter.length}`} onRemove={() => setClientFilter([])} />}
+                {clientFilter.length > 0 && <ActiveFilterChip label={`Clients: ${clientFilter.length}`} onRemove={() => setClientFilter([])} />}
                 {projectFilter.length > 0 && <ActiveFilterChip label={`Projects: ${projectFilter.length}`} onRemove={() => setProjectFilter([])} />}
                 {statusFilter.length > 0 && <ActiveFilterChip label={`Status: ${statusFilter.length}`} onRemove={() => setStatusFilter([])} />}
                 {teamFilter.length > 0 && <ActiveFilterChip label={`Departments: ${teamFilter.length}`} onRemove={() => setTeamFilter([])} />}
@@ -553,7 +554,7 @@ function TasksContent() {
             <Drawer isOpen={filterSheetOpen} onClose={() => setFilterSheetOpen(false)} title="Filter Tasks">
               <div className="p-4 space-y-4">
                 <div>
-                  <label className="text-xs font-medium text-secondary mb-1.5 block">Companies</label>
+                  <label className="text-xs font-medium text-secondary mb-1.5 block">Clients</label>
                   <MultiSelect
                     showSelectAll
                     value={clientFilter}
@@ -566,7 +567,7 @@ function TasksContent() {
                         }));
                       }
                     }}
-                    placeholder="Companies"
+                    placeholder="Clients"
                     triggerClassName="w-full h-9 rounded-xl border border-border bg-white px-3 text-xs"
                     options={clients.map((c: any) => ({ label: getClientDisplayName(c), value: c.id }))}
                   />
@@ -658,17 +659,8 @@ function TasksContent() {
                     />
                   </div>
                 )}
-                <div className="flex items-center justify-between pt-2 border-t border-border">
-                  <span className="text-xs font-semibold text-secondary">Show Done Tasks</span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={showCompleted}
-                    onClick={() => setShowCompleted(!showCompleted)}
-                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors ${showCompleted ? 'bg-primary border-primary' : 'bg-gray-200 border-gray-300'}`}
-                  >
-                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${showCompleted ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
-                  </button>
+                <div className="pt-2 border-t border-border">
+                  <Toggle label="Show Done Tasks" checked={showCompleted} onChange={setShowCompleted} className="w-full justify-between flex-row-reverse" />
                 </div>
               </div>
             </Drawer>
@@ -700,7 +692,7 @@ function TasksContent() {
                     }));
                   }
                 }}
-                placeholder="Companies"
+                placeholder="Clients"
                 triggerClassName={clientFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
                 options={clients.map((c: any) => ({ label: getClientDisplayName(c), value: c.id }))}
               />
@@ -793,18 +785,8 @@ function TasksContent() {
               </div>
             )}
 
-            <div className="flex items-center gap-1.5 border border-border rounded-xl px-3 h-9 bg-white shadow-sm shrink-0">
-              <label htmlFor="show-completed" className="text-xs font-semibold text-body-soft cursor-pointer select-none">Show Done</label>
-              <button
-                id="show-completed"
-                type="button"
-                role="switch"
-                aria-checked={showCompleted}
-                onClick={() => setShowCompleted(!showCompleted)}
-                className={`relative inline-flex h-4.5 w-8 shrink-0 items-center rounded-full border transition-colors ${showCompleted ? 'bg-primary border-primary' : 'bg-gray-200 border-gray-300'}`}
-              >
-                <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform ${showCompleted ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
-              </button>
+            <div className="flex items-center border border-border rounded-xl px-3 h-9 bg-white shadow-sm shrink-0">
+              <Toggle size="sm" label="Show Done" id="show-completed" checked={showCompleted} onChange={setShowCompleted} labelClassName="text-body-soft" />
             </div>
           </div>
         )}
@@ -933,7 +915,7 @@ function TasksContent() {
                       <div className="flex items-center gap-2 mb-3 px-1">
                         <div className={`h-2 w-2 rounded-full ${TASK_STATUS_COLORS[col]?.split(' ')[0] || 'bg-gray-200'}`} />
                         <span className="text-xs font-medium text-body uppercase tracking-wide">{TASK_STATUS_LABELS[col]}</span>
-                        <span className="ml-auto text-xs text-secondary bg-subtle rounded-full px-2 py-0.5 tabular-nums">{colTasks.length}</span>
+                        <span className="ml-auto text-xs text-body-soft bg-subtle rounded-full px-2 py-0.5 tabular-nums">{colTasks.length}</span>
                       </div>
                       <Droppable droppableId={col}>
                         {(provided, snapshot) => (
@@ -1007,7 +989,7 @@ function TasksContent() {
                     <thead>
                       <tr className="border-b border-subtle">
                         {visibleColumns.includes('task') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Task</th>}
-                        {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Company</th>}
+                        {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>}
                         {visibleColumns.includes('project') && (
                           <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
                             <ColumnDropdown

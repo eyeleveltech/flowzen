@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { formatCurrency, formatShortDate } from '@/lib/utils';
 import { ChevronDown, ChevronsLeft, ChevronsRight, Clock } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -172,14 +173,21 @@ export function ProjectBoardView({ projects, onUpdateProject, userRole }: { proj
                                 ref={provided.innerRef}
                                 {...provided.draggableProps}
                                 {...provided.dragHandleProps}
-                                onClick={() => router.push(`/projects/${project.id}`)}
                                 className={`bg-white rounded-xl p-4 border border-border ${!canDrag ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'} group ${
-                                  snapshot.isDragging ? 'shadow-2xl scale-105 z-50 ring-2 ring-primary' : 'shadow-sm hover:shadow-md hover:border-gray-300'
+                                  snapshot.isDragging ? 'shadow-modal scale-105 z-50 ring-2 ring-primary' : 'shadow-sm hover:shadow-md hover:border-gray-300'
                                 } transition-all relative`}
                               >
                                 <div className="flex items-start justify-between mb-2">
                                   <div className="pr-4">
-                                    <h4 className="text-sm font-bold text-primary truncate" title={project.name}>{project.name}</h4>
+                                    <h4 className="text-sm font-bold text-primary truncate">
+                                      <Link
+                                        href={`/projects/${project.id}`}
+                                        className="relative z-10 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
+                                        title={project.name}
+                                      >
+                                        {project.name}
+                                      </Link>
+                                    </h4>
                                     <p className="text-xs text-secondary truncate mt-0.5">{project.client?.name}</p>
                                   </div>
                                 </div>
@@ -237,7 +245,7 @@ export function ProjectBoardView({ projects, onUpdateProject, userRole }: { proj
         <>
           <div className="fixed inset-0 z-60" onClick={() => setStageMenu(null)} />
           <div
-            className="fixed z-61 w-48 max-h-80 overflow-y-auto bg-white rounded-xl shadow-2xl border border-border py-1"
+            className="fixed z-61 w-48 max-h-80 overflow-y-auto bg-white rounded-xl shadow-modal border border-border py-1"
             style={{
               top: stageMenu.up ? stageMenu.y - 6 : stageMenu.y + 6,
               left: stageMenu.x,

@@ -70,7 +70,7 @@ export function ViewSettingsPanel({
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-sm bg-white border-l border-border shadow-2xl flex flex-col"
+            className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-sm bg-white border-l border-border shadow-modal flex flex-col"
           >
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
@@ -98,7 +98,7 @@ export function ViewSettingsPanel({
                   value={viewName}
                   onChange={(e) => onViewNameChange(e.target.value)}
                   className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
-                  placeholder="e.g. All Companies"
+                  placeholder="e.g. All clients"
                 />
               </div>
 

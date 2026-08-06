@@ -168,7 +168,7 @@ function QuotationsContent() {
             <thead>
               <tr className="border-b border-border text-left text-xs font-semibold text-secondary uppercase tracking-wider">
                 <th className="px-6 py-3">Document</th>
-                <th className="px-6 py-3">Company</th>
+                <th className="px-6 py-3">Client</th>
                 <th className="px-6 py-3">Date</th>
                 <th className="px-6 py-3 text-right">Amount</th>
                 <th className="px-6 py-3">Status</th>
@@ -228,7 +228,7 @@ function QuotationsContent() {
                       {activeDropdownId === q.id && (
                         <>
                           <div className="fixed inset-0 z-40" onClick={() => setActiveDropdownId(null)} />
-                          <div className="absolute right-0 top-8 z-50 w-52 rounded-xl bg-white shadow-2xl border border-border py-1 flex flex-col text-left">
+                          <div className="absolute right-0 top-8 z-50 w-52 rounded-xl bg-white shadow-modal border border-border py-1 flex flex-col text-left">
                             <button
                               onClick={() => { setActiveDropdownId(null); openEdit(q.id); }}
                               className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
@@ -320,7 +320,7 @@ function QuotationsContent() {
                 {activeDropdownId === q.id && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setActiveDropdownId(null)} />
-                    <div className="absolute right-0 bottom-8 z-50 w-52 rounded-xl bg-white shadow-2xl border border-border py-1 flex flex-col text-left">
+                    <div className="absolute right-0 bottom-8 z-50 w-52 rounded-xl bg-white shadow-modal border border-border py-1 flex flex-col text-left">
                       <button
                         onClick={() => { setActiveDropdownId(null); openEdit(q.id); }}
                         className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"

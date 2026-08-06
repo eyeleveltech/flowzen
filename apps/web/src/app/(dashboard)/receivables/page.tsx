@@ -52,7 +52,7 @@ export default function ReceivablesPage() {
             <thead className="bg-surface text-secondary">
               <tr>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Contract Title</th>
-                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Company</th>
+                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Client</th>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider text-right">Total Value</th>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider text-right">Paid</th>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider text-right">Remaining</th>

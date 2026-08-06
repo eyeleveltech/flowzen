@@ -92,7 +92,7 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="space-y-6">
         <div className="flex gap-4">
           <Skeleton className="h-10 w-32 rounded-xl" />
           <Skeleton className="h-10 w-32 rounded-xl" />
@@ -119,7 +119,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
+    <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold text-primary tracking-tight">Settings</h1>
         <p className="text-sm text-secondary mt-1">Manage your organization, team, and preferences.</p>
@@ -170,7 +170,7 @@ export default function SettingsPage() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2 }}
-        className="bg-white p-6 rounded-2xl border border-border"
+        className="bg-white p-4 sm:p-6 rounded-2xl border border-border overflow-hidden min-w-0"
       >
         {tab === 'organization' && (fetchErrors.organization
           ? <ErrorPanel message={fetchErrors.organization} onRetry={fetchOrg} />

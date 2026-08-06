@@ -105,7 +105,7 @@ function PipelineContent() {
         <div>
           <h1 className="text-2xl font-semibold text-primary tracking-tight flex items-center gap-2">
             Pipeline
-            <span className="text-xs font-normal text-secondary bg-subtle px-2 py-0.5 rounded-lg border border-border">
+            <span className="text-xs font-normal text-body-soft bg-subtle px-2 py-0.5 rounded-lg border border-border">
               {viewName}
             </span>
           </h1>
@@ -121,33 +121,34 @@ function PipelineContent() {
               <Icon as={Plus} size="md" />
             </button>
           )}
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="flex items-center gap-2 p-1 bg-subtle rounded-xl">
+          <div className="flex items-center gap-2 shrink-0 max-w-full overflow-x-auto no-scrollbar">
+            <div className="flex items-center gap-1 p-1 bg-subtle rounded-xl shrink-0">
               <button
                 onClick={() => setActiveTab('BOARD')}
-                className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'BOARD' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-body'}`}
+                className={`px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium rounded-lg transition-all ${activeTab === 'BOARD' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-body'}`}
               >
                 Board
               </button>
               <button
                 onClick={() => setActiveTab('LIST')}
-                className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'LIST' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-body'}`}
+                className={`px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium rounded-lg transition-all ${activeTab === 'LIST' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-body'}`}
               >
                 List
               </button>
               <button
                 onClick={() => setActiveTab('DASHBOARD')}
-                className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'DASHBOARD' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-body'}`}
+                className={`px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium rounded-lg transition-all ${activeTab === 'DASHBOARD' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-body'}`}
               >
                 Analytics
               </button>
             </div>
             <button
               onClick={() => setShowViewSettings(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-secondary hover:text-primary bg-white border border-border rounded-lg shadow-sm transition-colors hover:bg-gray-50 h-9.5"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-secondary hover:text-primary bg-white border border-border rounded-lg shadow-sm transition-colors hover:bg-gray-50 h-9 shrink-0"
               title="Configure View Settings"
             >
-              <Icon as={Settings} size="sm" /> View Settings
+              <Icon as={Settings} size="sm" />
+              <span className="hidden sm:inline">View Settings</span>
             </button>
           </div>
         </div>

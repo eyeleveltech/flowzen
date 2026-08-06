@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Plus, Loader2, Trash2, Check, User, CalendarDays } from 'lucide-react';
 import { api } from '@/lib/api';
-import { getInitials, getAvatarColor } from '@/lib/utils';
+import { getInitials, getAvatarColor, formatDate } from '@/lib/utils';
 import toast from 'react-hot-toast';
 import { LeadTaskFormDrawer } from './LeadTaskFormDrawer';
 import { Icon } from '@/components/ui/icon';
@@ -77,7 +77,7 @@ export function LeadTasksTab({ leadId, initialAdding = false }: { leadId: string
         <div>
           <h3 className="text-sm font-semibold text-primary">Tasks</h3>
           <p className="text-xs text-secondary mt-0.5">
-            Pre-sales work on this lead — audits, research, prep. Carries over when the deal is won.
+            Pre-sales work on this lead — audits, research, prep. Carries over when the lead is won.
           </p>
         </div>
         <button
@@ -99,7 +99,7 @@ export function LeadTasksTab({ leadId, initialAdding = false }: { leadId: string
         <div className="bg-white rounded-2xl border border-border p-10 text-center">
           <p className="text-sm font-medium text-primary">No tasks yet</p>
           <p className="text-xs text-secondary mt-1">
-            Add the audit or research work your team needs to do before this deal moves forward.
+            Add the audit or research work your team needs to do before this lead moves forward.
           </p>
         </div>
       )}
@@ -149,7 +149,7 @@ export function LeadTasksTab({ leadId, initialAdding = false }: { leadId: string
                       {t.dueDate && (
                         <span className="flex items-center gap-1.5 text-xs text-secondary">
                           <Icon as={CalendarDays} size="sm" />
-                          {new Date(t.dueDate).toLocaleDateString()}
+                          {formatDate(t.dueDate)}
                         </span>
                       )}
                       {t.priority && (

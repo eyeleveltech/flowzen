@@ -486,7 +486,7 @@ reportRouter.get('/executive', async (req: AuthRequest, res: Response, next) => 
         });
       });
       let health = 'Green';
-      if (cOverdue >= 3 || pastEnd) health = 'Red';
+      if (cOverdue >= 4 || pastEnd) health = 'Red';
       else if (cOverdue > 0) health = 'Amber';
       return { name: (c.company || c.name) as string, contractValue: Number(c.contractValue || 0), status: c.status, overdueTasks: cOverdue, health, updatedAt: c.updatedAt };
     });

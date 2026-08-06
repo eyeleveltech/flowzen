@@ -72,7 +72,7 @@ export default function PaymentsPage() {
             <thead className="bg-surface text-secondary">
               <tr>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Payment ID</th>
-                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Company</th>
+                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Client</th>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Against</th>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Date</th>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Method</th>

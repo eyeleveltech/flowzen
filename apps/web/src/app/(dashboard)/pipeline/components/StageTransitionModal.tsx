@@ -183,7 +183,7 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
             {isActivationGate && (
               <div className="flex items-start gap-2 p-3 rounded-xl border border-amber-200 bg-amber-50 text-sm text-amber-800">
                 <Icon as={AlertTriangle} size="md" className="mt-0.5 shrink-0" />
-                <span>The signed contract must be uploaded below before this deal can be activated.</span>
+                <span>The signed contract must be uploaded below before this lead can be activated.</span>
               </div>
             )}
 

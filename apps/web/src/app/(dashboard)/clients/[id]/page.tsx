@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useId } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { getSSE } from '@/lib/sse';
@@ -538,10 +539,10 @@ export default function ClientDetailPage() {
               const overdue = !!(p.endDate && new Date(p.endDate) < new Date() && p.status !== 'COMPLETED');
               const ptype = (p as any).type as string | undefined;
               return (
-                <div
+                <Link
                   key={p.id}
-                  onClick={() => router.push(`/projects/${p.id}`)}
-                  className="group rounded-2xl border border-border bg-white p-5 hover:shadow-sm hover:border-gray-300 cursor-pointer transition-colors duration-150 motion-reduce:transition-none"
+                  href={`/projects/${p.id}`}
+                  className="group rounded-2xl border border-border bg-white p-5 hover:shadow-sm hover:border-gray-300 block transition-colors duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
                   {/* Header */}
                   <div className="flex items-start justify-between gap-3 mb-4">
@@ -587,7 +588,7 @@ export default function ClientDetailPage() {
                       <div className={`h-full rounded-full ${p.status === 'COMPLETED' ? 'bg-green-500' : 'bg-primary'}`} style={{ width: `${p.progress}%` }} />
                     </div>
                   </div>
-                </div>
+                </Link>
               );
             })
           )}

@@ -87,7 +87,7 @@ export default function InvoiceDraftsPage() {
             <thead className="bg-surface text-secondary">
               <tr>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Draft #</th>
-                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Company</th>
+                <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Client</th>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Quote Ref</th>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider text-right">Grand Total</th>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Status</th>

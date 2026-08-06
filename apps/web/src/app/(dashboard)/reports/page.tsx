@@ -581,7 +581,7 @@ function ExecutiveTab({ data, periodLabel }: { data: any; periodLabel: string })
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1 space-y-3">
             <StatRow label="Won deals" value={formatCurrency(revenue.wonValue)} sub={`${revenue.wonCount} deals`} tone="green" />
-            <StatRow label="Lost deals" value={formatCurrency(revenue.lostValue)} sub={`${revenue.lostCount} deals`} tone="red" />
+            <StatRow label="Lost leads" value={formatCurrency(revenue.lostValue)} sub={`${revenue.lostCount} leads`} tone="red" />
             <StatRow label="Weighted forecast" value={formatCurrency(revenue.weightedPipelineValue || 0)} sub="probability adjusted" tone="green" />
             <StatRow label="Open pipeline" value={formatCurrency(revenue.pipelineValue)} sub="raw active leads" />
           </div>
@@ -598,7 +598,7 @@ function ExecutiveTab({ data, periodLabel }: { data: any; periodLabel: string })
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            ) : <Empty>No lost deals in this period.</Empty>}
+            ) : <Empty>No lost leads in this period.</Empty>}
           </div>
         </div>
       </motion.div>

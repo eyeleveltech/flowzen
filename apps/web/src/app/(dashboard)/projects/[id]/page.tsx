@@ -14,6 +14,7 @@ import { TaskFormDrawer } from '@/components/tasks/task-form-drawer';
 import { TaskBoardView } from '../components/TaskBoardView';
 import { ViewSettingsPanel } from '@/components/ui/view-settings-panel';
 import { ColumnDropdown } from '@/components/ui/column-dropdown';
+import { Toggle } from '@/components/ui/toggle';
 
 import { MultiSelect } from '@/components/ui/multi-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
@@ -45,6 +46,7 @@ interface ProjectDetail {
 import { StatusBadge } from '@/components/ui/status-badge';
 import { NoAccess } from '@/components/ui/no-access';
 import { NotFoundPanel } from '@/components/ui/not-found-panel';
+import { ProjectDetailSkeleton } from '@/components/ui/skeleton-loaders';
 import { getPriorityDot, getPriorityColor } from '@/lib/priority';
 import { Icon } from '@/components/ui/icon';
 
@@ -344,7 +346,7 @@ export default function ProjectDetailPage() {
   }
 
   if (!project) return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="space-y-6">
       {/* Header Skeleton */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-border">
         <div className="space-y-3">
@@ -454,7 +456,7 @@ export default function ProjectDetailPage() {
     finalTasks.sort((a, b) => (priorityOrder[b.priority] || 0) - (priorityOrder[a.priority] || 0));
   }
 
-  if (loading) return <div className="py-20 text-center text-sm text-secondary">Loading...</div>;
+  if (loading) return <ProjectDetailSkeleton />;
   if (errorStatus === 403) {
     return <NoAccess title="Access Restricted" message="You do not have permission or module access to view this project." backHref="/projects" backLabel="Back to Projects" />;
   }
@@ -590,7 +592,7 @@ export default function ProjectDetailPage() {
               </div>
             ))}
             {allProjectMembers.length > 5 && (
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-subtle text-secondary text-xs font-semibold border-2 border-white" style={{ zIndex: 0 }}>
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-subtle text-body-soft text-xs font-semibold border-2 border-white" style={{ zIndex: 0 }}>
                 +{allProjectMembers.length - 5}
               </div>
             )}
@@ -737,18 +739,8 @@ export default function ProjectDetailPage() {
                 />
               </div>
 
-              <div className="flex items-center gap-1.5 border border-border rounded-xl px-3 h-9 bg-white shadow-sm shrink-0">
-                <label htmlFor="proj-show-completed" className="text-xs font-semibold text-body-soft cursor-pointer select-none">Show Done</label>
-                <button
-                  id="proj-show-completed"
-                  type="button"
-                  role="switch"
-                  aria-checked={showCompleted}
-                  onClick={() => setShowCompleted(!showCompleted)}
-                  className={`relative inline-flex h-4.5 w-8 shrink-0 items-center rounded-full border transition-colors ${showCompleted ? 'bg-primary border-primary' : 'bg-gray-200 border-gray-300'}`}
-                >
-                  <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform ${showCompleted ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
-                </button>
+              <div className="flex items-center border border-border rounded-xl px-3 h-9 bg-white shadow-sm shrink-0">
+                <Toggle size="sm" label="Show Done" id="proj-show-completed" checked={showCompleted} onChange={setShowCompleted} labelClassName="text-body-soft" />
               </div>
             </div>
 
@@ -1192,7 +1184,7 @@ export default function ProjectDetailPage() {
         {showEditProject && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setShowEditProject(false)} />
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto">
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-modal shadow-black/10 overflow-y-auto">
               <div className="flex items-center justify-between px-6 py-4 border-b border-subtle">
                 <h2 className="text-lg font-semibold text-primary">Edit Project</h2>
                 <button onClick={() => setShowEditProject(false)} className="p-2 rounded-xl hover:bg-subtle"><Icon as={X} size="md" className="text-secondary" /></button>
@@ -1356,7 +1348,7 @@ export default function ProjectDetailPage() {
         {viewModalContent && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setViewModalContent(null)} />
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 flex flex-col">
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-modal shadow-black/10 flex flex-col">
               <div className="flex items-center justify-between px-6 py-4 border-b border-subtle shrink-0">
                 <h2 className="text-lg font-semibold text-primary">{viewModalContent.title}</h2>
                 <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-subtle"><Icon as={X} size="md" className="text-secondary" /></button>

@@ -348,7 +348,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
-            className="fixed right-0 top-0 bottom-0 z-101 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto"
+            className="fixed right-0 top-0 bottom-0 z-101 w-full max-w-lg bg-white border-l border-border shadow-modal shadow-black/10 overflow-y-auto"
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-subtle sticky top-0 bg-white z-10">
               <h2 className="text-lg font-semibold text-primary">{isEditing ? 'Edit Task' : 'New Task'}</h2>
@@ -440,17 +440,17 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
                 {!propProjectId && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-body mb-1.5">Company</label>
+                      <label className="block text-sm font-medium text-body mb-1.5">Client</label>
                       <Controller
                         name="clientId"
                         control={control}
                         render={({ field }) => (
                           <Select
-                            ariaLabel="Company"
+                            ariaLabel="Client"
                             value={field.value || ''}
                             onChange={(val) => handleCompanyChange(val, field.onChange)}
                             options={[
-                              { label: 'Select company', value: '' },
+                              { label: 'Select client', value: '' },
                               ...clientOptions,
                             ]}
                           />

@@ -216,7 +216,7 @@ export function CommandPalette() {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: -20 }}
             transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.15 }}
-            className="fixed left-1/2 top-[20%] z-50 w-full max-w-xl -translate-x-1/2 rounded-2xl border border-border bg-white shadow-2xl shadow-black/10"
+            className="fixed left-1/2 top-[20%] z-50 w-full max-w-xl -translate-x-1/2 rounded-2xl border border-border bg-white shadow-modal shadow-black/10"
           >
             {/* Search input */}
             <div className="flex items-center gap-3 px-5 py-4 border-b border-subtle">

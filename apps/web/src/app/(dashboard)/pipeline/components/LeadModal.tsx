@@ -250,7 +250,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: '100%' }}
         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-        className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-xl bg-white shadow-2xl flex flex-col"
+        className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-xl bg-white shadow-modal flex flex-col"
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-white z-10">
           <div>
@@ -290,7 +290,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
 
                 {/* Client Search / Autocomplete */}
                 <div className="relative" ref={clientDropdownRef}>
-                  <label className="block text-sm font-medium text-body mb-1.5">Client / Company Name <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-body mb-1.5">Client name <span className="text-red-500">*</span></label>
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
                     <input
