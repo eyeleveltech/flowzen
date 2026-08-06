@@ -16,12 +16,12 @@ const MenuBar = ({ editor }: { editor: any }) => {
   if (!editor) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-1 border-b border-border bg-[#F9FAFB] px-3 py-2 rounded-t-xl">
+    <div className="flex flex-wrap items-center gap-1 border-b border-border bg-surface px-3 py-2 rounded-t-xl">
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleBold().run()}
         disabled={!editor.can().chain().focus().toggleBold().run()}
-        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('bold') ? 'bg-border text-primary' : 'text-secondary hover:bg-[#F3F4F6] hover:text-primary'}`}
+        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('bold') ? 'bg-border text-primary' : 'text-secondary hover:bg-subtle hover:text-primary'}`}
       >
         <Icon as={Bold} size="md" />
       </button>
@@ -29,7 +29,7 @@ const MenuBar = ({ editor }: { editor: any }) => {
         type="button"
         onClick={() => editor.chain().focus().toggleItalic().run()}
         disabled={!editor.can().chain().focus().toggleItalic().run()}
-        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('italic') ? 'bg-border text-primary' : 'text-secondary hover:bg-[#F3F4F6] hover:text-primary'}`}
+        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('italic') ? 'bg-border text-primary' : 'text-secondary hover:bg-subtle hover:text-primary'}`}
       >
         <Icon as={Italic} size="md" />
       </button>
@@ -37,7 +37,7 @@ const MenuBar = ({ editor }: { editor: any }) => {
         type="button"
         onClick={() => editor.chain().focus().toggleStrike().run()}
         disabled={!editor.can().chain().focus().toggleStrike().run()}
-        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('strike') ? 'bg-border text-primary' : 'text-secondary hover:bg-[#F3F4F6] hover:text-primary'}`}
+        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('strike') ? 'bg-border text-primary' : 'text-secondary hover:bg-subtle hover:text-primary'}`}
       >
         <Icon as={Strikethrough} size="md" />
       </button>
@@ -47,21 +47,21 @@ const MenuBar = ({ editor }: { editor: any }) => {
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('heading', { level: 2 }) ? 'bg-border text-primary' : 'text-secondary hover:bg-[#F3F4F6] hover:text-primary'}`}
+        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('heading', { level: 2 }) ? 'bg-border text-primary' : 'text-secondary hover:bg-subtle hover:text-primary'}`}
       >
         <Icon as={Heading2} size="md" />
       </button>
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleBulletList().run()}
-        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('bulletList') ? 'bg-border text-primary' : 'text-secondary hover:bg-[#F3F4F6] hover:text-primary'}`}
+        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('bulletList') ? 'bg-border text-primary' : 'text-secondary hover:bg-subtle hover:text-primary'}`}
       >
         <Icon as={List} size="md" />
       </button>
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('orderedList') ? 'bg-border text-primary' : 'text-secondary hover:bg-[#F3F4F6] hover:text-primary'}`}
+        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('orderedList') ? 'bg-border text-primary' : 'text-secondary hover:bg-subtle hover:text-primary'}`}
       >
         <Icon as={ListOrdered} size="md" />
       </button>

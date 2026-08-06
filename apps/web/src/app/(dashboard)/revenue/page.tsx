@@ -102,11 +102,11 @@ export default function RevenueOverviewPage() {
               className="flex flex-col rounded-2xl border border-border bg-white p-6 shadow-sm"
             >
               <div className="flex items-center justify-between">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-subtle text-body">
                   <kpi.icon className="h-6 w-6" />
                 </div>
                 <span className={`flex items-center text-sm font-medium px-2 py-1 rounded-md ${
-                  isNegative ? 'text-red-600 bg-red-50' : 'text-emerald-600 bg-emerald-50'
+                  isNegative ? 'text-red-600 bg-red-50' : 'text-green-600 bg-green-50'
                 }`}>
                   {kpi.trend}
                   {!isZero && (isNegative ? <ArrowDownRight className="ml-1 h-3 w-3" /> : <ArrowUpRight className="ml-1 h-3 w-3" />)}
@@ -122,7 +122,7 @@ export default function RevenueOverviewPage() {
       </div>
 
       {(!data?.paidThisMonth && !data?.mrr && !data?.receivables) && (
-        <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-sm">
+        <div className="rounded-2xl border border-border bg-subtle/50 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-sm">
           <p className="text-secondary">
             Revenue metrics will populate here once you have active clients with payments or contracts.
           </p>
@@ -141,7 +141,7 @@ export default function RevenueOverviewPage() {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-[#F9FAFB] text-secondary">
+            <thead className="bg-surface text-secondary">
               <tr>
                 <th className="px-6 py-4 font-medium">Client</th>
                 <th className="px-6 py-4 font-medium">Amount</th>
@@ -157,7 +157,7 @@ export default function RevenueOverviewPage() {
                 </tr>
               ) : (
                 data?.recentPayments?.map((payment: any) => (
-                  <tr key={payment.id} className="hover:bg-[#F9FAFB] transition-colors">
+                  <tr key={payment.id} className="hover:bg-surface transition-colors">
                     <td className="px-6 py-4 font-medium text-primary">
                       {payment.client?.company || payment.client?.name}
                     </td>
@@ -165,7 +165,7 @@ export default function RevenueOverviewPage() {
                     <td className="px-6 py-4 text-secondary">{formatDate(payment.paidOn)}</td>
                     <td className="px-6 py-4 text-secondary">{payment.method || 'Transfer'}</td>
                     <td className="px-6 py-4">
-                      <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 border border-emerald-200">
+                      <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700 border border-green-200">
                         {payment.status}
                       </span>
                     </td>

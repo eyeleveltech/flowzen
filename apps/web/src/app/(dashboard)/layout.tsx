@@ -80,7 +80,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           exit={{ opacity: 0, y: 20, scale: 0.95 }}
           className={`fixed ${isMobile ? 'bottom-20 left-4 right-4' : 'bottom-6 right-6 w-80'} z-50 flex items-start gap-3 rounded-2xl border border-border bg-white p-4 shadow-xl shadow-black/5`}
         >
-          <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+          <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-subtle text-body">
             <Icon as={Bell} size="md" />
           </div>
           <div className="flex-1">
@@ -89,7 +89,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
           <button
             onClick={clearToast}
-            className="flex shrink-0 items-center justify-center rounded-lg p-1 text-secondary hover:bg-surface-sunken hover:text-primary transition-colors"
+            className="flex shrink-0 items-center justify-center rounded-lg p-1 text-secondary hover:bg-subtle hover:text-primary transition-colors"
           >
             <Icon as={X} size="md" />
           </button>

@@ -74,7 +74,7 @@ export function ActivityFeedWidget({ itemVariants }: { itemVariants?: any }) {
     if (item.type === 'TASK_STATUS_CHANGED') {
       const match = item.message.match(/changed task status to (.+)/);
       const newStatus = match ? match[1].replace('_', ' ') : 'a new status';
-      return <><span className="font-semibold text-primary">{actor}</span> moved {target} to <span className="font-medium text-[#374151]">{newStatus}</span>{inProject}</>;
+      return <><span className="font-semibold text-primary">{actor}</span> moved {target} to <span className="font-medium text-body">{newStatus}</span>{inProject}</>;
     }
 
     if (item.type === 'TASK_CREATED') {
@@ -156,18 +156,18 @@ export function ActivityFeedWidget({ itemVariants }: { itemVariants?: any }) {
           const innerContent = (
             <>
               <div className="relative">
-                <div className="h-5 w-5 rounded-full bg-white border border-border text-primary text-[8px] font-bold flex items-center justify-center shrink-0 shadow-sm mt-0.5 group-hover:border-[#D1D5DB] transition-colors">
+                <div className="h-5 w-5 rounded-full bg-white border border-border text-primary text-[8px] font-bold flex items-center justify-center shrink-0 shadow-sm mt-0.5 group-hover:border-line transition-colors">
                   {getInitials(item.user?.name || '?')}
                 </div>
                 {isUnread && (
                   <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500 border-2 border-white"></span>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary border-2 border-white"></span>
                   </span>
                 )}
               </div>
               <div className="pt-0.5 flex-1">
-                <p className={`text-xs leading-snug ${isUnread ? 'text-primary' : 'text-[#4B5563]'}`}>
+                <p className={`text-xs leading-snug ${isUnread ? 'text-primary' : 'text-body-soft'}`}>
                   {getReadableMessage(item)}
                 </p>
                 <p className="text-xs text-secondary mt-1 font-medium">{formatRelativeDate(item.createdAt)}</p>

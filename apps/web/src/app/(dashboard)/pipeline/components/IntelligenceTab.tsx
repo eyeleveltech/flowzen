@@ -60,13 +60,13 @@ export function IntelligenceTab({ leadId, linkedinUrl, dossier, onRefetch }: {
       ) : error && !d ? (
         <div className="flex flex-col items-center justify-center py-10 text-center">
           <AlertTriangle className="h-7 w-7 text-amber-500 mb-2" />
-          <p className="text-sm text-[#374151]">{error}</p>
-          <button onClick={run} className="mt-3 text-sm font-medium text-white bg-primary rounded-xl px-4 py-2 hover:bg-[#1F2937] transition-all">Retry</button>
+          <p className="text-sm text-body">{error}</p>
+          <button onClick={run} className="mt-3 text-sm font-medium text-white bg-primary rounded-xl px-4 py-2 hover:bg-primary-hover transition-all">Retry</button>
         </div>
       ) : !d ? (
         <div className="flex flex-col items-center justify-center py-10 text-center">
           <p className="text-sm text-secondary mb-3">Generate a behavioural dossier from this lead's LinkedIn profile.</p>
-          <button onClick={run} className="flex items-center gap-2 text-sm font-medium text-white bg-primary rounded-xl px-4 py-2.5 hover:bg-[#1F2937] transition-all">
+          <button onClick={run} className="flex items-center gap-2 text-sm font-medium text-white bg-primary rounded-xl px-4 py-2.5 hover:bg-primary-hover transition-all">
             <Icon as={Sparkles} size="md" /> Run Intelligence
           </button>
         </div>

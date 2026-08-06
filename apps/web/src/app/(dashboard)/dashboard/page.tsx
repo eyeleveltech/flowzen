@@ -27,12 +27,13 @@ import {
 } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
 import { axisTick, gridStroke } from '@/lib/chart-theme';
+import { getPriorityDot, getPriorityBadge } from '@/lib/priority';
 
 // Strict Monochromatic Palette for Charts
 const COLORS = ['#111827', '#4B5563', '#9CA3AF', '#D1D5DB', '#F3F4F6'];
 
 const HEALTH_CONFIG: Record<string, { label: string; dot: string }> = {
-  Green: { label: 'Healthy', dot: 'bg-emerald-500' },
+  Green: { label: 'Healthy', dot: 'bg-green-500' },
   Amber: { label: 'Watch', dot: 'bg-amber-500' },
   Red: { label: 'At risk', dot: 'bg-red-500' },
 };
@@ -137,7 +138,7 @@ const PendingApprovalItem = ({
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3 min-w-0">
               {task.assignee && (
-                <div className="h-8 w-8 rounded-full bg-surface-sunken text-primary text-[10px] font-bold flex items-center justify-center shrink-0 border border-border mt-0.5">
+                <div className="h-8 w-8 rounded-full bg-subtle text-primary text-[10px] font-bold flex items-center justify-center shrink-0 border border-border mt-0.5">
                   {getInitials(task.assignee.name)}
                 </div>
               )}
@@ -157,7 +158,7 @@ const PendingApprovalItem = ({
                           e.stopPropagation();
                           onApproveAllForProject(task.projectId);
                         }}
-                        className="text-[10px] text-emerald-600 font-bold hover:underline hover:text-emerald-700 whitespace-nowrap"
+                        className="text-[10px] text-green-600 font-bold hover:underline hover:text-green-700 whitespace-nowrap"
                       >
                         Approve Project Tasks
                       </button>
@@ -170,7 +171,7 @@ const PendingApprovalItem = ({
               <button
                 disabled={submitting}
                 onClick={handleApprove}
-                className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                className="flex items-center justify-center h-8 w-8 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
                 title="Approve"
               >
                 <Icon as={CheckCircle2} size="md" />
@@ -207,7 +208,7 @@ const PendingApprovalItem = ({
               <button
                 disabled={submitting || !commentText.trim()}
                 onClick={handleSubmitChanges}
-                className="px-3 py-1.5 text-xs font-medium text-white bg-primary rounded-lg hover:bg-[#1F2937] transition-colors disabled:opacity-50"
+                className="px-3 py-1.5 text-xs font-medium text-white bg-primary rounded-lg hover:bg-primary-hover transition-colors disabled:opacity-50"
               >
                 {submitting ? 'Submitting...' : 'Submit Feedback'}
               </button>
@@ -571,12 +572,12 @@ export default function DashboardPage() {
                     {hasTasks && (
                       <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-lg border ${hasOverdue
                         ? 'bg-red-50 text-red-600 border-red-100'
-                        : 'bg-surface-sunken text-text-on-sunken border-border'
+                        : 'bg-subtle text-body-soft border-border'
                         }`}>
                         {hasOverdue ? `${overdueCount} overdue` : `${allPendingTasks.length} pending`}
                       </span>
                     )}
-                    <button onClick={() => router.push('/tasks')} className="text-xs font-semibold text-black-600 hover:text-blue-700 hover:underline transition-colors">
+                    <button onClick={() => router.push('/tasks')} className="text-xs font-semibold text-black-600 hover:text-body hover:underline transition-colors">
                       View All
                     </button>
                   </div>
@@ -586,23 +587,18 @@ export default function DashboardPage() {
                 <div className="flex-1 overflow-y-auto max-h-120 custom-scrollbar p-3.5">
                   {sortedTasks.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 text-center gap-2">
-                      <p className="text-sm font-semibold text-emerald-600">You're all caught up!</p>
+                      <p className="text-sm font-semibold text-green-600">You're all caught up!</p>
                       <p className="text-xs text-secondary">No pending tasks right now.</p>
                     </div>
                   ) : (
                     <div className="space-y-2">
                       {sortedTasks.map((t: any) => {
                         const isOverdue = t.dueDate && new Date(t.dueDate) < todayStart && t.status !== 'COMPLETED' && t.status !== 'ON_HOLD';
-                        const priorityBgColor =
-                          t.priority === 'URGENT' ? 'bg-red-500' :
-                            t.priority === 'HIGH' ? 'bg-orange-500' :
-                              t.priority === 'MEDIUM' ? 'bg-blue-500' :
-                                'bg-gray-300';
-                        const priorityChipStyle =
-                          t.priority === 'URGENT' ? 'bg-red-50 text-red-700 border-red-200' :
-                            t.priority === 'HIGH' ? 'bg-orange-50 text-orange-700 border-orange-200' :
-                              t.priority === 'MEDIUM' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                'bg-gray-50 text-gray-600 border-gray-200';
+                        // Priority styling comes from lib/priority, not a ladder rebuilt here —
+                        // this copy had already drifted (orange for HIGH, where the shared config
+                        // says amber) and CRITICAL fell through to the "no priority" grey.
+                        const priorityBgColor = getPriorityDot(t.priority);
+                        const priorityChipStyle = getPriorityBadge(t.priority);
 
                         const leadInfo = t.lead;
                         const targetLeadId = t.leadId || leadInfo?.id;
@@ -626,8 +622,8 @@ export default function DashboardPage() {
                                 <p className="text-sm font-semibold text-primary truncate mb-0.5">{t.title}</p>
                                 <div className="flex flex-wrap items-center gap-2.5 text-xs text-secondary">
                                   {leadInfo ? (
-                                    <span className="flex items-center gap-1 text-purple-700 font-medium truncate">
-                                      <Icon as={Target} size="sm" className="text-purple-600 shrink-0" />
+                                    <span className="flex items-center gap-1 text-body font-medium truncate">
+                                      <Icon as={Target} size="sm" className="text-body shrink-0" />
                                       {leadInfo.companyName || leadInfo.contactName || leadInfo.leadId || 'Lead Task'}
                                     </span>
                                   ) : (
@@ -659,7 +655,7 @@ export default function DashboardPage() {
                                 </span>
                               )}
                               {leadInfo && (
-                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded border border-purple-200 bg-purple-50 text-purple-700 uppercase tracking-wide">
+                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded border border-border bg-subtle text-body uppercase tracking-wide">
                                   Pipeline
                                 </span>
                               )}
@@ -688,7 +684,7 @@ export default function DashboardPage() {
               >
                 <Link href="/tasks?filter=approval" className="flex items-center gap-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm">
                   <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Icon as={CheckCircle2} size="md" className="text-secondary" /> Pending Approvals</h2>
-                  {pendingApprovals.length > 0 && <span className="text-xs font-medium text-primary bg-surface-sunken border border-border px-2 py-0.5 rounded-md">{pendingApprovals.length}</span>}
+                  {pendingApprovals.length > 0 && <span className="text-xs font-medium text-primary bg-subtle border border-border px-2 py-0.5 rounded-md">{pendingApprovals.length}</span>}
                 </Link>
 
                 {pendingApprovals.length > 0 && (
@@ -835,8 +831,8 @@ export default function DashboardPage() {
                 deadlines.map((d: any) => {
                   const daysRemaining = Math.ceil((new Date(d.dueDate).getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
                   let dotColor = 'bg-[#9CA3AF]'; // Grey for 4+ days
-                  if (daysRemaining <= 1) dotColor = 'bg-[#EF4444] animate-pulse'; // Red for <= 1 day
-                  else if (daysRemaining <= 3) dotColor = 'bg-[#F59E0B]'; // Orange for <= 3 days
+                  if (daysRemaining <= 1) dotColor = 'bg-danger animate-pulse'; // Red for <= 1 day
+                  else if (daysRemaining <= 3) dotColor = 'bg-warning'; // Orange for <= 3 days
 
                   return (
                     <Link
@@ -853,7 +849,7 @@ export default function DashboardPage() {
                           <p className="text-xs text-secondary truncate">{d.project?.name || 'No project'}</p>
                         </div>
                       </div>
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 border rounded-sm shrink-0 ${new Date(d.dueDate) < todayStart ? 'bg-red-50 text-red-600 border-red-200' : 'bg-surface-sunken text-primary border-border'}`}>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 border rounded-sm shrink-0 ${new Date(d.dueDate) < todayStart ? 'bg-red-50 text-red-600 border-red-200' : 'bg-subtle text-primary border-border'}`}>
                         {new Date(d.dueDate) < todayStart ? `OVERDUE: ${formatShortDate(d.dueDate)}` : formatShortDate(d.dueDate)}
                       </span>
                     </Link>
@@ -879,7 +875,7 @@ export default function DashboardPage() {
                 if (list.length === 0) {
                   return (
                     <div className="flex flex-col items-center justify-center py-6 text-center gap-2">
-                      <p className="text-xs font-semibold text-emerald-600">No overdue tasks. Great job!</p>
+                      <p className="text-xs font-semibold text-green-600">No overdue tasks. Great job!</p>
                     </div>
                   );
                 }
@@ -924,7 +920,7 @@ export default function DashboardPage() {
                       <p className="text-sm font-semibold text-primary truncate group-hover:text-black transition-colors">{p.name}</p>
                       <p className="text-xs text-secondary truncate">{p.client?.company || p.client?.name || 'No Client'}</p>
                     </div>
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 border rounded-sm bg-surface-sunken text-primary border-border shrink-0">
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 border rounded-sm bg-subtle text-primary border-border shrink-0">
                       {p.progress}%
                     </span>
                   </Link>

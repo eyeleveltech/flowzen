@@ -172,7 +172,7 @@ export default function TeamsPage() {
         </div>
         <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden p-6 space-y-4">
           {[1, 2, 3].map(i => (
-            <div key={i} className="flex items-center gap-4 py-3 border-b border-surface-sunken last:border-0">
+            <div key={i} className="flex items-center gap-4 py-3 border-b border-subtle last:border-0">
               <div className="flex items-center gap-3">
                 <Skeleton className="h-10 w-10 rounded-xl" />
                 <div>
@@ -198,7 +198,7 @@ export default function TeamsPage() {
         {isAdmin && (
           <button
             onClick={openCreate}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none hover:shadow-sm self-start sm:self-auto"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover transition-colors duration-150 motion-reduce:transition-none hover:shadow-sm self-start sm:self-auto"
           >
             <Icon as={Plus} size="md" />
             Create Department
@@ -216,7 +216,7 @@ export default function TeamsPage() {
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left border-collapse min-w-200">
                 <thead>
-                  <tr className="bg-[#F9FAFB] border-b border-border">
+                  <tr className="bg-surface border-b border-border">
                     <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide">Department Name</th>
                     <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide">Managers</th>
                     <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide">Members</th>
@@ -225,10 +225,10 @@ export default function TeamsPage() {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {teams.map(team => (
-                    <tr key={team.id} className="hover:bg-[#F9FAFB] transition-colors group">
+                    <tr key={team.id} className="hover:bg-surface transition-colors group">
                       <td className="px-6 py-5">
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-xl bg-surface-sunken text-primary flex items-center justify-center border border-border shrink-0">
+                          <div className="h-10 w-10 rounded-xl bg-subtle text-primary flex items-center justify-center border border-border shrink-0">
                             <Icon as={Users} size="lg" />
                           </div>
                           <div>
@@ -275,7 +275,7 @@ export default function TeamsPage() {
                             ))}
                             {team.members.length > 5 && (
                               <div
-                                className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-2 ring-white bg-surface-sunken text-primary border border-border text-[10px] font-semibold"
+                                className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-2 ring-white bg-subtle text-primary border border-border text-[10px] font-semibold"
                                 style={{ zIndex: 0 }}
                               >
                                 +{team.members.length - 5}
@@ -289,7 +289,7 @@ export default function TeamsPage() {
                         {(canEdit(team) || canDelete) && (
                           <div className="flex gap-2 justify-end opacity-100 lg:opacity-0 lg:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                             {canEdit(team) && (
-                              <button onClick={() => openEdit(team)} className="p-2 text-secondary hover:text-primary bg-white border border-border hover:bg-surface-sunken rounded-xl transition-colors duration-150 motion-reduce:transition-none hover:shadow-sm">
+                              <button onClick={() => openEdit(team)} className="p-2 text-secondary hover:text-primary bg-white border border-border hover:bg-subtle rounded-xl transition-colors duration-150 motion-reduce:transition-none hover:shadow-sm">
                                 <Icon as={Edit2} size="md" />
                               </button>
                             )}
@@ -315,10 +315,10 @@ export default function TeamsPage() {
             {/* Mobile Card View (Optimized for 320px+) */}
             <div className="md:hidden flex flex-col divide-y divide-border">
               {teams.map((team) => (
-                <div key={team.id} className="p-3.5 sm:p-4 hover:bg-[#F9FAFB] transition-colors relative">
+                <div key={team.id} className="p-3.5 sm:p-4 hover:bg-surface transition-colors relative">
                   <div className="flex items-start justify-between gap-2 mb-3">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="h-9 w-9 rounded-xl bg-linear-to-br from-blue-50 to-indigo-50 text-blue-600 flex items-center justify-center border border-blue-100/50 shrink-0">
+                      <div className="h-9 w-9 rounded-xl bg-linear-to-br from-subtle to-subtle text-body flex items-center justify-center border border-border/50 shrink-0">
                         <Icon as={Users} size="md" />
                       </div>
                       <div className="min-w-0">
@@ -329,7 +329,7 @@ export default function TeamsPage() {
                     {(canEdit(team) || canDelete) && (
                       <div className="flex gap-1.5 shrink-0">
                         {canEdit(team) && (
-                          <button onClick={() => openEdit(team)} className="p-1.5 text-secondary hover:text-primary bg-white border border-border hover:bg-surface-sunken rounded-xl transition-colors duration-150 motion-reduce:transition-none hover:shadow-sm">
+                          <button onClick={() => openEdit(team)} className="p-1.5 text-secondary hover:text-primary bg-white border border-border hover:bg-subtle rounded-xl transition-colors duration-150 motion-reduce:transition-none hover:shadow-sm">
                             <Icon as={Edit2} size="md" />
                           </button>
                         )}
@@ -342,7 +342,7 @@ export default function TeamsPage() {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 mt-3 bg-[#F9FAFB] p-2.5 rounded-xl border border-border">
+                  <div className="grid grid-cols-2 gap-3 mt-3 bg-surface p-2.5 rounded-xl border border-border">
                     <div className="min-w-0">
                       <span className="text-[10px] font-medium text-secondary uppercase tracking-wide block mb-1">Managers</span>
                       {team.managers && team.managers.length > 0 ? (
@@ -360,7 +360,7 @@ export default function TeamsPage() {
                         {team.members.slice(0, 4).map((m, i) => (
                           <div
                             key={m.id}
-                            className={`relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-2 ring-[#F9FAFB] text-[8px] font-bold ${getAvatarColor(m.name)}`}
+                            className={`relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-2 ring-surface text-[8px] font-bold ${getAvatarColor(m.name)}`}
                             style={{ zIndex: 4 - i }}
                             title={m.name}
                           >
@@ -369,7 +369,7 @@ export default function TeamsPage() {
                         ))}
                         {team.members.length > 4 && (
                           <div
-                            className="relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-2 ring-[#F9FAFB] bg-surface-sunken text-primary border border-border text-[7px] font-semibold"
+                            className="relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-2 ring-[#F9FAFB] bg-subtle text-primary border border-border text-[7px] font-semibold"
                             style={{ zIndex: 0 }}
                           >
                             +{team.members.length - 4}
@@ -398,17 +398,17 @@ export default function TeamsPage() {
           {formError && <div className="absolute top-0 left-0 right-0 -mt-2 z-10 rounded-xl bg-red-50 p-3 text-sm text-red-600 shadow-sm border border-red-100">{formError}</div>}
 
           <div>
-            <label className="block text-sm font-medium text-[#374151] mb-1.5">Department Name *</label>
+            <label className="block text-sm font-medium text-body mb-1.5">Department Name *</label>
             <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none" />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
+            <label className="block text-sm font-medium text-body mb-1.5">Description</label>
             <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none resize-none" />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[#374151] mb-1.5">Department Members *</label>
+            <label className="block text-sm font-medium text-body mb-1.5">Department Members *</label>
             <MultiSelect
               compact={false}
               options={users.map(u => ({
@@ -428,7 +428,7 @@ export default function TeamsPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[#374151] mb-1.5">Managers *</label>
+            <label className="block text-sm font-medium text-body mb-1.5">Managers *</label>
             <MultiSelect
               compact={false}
               options={users.filter(u => form.memberIds.includes(u.id)).map(u => ({
@@ -447,8 +447,8 @@ export default function TeamsPage() {
           </div>
 
           <div className="pt-4 flex gap-3">
-            <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none">Cancel</button>
-            <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none">{submitting ? 'Saving...' : 'Save Department'}</button>
+            <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-body hover:bg-surface transition-colors duration-150 motion-reduce:transition-none">Cancel</button>
+            <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none">{submitting ? 'Saving...' : 'Save Department'}</button>
           </div>
         </form>
       </Drawer>

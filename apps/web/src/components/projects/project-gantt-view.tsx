@@ -169,7 +169,7 @@ export function ProjectGanttView({ projects, loading = false }: ProjectGanttView
                   {/* Sidebar cell – sticky left */}
                   <Link
                     href={`/projects/${project.id}`}
-                    className="sticky left-0 z-20 bg-white border-r border-surface-sunken flex items-center px-4 shrink-0 hover:bg-surface transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]"
+                    className="sticky left-0 z-20 bg-white border-r border-subtle flex items-center px-4 shrink-0 hover:bg-surface transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]"
                     style={{ width: SIDEBAR_WIDTH }}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">

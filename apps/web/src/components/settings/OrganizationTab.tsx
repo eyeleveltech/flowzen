@@ -62,7 +62,7 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
       <div className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <label htmlFor="org-name" className="text-sm font-medium text-[#374151] flex items-center gap-2">
+            <label htmlFor="org-name" className="text-sm font-medium text-body flex items-center gap-2">
               <Icon as={Building2} size="sm" className="text-secondary" /> Organization Name <span className="text-red-500">*</span>
             </label>
             <input
@@ -77,7 +77,7 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
             {nameError && <p className="text-xs text-red-600 font-medium">{nameError}</p>}
           </div>
           <div className="space-y-1.5">
-            <label htmlFor="org-website" className="text-sm font-medium text-[#374151] flex items-center gap-2">
+            <label htmlFor="org-website" className="text-sm font-medium text-body flex items-center gap-2">
               <Icon as={Globe} size="sm" className="text-secondary" /> Website
             </label>
             <input
@@ -93,7 +93,7 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <label htmlFor="org-industry" className="text-sm font-medium text-[#374151] flex items-center gap-2">
+            <label htmlFor="org-industry" className="text-sm font-medium text-body flex items-center gap-2">
               <Icon as={Briefcase} size="sm" className="text-secondary" /> Industry
             </label>
             <input
@@ -106,7 +106,7 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
             />
           </div>
           <div className="space-y-1.5 z-20">
-            <label htmlFor="org-size" className="text-sm font-medium text-[#374151] flex items-center gap-2">
+            <label htmlFor="org-size" className="text-sm font-medium text-body flex items-center gap-2">
               <Icon as={Users} size="sm" className="text-secondary" /> Company Size
             </label>
             <Select
@@ -122,7 +122,7 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <label htmlFor="org-phone" className="text-sm font-medium text-[#374151] flex items-center gap-2">
+            <label htmlFor="org-phone" className="text-sm font-medium text-body flex items-center gap-2">
               <Icon as={Phone} size="sm" className="text-secondary" /> Phone Number
             </label>
             <input
@@ -134,7 +134,7 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
             />
           </div>
           <div className="space-y-1.5">
-            <label htmlFor="org-currency" className="text-sm font-medium text-[#374151] flex items-center gap-2">
+            <label htmlFor="org-currency" className="text-sm font-medium text-body flex items-center gap-2">
               <Icon as={Coins} size="sm" className="text-secondary" /> Default Currency
             </label>
             <CurrencySelect
@@ -145,7 +145,7 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="org-address" className="text-sm font-medium text-[#374151] flex items-center gap-2">
+          <label htmlFor="org-address" className="text-sm font-medium text-body flex items-center gap-2">
             <Icon as={MapPin} size="sm" className="text-secondary" /> Headquarter Address
           </label>
           <textarea
@@ -158,7 +158,7 @@ export function OrganizationTab({ initialData, onSaved }: { initialData: any, on
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="org-description" className="text-sm font-medium text-[#374151] flex items-center gap-2">
+          <label htmlFor="org-description" className="text-sm font-medium text-body flex items-center gap-2">
             <Icon as={Building2} size="sm" className="text-secondary" /> Description
           </label>
           <textarea

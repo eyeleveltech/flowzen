@@ -129,7 +129,7 @@ export default function SettingsPage() {
         <div
           ref={tabStripRef}
           onScroll={updateTabScroll}
-          className="flex gap-2 p-1 bg-surface-sunken rounded-xl overflow-x-auto no-scrollbar pr-10"
+          className="flex gap-2 p-1 bg-subtle rounded-xl overflow-x-auto no-scrollbar pr-10"
         >
           {tabs.map((t) => (
             <button
@@ -157,7 +157,7 @@ export default function SettingsPage() {
               type="button"
               aria-label="Scroll tab list right"
               onClick={() => tabStripRef.current?.scrollBy({ left: 160, behavior: 'smooth' })}
-              className="absolute right-1 top-1/2 -translate-y-1/2 z-10 flex h-7 w-7 items-center justify-center rounded-lg bg-white shadow-xs border border-border/50 text-secondary hover:text-primary hover:bg-[#F9FAFB] active:scale-95 transition-all"
+              className="absolute right-1 top-1/2 -translate-y-1/2 z-10 flex h-7 w-7 items-center justify-center rounded-lg bg-white shadow-xs border border-border/50 text-secondary hover:text-primary hover:bg-surface active:scale-95 transition-all"
             >
               <Icon as={ChevronRight} size="sm" />
             </button>

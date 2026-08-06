@@ -53,11 +53,11 @@ export function AuditLogsTab() {
   };
 
   const getActionColor = (action: string) => {
-    if (action.includes('CREATE')) return 'bg-emerald-50 text-emerald-700 ring-emerald-600/20';
-    if (action.includes('DELETE')) return 'bg-rose-50 text-rose-700 ring-rose-600/10';
+    if (action.includes('CREATE')) return 'bg-green-50 text-green-700 ring-green-600/20';
+    if (action.includes('DELETE')) return 'bg-red-50 text-red-700 ring-red-600/10';
     if (action.includes('UPDATE') || action.includes('ROLE')) return 'bg-amber-50 text-amber-700 ring-amber-600/20';
     if (action.includes('ARCHIVE')) return 'bg-gray-50 text-gray-700 ring-gray-600/20';
-    return 'bg-blue-50 text-blue-700 ring-blue-600/20';
+    return 'bg-subtle text-body ring-primary/20';
   };
 
   const renderDetails = (log: AuditLog) => {
@@ -104,7 +104,7 @@ export function AuditLogsTab() {
       return (
         <p className="text-sm text-primary">
           Project <span className="font-semibold">{details.name}</span> archived as{' '}
-          <span className="font-semibold text-rose-600">{details.status}</span>.
+          <span className="font-semibold text-red-600">{details.status}</span>.
         </p>
       );
     }

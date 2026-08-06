@@ -44,7 +44,7 @@ export function PermissionsTab() {
                 {p.values.map((v, j) => (
                   <td key={j} className="px-6 py-4 text-center">
                     {v ? (
-                      <Icon as={Check} size="md" className="text-emerald-600 mx-auto" strokeWidth={3} />
+                      <Icon as={Check} size="md" className="text-green-600 mx-auto" strokeWidth={3} />
                     ) : (
                       <Icon as={Minus} size="md" className="text-secondary/40 mx-auto" />
                     )}

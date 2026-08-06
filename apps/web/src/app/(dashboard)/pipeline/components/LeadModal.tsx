@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { X, Save, Upload, FileText, User, Briefcase, Mail, Phone, Search, Check, AlignLeft } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getInitials } from '@/lib/utils';
+import { getPriorityDot } from '@/lib/priority';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { Select } from '@/components/ui/select';
 import { useMembers, useClients } from '@/hooks/useQueries';
@@ -264,13 +265,13 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
         <div className="flex gap-6 px-6 border-b border-border bg-gray-50/50">
           <button
             onClick={() => setCreationMode('MANUAL')}
-            className={`pb-3 mt-4 text-sm font-medium border-b-2 transition-colors ${creationMode === 'MANUAL' ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-[#374151]'}`}
+            className={`pb-3 mt-4 text-sm font-medium border-b-2 transition-colors ${creationMode === 'MANUAL' ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-body'}`}
           >
             Manual Entry
           </button>
           <button
             onClick={() => setCreationMode('BULK')}
-            className={`pb-3 mt-4 text-sm font-medium border-b-2 transition-colors ${creationMode === 'BULK' ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-[#374151]'}`}
+            className={`pb-3 mt-4 text-sm font-medium border-b-2 transition-colors ${creationMode === 'BULK' ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-body'}`}
           >
             Bulk Import
           </button>
@@ -289,7 +290,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
 
                 {/* Client Search / Autocomplete */}
                 <div className="relative" ref={clientDropdownRef}>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Client name <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-body mb-1.5">Client name <span className="text-red-500">*</span></label>
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
                     <input
@@ -298,10 +299,10 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                       onChange={handleClientSearchChange}
                       onFocus={() => setShowClientDropdown(true)}
                       placeholder="Search existing clients or type company name..."
-                      className={`w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none ${form.clientId ? 'bg-blue-50 border-blue-200 text-blue-900' : ''}`}
+                      className={`w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none ${form.clientId ? 'bg-subtle border-border text-primary' : ''}`}
                     />
                     {form.clientId && (
-                      <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-600" />
+                      <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-body" />
                     )}
                   </div>
                   {errors.companyName && <p className="mt-1 text-xs text-red-600">{errors.companyName}</p>}
@@ -313,7 +314,7 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                           key={client.id}
                           type="button"
                           onClick={() => handleSelectClient(client)}
-                          className="w-full text-left px-3 py-2 text-sm text-[#374151] hover:bg-gray-50 rounded-lg flex flex-col transition-colors"
+                          className="w-full text-left px-3 py-2 text-sm text-body hover:bg-gray-50 rounded-lg flex flex-col transition-colors"
                         >
                           <span className="font-medium">{client.name}</span>
                           {client.company && <span className="text-xs text-secondary">{client.company}</span>}
@@ -459,9 +460,9 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
               <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-white shadow-sm">
                 <div>
                   <h3 className="text-sm font-semibold text-primary">Need a template?</h3>
-                  <p className="text-xs text-secondary mt-1">CSV or Excel (.xlsx). <span className="font-medium text-[#374151]">CompanyName required</span> on every row — the contact person and their details are optional.</p>
+                  <p className="text-xs text-secondary mt-1">CSV or Excel (.xlsx). <span className="font-medium text-body">CompanyName required</span> on every row — the contact person and their details are optional.</p>
                 </div>
-                <button onClick={downloadTemplate} className="flex items-center gap-2 rounded-lg border border-border bg-gray-50 px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-gray-100 transition-colors duration-150 motion-reduce:transition-none">
+                <button onClick={downloadTemplate} className="flex items-center gap-2 rounded-lg border border-border bg-gray-50 px-3 py-1.5 text-xs font-medium text-body hover:bg-gray-100 transition-colors duration-150 motion-reduce:transition-none">
                   <FileText className="h-3.5 w-3.5" /> Template
                 </button>
               </div>
@@ -490,10 +491,10 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
               </div>
 
               {importResult ? (
-                <div className={`p-4 rounded-xl border ${importResult.rejectedCount > 0 ? 'border-amber-200 bg-amber-50/60' : 'border-emerald-200 bg-emerald-50/60'}`}>
+                <div className={`p-4 rounded-xl border ${importResult.rejectedCount > 0 ? 'border-amber-200 bg-amber-50/60' : 'border-green-200 bg-green-50/60'}`}>
                   <h4 className="text-sm font-semibold text-primary mb-1">Import complete</h4>
-                  <p className="text-sm text-[#374151]">
-                    <span className="font-semibold text-emerald-700">{importResult.imported} imported</span>
+                  <p className="text-sm text-body">
+                    <span className="font-semibold text-green-700">{importResult.imported} imported</span>
                     {importResult.rejectedCount > 0 && <>, <span className="font-semibold text-amber-700">{importResult.rejectedCount} rejected</span></>}.
                   </p>
                   {importResult.rejectedCount > 0 && (
@@ -503,9 +504,9 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
                   )}
                 </div>
               ) : importPreview.length > 0 && (
-                <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/50">
-                  <h4 className="text-sm font-semibold text-blue-900 mb-1">Ready to Import</h4>
-                  <p className="text-sm text-blue-700">Found {importPreview.length} row{importPreview.length === 1 ? '' : 's'}. Each will be validated on import.</p>
+                <div className="p-4 rounded-xl border border-border bg-subtle/50">
+                  <h4 className="text-sm font-semibold text-primary mb-1">Ready to Import</h4>
+                  <p className="text-sm text-body">Found {importPreview.length} row{importPreview.length === 1 ? '' : 's'}. Each will be validated on import.</p>
                 </div>
               )}
             </div>
@@ -513,20 +514,20 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
         </div>
 
         <div className="p-4 pb-safe sm:p-5 border-t border-border bg-white flex flex-row justify-end gap-2 sm:gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)] z-10">
-          <button type="button" onClick={guardedClose} className="flex-1 sm:flex-none w-full sm:w-auto px-2 sm:px-5 py-2.5 text-sm font-medium text-[#374151] bg-white border border-border rounded-xl hover:bg-gray-50 transition-colors">
+          <button type="button" onClick={guardedClose} className="flex-1 sm:flex-none w-full sm:w-auto px-2 sm:px-5 py-2.5 text-sm font-medium text-body bg-white border border-border rounded-xl hover:bg-gray-50 transition-colors">
             Cancel
           </button>
           {creationMode === 'MANUAL' ? (
-            <button type="submit" form="lead-form" disabled={submitting} className="flex-1 sm:flex-none w-full sm:w-auto justify-center px-2 sm:px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] shadow-sm transition-colors duration-150 motion-reduce:transition-none disabled:opacity-50 flex items-center gap-1.5 sm:gap-2">
+            <button type="submit" form="lead-form" disabled={submitting} className="flex-1 sm:flex-none w-full sm:w-auto justify-center px-2 sm:px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-primary-hover shadow-sm transition-colors duration-150 motion-reduce:transition-none disabled:opacity-50 flex items-center gap-1.5 sm:gap-2">
               <Save className="h-4 w-4 shrink-0" />
               {submitting ? 'Saving...' : <><span className="hidden sm:inline">Save Lead</span><span className="inline sm:hidden">Save</span></>}
             </button>
           ) : importResult ? (
-            <button onClick={onSuccess} className="w-full sm:w-auto justify-center px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] shadow-sm transition-colors duration-150 motion-reduce:transition-none flex items-center gap-2">
+            <button onClick={onSuccess} className="w-full sm:w-auto justify-center px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-primary-hover shadow-sm transition-colors duration-150 motion-reduce:transition-none flex items-center gap-2">
               <Check className="h-4 w-4" /> Done
             </button>
           ) : (
-            <button onClick={handleBulkImport} disabled={importing || importPreview.length === 0} className="flex-1 sm:flex-none w-full sm:w-auto justify-center px-2 sm:px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] shadow-sm transition-colors duration-150 motion-reduce:transition-none disabled:opacity-50 flex items-center gap-1.5 sm:gap-2">
+            <button onClick={handleBulkImport} disabled={importing || importPreview.length === 0} className="flex-1 sm:flex-none w-full sm:w-auto justify-center px-2 sm:px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-primary-hover shadow-sm transition-colors duration-150 motion-reduce:transition-none disabled:opacity-50 flex items-center gap-1.5 sm:gap-2">
               <Upload className="h-4 w-4 shrink-0" />
               {importing ? 'Importing...' : <><span className="hidden sm:inline">Import Leads</span><span className="inline sm:hidden">Import</span></>}
             </button>
@@ -538,7 +539,5 @@ export function LeadModal({ onClose, onSuccess, initialMode = 'MANUAL' }: { onCl
 }
 
 function PriorityDot({ level }: { level: string }) {
-  if (level === 'HIGH') return <div className="h-2.5 w-2.5 rounded-full bg-red-500" />;
-  if (level === 'MEDIUM') return <div className="h-2.5 w-2.5 rounded-full bg-yellow-500" />;
-  return <div className="h-2.5 w-2.5 rounded-full bg-gray-400" />;
+  return <div className={`h-2.5 w-2.5 rounded-full ${getPriorityDot(level)}`} />;
 }

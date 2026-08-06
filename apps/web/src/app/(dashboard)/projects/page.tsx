@@ -248,7 +248,7 @@ function ProjectsContent() {
         <div>
           <h1 className="text-2xl font-semibold text-primary tracking-tight flex items-center gap-2">
             Projects
-            <span className="text-xs font-normal text-text-on-sunken bg-surface-sunken px-2 py-0.5 rounded-lg border border-border">
+            <span className="text-xs font-normal text-body-soft bg-subtle px-2 py-0.5 rounded-lg border border-border">
               {viewName}
             </span>
           </h1>
@@ -297,7 +297,7 @@ function ProjectsContent() {
                 {user?.role !== 'TEAM_MEMBER' && (
                   <button
                     onClick={() => setShowCreate(true)}
-                    className="flex items-center justify-center rounded-xl bg-primary h-9 w-9 text-white hover:bg-[#1F2937] transition-colors shrink-0"
+                    className="flex items-center justify-center rounded-xl bg-primary h-9 w-9 text-white hover:bg-primary-hover transition-colors shrink-0"
                     title="New Project"
                   >
                     <Icon as={Plus} size="sm" />
@@ -452,7 +452,7 @@ function ProjectsContent() {
               {user?.role !== 'TEAM_MEMBER' && (
                 <button
                   onClick={() => setShowCreate(true)}
-                  className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none h-9 shrink-0"
+                  className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary-hover transition-colors duration-150 motion-reduce:transition-none h-9 shrink-0"
                 >
                   <Icon as={Plus} size="sm" /> New Project
                 </button>
@@ -490,7 +490,7 @@ function ProjectsContent() {
             )}
 
             {/* Segmented View Mode Switcher */}
-            <div className="flex bg-surface-sunken p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center overflow-x-auto no-scrollbar max-w-full">
+            <div className="flex bg-subtle p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center overflow-x-auto no-scrollbar max-w-full">
               {viewButtons.map((v) => (
                 <button
                   key={v.mode}
@@ -513,7 +513,7 @@ function ProjectsContent() {
       {loading ? (
         <div className="rounded-2xl border border-border bg-white p-6 space-y-4">
           {[1, 2, 3, 4, 5].map(i => (
-            <div key={i} className="flex items-center gap-4 py-3 border-b border-surface-sunken last:border-0">
+            <div key={i} className="flex items-center gap-4 py-3 border-b border-subtle last:border-0">
               <Skeleton className="h-6 w-48" />
               <Skeleton className="h-4 w-24 ml-auto" />
               <Skeleton className="h-4 w-16" />
@@ -532,7 +532,7 @@ function ProjectsContent() {
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-200">
                     <thead>
-                      <tr className="border-b border-surface-sunken">
+                      <tr className="border-b border-subtle">
                         {visibleColumns.includes('project') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Project</th>}
                         {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>}
                         {visibleColumns.includes('progress') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Progress</th>}
@@ -557,7 +557,7 @@ function ProjectsContent() {
                                   exit={{ opacity: 0, y: 5 }}
                                   className="absolute right-0 top-full mt-2 w-48 bg-white border border-border rounded-xl shadow-lg z-50 overflow-hidden py-1"
                                 >
-                                  <div className="px-3 py-2 border-b border-surface-sunken text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
+                                  <div className="px-3 py-2 border-b border-subtle text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
                                     Visible Columns
                                   </div>
                                   {ALL_PROJECT_COLUMNS.map(col => (
@@ -570,9 +570,9 @@ function ProjectsContent() {
                                             : [...prev, col.id]
                                         )
                                       }}
-                                      className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#F9FAFB] transition-colors"
+                                      className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-surface transition-colors"
                                     >
-                                      <span className="text-[#374151]">{col.label}</span>
+                                      <span className="text-body">{col.label}</span>
                                       {visibleColumns.includes(col.id) && <Icon as={Check} size="md" className="text-primary" />}
                                     </button>
                                   ))}
@@ -583,7 +583,7 @@ function ProjectsContent() {
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-surface-sunken">
+                    <tbody className="divide-y divide-subtle">
                       {projects.map((p) => (
                         <motion.tr key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="hover:bg-surface transition-colors relative">
                           {visibleColumns.includes('project') && (
@@ -596,7 +596,7 @@ function ProjectsContent() {
                           {visibleColumns.includes('progress') && (
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-2">
-                                <div className="h-1.5 w-20 rounded-full bg-surface-sunken overflow-hidden">
+                                <div className="h-1.5 w-20 rounded-full bg-subtle overflow-hidden">
                                   <div className="h-full rounded-full bg-primary" style={{ width: `${p.progress}%` }} />
                                 </div>
                                 <span className="text-xs text-secondary tabular-nums">{p.progress}%</span>
@@ -615,7 +615,7 @@ function ProjectsContent() {
                                   <div className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold ${getAvatarColor(p.owner.name)}`}>
                                     {getInitials(p.owner.name)}
                                   </div>
-                                  <span className="text-sm text-[#374151]">{p.owner.name}</span>
+                                  <span className="text-sm text-body">{p.owner.name}</span>
                                 </div>
                               )}
                             </td>
@@ -652,7 +652,7 @@ function ProjectsContent() {
 
                       <div className="mb-4">
                         <div className="flex items-center gap-2">
-                          <div className="h-1.5 flex-1 rounded-full bg-surface-sunken overflow-hidden">
+                          <div className="h-1.5 flex-1 rounded-full bg-subtle overflow-hidden">
                             <div className="h-full rounded-full bg-primary" style={{ width: `${p.progress}%` }} />
                           </div>
                           <span className="text-xs text-secondary tabular-nums shrink-0">{p.progress}%</span>
@@ -666,7 +666,7 @@ function ProjectsContent() {
                               <div className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold ${getAvatarColor(p.owner.name)}`}>
                                 {getInitials(p.owner.name)}
                               </div>
-                              <span className="text-xs font-medium text-[#374151]">{p.owner.name}</span>
+                              <span className="text-xs font-medium text-body">{p.owner.name}</span>
                             </>
                           ) : (
                             <span className="text-xs text-secondary">Unassigned</span>
@@ -674,11 +674,11 @@ function ProjectsContent() {
                         </div>
 
                         <div className="flex items-center gap-2 text-xs font-medium text-secondary">
-                          <span className="bg-surface-sunken px-1.5 py-0.5 rounded">
+                          <span className="bg-subtle px-1.5 py-0.5 rounded">
                             {p._count?.tasks ?? 0} tasks
                           </span>
                           {p.endDate && (
-                            <span className="bg-surface-sunken px-1.5 py-0.5 rounded">
+                            <span className="bg-subtle px-1.5 py-0.5 rounded">
                               {formatShortDate(p.endDate)}
                             </span>
                           )}
@@ -711,13 +711,13 @@ function ProjectsContent() {
                   const pct = Math.min(100, (elapsed / totalDays) * 100);
 
                   return (
-                    <Link key={p.id} href={`/projects/${p.id}`} className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4 py-3 md:py-2 hover:bg-surface rounded-xl px-3 -mx-3 transition-colors border-b border-surface-sunken last:border-0 md:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                    <Link key={p.id} href={`/projects/${p.id}`} className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4 py-3 md:py-2 hover:bg-surface rounded-xl px-3 -mx-3 transition-colors border-b border-subtle last:border-0 md:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                       <div className="w-full md:w-48 shrink-0">
                         <p className="text-sm font-medium text-primary truncate">{p.name}</p>
                         <p className="text-xs text-secondary">{p.client ? getClientDisplayName(p.client) : 'Internal Project'}</p>
                       </div>
                       <div className="flex-1 w-full">
-                        <div className="relative h-8 rounded-lg bg-surface-sunken overflow-hidden">
+                        <div className="relative h-8 rounded-lg bg-subtle overflow-hidden">
                           <div className="absolute inset-y-0 left-0 rounded-lg bg-primary/10" style={{ width: `${pct}%` }} />
                           <div className="absolute inset-y-0 left-0 rounded-lg bg-primary" style={{ width: `${p.progress}%`, maxWidth: `${pct}%` }} />
                           <div className="absolute inset-0 flex items-center px-3">
@@ -750,7 +750,7 @@ function ProjectsContent() {
               <button
                 onClick={() => fetchNextPage()}
                 disabled={isFetchingNextPage}
-                className="rounded-xl border border-border bg-white px-6 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
+                className="rounded-xl border border-border bg-white px-6 py-2.5 text-sm font-medium text-body hover:bg-surface disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
               >
                 {isFetchingNextPage ? 'Loading...' : 'Load More Projects'}
               </button>
@@ -765,16 +765,16 @@ function ProjectsContent() {
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setShowCreate(false)} />
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-modal shadow-black/10 overflow-y-auto">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-surface-sunken">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-subtle">
                 <h2 className="text-lg font-semibold text-primary">New Project</h2>
-                <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl hover:bg-surface-sunken"><Icon as={X} size="md" className="text-secondary" /></button>
+                <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl hover:bg-subtle"><Icon as={X} size="md" className="text-secondary" /></button>
               </div>
               <form onSubmit={handleCreate} className="relative p-6 pb-24 md:pb-6 space-y-8">
                 {formError && <div className="absolute top-0 left-6 right-6 -mt-2 z-10 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 border border-red-100">{formError}</div>}
 
                 {templates.length > 0 && (
-                  <div className="mb-2 pb-4 border-b border-surface-sunken">
-                    <label className="flex text-sm font-medium text-[#374151] mb-1.5 items-center gap-2">
+                  <div className="mb-2 pb-4 border-b border-subtle">
+                    <label className="flex text-sm font-medium text-body mb-1.5 items-center gap-2">
                       Start from a Template <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">New</span>
                     </label>
                     <Select
@@ -796,20 +796,20 @@ function ProjectsContent() {
 
                 {/* Basic Info */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-surface-sunken pb-2">Basic Info</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-subtle pb-2">Basic Info</h3>
                   <div>
                     <Field label="Project Name *" value={formValues.name} onChange={(v) => setValue('name', v, { shouldValidate: true })} required />
                     {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
+                    <label className="block text-sm font-medium text-body mb-1.5">Description</label>
                     <RichTextEditor value={formValues.description || ''} onChange={(val) => setValue('description', val, { shouldValidate: true })} placeholder="Project description..." />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Project Type</label>
+                      <label className="block text-sm font-medium text-body mb-1.5">Project Type</label>
                       <Select
                         value={formValues.type}
                         onChange={(val) => {
@@ -826,7 +826,7 @@ function ProjectsContent() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Status</label>
+                      <label className="block text-sm font-medium text-body mb-1.5">Status</label>
                       <Select
                         value={formValues.status}
                         onChange={(val) => setValue('status', val as any)}
@@ -842,7 +842,7 @@ function ProjectsContent() {
                     </div>
                     <div>
                       {/* Project Priority */}
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority</label>
+                      <label className="block text-sm font-medium text-body mb-1.5">Priority</label>
                       <Select
                         value={formValues.priority}
                         onChange={(val) => setValue('priority', val as any)}
@@ -859,13 +859,13 @@ function ProjectsContent() {
 
                 {/* Client & Ownership */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-surface-sunken pb-2">Client & Ownership</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-subtle pb-2">Client & Ownership</h3>
                   <div className="flex flex-col gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Client</label>
+                      <label className="block text-sm font-medium text-body mb-1.5">Client</label>
                       {formValues.type === 'INTERNAL' ? (
                         // Internal project → no client picker; it's locked to the org's own account.
-                        <div className="flex items-center gap-2 h-10 px-3 rounded-lg border border-border bg-[#F9FAFB] text-sm text-secondary">
+                        <div className="flex items-center gap-2 h-10 px-3 rounded-lg border border-border bg-surface text-sm text-secondary">
                           <Icon as={Lock} size="sm" />
                           <span>Internal · {user?.organization?.name || 'your organization'}</span>
                         </div>
@@ -885,7 +885,7 @@ function ProjectsContent() {
                       )}
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Project Owner *</label>
+                      <label className="block text-sm font-medium text-body mb-1.5">Project Owner *</label>
                       <Select
                         required
                         value={formValues.ownerId}
@@ -899,7 +899,7 @@ function ProjectsContent() {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Team Members</label>
+                    <label className="block text-sm font-medium text-body mb-1.5">Team Members</label>
                     <MultiSelect
                       compact={false}
                       options={members.filter(m => m.id !== formValues.ownerId).map(m => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name) }))}
@@ -912,7 +912,7 @@ function ProjectsContent() {
 
                 {/* Timeline */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-surface-sunken pb-2">Timeline</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-subtle pb-2">Timeline</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Field label="Start Date" type="date" value={formValues.startDate || ''} onChange={(v) => setValue('startDate', v, { shouldValidate: true })} />
@@ -931,9 +931,9 @@ function ProjectsContent() {
 
                 {/* Scope */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-surface-sunken pb-2">Scope</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-subtle pb-2">Scope</h3>
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Scope of Work</label>
+                    <label className="block text-sm font-medium text-body mb-1.5">Scope of Work</label>
                     <RichTextEditor
                       value={formValues.scope || ''}
                       onChange={(val) => setValue('scope', val)}
@@ -945,8 +945,8 @@ function ProjectsContent() {
 
 
                 <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none">Cancel</button>
-                  <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none">{submitting ? 'Creating...' : 'Create Project'}</button>
+                  <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-body hover:bg-surface transition-colors duration-150 motion-reduce:transition-none">Cancel</button>
+                  <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none">{submitting ? 'Creating...' : 'Create Project'}</button>
                 </div>
               </form>
             </motion.div>
@@ -1019,7 +1019,7 @@ function Field({ label, value, onChange, type = 'text', required = false }: {
   const id = useId();
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-medium text-[#374151] mb-1.5">{label}</label>
+      <label htmlFor={id} className="block text-sm font-medium text-body mb-1.5">{label}</label>
       <input id={id} type={type} value={value} onChange={(e) => onChange(e.target.value)} required={required} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none" />
     </div>
   );

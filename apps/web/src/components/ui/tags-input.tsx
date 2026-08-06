@@ -30,12 +30,12 @@ export function TagsInput({ value = [], onChange, placeholder = "Type and press 
   return (
     <div className="w-full rounded-xl border border-border bg-white px-3 py-2 flex flex-wrap gap-2 focus-within:border-primary focus-within:ring-1 focus-within:ring-primary transition-all min-h-11.5">
       {value.map(tag => (
-        <div key={tag} className="flex items-center gap-1.5 bg-[#F3F4F6] text-[#374151] px-2.5 py-1 rounded-lg text-sm font-medium">
+        <div key={tag} className="flex items-center gap-1.5 bg-subtle text-body px-2.5 py-1 rounded-lg text-sm font-medium">
           <span>{tag}</span>
           <button
             type="button"
             onClick={() => removeTag(tag)}
-            className="text-secondary hover:text-[#4B5563] transition-colors focus:outline-none"
+            className="text-secondary hover:text-body-soft transition-colors focus:outline-none"
           >
             <X className="h-3 w-3" />
           </button>

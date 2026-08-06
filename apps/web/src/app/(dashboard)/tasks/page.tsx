@@ -88,7 +88,7 @@ function AssigneeAvatars({ task, size = 26 }: { task: { assignees?: AssigneePers
         </div>
       ))}
       {extra > 0 && (
-        <div style={{ height: size, width: size }} className="flex items-center justify-center rounded-full text-[10px] font-medium ring-2 ring-white bg-surface-sunken text-text-on-sunken">+{extra}</div>
+        <div style={{ height: size, width: size }} className="flex items-center justify-center rounded-full text-[10px] font-medium ring-2 ring-white bg-subtle text-body-soft">+{extra}</div>
       )}
     </div>
   );
@@ -513,7 +513,7 @@ function TasksContent() {
         <div>
           <h1 className="text-2xl font-semibold text-primary tracking-tight flex items-center gap-2">
             Tasks
-            <span className="text-xs font-normal text-text-on-sunken bg-surface-sunken px-2 py-0.5 rounded-lg border border-border">
+            <span className="text-xs font-normal text-body-soft bg-subtle px-2 py-0.5 rounded-lg border border-border">
               {viewName}
             </span>
           </h1>
@@ -810,7 +810,7 @@ function TasksContent() {
             )}
 
             <div className="flex items-center border border-border rounded-xl px-3 h-9 bg-white shadow-sm shrink-0">
-              <Toggle size="sm" label="Show Done" id="show-completed" checked={showCompleted} onChange={setShowCompleted} labelClassName="text-[#4B5563]" />
+              <Toggle size="sm" label="Show Done" id="show-completed" checked={showCompleted} onChange={setShowCompleted} labelClassName="text-body-soft" />
             </div>
           </div>
         )}
@@ -821,7 +821,7 @@ function TasksContent() {
         {/* Row 2: Tabs + Actions */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 w-full max-w-full">
           {/* Left Side: Segmented tabs */}
-          <div className="flex bg-surface-sunken p-1 rounded-xl gap-0.5 border border-border/50 w-full sm:w-auto max-w-full overflow-x-auto no-scrollbar">
+          <div className="flex bg-subtle p-1 rounded-xl gap-0.5 border border-border/50 w-full sm:w-auto max-w-full overflow-x-auto no-scrollbar">
             {[
               { id: '', label: 'All', activeColor: 'bg-white text-primary shadow-sm border border-black/5' },
               { id: 'today', label: 'Today', activeColor: 'bg-white text-primary shadow-sm border border-black/5' },
@@ -868,7 +868,7 @@ function TasksContent() {
             )}
 
             {/* List / Board Toggle Buttons */}
-            <div className="flex bg-surface-sunken p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-8.5 items-center">
+            <div className="flex bg-subtle p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-8.5 items-center">
               <button
                 type="button"
                 onClick={() => setView('list')}
@@ -891,7 +891,7 @@ function TasksContent() {
               <Icon as={Settings} size="sm" />
             </button>
 
-            <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none h-8.5">
+            <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary-hover transition-colors duration-150 motion-reduce:transition-none h-8.5">
               <Icon as={Plus} size="sm" /> New Task
             </button>
           </div>
@@ -934,8 +934,8 @@ function TasksContent() {
                     <div key={col} className="min-w-65 flex-1 flex flex-col">
                       <div className="flex items-center gap-2 mb-3 px-1">
                         <div className={`h-2 w-2 rounded-full ${TASK_STATUS_COLORS[col]?.split(' ')[0] || 'bg-gray-200'}`} />
-                        <span className="text-xs font-medium text-[#374151] uppercase tracking-wide">{TASK_STATUS_LABELS[col]}</span>
-                        <span className="ml-auto text-xs text-text-on-sunken bg-surface-sunken rounded-full px-2 py-0.5 tabular-nums">{colTasks.length}</span>
+                        <span className="text-xs font-medium text-body uppercase tracking-wide">{TASK_STATUS_LABELS[col]}</span>
+                        <span className="ml-auto text-xs text-body-soft bg-subtle rounded-full px-2 py-0.5 tabular-nums">{colTasks.length}</span>
                       </div>
                       <Droppable droppableId={col}>
                         {(provided, snapshot) => (
@@ -1007,7 +1007,7 @@ function TasksContent() {
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-200">
                     <thead>
-                      <tr className="border-b border-surface-sunken">
+                      <tr className="border-b border-subtle">
                         {visibleColumns.includes('task') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Task</th>}
                         {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>}
                         {visibleColumns.includes('project') && (
@@ -1079,7 +1079,7 @@ function TasksContent() {
                                   exit={{ opacity: 0, y: 5 }}
                                   className="absolute right-0 top-full mt-2 w-48 bg-white border border-border rounded-xl shadow-lg z-50 overflow-hidden py-1"
                                 >
-                                  <div className="px-3 py-2 border-b border-surface-sunken text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
+                                  <div className="px-3 py-2 border-b border-subtle text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
                                     Visible Columns
                                   </div>
                                   {ALL_TASK_COLUMNS.map(col => (
@@ -1092,9 +1092,9 @@ function TasksContent() {
                                             : [...prev, col.id]
                                         )
                                       }}
-                                      className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#F9FAFB] transition-colors"
+                                      className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-surface transition-colors"
                                     >
-                                      <span className="text-[#374151]">{col.label}</span>
+                                      <span className="text-body">{col.label}</span>
                                       {visibleColumns.includes(col.id) && <Icon as={Check} size="md" className="text-primary" />}
                                     </button>
                                   ))}
@@ -1105,7 +1105,7 @@ function TasksContent() {
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-surface-sunken">
+                    <tbody className="divide-y divide-subtle">
                       {tasks.map((t) => (
                         <tr key={t.id} className="hover:bg-surface cursor-pointer transition-colors" onClick={() => setSelectedTask(t)}>
                           {visibleColumns.includes('task') && (
@@ -1123,14 +1123,14 @@ function TasksContent() {
                               {taskAssignees(t).length ? (
                                 <div className="flex items-center gap-2">
                                   <AssigneeAvatars task={t} size={24} />
-                                  <span className="text-sm text-[#374151]">{assigneeLabel(t)}</span>
+                                  <span className="text-sm text-body">{assigneeLabel(t)}</span>
                                 </div>
                               ) : <span className="text-sm text-secondary">Unassigned</span>}
                             </td>
                           )}
                           {visibleColumns.includes('priority') && (
                             <td className="px-6 py-3.5">
-                              <span className="text-xs font-medium text-[#374151] capitalize">{t.priority.toLowerCase()}</span>
+                              <span className="text-xs font-medium text-body capitalize">{t.priority.toLowerCase()}</span>
                             </td>
                           )}
                           {visibleColumns.includes('status') && (
@@ -1210,7 +1210,7 @@ function TasksContent() {
               <button
                 onClick={() => fetchNextPage()}
                 disabled={isFetchingNextPage}
-                className="rounded-xl border border-border bg-white px-6 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
+                className="rounded-xl border border-border bg-white px-6 py-2.5 text-sm font-medium text-body hover:bg-surface disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
               >
                 {isFetchingNextPage ? 'Loading...' : 'Load More Tasks'}
               </button>

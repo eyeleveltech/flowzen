@@ -49,7 +49,7 @@ export default function ReceivablesPage() {
       <div className="rounded-2xl border border-border bg-white shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-[#F9FAFB] text-secondary">
+            <thead className="bg-surface text-secondary">
               <tr>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Contract Title</th>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Client</th>
@@ -68,11 +68,11 @@ export default function ReceivablesPage() {
                   const paid = Number(c.paid || 0);
                   const remaining = Number(c.remaining ?? Math.max(0, Number(c.value) - paid));
                   return (
-                    <tr key={c.id} className="hover:bg-[#F9FAFB] transition-colors">
+                    <tr key={c.id} className="hover:bg-surface transition-colors">
                       <td className="px-6 py-4 font-medium text-primary">{c.title}</td>
                       <td className="px-6 py-4 text-secondary">{c.client?.company || c.client?.name}</td>
                       <td className="px-6 py-4 text-right text-secondary">{formatCurrency(c.value, c.currency)}</td>
-                      <td className="px-6 py-4 text-right text-emerald-600">{formatCurrency(paid, c.currency)}</td>
+                      <td className="px-6 py-4 text-right text-green-600">{formatCurrency(paid, c.currency)}</td>
                       <td className="px-6 py-4 text-right font-bold text-red-600">{formatCurrency(remaining, c.currency)}</td>
                     </tr>
                   );

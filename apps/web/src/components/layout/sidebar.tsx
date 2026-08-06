@@ -74,7 +74,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
             title={sidebarCollapsed ? activeLabel : undefined}
             aria-label={activeLabel}
           >
-            <div className={cn('group flex items-center gap-3 rounded-xl px-3 py-2.5 mb-2 text-sm font-medium border border-border bg-[#F9FAFB] text-secondary hover:text-primary hover:border-[#D1D5DB] transition-colors duration-150 motion-reduce:transition-none', sidebarCollapsed && 'justify-center px-0')}>
+            <div className={cn('group flex items-center gap-3 rounded-xl px-3 py-2.5 mb-2 text-sm font-medium border border-border bg-surface text-secondary hover:text-primary hover:border-line transition-colors duration-150 motion-reduce:transition-none', sidebarCollapsed && 'justify-center px-0')}>
               <ArrowLeftRight className="h-4.5 w-4.5 shrink-0 text-secondary group-hover:text-primary" />
               <AnimatePresence>
                 {!sidebarCollapsed && (
@@ -104,7 +104,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
                   'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors duration-150 motion-reduce:transition-none',
                   isActive
                     ? 'bg-primary text-white'
-                    : 'text-secondary hover:bg-[#F9FAFB] hover:text-primary'
+                    : 'text-secondary hover:bg-surface hover:text-primary'
                 )}
               >
                 <item.icon className={cn('h-4.5 w-4.5 shrink-0', isActive ? 'text-white' : 'text-secondary group-hover:text-primary')} />
@@ -150,8 +150,8 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
                 className={cn(
                   'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors duration-150 motion-reduce:transition-none',
                   isActive
-                    ? 'bg-[#F9FAFB] text-primary'
-                    : 'text-secondary hover:bg-[#F9FAFB] hover:text-primary'
+                    ? 'bg-surface text-primary'
+                    : 'text-secondary hover:bg-surface hover:text-primary'
                 )}
               >
                 <item.icon className="h-4.5 w-4.5 shrink-0 text-secondary group-hover:text-primary" />
@@ -178,7 +178,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
             onClick={toggleCollapse}
             title={sidebarCollapsed ? 'Expand' : 'Collapse'}
             aria-label={sidebarCollapsed ? 'Expand' : 'Collapse'}
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-secondary hover:bg-[#F9FAFB] hover:text-primary transition-colors duration-150 motion-reduce:transition-none"
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-secondary hover:bg-surface hover:text-primary transition-colors duration-150 motion-reduce:transition-none"
           >
             <motion.div animate={{ rotate: sidebarCollapsed ? 180 : 0 }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2 }}>
               <ChevronLeft className="h-4.5 w-4.5 text-secondary" />

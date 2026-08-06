@@ -72,13 +72,13 @@ export function TaskTimeLog({ taskId, onChanged }: { taskId: string; onChanged?:
   };
 
   return (
-    <div className="mt-8 border-t border-surface-sunken pt-6">
+    <div className="mt-8 border-t border-subtle pt-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-primary flex items-center gap-2">
           <Clock className="h-4 w-4 text-secondary" /> Time Logged
         </h3>
         {totalHours > 0 && (
-          <span className="text-xs font-semibold text-primary bg-surface-sunken border border-border px-2 py-0.5 rounded-md tabular-nums">
+          <span className="text-xs font-semibold text-primary bg-subtle border border-border px-2 py-0.5 rounded-md tabular-nums">
             {totalHours}h total
           </span>
         )}
@@ -122,10 +122,10 @@ export function TaskTimeLog({ taskId, onChanged }: { taskId: string; onChanged?:
       ) : (
         <div className="space-y-1.5">
           {entries.map((e) => (
-            <div key={e.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border bg-[#F9FAFB]">
+            <div key={e.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border bg-surface">
               <span className="text-sm font-semibold text-primary tabular-nums w-14 shrink-0">{Number(e.hours)}h</span>
               <span className="text-xs text-secondary w-24 shrink-0">{formatDate(e.date)}</span>
-              <span className="text-xs font-medium text-[#374151] shrink-0">{e.user?.name}</span>
+              <span className="text-xs font-medium text-body shrink-0">{e.user?.name}</span>
               {e.note && <span className="text-xs text-secondary truncate flex-1">{e.note}</span>}
               <button
                 onClick={() => remove(e.id)}

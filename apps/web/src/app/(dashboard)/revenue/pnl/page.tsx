@@ -75,7 +75,7 @@ export default function PnLPage() {
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <div className="flex items-center gap-4 rounded-2xl border border-border bg-white p-5 shadow-sm">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-subtle text-body">
             <DollarSign className="h-6 w-6" />
           </div>
           <div>
@@ -104,7 +104,7 @@ export default function PnLPage() {
           </div>
         </div>
         <div className="flex items-center gap-4 rounded-2xl border border-border bg-white p-5 shadow-sm">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-green-50 text-green-600">
             <PieChart className="h-6 w-6" />
           </div>
           <div>
@@ -134,7 +134,7 @@ export default function PnLPage() {
                 </tr>
               ) : (
                 safeData.map((row) => (
-                  <tr key={row.projectId} className="hover:bg-[#F9FAFB] transition-colors">
+                  <tr key={row.projectId} className="hover:bg-surface transition-colors">
                     <td className="px-6 py-4 font-medium text-primary">{row.projectName}</td>
                     <td className="px-6 py-4 text-secondary">{row.clientName}</td>
                     <td className="px-6 py-4 text-right font-medium text-primary">{formatCurrency(row.revenue)}</td>
@@ -143,8 +143,8 @@ export default function PnLPage() {
                       {formatCurrency(row.labourCost || 0)}
                       {(row.labourHours || 0) > 0 && <span className="block text-[11px] font-normal text-secondary">{row.labourHours}h</span>}
                     </td>
-                    <td className="px-6 py-4 text-right font-bold text-emerald-600">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${row.net >= 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                    <td className="px-6 py-4 text-right font-bold text-green-600">
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${row.net >= 0 ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
                         {formatCurrency(row.net)}
                       </span>
                     </td>

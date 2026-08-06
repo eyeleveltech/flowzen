@@ -69,7 +69,7 @@ export default function PaymentsPage() {
       <div className="rounded-2xl border border-border bg-white shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-[#F9FAFB] text-secondary">
+            <thead className="bg-surface text-secondary">
               <tr>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Payment ID</th>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Client</th>
@@ -87,15 +87,15 @@ export default function PaymentsPage() {
                 </tr>
               ) : (
                 data.map((p: any) => (
-                  <tr key={p.id} className="hover:bg-[#F9FAFB] transition-colors">
+                  <tr key={p.id} className="hover:bg-surface transition-colors">
                     <td className="px-6 py-4 font-medium text-primary flex items-center gap-2">
-                      <Icon as={DollarSign} size="md" className="text-emerald-500" />
+                      <Icon as={DollarSign} size="md" className="text-green-500" />
                       {p.id.slice(-6).toUpperCase()}
                     </td>
                     <td className="px-6 py-4 text-secondary">{p.client?.company || p.client?.name}</td>
                     <td className="px-6 py-4 text-secondary">
                       {p.contract?.title
-                        || (p.subscription ? <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 border border-blue-200">Retainer</span>
+                        || (p.subscription ? <span className="inline-flex items-center rounded-full bg-subtle px-2 py-0.5 text-xs font-medium text-body border border-border">Retainer</span>
                         : '-')}
                     </td>
                     <td className="px-6 py-4 text-secondary">{formatDate(p.paidOn)}</td>
@@ -109,7 +109,7 @@ export default function PaymentsPage() {
                             type="button"
                             onClick={() => markPaid(p.id)}
                             disabled={confirming === p.id}
-                            className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 transition-colors"
+                            className="inline-flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-100 disabled:opacity-50 transition-colors"
                             title="Confirm this payment was received"
                           >
                             <Check className="h-3 w-3" /> Mark Paid

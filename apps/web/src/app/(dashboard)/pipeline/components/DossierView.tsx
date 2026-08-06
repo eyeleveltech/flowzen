@@ -66,7 +66,7 @@ export function DossierView({ d }: { d: any }) {
                 <div key={t.key}>
                   <div className="flex justify-between text-[11px] text-secondary mb-1">
                     <span>{t.left}</span>
-                    <span className="font-medium text-[#374151]">{d.traits?.[t.key]?.label || ''}</span>
+                    <span className="font-medium text-body">{d.traits?.[t.key]?.label || ''}</span>
                     <span>{t.right}</span>
                   </div>
                   <div className="relative h-2 rounded-full bg-linear-to-r from-gray-200 via-gray-300 to-gray-400">
@@ -83,11 +83,11 @@ export function DossierView({ d }: { d: any }) {
       {d.context && (
         <div className="rounded-xl border border-border p-4">
           <p className="text-xs font-semibold text-secondary uppercase tracking-wider mb-2">Current Context</p>
-          <p className="text-sm text-[#374151]">{d.context.summary}</p>
+          <p className="text-sm text-body">{d.context.summary}</p>
           {Array.isArray(d.context.signals) && (
             <div className="flex flex-wrap gap-1.5 mt-3">
               {d.context.signals.map((s: string, i: number) => (
-                <span key={i} className="text-[11px] font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{s}</span>
+                <span key={i} className="text-[11px] font-medium bg-subtle text-body px-2 py-0.5 rounded-full">{s}</span>
               ))}
             </div>
           )}
@@ -99,8 +99,8 @@ export function DossierView({ d }: { d: any }) {
         {d.writing_style && (
           <div className="rounded-xl border border-border p-4">
             <p className="text-xs font-semibold text-secondary uppercase tracking-wider mb-2">Writing Style</p>
-            <p className="text-sm text-[#374151]">Tone: <span className="font-medium">{d.writing_style.tone}</span></p>
-            <p className="text-sm text-[#374151]">Participation: <span className="font-medium">{d.writing_style.participation}</span></p>
+            <p className="text-sm text-body">Tone: <span className="font-medium">{d.writing_style.tone}</span></p>
+            <p className="text-sm text-body">Participation: <span className="font-medium">{d.writing_style.participation}</span></p>
             {Array.isArray(d.writing_style.hooks) && (
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {d.writing_style.hooks.map((h: string, i: number) => (
@@ -113,9 +113,9 @@ export function DossierView({ d }: { d: any }) {
         {d.background && (
           <div className="rounded-xl border border-border p-4">
             <p className="text-xs font-semibold text-secondary uppercase tracking-wider mb-2">Background</p>
-            <p className="text-sm text-[#374151]">Tenure: <span className="font-medium">{d.background.tenure_years} yrs</span></p>
-            <p className="text-sm text-[#374151]">Industry depth: <span className="font-medium">{d.background.industry_depth}</span></p>
-            <p className="text-sm text-[#374151]">Career pattern: <span className="font-medium">{d.background.career_pattern}</span></p>
+            <p className="text-sm text-body">Tenure: <span className="font-medium">{d.background.tenure_years} yrs</span></p>
+            <p className="text-sm text-body">Industry depth: <span className="font-medium">{d.background.industry_depth}</span></p>
+            <p className="text-sm text-body">Career pattern: <span className="font-medium">{d.background.career_pattern}</span></p>
           </div>
         )}
       </div>

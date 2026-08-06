@@ -76,11 +76,11 @@ interface ClientDetail {
 type Tab = 'overview' | 'projects' | 'activity' | 'notes';
 
 const projectStatusColors: Record<string, string> = {
-  PLANNING: 'bg-violet-50 text-violet-700',
-  IN_PROGRESS: 'bg-blue-50 text-blue-700',
+  PLANNING: 'bg-subtle text-body',
+  IN_PROGRESS: 'bg-subtle text-body',
   REVIEW: 'bg-amber-50 text-amber-700',
-  COMPLETED: 'bg-emerald-50 text-emerald-700',
-  ON_HOLD: 'bg-orange-50 text-orange-700',
+  COMPLETED: 'bg-green-50 text-green-700',
+  ON_HOLD: 'bg-subtle text-body',
   CANCELLED: 'bg-red-50 text-red-700',
 };
 
@@ -309,7 +309,7 @@ export default function ClientDetailPage() {
             {!client.archivedAt && !['PROJECT_COMPLETED', 'CHURNED'].includes(client.status) && (
               <button
                 onClick={() => setShowCreateProject(true)}
-                className="flex-1 sm:flex-none justify-center px-4 py-2 bg-primary text-white rounded-xl text-sm font-medium hover:bg-[#1F2937] transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap"
+                className="flex-1 sm:flex-none justify-center px-4 py-2 bg-primary text-white rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap"
               >
                 <Plus className="h-4 w-4" /> Create Project
               </button>
@@ -317,20 +317,20 @@ export default function ClientDetailPage() {
             {client.leads?.[0] && canManageClients && (
               <button
                 onClick={() => router.push(`/pipeline/${client.leads![0].id}`)}
-                className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-[#374151] hover:bg-gray-50 transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap"
+                className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-body hover:bg-gray-50 transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap"
               >
-                <Target className="h-4 w-4 text-purple-600" /> View Lead
+                <Target className="h-4 w-4 text-body" /> View Lead
               </button>
             )}
             {activeModule !== 'PM' && canManageClients && (
               client.archivedAt ? (
-                <button onClick={handleRestore} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-[#374151] hover:bg-gray-50 transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap">
+                <button onClick={handleRestore} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-body hover:bg-gray-50 transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap">
                   <RotateCcw className="h-4 w-4" />
                   Restore Client
                 </button>
               ) : (
                 <>
-                  <button onClick={openEdit} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-[#374151] hover:bg-gray-50 transition-colors shadow-sm whitespace-nowrap">
+                  <button onClick={openEdit} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-body hover:bg-gray-50 transition-colors shadow-sm whitespace-nowrap">
                     Edit Client
                   </button>
                   <button onClick={handleDelete} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-red-200 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap">
@@ -370,7 +370,7 @@ export default function ClientDetailPage() {
 
             {client.name === 'Internal' && orgProfile ? (
               <div className="space-y-4 pt-1">
-                <p className="text-sm text-[#374151] leading-relaxed">
+                <p className="text-sm text-body leading-relaxed">
                   {orgProfile.description || 'No organization description provided.'}
                 </p>
                 <InfoRow icon={Briefcase} label="Industry" value={orgProfile.industry || 'Not specified'} />
@@ -381,7 +381,7 @@ export default function ClientDetailPage() {
               <div className="space-y-6">
                 {/* Company Details */}
                 <div>
-                  <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-surface-sunken">Company Details</h4>
+                  <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-subtle">Company Details</h4>
                   <div className="grid grid-cols-2 gap-y-4 gap-x-2">
                     <InfoRow icon={Building2} label="Industry" value={client.industry || '—'} />
                     <InfoRow icon={Globe} label="Website" value={client.website || '—'} />
@@ -397,7 +397,7 @@ export default function ClientDetailPage() {
                             href={client.assetLinks.startsWith('http') ? client.assetLinks : `https://${client.assetLinks}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-sm font-medium text-blue-600 hover:underline truncate block max-w-50"
+                            className="text-sm font-medium text-body hover:underline truncate block max-w-50"
                           >
                             {client.assetLinks}
                           </a>
@@ -411,7 +411,7 @@ export default function ClientDetailPage() {
 
                 {/* Billing / Address */}
                 <div>
-                  <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-surface-sunken">Billing & Address</h4>
+                  <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-subtle">Billing & Address</h4>
                   <div className="grid grid-cols-2 gap-y-4 gap-x-2 mb-4">
                     <InfoRow icon={MapPin} label="City" value={client.city || '—'} />
                     <InfoRow icon={MapPin} label="State" value={client.state || '—'} />
@@ -422,7 +422,7 @@ export default function ClientDetailPage() {
                     </div>
                   )}
                   {client.billingAddress && (
-                    <div className="text-sm text-[#374151] bg-gray-50 p-3 rounded-xl border border-gray-100">
+                    <div className="text-sm text-body bg-gray-50 p-3 rounded-xl border border-gray-100">
                       <span className="block text-xs font-semibold text-secondary mb-1">Billing Address</span>
                       {client.billingAddress}
                     </div>
@@ -431,7 +431,7 @@ export default function ClientDetailPage() {
 
                 {/* Engagement */}
                 <div>
-                  <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-surface-sunken">Engagement</h4>
+                  <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-subtle">Engagement</h4>
                   <div className="grid grid-cols-2 gap-y-4 gap-x-2 mb-4">
                     <InfoRow icon={Briefcase} label="Engagement Type" value={client.engagementType || '—'} />
                     <InfoRow icon={Calendar} label="Start Date" value={client.startDate ? formatDate(client.startDate) : '—'} />
@@ -439,10 +439,10 @@ export default function ClientDetailPage() {
                   </div>
 
                   {client.scope ? (
-                    <div className="mt-2 bg-blue-50/50 p-4 rounded-xl border border-blue-100/50">
-                      <span className="block text-xs font-semibold text-blue-900 mb-2">Scope of Work</span>
+                    <div className="mt-2 bg-subtle/50 p-4 rounded-xl border border-border/50">
+                      <span className="block text-xs font-semibold text-primary mb-2">Scope of Work</span>
                       <SafeHtml
-                        className="text-sm text-[#374151] line-clamp-3 prose prose-sm max-w-none"
+                        className="text-sm text-body line-clamp-3 prose prose-sm max-w-none"
                         html={client.scope}
                       />
                       <button
@@ -460,7 +460,7 @@ export default function ClientDetailPage() {
                 {/* CRM Details */}
                 {activeModule !== 'PM' && (
                   <div>
-                    <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-surface-sunken">CRM Details</h4>
+                    <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-subtle">CRM Details</h4>
                     <div className="grid grid-cols-2 gap-y-4 gap-x-2">
                       <InfoRow icon={Briefcase} label="Job Title" value={client.jobTitle || '—'} />
                       <InfoRow icon={Globe} label="LinkedIn" value={client.linkedinUrl || '—'} />
@@ -481,7 +481,7 @@ export default function ClientDetailPage() {
             )}
 
             {client.contacts && client.contacts.length > 0 && (
-              <div className="pt-4 border-t border-surface-sunken">
+              <div className="pt-4 border-t border-subtle">
                 <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3">Contacts</h4>
                 <div className="space-y-3">
                   {client.contacts.map((c) => (
@@ -499,8 +499,8 @@ export default function ClientDetailPage() {
                       </div>
                       {c.designation && <p className="text-xs text-secondary mb-2">{c.designation}</p>}
                       <div className="space-y-1 mt-2">
-                        {c.email && <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5 text-secondary" /><span className="text-xs text-[#374151]">{c.email}</span></div>}
-                        {c.phone && <div className="flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-secondary" /><span className="text-xs text-[#374151]">{c.phone}</span></div>}
+                        {c.email && <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5 text-secondary" /><span className="text-xs text-body">{c.email}</span></div>}
+                        {c.phone && <div className="flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-secondary" /><span className="text-xs text-body">{c.phone}</span></div>}
                         {c.linkedinUrl && <div className="flex items-center gap-2"><Globe className="h-3.5 w-3.5 text-secondary" /><a href={c.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline truncate">LinkedIn</a></div>}
                       </div>
                       {c.notes && <p className="text-xs text-secondary mt-2 whitespace-pre-wrap">{c.notes}</p>}
@@ -513,11 +513,11 @@ export default function ClientDetailPage() {
           <div className="rounded-2xl border border-border bg-white p-6">
             <h3 className="text-sm font-semibold text-primary mb-4">Project Summary</h3>
             <div className="grid grid-cols-2 gap-4">
-              <div className="text-center p-3 rounded-xl bg-[#F9FAFB]">
+              <div className="text-center p-3 rounded-xl bg-surface">
                 <p className="text-2xl font-bold text-primary">{client.projects.length}</p>
                 <p className="text-xs text-secondary">Total Projects</p>
               </div>
-              <div className="text-center p-3 rounded-xl bg-[#F9FAFB]">
+              <div className="text-center p-3 rounded-xl bg-surface">
                 <p className="text-2xl font-bold text-primary">{client.projects.filter((p) => p.status === 'COMPLETED').length}</p>
                 <p className="text-xs text-secondary">Completed</p>
               </div>
@@ -530,7 +530,7 @@ export default function ClientDetailPage() {
         <div className="space-y-3">
           {client.projects.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border bg-white p-10 text-center">
-              <FolderKanban className="h-10 w-10 text-[#D1D5DB] mx-auto mb-3" />
+              <FolderKanban className="h-10 w-10 text-line mx-auto mb-3" />
               <p className="text-sm font-medium text-primary">No projects yet</p>
               <p className="text-xs text-secondary mt-1">Create a project for this client to get started.</p>
             </div>
@@ -547,7 +547,7 @@ export default function ClientDetailPage() {
                   {/* Header */}
                   <div className="flex items-start justify-between gap-3 mb-4">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-9 w-9 rounded-xl bg-surface-sunken border border-border flex items-center justify-center shrink-0">
+                      <div className="h-9 w-9 rounded-xl bg-subtle border border-border flex items-center justify-center shrink-0">
                         <FolderKanban className="h-4 w-4 text-secondary" />
                       </div>
                       <div className="min-w-0">
@@ -566,7 +566,7 @@ export default function ClientDetailPage() {
                       {p.owner ? (
                         <>
                           <span className={`h-5 w-5 rounded-full text-[9px] font-semibold flex items-center justify-center ${getAvatarColor(p.owner.name)}`}>{getInitials(p.owner.name)}</span>
-                          <span className="text-[#374151] font-medium">{p.owner.name}</span>
+                          <span className="text-body font-medium">{p.owner.name}</span>
                         </>
                       ) : (
                         <span className="text-secondary">Unassigned</span>
@@ -584,7 +584,7 @@ export default function ClientDetailPage() {
                       <span className="text-[11px] font-medium text-secondary uppercase tracking-wide">Progress</span>
                       <span className="text-xs font-semibold text-primary tabular-nums">{p.progress}%</span>
                     </div>
-                    <div className="h-2 w-full rounded-full bg-surface-sunken overflow-hidden">
+                    <div className="h-2 w-full rounded-full bg-subtle overflow-hidden">
                       <div className={`h-full rounded-full ${p.status === 'COMPLETED' ? 'bg-emerald-500' : 'bg-primary'}`} style={{ width: `${p.progress}%` }} />
                     </div>
                   </div>
@@ -601,7 +601,7 @@ export default function ClientDetailPage() {
             <div key={a.id} className="flex items-start gap-3 py-2">
               <div className={`h-7 w-7 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(a.user.name)}`}>{getInitials(a.user.name)}</div>
               <div>
-                <p className="text-sm text-[#374151]"><span className="font-medium">{a.user.name}</span> {a.message}</p>
+                <p className="text-sm text-body"><span className="font-medium">{a.user.name}</span> {a.message}</p>
                 <p className="text-xs text-secondary">{formatRelativeDate(a.createdAt)}</p>
               </div>
             </div>
@@ -613,12 +613,12 @@ export default function ClientDetailPage() {
         <div>
           <div className="flex gap-3 mb-6">
             <input value={noteContent} onChange={(e) => setNoteContent(e.target.value)} placeholder="Add a note..." className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none" />
-            <button onClick={addNote} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none">Add Note</button>
+            <button onClick={addNote} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover transition-colors duration-150 motion-reduce:transition-none">Add Note</button>
           </div>
           <div className="space-y-3">
             {client.notes.map((n) => (
               <div key={n.id} className="rounded-2xl border border-border bg-white p-4">
-                <p className="text-sm text-[#374151]">{n.content}</p>
+                <p className="text-sm text-body">{n.content}</p>
                 <p className="text-xs text-secondary mt-2">{n.author.name} · {formatRelativeDate(n.createdAt)}</p>
               </div>
             ))}
@@ -637,9 +637,9 @@ export default function ClientDetailPage() {
               exit={{ opacity: 0, x: 20 }}
               className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto"
             >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-surface-sunken">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-subtle">
                 <h2 className="text-lg font-semibold text-primary">Edit Client</h2>
-                <button onClick={() => setShowEdit(false)} className="p-2 rounded-xl hover:bg-surface-sunken transition-colors">
+                <button onClick={() => setShowEdit(false)} className="p-2 rounded-xl hover:bg-subtle transition-colors">
                   <X className="h-4 w-4 text-secondary" />
                 </button>
               </div>
@@ -649,7 +649,7 @@ export default function ClientDetailPage() {
                 <Field label="Industry" value={editForm.industry} onChange={(v) => setEditForm({ ...editForm, industry: v })} />
 
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Engagement Type</label>
+                  <label className="block text-sm font-medium text-body mb-1.5">Engagement Type</label>
                   <Select
                     value={editForm.engagementType}
                     onChange={(v) => setEditForm({ ...editForm, engagementType: v })}
@@ -666,13 +666,13 @@ export default function ClientDetailPage() {
                 <Field label="Website" value={editForm.website} onChange={(v) => setEditForm({ ...editForm, website: v })} />
                 <Field label="City" value={editForm.city} onChange={(v) => setEditForm({ ...editForm, city: v })} />
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Billing Address</label>
+                  <label className="block text-sm font-medium text-body mb-1.5">Billing Address</label>
                   <textarea value={editForm.billingAddress} onChange={(e) => setEditForm({ ...editForm, billingAddress: e.target.value })} rows={2} placeholder="Used to auto-fill quotations" className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 resize-none" />
                 </div>
                 <Field label="Start Date" type="date" value={editForm.startDate} onChange={(v) => setEditForm({ ...editForm, startDate: v })} />
 
                 {activeModule !== 'PM' && (
-                  <div className="space-y-4 pt-4 border-t border-surface-sunken">
+                  <div className="space-y-4 pt-4 border-t border-subtle">
                     <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider">CRM Details</h4>
 
                     {/* Contact Info */}
@@ -708,7 +708,7 @@ export default function ClientDetailPage() {
                     <div className="space-y-3">
                       <p className="text-xs font-medium text-primary">Sales Info</p>
                       <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1.5">Source</label>
+                        <label className="block text-sm font-medium text-body mb-1.5">Source</label>
                         <Select
                           value={editForm.source}
                           onChange={(v) => setEditForm({ ...editForm, source: v })}
@@ -733,7 +733,7 @@ export default function ClientDetailPage() {
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority</label>
+                          <label className="block text-sm font-medium text-body mb-1.5">Priority</label>
                           <Select
                             value={editForm.priority}
                             onChange={(v) => setEditForm({ ...editForm, priority: v })}
@@ -748,7 +748,7 @@ export default function ClientDetailPage() {
                         <Field label="Expected Revenue" type="number" value={editForm.expectedRevenue} onChange={(v) => setEditForm({ ...editForm, expectedRevenue: v })} />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1.5">Currency</label>
+                        <label className="block text-sm font-medium text-body mb-1.5">Currency</label>
                         <CurrencySelect value={editForm.currency} onChange={(v) => setEditForm({ ...editForm, currency: v })} />
                       </div>
                     </div>
@@ -767,7 +767,7 @@ export default function ClientDetailPage() {
                       <Field label="Company Size" value={editForm.companySize} onChange={(v) => setEditForm({ ...editForm, companySize: v })} />
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-sm font-medium text-[#374151] mb-1.5">Contract Type</label>
+                          <label className="block text-sm font-medium text-body mb-1.5">Contract Type</label>
                           <Select
                             value={editForm.contractType}
                             onChange={(v) => setEditForm({ ...editForm, contractType: v })}
@@ -779,7 +779,7 @@ export default function ClientDetailPage() {
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-[#374151] mb-1.5">Health Status</label>
+                          <label className="block text-sm font-medium text-body mb-1.5">Health Status</label>
                           <Select
                             value={editForm.healthStatus}
                             onChange={(v) => setEditForm({ ...editForm, healthStatus: v })}
@@ -797,7 +797,7 @@ export default function ClientDetailPage() {
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Scope</label>
+                  <label className="block text-sm font-medium text-body mb-1.5">Scope</label>
                   <RichTextEditor
                     value={editForm.scope}
                     onChange={(val) => setEditForm({ ...editForm, scope: val })}
@@ -806,7 +806,7 @@ export default function ClientDetailPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Account Manager</label>
+                  <label className="block text-sm font-medium text-body mb-1.5">Account Manager</label>
                   <Select
                     value={editForm.accountManagerId}
                     onChange={(v) => setEditForm({ ...editForm, accountManagerId: v })}
@@ -819,11 +819,11 @@ export default function ClientDetailPage() {
 
 
 
-                <div className="space-y-3 pt-2 pb-2 border-y border-surface-sunken">
+                <div className="space-y-3 pt-2 pb-2 border-y border-subtle">
                   <div className="flex items-center justify-between">
-                    <label className="block text-sm font-medium text-[#374151]">Contacts</label>
+                    <label className="block text-sm font-medium text-body">Contacts</label>
                     {editForm.contacts.length < 5 && (
-                      <button type="button" onClick={() => setEditForm({ ...editForm, contacts: [...editForm.contacts, { id: '', name: '', designation: '', email: '', phone: '' }] })} className="text-xs font-medium text-primary flex items-center gap-1 hover:bg-surface-sunken px-2 py-1 rounded transition-colors">
+                      <button type="button" onClick={() => setEditForm({ ...editForm, contacts: [...editForm.contacts, { id: '', name: '', designation: '', email: '', phone: '' }] })} className="text-xs font-medium text-primary flex items-center gap-1 hover:bg-subtle px-2 py-1 rounded transition-colors">
                         <Plus className="h-3 w-3" /> Add Contact
                       </button>
                     )}
@@ -874,7 +874,7 @@ export default function ClientDetailPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">
+                  <label className="block text-sm font-medium text-body mb-1.5">
                     Lifecycle Stage
                   </label>
                   {/* Status is derived entirely from the lead's pipeline stage (win/hold/churn cascades
@@ -890,10 +890,10 @@ export default function ClientDetailPage() {
                   </div>
                 </div>
                 <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setShowEdit(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none">
+                  <button type="button" onClick={() => setShowEdit(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-body hover:bg-surface transition-colors duration-150 motion-reduce:transition-none">
                     Cancel
                   </button>
-                  <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none">
+                  <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none">
                     {submitting ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
@@ -908,13 +908,13 @@ export default function ClientDetailPage() {
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-60 bg-black/20 backdrop-blur-sm" onClick={() => setViewModalContent(null)} />
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-60 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 flex flex-col">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-surface-sunken shrink-0">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-subtle shrink-0">
                 <h2 className="text-lg font-semibold text-primary">{viewModalContent.title}</h2>
-                <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-surface-sunken"><X className="h-4 w-4 text-secondary" /></button>
+                <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-subtle"><X className="h-4 w-4 text-secondary" /></button>
               </div>
               <div className="p-6 overflow-y-auto flex-1">
                 <SafeHtml
-                  className="prose prose-sm max-w-none text-[#374151]"
+                  className="prose prose-sm max-w-none text-body"
                   html={viewModalContent.content}
                 />
               </div>
@@ -947,7 +947,7 @@ function InfoRow({ icon: Icon, label, value }: { icon: typeof Mail; label: strin
       <Icon className="h-4 w-4 text-secondary" />
       <div>
         <p className="text-xs text-secondary">{label}</p>
-        <p className="text-sm text-[#374151]">{value}</p>
+        <p className="text-sm text-body">{value}</p>
       </div>
     </div>
   );
@@ -959,7 +959,7 @@ function Field({ label, value, onChange, type = 'text', required = false }: {
   const id = useId();
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-medium text-[#374151] mb-1.5">{label}</label>
+      <label htmlFor={id} className="block text-sm font-medium text-body mb-1.5">{label}</label>
       <input
         id={id}
         type={type}

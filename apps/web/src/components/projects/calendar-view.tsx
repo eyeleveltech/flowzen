@@ -62,17 +62,17 @@ export function CalendarView({ projects }: CalendarViewProps) {
 
   return (
     <div className="rounded-2xl border border-border bg-white overflow-hidden flex flex-col h-200">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] bg-white">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-subtle bg-white">
         <h2 className="text-lg font-bold text-primary">{format(currentDate, 'MMMM yyyy')}</h2>
         <div className="flex items-center gap-2">
-          <button onClick={() => setCurrentDate(new Date())} className="px-3 py-1.5 text-xs font-medium text-[#374151] border border-border rounded-lg hover:bg-[#F9FAFB] transition-colors">
+          <button onClick={() => setCurrentDate(new Date())} className="px-3 py-1.5 text-xs font-medium text-body border border-border rounded-lg hover:bg-surface transition-colors">
             Today
           </button>
           <div className="flex items-center rounded-lg border border-border p-0.5">
-            <button onClick={() => setCurrentDate(subMonths(currentDate, 1))} className="p-1.5 hover:bg-[#F3F4F6] rounded-md transition-colors">
+            <button onClick={() => setCurrentDate(subMonths(currentDate, 1))} className="p-1.5 hover:bg-subtle rounded-md transition-colors">
               <ChevronLeft className="h-4 w-4 text-secondary" />
             </button>
-            <button onClick={() => setCurrentDate(addMonths(currentDate, 1))} className="p-1.5 hover:bg-[#F3F4F6] rounded-md transition-colors">
+            <button onClick={() => setCurrentDate(addMonths(currentDate, 1))} className="p-1.5 hover:bg-subtle rounded-md transition-colors">
               <ChevronRight className="h-4 w-4 text-secondary" />
             </button>
           </div>
@@ -80,7 +80,7 @@ export function CalendarView({ projects }: CalendarViewProps) {
       </div>
 
       {/* Desktop Day Headers */}
-      <div className="hidden md:grid grid-cols-7 border-b border-[#F3F4F6] bg-surface">
+      <div className="hidden md:grid grid-cols-7 border-b border-subtle bg-surface">
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
           <div key={day} className="px-2 py-3 text-center text-xs font-medium text-secondary uppercase">
             {day}
@@ -97,9 +97,9 @@ export function CalendarView({ projects }: CalendarViewProps) {
             const today = isToday(date);
 
             return (
-              <div key={date.toISOString()} className={`min-h-30 border-b border-r border-[#F3F4F6] p-2 transition-colors ${!isCurrentMonth ? 'bg-surface/50 opacity-50' : 'bg-white hover:bg-[#F9FAFB]'}`}>
+              <div key={date.toISOString()} className={`min-h-30 border-b border-r border-subtle p-2 transition-colors ${!isCurrentMonth ? 'bg-surface/50 opacity-50' : 'bg-white hover:bg-surface'}`}>
                 <div className="flex justify-between items-center mb-1.5">
-                  <span className={`text-xs font-medium h-6 w-6 flex items-center justify-center rounded-full ${today ? 'bg-primary text-white' : 'text-[#374151]'}`}>
+                  <span className={`text-xs font-medium h-6 w-6 flex items-center justify-center rounded-full ${today ? 'bg-primary text-white' : 'text-body'}`}>
                     {format(date, 'd')}
                   </span>
                   {dayEvents.length > 0 && (
@@ -121,7 +121,7 @@ export function CalendarView({ projects }: CalendarViewProps) {
                         title={event.title}
                       >
                         <div className="flex items-center gap-1.5 truncate">
-                          <Icon className={`h-3.5 w-3.5 shrink-0 ${event.type === 'PROJECT_START' ? 'text-blue-500' : event.type === 'PROJECT_DUE' ? 'text-red-500' : 'text-emerald-600'}`} />
+                          <Icon className={`h-3.5 w-3.5 shrink-0 ${event.type === 'PROJECT_START' ? 'text-secondary' : event.type === 'PROJECT_DUE' ? 'text-red-500' : 'text-green-600'}`} />
                           <span className="truncate font-medium">{event.title}</span>
                         </div>
                       </Link>
@@ -163,7 +163,7 @@ export function CalendarView({ projects }: CalendarViewProps) {
                           `}
                         >
                           <div className="flex items-center gap-2">
-                            <Icon className={`h-4 w-4 shrink-0 ${event.type === 'PROJECT_START' ? 'text-blue-500' : event.type === 'PROJECT_DUE' ? 'text-red-500' : 'text-emerald-600'}`} />
+                            <Icon className={`h-4 w-4 shrink-0 ${event.type === 'PROJECT_START' ? 'text-secondary' : event.type === 'PROJECT_DUE' ? 'text-red-500' : 'text-green-600'}`} />
                             <span className="font-semibold">{event.title}</span>
                           </div>
                           <span className="text-[10px] uppercase tracking-wider font-bold opacity-60 ml-6 mt-1 block">

@@ -58,7 +58,7 @@ export function ModulesTab({ modules, fetchModules, userCount }: { modules: { ke
           return (
             <div key={m.key} className="flex items-center justify-between rounded-2xl border border-border bg-white p-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F3F4F6] text-primary">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-subtle text-primary">
                   <Icon className="h-5 w-5" />
                 </div>
                 <div>
@@ -71,7 +71,7 @@ export function ModulesTab({ modules, fetchModules, userCount }: { modules: { ke
                 onClick={() => toggle(m.key, !m.enabled)}
                 disabled={saving === m.key}
                 aria-pressed={m.enabled}
-                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${m.enabled ? 'bg-primary' : 'bg-[#D1D5DB]'} disabled:opacity-50`}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${m.enabled ? 'bg-primary' : 'bg-line'} disabled:opacity-50`}
               >
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${m.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>

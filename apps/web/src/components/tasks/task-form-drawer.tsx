@@ -350,9 +350,9 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
             exit={{ opacity: 0, x: 20 }}
             className="fixed right-0 top-0 bottom-0 z-101 w-full max-w-lg bg-white border-l border-border shadow-modal shadow-black/10 overflow-y-auto"
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-surface-sunken sticky top-0 bg-white z-10">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-subtle sticky top-0 bg-white z-10">
               <h2 className="text-lg font-semibold text-primary">{isEditing ? 'Edit Task' : 'New Task'}</h2>
-              <button onClick={guardedClose} className="p-2 rounded-xl hover:bg-surface-sunken transition-colors">
+              <button onClick={guardedClose} className="p-2 rounded-xl hover:bg-subtle transition-colors">
                 <Icon as={X} size="md" className="text-secondary" />
               </button>
             </div>
@@ -361,7 +361,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
               <form onSubmit={handleSubmit(onSubmitForm, onInvalid)} className="space-y-4">
                 {/* Title */}
                 <div>
-                  <label htmlFor="tfd-title" className="block text-sm font-medium text-[#374151] mb-1.5">
+                  <label htmlFor="tfd-title" className="block text-sm font-medium text-body mb-1.5">
                     Title *
                   </label>
                   <input
@@ -383,7 +383,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
                 {/* Due Date & Time */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="tfd-dueDateOnly" className="block text-sm font-medium text-[#374151] mb-1.5">
+                    <label htmlFor="tfd-dueDateOnly" className="block text-sm font-medium text-body mb-1.5">
                       Due Date
                     </label>
                     <input
@@ -394,7 +394,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
                     />
                   </div>
                   <div>
-                    <label htmlFor="tfd-dueTimeOnly" className="block text-sm font-medium text-[#374151] mb-1.5">
+                    <label htmlFor="tfd-dueTimeOnly" className="block text-sm font-medium text-body mb-1.5">
                       Due Time (Optional)
                     </label>
                     <input
@@ -408,7 +408,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
 
                 {/* Description */}
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
+                  <label className="block text-sm font-medium text-body mb-1.5">Description</label>
                   <Controller
                     name="description"
                     control={control}
@@ -424,7 +424,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
 
                 {/* Drive Link */}
                 <div>
-                  <label htmlFor="tfd-driveLink" className="block text-sm font-medium text-[#374151] mb-1.5">
+                  <label htmlFor="tfd-driveLink" className="block text-sm font-medium text-body mb-1.5">
                     Drive Link
                   </label>
                   <input
@@ -440,7 +440,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
                 {!propProjectId && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Client</label>
+                      <label className="block text-sm font-medium text-body mb-1.5">Client</label>
                       <Controller
                         name="clientId"
                         control={control}
@@ -458,7 +458,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Project *</label>
+                      <label className="block text-sm font-medium text-body mb-1.5">Project *</label>
                       <Controller
                         name="projectId"
                         control={control}
@@ -487,7 +487,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
                 {/* Task Type, Reviewer & Assigned By */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Task Type</label>
+                    <label className="block text-sm font-medium text-body mb-1.5">Task Type</label>
                     <Controller
                       name="type"
                       control={control}
@@ -512,7 +512,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Reviewer</label>
+                    <label className="block text-sm font-medium text-body mb-1.5">Reviewer</label>
                     <Controller
                       name="reviewerId"
                       control={control}
@@ -535,7 +535,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Assigned By</label>
+                    <label className="block text-sm font-medium text-body mb-1.5">Assigned By</label>
                     <Controller
                       name="assignedById"
                       control={control}
@@ -558,7 +558,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority</label>
+                    <label className="block text-sm font-medium text-body mb-1.5">Priority</label>
                     <Controller
                       name="priority"
                       control={control}
@@ -580,7 +580,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
 
                   {/* Assignees */}
                   <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Assignees</label>
+                    <label className="block text-sm font-medium text-body mb-1.5">Assignees</label>
                     <Controller
                       name="assigneeIds"
                       control={control}
@@ -605,7 +605,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
 
                   {/* Dates, log hours */}
                   <div>
-                    <label htmlFor="tfd-assignedDate" className="block text-sm font-medium text-[#374151] mb-1.5">
+                    <label htmlFor="tfd-assignedDate" className="block text-sm font-medium text-body mb-1.5">
                       Assigned Date
                     </label>
                     <input
@@ -619,13 +619,13 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
 
                   {/* Recurring options */}
                   <div className="flex flex-col justify-end">
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Repeat Task</label>
+                    <label className="block text-sm font-medium text-body mb-1.5">Repeat Task</label>
                     <Controller
                       name="isRecurring"
                       control={control}
                       render={({ field }) => (
                         <div className="flex items-center justify-between py-2 border border-border rounded-xl px-4 bg-white h-11.5 shadow-sm">
-                          <span className="text-sm font-medium text-[#374151]">Repeat Task</span>
+                          <span className="text-sm font-medium text-body">Repeat Task</span>
                           <button
                             type="button"
                             role="switch"
@@ -648,7 +648,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
 
                   {watch('isRecurring') && (
                     <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Repeat Frequency</label>
+                      <label className="block text-sm font-medium text-body mb-1.5">Repeat Frequency</label>
                       <Controller
                         name="recurrenceFrequency"
                         control={control}
@@ -671,7 +671,7 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
 
                   {/* Status selection */}
                   <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Task Status</label>
+                    <label className="block text-sm font-medium text-body mb-1.5">Task Status</label>
                     <Controller
                       name="status"
                       control={control}
@@ -692,14 +692,14 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
                   <button
                     type="button"
                     onClick={guardedClose}
-                    className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none"
+                    className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-body hover:bg-surface transition-colors duration-150 motion-reduce:transition-none"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
+                    className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
                   >
                     {submitting ? 'Saving...' : isEditing ? 'Save Changes' : 'Create Task'}
                   </button>

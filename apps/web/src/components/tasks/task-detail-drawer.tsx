@@ -30,10 +30,10 @@ interface TaskDetailDrawerProps {
 
 function Row({ label, value, highlight, danger }: { label: string; value?: string | null; highlight?: boolean; danger?: boolean }) {
   return (
-    <div className="flex items-center justify-between py-2 border-b border-surface-sunken">
+    <div className="flex items-center justify-between py-2 border-b border-subtle">
       <span className="text-sm text-secondary">{label}</span>
       {highlight ? (
-        <span className={`text-sm font-semibold px-2.5 py-1 rounded-lg border ${danger ? 'bg-red-50 text-red-700 border-red-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>{value || '—'}</span>
+        <span className={`text-sm font-semibold px-2.5 py-1 rounded-lg border ${danger ? 'bg-red-50 text-red-700 border-red-200' : 'bg-subtle text-body border-border'}`}>{value || '—'}</span>
       ) : (
         <span className="text-sm font-medium text-primary">{value || '—'}</span>
       )}
@@ -143,16 +143,16 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
         exit={{ opacity: 0, x: 20 }}
         className="fixed right-0 top-0 bottom-0 z-101 w-full max-w-2xl bg-white border-l border-border shadow-modal shadow-black/10 overflow-y-auto"
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-surface-sunken sticky top-0 bg-white z-10">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-subtle sticky top-0 bg-white z-10">
           <h2 className="text-lg font-semibold text-primary">Task Details</h2>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-surface-sunken transition-colors"><Icon as={X} size="md" className="text-secondary" /></button>
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-subtle transition-colors"><Icon as={X} size="md" className="text-secondary" /></button>
         </div>
 
         {loading || !task ? (
           <div className="p-10 flex justify-center"><div className="h-7 w-7 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>
         ) : (
           <div className="p-6 pb-24 md:pb-6">
-            <div className="flex items-center justify-between border-b border-surface-sunken pb-4 mb-4">
+            <div className="flex items-center justify-between border-b border-subtle pb-4 mb-4">
               <div className="flex items-center gap-2">
                 <StatusBadge status={task.status} />
                 <span className={`h-2 w-2 rounded-full ${getPriorityDot(task.priority)}`} />
@@ -160,7 +160,7 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
               {manage && (
                 <div className="flex items-center gap-2">
                   {onEdit && (
-                    <button onClick={() => onEdit(task)} className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none">Edit</button>
+                    <button onClick={() => onEdit(task)} className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-body hover:bg-surface transition-colors duration-150 motion-reduce:transition-none">Edit</button>
                   )}
                   <button onClick={deleteTask} className="rounded-xl border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 hover:border-red-300 transition-colors duration-150 motion-reduce:transition-none flex items-center gap-1.5">
                     <Icon as={Trash2} size="sm" /> Delete
@@ -184,13 +184,13 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
               <Row label="Due Date" value={formatDate(task.dueDate)} highlight danger={dueOverdue} />
               {task.completedAt && <Row label="Completed On" value={formatDate(task.completedAt)} />}
               {task.driveLink && (
-                <div className="flex items-center justify-between py-2 border-b border-surface-sunken">
+                <div className="flex items-center justify-between py-2 border-b border-subtle">
                   <span className="text-sm text-secondary">Drive Link</span>
                   <a
                     href={task.driveLink.startsWith('http') ? task.driveLink : `https://${task.driveLink}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1.5 truncate max-w-70"
+                    className="text-sm font-medium text-body hover:text-body hover:underline flex items-center gap-1.5 truncate max-w-70"
                   >
                     <span>Open Link</span>
                     <Icon as={ExternalLink} size="sm" className="shrink-0" />
@@ -203,10 +203,10 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
 
             {manage && (
               <div className="mt-6">
-                <p className="block text-sm font-medium text-[#374151] mb-2">Update Status</p>
+                <p className="block text-sm font-medium text-body mb-2">Update Status</p>
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Update Status">
                   {TASK_STATUSES.map((s) => (
-                    <button key={s} onClick={() => updateStatus(s)} className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors duration-150 motion-reduce:transition-none ${task.status === s ? 'bg-primary text-white' : 'border border-border text-secondary hover:bg-[#F9FAFB]'}`}>
+                    <button key={s} onClick={() => updateStatus(s)} className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors duration-150 motion-reduce:transition-none ${task.status === s ? 'bg-primary text-white' : 'border border-border text-secondary hover:bg-surface'}`}>
                       {TASK_STATUS_LABELS[s]}
                     </button>
                   ))}
@@ -217,7 +217,7 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
             <TaskTimeLog taskId={taskId} onChanged={onChanged} />
 
             {/* Comments */}
-            <div className="mt-8 border-t border-surface-sunken pt-6">
+            <div className="mt-8 border-t border-subtle pt-6">
               <h3 className="text-sm font-semibold text-primary mb-4">Comments</h3>
               <div className="mb-6">
                 <textarea
@@ -237,13 +237,13 @@ export function TaskDetailDrawer({ taskId, onClose, onChanged, onEdit, canManage
                 ) : (
                   task.comments.map((c: any) => (
                     <div key={c.id} className="flex gap-3">
-                      <div className="h-8 w-8 rounded-full bg-surface-sunken text-primary text-xs font-medium flex items-center justify-center shrink-0 border border-border">{c.author.name.charAt(0).toUpperCase()}</div>
+                      <div className="h-8 w-8 rounded-full bg-subtle text-primary text-xs font-medium flex items-center justify-center shrink-0 border border-border">{c.author.name.charAt(0).toUpperCase()}</div>
                       <div className="flex-1 bg-surface border border-border rounded-xl p-3">
                         <div className="flex items-center justify-between mb-1">
                           <span className="font-semibold text-xs text-primary">{c.author.name}</span>
                           <span className="text-xs text-secondary">{formatDate(c.createdAt)}</span>
                         </div>
-                        <p className="text-sm text-[#374151] whitespace-pre-wrap">{c.content}</p>
+                        <p className="text-sm text-body whitespace-pre-wrap">{c.content}</p>
                       </div>
                     </div>
                   ))

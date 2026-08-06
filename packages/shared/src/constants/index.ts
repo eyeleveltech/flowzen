@@ -33,12 +33,21 @@ export const STATUS_COLORS: Record<string, { bg: string; text: string; dot: stri
   BLOCKED: { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' },
 };
 
+// Priority uses the SAME four tones as the status map in apps/web (lib/status.ts): quiet for
+// "nothing to do", neutral for normal, amber for soon, red for now. It previously spent blue on
+// MEDIUM and orange on HIGH, which added two colour families to a deliberately monochrome UI to
+// describe a scale that only has one axis — urgency. Blue on "Medium" is the costly one: it draws
+// the eye to the priority that by definition does not need it, and makes the red URGENT beside it
+// harder to pick out.
+//
+// HIGH now shares amber with the WARN status tone, and CRITICAL/URGENT share red with DANGER, so
+// one glance means the same thing everywhere in the product.
 export const PRIORITY_CONFIG: Record<string, { dot: string; badge: string; color: string; label: string; icon: string }> = {
-  LOW: { dot: 'bg-gray-300', badge: 'bg-gray-100 text-gray-700 border-gray-200', color: 'text-gray-400', label: 'Low', icon: '○' },
-  MEDIUM: { dot: 'bg-blue-400', badge: 'bg-blue-50 text-blue-700 border-blue-200', color: 'text-blue-500', label: 'Medium', icon: '◐' },
-  HIGH: { dot: 'bg-orange-500', badge: 'bg-amber-50 text-amber-700 border-amber-200', color: 'text-orange-500', label: 'High', icon: '●' },
-  CRITICAL: { dot: 'bg-red-500', badge: 'bg-red-50 text-red-700 border-red-200', color: 'text-red-500', label: 'Critical', icon: '◉' },
-  URGENT: { dot: 'bg-red-500', badge: 'bg-red-50 text-red-700 border-red-200', color: 'text-red-500', label: 'Urgent', icon: '⚡' },
+  LOW: { dot: 'bg-line', badge: 'bg-surface text-secondary border-border', color: 'text-secondary', label: 'Low', icon: '○' },
+  MEDIUM: { dot: 'bg-secondary', badge: 'bg-subtle text-body border-border', color: 'text-body', label: 'Medium', icon: '◐' },
+  HIGH: { dot: 'bg-amber-500', badge: 'bg-amber-50 text-amber-700 border-amber-200', color: 'text-amber-600', label: 'High', icon: '●' },
+  CRITICAL: { dot: 'bg-red-500', badge: 'bg-red-50 text-red-700 border-red-200', color: 'text-red-600', label: 'Critical', icon: '◉' },
+  URGENT: { dot: 'bg-red-500', badge: 'bg-red-50 text-red-700 border-red-200', color: 'text-red-600', label: 'Urgent', icon: '⚡' },
 };
 
 export const ROLE_LABELS: Record<string, string> = {

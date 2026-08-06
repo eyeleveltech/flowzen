@@ -145,7 +145,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
           {selectedOptions.map(opt => (
             <span
               key={opt.value}
-              className="flex items-center gap-1 bg-surface-sunken text-[#374151] px-2 py-1 rounded-lg text-xs font-medium"
+              className="flex items-center gap-1 bg-subtle text-body px-2 py-1 rounded-lg text-xs font-medium"
             >
               {opt.image && <div className={`h-4 w-4 rounded-full flex items-center justify-center text-[8px] font-semibold ${opt.colorClass || 'bg-primary text-white'}`}>{opt.image}</div>}
               {opt.label}
@@ -213,9 +213,9 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
                         onChange(options.map(o => o.value));
                       }
                     }}
-                    className="flex w-full items-center text-left gap-3 px-4 py-3.5 rounded-xl text-base transition-colors text-primary active:bg-[#F9FAFB] font-semibold border-b border-border/50 mb-1"
+                    className="flex w-full items-center text-left gap-3 px-4 py-3.5 rounded-xl text-base transition-colors text-primary active:bg-surface font-semibold border-b border-border/50 mb-1"
                   >
-                    <div className={`flex items-center justify-center h-5 w-5 rounded border shrink-0 ${value.length === options.length ? 'bg-primary border-primary' : 'border-[#D1D5DB]'}`}>
+                    <div className={`flex items-center justify-center h-5 w-5 rounded border shrink-0 ${value.length === options.length ? 'bg-primary border-primary' : 'border-line'}`}>
                       {value.length === options.length && <Icon as={Check} size="sm" className="text-white" />}
                     </div>
                     <span>Select All</span>
@@ -229,18 +229,18 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
                       key={opt.value}
                       onClick={(e) => { e.stopPropagation(); handleSelect(opt.value); }}
                       className={`flex w-full items-center text-left gap-3 px-4 py-3.5 rounded-xl text-base transition-colors ${isSelected
-                          ? 'bg-surface-sunken text-primary font-semibold'
-                          : 'text-[#374151] active:bg-[#F9FAFB]'
+                          ? 'bg-subtle text-primary font-semibold'
+                          : 'text-body active:bg-surface'
                         }`}
                     >
-                      <div className={`flex items-center justify-center h-5 w-5 rounded border shrink-0 ${isSelected ? 'bg-primary border-primary' : 'border-[#D1D5DB]'}`}>
+                      <div className={`flex items-center justify-center h-5 w-5 rounded border shrink-0 ${isSelected ? 'bg-primary border-primary' : 'border-line'}`}>
                         {isSelected && <Icon as={Check} size="sm" className="text-white" />}
                       </div>
                       {opt.image && <div className={`h-6 w-6 shrink-0 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-primary text-white'}`}>{opt.image}</div>}
                       <span className="truncate flex-1">{opt.label}</span>
                       {opt.capacity !== undefined && (
                         <span className="flex items-center gap-1.5 shrink-0 ml-2" title={`Capacity: ${opt.capacity}%`}>
-                          <span className={`h-2 w-2 rounded-full ${opt.isOverloaded || opt.capacity > 80 ? 'bg-red-500' : opt.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                          <span className={`h-2 w-2 rounded-full ${opt.isOverloaded || opt.capacity > 80 ? 'bg-red-500' : opt.capacity > 50 ? 'bg-amber-500' : 'bg-green-500'}`} />
                           <span className="text-xs font-medium text-secondary">{opt.capacity}%</span>
                         </span>
                       )}
@@ -269,7 +269,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
             }}
           >
             {compact && options.length > 7 && (
-              <div className="sticky top-0 z-10 -mt-1.5 mb-1 bg-white px-1.5 pt-1.5 pb-1.5 border-b border-surface-sunken">
+              <div className="sticky top-0 z-10 -mt-1.5 mb-1 bg-white px-1.5 pt-1.5 pb-1.5 border-b border-subtle">
                 <input
                   autoFocus
                   value={search}
@@ -285,7 +285,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
               <>
                 {showSelectAll && (
                   <div
-                    className="flex items-center gap-2 mx-1.5 px-3 py-2 rounded-lg text-sm cursor-pointer hover:bg-[#F9FAFB] text-primary font-medium transition-colors border-b border-border/50 mb-1 pb-2"
+                    className="flex items-center gap-2 mx-1.5 px-3 py-2 rounded-lg text-sm cursor-pointer hover:bg-surface text-primary font-medium transition-colors border-b border-border/50 mb-1 pb-2"
                     onClick={(e) => {
                       e.stopPropagation();
                       if (value.length === options.length) {
@@ -295,7 +295,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
                       }
                     }}
                   >
-                    <div className={`flex items-center justify-center h-4 w-4 rounded border shrink-0 ${value.length === options.length ? 'bg-primary border-primary' : 'border-[#D1D5DB]'}`}>
+                    <div className={`flex items-center justify-center h-4 w-4 rounded border shrink-0 ${value.length === options.length ? 'bg-primary border-primary' : 'border-line'}`}>
                       {value.length === options.length && <Check className="h-3 w-3 text-white" />}
                     </div>
                     <span>Select All</span>
@@ -309,7 +309,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
                       role="option"
                       tabIndex={isOpen ? 0 : -1}
                       aria-selected={isSelected}
-                      className="flex items-center gap-2 mx-1.5 px-3 py-2 rounded-lg text-sm cursor-pointer hover:bg-[#F9FAFB] focus:bg-[#F9FAFB] focus:ring-2 focus:ring-inset focus:ring-primary/10 outline-none transition-colors"
+                      className="flex items-center gap-2 mx-1.5 px-3 py-2 rounded-lg text-sm cursor-pointer hover:bg-surface focus:bg-surface focus:ring-2 focus:ring-inset focus:ring-primary/10 outline-none transition-colors"
                       onClick={(e) => { e.stopPropagation(); handleSelect(opt.value); }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
@@ -335,14 +335,14 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
                         }
                       }}
                     >
-                      <div className={`flex items-center justify-center h-4 w-4 rounded border shrink-0 ${isSelected ? 'bg-primary border-primary' : 'border-[#D1D5DB]'}`}>
+                      <div className={`flex items-center justify-center h-4 w-4 rounded border shrink-0 ${isSelected ? 'bg-primary border-primary' : 'border-line'}`}>
                         {isSelected && <Check className="h-3 w-3 text-white" />}
                       </div>
                       {opt.image && <div className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-primary text-white'}`}>{opt.image}</div>}
-                      <span className="text-[#374151] truncate flex-1">{opt.label}</span>
+                      <span className="text-body truncate flex-1">{opt.label}</span>
                       {opt.capacity !== undefined && (
                         <span className="flex items-center gap-1.5 shrink-0 ml-2" title={`Capacity: ${opt.capacity}%`}>
-                          <span className={`h-1.5 w-1.5 rounded-full ${opt.isOverloaded || opt.capacity > 80 ? 'bg-red-500' : opt.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                          <span className={`h-1.5 w-1.5 rounded-full ${opt.isOverloaded || opt.capacity > 80 ? 'bg-red-500' : opt.capacity > 50 ? 'bg-amber-500' : 'bg-green-500'}`} />
                           <span className="text-xs font-medium text-secondary">{opt.capacity}%</span>
                         </span>
                       )}

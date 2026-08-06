@@ -142,14 +142,31 @@ export function getInitials(name: string): string {
     .slice(0, 2);
 }
 
+/**
+ * Avatar tints — four steps of the neutral ramp, light to dark.
+ *
+ * This used to be nine colour families (red, orange, amber, green, teal, blue, indigo, purple,
+ * pink) picked by hashing a person's name. That colour never meant anything — someone was pink
+ * because of the letters in their name — but avatars appear in every table row, board card and
+ * assignee chip, so it was the single loudest source of colour in a product whose palette is
+ * otherwise deliberately monochrome. It also competed with the status colours, which DO mean
+ * something: a red "Overdue" badge is harder to spot next to a red avatar.
+ *
+ * Four steps rather than one flat grey, because the point of tinting an avatar is to tell two
+ * people apart at a glance in a list of assignees — that still works without hue.
+ *
+ * All four pairings clear WCAG AA for normal text (9.3:1, 12.1:1, 4.8:1, 17.8:1), which matters
+ * because initials are set small and bold.
+ */
 const AVATAR_COLORS = [
-  'bg-red-100 text-red-700', 'bg-orange-100 text-orange-700', 'bg-amber-100 text-amber-700',
-  'bg-green-100 text-green-700', 'bg-teal-100 text-teal-700', 'bg-blue-100 text-blue-700',
-  'bg-indigo-100 text-indigo-700', 'bg-purple-100 text-purple-700', 'bg-pink-100 text-pink-700',
+  'bg-subtle text-body',
+  'bg-line text-primary',
+  'bg-secondary text-white',
+  'bg-primary text-white',
 ];
 
 export function getAvatarColor(name: string): string {
-  if (!name) return 'bg-[#F3F4F6] text-[#111827] border border-[#E5E7EB]';
+  if (!name) return 'bg-subtle text-primary border border-border';
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
   return AVATAR_COLORS[h % AVATAR_COLORS.length];
@@ -227,7 +244,7 @@ export function getProjectStatusFromClient(client: any): 'PLANNING' | 'IN_PROGRE
 export type ProjectHealth = 'GREEN' | 'AMBER' | 'RED';
 
 export const PROJECT_HEALTH_CONFIG: Record<ProjectHealth, { color: string; label: string }> = {
-  GREEN: { color: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'On Track' },
+  GREEN: { color: 'bg-green-50 text-green-700 border-green-200', label: 'On Track' },
   AMBER: { color: 'bg-amber-50 text-amber-700 border-amber-200', label: 'At Risk' },
   RED: { color: 'bg-red-50 text-red-700 border-red-200', label: 'Off Track' },
 };

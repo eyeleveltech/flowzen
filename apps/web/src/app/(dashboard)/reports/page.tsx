@@ -161,7 +161,7 @@ export default function ReportsPage() {
               onClick={() => setTab(t.id)}
               className={`flex items-center gap-2 px-3 sm:px-5 py-2.5 rounded-xl text-sm font-medium transition-colors duration-150 motion-reduce:transition-none border snap-start ${active
                 ? 'bg-primary text-white border-primary shadow-sm'
-                : 'bg-white text-secondary border-border hover:text-primary hover:bg-[#F9FAFB] hover:border-[#D1D5DB]'
+                : 'bg-white text-secondary border-border hover:text-primary hover:bg-surface hover:border-line'
                 }`}
             >
               <Icon className="h-4 w-4" />
@@ -191,7 +191,7 @@ export default function ReportsPage() {
               onClick={() => setSelectedDepartment(user.teamId || '')}
               className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-colors duration-150 motion-reduce:transition-none flex items-center justify-center gap-1.5 w-full sm:w-auto shrink-0 ${selectedDepartment === user.teamId
                   ? 'bg-primary text-white border-primary shadow-sm'
-                  : 'bg-white text-secondary border-border hover:text-primary hover:bg-[#F9FAFB]'
+                  : 'bg-white text-secondary border-border hover:text-primary hover:bg-surface'
                 }`}
             >
               <Users className="h-3.5 w-3.5" />
@@ -248,7 +248,7 @@ export default function ReportsPage() {
                 {projectReport.statusDistribution.map((s) => (
                   <div key={s.status} className="flex items-center gap-3 sm:gap-4">
                     <span className="text-xs sm:text-sm text-secondary font-medium w-20 sm:w-24 truncate">{s.status}</span>
-                    <div className="flex-1 h-2 rounded-full bg-surface-sunken overflow-hidden">
+                    <div className="flex-1 h-2 rounded-full bg-subtle overflow-hidden">
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${projectReport.total > 0 ? (s.count / projectReport.total) * 100 : 0}%` }}
@@ -267,7 +267,7 @@ export default function ReportsPage() {
                 <h3 className="text-sm font-semibold text-primary mb-4">Projects by Type</h3>
                 <div className="flex flex-wrap gap-2">
                   {projectReport.projectsByType.map(t => (
-                    <div key={t.type} className="px-3 py-1.5 bg-[#F9FAFB] border border-border rounded-lg text-xs font-medium text-[#374151]">
+                    <div key={t.type} className="px-3 py-1.5 bg-surface border border-border rounded-lg text-xs font-medium text-body">
                       {t.type.replace('_', ' ')}: <span className="text-primary ml-1 font-semibold">{t.count}</span>
                     </div>
                   ))}
@@ -275,13 +275,13 @@ export default function ReportsPage() {
                 </div>
               </div>
 
-              <div className="flex-1 border-t border-surface-sunken pt-6">
+              <div className="flex-1 border-t border-subtle pt-6">
                 <h3 className="text-sm font-semibold text-primary mb-4">Active Projects by Client</h3>
                 <div className="space-y-3 max-h-50 overflow-y-auto pr-2">
                   {projectReport.projectsByClient.map(c => (
                     <div key={c.client} className="flex items-center justify-between">
                       <span className="text-sm text-secondary truncate">{c.client}</span>
-                      <span className="text-sm font-semibold text-primary px-2 py-0.5 bg-surface-sunken rounded-md">{c.count}</span>
+                      <span className="text-sm font-semibold text-primary px-2 py-0.5 bg-subtle rounded-md">{c.count}</span>
                     </div>
                   ))}
                   {projectReport.projectsByClient.length === 0 && <span className="text-sm text-secondary">No active projects.</span>}
@@ -310,7 +310,7 @@ export default function ReportsPage() {
                 {taskReport.tasksByAssignee.map((a) => (
                   <div key={a.assignee} className="flex items-center gap-3 sm:gap-4">
                     <span className="text-xs sm:text-sm text-secondary font-medium w-24 sm:w-32 truncate">{a.assignee}</span>
-                    <div className="flex-1 h-2 rounded-full bg-surface-sunken overflow-hidden">
+                    <div className="flex-1 h-2 rounded-full bg-subtle overflow-hidden">
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${taskReport.total > 0 ? (a.count / taskReport.total) * 100 : 0}%` }}
@@ -329,7 +329,7 @@ export default function ReportsPage() {
               <h3 className="text-sm font-semibold text-primary mb-6">Tasks by Type (Open)</h3>
               <div className="flex flex-wrap gap-3">
                 {taskReport.tasksByType.map(t => (
-                  <div key={t.type} className="px-4 py-2 bg-[#F9FAFB] border border-border rounded-xl text-sm font-medium text-[#374151] flex items-center gap-2">
+                  <div key={t.type} className="px-4 py-2 bg-surface border border-border rounded-xl text-sm font-medium text-body flex items-center gap-2">
                     <span className="capitalize">{t.type.toLowerCase().replace('_', ' ')}</span>
                     <span className="bg-primary text-white text-[10px] px-1.5 py-0.5 rounded-md font-semibold">{t.count}</span>
                   </div>
@@ -356,15 +356,15 @@ export default function ReportsPage() {
             <div className="overflow-x-auto max-w-full">
               <table className="w-full min-w-140 sm:min-w-175">
                 <thead>
-                  <tr className="border-b border-surface-sunken bg-surface">
+                  <tr className="border-b border-subtle bg-surface">
                     <th className="px-6 py-4 text-left text-xs font-medium text-secondary uppercase tracking-wide">Member</th>
                     <th className="px-6 py-4 text-center text-xs font-medium text-secondary uppercase tracking-wide">Active Workload</th>
                     <th className="px-6 py-4 text-center text-xs font-medium text-secondary uppercase tracking-wide">Completion Rate</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-surface-sunken">
+                <tbody className="divide-y divide-subtle">
                   {teamReport.members.map((m) => (
-                    <tr key={m.id} className="hover:bg-[#F9FAFB] transition-colors">
+                    <tr key={m.id} className="hover:bg-surface transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className={`h-8 w-8 rounded-full text-[11px] font-semibold flex items-center justify-center ${getAvatarColor(m.name)}`}>{getInitials(m.name)}</div>
@@ -372,13 +372,13 @@ export default function ReportsPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-sm font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-sm font-semibold bg-subtle text-body border border-border">
                           {m.activeTasks} tasks
                         </span>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-center gap-3">
-                          <div className="h-2 w-24 rounded-full bg-surface-sunken overflow-hidden">
+                          <div className="h-2 w-24 rounded-full bg-subtle overflow-hidden">
                             <div className="h-full rounded-full bg-[#10B981]" style={{ width: `${m.completionRate}%` }} />
                           </div>
                           <span className="text-sm font-semibold text-primary tabular-nums w-10">{m.completionRate}%</span>
@@ -409,7 +409,7 @@ export default function ReportsPage() {
             <div className="overflow-x-auto max-w-full">
               <table className="w-full min-w-180 sm:min-w-225">
                 <thead>
-                  <tr className="border-b border-surface-sunken bg-surface">
+                  <tr className="border-b border-subtle bg-surface">
                     <th className="px-6 py-4 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>
                     <th className="px-6 py-4 text-center text-xs font-medium text-secondary uppercase tracking-wide">Projects Health</th>
                     <th className="px-6 py-4 text-center text-xs font-medium text-secondary uppercase tracking-wide">Deliverables Tracker</th>
@@ -417,9 +417,9 @@ export default function ReportsPage() {
                     <th className="px-6 py-4 text-left text-xs font-medium text-secondary uppercase tracking-wide">Next Deadline</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-surface-sunken">
+                <tbody className="divide-y divide-subtle">
                   {clientReport.clients.map((c) => (
-                    <tr key={c.id} className="hover:bg-[#F9FAFB] transition-colors">
+                    <tr key={c.id} className="hover:bg-surface transition-colors">
                       <td className="px-6 py-4">
                         <p className="text-sm font-semibold text-primary">{getClientDisplayName(c)}</p>
                         {c.name !== 'Internal' && c.company && (c.contacts?.[0]?.name || c.name !== c.company) ? (
@@ -435,7 +435,7 @@ export default function ReportsPage() {
                       <td className="px-6 py-4">
                         <div className="flex flex-col items-center">
                           <div className="flex items-center gap-2 mb-1">
-                            <div className="h-2 w-20 rounded-full bg-surface-sunken overflow-hidden">
+                            <div className="h-2 w-20 rounded-full bg-subtle overflow-hidden">
                               <div className="h-full rounded-full bg-[#8B5CF6]" style={{ width: `${c.deliverablesRate}%` }} />
                             </div>
                             <span className="text-xs font-semibold text-primary w-8">{c.deliverablesRate}%</span>
@@ -495,28 +495,28 @@ function ReportSkeleton() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[...Array(4)].map((_, i) => (
           <div key={i} className="p-4 sm:p-5 rounded-2xl border border-border bg-white h-26">
-            <div className="h-3 w-24 bg-surface-sunken rounded mb-4" />
-            <div className="h-8 w-16 bg-surface-sunken rounded" />
+            <div className="h-3 w-24 bg-subtle rounded mb-4" />
+            <div className="h-8 w-16 bg-subtle rounded" />
           </div>
         ))}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="rounded-2xl border border-border bg-white p-6 h-75">
-          <div className="h-4 w-32 bg-surface-sunken rounded mb-6" />
+          <div className="h-4 w-32 bg-subtle rounded mb-6" />
           <div className="space-y-6">
             {[...Array(4)].map((_, i) => (
               <div key={i} className="flex gap-4">
-                <div className="h-4 w-24 bg-surface-sunken rounded" />
-                <div className="h-4 flex-1 bg-surface-sunken rounded" />
+                <div className="h-4 w-24 bg-subtle rounded" />
+                <div className="h-4 flex-1 bg-subtle rounded" />
               </div>
             ))}
           </div>
         </div>
         <div className="rounded-2xl border border-border bg-white p-6 h-75">
-          <div className="h-4 w-32 bg-surface-sunken rounded mb-6" />
+          <div className="h-4 w-32 bg-subtle rounded mb-6" />
           <div className="flex gap-2 flex-wrap">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-8 w-24 bg-surface-sunken rounded-lg" />
+              <div key={i} className="h-8 w-24 bg-subtle rounded-lg" />
             ))}
           </div>
         </div>
@@ -537,7 +537,7 @@ function SectionTitle({ icon: Icon, title, subtitle }: { icon: any; title: strin
 }
 
 function StatRow({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'green' | 'red' }) {
-  const color = tone === 'green' ? 'text-emerald-600' : tone === 'red' ? 'text-red-600' : 'text-primary';
+  const color = tone === 'green' ? 'text-green-600' : tone === 'red' ? 'text-red-600' : 'text-primary';
   return (
     <div className="rounded-2xl border border-border bg-white p-4 flex items-center justify-between">
       <div>
@@ -684,7 +684,7 @@ function ExecutiveTab({ data, periodLabel }: { data: any; periodLabel: string })
           <div className="rounded-2xl border border-border bg-white p-5">
             <h3 className="text-sm font-semibold text-primary mb-4 flex items-center gap-2"><Trophy className="h-4 w-4 text-secondary" /> Top Clients by Value</h3>
             {clients.topClients.length ? clients.topClients.map((c: any, i: number) => (
-              <div key={i} className="flex items-center justify-between py-2 border-b border-surface-sunken last:border-0">
+              <div key={i} className="flex items-center justify-between py-2 border-b border-subtle last:border-0">
                 <span className="text-sm text-primary truncate pr-3">{c.name}</span>
                 <span className="text-sm font-semibold text-primary tabular-nums shrink-0">{formatCurrency(c.contractValue)}</span>
               </div>
@@ -693,7 +693,7 @@ function ExecutiveTab({ data, periodLabel }: { data: any; periodLabel: string })
           <div className="rounded-2xl border border-border bg-white p-5">
             <h3 className="text-sm font-semibold text-primary mb-4 flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-secondary" /> At-Risk Clients</h3>
             {clients.atRisk.length ? clients.atRisk.map((c: any, i: number) => (
-              <div key={i} className="flex items-center justify-between py-2 border-b border-surface-sunken last:border-0">
+              <div key={i} className="flex items-center justify-between py-2 border-b border-subtle last:border-0">
                 <span className="flex items-center gap-2 text-sm text-primary truncate pr-3"><span className={`h-2 w-2 rounded-full shrink-0 ${c.health === 'Red' ? 'bg-red-500' : 'bg-amber-500'}`} />{c.name}</span>
                 <span className="text-xs text-secondary shrink-0">{c.overdueTasks} overdue</span>
               </div>

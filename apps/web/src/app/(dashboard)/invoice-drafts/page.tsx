@@ -84,7 +84,7 @@ export default function InvoiceDraftsPage() {
       <div className="rounded-2xl border border-border bg-white shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-[#F9FAFB] text-secondary">
+            <thead className="bg-surface text-secondary">
               <tr>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Draft #</th>
                 <th className="px-6 py-3 text-xs font-semibold text-secondary uppercase tracking-wider">Client</th>
@@ -101,9 +101,9 @@ export default function InvoiceDraftsPage() {
                 </tr>
               ) : (
                 data.map((draft: any) => (
-                  <tr key={draft.id} className="hover:bg-[#F9FAFB] transition-colors">
+                  <tr key={draft.id} className="hover:bg-surface transition-colors">
                     <td className="px-6 py-4 font-medium text-primary flex items-center gap-2">
-                      <Icon as={FileText} size="md" className="text-blue-500" />
+                      <Icon as={FileText} size="md" className="text-secondary" />
                       {draft.draftNumber}
                     </td>
                     <td className="px-6 py-4 text-secondary">{draft.clientName}</td>
@@ -115,7 +115,7 @@ export default function InvoiceDraftsPage() {
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         {draft.pdfUrl && (
-                          <a href={fileUrl(draft.pdfUrl)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50">
+                          <a href={fileUrl(draft.pdfUrl)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-body hover:bg-subtle">
                             <Icon as={Download} size="md" /> Download
                           </a>
                         )}
@@ -141,7 +141,7 @@ export default function InvoiceDraftsPage() {
                             {draft.pdfUrl && (
                               <button
                                 onClick={() => markSent(draft.id)}
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors"
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-sm font-medium text-green-700 hover:bg-green-100 transition-colors"
                                 title="Locks the draft — it can no longer be edited"
                               >
                                 <Icon as={Send} size="md" /> Mark Sent

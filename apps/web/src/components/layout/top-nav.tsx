@@ -172,7 +172,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
         {/* Search bar on Desktop */}
         <button
           onClick={() => setCommandPaletteOpen(true)}
-          className="hidden sm:flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm text-secondary hover:bg-white hover:border-[#D1D5DB] transition-colors duration-150 motion-reduce:transition-none sm:w-80"
+          className="hidden sm:flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm text-secondary hover:bg-white hover:border-line transition-colors duration-150 motion-reduce:transition-none sm:w-80"
         >
           <Search className="h-4 w-4 shrink-0" />
           <span className="truncate">Search clients, projects, tasks, team...</span>
@@ -188,7 +188,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
         <div className="relative">
           <button
             onClick={() => { setShowQuickCreate(!showQuickCreate); setShowNotifications(false); setShowUserMenu(false); }}
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-border text-secondary hover:bg-[#F9FAFB] hover:text-primary transition-colors duration-150 motion-reduce:transition-none"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-border text-secondary hover:bg-surface hover:text-primary transition-colors duration-150 motion-reduce:transition-none"
           >
             <Plus className="h-4 w-4" />
           </button>
@@ -200,9 +200,9 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                   <button
                     key={item.label}
                     onClick={() => { router.push(item.href); setShowQuickCreate(false); }}
-                    className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-[#374151] hover:bg-[#F9FAFB] active:bg-surface-sunken transition-colors"
+                    className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-body hover:bg-surface active:bg-subtle transition-colors"
                   >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-sunken">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-subtle">
                       <item.icon className="h-5 w-5 text-secondary" />
                     </div>
                     {item.label}
@@ -224,7 +224,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                     <button
                       key={item.label}
                       onClick={() => { router.push(item.href); setShowQuickCreate(false); }}
-                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-[#374151] hover:bg-[#F9FAFB] transition-colors"
+                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-body hover:bg-surface transition-colors"
                     >
                       <item.icon className="h-4 w-4 text-secondary" />
                       {item.label}
@@ -240,7 +240,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
         <div className="relative">
           <button
             onClick={() => { setShowNotifications(!showNotifications); setShowQuickCreate(false); setShowUserMenu(false); }}
-            className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-border text-secondary hover:bg-[#F9FAFB] hover:text-primary transition-colors duration-150 motion-reduce:transition-none"
+            className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-border text-secondary hover:bg-surface hover:text-primary transition-colors duration-150 motion-reduce:transition-none"
           >
             <Bell className="h-4 w-4" />
             {unreadCount > 0 && (
@@ -258,12 +258,12 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
             <Drawer isOpen={showNotifications} onClose={() => setShowNotifications(false)} title="In-App Notifications">
               {unreadCount > 0 && (
                 <div className="flex justify-end mb-2">
-                  <button onClick={markAllAsRead} className="text-xs font-medium text-secondary hover:text-primary transition-colors bg-[#F9FAFB] px-3 py-1.5 rounded-lg">
+                  <button onClick={markAllAsRead} className="text-xs font-medium text-secondary hover:text-primary transition-colors bg-surface px-3 py-1.5 rounded-lg">
                     Mark all read
                   </button>
                 </div>
               )}
-              <div className="max-h-[60vh] overflow-y-auto divide-y divide-surface-sunken -mx-6 border-t border-surface-sunken">
+              <div className="max-h-[60vh] overflow-y-auto divide-y divide-subtle -mx-6 border-t border-subtle">
                 {notifications.length === 0 ? (
                   <div className="py-8 text-center text-sm text-secondary">No notifications yet</div>
                 ) : (
@@ -281,13 +281,13 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                       <div
                         key={n.id}
                         onClick={handleNotificationClick}
-                        className={`flex gap-3 px-6 py-4 cursor-pointer hover:bg-[#F9FAFB] transition-colors ${!n.read ? 'bg-blue-50/50' : ''}`}
+                        className={`flex gap-3 px-6 py-4 cursor-pointer hover:bg-surface transition-colors ${!n.read ? 'bg-subtle/50' : ''}`}
                       >
-                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface-sunken">
+                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-subtle">
                           <Icon className="h-4 w-4 text-secondary" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-[15px] text-[#374151] leading-snug">{n.message}</p>
+                          <p className="text-[15px] text-body leading-snug">{n.message}</p>
                           <p className="text-xs text-secondary mt-1">{formatRelativeDate(n.createdAt)}</p>
                         </div>
                         {!n.read && <div className="mt-2 h-2.5 w-2.5 shrink-0 rounded-full bg-[#3B82F6]" />}
@@ -307,7 +307,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                   transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.15 }}
                   className="absolute right-0 mt-2 w-96 rounded-2xl border border-border bg-white shadow-lg shadow-black/5"
                 >
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-surface-sunken">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-subtle">
                     <div>
                       <h3 className="text-sm font-semibold text-primary">In-App Notifications</h3>
                       <p className="text-xs text-secondary mt-0.5">Real-time activity logs</p>
@@ -318,7 +318,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                       </button>
                     )}
                   </div>
-                  <div className="max-h-80 overflow-y-auto divide-y divide-surface-sunken">
+                  <div className="max-h-80 overflow-y-auto divide-y divide-subtle">
                     {notifications.length === 0 ? (
                       <div className="py-8 text-center text-sm text-secondary">No notifications yet</div>
                     ) : (
@@ -336,13 +336,13 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                           <div
                             key={n.id}
                             onClick={handleNotificationClick}
-                            className={`flex gap-3 px-4 py-3 cursor-pointer hover:bg-[#F9FAFB] transition-colors ${!n.read ? 'bg-blue-50/50' : ''}`}
+                            className={`flex gap-3 px-4 py-3 cursor-pointer hover:bg-surface transition-colors ${!n.read ? 'bg-subtle/50' : ''}`}
                           >
-                            <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface-sunken">
+                            <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-subtle">
                               <Icon className="h-3.5 w-3.5 text-secondary" />
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="text-sm text-[#374151] leading-snug">{n.message}</p>
+                              <p className="text-sm text-body leading-snug">{n.message}</p>
                               <p className="text-xs text-secondary mt-0.5">{formatRelativeDate(n.createdAt)}</p>
                             </div>
                             {!n.read && <div className="mt-2 h-2 w-2 shrink-0 rounded-full bg-[#3B82F6]" />}
@@ -361,7 +361,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
         <div className="relative ml-1">
           <button
             onClick={() => { setShowUserMenu(!showUserMenu); setShowNotifications(false); setShowQuickCreate(false); }}
-            className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none"
+            className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-surface transition-colors duration-150 motion-reduce:transition-none"
           >
             <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${user ? getAvatarColor(user.name) : 'bg-primary text-white'}`}>
               {user ? getInitials(user.name) : '??'}
@@ -371,7 +371,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
 
           {isMobile ? (
             <Drawer isOpen={showUserMenu} onClose={() => setShowUserMenu(false)} title="Account">
-              <div className="px-4 py-3.5 mb-3 bg-[#F9FAFB] rounded-xl border border-border flex items-center gap-3">
+              <div className="px-4 py-3.5 mb-3 bg-surface rounded-xl border border-border flex items-center gap-3">
                 <div className={`flex h-12 w-12 items-center justify-center rounded-full text-sm font-semibold ${user ? getAvatarColor(user.name) : 'bg-primary text-white'}`}>
                   {user ? getInitials(user.name) : '??'}
                 </div>
@@ -383,9 +383,9 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
               <div className="flex flex-col gap-1 pb-4">
                 <button
                   onClick={() => { router.push('/profile'); setShowUserMenu(false); }}
-                  className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-[#374151] hover:bg-[#F9FAFB] active:bg-surface-sunken transition-colors"
+                  className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-body hover:bg-surface active:bg-subtle transition-colors"
                 >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-sunken">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-subtle">
                     <UserIcon className="h-5 w-5 text-secondary" />
                   </div>
                   My Profile
@@ -393,9 +393,9 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                 {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
                   <button
                     onClick={() => { router.push('/settings'); setShowUserMenu(false); }}
-                    className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-[#374151] hover:bg-[#F9FAFB] active:bg-surface-sunken transition-colors"
+                    className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-body hover:bg-surface active:bg-subtle transition-colors"
                   >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-sunken">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-subtle">
                       <Settings className="h-5 w-5 text-secondary" />
                     </div>
                     Settings
@@ -426,10 +426,10 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                     <p className="text-sm font-medium text-primary">{user?.name}</p>
                     <p className="text-xs text-secondary">{user?.email}</p>
                   </div>
-                  <div className="border-t border-surface-sunken pt-1">
+                  <div className="border-t border-subtle pt-1">
                     <button
                       onClick={() => { router.push('/profile'); setShowUserMenu(false); }}
-                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-[#374151] hover:bg-[#F9FAFB] transition-colors"
+                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-body hover:bg-surface transition-colors"
                     >
                       <UserIcon className="h-4 w-4 text-secondary" />
                       My Profile
@@ -437,7 +437,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                     {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
                       <button
                         onClick={() => { router.push('/settings'); setShowUserMenu(false); }}
-                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-[#374151] hover:bg-[#F9FAFB] transition-colors"
+                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-body hover:bg-surface transition-colors"
                       >
                         <Settings className="h-4 w-4 text-secondary" />
                         Settings

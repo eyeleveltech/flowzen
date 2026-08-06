@@ -78,55 +78,78 @@ export const STATUS_LABELS: Record<string, string> = {
   LOST: 'Lost',
 };
 
+/**
+ * Four tones. That is the whole vocabulary.
+ *
+ * This map previously spent NINE colour families (blue, emerald, amber, gray, slate, purple,
+ * rose, red, teal) on 29 statuses, and several of them said the same thing twice: red AND rose
+ * both meant "bad", emerald AND teal both meant "good", and purple meant nothing in particular.
+ *
+ * The rule now is: in a monochrome product, colour means "act on this". Blue on "Prospect" spent
+ * attention on a state that needs no action, and every colour spent that way makes a red
+ * "Overdue" harder to find. So anything that is merely a normal step in a process is neutral,
+ * and the three semantic tones are kept for states a person should actually do something about.
+ *
+ * The three semantic tones deliberately match the palette tokens exactly — red-500 is
+ * --color-danger, amber-500 is --color-warning, green-500 is --color-success — so a badge and an
+ * icon tinted from the token cannot drift apart.
+ *
+ * Contrast: NEUTRAL is 9.3:1, QUIET is 4.6:1, both AA for normal text.
+ */
+
+/** A normal step in a process. Nothing is wrong, nothing is owed. */
+const NEUTRAL = { bg: 'bg-subtle', text: 'text-body', border: 'border-border', dot: 'bg-secondary', bar: 'bg-secondary' };
+/** Finished or abandoned. Kept quieter than NEUTRAL so closed records recede in a list. */
+const QUIET = { bg: 'bg-surface', text: 'text-secondary', border: 'border-border', dot: 'bg-line', bar: 'bg-line' };
+/** Needs attention soon. */
+const WARN = { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', dot: 'bg-amber-500', bar: 'bg-amber-500' };
+/** Needs action now. */
+const DANGER = { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', dot: 'bg-red-500', bar: 'bg-red-500' };
+/** Money or a contract landed. Reserved for outcomes, not for every completed thing. */
+const GOOD = { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', dot: 'bg-green-500', bar: 'bg-green-500' };
+
 export const STATUS_COLORS: Record<string, StatusConfig> = {
   // Client & General Active statuses
-  PROSPECT: { label: 'Prospect', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', dot: 'bg-blue-500', bar: 'bg-blue-500' },
-  ACTIVE: { label: 'Active', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500', bar: 'bg-emerald-500' },
-  ONHOLD: { label: 'On Hold', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', dot: 'bg-amber-500', bar: 'bg-amber-500' },
-  CHURNED: { label: 'Churned', bg: 'bg-gray-100', text: 'text-gray-600', border: 'border-gray-200', dot: 'bg-gray-400', bar: 'bg-gray-400' },
-  PROJECT_COMPLETED: { label: 'Project Completed', bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200', dot: 'bg-slate-400', bar: 'bg-slate-400' },
+  PROSPECT: { label: 'Prospect', ...NEUTRAL },
+  ACTIVE: { label: 'Active', ...GOOD },
+  ONHOLD: { label: 'On Hold', ...WARN },
+  CHURNED: { label: 'Churned', ...QUIET },
+  PROJECT_COMPLETED: { label: 'Project Completed', ...QUIET },
 
   // Project statuses
-  PLANNING: { label: 'Planning', bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200', dot: 'bg-slate-400', bar: 'bg-slate-400' },
-  IN_PROGRESS: { label: 'In Progress', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', dot: 'bg-blue-500', bar: 'bg-blue-500' },
-  REVIEW: { label: 'Review', bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', dot: 'bg-purple-500', bar: 'bg-purple-500' },
-  COMPLETED: { label: 'Completed', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500', bar: 'bg-emerald-500' },
-  ON_HOLD: { label: 'On Hold', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', dot: 'bg-amber-500', bar: 'bg-amber-500' },
-  CANCELLED: { label: 'Cancelled', bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', dot: 'bg-rose-500', bar: 'bg-rose-500' },
+  PLANNING: { label: 'Planning', ...NEUTRAL },
+  IN_PROGRESS: { label: 'In Progress', ...NEUTRAL },
+  REVIEW: { label: 'Review', ...NEUTRAL },
+  COMPLETED: { label: 'Completed', ...QUIET },
+  ON_HOLD: { label: 'On Hold', ...WARN },
+  CANCELLED: { label: 'Cancelled', ...QUIET },
 
   // Task statuses
-  BACKLOG: { label: 'Backlog', bg: 'bg-gray-100', text: 'text-gray-600', border: 'border-gray-200', dot: 'bg-gray-400', bar: 'bg-gray-400' },
-  TODO: { label: 'To Do', bg: 'bg-slate-100', text: 'text-slate-600', border: 'border-slate-200', dot: 'bg-slate-400', bar: 'bg-slate-400' },
-  APPROVED: { label: 'Approved', bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200', dot: 'bg-teal-500', bar: 'bg-teal-500' },
-  BLOCKED: { label: 'Blocked', bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', dot: 'bg-red-500', bar: 'bg-red-500' },
+  BACKLOG: { label: 'Backlog', ...QUIET },
+  TODO: { label: 'To Do', ...NEUTRAL },
+  APPROVED: { label: 'Approved', ...NEUTRAL },
+  BLOCKED: { label: 'Blocked', ...DANGER },
 
   // Document, Invoice & Quote statuses
-  DRAFT: { label: 'Draft', bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-200', dot: 'bg-slate-400', bar: 'bg-slate-400' },
-  SENT: { label: 'Sent', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', dot: 'bg-blue-500', bar: 'bg-blue-500' },
-  ACCEPTED: { label: 'Accepted', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500', bar: 'bg-emerald-500' },
-  EXPIRED: { label: 'Expired', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', dot: 'bg-amber-500', bar: 'bg-amber-500' },
+  DRAFT: { label: 'Draft', ...QUIET },
+  SENT: { label: 'Sent', ...NEUTRAL },
+  ACCEPTED: { label: 'Accepted', ...GOOD },
+  EXPIRED: { label: 'Expired', ...WARN },
 
   // Payment & Financial statuses
-  PAID: { label: 'Paid', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500', bar: 'bg-emerald-500' },
-  UNPAID: { label: 'Unpaid', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', dot: 'bg-amber-500', bar: 'bg-amber-500' },
-  OVERDUE: { label: 'Overdue', bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', dot: 'bg-red-500', bar: 'bg-red-500' },
-  PARTIAL: { label: 'Partially Paid', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', dot: 'bg-blue-500', bar: 'bg-blue-500' },
-  REFUNDED: { label: 'Refunded', bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', dot: 'bg-purple-500', bar: 'bg-purple-500' },
-  UPCOMING: { label: 'Upcoming', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', dot: 'bg-blue-500' },
-  IN_DISCUSSION: { label: 'In Discussion', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', dot: 'bg-amber-500' },
-  AT_RISK: { label: 'At Risk', bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', dot: 'bg-red-500' },
-  RENEWED: { label: 'Renewed', bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200', dot: 'bg-teal-500', bar: 'bg-teal-500' },
-  TERMINATED: { label: 'Terminated', bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', dot: 'bg-rose-500', bar: 'bg-rose-500' },
+  PAID: { label: 'Paid', ...GOOD },
+  UNPAID: { label: 'Unpaid', ...WARN },
+  OVERDUE: { label: 'Overdue', ...DANGER },
+  PARTIAL: { label: 'Partially Paid', ...NEUTRAL },
+  REFUNDED: { label: 'Refunded', ...NEUTRAL },
+  UPCOMING: { label: 'Upcoming', ...NEUTRAL },
+  IN_DISCUSSION: { label: 'In Discussion', ...WARN },
+  AT_RISK: { label: 'At Risk', ...DANGER },
+  RENEWED: { label: 'Renewed', ...GOOD },
+  TERMINATED: { label: 'Terminated', ...QUIET },
 };
 
-const DEFAULT_STATUS_CONFIG: StatusConfig = {
-  label: '',
-  bg: 'bg-gray-50',
-  text: 'text-gray-600',
-  border: 'border-gray-200',
-  dot: 'bg-gray-400',
-  bar: 'bg-gray-400',
-};
+const DEFAULT_STATUS_CONFIG: StatusConfig = { label: '', ...QUIET };
 
 export function getStatusLabel(status?: string | null): string {
   if (!status) return '—';

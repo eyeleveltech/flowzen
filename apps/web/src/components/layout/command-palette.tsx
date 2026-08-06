@@ -219,7 +219,7 @@ export function CommandPalette() {
             className="fixed left-1/2 top-[20%] z-50 w-full max-w-xl -translate-x-1/2 rounded-2xl border border-border bg-white shadow-modal shadow-black/10"
           >
             {/* Search input */}
-            <div className="flex items-center gap-3 px-5 py-4 border-b border-surface-sunken">
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-subtle">
               <Search className="h-5 w-5 text-secondary" />
               <input
                 autoFocus
@@ -229,7 +229,7 @@ export function CommandPalette() {
                 className="flex-1 text-sm text-primary placeholder:text-secondary outline-none bg-transparent"
               />
               {query && (
-                <button onClick={() => { setQuery(''); setResults(null); }} className="p-1 rounded-lg hover:bg-surface-sunken">
+                <button onClick={() => { setQuery(''); setResults(null); }} className="p-1 rounded-lg hover:bg-subtle">
                   <X className="h-4 w-4 text-secondary" />
                 </button>
               )}
@@ -272,7 +272,7 @@ export function CommandPalette() {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between px-4 py-2.5 border-t border-surface-sunken text-xs text-secondary">
+            <div className="flex items-center justify-between px-4 py-2.5 border-t border-subtle text-xs text-secondary">
               <span>↑↓ Navigate</span>
               <span>↵ Open</span>
               <span>ESC Close</span>
@@ -315,11 +315,11 @@ function ResultSection({
             key={item.id}
             onClick={() => onNavigate(item.href)}
             onMouseEnter={() => onHover(globalIndex)}
-            className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors group ${isSelected ? 'bg-surface-sunken' : 'hover:bg-[#F9FAFB]'}`}
+            className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors group ${isSelected ? 'bg-subtle' : 'hover:bg-surface'}`}
           >
             <span className="text-primary font-medium truncate">{item.label}</span>
             <span className="text-secondary text-xs truncate">{item.sub}</span>
-            <ArrowRight className={`h-3.5 w-3.5 ml-auto shrink-0 text-[#D1D5DB] transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
+            <ArrowRight className={`h-3.5 w-3.5 ml-auto shrink-0 text-line transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
           </button>
         );
       })}
