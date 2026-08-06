@@ -626,7 +626,7 @@ export function PipelineBoardView() {
                                   {/* Distinctive active stage badges for Retainer vs. Project */}
                                   {(lead.stage === 'ACTIVE_RETAINER' || lead.stage === 'ACTIVE_PROJECT') && (
                                     <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-md border uppercase tracking-wider ${lead.stage === 'ACTIVE_RETAINER'
-                                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                        ? 'bg-subtle text-body border-border'
                                         : 'bg-green-50 text-green-700 border-green-200'
                                       }`}>
                                       {LEAD_STAGE_SHORT_LABELS[lead.stage] || leadStageLabel(lead.stage)}
@@ -728,7 +728,7 @@ export function PipelineBoardView() {
                       </div>
                       <div className="border-l border-gray-100 pl-3 min-w-0">
                         <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider block">Weighted</span>
-                        <span className="text-xs font-bold text-emerald-600 truncate block max-w-37.5" title={formatCurrency(columnWeightedValue)}>
+                        <span className="text-xs font-bold text-green-600 truncate block max-w-37.5" title={formatCurrency(columnWeightedValue)}>
                           {formatCurrencyCompact(columnWeightedValue)}
                         </span>
                       </div>
@@ -739,7 +739,7 @@ export function PipelineBoardView() {
                       e.stopPropagation();
                       setIsAddModalOpen(true);
                     }}
-                    className="flex items-center justify-center text-primary hover:text-blue-600 transition-colors p-1.5 rounded-lg hover:bg-gray-50 border border-gray-200"
+                    className="flex items-center justify-center text-primary hover:text-body transition-colors p-1.5 rounded-lg hover:bg-gray-50 border border-gray-200"
                     title="Add Lead"
                   >
                     <Icon as={Plus} size="sm" />

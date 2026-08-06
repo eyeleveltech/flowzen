@@ -171,7 +171,7 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
               {fromLabel} <ArrowRight className="h-3 w-3" /> {toLabel}
             </p>
           </div>
-          <button onClick={guardedClose} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
+          <button onClick={guardedClose} className="p-2 rounded-xl hover:bg-subtle transition-colors">
             <Icon as={X} size="md" className="text-secondary" />
           </button>
         </div>
@@ -192,13 +192,13 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
                 <div>
                   {/* One input, named for what the number MEANS at this point in the funnel: an
                       estimate while the deal is being chased, the agreed figure once it is won. */}
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">
+                  <label className="block text-sm font-medium text-body mb-1.5">
                     {targetStage === 'CONTRACT' ? 'Agreed Final Value (₹)' : 'Deal Value (₹)'}
                   </label>
                   <input type="number" value={dealValue} onChange={e => setDealValue(e.target.value)} className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-primary" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Expected Close Date</label>
+                  <label className="block text-sm font-medium text-body mb-1.5">Expected Close Date</label>
                   <input type="date" value={expectedCloseDate} onChange={e => setExpectedCloseDate(e.target.value)} className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1" />
                 </div>
               </div>
@@ -206,7 +206,7 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
 
             {showsContractType && (
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">Contract Type</label>
+                <label className="block text-sm font-medium text-body mb-1.5">Contract Type</label>
                 <Select value={contractType} onChange={setContractType} options={[{ label: 'Retainer', value: 'RETAINER' }, { label: 'One-Time Project', value: 'ONE_TIME' }]} />
               </div>
             )}
@@ -214,7 +214,7 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
             {/* §3.6 Lost & Closed: ONLY the Lost Reason dropdown */}
             {targetStage === 'CHURNED' && (
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">
+                <label className="block text-sm font-medium text-body mb-1.5">
                   Reason for Loss <span className="text-red-500">*</span>
                 </label>
                 <Select
@@ -228,7 +228,7 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
             {!['ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(targetStage) && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Next Follow-up Date</label>
+                  <label className="block text-sm font-medium text-body mb-1.5">Next Follow-up Date</label>
                   <input
                     type="date"
                     value={followUpDate}
@@ -237,7 +237,7 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Last Contacted Date</label>
+                  <label className="block text-sm font-medium text-body mb-1.5">Last Contacted Date</label>
                   <input
                     type="date"
                     value={lastContactedDate}
@@ -251,7 +251,7 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
             {/* Dynamic stage fields */}
             {fields.map((field: StageField) => (
               <div key={field.key}>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">
+                <label className="block text-sm font-medium text-body mb-1.5">
                   {field.label} {field.required && <span className="text-red-500">*</span>}
                 </label>
 
@@ -284,9 +284,9 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
                           type="checkbox"
                           checked={(formData[field.key] || []).includes(opt)}
                           onChange={(e) => handleChecklistChange(field.key, opt, e.target.checked)}
-                          className="rounded border-[#D1D5DB] text-primary focus:ring-primary"
+                          className="rounded border-line text-primary focus:ring-primary"
                         />
-                        <span className="text-sm text-[#374151]">{opt}</span>
+                        <span className="text-sm text-body">{opt}</span>
                       </label>
                     ))}
                   </div>
@@ -298,10 +298,10 @@ export function StageTransitionModal({ lead, currentStage, targetStage, onClose,
         </div>
 
         <div className="p-4 border-t border-border bg-gray-50 flex gap-3 rounded-b-2xl">
-          <button type="button" onClick={guardedClose} className="flex-1 px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#D1D5DB] rounded-xl hover:bg-gray-50 transition-colors">
+          <button type="button" onClick={guardedClose} className="flex-1 px-4 py-2 text-sm font-medium text-body bg-white border border-line rounded-xl hover:bg-gray-50 transition-colors">
             Cancel
           </button>
-          <button type="submit" form="stage-form" disabled={isLoading} className="flex-1 px-4 py-2 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] transition-colors disabled:opacity-50">
+          <button type="submit" form="stage-form" disabled={isLoading} className="flex-1 px-4 py-2 text-sm font-medium text-white bg-primary rounded-xl hover:bg-primary-hover transition-colors disabled:opacity-50">
             {isLoading ? 'Saving...' : 'Confirm Stage Change'}
           </button>
         </div>

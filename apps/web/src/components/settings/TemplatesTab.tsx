@@ -149,21 +149,21 @@ export function TemplatesTab({ templates, fetchTemplates }: { templates: any[], 
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {templates.map((t) => (
-          <div key={t.id} className="bg-white border border-border rounded-2xl p-5 hover:border-[#D1D5DB] transition-colors group">
+          <div key={t.id} className="bg-white border border-border rounded-2xl p-5 hover:border-line transition-colors group">
             <div className="flex justify-between items-start mb-4">
-              <div className="h-10 w-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center border border-purple-100">
+              <div className="h-10 w-10 rounded-xl bg-subtle text-body flex items-center justify-center border border-border">
                 <Icon as={FileText} size="lg" />
               </div>
               <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => openModal(t)} className="p-1.5 text-secondary hover:text-primary hover:bg-[#F3F4F6] rounded-md"><Icon as={Edit2} size="md" /></button>
+                <button onClick={() => openModal(t)} className="p-1.5 text-secondary hover:text-primary hover:bg-subtle rounded-md"><Icon as={Edit2} size="md" /></button>
                 <button onClick={() => handleDelete(t.id)} className="p-1.5 text-secondary hover:text-red-600 hover:bg-red-50 rounded-md"><Icon as={Trash2} size="md" /></button>
               </div>
             </div>
             <h3 className="font-medium text-primary text-base mb-1">{t.name}</h3>
             <p className="text-sm text-secondary line-clamp-2 mb-4 h-10">{t.description || 'No description provided.'}</p>
 
-            <div className="flex items-center justify-between pt-4 border-t border-[#F3F4F6]">
-              <span className="text-xs font-semibold text-primary bg-[#F3F4F6] px-2.5 py-1 rounded-md">{t.type}</span>
+            <div className="flex items-center justify-between pt-4 border-t border-subtle">
+              <span className="text-xs font-semibold text-primary bg-subtle px-2.5 py-1 rounded-md">{t.type}</span>
               <span className="text-xs text-secondary font-medium">{t.structure?.tasks?.length || 0} tasks</span>
             </div>
           </div>
@@ -199,7 +199,7 @@ export function TemplatesTab({ templates, fetchTemplates }: { templates: any[], 
                   <div className="space-y-4">
                     <div className="flex items-center justify-between border-b border-border pb-2">
                       <h4 className="text-sm font-medium text-primary">Default Tasks</h4>
-                      <button type="button" onClick={addTask} className="text-xs font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                      <button type="button" onClick={addTask} className="text-xs font-medium text-body hover:text-body flex items-center gap-1">
                         <Plus className="h-3 w-3" /> Add Task
                       </button>
                     </div>
@@ -235,7 +235,7 @@ export function TemplatesTab({ templates, fetchTemplates }: { templates: any[], 
                 </form>
               </div>
               <div className="p-4 sm:p-6 pt-4 border-t border-border bg-surface shrink-0 flex gap-3">
-                <button type="button" onClick={() => setShowModal(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-border text-[#374151] font-medium hover:bg-surface transition-colors">Cancel</button>
+                <button type="button" onClick={() => setShowModal(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-border text-body font-medium hover:bg-surface transition-colors">Cancel</button>
                 <button type="submit" form="template-form" disabled={saving} className="flex-1 bg-primary text-white px-4 py-2.5 rounded-xl font-medium hover:bg-black transition-colors disabled:opacity-50">
                   {saving ? 'Saving...' : 'Save Template'}
                 </button>

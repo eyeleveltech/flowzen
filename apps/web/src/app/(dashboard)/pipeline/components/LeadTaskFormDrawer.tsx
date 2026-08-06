@@ -179,7 +179,7 @@ export function LeadTaskFormDrawer({ isOpen, onClose, leadId, onSuccess }: LeadT
                 type="button"
                 onClick={() => handleSubmit()}
                 disabled={saving}
-                className="rounded-xl bg-primary px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#1F2937] disabled:opacity-60 transition-colors duration-150 motion-reduce:transition-none flex items-center gap-1.5 shadow-sm"
+                className="rounded-xl bg-primary px-5 py-2.5 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-60 transition-colors duration-150 motion-reduce:transition-none flex items-center gap-1.5 shadow-sm"
               >
                 {saving ? 'Creating…' : 'Create Task'}
               </button>

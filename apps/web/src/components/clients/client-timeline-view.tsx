@@ -78,14 +78,14 @@ export function ClientTimelineView({ clients, loading }: { clients: any[]; loadi
             {clients.map((client) => (
               <div
                 key={client.id}
-                className="h-16 px-4 flex items-center border-b border-[#F3F4F6] hover:bg-white cursor-pointer transition-colors group"
+                className="h-16 px-4 flex items-center border-b border-subtle hover:bg-white cursor-pointer transition-colors group"
                 onClick={() => router.push(`/clients/${client.id}`)}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className={`h-7 w-7 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(getClientDisplayName(client))}`}>
                     {getInitials(getClientDisplayName(client))}
                   </div>
-                  <span className="text-sm font-medium text-primary truncate group-hover:text-blue-600 transition-colors">
+                  <span className="text-sm font-medium text-primary truncate group-hover:text-body transition-colors">
                     {getClientDisplayName(client)}
                   </span>
                 </div>
@@ -104,7 +104,7 @@ export function ClientTimelineView({ clients, loading }: { clients: any[]; loadi
                 return (
                   <div
                     key={i}
-                    className={`flex-1 min-w-25 px-3 flex items-center border-r border-border text-[11px] font-semibold uppercase tracking-wider ${isCurrentMonth ? 'text-blue-600 bg-blue-50/60' : 'text-secondary'}`}
+                    className={`flex-1 min-w-25 px-3 flex items-center border-r border-border text-[11px] font-semibold uppercase tracking-wider ${isCurrentMonth ? 'text-body bg-subtle/60' : 'text-secondary'}`}
                   >
                     {m.toLocaleString('default', { month: 'short' })}
                     <span className="ml-1 opacity-60 font-normal">{m.getFullYear()}</span>
@@ -122,7 +122,7 @@ export function ClientTimelineView({ clients, loading }: { clients: any[]; loadi
                   return (
                     <div
                       key={i}
-                      className={`flex-1 min-w-25 border-r ${isCurrentMonth ? 'bg-blue-50/30 border-blue-100' : 'border-gray-100'}`}
+                      className={`flex-1 min-w-25 border-r ${isCurrentMonth ? 'bg-subtle/30 border-border' : 'border-gray-100'}`}
                     />
                   );
                 })}
@@ -131,10 +131,10 @@ export function ClientTimelineView({ clients, loading }: { clients: any[]; loadi
               {/* Today indicator */}
               {todayPct >= 0 && todayPct <= 100 && (
                 <div
-                  className="absolute top-0 bottom-0 w-0.5 bg-blue-500/70 z-10 pointer-events-none"
+                  className="absolute top-0 bottom-0 w-0.5 bg-primary/70 z-10 pointer-events-none"
                   style={{ left: `${todayPct}%` }}
                 >
-                  <div className="absolute top-2 -left-4.5 text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-md shadow-sm whitespace-nowrap z-10">
+                  <div className="absolute top-2 -left-4.5 text-[10px] font-bold text-body bg-subtle border border-border px-1.5 py-0.5 rounded-md shadow-sm whitespace-nowrap z-10">
                     Today
                   </div>
                 </div>
@@ -143,7 +143,7 @@ export function ClientTimelineView({ clients, loading }: { clients: any[]; loadi
               {/* Client rows */}
               {clients.map((client, idx) => {
                 const dateStr = client.startDate || client.createdAt;
-                if (!dateStr) return <div key={client.id} className="h-16 border-b border-[#F3F4F6]" />;
+                if (!dateStr) return <div key={client.id} className="h-16 border-b border-subtle" />;
                 const d = new Date(dateStr);
                 const pct = ((d.getTime() - minDate.getTime()) / totalDuration) * 100;
                 const cfg = getStatusColor(client.status);
@@ -154,7 +154,7 @@ export function ClientTimelineView({ clients, loading }: { clients: any[]; loadi
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: idx * 0.03 }}
-                    className="h-16 border-b border-[#F3F4F6] flex items-center relative group"
+                    className="h-16 border-b border-subtle flex items-center relative group"
                   >
                     {/* Horizontal connector line */}
                     <div

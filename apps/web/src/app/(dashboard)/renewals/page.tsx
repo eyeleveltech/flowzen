@@ -84,7 +84,7 @@ export default function RenewalsPage() {
                 const d = daysTo(r.contractEndDate);
                 return (
                   <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50/40">
-                    <td className="px-4 py-3"><Link href={`/pipeline/${r.id}`} className="font-medium text-primary hover:underline">{name(r)}</Link>{r.autoRenewal && <span className="ml-2 text-[10px] font-semibold text-emerald-600">AUTO</span>}</td>
+                    <td className="px-4 py-3"><Link href={`/pipeline/${r.id}`} className="font-medium text-primary hover:underline">{name(r)}</Link>{r.autoRenewal && <span className="ml-2 text-[10px] font-semibold text-green-600">AUTO</span>}</td>
                     <td className="px-4 py-3 text-right tabular-nums">{r.dealValue ? formatCurrency(r.dealValue) : '—'}</td>
                     <td className="px-4 py-3 text-secondary">{fmtDate(r.contractStartDate)}</td>
                     <td className="px-4 py-3 text-secondary">{fmtDate(r.contractEndDate)}</td>

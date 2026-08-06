@@ -45,7 +45,7 @@ function VerifyEmailContent() {
   }, [token, router]);
 
   return (
-      <div className="w-full max-w-md space-y-8 rounded-2xl bg-white p-8 shadow-xl shadow-black/5 ring-1 ring-[#E5E7EB] text-center">
+      <div className="w-full max-w-md space-y-8 rounded-2xl bg-white p-8 shadow-xl shadow-black/5 ring-1 ring-border text-center">
         
         {status === 'loading' && (
           <div className="flex flex-col items-center justify-center py-8">
@@ -71,13 +71,13 @@ function VerifyEmailContent() {
         {status === 'error' && (
           <div className="flex flex-col items-center justify-center py-8">
             <div className="h-16 w-16 rounded-full bg-[#FEF2F2] flex items-center justify-center mb-6">
-              <XCircle className="h-8 w-8 text-[#DC2626]" />
+              <XCircle className="h-8 w-8 text-danger-hover" />
             </div>
             <h2 className="text-2xl font-bold text-primary">Verification Failed</h2>
             <p className="mt-2 text-sm text-secondary mb-8">{errorMessage}</p>
             
             <Link href="/dashboard" className="w-full">
-              <button className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm font-medium text-primary hover:bg-[#F9FAFB] transition-all duration-150 h-11 flex items-center justify-center">
+              <button className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm font-medium text-primary hover:bg-surface transition-all duration-150 h-11 flex items-center justify-center">
                 Go to Dashboard
               </button>
             </Link>
@@ -91,7 +91,7 @@ export default function VerifyEmailPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface p-4">
       <Suspense fallback={
-        <div className="w-full max-w-md space-y-8 rounded-2xl bg-white p-8 shadow-xl shadow-black/5 ring-1 ring-[#E5E7EB] text-center">
+        <div className="w-full max-w-md space-y-8 rounded-2xl bg-white p-8 shadow-xl shadow-black/5 ring-1 ring-border text-center">
           <div className="flex flex-col items-center justify-center py-8">
             <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
             <h2 className="text-xl font-semibold text-primary">Loading...</h2>

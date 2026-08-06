@@ -122,7 +122,7 @@ export function PipelineDetailsModal({ lead, onClose, onSuccess }: PipelineDetai
             <h2 className="text-lg font-semibold text-primary">Update Pipeline Details</h2>
             <p className="text-sm text-secondary mt-0.5">Missing info for {lead.contactName || lead.companyName}</p>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-subtle transition-colors">
             <Icon as={X} size="md" className="text-secondary" />
           </button>
         </div>
@@ -137,18 +137,18 @@ export function PipelineDetailsModal({ lead, onClose, onSuccess }: PipelineDetai
                 {requiresDealValue && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-4 border-b border-border">
                     <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Deal Value (₹)</label>
+                      <label className="block text-sm font-medium text-body mb-1.5">Deal Value (₹)</label>
                       <input type="number" value={dealValue} onChange={e => setDealValue(e.target.value)} required className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1" />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Expected Close Date</label>
+                      <label className="block text-sm font-medium text-body mb-1.5">Expected Close Date</label>
                       <input type="date" value={expectedCloseDate} onChange={e => setExpectedCloseDate(e.target.value)} required className="w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1" />
                     </div>
                   </div>
                 )}
                 {showsContractType && (
                   <div className="pb-4 border-b border-border">
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Contract Type</label>
+                    <label className="block text-sm font-medium text-body mb-1.5">Contract Type</label>
                     <Select
                       value={contractType}
                       onChange={(v) => setContractType(v)}
@@ -158,7 +158,7 @@ export function PipelineDetailsModal({ lead, onClose, onSuccess }: PipelineDetai
                 )}
                 {isChurned && (
                   <div className="pb-4 border-b border-border">
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Reason for Loss <span className="text-red-500">*</span></label>
+                    <label className="block text-sm font-medium text-body mb-1.5">Reason for Loss <span className="text-red-500">*</span></label>
                     <Select
                       value={lostReason}
                       onChange={(v) => setLostReason(v)}
@@ -174,7 +174,7 @@ export function PipelineDetailsModal({ lead, onClose, onSuccess }: PipelineDetai
                 )}
                 {combinedFields.map((field: StageField) => (
                 <div key={field.key}>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">
+                  <label className="block text-sm font-medium text-body mb-1.5">
                     {field.label}
                   </label>
                   
@@ -205,9 +205,9 @@ export function PipelineDetailsModal({ lead, onClose, onSuccess }: PipelineDetai
                             type="checkbox"
                             checked={(formData[field.key] || []).includes(opt)}
                             onChange={(e) => handleChecklistChange(field.key, opt, e.target.checked)}
-                            className="rounded border-[#D1D5DB] text-primary focus:ring-primary"
+                            className="rounded border-line text-primary focus:ring-primary"
                           />
-                          <span className="text-sm text-[#374151]">{opt}</span>
+                          <span className="text-sm text-body">{opt}</span>
                         </label>
                       ))}
                     </div>
@@ -221,7 +221,7 @@ export function PipelineDetailsModal({ lead, onClose, onSuccess }: PipelineDetai
         </div>
 
         <div className="p-4 border-t border-border bg-gray-50 flex gap-3 rounded-b-2xl">
-          <button type="button" onClick={onClose} className="flex-1 px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#D1D5DB] rounded-xl hover:bg-gray-50 transition-colors">
+          <button type="button" onClick={onClose} className="flex-1 px-4 py-2 text-sm font-medium text-body bg-white border border-line rounded-xl hover:bg-gray-50 transition-colors">
             Cancel
           </button>
           <button

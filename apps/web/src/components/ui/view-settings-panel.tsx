@@ -150,9 +150,9 @@ export function ViewSettingsPanel({
                             onVisibleColumnsChange([...visibleColumns, col.id]);
                           }
                         }}
-                        className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#F9FAFB] transition-colors"
+                        className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-surface transition-colors"
                       >
-                        <span className="text-[#374151]">{col.label}</span>
+                        <span className="text-body">{col.label}</span>
                         <div className={`h-4.5 w-4.5 rounded border flex items-center justify-center transition-colors ${isVisible ? 'bg-primary border-primary' : 'border-border'}`}>
                           {isVisible && <CheckIcon className="h-3 w-3 text-white" />}
                         </div>
@@ -200,7 +200,7 @@ export function ViewSettingsPanel({
                 <button
                   type="button"
                   onClick={onReset}
-                  className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 border border-border rounded-xl text-sm font-medium text-[#374151] bg-white hover:bg-gray-50 transition-colors"
+                  className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 border border-border rounded-xl text-sm font-medium text-body bg-white hover:bg-gray-50 transition-colors"
                 >
                   <Icon as={RefreshCw} size="md" />
                   Reset View
@@ -208,7 +208,7 @@ export function ViewSettingsPanel({
                 <button
                   type="button"
                   onClick={onSave}
-                  className="flex-1 flex items-center justify-center gap-1.5 bg-primary text-white rounded-xl text-sm font-medium hover:bg-[#1F2937] transition-colors shadow-sm"
+                  className="flex-1 flex items-center justify-center gap-1.5 bg-primary text-white rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors shadow-sm"
                 >
                   <Icon as={Save} size="md" />
                   Save (⌘S)

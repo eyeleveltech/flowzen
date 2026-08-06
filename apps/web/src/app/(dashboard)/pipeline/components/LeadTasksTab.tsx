@@ -82,7 +82,7 @@ export function LeadTasksTab({ leadId, initialAdding = false }: { leadId: string
         </div>
         <button
           onClick={() => setShowDrawer(true)}
-          className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#1F2937] transition-all"
+          className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-white hover:bg-primary-hover transition-all"
         >
           <Icon as={Plus} size="sm" /> Add Task
         </button>

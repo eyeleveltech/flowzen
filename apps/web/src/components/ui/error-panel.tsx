@@ -10,7 +10,7 @@ export function ErrorPanel({ message, onRetry }: { message: string; onRetry?: ()
       <p className="text-sm font-semibold text-primary mb-1">Failed to load</p>
       <p className="text-xs text-secondary mb-5 max-w-xs">{message}</p>
       {onRetry && (
-        <button onClick={onRetry} className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2 text-sm font-medium text-primary hover:bg-[#F3F4F6] transition-all">
+        <button onClick={onRetry} className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2 text-sm font-medium text-primary hover:bg-subtle transition-all">
           <Icon as={RefreshCw} size="sm" /> Try Again
         </button>
       )}

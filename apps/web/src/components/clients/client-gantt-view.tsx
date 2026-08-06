@@ -41,7 +41,7 @@ export function ClientGanttView({ clients, loading }: { clients: any[]; loading:
         {Array.from({ length: 5 }).map((_, i) => (
           <div key={i} className="flex gap-4 animate-pulse">
             <div className="h-10 w-36 bg-gray-100 rounded-lg" />
-            <div className="h-10 bg-blue-50 rounded-full border border-blue-100" style={{ width: `${120 + i * 30}px`, marginLeft: `${i * 15}px` }} />
+            <div className="h-10 bg-subtle rounded-full border border-border" style={{ width: `${120 + i * 30}px`, marginLeft: `${i * 15}px` }} />
           </div>
         ))}
       </div>
@@ -91,7 +91,7 @@ export function ClientGanttView({ clients, loading }: { clients: any[]; loading:
               return (
                 <div
                   key={i}
-                  className={`flex-1 min-w-25 px-3 flex items-center border-r text-[11px] font-semibold uppercase tracking-wider ${isNow ? 'text-blue-600 bg-blue-50 border-blue-100' : 'text-secondary border-border'}`}
+                  className={`flex-1 min-w-25 px-3 flex items-center border-r text-[11px] font-semibold uppercase tracking-wider ${isNow ? 'text-body bg-subtle border-border' : 'text-secondary border-border'}`}
                 >
                   {m.toLocaleString('default', { month: 'short' })}
                   <span className="ml-1 font-normal opacity-60">{m.getFullYear()}</span>
@@ -109,7 +109,7 @@ export function ClientGanttView({ clients, loading }: { clients: any[]; loading:
                 return (
                   <div
                     key={i}
-                    className={`flex-1 min-w-25 border-r ${isNow ? 'bg-blue-50/30 border-blue-100' : 'border-gray-100'}`}
+                    className={`flex-1 min-w-25 border-r ${isNow ? 'bg-subtle/30 border-border' : 'border-gray-100'}`}
                   />
                 );
               })}
@@ -120,8 +120,8 @@ export function ClientGanttView({ clients, loading }: { clients: any[]; loading:
               className="absolute top-0 bottom-0 pointer-events-none z-10"
               style={{ left: `calc(${SIDEBAR_WIDTH}px + ${todayPct}% * (100% - ${SIDEBAR_WIDTH}px) / 100)` }}
             >
-              <div className="absolute inset-y-0 w-0.5 bg-blue-500/60" />
-              <div className="absolute top-2 left-2 text-[10px] font-bold text-blue-600 bg-white border border-blue-200 px-1.5 py-0.5 rounded shadow-sm whitespace-nowrap">
+              <div className="absolute inset-y-0 w-0.5 bg-primary/60" />
+              <div className="absolute top-2 left-2 text-[10px] font-bold text-body bg-white border border-border px-1.5 py-0.5 rounded shadow-sm whitespace-nowrap">
                 Today
               </div>
             </div>
@@ -146,7 +146,7 @@ export function ClientGanttView({ clients, loading }: { clients: any[]; loading:
                 >
                   {/* Sidebar cell – sticky left, always aligned with its chart row */}
                   <div
-                    className="sticky left-0 z-20 bg-white border-r border-[#F3F4F6] flex items-center px-4 shrink-0 cursor-pointer hover:bg-surface transition-colors"
+                    className="sticky left-0 z-20 bg-white border-r border-subtle flex items-center px-4 shrink-0 cursor-pointer hover:bg-surface transition-colors"
                     style={{ width: SIDEBAR_WIDTH }}
                     onClick={() => router.push(`/clients/${client.id}`)}
                   >
@@ -156,7 +156,7 @@ export function ClientGanttView({ clients, loading }: { clients: any[]; loading:
                         {getInitials(getClientDisplayName(client))}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-primary truncate group-hover:text-blue-600 transition-colors leading-tight">
+                        <p className="text-sm font-medium text-primary truncate group-hover:text-body transition-colors leading-tight">
                           {getClientDisplayName(client)}
                         </p>
                         <p className="text-[10px] text-secondary">{label}</p>

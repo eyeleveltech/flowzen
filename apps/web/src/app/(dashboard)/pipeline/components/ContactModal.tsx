@@ -8,10 +8,10 @@ import toast from 'react-hot-toast';
 import { Icon } from '@/components/ui/icon';
 
 export const CONTACT_ROLES = [
-  { v: 'DECISION_MAKER', label: 'Decision Maker', desc: 'Final sign-off authority — the person who says yes or no', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  { v: 'INFLUENCER', label: 'Influencer', desc: 'Shapes the decision but does not sign off', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+  { v: 'DECISION_MAKER', label: 'Decision Maker', desc: 'Final sign-off authority — the person who says yes or no', color: 'bg-green-50 text-green-700 border-green-200' },
+  { v: 'INFLUENCER', label: 'Influencer', desc: 'Shapes the decision but does not sign off', color: 'bg-subtle text-body border-border' },
   { v: 'GATEKEEPER', label: 'Gatekeeper', desc: 'Controls access to the Decision Maker', color: 'bg-amber-50 text-amber-700 border-amber-200' },
-  { v: 'CHAMPION', label: 'Champion', desc: 'Internal advocate on our side — wants us to win', color: 'bg-purple-50 text-purple-700 border-purple-200' },
+  { v: 'CHAMPION', label: 'Champion', desc: 'Internal advocate on our side — wants us to win', color: 'bg-subtle text-body border-border' },
   { v: 'CC_ONLY', label: 'CC Only', desc: 'Kept in the loop but not in the conversation', color: 'bg-gray-100 text-gray-600 border-gray-200' },
 ] as const;
 

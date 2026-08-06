@@ -101,11 +101,11 @@ export function TimelineTab({ leadId }: { leadId: string }) {
                 </div>
                 <div className="flex items-center gap-2 mb-0.5">
                   <div className={`hidden md:flex h-5 w-5 rounded-full items-center justify-center text-[9px] font-bold ${a.user ? getAvatarColor(a.user.name) : 'bg-gray-100 text-gray-400'}`}>{a.user ? getInitials(a.user.name) : '•'}</div>
-                  <p className="text-sm text-primary"><span className="font-medium">{a.user?.name || 'System'}</span> <span className="text-[#4B5563]">{a.message}</span></p>
+                  <p className="text-sm text-primary"><span className="font-medium">{a.user?.name || 'System'}</span> <span className="text-body-soft">{a.message}</span></p>
                 </div>
                 <p className="text-xs text-secondary ml-7" title={formatDateTime(a.createdAt)}>{formatDistanceToNow(new Date(a.createdAt), { addSuffix: true })}</p>
                 {extras.length > 0 && <p className="ml-7 mt-1 text-xs text-secondary">{extras.join(' · ')}</p>}
-                {body && <div className="ml-7 mt-2 p-3 bg-gray-50 rounded-xl text-sm text-[#4B5563] border border-gray-100 whitespace-pre-wrap">{body}</div>}
+                {body && <div className="ml-7 mt-2 p-3 bg-gray-50 rounded-xl text-sm text-body-soft border border-gray-100 whitespace-pre-wrap">{body}</div>}
               </div>
             );
           })}

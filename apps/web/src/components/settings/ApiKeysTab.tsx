@@ -104,25 +104,25 @@ export function ApiKeysTab() {
 
       {/* Newly Generated Key Banner */}
       {newKey && (
-        <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-5 max-w-xl space-y-3">
+        <div className="bg-green-50 border border-green-100 rounded-2xl p-5 max-w-xl space-y-3">
           <div className="flex items-start gap-2.5">
-            <Icon as={AlertCircle} size="lg" className="text-emerald-600 shrink-0 mt-0.5" />
+            <Icon as={AlertCircle} size="lg" className="text-green-600 shrink-0 mt-0.5" />
             <div>
-              <h5 className="text-xs font-bold text-emerald-800">Copy your API Key</h5>
-              <p className="text-[11px] text-emerald-700 mt-0.5">
+              <h5 className="text-xs font-bold text-green-800">Copy your API Key</h5>
+              <p className="text-[11px] text-green-700 mt-0.5">
                 For security reasons, this key will only be shown once. If you lose it, you will need to revoke it and generate a new one.
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 bg-white border border-emerald-100 rounded-xl p-2.5">
+          <div className="flex items-center gap-2 bg-white border border-green-100 rounded-xl p-2.5">
             <code className="text-xs font-mono select-all break-all flex-1 text-primary">{newKey}</code>
             <button
               type="button"
               onClick={handleCopy}
-              className="p-2 hover:bg-emerald-50 rounded-lg text-emerald-600 transition-colors shrink-0"
+              className="p-2 hover:bg-green-50 rounded-lg text-green-600 transition-colors shrink-0"
               title="Copy to Clipboard"
             >
-              {copied ? <Icon as={Check} size="md" className="text-emerald-600" /> : <Icon as={Copy} size="md" />}
+              {copied ? <Icon as={Check} size="md" className="text-green-600" /> : <Icon as={Copy} size="md" />}
             </button>
           </div>
         </div>

@@ -52,12 +52,12 @@ export function WonCelebrationModal({ lead, onClose }: WonCelebrationModalProps)
           <Icon as={X} size="md" className="text-secondary" />
         </button>
 
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50">
-          <Trophy className="h-7 w-7 text-emerald-600" />
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-50">
+          <Trophy className="h-7 w-7 text-green-600" />
         </div>
         <h2 className="text-xl font-bold text-primary">🎉 Deal Won!</h2>
         <p className="mt-1 text-sm text-secondary">What would you like to do next?</p>
-        <p className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
+        <p className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-50 px-2.5 py-1 rounded-full">
           ✓ {clientName} marked as Active client
         </p>
         {dealAmount ? (
@@ -67,13 +67,13 @@ export function WonCelebrationModal({ lead, onClose }: WonCelebrationModalProps)
         <div className="mt-6 flex flex-col gap-2">
           <button
             onClick={handleCreateProject}
-            className="flex items-center justify-center gap-2 w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-colors"
+            className="flex items-center justify-center gap-2 w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover transition-colors"
           >
             <Icon as={FolderPlus} size="md" /> Create Project
           </button>
           <button
             onClick={onClose}
-            className="w-full rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-gray-50 transition-colors"
+            className="w-full rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-body hover:bg-gray-50 transition-colors"
           >
             Skip for now
           </button>

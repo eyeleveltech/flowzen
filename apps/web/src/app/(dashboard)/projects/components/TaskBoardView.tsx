@@ -120,7 +120,7 @@ export function TaskBoardView({ tasks, onUpdateTask, onTaskClick }: { tasks: any
             }
 
             return (
-              <div key={group.id} className="flex flex-col flex-1 min-w-70 max-w-85 h-full shrink-0 border border-border bg-[#F9FAFB] rounded-xl overflow-hidden shadow-sm">
+              <div key={group.id} className="flex flex-col flex-1 min-w-70 max-w-85 h-full shrink-0 border border-border bg-surface rounded-xl overflow-hidden shadow-sm">
                 {/* Column Header */}
                 <div className="px-4 py-3 flex items-center justify-between shrink-0 bg-white border-b border-border" style={{ borderTop: `3px solid ${group.color}` }}>
                   <div className="flex items-center gap-2">

@@ -49,7 +49,7 @@ export function ProjectGanttView({ projects, loading = false }: ProjectGanttView
         {Array.from({ length: 5 }).map((_, i) => (
           <div key={i} className="flex gap-4 animate-pulse">
             <div className="h-10 w-36 bg-gray-100 rounded-lg" />
-            <div className="h-10 bg-blue-50 rounded-full border border-blue-100" style={{ width: `${120 + i * 30}px`, marginLeft: `${i * 15}px` }} />
+            <div className="h-10 bg-subtle rounded-full border border-border" style={{ width: `${120 + i * 30}px`, marginLeft: `${i * 15}px` }} />
           </div>
         ))}
       </div>
@@ -156,7 +156,7 @@ export function ProjectGanttView({ projects, loading = false }: ProjectGanttView
                 >
                   {/* Sidebar cell – sticky left */}
                   <div
-                    className="sticky left-0 z-20 bg-white border-r border-[#F3F4F6] flex items-center px-4 shrink-0 cursor-pointer hover:bg-surface transition-colors"
+                    className="sticky left-0 z-20 bg-white border-r border-subtle flex items-center px-4 shrink-0 cursor-pointer hover:bg-surface transition-colors"
                     style={{ width: SIDEBAR_WIDTH }}
                     onClick={() => router.push(`/projects/${project.id}`)}
                   >

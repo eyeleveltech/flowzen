@@ -65,7 +65,7 @@ export default function LoginPage() {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Email</label>
+              <label className="block text-sm font-medium text-body mb-1.5">Email</label>
               <input
                 type="email"
                 value={email}
@@ -78,7 +78,7 @@ export default function LoginPage() {
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-sm font-medium text-[#374151]">Password</label>
+                <label className="block text-sm font-medium text-body">Password</label>
                 <Link href="/forgot-password" className="text-xs font-medium text-primary hover:underline">
                   Forgot password?
                 </Link>
@@ -105,7 +105,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
+              className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">

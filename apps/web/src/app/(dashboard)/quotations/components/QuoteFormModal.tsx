@@ -312,15 +312,15 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
           {/* Header fields */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="relative sm:col-span-2" ref={clientRef}>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">
+              <label className="block text-sm font-medium text-body mb-1.5">
                 Client or Lead <span className="text-red-500">*</span>
                 {leadId && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">Lead</span>}
               </label>
               <div className="relative">
                 <Icon as={Search} size="md" className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary" />
                 <input value={clientSearch} onChange={(e) => { setClientSearch(e.target.value); setShowClientList(true); }} onFocus={() => setShowClientList(true)}
-                  placeholder="Search clients or pipeline leads…" className={`w-full rounded-xl border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 ${clientId || leadId ? 'border-blue-200 bg-blue-50/40' : 'border-border'}`} />
-                {(clientId || leadId) && <Icon as={Check} size="md" className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-600" />}
+                  placeholder="Search clients or pipeline leads…" className={`w-full rounded-xl border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 ${clientId || leadId ? 'border-border bg-subtle/40' : 'border-border'}`} />
+                {(clientId || leadId) && <Icon as={Check} size="md" className="absolute right-3 top-1/2 -translate-y-1/2 text-body" />}
               </div>
               {showClientList && (
                 <div className="absolute z-20 w-full mt-1 bg-white border border-border rounded-xl shadow-lg max-h-56 overflow-auto p-1">
@@ -363,7 +363,7 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
             <Input label="Document Date" type="date" required value={form.documentDate} onChange={(v) => setForm({ ...form, documentDate: v })} />
             <Input label="Expiration Date" type="date" required value={form.expirationDate} onChange={(v) => setForm({ ...form, expirationDate: v })} />
             <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Payment Terms <span className="text-red-500">*</span></label>
+              <label className="block text-sm font-medium text-body mb-1.5">Payment Terms <span className="text-red-500">*</span></label>
               {(() => {
                 const isCustom = !PRESET_TERMS.includes(form.paymentTerms);
                 return (
@@ -387,7 +387,7 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
               })()}
             </div>
             <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Billing Address</label>
+              <label className="block text-sm font-medium text-body mb-1.5">Billing Address</label>
               <textarea value={form.billingAddress} onChange={(e) => setForm({ ...form, billingAddress: e.target.value })} rows={2} placeholder="Auto-filled from client — edit if needed" className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 resize-none" />
             </div>
           </div>
@@ -447,11 +447,11 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
           {/* Scope & Terms */}
           <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Scope of Work</label>
+              <label className="block text-sm font-medium text-body mb-1.5">Scope of Work</label>
               <RichTextEditor value={form.scope} onChange={(v) => setForm({ ...form, scope: v })} placeholder="Enter scope of work..." />
             </div>
             <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Terms &amp; Conditions</label>
+              <label className="block text-sm font-medium text-body mb-1.5">Terms &amp; Conditions</label>
               <textarea value={form.termsConditions} onChange={(e) => setForm({ ...form, termsConditions: e.target.value })} rows={4} className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 resize-none" />
             </div>
           </div>
@@ -462,21 +462,21 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
             {showOther && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Sales Team</label>
+                  <label className="block text-sm font-medium text-body mb-1.5">Sales Team</label>
                   <Select ariaLabel="Sales Team" value={form.salesTeam} onChange={(v) => setForm({ ...form, salesTeam: v })} options={[{ label: '—', value: '' }, ...SALES_TEAMS.map((t) => ({ label: t, value: t }))]} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Payment Method</label>
+                  <label className="block text-sm font-medium text-body mb-1.5">Payment Method</label>
                   <Select ariaLabel="Payment Method" value={form.paymentMethod} onChange={(v) => setForm({ ...form, paymentMethod: v })} options={[{ label: '—', value: '' }, ...PAY_METHODS.map((t) => ({ label: t, value: t }))]} />
                 </div>
                 <Input label="Project Start Date" type="date" value={form.projectStartDate} onChange={(v) => setForm({ ...form, projectStartDate: v })} />
                 <Input label="Delivery / Completion Date" type="date" value={form.deliveryDate} onChange={(v) => setForm({ ...form, deliveryDate: v })} />
                 <Input label="Tags (comma separated)" value={form.tags} onChange={(v) => setForm({ ...form, tags: v })} />
                 <div className="flex items-center gap-6 pt-7">
-                  <label className="flex items-center gap-2 text-sm text-[#374151]"><input type="checkbox" checked={form.onlinePayment} onChange={(e) => setForm({ ...form, onlinePayment: e.target.checked })} /> Online Payment</label>
+                  <label className="flex items-center gap-2 text-sm text-body"><input type="checkbox" checked={form.onlinePayment} onChange={(e) => setForm({ ...form, onlinePayment: e.target.checked })} /> Online Payment</label>
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Project Notes (internal)</label>
+                  <label className="block text-sm font-medium text-body mb-1.5">Project Notes (internal)</label>
                   <textarea value={form.projectNotes} onChange={(e) => setForm({ ...form, projectNotes: e.target.value })} rows={2} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 resize-none" />
                 </div>
               </div>
@@ -485,12 +485,12 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
         </div>
 
         <div className="p-4 sm:p-5 border-t border-border bg-white flex flex-row justify-end gap-2 sm:gap-3">
-          <button onClick={guardedClose} className="px-4 py-2.5 text-sm font-medium text-[#374151] bg-white border border-border rounded-xl hover:bg-gray-50">Cancel</button>
-          <button onClick={onSaveDraftStay} disabled={submitting} className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-[#374151] bg-white border border-border rounded-xl hover:bg-gray-50 disabled:opacity-50">
+          <button onClick={guardedClose} className="px-4 py-2.5 text-sm font-medium text-body bg-white border border-border rounded-xl hover:bg-gray-50">Cancel</button>
+          <button onClick={onSaveDraftStay} disabled={submitting} className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-body bg-white border border-border rounded-xl hover:bg-gray-50 disabled:opacity-50">
             <Icon as={Save} size="md" className="shrink-0" />
             <span className="hidden sm:inline">Save Draft</span><span className="inline sm:hidden">Save</span>
           </button>
-          <button onClick={onGeneratePdf} disabled={submitting} className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] disabled:opacity-50">
+          <button onClick={onGeneratePdf} disabled={submitting} className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-primary-hover disabled:opacity-50">
             <Icon as={FileDown} size="md" className="shrink-0" />
             <span className="hidden sm:inline">Generate PDF</span><span className="inline sm:hidden">PDF</span>
           </button>
@@ -504,12 +504,12 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
 function Input({ label, value, onChange, type = 'text', required = false, placeholder }: { label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean; placeholder?: string }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-[#374151] mb-1.5">{label} {required && <span className="text-red-500">*</span>}</label>
+      <label className="block text-sm font-medium text-body mb-1.5">{label} {required && <span className="text-red-500">*</span>}</label>
       <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1" />
     </div>
   );
 }
 
 function Row({ label, value }: { label: string; value: string }) {
-  return <div className="flex justify-between text-[#374151]"><span className="text-secondary">{label}</span><span className="tabular-nums">{value}</span></div>;
+  return <div className="flex justify-between text-body"><span className="text-secondary">{label}</span><span className="tabular-nums">{value}</span></div>;
 }

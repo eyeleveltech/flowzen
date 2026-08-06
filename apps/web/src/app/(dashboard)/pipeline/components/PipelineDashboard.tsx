@@ -430,11 +430,11 @@ export function PipelineDashboard() {
         {/* Won Deals */}
         <div className="rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow p-5 flex flex-col">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-primary mb-4">
-            <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" /> Won Deals
+            <span className="inline-block h-2 w-2 rounded-full bg-green-500" /> Won Deals
           </h2>
           <div className="flex items-end gap-8">
             <div>
-              <p className="text-3xl font-semibold text-emerald-600">{metrics.wonCount}</p>
+              <p className="text-3xl font-semibold text-green-600">{metrics.wonCount}</p>
               <p className="text-xs text-secondary mt-1">deals won</p>
             </div>
             <div>
@@ -504,9 +504,9 @@ export function PipelineDashboard() {
                     </div>
                   </td>
                   <td className="px-5 py-3">
-                    <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md border ${lead.stage === 'PROJECT_COMPLETED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                    <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md border ${lead.stage === 'PROJECT_COMPLETED' ? 'bg-green-50 text-green-700 border-green-200' :
                         lead.stage === 'CHURNED' ? 'bg-red-50 text-red-700 border-red-200' :
-                          'text-primary bg-[#F3F4F6] border-border'
+                          'text-primary bg-subtle border-border'
                       }`}>
                       {STAGE_LABELS[lead.stage] || lead.stage}
                     </span>

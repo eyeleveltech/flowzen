@@ -69,7 +69,7 @@ export default function RegisterPage() {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Organization name</label>
+              <label className="block text-sm font-medium text-body mb-1.5">Organization name</label>
               <input
                 value={organizationName}
                 onChange={(e) => setOrganizationName(e.target.value)}
@@ -80,7 +80,7 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Full name</label>
+              <label className="block text-sm font-medium text-body mb-1.5">Full name</label>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -91,7 +91,7 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Email</label>
+              <label className="block text-sm font-medium text-body mb-1.5">Email</label>
               <input
                 type="email"
                 value={email}
@@ -103,7 +103,7 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Password</label>
+              <label className="block text-sm font-medium text-body mb-1.5">Password</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
@@ -127,7 +127,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
+              className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
             >
               {loading ? 'Creating workspace...' : 'Create workspace'}
             </button>

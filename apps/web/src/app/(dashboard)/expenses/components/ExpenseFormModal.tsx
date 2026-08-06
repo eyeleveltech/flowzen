@@ -62,16 +62,16 @@ export function ExpenseFormModal({ onClose, onSaved }: Props) {
     <>
       <div className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={onClose} />
       <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-2xl flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-subtle">
           <h2 className="text-lg font-semibold text-primary">Log Expense</h2>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-[#F3F4F6]">
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-subtle">
             <Icon as={X} size="md" className="text-secondary" />
           </button>
         </div>
         
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
           <div>
-            <label className="block text-sm font-medium text-[#374151] mb-1.5">Vendor *</label>
+            <label className="block text-sm font-medium text-body mb-1.5">Vendor *</label>
             <input
               required
               type="text"
@@ -84,7 +84,7 @@ export function ExpenseFormModal({ onClose, onSaved }: Props) {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Amount *</label>
+              <label className="block text-sm font-medium text-body mb-1.5">Amount *</label>
               <input
                 required
                 type="number"
@@ -96,7 +96,7 @@ export function ExpenseFormModal({ onClose, onSaved }: Props) {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">Date *</label>
+              <label className="block text-sm font-medium text-body mb-1.5">Date *</label>
               <input
                 required
                 type="date"
@@ -108,7 +108,7 @@ export function ExpenseFormModal({ onClose, onSaved }: Props) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[#374151] mb-1.5">Category *</label>
+            <label className="block text-sm font-medium text-body mb-1.5">Category *</label>
             <select
               required
               value={formData.category}
@@ -124,7 +124,7 @@ export function ExpenseFormModal({ onClose, onSaved }: Props) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[#374151] mb-1.5">Related Project (Optional)</label>
+            <label className="block text-sm font-medium text-body mb-1.5">Related Project (Optional)</label>
             <select
               value={formData.projectId}
               onChange={(e) => setFormData(f => ({ ...f, projectId: e.target.value }))}
@@ -138,7 +138,7 @@ export function ExpenseFormModal({ onClose, onSaved }: Props) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[#374151] mb-1.5">Related Client (Optional)</label>
+            <label className="block text-sm font-medium text-body mb-1.5">Related Client (Optional)</label>
             <select
               value={formData.clientId}
               onChange={(e) => setFormData(f => ({ ...f, clientId: e.target.value }))}
@@ -152,7 +152,7 @@ export function ExpenseFormModal({ onClose, onSaved }: Props) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[#374151] mb-1.5">Description / Notes</label>
+            <label className="block text-sm font-medium text-body mb-1.5">Description / Notes</label>
             <textarea
               rows={3}
               value={formData.description}
@@ -163,18 +163,18 @@ export function ExpenseFormModal({ onClose, onSaved }: Props) {
           </div>
         </form>
 
-        <div className="p-6 border-t border-[#F3F4F6] bg-gray-50 flex justify-end gap-3">
+        <div className="p-6 border-t border-subtle bg-gray-50 flex justify-end gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-border rounded-xl transition-colors"
+            className="px-4 py-2.5 text-sm font-medium text-body hover:bg-border rounded-xl transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={submitting}
-            className="px-4 py-2.5 text-sm font-medium text-white bg-primary hover:bg-[#1F2937] rounded-xl transition-colors disabled:opacity-50"
+            className="px-4 py-2.5 text-sm font-medium text-white bg-primary hover:bg-primary-hover rounded-xl transition-colors disabled:opacity-50"
           >
             {submitting ? 'Saving...' : 'Log Expense'}
           </button>

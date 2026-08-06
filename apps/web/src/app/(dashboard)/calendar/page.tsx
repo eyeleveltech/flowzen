@@ -337,9 +337,9 @@ export default function CalendarPage() {
             <button
               type="button"
               onClick={() => setHideDone(!hideDone)}
-              className="flex items-center gap-2 text-xs font-semibold text-secondary ml-auto cursor-pointer select-none focus:outline-none h-9 hover:text-primary transition-colors shrink-0"
+              className="flex items-center gap-2 text-xs font-semibold text-secondary ml-auto cursor-pointer select-none h-9 px-1.5 rounded-lg hover:text-primary transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1"
             >
-              <div className={`flex items-center justify-center h-4 w-4 rounded-sm border transition-colors ${hideDone ? 'bg-primary border-primary' : 'border-[#D1D5DB] bg-white'}`}>
+              <div className={`flex items-center justify-center h-4 w-4 rounded-sm border transition-colors ${hideDone ? 'bg-primary border-primary' : 'border-line bg-white'}`}>
                 {hideDone && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
               </div>
               Hide Done Tasks
@@ -373,7 +373,7 @@ export default function CalendarPage() {
 
           {/* Right Side: Segmented switcher */}
           <div className="flex justify-center sm:justify-end flex-1">
-            <div className="flex bg-[#F3F4F6] p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center">
+            <div className="flex bg-subtle p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center">
               <button
                 type="button"
                 onClick={() => setView('month')}
@@ -398,7 +398,7 @@ export default function CalendarPage() {
           <div className="min-w-full md:min-w-175">
 
             {/* Desktop Grid Headers */}
-            <div className="hidden md:grid grid-cols-7 border-b border-[#F3F4F6]">
+            <div className="hidden md:grid grid-cols-7 border-b border-subtle">
               {(view === 'month' ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] : weekDays).map((d, i) => (
                 <div key={i} className="px-2 py-2.5 text-center text-xs font-medium text-secondary uppercase tracking-wide">
                   {view === 'month' ? d as string : (d as Date).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })}
@@ -410,15 +410,15 @@ export default function CalendarPage() {
             {view === 'month' && (
               <div className="hidden md:grid grid-cols-7">
                 {days.map((day, i) => {
-                  if (day === null) return <div key={i} className="min-h-27.5 border-b border-r border-[#F3F4F6] bg-surface" />;
+                  if (day === null) return <div key={i} className="min-h-27.5 border-b border-r border-subtle bg-surface" />;
 
                   const dObj = new Date(year, month, day);
                   const isToday = today.toDateString() === dObj.toDateString();
                   const dayTasks = getTasksForDate(dObj);
 
                   return (
-                    <div key={i} className="min-h-27.5 border-b border-r border-[#F3F4F6] p-2 hover:bg-[#F9FAFB] transition-colors">
-                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium mb-1.5 ${isToday ? 'bg-primary text-white' : 'text-[#374151]'}`}>
+                    <div key={i} className="min-h-27.5 border-b border-r border-subtle p-2 hover:bg-surface transition-colors">
+                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium mb-1.5 ${isToday ? 'bg-primary text-white' : 'text-body'}`}>
                         {day}
                       </span>
                       <div className="space-y-1">
@@ -440,8 +440,8 @@ export default function CalendarPage() {
                   const dayTasks = getTasksForDate(dObj);
 
                   return (
-                    <div key={i} className="min-h-100 border-b border-r border-[#F3F4F6] p-2 hover:bg-[#F9FAFB] transition-colors flex flex-col gap-2">
-                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium self-center mb-2 ${isToday ? 'bg-primary text-white' : 'text-[#374151]'}`}>
+                    <div key={i} className="min-h-100 border-b border-r border-subtle p-2 hover:bg-surface transition-colors flex flex-col gap-2">
+                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium self-center mb-2 ${isToday ? 'bg-primary text-white' : 'text-body'}`}>
                         {dObj.getDate()}
                       </span>
                       {dayTasks.map((t) => renderTaskPill(t, false))}
@@ -469,7 +469,7 @@ export default function CalendarPage() {
 
                 return agendaDays.map((day, i) => (
                   <div key={i} className="flex flex-col gap-3 bg-white p-4 rounded-xl border border-border">
-                    <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">
+                    <h3 className="text-sm font-semibold text-primary border-b border-subtle pb-2">
                       {day.date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
                     </h3>
                     <div className="flex flex-col gap-2">

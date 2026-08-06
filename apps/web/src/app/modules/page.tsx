@@ -78,7 +78,7 @@ export default function ModulePickerPage() {
                 onClick={() => enter(m.key, m.home)}
                 className="group flex flex-col items-start gap-4 rounded-2xl border border-border bg-white p-6 text-left hover:border-primary hover:shadow-md transition-all"
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#F3F4F6] text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-subtle text-primary group-hover:bg-primary group-hover:text-white transition-colors">
                   <Icon className="h-6 w-6" />
                 </div>
                 <div>

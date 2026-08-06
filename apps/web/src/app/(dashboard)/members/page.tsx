@@ -184,7 +184,7 @@ export default function TeamPage() {
       return (
         <div className="h-137.5 flex flex-col items-center justify-center text-center p-8 bg-gray-50/50 rounded-3xl border border-dashed border-border">
           <div className="h-14 w-14 rounded-2xl bg-white flex items-center justify-center border border-border text-secondary mb-5">
-            <Sparkles className="h-6 w-6 text-indigo-500" />
+            <Sparkles className="h-6 w-6 text-secondary" />
           </div>
           <h3 className="text-sm font-semibold text-primary">Workload Inspector</h3>
           <p className="text-xs text-secondary max-w-65 mt-2 leading-relaxed">
@@ -216,19 +216,19 @@ export default function TeamPage() {
                 <button
                   disabled={promoting}
                   onClick={() => handlePromoteToSuperAdmin(memberDetail.id)}
-                  className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-md bg-subtle text-body border border-border hover:bg-subtle transition-colors disabled:opacity-50"
                 >
                   Promote to Super Admin
                 </button>
               )}
               {designation && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-100">
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-md bg-subtle text-body border border-border">
                   <Briefcase className="h-3 w-3" />
                   {designation}
                 </span>
               )}
               {department && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-100">
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-md bg-subtle text-body border border-border">
                   <Briefcase className="h-3 w-3" />
                   {department}
                 </span>
@@ -238,7 +238,7 @@ export default function TeamPage() {
         </div>
 
         {/* Tab Buttons */}
-        <div className="flex bg-[#F3F4F6] p-1 rounded-xl">
+        <div className="flex bg-subtle p-1 rounded-xl">
           <button
             onClick={() => setActiveTab('tasks')}
             className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-colors duration-150 motion-reduce:transition-none ${activeTab === 'tasks'
@@ -285,7 +285,7 @@ export default function TeamPage() {
                 </div>
                 <div className="h-2 w-full rounded-full bg-border overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-colors duration-150 motion-reduce:transition-none duration-500 ${isOverloaded ? 'bg-red-500' : stats.capacity > 80 ? 'bg-red-500' : stats.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                    className={`h-full rounded-full transition-colors duration-150 motion-reduce:transition-none duration-500 ${isOverloaded ? 'bg-red-500' : stats.capacity > 80 ? 'bg-red-500' : stats.capacity > 50 ? 'bg-amber-500' : 'bg-green-500'
                       }`}
                     style={{ width: `${stats.capacity}%` }}
                   />
@@ -298,7 +298,7 @@ export default function TeamPage() {
                   ) : stats.capacity > 50 ? (
                     <><Icon as={Zap} size="sm" className="text-amber-500 mr-1.5" /> Active workload. Capable of handling smaller tasks.</>
                   ) : (
-                    <><Icon as={Leaf} size="sm" className="text-emerald-500 mr-1.5" /> High availability. Ready for assignments.</>
+                    <><Icon as={Leaf} size="sm" className="text-green-500 mr-1.5" /> High availability. Ready for assignments.</>
                   )}
                 </div>
               </div>
@@ -383,7 +383,7 @@ export default function TeamPage() {
               className="space-y-6"
             >
               {/* Contact Info Card */}
-              <div className="bg-surface rounded-2xl p-5 border border-border/80 space-y-3.5 text-xs text-[#4B5563]">
+              <div className="bg-surface rounded-2xl p-5 border border-border/80 space-y-3.5 text-xs text-body-soft">
                 <h4 className="text-xs text-secondary font-medium uppercase tracking-wide mb-1">Contact Information</h4>
                 <div className="flex items-center gap-3">
                   <Icon as={Mail} size="md" className="text-secondary" />
@@ -413,7 +413,7 @@ export default function TeamPage() {
                   </div>
                   <div className="bg-white p-4 rounded-2xl border border-border">
                     <span className="text-xs text-secondary font-medium uppercase tracking-wide block mb-1">Completed</span>
-                    <p className="text-2xl font-bold text-emerald-600 tabular-nums">{stats.completedTasks}</p>
+                    <p className="text-2xl font-bold text-green-600 tabular-nums">{stats.completedTasks}</p>
                   </div>
                   <div className="bg-white p-4 rounded-2xl border border-border">
                     <span className="text-xs text-secondary font-medium uppercase tracking-wide block mb-1">Total Assigned</span>
@@ -421,7 +421,7 @@ export default function TeamPage() {
                   </div>
                   <div className="bg-white p-4 rounded-2xl border border-border">
                     <span className="text-xs text-secondary font-medium uppercase tracking-wide block mb-1">Led Projects</span>
-                    <p className="text-2xl font-bold text-blue-600 tabular-nums">{stats.totalProjects}</p>
+                    <p className="text-2xl font-bold text-body tabular-nums">{stats.totalProjects}</p>
                   </div>
                 </div>
               </div>
@@ -546,13 +546,13 @@ export default function TeamPage() {
                       </div>
                     </div>
 
-                    <div className="mt-auto pt-4 border-t border-[#F3F4F6] flex items-center justify-between text-xs">
+                    <div className="mt-auto pt-4 border-t border-subtle flex items-center justify-between text-xs">
                       <div className="flex items-center gap-3 text-secondary">
                         <span className="flex items-center gap-1">
                           <span className="font-semibold text-primary">{m.activeTasks}</span>
                           <span className="opacity-80">tasks</span>
                         </span>
-                        <span className="h-0.5 w-0.5 rounded-full bg-[#D1D5DB]"></span>
+                        <span className="h-0.5 w-0.5 rounded-full bg-line"></span>
                         <span className="flex items-center gap-1">
                           <span className="font-semibold text-primary">{m.totalProjects}</span>
                           <span className="opacity-80">projects</span>
@@ -561,7 +561,7 @@ export default function TeamPage() {
 
                       {/* Minimal Capacity Dot */}
                       <div className="flex items-center gap-1.5" title={`Capacity: ${m.capacity}%`}>
-                        <div className={`h-2 w-2 rounded-full ${m.capacity > 80 ? 'bg-red-500' : m.capacity > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                        <div className={`h-2 w-2 rounded-full ${m.capacity > 80 ? 'bg-red-500' : m.capacity > 50 ? 'bg-amber-500' : 'bg-green-500'
                           }`} />
                         <span className="text-secondary font-medium">{m.capacity}%</span>
                       </div>

@@ -90,14 +90,14 @@ export function BillingTab() {
       </div>
 
       <div>
-        <label htmlFor="billing-standard-terms" className="block text-sm font-medium text-[#374151] mb-1.5">Standard Terms &amp; Conditions</label>
+        <label htmlFor="billing-standard-terms" className="block text-sm font-medium text-body mb-1.5">Standard Terms &amp; Conditions</label>
         <textarea id="billing-standard-terms" value={form.standardTerms} onChange={(e) => setForm({ ...form, standardTerms: e.target.value })} rows={5} placeholder="Pre-filled on every new quotation…" className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 resize-none" />
       </div>
 
       <div>
         <h3 className="text-sm font-semibold text-primary mb-3">Document Styling</h3>
         <div className="w-full sm:w-1/2">
-          <label htmlFor="billing-quotation-template" className="block text-sm font-medium text-[#374151] mb-1.5">Quotation &amp; Proforma Template</label>
+          <label htmlFor="billing-quotation-template" className="block text-sm font-medium text-body mb-1.5">Quotation &amp; Proforma Template</label>
           <Select
             id="billing-quotation-template"
             ariaLabel="Quotation & Proforma Template"
@@ -114,7 +114,7 @@ export function BillingTab() {
       </div>
 
       <div className="flex justify-end">
-        <button onClick={save} disabled={saving} className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-[#1F2937] disabled:opacity-50">
+        <button onClick={save} disabled={saving} className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-primary-hover disabled:opacity-50">
           <Icon as={Save} size="md" /> {saving ? 'Saving…' : 'Save'}
         </button>
       </div>
@@ -125,7 +125,7 @@ export function BillingTab() {
 function Field({ id, label, value, onChange, placeholder, hint }: { id?: string; label: string; value: string; onChange: (v: string) => void; placeholder?: string; hint?: string }) {
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-medium text-[#374151] mb-1.5">{label}</label>
+      <label htmlFor={id} className="block text-sm font-medium text-body mb-1.5">{label}</label>
       <input id={id} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1" />
       {hint && <p className="mt-1 text-[11px] text-secondary">{hint}</p>}
     </div>

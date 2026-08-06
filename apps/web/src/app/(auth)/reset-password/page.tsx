@@ -60,7 +60,7 @@ function ResetPasswordForm() {
     <div className="w-full max-w-md space-y-8 rounded-2xl bg-white p-8 shadow-xl shadow-black/5 ring-1 ring-border">
 
       <div className="text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#F3F4F6] mb-4">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-subtle mb-4">
           <KeyRound className="h-6 w-6 text-primary" />
         </div>
         <h2 className="text-2xl font-bold tracking-tight text-primary">Set new password</h2>
@@ -76,7 +76,7 @@ function ResetPasswordForm() {
             <p className="mt-1">You can now sign in with your new password.</p>
           </div>
           <Link href="/login" className="w-full">
-            <button className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none h-11 group flex items-center justify-center">
+            <button className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover transition-colors duration-150 motion-reduce:transition-none h-11 group flex items-center justify-center">
               Go to login
               <Icon as={ArrowRight} size="md" className="ml-2 transition-transform group-hover:translate-x-1" />
             </button>
@@ -85,14 +85,14 @@ function ResetPasswordForm() {
       ) : (
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {error && (
-            <div className="rounded-xl bg-[#FEF2F2] p-4 text-sm text-[#991B1B] ring-1 ring-[#DC2626]/20">
+            <div className="rounded-xl bg-[#FEF2F2] p-4 text-sm text-[#991B1B] ring-1 ring-danger-hover/20">
               {error}
             </div>
           )}
 
           <div className="space-y-4">
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-[#374151]">
+              <label htmlFor="password" className="block text-sm font-medium text-body">
                 New password
               </label>
               <div className="mt-1 relative">
@@ -104,7 +104,7 @@ function ResetPasswordForm() {
                   disabled={!token}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full appearance-none rounded-xl border border-border bg-[#F9FAFB] px-4 py-3 pr-10 text-primary placeholder:text-secondary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-colors duration-150 motion-reduce:transition-none sm:text-sm disabled:opacity-50"
+                  className="block w-full appearance-none rounded-xl border border-border bg-surface px-4 py-3 pr-10 text-primary placeholder:text-secondary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-colors duration-150 motion-reduce:transition-none sm:text-sm disabled:opacity-50"
                   placeholder="••••••••"
                 />
                 <button
@@ -118,7 +118,7 @@ function ResetPasswordForm() {
             </div>
 
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-[#374151]">
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-body">
                 Confirm new password
               </label>
               <div className="mt-1 relative">
@@ -130,7 +130,7 @@ function ResetPasswordForm() {
                   disabled={!token}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="block w-full appearance-none rounded-xl border border-border bg-[#F9FAFB] px-4 py-3 pr-10 text-primary placeholder:text-secondary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-colors duration-150 motion-reduce:transition-none sm:text-sm disabled:opacity-50"
+                  className="block w-full appearance-none rounded-xl border border-border bg-surface px-4 py-3 pr-10 text-primary placeholder:text-secondary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-colors duration-150 motion-reduce:transition-none sm:text-sm disabled:opacity-50"
                   placeholder="••••••••"
                 />
               </div>
@@ -140,7 +140,7 @@ function ResetPasswordForm() {
           <button
             type="submit"
             disabled={loading || !token}
-            className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none h-11"
+            className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none h-11"
           >
             {loading ? 'Resetting...' : 'Reset password'}
           </button>

@@ -69,7 +69,7 @@ export function BottomTabs() {
             >
               {/* Handle */}
               <div className="flex justify-center pt-3 pb-1">
-                <div className="h-1 w-10 rounded-full bg-[#D1D5DB]" />
+                <div className="h-1 w-10 rounded-full bg-line" />
               </div>
 
               {/* Header */}
@@ -77,7 +77,7 @@ export function BottomTabs() {
                 <h3 className="text-base font-semibold text-primary">More</h3>
                 <button
                   onClick={() => setShowMore(false)}
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F3F4F6] text-secondary hover:bg-border transition-colors"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-subtle text-secondary hover:bg-border transition-colors"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -87,7 +87,7 @@ export function BottomTabs() {
               <nav className="px-3 pb-2">
                 {canSwitch && (
                   <Link href="/modules" onClick={() => setShowMore(false)}>
-                    <div className="flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none border border-border mb-1">
+                    <div className="flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-medium text-body hover:bg-surface transition-colors duration-150 motion-reduce:transition-none border border-border mb-1">
                       <ArrowLeftRight className="h-5 w-5 text-secondary" />
                       Switch module
                     </div>
@@ -104,7 +104,7 @@ export function BottomTabs() {
                       <div
                         className={`flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-medium transition-colors duration-150 motion-reduce:transition-none ${isActive
                           ? 'bg-primary text-white'
-                          : 'text-[#374151] hover:bg-[#F9FAFB]'
+                          : 'text-body hover:bg-surface'
                           }`}
                       >
                         <item.icon
@@ -119,7 +119,7 @@ export function BottomTabs() {
               </nav>
 
               {/* Sign Out */}
-              <div className="border-t border-[#F3F4F6] px-3 py-2 pb-20">
+              <div className="border-t border-subtle px-3 py-2 pb-20">
                 <button
                   onClick={() => {
                     logout();

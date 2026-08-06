@@ -121,7 +121,7 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
             <h2 className="text-lg font-semibold text-primary">Edit Lead Details</h2>
             <p className="text-sm text-secondary">Update information for {leadLabel}</p>
           </div>
-          <button onClick={guardedClose} className="p-2 text-secondary hover:text-primary rounded-lg hover:bg-[#F3F4F6] transition-colors">
+          <button onClick={guardedClose} className="p-2 text-secondary hover:text-primary rounded-lg hover:bg-subtle transition-colors">
             <Icon as={X} size="lg" />
           </button>
         </div>
@@ -238,15 +238,15 @@ export function EditLeadModal({ lead, onClose, onSuccess }: { lead: any; onClose
           </form>
         </div>
 
-        <div className="p-6 pb-safe border-t border-border bg-[#F9FAFB] shrink-0 flex items-center justify-end gap-3">
-          <button type="button" onClick={guardedClose} className="px-4 py-2 text-sm font-medium text-[#374151] hover:bg-border rounded-xl transition-all">
+        <div className="p-6 pb-safe border-t border-border bg-surface shrink-0 flex items-center justify-end gap-3">
+          <button type="button" onClick={guardedClose} className="px-4 py-2 text-sm font-medium text-body hover:bg-border rounded-xl transition-all">
             Cancel
           </button>
           <button
             type="submit"
             form="editLeadForm"
             disabled={submitting}
-            className="flex items-center gap-2 px-6 py-2 bg-primary text-white text-sm font-medium rounded-xl hover:bg-[#1F2937] transition-all disabled:opacity-50"
+            className="flex items-center gap-2 px-6 py-2 bg-primary text-white text-sm font-medium rounded-xl hover:bg-primary-hover transition-all disabled:opacity-50"
           >
             {submitting ? (
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />

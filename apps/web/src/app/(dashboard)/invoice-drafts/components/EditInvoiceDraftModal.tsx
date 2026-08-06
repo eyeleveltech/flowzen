@@ -131,12 +131,12 @@ export function EditInvoiceDraftModal({ draftId, onClose, onSaved }: { draftId: 
       <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex h-full max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <h2 className="text-lg font-semibold text-primary">Edit Invoice Draft</h2>
-          <button onClick={onClose} className="rounded-lg p-2 text-secondary hover:bg-[#F3F4F6] transition-colors"><Icon as={X} size="lg" /></button>
+          <button onClick={onClose} className="rounded-lg p-2 text-secondary hover:bg-subtle transition-colors"><Icon as={X} size="lg" /></button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-[#F9FAFB]">
+        <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-surface">
           <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
-            <div className="border-b border-border bg-[#F9FAFB] px-4 py-3"><h3 className="font-semibold text-primary">Line Items</h3></div>
+            <div className="border-b border-border bg-surface px-4 py-3"><h3 className="font-semibold text-primary">Line Items</h3></div>
             <div className="p-4 space-y-4">
               <div className="hidden lg:grid grid-cols-[2fr_1fr_1fr_1.5fr_1fr_1.5fr_0.5fr] gap-4 px-2 text-xs font-semibold text-secondary uppercase tracking-wider">
                 <div>Description</div>
@@ -165,7 +165,7 @@ export function EditInvoiceDraftModal({ draftId, onClose, onSaved }: { draftId: 
                 ))}
               </div>
 
-              <button onClick={() => setLineItems([...lineItems, emptyLine()])} className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 p-2 rounded-lg hover:bg-blue-50 transition-colors w-max"><Icon as={Plus} size="md" /> Add Item</button>
+              <button onClick={() => setLineItems([...lineItems, emptyLine()])} className="flex items-center gap-2 text-sm font-medium text-body hover:text-body p-2 rounded-lg hover:bg-subtle transition-colors w-max"><Icon as={Plus} size="md" /> Add Item</button>
 
               <div className="mt-8 flex flex-col items-end border-t border-border pt-6">
                 <div className="w-full max-w-sm space-y-3">
@@ -189,16 +189,16 @@ export function EditInvoiceDraftModal({ draftId, onClose, onSaved }: { draftId: 
           </div>
           
           <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
-             <div className="border-b border-border bg-[#F9FAFB] px-4 py-3"><h3 className="font-semibold text-primary">Notes</h3></div>
+             <div className="border-b border-border bg-surface px-4 py-3"><h3 className="font-semibold text-primary">Notes</h3></div>
              <div className="p-4">
                  <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Additional notes..." className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 resize-none" />
              </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4 bg-[#F9FAFB]">
+        <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4 bg-surface">
           <button onClick={onClose} disabled={submitting} className="rounded-xl px-5 py-2.5 text-sm font-medium text-secondary hover:bg-border transition-colors disabled:opacity-50">Cancel</button>
-          <button onClick={handleSave} disabled={submitting} className="flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none shadow-sm disabled:opacity-50">
+          <button onClick={handleSave} disabled={submitting} className="flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-white hover:bg-primary-hover transition-colors duration-150 motion-reduce:transition-none shadow-sm disabled:opacity-50">
             {submitting ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> : <Icon as={Save} size="md" />}
             Save Draft
           </button>

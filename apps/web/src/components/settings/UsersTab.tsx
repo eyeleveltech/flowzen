@@ -237,7 +237,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                 <tr key={u.id} className="hover:bg-surface transition-colors">
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded-full bg-[#F3F4F6] text-primary flex items-center justify-center text-xs font-medium border border-border">
+                      <div className="h-8 w-8 rounded-full bg-subtle text-primary flex items-center justify-center text-xs font-medium border border-border">
                         {getInitials(u.name)}
                       </div>
                       <div>
@@ -256,9 +256,9 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                     {u.designation || '—'}
                   </td>
                   <td className="px-5 py-3">
-                    {u.status === 'ACTIVE' && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[#F3F4F6] text-primary border border-border uppercase tracking-wide">Active</span>}
-                    {u.status === 'PENDING' && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[#F3F4F6] text-secondary border border-border uppercase tracking-wide">Pending</span>}
-                    {u.status === 'INACTIVE' && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[#F9FAFB] text-secondary border border-border uppercase tracking-wide">Inactive</span>}
+                    {u.status === 'ACTIVE' && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-subtle text-primary border border-border uppercase tracking-wide">Active</span>}
+                    {u.status === 'PENDING' && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-subtle text-secondary border border-border uppercase tracking-wide">Pending</span>}
+                    {u.status === 'INACTIVE' && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-surface text-secondary border border-border uppercase tracking-wide">Inactive</span>}
                   </td>
                   <td className="px-5 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
@@ -275,7 +275,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                         <button
                           onClick={() => handleResendInvite(u.id)}
                           title="Resend invite email"
-                          className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors"
+                          className="p-1.5 text-body hover:text-body hover:bg-subtle rounded-md transition-colors"
                         >
                           <Icon as={Mail} size="md" />
                         </button>
@@ -283,7 +283,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                       <button
                         onClick={() => setEditingUser(u)}
                         title="Edit user"
-                        className="p-1.5 text-secondary hover:text-primary hover:bg-[#F3F4F6] rounded-md transition-colors"
+                        className="p-1.5 text-secondary hover:text-primary hover:bg-subtle rounded-md transition-colors"
                       >
                         <Icon as={Edit2} size="md" />
                       </button>
@@ -331,10 +331,10 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
         {/* Mobile Card View (Optimized for 320px+) */}
         <div className="md:hidden flex flex-col divide-y divide-border">
           {users.map((u) => (
-            <div key={u.id} className="p-3.5 sm:p-4 hover:bg-[#F9FAFB] transition-colors relative">
+            <div key={u.id} className="p-3.5 sm:p-4 hover:bg-surface transition-colors relative">
               <div className="flex items-start justify-between gap-2 mb-3">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="h-9 w-9 rounded-full bg-[#F3F4F6] text-primary flex items-center justify-center text-xs font-semibold border border-border shrink-0">
+                  <div className="h-9 w-9 rounded-full bg-subtle text-primary flex items-center justify-center text-xs font-semibold border border-border shrink-0">
                     {getInitials(u.name)}
                   </div>
                   <div className="min-w-0">
@@ -355,7 +355,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                   <button
                     onClick={() => setEditingUser(u)}
                     title="Edit user"
-                    className="p-1.5 text-secondary hover:text-primary bg-white border border-border hover:bg-[#F3F4F6] rounded-xl transition-colors duration-150 motion-reduce:transition-none"
+                    className="p-1.5 text-secondary hover:text-primary bg-white border border-border hover:bg-subtle rounded-xl transition-colors duration-150 motion-reduce:transition-none"
                   >
                     <Icon as={Edit2} size="md" />
                   </button>
@@ -394,7 +394,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 mt-3 bg-[#F9FAFB] p-2.5 rounded-xl border border-border text-xs">
+              <div className="grid grid-cols-2 gap-2 mt-3 bg-surface p-2.5 rounded-xl border border-border text-xs">
                 <div className="min-w-0">
                   <span className="text-[10px] font-medium text-secondary uppercase tracking-wide block mb-0.5">Role</span>
                   <span className="font-medium text-primary block truncate">{getRoleLabel(u.role)}</span>
@@ -425,19 +425,19 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
       <Drawer variant="slideover" isOpen={showInvite} onClose={() => setShowInvite(false)} title="Invite Member">
         <form onSubmit={handleInvite} className="space-y-4">
           <div className="space-y-1.5">
-            <label htmlFor="invite-name" className="text-sm font-medium text-[#374151]">Full Name</label>
+            <label htmlFor="invite-name" className="text-sm font-medium text-body">Full Name</label>
             <input id="invite-name" required value={inviteForm.name} onChange={(e) => setInviteForm({ ...inviteForm, name: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none transition-colors duration-150 motion-reduce:transition-none" />
           </div>
           <div className="space-y-1.5">
-            <label htmlFor="invite-email" className="text-sm font-medium text-[#374151]">Email Address</label>
+            <label htmlFor="invite-email" className="text-sm font-medium text-body">Email Address</label>
             <input id="invite-email" required type="email" value={inviteForm.email} onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none transition-colors duration-150 motion-reduce:transition-none" />
           </div>
           <div className="space-y-1.5 z-30 relative">
-            <label htmlFor="invite-role" className="text-sm font-medium text-[#374151]">Role</label>
+            <label htmlFor="invite-role" className="text-sm font-medium text-body">Role</label>
             <Select id="invite-role" ariaLabel="Role" value={inviteForm.role} onChange={(val) => setInviteForm({ ...inviteForm, role: val })} options={roleOptions} />
           </div>
           <div className="space-y-1.5 z-20 relative">
-            <label htmlFor="invite-team" className="text-sm font-medium text-[#374151]">Team (Optional)</label>
+            <label htmlFor="invite-team" className="text-sm font-medium text-body">Team (Optional)</label>
             <Select
               id="invite-team"
               ariaLabel="Team"
@@ -447,11 +447,11 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
             />
           </div>
           <div className="space-y-1.5 relative">
-            <label htmlFor="invite-designation" className="text-sm font-medium text-[#374151]">Designation (Optional)</label>
+            <label htmlFor="invite-designation" className="text-sm font-medium text-body">Designation (Optional)</label>
             <input id="invite-designation" list="designation-options" placeholder="Select or type a designation…" value={inviteForm.designation || ''} onChange={(e) => setInviteForm({ ...inviteForm, designation: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none transition-colors duration-150 motion-reduce:transition-none" />
           </div>
           <div className="pt-8 flex gap-3">
-            <button type="button" onClick={() => setShowInvite(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-border text-[#374151] font-medium hover:bg-surface transition-colors">Cancel</button>
+            <button type="button" onClick={() => setShowInvite(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-border text-body font-medium hover:bg-surface transition-colors">Cancel</button>
             <button type="submit" disabled={saving} className="flex-1 bg-primary text-white px-4 py-2.5 rounded-xl font-medium hover:bg-black transition-colors disabled:opacity-50">
               {saving ? 'Sending...' : 'Send Invite'}
             </button>
@@ -463,15 +463,15 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
         {editingUser && (
           <form onSubmit={handleUpdateUser} className="space-y-4">
             <div className="space-y-1.5">
-              <label htmlFor="edit-name" className="text-sm font-medium text-[#374151]">Full Name</label>
+              <label htmlFor="edit-name" className="text-sm font-medium text-body">Full Name</label>
               <input id="edit-name" required value={editingUser.name} onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none transition-colors duration-150 motion-reduce:transition-none" />
             </div>
             <div className="space-y-1.5 z-40 relative">
-              <label htmlFor="edit-role" className="text-sm font-medium text-[#374151]">Role</label>
+              <label htmlFor="edit-role" className="text-sm font-medium text-body">Role</label>
               <Select id="edit-role" ariaLabel="Role" value={editingUser.role} onChange={(val) => setEditingUser({ ...editingUser, role: val })} options={roleOptions} disabled={editingUser.role === 'SUPER_ADMIN'} />
             </div>
             <div className="space-y-1.5 z-30 relative">
-              <label htmlFor="edit-team" className="text-sm font-medium text-[#374151]">Team (Optional)</label>
+              <label htmlFor="edit-team" className="text-sm font-medium text-body">Team (Optional)</label>
               <Select
                 id="edit-team"
                 ariaLabel="Team"
@@ -481,12 +481,12 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
               />
             </div>
             <div className="space-y-1.5 relative">
-              <label htmlFor="edit-designation" className="text-sm font-medium text-[#374151]">Designation (Optional)</label>
+              <label htmlFor="edit-designation" className="text-sm font-medium text-body">Designation (Optional)</label>
               <input id="edit-designation" list="designation-options" placeholder="Select or type a designation…" value={editingUser.designation || ''} onChange={(e) => setEditingUser({ ...editingUser, designation: e.target.value })} className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none transition-colors duration-150 motion-reduce:transition-none" />
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="edit-cost-rate" className="text-sm font-medium text-[#374151]">Hourly Cost Rate (₹)</label>
+              <label htmlFor="edit-cost-rate" className="text-sm font-medium text-body">Hourly Cost Rate (₹)</label>
               <input
                 id="edit-cost-rate" type="number" min="0" step="1" placeholder="e.g. 500"
                 value={editingUser.hourlyCostRate ?? ''}
@@ -502,11 +502,11 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
               </p>
             </div>
             <div className="space-y-1.5 z-10 relative">
-              <label htmlFor="edit-status" className="text-sm font-medium text-[#374151]">Status</label>
+              <label htmlFor="edit-status" className="text-sm font-medium text-body">Status</label>
               <Select id="edit-status" ariaLabel="Status" value={editingUser.status} onChange={(val) => setEditingUser({ ...editingUser, status: val })} options={[{ label: 'Active', value: 'ACTIVE' }, { label: 'Pending', value: 'PENDING' }, { label: 'Inactive', value: 'INACTIVE' }]} />
             </div>
             <div className="pt-8 flex gap-3">
-              <button type="button" onClick={() => setEditingUser(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-border text-[#374151] font-medium hover:bg-surface transition-colors">Cancel</button>
+              <button type="button" onClick={() => setEditingUser(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-border text-body font-medium hover:bg-surface transition-colors">Cancel</button>
               <button type="submit" disabled={saving} className="flex-1 bg-primary text-white px-4 py-2.5 rounded-xl font-medium hover:bg-black transition-colors disabled:opacity-50">
                 {saving ? 'Saving...' : 'Save Changes'}
               </button>
@@ -567,7 +567,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                 <button
                   type="button"
                   onClick={() => setTransferTarget(null)}
-                  className="flex-1 px-4 py-2.5 rounded-xl border border-border text-[#374151] font-medium hover:bg-surface transition-colors"
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-border text-body font-medium hover:bg-surface transition-colors"
                 >
                   Cancel
                 </button>

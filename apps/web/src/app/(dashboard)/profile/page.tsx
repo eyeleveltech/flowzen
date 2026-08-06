@@ -134,7 +134,7 @@ export default function ProfilePage() {
         {/* Personal Information Section */}
         <section className="rounded-2xl border border-border bg-white shadow-sm">
           <div className="border-b border-border px-4 sm:px-6 py-4 sm:py-5 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F3F4F6] shrink-0">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-subtle shrink-0">
               <Icon as={User} size="lg" className="text-secondary" />
             </div>
             <div>
@@ -146,7 +146,7 @@ export default function ProfilePage() {
             <form onSubmit={handleProfileSubmit} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label htmlFor="profile-name" className="text-sm font-medium text-[#374151]">Full Name</label>
+                  <label htmlFor="profile-name" className="text-sm font-medium text-body">Full Name</label>
                   <input
                     id="profile-name"
                     type="text"
@@ -157,18 +157,18 @@ export default function ProfilePage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label htmlFor="profile-email" className="text-sm font-medium text-[#374151]">Email Address</label>
+                  <label htmlFor="profile-email" className="text-sm font-medium text-body">Email Address</label>
                   <input
                     id="profile-email"
                     type="email"
                     disabled
                     value={user.email}
-                    className="w-full rounded-xl border border-border bg-[#F9FAFB] px-4 py-2.5 text-sm text-secondary cursor-not-allowed"
+                    className="w-full rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-secondary cursor-not-allowed"
                     title="Email cannot be changed"
                   />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <label htmlFor="profile-designation" className="text-sm font-medium text-[#374151]">Designation (Job Title)</label>
+                  <label htmlFor="profile-designation" className="text-sm font-medium text-body">Designation (Job Title)</label>
                   <input
                     id="profile-designation"
                     type="text"
@@ -183,7 +183,7 @@ export default function ProfilePage() {
                   </datalist>
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <label className="text-sm font-medium text-[#374151]">Department</label>
+                  <label className="text-sm font-medium text-body">Department</label>
                   <p className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary">
                     {user.team?.name || '—'}
                   </p>
@@ -194,7 +194,7 @@ export default function ProfilePage() {
                 <button
                   type="submit"
                   disabled={savingProfile}
-                  className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
+                  className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
                 >
                   <Icon as={Save} size="md" />
                   {savingProfile ? 'Saving...' : 'Save Profile'}
@@ -207,7 +207,7 @@ export default function ProfilePage() {
         {/* Security Section */}
         <section className="rounded-2xl border border-border bg-white shadow-sm overflow-hidden">
           <div className="border-b border-border px-4 sm:px-6 py-4 sm:py-5 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F3F4F6] shrink-0">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-subtle shrink-0">
               <Icon as={KeyRound} size="lg" className="text-secondary" />
             </div>
             <div>
@@ -218,7 +218,7 @@ export default function ProfilePage() {
           <div className="p-4 sm:p-6">
             <form onSubmit={handlePasswordSubmit} className="space-y-4 max-w-md">
               <div className="space-y-1.5 relative">
-                <label htmlFor="profile-current-password" className="text-sm font-medium text-[#374151]">Current Password</label>
+                <label htmlFor="profile-current-password" className="text-sm font-medium text-body">Current Password</label>
                 <div className="relative">
                   <input
                     id="profile-current-password"
@@ -238,7 +238,7 @@ export default function ProfilePage() {
                 </div>
               </div>
               <div className="space-y-1.5 relative">
-                <label htmlFor="profile-new-password" className="text-sm font-medium text-[#374151]">New Password</label>
+                <label htmlFor="profile-new-password" className="text-sm font-medium text-body">New Password</label>
                 <div className="relative">
                   <input
                     id="profile-new-password"
@@ -251,7 +251,7 @@ export default function ProfilePage() {
                 </div>
               </div>
               <div className="space-y-1.5 relative">
-                <label htmlFor="profile-confirm-password" className="text-sm font-medium text-[#374151]">Confirm New Password</label>
+                <label htmlFor="profile-confirm-password" className="text-sm font-medium text-body">Confirm New Password</label>
                 <div className="relative">
                   <input
                     id="profile-confirm-password"
@@ -267,7 +267,7 @@ export default function ProfilePage() {
                 <button
                   type="submit"
                   disabled={savingPassword}
-                  className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
+                  className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
                 >
                   <Icon as={Save} size="md" />
                   {savingPassword ? 'Updating...' : 'Update Password'}

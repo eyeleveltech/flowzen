@@ -84,7 +84,7 @@ export default function LostDealsPage() {
               <div className="flex-1 w-full space-y-1.5">
                 {data.lossByReason.map((r: any, i: number) => (
                   <div key={r.reason} className="flex items-center justify-between text-sm">
-                    <span className="flex items-center gap-2 text-[#374151]"><span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: COLORS[i % COLORS.length] }} /> <span className="truncate">{label(r.reason)}</span></span>
+                    <span className="flex items-center gap-2 text-body"><span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: COLORS[i % COLORS.length] }} /> <span className="truncate">{label(r.reason)}</span></span>
                     <span className="text-secondary shrink-0 ml-2">{r.count} · {r.pct}%</span>
                   </div>
                 ))}

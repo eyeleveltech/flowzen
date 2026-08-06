@@ -62,7 +62,7 @@ function SocialLink({ platform, input }: { platform: 'linkedin' | 'instagram' | 
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline inline-flex items-center gap-1 transition-colors"
+      className="text-sm font-medium text-body hover:text-body hover:underline inline-flex items-center gap-1 transition-colors"
     >
       {display}
     </a>
@@ -174,7 +174,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   setActiveTab('tasks');
                   setAutoOpenTaskForm(true);
                 }}
-                className="flex items-center justify-center gap-2 px-3.5 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-[#1F2937] transition-colors shadow-sm"
+                className="flex items-center justify-center gap-2 px-3.5 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-hover transition-colors shadow-sm"
               >
                 <Icon as={Plus} size="md" />
                 <span className="hidden sm:inline">Add Task</span>
@@ -202,7 +202,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                       setPreparingProject(false);
                     }
                   }}
-                  className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-[#1F2937] disabled:opacity-60 transition-colors"
+                  className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-hover disabled:opacity-60 transition-colors"
                 >
                   <Icon as={FolderPlus} size="md" />
                   <span className="hidden sm:inline">{preparingProject ? 'Preparing…' : 'Create Project'}</span>
@@ -212,19 +212,19 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   never forces a company to exist twice. */}
               <button
                 onClick={() => router.push(`/quotations?create=true&leadId=${leadId}`)}
-                className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-[#4B5563] bg-white border border-border rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-body-soft bg-white border border-border rounded-lg hover:bg-gray-50 transition-colors"
               >
                 <Icon as={Receipt} size="md" /> <span className="hidden sm:inline">Raise Quotation</span>
               </button>
               <button
                 onClick={() => setIsPipelineDetailsModalOpen(true)}
-                className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-[#4B5563] bg-white border border-border rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-body-soft bg-white border border-border rounded-lg hover:bg-gray-50 transition-colors"
               >
                 <Icon as={Tag} size="md" /> <span className="hidden sm:inline">Stage Data</span>
               </button>
               <button
                 onClick={() => setIsEditModalOpen(true)}
-                className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-[#4B5563] bg-white border border-border rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-body-soft bg-white border border-border rounded-lg hover:bg-gray-50 transition-colors"
               >
                 <Icon as={Pencil} size="md" /> <span className="hidden sm:inline">Edit</span>
               </button>
@@ -250,7 +250,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                     <h1 className="text-2xl font-bold text-primary leading-none truncate">{displayName}</h1>
                   </OverflowMarquee>
                   <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-1 rounded-md bg-purple-50 text-purple-700 text-[10px] font-bold tracking-wider uppercase border border-purple-200 whitespace-nowrap">
+                    <span className="px-2.5 py-1 rounded-md bg-subtle text-body text-[10px] font-bold tracking-wider uppercase border border-border whitespace-nowrap">
                       {leadStageLabel(lead.stage)}
                     </span>
                     {lead.client?.status === 'ONHOLD' && (
@@ -364,14 +364,14 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
               const isCurrent = lead.stage === stage;
               return (
                 <div key={stage} className="flex flex-col items-center gap-2.5 relative min-w-30 shrink-0">
-                  <div className={`h-7 w-7 rounded-full flex items-center justify-center text-[11px] font-bold z-10 transition-colors ${isCurrent ? 'bg-primary text-white ring-4 ring-primary/10' : isCompleted ? 'bg-blue-50 text-blue-600 ring-4 ring-white' : 'bg-gray-50 text-gray-400 ring-4 ring-white border border-border'}`}>
+                  <div className={`h-7 w-7 rounded-full flex items-center justify-center text-[11px] font-bold z-10 transition-colors ${isCurrent ? 'bg-primary text-white ring-4 ring-primary/10' : isCompleted ? 'bg-subtle text-body ring-4 ring-white' : 'bg-gray-50 text-gray-400 ring-4 ring-white border border-border'}`}>
                     {idx + 1}
                   </div>
                   <span className={`text-[10px] font-bold uppercase tracking-wider text-center ${isCurrent ? 'text-primary' : isCompleted ? 'text-secondary' : 'text-gray-400'}`}>
                     {leadStageLabel(stage)}
                   </span>
                   {idx < 7 && (
-                    <div className={`absolute top-3.5 left-1/2 w-full h-0.5 z-0 ${isCompleted && !isCurrent ? 'bg-blue-100' : 'bg-gray-100'}`} />
+                    <div className={`absolute top-3.5 left-1/2 w-full h-0.5 z-0 ${isCompleted && !isCurrent ? 'bg-subtle' : 'bg-gray-100'}`} />
                   )}
                 </div>
               );
@@ -425,7 +425,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                       <Detail label="Company Size" value={lead.companySize} />
                       <Detail label="Website">
                         {website ? (
-                          <a href={website.startsWith('http') ? website : `https://${website}`} target="_blank" rel="noreferrer" className="text-sm font-medium text-blue-600 hover:underline flex items-center gap-1.5 truncate">
+                          <a href={website.startsWith('http') ? website : `https://${website}`} target="_blank" rel="noreferrer" className="text-sm font-medium text-body hover:underline flex items-center gap-1.5 truncate">
                             <Icon as={Globe} size="sm" className="shrink-0" /> <span className="truncate">{website}</span>
                           </a>
                         ) : <span className="text-sm text-gray-400">—</span>}
@@ -489,7 +489,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                         <div className="flex flex-col gap-1">
                           <SocialLink platform="linkedin" input={lead.linkedinUrl} />
                           <div className="flex items-center gap-1.5 mt-1">
-                            <Globe className={`h-3.5 w-3.5 ${lead.linkedinChecked ? 'text-blue-600' : 'text-gray-300'}`} />
+                            <Globe className={`h-3.5 w-3.5 ${lead.linkedinChecked ? 'text-body' : 'text-gray-300'}`} />
                             <span className="text-[10px] text-secondary font-medium uppercase tracking-wider">{lead.linkedinChecked ? (lead.linkedinFound ? 'Found' : 'Not Found') : 'Not Checked'}</span>
                           </div>
                         </div>
@@ -579,7 +579,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                       <div className="relative border-l-2 border-gray-100 ml-2 space-y-6">
                         {lead.stageHistory.map((history: any, index: number) => (
                           <div key={history.id || index} className="relative pl-5">
-                            <div className="absolute -left-2.25 top-1.5 h-4 w-4 rounded-full bg-blue-50 border-2 border-blue-500 ring-2 ring-white"></div>
+                            <div className="absolute -left-2.25 top-1.5 h-4 w-4 rounded-full bg-subtle border-2 border-primary ring-2 ring-white"></div>
                             <div className="flex flex-col">
                               <span className="text-sm font-bold text-primary">{leadStageLabel(history.toStage)}</span>
                               <div className="flex items-center gap-1.5 mt-0.5">
@@ -588,7 +588,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                                 <span className="text-[11px] font-medium text-secondary">by {history.changedBy?.name || 'System'}</span>
                               </div>
                               {history.notes && (
-                                <p className="mt-2.5 text-sm text-[#4B5563] bg-gray-50/80 p-3 rounded-lg border border-gray-100 whitespace-pre-wrap leading-relaxed">{history.notes}</p>
+                                <p className="mt-2.5 text-sm text-body-soft bg-gray-50/80 p-3 rounded-lg border border-gray-100 whitespace-pre-wrap leading-relaxed">{history.notes}</p>
                               )}
                             </div>
                           </div>

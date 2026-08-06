@@ -58,7 +58,7 @@ export function ConfirmDialog() {
       case 'info':
       default:
         return (
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-500">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-subtle text-secondary">
             <HelpCircle className="h-6 w-6" />
           </div>
         );
@@ -70,12 +70,12 @@ export function ConfirmDialog() {
     const baseClass = "px-4 py-2 text-sm font-semibold rounded-xl transition-[transform,background-color,border-color,color] duration-200 shadow-sm active:scale-95";
     switch (variant) {
       case 'danger':
-        return `${baseClass} bg-[#EF4444] text-white hover:bg-[#DC2626] hover:shadow-red-100`;
+        return `${baseClass} bg-danger text-white hover:bg-danger-hover hover:shadow-red-100`;
       case 'warning':
-        return `${baseClass} bg-[#F59E0B] text-white hover:bg-[#D97706] hover:shadow-amber-100`;
+        return `${baseClass} bg-warning text-white hover:bg-warning-hover hover:shadow-amber-100`;
       case 'info':
       default:
-        return `${baseClass} bg-primary text-white hover:bg-[#1F2937]`;
+        return `${baseClass} bg-primary text-white hover:bg-primary-hover`;
     }
   };
 
@@ -103,7 +103,7 @@ export function ConfirmDialog() {
             {/* Close Button */}
             <button
               onClick={onCancel}
-              className="absolute right-4 top-4 rounded-lg p-1.5 text-secondary hover:bg-[#F3F4F6] hover:text-[#4B5563] transition-colors"
+              className="absolute right-4 top-4 rounded-lg p-1.5 text-secondary hover:bg-subtle hover:text-body-soft transition-colors"
             >
               <Icon as={X} size="md" />
             </button>
@@ -145,11 +145,11 @@ export function ConfirmDialog() {
             </div>
 
             {/* Footer Buttons */}
-            <div className="mt-6 flex justify-end gap-3 border-t border-[#F3F4F6] pt-4">
+            <div className="mt-6 flex justify-end gap-3 border-t border-subtle pt-4">
               <button
                 type="button"
                 onClick={onCancel}
-                className="px-4 py-2 text-sm font-semibold text-[#4B5563] bg-white border border-border rounded-xl hover:bg-[#F9FAFB] transition-[transform,background-color,border-color,color] duration-200 active:scale-95"
+                className="px-4 py-2 text-sm font-semibold text-body-soft bg-white border border-border rounded-xl hover:bg-surface transition-[transform,background-color,border-color,color] duration-200 active:scale-95"
               >
                 {cancelText}
               </button>

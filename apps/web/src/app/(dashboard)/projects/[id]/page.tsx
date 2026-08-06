@@ -45,7 +45,7 @@ interface ProjectDetail {
 import { StatusBadge } from '@/components/ui/status-badge';
 import { NoAccess } from '@/components/ui/no-access';
 import { NotFoundPanel } from '@/components/ui/not-found-panel';
-import { getPriorityDot } from '@/lib/priority';
+import { getPriorityDot, getPriorityColor } from '@/lib/priority';
 import { Icon } from '@/components/ui/icon';
 
 type Tab = 'tasks' | 'team' | 'activity' | 'comments';
@@ -348,13 +348,13 @@ export default function ProjectDetailPage() {
       {/* Header Skeleton */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-border">
         <div className="space-y-3">
-          <div className="h-4 w-24 bg-[#F3F4F6] rounded-md animate-pulse" />
+          <div className="h-4 w-24 bg-subtle rounded-md animate-pulse" />
           <div className="h-8 w-64 bg-border rounded-lg animate-pulse" />
-          <div className="h-4 w-48 bg-[#F3F4F6] rounded-md animate-pulse" />
+          <div className="h-4 w-48 bg-subtle rounded-md animate-pulse" />
         </div>
         <div className="flex gap-2">
-          <div className="h-10 w-28 bg-[#F3F4F6] rounded-xl animate-pulse" />
-          <div className="h-10 w-28 bg-[#F3F4F6] rounded-xl animate-pulse" />
+          <div className="h-10 w-28 bg-subtle rounded-xl animate-pulse" />
+          <div className="h-10 w-28 bg-subtle rounded-xl animate-pulse" />
         </div>
       </div>
 
@@ -362,10 +362,10 @@ export default function ProjectDetailPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[...Array(4)].map((_, i) => (
           <div key={i} className="bg-white rounded-2xl border border-border p-5 h-32 flex flex-col justify-between">
-            <div className="h-4 w-1/3 bg-[#F3F4F6] rounded-md animate-pulse mb-4" />
+            <div className="h-4 w-1/3 bg-subtle rounded-md animate-pulse mb-4" />
             <div className="space-y-3">
               <div className="h-4 w-full bg-border rounded-md animate-pulse" />
-              <div className="h-4 w-2/3 bg-[#F3F4F6] rounded-md animate-pulse" />
+              <div className="h-4 w-2/3 bg-subtle rounded-md animate-pulse" />
             </div>
           </div>
         ))}
@@ -373,15 +373,15 @@ export default function ProjectDetailPage() {
 
       {/* Main Content Skeleton */}
       <div className="bg-white rounded-2xl border border-border h-96 flex flex-col p-6">
-        <div className="flex gap-6 mb-6 border-b border-[#F3F4F6] pb-4">
+        <div className="flex gap-6 mb-6 border-b border-subtle pb-4">
           <div className="h-6 w-20 bg-border rounded-md animate-pulse" />
-          <div className="h-6 w-24 bg-[#F3F4F6] rounded-md animate-pulse" />
-          <div className="h-6 w-20 bg-[#F3F4F6] rounded-md animate-pulse" />
+          <div className="h-6 w-24 bg-subtle rounded-md animate-pulse" />
+          <div className="h-6 w-20 bg-subtle rounded-md animate-pulse" />
         </div>
         <div className="flex-1 space-y-4">
-          <div className="h-4 w-full bg-[#F3F4F6] rounded-md animate-pulse" />
-          <div className="h-4 w-full bg-[#F3F4F6] rounded-md animate-pulse" />
-          <div className="h-4 w-3/4 bg-[#F3F4F6] rounded-md animate-pulse" />
+          <div className="h-4 w-full bg-subtle rounded-md animate-pulse" />
+          <div className="h-4 w-full bg-subtle rounded-md animate-pulse" />
+          <div className="h-4 w-3/4 bg-subtle rounded-md animate-pulse" />
         </div>
       </div>
     </div>
@@ -478,14 +478,14 @@ export default function ProjectDetailPage() {
           <div className="flex flex-wrap items-center gap-2 md:gap-3 mb-2">
             <h1 className="text-xl md:text-3xl font-semibold text-primary tracking-tight">{project.name}</h1>
             <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium border ${healthConfig[projectHealth].color}`}>
-              <div className={`h-1.5 w-1.5 rounded-full mr-1.5 ${projectHealth === 'GREEN' ? 'bg-emerald-500' : projectHealth === 'AMBER' ? 'bg-amber-500' : 'bg-red-500'}`} />
+              <div className={`h-1.5 w-1.5 rounded-full mr-1.5 ${projectHealth === 'GREEN' ? 'bg-green-500' : projectHealth === 'AMBER' ? 'bg-amber-500' : 'bg-red-500'}`} />
               {healthConfig[projectHealth].label}
             </span>
             <span className="inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 capitalize">
               {project.type?.replace('_', ' ') || 'One Time'}
             </span>
             {project.reportingCadence && project.reportingCadence !== 'NONE' && (
-              <span className="inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium bg-teal-50 text-teal-700 border border-teal-200">
+              <span className="inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium bg-subtle text-body border border-border">
                 {project.reportingCadence === 'WEEKLY' ? 'Weekly Reports' :
                  project.reportingCadence === 'FORTNIGHTLY' ? 'Biweekly Reports' :
                  project.reportingCadence === 'MONTHLY' ? 'Monthly Reports' :
@@ -503,13 +503,13 @@ export default function ProjectDetailPage() {
             </button>
           )}
           {project.folderLink && (
-            <a href={project.folderLink} target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto justify-center rounded-xl border border-border px-4 py-2 text-sm font-medium text-[#2563EB] bg-white hover:bg-blue-50 transition-colors duration-150 motion-reduce:transition-none flex items-center gap-1.5">
+            <a href={project.folderLink} target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto justify-center rounded-xl border border-border px-4 py-2 text-sm font-medium text-[#2563EB] bg-white hover:bg-subtle transition-colors duration-150 motion-reduce:transition-none flex items-center gap-1.5">
               Drive Folder
             </a>
           )}
           {user?.role !== 'TEAM_MEMBER' && (
             <div className="flex items-center gap-2 w-full sm:w-auto">
-              <button onClick={startEditingProject} className="flex-1 sm:flex-none justify-center rounded-xl border border-border px-4 py-2 text-sm font-medium text-[#374151] bg-white hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none whitespace-nowrap">
+              <button onClick={startEditingProject} className="flex-1 sm:flex-none justify-center rounded-xl border border-border px-4 py-2 text-sm font-medium text-body bg-white hover:bg-surface transition-colors duration-150 motion-reduce:transition-none whitespace-nowrap">
                 Edit Project
               </button>
               <button onClick={handleDeleteProject} className="flex-1 sm:flex-none justify-center rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 hover:border-red-300 transition-colors duration-150 motion-reduce:transition-none flex items-center gap-1.5 whitespace-nowrap">
@@ -571,7 +571,7 @@ export default function ProjectDetailPage() {
               <span className="text-2xl font-semibold text-primary leading-none">{project.progress}%</span>
               <span className="text-xs text-secondary">{completedTasks}/{totalTasks} tasks</span>
             </div>
-            <div className="h-2 w-full rounded-full bg-[#F3F4F6] overflow-hidden">
+            <div className="h-2 w-full rounded-full bg-subtle overflow-hidden">
               <div className="h-full rounded-full bg-primary" style={{ width: `${project.progress}%` }} />
             </div>
           </div>
@@ -590,7 +590,7 @@ export default function ProjectDetailPage() {
               </div>
             ))}
             {allProjectMembers.length > 5 && (
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#F3F4F6] text-secondary text-xs font-semibold border-2 border-white" style={{ zIndex: 0 }}>
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-subtle text-secondary text-xs font-semibold border-2 border-white" style={{ zIndex: 0 }}>
                 +{allProjectMembers.length - 5}
               </div>
             )}
@@ -605,7 +605,7 @@ export default function ProjectDetailPage() {
           {project.description ? (
             <>
               <SafeHtml
-                className="text-sm text-[#374151] line-clamp-2 prose prose-sm max-w-none"
+                className="text-sm text-body line-clamp-2 prose prose-sm max-w-none"
                 html={project.description}
               />
               <button
@@ -624,7 +624,7 @@ export default function ProjectDetailPage() {
           {project.scope ? (
             <>
               <SafeHtml
-                className="text-sm text-[#374151] line-clamp-2 prose prose-sm max-w-none"
+                className="text-sm text-body line-clamp-2 prose prose-sm max-w-none"
                 html={project.scope}
               />
               <button
@@ -642,7 +642,7 @@ export default function ProjectDetailPage() {
           <div className="bg-white rounded-2xl border border-border p-6 relative">
             <span className="block text-xs font-medium text-secondary uppercase tracking-wide mb-3">Internal Notes</span>
             <SafeHtml
-              className="text-sm text-[#374151] line-clamp-2 prose prose-sm max-w-none"
+              className="text-sm text-body line-clamp-2 prose prose-sm max-w-none"
               html={project.projectNotes}
             />
             <button
@@ -738,7 +738,7 @@ export default function ProjectDetailPage() {
               </div>
 
               <div className="flex items-center gap-1.5 border border-border rounded-xl px-3 h-9 bg-white shadow-sm shrink-0">
-                <label htmlFor="proj-show-completed" className="text-xs font-semibold text-[#4B5563] cursor-pointer select-none">Show Done</label>
+                <label htmlFor="proj-show-completed" className="text-xs font-semibold text-body-soft cursor-pointer select-none">Show Done</label>
                 <button
                   id="proj-show-completed"
                   type="button"
@@ -774,7 +774,7 @@ export default function ProjectDetailPage() {
                 )}
 
                 {/* List / Board Toggle Buttons */}
-                <div className="flex bg-[#F3F4F6] p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center">
+                <div className="flex bg-subtle p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center">
                   <button
                     type="button"
                     onClick={() => {
@@ -803,7 +803,7 @@ export default function ProjectDetailPage() {
                   <Icon as={Settings} size="sm" />
                 </button>
 
-                <button onClick={openCreateTask} className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none h-9">
+                <button onClick={openCreateTask} className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary-hover transition-colors duration-150 motion-reduce:transition-none h-9">
                   <Icon as={Plus} size="sm" /> Add Task
                 </button>
               </div>
@@ -824,7 +824,7 @@ export default function ProjectDetailPage() {
               <div className="hidden md:block rounded-2xl border border-border bg-white overflow-hidden">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-[#F3F4F6]">
+                    <tr className="border-b border-subtle">
                       {visibleTaskColumns.includes('task') && <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Task</th>}
                       {visibleTaskColumns.includes('type') && <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Department</th>}
                       {visibleTaskColumns.includes('assignee') && <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Assignee</th>}
@@ -895,7 +895,7 @@ export default function ProjectDetailPage() {
                                 exit={{ opacity: 0, y: 5 }}
                                 className="absolute right-0 top-full mt-2 w-48 bg-white border border-border rounded-xl shadow-lg z-50 overflow-hidden py-1"
                               >
-                                <div className="px-3 py-2 border-b border-[#F3F4F6] text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
+                                <div className="px-3 py-2 border-b border-subtle text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
                                   Visible Columns
                                 </div>
                                 {ALL_TASK_COLUMNS.map(col => (
@@ -908,9 +908,9 @@ export default function ProjectDetailPage() {
                                           : [...prev, col.id]
                                       );
                                     }}
-                                    className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#F9FAFB] transition-colors"
+                                    className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-surface transition-colors"
                                   >
-                                    <span className="text-[#374151]">{col.label}</span>
+                                    <span className="text-body">{col.label}</span>
                                     {visibleTaskColumns.includes(col.id) && <Icon as={Check} size="md" className="text-primary" />}
                                   </button>
                                 ))}
@@ -921,7 +921,7 @@ export default function ProjectDetailPage() {
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#F3F4F6]">
+                  <tbody className="divide-y divide-subtle">
                     {finalTasks.length === 0 ? (
                       <tr><td colSpan={visibleTaskColumns.length + 1} className="px-6 py-8 text-center text-sm text-secondary">{hasTaskFilters ? 'No tasks match your filters' : 'No tasks yet'}</td></tr>
                     ) : (
@@ -960,7 +960,7 @@ export default function ProjectDetailPage() {
                                   return (
                                     <div className="flex items-center gap-1.5">
                                       <div className={`h-5 w-5 rounded-full text-[8px] font-semibold flex items-center justify-center ${getAvatarColor(people[0].name)}`}>{getInitials(people[0].name)}</div>
-                                      <span className="text-sm text-[#374151]">{people.map((a: any) => a.name).join(', ')}</span>
+                                      <span className="text-sm text-body">{people.map((a: any) => a.name).join(', ')}</span>
                                     </div>
                                   );
                                 })()
@@ -969,10 +969,7 @@ export default function ProjectDetailPage() {
                           )}
                           {visibleTaskColumns.includes('priority') && (
                             <td className="px-6 py-3">
-                              <span className={`text-xs font-medium capitalize ${t.priority === 'URGENT' ? 'text-red-600' :
-                                t.priority === 'HIGH' ? 'text-orange-500' :
-                                  t.priority === 'MEDIUM' ? 'text-blue-500' : 'text-gray-400'
-                                }`}>
+                              <span className={`text-xs font-medium capitalize ${getPriorityColor(t.priority)}`}>
                                 {(t.priority || 'medium').toLowerCase()}
                               </span>
                             </td>
@@ -1071,7 +1068,7 @@ export default function ProjectDetailPage() {
                                   <div className={`h-6 w-6 rounded-full text-[10px] font-semibold flex items-center justify-center ${getAvatarColor(people[0].name)}`}>
                                     {getInitials(people[0].name)}
                                   </div>
-                                  <span className="text-xs font-medium text-[#374151]">{people.map((a: any) => a.name).join(', ')}</span>
+                                  <span className="text-xs font-medium text-body">{people.map((a: any) => a.name).join(', ')}</span>
                                 </>
                               );
                             })()
@@ -1128,7 +1125,7 @@ export default function ProjectDetailPage() {
                 <button
                   type="submit"
                   disabled={submittingComment || !commentContent.trim()}
-                  className="rounded-xl bg-primary px-4 py-2 text-xs font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none flex items-center gap-1.5"
+                  className="rounded-xl bg-primary px-4 py-2 text-xs font-medium text-white hover:bg-primary-hover disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none flex items-center gap-1.5"
                 >
                   <Icon as={MessageSquare} size="sm" />
                   {submittingComment ? 'Posting...' : 'Post Comment'}
@@ -1153,7 +1150,7 @@ export default function ProjectDetailPage() {
                       <span className="font-semibold text-sm text-primary">{comment.author.name}</span>
                       <span className="text-xs text-secondary">{formatRelativeDate(comment.createdAt)}</span>
                     </div>
-                    <p className="text-sm text-[#374151] whitespace-pre-wrap">{comment.content}</p>
+                    <p className="text-sm text-body whitespace-pre-wrap">{comment.content}</p>
                   </div>
                 </div>
               ))
@@ -1168,7 +1165,7 @@ export default function ProjectDetailPage() {
             <div key={a.id} className="flex items-start gap-3 py-2">
               <div className={`h-7 w-7 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(a.user.name)}`}>{getInitials(a.user.name)}</div>
               <div>
-                <p className="text-sm text-[#374151]"><span className="font-medium">{a.user.name}</span> {a.message}</p>
+                <p className="text-sm text-body"><span className="font-medium">{a.user.name}</span> {a.message}</p>
                 <p className="text-xs text-secondary">{formatRelativeDate(a.createdAt)}</p>
               </div>
             </div>
@@ -1196,25 +1193,25 @@ export default function ProjectDetailPage() {
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setShowEditProject(false)} />
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-subtle">
                 <h2 className="text-lg font-semibold text-primary">Edit Project</h2>
-                <button onClick={() => setShowEditProject(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><Icon as={X} size="md" className="text-secondary" /></button>
+                <button onClick={() => setShowEditProject(false)} className="p-2 rounded-xl hover:bg-subtle"><Icon as={X} size="md" className="text-secondary" /></button>
               </div>
               <form onSubmit={handleEditProject} className="p-6 pb-24 md:pb-6 space-y-8">
                 {/* Basic Info */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Basic Info</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-subtle pb-2">Basic Info</h3>
                   <div>
-                    <label htmlFor="pe-name" className="block text-sm font-medium text-[#374151] mb-1.5">Project Name *</label>
+                    <label htmlFor="pe-name" className="block text-sm font-medium text-body mb-1.5">Project Name *</label>
                     <input id="pe-name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
+                    <label className="block text-sm font-medium text-body mb-1.5">Description</label>
                     <RichTextEditor value={editForm.description} onChange={(val) => setEditForm({ ...editForm, description: val })} placeholder="Project description..." />
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Project Type</label>
+                      <label className="block text-sm font-medium text-body mb-1.5">Project Type</label>
                       <Select
                         ariaLabel="Project Type"
                         value={editForm.type}
@@ -1228,7 +1225,7 @@ export default function ProjectDetailPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Reporting Cadence</label>
+                      <label className="block text-sm font-medium text-body mb-1.5">Reporting Cadence</label>
                       <Select
                         ariaLabel="Reporting Cadence"
                         value={editForm.reportingCadence}
@@ -1244,7 +1241,7 @@ export default function ProjectDetailPage() {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Status</label>
+                      <label className="block text-sm font-medium text-body mb-1.5">Status</label>
                       <Select
                         ariaLabel="Status"
                         value={editForm.status}
@@ -1260,7 +1257,7 @@ export default function ProjectDetailPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Priority</label>
+                      <label className="block text-sm font-medium text-body mb-1.5">Priority</label>
                       <Select
                         ariaLabel="Priority"
                         value={editForm.priority}
@@ -1278,10 +1275,10 @@ export default function ProjectDetailPage() {
 
                 {/* Client & Ownership */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Client & Ownership</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-subtle pb-2">Client & Ownership</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Client</label>
+                      <label className="block text-sm font-medium text-body mb-1.5">Client</label>
                       <Select
                         ariaLabel="Client"
                         value={editForm.clientId}
@@ -1290,7 +1287,7 @@ export default function ProjectDetailPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Project Owner *</label>
+                      <label className="block text-sm font-medium text-body mb-1.5">Project Owner *</label>
                       <Select
                         ariaLabel="Project Owner"
                         value={editForm.ownerId}
@@ -1300,7 +1297,7 @@ export default function ProjectDetailPage() {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Team Members</label>
+                    <label className="block text-sm font-medium text-body mb-1.5">Team Members</label>
                     <MultiSelect
                       compact={false}
                       options={members.filter(m => m.id !== editForm.ownerId).map(m => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name) }))}
@@ -1313,14 +1310,14 @@ export default function ProjectDetailPage() {
 
                 {/* Timeline */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Timeline</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-subtle pb-2">Timeline</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label htmlFor="pe-startDate" className="block text-sm font-medium text-[#374151] mb-1.5">Start Date</label>
+                      <label htmlFor="pe-startDate" className="block text-sm font-medium text-body mb-1.5">Start Date</label>
                       <input id="pe-startDate" type="date" value={editForm.startDate} onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none" />
                     </div>
                     <div>
-                      <label htmlFor="pe-endDate" className="block text-sm font-medium text-[#374151] mb-1.5">End Date {(editForm.type === 'ONE_TIME' || editForm.type === 'EVENT') && '*'}</label>
+                      <label htmlFor="pe-endDate" className="block text-sm font-medium text-body mb-1.5">End Date {(editForm.type === 'ONE_TIME' || editForm.type === 'EVENT') && '*'}</label>
                       <input id="pe-endDate" type="date" value={editForm.endDate} onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} required={editForm.type === 'ONE_TIME' || editForm.type === 'EVENT'} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none" />
                     </div>
                   </div>
@@ -1328,9 +1325,9 @@ export default function ProjectDetailPage() {
 
                 {/* Scope */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Scope</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-subtle pb-2">Scope</h3>
                   <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Scope of Work</label>
+                    <label className="block text-sm font-medium text-body mb-1.5">Scope of Work</label>
                     <RichTextEditor
                       value={editForm.scope}
                       onChange={(val) => setEditForm({ ...editForm, scope: val })}
@@ -1344,8 +1341,8 @@ export default function ProjectDetailPage() {
 
 
                 <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setShowEditProject(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none">Cancel</button>
-                  <button type="submit" disabled={submittingEdit} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none">{submittingEdit ? 'Saving...' : 'Save Changes'}</button>
+                  <button type="button" onClick={() => setShowEditProject(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-body hover:bg-surface transition-colors duration-150 motion-reduce:transition-none">Cancel</button>
+                  <button type="submit" disabled={submittingEdit} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none">{submittingEdit ? 'Saving...' : 'Save Changes'}</button>
                 </div>
               </form>
             </motion.div>
@@ -1360,13 +1357,13 @@ export default function ProjectDetailPage() {
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setViewModalContent(null)} />
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 flex flex-col">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] shrink-0">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-subtle shrink-0">
                 <h2 className="text-lg font-semibold text-primary">{viewModalContent.title}</h2>
-                <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><Icon as={X} size="md" className="text-secondary" /></button>
+                <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-subtle"><Icon as={X} size="md" className="text-secondary" /></button>
               </div>
               <div className="p-6 pb-24 md:pb-6 overflow-y-auto flex-1">
                 <SafeHtml
-                  className="prose prose-sm max-w-none text-[#374151]"
+                  className="prose prose-sm max-w-none text-body"
                   html={viewModalContent.content}
                 />
               </div>

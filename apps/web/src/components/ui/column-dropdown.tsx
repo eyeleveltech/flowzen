@@ -135,7 +135,7 @@ export function ColumnDropdown({
                     onClick={() => handleSort(sortAscValue)}
                     className={cn(
                       "w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-surface transition-colors",
-                      currentSort === sortAscValue ? "bg-surface font-medium text-primary" : "text-[#374151]"
+                      currentSort === sortAscValue ? "bg-surface font-medium text-primary" : "text-body"
                     )}
                   >
                     <Icon as={ArrowDownAZ} size="md" className="text-secondary" /> {sortAscLabel}
@@ -146,7 +146,7 @@ export function ColumnDropdown({
                     onClick={() => handleSort(sortDescValue)}
                     className={cn(
                       "w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-surface transition-colors",
-                      currentSort === sortDescValue ? "bg-surface font-medium text-primary" : "text-[#374151]"
+                      currentSort === sortDescValue ? "bg-surface font-medium text-primary" : "text-body"
                     )}
                   >
                     <Icon as={ArrowUpZA} size="md" className="text-secondary" /> {sortDescLabel}
@@ -165,7 +165,7 @@ export function ColumnDropdown({
                       <div className={cn("h-4 w-4 rounded-sm border flex items-center justify-center transition-colors", isChecked ? "bg-primary border-primary text-white" : "border-border bg-white group-hover:border-primary/50")}>
                         {isChecked && <svg width="10" height="8" viewBox="0 0 10 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 4.5L3.5 7L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                       </div>
-                      <span className={cn("text-sm transition-colors", isChecked ? "text-primary font-medium" : "text-[#374151]")}>{opt.label}</span>
+                      <span className={cn("text-sm transition-colors", isChecked ? "text-primary font-medium" : "text-body")}>{opt.label}</span>
                     </label>
                   );
                 })}

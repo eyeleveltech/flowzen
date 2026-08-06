@@ -1,11 +1,39 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/* ─────────────────────────────────────────────────────────────────────────
+   The neutral ramp, darkest to lightest:
+
+     primary  #111827   headings, primary buttons, strongest text
+     body     #374151   form labels and body copy — the everyday text colour
+     body-soft#4B5563   text one step down from body
+     secondary#6B7280   supporting text
+     muted    #6B7280   placeholders and hints (same value, different intent)
+     line     #D1D5DB   disabled controls, stronger dividers, scrollbar
+     border   #E5E7EB   the default hairline
+     subtle   #F3F4F6   quiet surfaces, section rules, hover fills
+     surface  #FAFAFA   page and row backgrounds
+
+   The middle four used to have no token, so 671 usages across the app spelled
+   them as raw hex — not because the tokens were being ignored (primary and
+   secondary are used over 1,800 times between them) but because there was
+   nothing to reach for. Add here first; never reintroduce a bare hex.
+
+   NOTE: #F9FAFB, previously written out 102 times, is gone. It differs from
+   --color-surface by one step per channel (250,250,250 vs 249,250,251), which
+   is not visible to anyone, so it now maps onto `surface`.
+   ───────────────────────────────────────────────────────────────────────── */
 @theme {
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --color-surface: #FAFAFA;
+  --color-subtle: #F3F4F6;
   --color-border: #E5E7EB;
+  --color-line: #D1D5DB;
   --color-primary: #111827;
+  /* Hover for anything sitting on --color-primary (buttons, dark chips). */
+  --color-primary-hover: #1F2937;
+  --color-body: #374151;
+  --color-body-soft: #4B5563;
   --color-secondary: #6B7280;
   /* Placeholder / hint / de-emphasised icon text. Must stay >= 4.5:1 on white
      (WCAG AA for normal text). The previous inline #9CA3AF measured 2.54:1 and
@@ -14,13 +42,11 @@
   --color-accent: #000000;
   --color-success: #22C55E;
   --color-warning: #F59E0B;
+  --color-warning-hover: #D97706;
   --color-danger: #EF4444;
-  --radius-card: 16px;
-  --radius-button: 12px;
-  --radius-input: 12px;
+  --color-danger-hover: #DC2626;
   --z-100: 100;
   --z-101: 101;
-  --ease-out: cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 @layer base {
@@ -68,27 +94,6 @@
 }
 
 @layer utilities {
-  .glass {
-    background: rgba(255, 255, 255, 0.8);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-  }
-
-  .animate-in {
-    animation: animate-in 0.3s ease-out;
-  }
-
-  @keyframes animate-in {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
   /* Seamless marquee — track holds 2 copies, animate by 50% so copy-2
      slides into view exactly when copy-1 exits */
   .animate-marquee-track {
@@ -130,6 +135,42 @@
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+}
+
+/* ── Reduced motion ──────────────────────────────────────────────────────
+   Two of this app's animations never stop on their own: the marquee (14s) and
+   the skeleton shimmer, both infinite loops. WCAG 2.3.3 exists for exactly
+   that — a user with vestibular sensitivity has no way to escape an animation
+   that repeats forever.
+
+   `animation: none` on .animate-marquee-track parks the track at translateX(0),
+   which shows the first of its two copies: the content stays readable, it just
+   stops moving. The skeleton keeps its gradient and simply stops sweeping, so
+   loading placeholders are still visibly placeholders.
+
+   Framer Motion is NOT covered here — it animates via inline styles, outside
+   the cascade. It is handled once at the root instead, by
+   <MotionConfig reducedMotion="user"> in components/providers.tsx.
+   ──────────────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-marquee-track {
+    animation: none !important;
+    transform: translateX(0) !important;
+  }
+
+  .skeleton {
+    animation: none !important;
+    background-position: 0 0 !important;
   }
 }
 

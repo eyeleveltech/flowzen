@@ -133,7 +133,7 @@ export function WorkflowsTab({ workflows, fetchWorkflows, users }: { workflows: 
                 <tr key={w.id} className="hover:bg-surface transition-colors">
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
+                      <div className="h-8 w-8 rounded-xl bg-subtle text-body flex items-center justify-center border border-border">
                         <Icon as={Zap} size="md" />
                       </div>
                       <span className="font-semibold text-primary">{w.name}</span>
@@ -153,9 +153,9 @@ export function WorkflowsTab({ workflows, fetchWorkflows, users }: { workflows: 
                     <div className="flex items-center justify-end gap-4">
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" className="sr-only peer" checked={w.isActive} onChange={() => handleToggleActive(w)} />
-                        <div className="h-5 w-9 bg-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-[#D1D5DB] after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                        <div className="h-5 w-9 bg-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-line after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
                       </label>
-                      <button onClick={() => openModal(w)} className="p-1.5 text-secondary hover:text-primary hover:bg-[#F3F4F6] rounded-md transition-colors">
+                      <button onClick={() => openModal(w)} className="p-1.5 text-secondary hover:text-primary hover:bg-subtle rounded-md transition-colors">
                         <Icon as={Edit2} size="md" />
                       </button>
                       <button onClick={() => handleDelete(w.id)} className="p-1.5 text-secondary hover:text-red-600 hover:bg-red-50 rounded-md transition-colors">
@@ -217,13 +217,13 @@ export function WorkflowsTab({ workflows, fetchWorkflows, users }: { workflows: 
                   {!editingWorkflow && (
                     <div className="space-y-1.5">
                       <label htmlFor="wf-creator-role" className="text-xs font-medium text-secondary uppercase tracking-wide">Creator Role</label>
-                      <input id="wf-creator-role" disabled value={user?.role || ''} className="w-full bg-[#F9FAFB] border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-secondary outline-none" />
+                      <input id="wf-creator-role" disabled value={user?.role || ''} className="w-full bg-surface border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-secondary outline-none" />
                     </div>
                   )}
                 </form>
               </div>
               <div className="p-4 sm:p-6 pt-4 border-t border-border bg-surface shrink-0 flex gap-3">
-                <button type="button" onClick={() => setShowModal(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-border text-[#374151] font-medium hover:bg-surface transition-colors">Cancel</button>
+                <button type="button" onClick={() => setShowModal(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-border text-body font-medium hover:bg-surface transition-colors">Cancel</button>
                 <button type="submit" form="workflow-form" disabled={saving} className="flex-1 bg-primary text-white px-4 py-2.5 rounded-xl font-medium hover:bg-black transition-colors disabled:opacity-50">
                   {saving ? 'Saving...' : 'Save Rule'}
                 </button>

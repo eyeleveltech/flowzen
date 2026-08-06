@@ -51,7 +51,7 @@ export default function ContractsPage() {
         </div>
         <button
           onClick={() => setShowModal(true)}
-          className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-[#1F2937] transition-colors"
+          className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors"
         >
           <Icon as={Plus} size="md" />
           New Contract

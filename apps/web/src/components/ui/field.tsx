@@ -45,7 +45,7 @@ export function Field({
 
   return (
     <div className={className}>
-      <label htmlFor={fieldId} className="block text-sm font-medium text-[#374151] mb-1.5">
+      <label htmlFor={fieldId} className="block text-sm font-medium text-body mb-1.5">
         {label} {required && <span className="text-red-500">*</span>}
       </label>
       {textarea ? (
@@ -60,7 +60,7 @@ export function Field({
           disabled={disabled}
           aria-invalid={!!error}
           aria-describedby={error ? `${fieldId}-error` : hint ? `${fieldId}-hint` : undefined}
-          className={`w-full rounded-xl border bg-white px-4 py-2.5 text-sm text-[#374151] outline-none transition-colors duration-150 motion-reduce:transition-none resize-none ${
+          className={`w-full rounded-xl border bg-white px-4 py-2.5 text-sm text-body outline-none transition-colors duration-150 motion-reduce:transition-none resize-none ${
             error
               ? 'border-red-400 focus:border-red-400 focus:ring-red-100'
               : 'border-border focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1'
@@ -87,7 +87,7 @@ export function Field({
             aria-describedby={error ? `${fieldId}-error` : hint ? `${fieldId}-hint` : undefined}
             className={`w-full rounded-xl border bg-white ${
               icon ? 'pl-9' : 'px-4'
-            } pr-4 py-2.5 text-sm text-[#374151] outline-none transition-colors duration-150 motion-reduce:transition-none ${
+            } pr-4 py-2.5 text-sm text-body outline-none transition-colors duration-150 motion-reduce:transition-none ${
               error
                 ? 'border-red-400 focus:border-red-400 focus:ring-red-100'
                 : 'border-border focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1'
@@ -136,7 +136,7 @@ export function FieldSelect({
 
   return (
     <div className={className}>
-      <label htmlFor={fieldId} className="block text-sm font-medium text-[#374151] mb-1.5">
+      <label htmlFor={fieldId} className="block text-sm font-medium text-body mb-1.5">
         {label} {required && <span className="text-red-500">*</span>}
       </label>
       <Select
@@ -194,7 +194,7 @@ export function FieldCheckbox({
         className="h-4 w-4 mt-0.5 text-primary rounded border-gray-300 focus:ring-primary cursor-pointer"
       />
       <div>
-        <label htmlFor={fieldId} className="text-sm font-medium text-[#374151] cursor-pointer">
+        <label htmlFor={fieldId} className="text-sm font-medium text-body cursor-pointer">
           {label}
         </label>
         {hint && <p className="text-xs text-secondary mt-0.5">{hint}</p>}

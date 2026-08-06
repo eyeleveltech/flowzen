@@ -15,6 +15,7 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { leadStageLabel } from '@/lib/lead-stage';
+import { getPriorityDot } from '@/lib/priority';
 import { Icon } from '@/components/ui/icon';
 
 const STAGES = [
@@ -247,7 +248,7 @@ export function LeadListView() {
             </button>
             <button
               onClick={() => { setModalMode('MANUAL'); setIsModalOpen(true); }}
-              className="flex items-center justify-center rounded-xl bg-primary h-10.5 w-10.5 text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none shrink-0"
+              className="flex items-center justify-center rounded-xl bg-primary h-10.5 w-10.5 text-white hover:bg-primary-hover transition-colors duration-150 motion-reduce:transition-none shrink-0"
               title="Add Lead"
             >
               <Icon as={Plus} size="md" />
@@ -291,9 +292,9 @@ export function LeadListView() {
                 <div className="space-y-1.5 w-full sm:w-auto min-w-70">
                   <label className="text-xs font-semibold text-secondary uppercase tracking-wider">Close Date Range</label>
                   <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
-                    <input type="date" value={closeDateFrom} onChange={(e) => setCloseDateFrom(e.target.value)} className="w-full rounded-lg border border-border p-2 text-sm focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none text-[#374151]" />
+                    <input type="date" value={closeDateFrom} onChange={(e) => setCloseDateFrom(e.target.value)} className="w-full rounded-lg border border-border p-2 text-sm focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none text-body" />
                     <span className="text-secondary hidden sm:inline">-</span>
-                    <input type="date" value={closeDateTo} onChange={(e) => setCloseDateTo(e.target.value)} className="w-full rounded-lg border border-border p-2 text-sm focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none text-[#374151]" />
+                    <input type="date" value={closeDateTo} onChange={(e) => setCloseDateTo(e.target.value)} className="w-full rounded-lg border border-border p-2 text-sm focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none text-body" />
                   </div>
                 </div>
 
@@ -317,9 +318,9 @@ export function LeadListView() {
                 <div className="space-y-1.5 w-full sm:w-auto min-w-70">
                   <label className="text-xs font-semibold text-secondary uppercase tracking-wider">Date Added Range</label>
                   <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
-                    <input type="date" value={dateAddedFrom} onChange={(e) => setDateAddedFrom(e.target.value)} className="w-full rounded-lg border border-border p-2 text-sm focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none text-[#374151]" />
+                    <input type="date" value={dateAddedFrom} onChange={(e) => setDateAddedFrom(e.target.value)} className="w-full rounded-lg border border-border p-2 text-sm focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none text-body" />
                     <span className="text-secondary hidden sm:inline">-</span>
-                    <input type="date" value={dateAddedTo} onChange={(e) => setDateAddedTo(e.target.value)} className="w-full rounded-lg border border-border p-2 text-sm focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none text-[#374151]" />
+                    <input type="date" value={dateAddedTo} onChange={(e) => setDateAddedTo(e.target.value)} className="w-full rounded-lg border border-border p-2 text-sm focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 outline-none text-body" />
                   </div>
                 </div>
               </div>
@@ -341,7 +342,7 @@ export function LeadListView() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-225">
             <thead>
-              <tr className="border-b border-[#F3F4F6] bg-white">
+              <tr className="border-b border-subtle bg-white">
                 <th className="px-6 py-3.5 text-left text-xs font-semibold text-secondary uppercase tracking-wider">
                   <ColumnDropdown
                     title="Client"
@@ -400,7 +401,7 @@ export function LeadListView() {
                 <th className="px-6 py-3.5"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#F3F4F6]">
+            <tbody className="divide-y divide-subtle">
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
@@ -412,7 +413,7 @@ export function LeadListView() {
               ) : filteredLeads.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center">
-                    <TrendingUp className="h-12 w-12 text-[#D1D5DB] mx-auto mb-4" />
+                    <TrendingUp className="h-12 w-12 text-line mx-auto mb-4" />
                     <h3 className="text-sm font-medium text-primary">No leads found</h3>
                     <p className="text-sm text-secondary mt-1">Try adjusting your filters or search term.</p>
                   </td>
@@ -429,7 +430,7 @@ export function LeadListView() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         {lead.priority && (
-                          <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${lead.priority === 'HIGH' ? 'bg-red-500' : lead.priority === 'MEDIUM' ? 'bg-yellow-500' : 'bg-gray-300'}`} title={`Priority: ${lead.priority}`} />
+                          <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${getPriorityDot(lead.priority)}`} title={`Priority: ${lead.priority}`} />
                         )}
                         <div className="flex flex-col">
                           <span className="text-sm font-medium text-primary">{lead.contactName || lead.companyName || getClientDisplayName(lead.client)}</span>
@@ -440,14 +441,14 @@ export function LeadListView() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md border ${lead.stage === 'PROJECT_COMPLETED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                      <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md border ${lead.stage === 'PROJECT_COMPLETED' ? 'bg-green-50 text-green-700 border-green-200' :
                           lead.stage === 'CHURNED' ? 'bg-red-50 text-red-700 border-red-200' :
-                            'text-primary bg-[#F3F4F6] border-border'
+                            'text-primary bg-subtle border-border'
                         }`}>
                         {leadStageLabel(lead.stage)}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-[#374151] font-medium">
+                    <td className="px-6 py-4 text-sm text-body font-medium">
                       {lead.dealValue ? formatCurrency(lead.dealValue) : '—'}
                     </td>
                     <td className="px-6 py-4 text-sm text-secondary">
@@ -460,17 +461,17 @@ export function LeadListView() {
                     <td className="px-6 py-4">
                       {lead.assignedTo ? (
                         <div className="flex items-center gap-2">
-                          <div className="h-6 w-6 rounded-full bg-[#F3F4F6] text-primary text-[9px] font-bold flex items-center justify-center shrink-0 border border-border">
+                          <div className="h-6 w-6 rounded-full bg-subtle text-primary text-[9px] font-bold flex items-center justify-center shrink-0 border border-border">
                             {getInitials(lead.assignedTo.name)}
                           </div>
-                          <span className="text-sm text-[#374151]">{lead.assignedTo.name}</span>
+                          <span className="text-sm text-body">{lead.assignedTo.name}</span>
                         </div>
                       ) : (
                         <span className="text-sm text-secondary">—</span>
                       )}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <Icon as={ChevronRight} size="md" className="text-[#D1D5DB] inline" />
+                      <Icon as={ChevronRight} size="md" className="text-line inline" />
                     </td>
                   </motion.tr>
                 ))
@@ -524,13 +525,13 @@ export function LeadListView() {
                 </div>
                 <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold border shrink-0 ${lead.stage === 'PROJECT_COMPLETED' ? 'bg-green-50 text-green-700 border-green-200' :
                     lead.stage === 'CHURNED' ? 'bg-red-50 text-red-700 border-red-200' :
-                      'text-primary bg-[#F3F4F6] border-border'
+                      'text-primary bg-subtle border-border'
                   }`}>
                   {leadStageLabel(lead.stage)}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#F3F4F6]">
+              <div className="flex items-center justify-between mt-3 pt-3 border-t border-subtle">
                 <div className="flex items-center gap-3 text-xs text-secondary">
                   {lead.dealValue ? (
                     <span className="font-semibold text-primary">
@@ -546,7 +547,7 @@ export function LeadListView() {
                   )}
                 </div>
                 {lead.assignedTo ? (
-                  <div className="flex items-center gap-1 text-[11px] text-secondary bg-[#F3F4F6] px-2 py-0.5 rounded border border-border">
+                  <div className="flex items-center gap-1 text-[11px] text-secondary bg-subtle px-2 py-0.5 rounded border border-border">
                     <span className="font-medium">{lead.assignedTo.name}</span>
                   </div>
                 ) : (

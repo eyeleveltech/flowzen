@@ -425,7 +425,7 @@ function ClientsContent() {
         <div>
           <h1 className="text-2xl font-semibold text-primary tracking-tight flex items-center gap-2">
             Clients
-            <span className="text-xs font-normal text-secondary bg-[#F3F4F6] px-2 py-0.5 rounded-lg border border-border">
+            <span className="text-xs font-normal text-secondary bg-subtle px-2 py-0.5 rounded-lg border border-border">
               {viewName}
             </span>
           </h1>
@@ -475,7 +475,7 @@ function ClientsContent() {
                   <button
                     onClick={handleExport}
                     disabled={isExporting}
-                    className="flex items-center justify-center rounded-xl border border-border bg-white h-9 w-9 text-xs font-semibold text-[#374151] hover:bg-[#F9FAFB] transition-colors disabled:opacity-50 shrink-0"
+                    className="flex items-center justify-center rounded-xl border border-border bg-white h-9 w-9 text-xs font-semibold text-body hover:bg-surface transition-colors disabled:opacity-50 shrink-0"
                     title="Export CSV"
                   >
                     <Download className="h-3.5 w-3.5" />
@@ -484,7 +484,7 @@ function ClientsContent() {
                 {activeModule !== 'PM' && (
                   <Link
                     href="/pipeline"
-                    className="flex items-center justify-center rounded-xl bg-primary h-9 w-9 text-white hover:bg-[#1F2937] transition-colors shrink-0"
+                    className="flex items-center justify-center rounded-xl bg-primary h-9 w-9 text-white hover:bg-primary-hover transition-colors shrink-0"
                     title="New Lead"
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -674,7 +674,7 @@ function ClientsContent() {
                 <button
                   onClick={handleExport}
                   disabled={isExporting}
-                  className="flex items-center gap-2 rounded-xl border border-border bg-white px-3 text-xs font-semibold text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none disabled:opacity-50 h-9 shrink-0 whitespace-nowrap"
+                  className="flex items-center gap-2 rounded-xl border border-border bg-white px-3 text-xs font-semibold text-body hover:bg-surface transition-colors duration-150 motion-reduce:transition-none disabled:opacity-50 h-9 shrink-0 whitespace-nowrap"
                 >
                   <Download className="h-3.5 w-3.5" /> Export CSV
                 </button>
@@ -683,7 +683,7 @@ function ClientsContent() {
               {activeModule !== 'PM' && (
                 <Link
                   href="/pipeline"
-                  className="flex items-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-semibold text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none h-9 shrink-0 whitespace-nowrap"
+                  className="flex items-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-semibold text-white hover:bg-primary-hover transition-colors duration-150 motion-reduce:transition-none h-9 shrink-0 whitespace-nowrap"
                 >
                   <Plus className="h-3.5 w-3.5" /> New Lead
                 </Link>
@@ -721,7 +721,7 @@ function ClientsContent() {
             )}
 
             {/* Segmented View Switcher */}
-            <div className="flex bg-[#F3F4F6] p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center overflow-x-auto no-scrollbar max-w-full">
+            <div className="flex bg-subtle p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center overflow-x-auto no-scrollbar max-w-full">
               <button
                 type="button"
                 onClick={() => {
@@ -757,7 +757,7 @@ function ClientsContent() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-200">
               <thead>
-                <tr className="border-b border-[#F3F4F6]">
+                <tr className="border-b border-subtle">
                   {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>}
                   {visibleColumns.includes('industry') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Industry</th>}
                   {visibleColumns.includes('contact') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Contact</th>}
@@ -781,7 +781,7 @@ function ClientsContent() {
                             exit={{ opacity: 0, y: 5 }}
                             className="absolute right-0 top-full mt-2 w-48 bg-white border border-border rounded-xl shadow-lg z-50 overflow-hidden py-1"
                           >
-                            <div className="px-3 py-2 border-b border-[#F3F4F6] text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
+                            <div className="px-3 py-2 border-b border-subtle text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
                               Visible Columns
                             </div>
                             {ALL_COLUMNS.map(col => (
@@ -794,9 +794,9 @@ function ClientsContent() {
                                       : [...prev, col.id]
                                   )
                                 }}
-                                className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-[#F9FAFB] transition-colors"
+                                className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-surface transition-colors"
                               >
-                                <span className="text-[#374151]">{col.label}</span>
+                                <span className="text-body">{col.label}</span>
                                 {visibleColumns.includes(col.id) && <Icon as={Check} size="md" className="text-primary" />}
                               </button>
                             ))}
@@ -807,7 +807,7 @@ function ClientsContent() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#F3F4F6]">
+              <tbody className="divide-y divide-subtle">
                 {loading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i}>
@@ -878,15 +878,15 @@ function ClientsContent() {
                         <td className="px-6 py-4">
                           {client.name === 'Internal' ? (
                             <div>
-                              <p className="text-sm text-[#374151] font-medium">Internal Contact</p>
+                              <p className="text-sm text-body font-medium">Internal Contact</p>
                               {orgProfile?.phone && <p className="text-[11px] text-secondary">{orgProfile.phone}</p>}
                             </div>
                           ) : client.contacts && client.contacts.length > 0 ? (
                             <div>
-                              <p className="text-sm text-[#374151] font-medium">{client.contacts[0].name}</p>
+                              <p className="text-sm text-body font-medium">{client.contacts[0].name}</p>
                               {client.contacts[0].designation && <p className="text-[11px] text-secondary">{client.contacts[0].designation}</p>}
                               {client.contacts.length > 1 && (
-                                <span className="text-[10px] font-medium bg-[#F3F4F6] text-[#4B5563] px-1.5 py-0.5 rounded mt-1 inline-block">
+                                <span className="text-[10px] font-medium bg-subtle text-body-soft px-1.5 py-0.5 rounded mt-1 inline-block">
                                   +{client.contacts.length - 1} more
                                 </span>
                               )}
@@ -911,7 +911,7 @@ function ClientsContent() {
                         </td>
                       )}
                       <td className="px-6 py-4">
-                        <ChevronRight className="h-4 w-4 text-[#D1D5DB]" />
+                        <ChevronRight className="h-4 w-4 text-line" />
                       </td>
                     </motion.tr>
                   ))
@@ -1002,7 +1002,7 @@ function ClientsContent() {
                 <div className="flex flex-col">
                   {client.contacts && client.contacts.length > 0 ? (
                     <>
-                      <p className="text-[11px] font-medium text-[#374151]">{client.contacts[0].name}</p>
+                      <p className="text-[11px] font-medium text-body">{client.contacts[0].name}</p>
                       {client.contacts.length > 1 && (
                         <p className="text-[10px] text-secondary">+{client.contacts.length - 1} more</p>
                       )}
@@ -1011,7 +1011,7 @@ function ClientsContent() {
                     <p className="text-xs text-secondary">No contacts</p>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5 text-xs font-medium text-secondary bg-[#F3F4F6] px-2 py-1 rounded-md">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-secondary bg-subtle px-2 py-1 rounded-md">
                   <FolderKanban className="h-3 w-3" />
                   {client._count?.projects ?? 0}
                 </div>
@@ -1027,7 +1027,7 @@ function ClientsContent() {
           <p className="text-xs text-secondary">Showing {clients.length} of {total}</p>
           <button
             onClick={() => setPage((p) => p + 1)}
-            className="rounded-xl border border-border bg-white px-5 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none"
+            className="rounded-xl border border-border bg-white px-5 py-2.5 text-sm font-medium text-body hover:bg-surface transition-colors duration-150 motion-reduce:transition-none"
           >
             Load more
           </button>
@@ -1045,25 +1045,25 @@ function ClientsContent() {
               exit={{ opacity: 0, x: 20 }}
               className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto"
             >
-              <div className="flex flex-col border-b border-[#F3F4F6]">
+              <div className="flex flex-col border-b border-subtle">
                 <div className="flex items-center justify-between px-6 py-4">
                   <div>
                     <h2 className="text-lg font-semibold text-primary">Import Clients</h2>
                     <p className="text-xs text-secondary mt-0.5">Bulk-onboard existing clients from a CSV file. New deals still go through the pipeline.</p>
                   </div>
-                  <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors shrink-0">
+                  <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl hover:bg-subtle transition-colors shrink-0">
                     <X className="h-4 w-4 text-secondary" />
                   </button>
                 </div>
               </div>
 
               <div className="p-6 space-y-6">
-                <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-[#F9FAFB]">
+                <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-surface">
                   <div>
                     <h3 className="text-sm font-semibold text-primary">Need a template?</h3>
-                    <p className="text-xs text-secondary mt-1">CSV or Excel (.xlsx). <span className="font-medium text-[#374151]">Name required</span> on every row.</p>
+                    <p className="text-xs text-secondary mt-1">CSV or Excel (.xlsx). <span className="font-medium text-body">Name required</span> on every row.</p>
                   </div>
-                  <button onClick={downloadTemplate} className="flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-gray-50 transition-colors duration-150 motion-reduce:transition-none">
+                  <button onClick={downloadTemplate} className="flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-body hover:bg-gray-50 transition-colors duration-150 motion-reduce:transition-none">
                     <FileText className="h-3.5 w-3.5" /> Template
                   </button>
                 </div>
@@ -1073,11 +1073,11 @@ function ClientsContent() {
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
-                    className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed transition-colors rounded-xl cursor-pointer ${isDragging ? 'border-primary bg-gray-50' : 'border-[#D1D5DB] hover:border-primary hover:bg-gray-50'}`}
+                    className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed transition-colors rounded-xl cursor-pointer ${isDragging ? 'border-primary bg-gray-50' : 'border-line hover:border-primary hover:bg-gray-50'}`}
                   >
                     <div className="flex flex-col items-center justify-center pt-5 pb-6">
                       <Upload className="h-8 w-8 mb-3 text-secondary" />
-                      <p className="mb-2 text-sm text-[#4B5563]">
+                      <p className="mb-2 text-sm text-body-soft">
                         <span className="font-semibold">Click to upload</span> or drag and drop
                       </p>
                       <p className="text-xs text-secondary">CSV or Excel (.xlsx, .xls)</p>
@@ -1094,9 +1094,9 @@ function ClientsContent() {
                 {importPreview.length > 0 && !importResult && (() => {
                   const named = importPreview.filter(r => resolveClientName(r).length >= 2).length;
                   return (
-                    <div className="p-4 rounded-xl border border-blue-100 bg-blue-50">
-                      <h4 className="text-sm font-semibold text-blue-900 mb-1">Ready to Import</h4>
-                      <p className="text-xs text-blue-700">
+                    <div className="p-4 rounded-xl border border-border bg-subtle">
+                      <h4 className="text-sm font-semibold text-primary mb-1">Ready to Import</h4>
+                      <p className="text-xs text-body">
                         Found {importPreview.length} row{importPreview.length === 1 ? '' : 's'}
                         {named < importPreview.length && <> — {importPreview.length - named} missing a name will be rejected</>}.
                       </p>
@@ -1105,8 +1105,8 @@ function ClientsContent() {
                 })()}
 
                 {importResult && (
-                  <div className={`p-4 rounded-xl border ${importResult.rejectedCount > 0 ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
-                    <h4 className={`text-sm font-semibold mb-1 ${importResult.rejectedCount > 0 ? 'text-amber-900' : 'text-emerald-900'}`}>
+                  <div className={`p-4 rounded-xl border ${importResult.rejectedCount > 0 ? 'border-amber-200 bg-amber-50' : 'border-green-200 bg-green-50'}`}>
+                    <h4 className={`text-sm font-semibold mb-1 ${importResult.rejectedCount > 0 ? 'text-amber-900' : 'text-green-900'}`}>
                       Imported {importResult.imported} of {importResult.imported + importResult.rejectedCount}
                     </h4>
                     {importResult.rejectedCount > 0 ? (
@@ -1119,13 +1119,13 @@ function ClientsContent() {
                         </button>
                       </>
                     ) : (
-                      <p className="text-xs text-emerald-800">Every row imported cleanly.</p>
+                      <p className="text-xs text-green-800">Every row imported cleanly.</p>
                     )}
                   </div>
                 )}
 
                 <div className="pt-4 flex flex-row gap-2 sm:gap-3">
-                  <button type="button" onClick={() => { setShowCreate(false); setImportFile(null); setImportPreview([]); setImportResult(null); }} className="flex-1 w-full sm:flex-1 rounded-xl border border-border px-2 sm:px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors duration-150 motion-reduce:transition-none">
+                  <button type="button" onClick={() => { setShowCreate(false); setImportFile(null); setImportPreview([]); setImportResult(null); }} className="flex-1 w-full sm:flex-1 rounded-xl border border-border px-2 sm:px-4 py-2.5 text-sm font-medium text-body hover:bg-surface transition-colors duration-150 motion-reduce:transition-none">
                     {importResult ? 'Done' : 'Cancel'}
                   </button>
                   {/* Hidden once a result is in — re-clicking would import the same file twice. */}
@@ -1133,7 +1133,7 @@ function ClientsContent() {
                     <button
                       onClick={handleBulkImport}
                       disabled={importing || importPreview.length === 0}
-                      className="flex-1 w-full sm:flex-1 rounded-xl bg-primary px-2 sm:px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none flex items-center justify-center"
+                      className="flex-1 w-full sm:flex-1 rounded-xl bg-primary px-2 sm:px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none flex items-center justify-center"
                     >
                       {importing ? 'Importing...' : <><span className="hidden sm:inline">Import Clients</span><span className="inline sm:hidden">Import</span></>}
                     </button>
