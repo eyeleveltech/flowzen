@@ -155,21 +155,20 @@ export function TemplatesTab({ templates, fetchTemplates }: { templates: any[], 
                 <Icon as={FileText} size="lg" />
               </div>
               <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => openModal(t)} className="p-1.5 text-secondary hover:text-primary hover:bg-[#F3F4F6] rounded-md"><Icon as={Edit2} size="md" /></button>
+                <button onClick={() => openModal(t)} className="p-1.5 text-secondary hover:text-primary hover:bg-surface-sunken rounded-md"><Icon as={Edit2} size="md" /></button>
                 <button onClick={() => handleDelete(t.id)} className="p-1.5 text-secondary hover:text-red-600 hover:bg-red-50 rounded-md"><Icon as={Trash2} size="md" /></button>
               </div>
             </div>
             <h3 className="font-medium text-primary text-base mb-1">{t.name}</h3>
             <p className="text-sm text-secondary line-clamp-2 mb-4 h-10">{t.description || 'No description provided.'}</p>
 
-            <div className="flex items-center justify-between pt-4 border-t border-[#F3F4F6]">
-              <span className="text-xs font-semibold text-primary bg-[#F3F4F6] px-2.5 py-1 rounded-md">{t.type}</span>
+            <div className="flex items-center justify-between pt-4 border-t border-surface-sunken">
+              <span className="text-xs font-semibold text-primary bg-surface-sunken px-2.5 py-1 rounded-md">{t.type}</span>
               <span className="text-xs text-secondary font-medium">{t.structure?.tasks?.length || 0} tasks</span>
             </div>
           </div>
         ))}
       </div>
-
       <AnimatePresence>
         {showModal && (
           <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">

@@ -155,7 +155,7 @@ export function WorkflowsTab({ workflows, fetchWorkflows, users }: { workflows: 
                         <input type="checkbox" className="sr-only peer" checked={w.isActive} onChange={() => handleToggleActive(w)} />
                         <div className="h-5 w-9 bg-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-[#D1D5DB] after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
                       </label>
-                      <button onClick={() => openModal(w)} className="p-1.5 text-secondary hover:text-primary hover:bg-[#F3F4F6] rounded-md transition-colors">
+                      <button onClick={() => openModal(w)} className="p-1.5 text-secondary hover:text-primary hover:bg-surface-sunken rounded-md transition-colors">
                         <Icon as={Edit2} size="md" />
                       </button>
                       <button onClick={() => handleDelete(w.id)} className="p-1.5 text-secondary hover:text-red-600 hover:bg-red-50 rounded-md transition-colors">

@@ -100,9 +100,9 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
         exit={{ opacity: 0, x: 20 }}
         className="fixed right-0 top-0 bottom-0 z-101 w-full max-w-lg bg-white border-l border-border shadow-modal shadow-black/10 overflow-y-auto"
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] sticky top-0 bg-white z-10">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-surface-sunken sticky top-0 bg-white z-10">
           <h2 className="text-lg font-semibold text-primary">New Project</h2>
-          <button onClick={guardedClose} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
+          <button onClick={guardedClose} className="p-2 rounded-xl hover:bg-surface-sunken transition-colors">
             <Icon as={X} size="md" className="text-secondary" />
           </button>
         </div>
@@ -112,7 +112,7 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
 
           {/* Basic Info */}
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Basic Info</h3>
+            <h3 className="text-sm font-semibold text-primary border-b border-surface-sunken pb-2">Basic Info</h3>
             <div>
               <label htmlFor="cp-name" className="block text-sm font-medium text-[#374151] mb-1.5">Project Name *</label>
               <input id="cp-name" value={formValues.name} onChange={(e) => setValue('name', e.target.value, { shouldValidate: true })} aria-invalid={!!errors.name} aria-describedby={errors.name ? 'cp-name-error' : undefined} className={`w-full rounded-xl border ${errors.name ? 'border-red-500' : 'border-border'} bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none`} />
@@ -171,7 +171,7 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
 
           {/* Client & Ownership */}
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Client & Ownership</h3>
+            <h3 className="text-sm font-semibold text-primary border-b border-surface-sunken pb-2">Client & Ownership</h3>
             <div className="flex flex-col gap-4">
               <div>
                 <label className="block text-sm font-medium text-[#374151] mb-1.5">Client</label>
@@ -197,7 +197,7 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
 
           {/* Timeline */}
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Timeline</h3>
+            <h3 className="text-sm font-semibold text-primary border-b border-surface-sunken pb-2">Timeline</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label htmlFor="cp-startDate" className="block text-sm font-medium text-[#374151] mb-1.5">Start Date</label>
@@ -213,7 +213,7 @@ export function CreateProjectModal({ clientId, clientName, onClose, onSuccess }:
 
           {/* Scope */}
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Scope</h3>
+            <h3 className="text-sm font-semibold text-primary border-b border-surface-sunken pb-2">Scope</h3>
             <div>
               <label className="block text-sm font-medium text-[#374151] mb-1.5">Scope of Work</label>
               <RichTextEditor value={formValues.scope || ''} onChange={(val) => setValue('scope', val)} placeholder="Enter the scope of work..." />

@@ -106,6 +106,12 @@ function ProjectsContent() {
   useEffect(() => {
     if (urlStatus) setStatusFilter([urlStatus]);
   }, [urlStatus]);
+
+  useEffect(() => {
+    if (isMobile && view === 'gantt') {
+      setView('list');
+    }
+  }, [isMobile, view]);
   const showCreate = searchParams.get('create') === 'true';
   const setShowCreate = (open: boolean) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -233,7 +239,7 @@ function ProjectsContent() {
     { mode: 'board' as ViewMode, icon: Kanban, label: 'Board' },
     { mode: 'timeline' as ViewMode, icon: BarChart3, label: 'Timeline' },
     { mode: 'calendar' as ViewMode, icon: Calendar, label: 'Calendar' },
-    { mode: 'gantt' as ViewMode, icon: GanttChartSquare, label: 'Gantt' },
+    ...(!isMobile ? [{ mode: 'gantt' as ViewMode, icon: GanttChartSquare, label: 'Gantt' }] : []),
   ];
 
   return (
@@ -484,7 +490,7 @@ function ProjectsContent() {
             )}
 
             {/* Segmented View Mode Switcher */}
-            <div className="flex bg-[#F3F4F6] p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center overflow-x-auto no-scrollbar max-w-full">
+            <div className="flex bg-surface-sunken p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center overflow-x-auto no-scrollbar max-w-full">
               {viewButtons.map((v) => (
                 <button
                   key={v.mode}
@@ -507,7 +513,7 @@ function ProjectsContent() {
       {loading ? (
         <div className="rounded-2xl border border-border bg-white p-6 space-y-4">
           {[1, 2, 3, 4, 5].map(i => (
-            <div key={i} className="flex items-center gap-4 py-3 border-b border-[#F3F4F6] last:border-0">
+            <div key={i} className="flex items-center gap-4 py-3 border-b border-surface-sunken last:border-0">
               <Skeleton className="h-6 w-48" />
               <Skeleton className="h-4 w-24 ml-auto" />
               <Skeleton className="h-4 w-16" />
@@ -526,7 +532,7 @@ function ProjectsContent() {
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-200">
                     <thead>
-                      <tr className="border-b border-[#F3F4F6]">
+                      <tr className="border-b border-surface-sunken">
                         {visibleColumns.includes('project') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Project</th>}
                         {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>}
                         {visibleColumns.includes('progress') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Progress</th>}
@@ -551,7 +557,7 @@ function ProjectsContent() {
                                   exit={{ opacity: 0, y: 5 }}
                                   className="absolute right-0 top-full mt-2 w-48 bg-white border border-border rounded-xl shadow-lg z-50 overflow-hidden py-1"
                                 >
-                                  <div className="px-3 py-2 border-b border-[#F3F4F6] text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
+                                  <div className="px-3 py-2 border-b border-surface-sunken text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
                                     Visible Columns
                                   </div>
                                   {ALL_PROJECT_COLUMNS.map(col => (
@@ -577,7 +583,7 @@ function ProjectsContent() {
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#F3F4F6]">
+                    <tbody className="divide-y divide-surface-sunken">
                       {projects.map((p) => (
                         <motion.tr key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="hover:bg-surface transition-colors relative">
                           {visibleColumns.includes('project') && (
@@ -590,7 +596,7 @@ function ProjectsContent() {
                           {visibleColumns.includes('progress') && (
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-2">
-                                <div className="h-1.5 w-20 rounded-full bg-[#F3F4F6] overflow-hidden">
+                                <div className="h-1.5 w-20 rounded-full bg-surface-sunken overflow-hidden">
                                   <div className="h-full rounded-full bg-primary" style={{ width: `${p.progress}%` }} />
                                 </div>
                                 <span className="text-xs text-secondary tabular-nums">{p.progress}%</span>
@@ -646,7 +652,7 @@ function ProjectsContent() {
 
                       <div className="mb-4">
                         <div className="flex items-center gap-2">
-                          <div className="h-1.5 flex-1 rounded-full bg-[#F3F4F6] overflow-hidden">
+                          <div className="h-1.5 flex-1 rounded-full bg-surface-sunken overflow-hidden">
                             <div className="h-full rounded-full bg-primary" style={{ width: `${p.progress}%` }} />
                           </div>
                           <span className="text-xs text-secondary tabular-nums shrink-0">{p.progress}%</span>
@@ -668,11 +674,11 @@ function ProjectsContent() {
                         </div>
 
                         <div className="flex items-center gap-2 text-xs font-medium text-secondary">
-                          <span className="bg-[#F3F4F6] px-1.5 py-0.5 rounded">
+                          <span className="bg-surface-sunken px-1.5 py-0.5 rounded">
                             {p._count?.tasks ?? 0} tasks
                           </span>
                           {p.endDate && (
-                            <span className="bg-[#F3F4F6] px-1.5 py-0.5 rounded">
+                            <span className="bg-surface-sunken px-1.5 py-0.5 rounded">
                               {formatShortDate(p.endDate)}
                             </span>
                           )}
@@ -705,13 +711,13 @@ function ProjectsContent() {
                   const pct = Math.min(100, (elapsed / totalDays) * 100);
 
                   return (
-                    <Link key={p.id} href={`/projects/${p.id}`} className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4 py-3 md:py-2 hover:bg-surface rounded-xl px-3 -mx-3 transition-colors border-b border-[#F3F4F6] last:border-0 md:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                    <Link key={p.id} href={`/projects/${p.id}`} className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4 py-3 md:py-2 hover:bg-surface rounded-xl px-3 -mx-3 transition-colors border-b border-surface-sunken last:border-0 md:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                       <div className="w-full md:w-48 shrink-0">
                         <p className="text-sm font-medium text-primary truncate">{p.name}</p>
                         <p className="text-xs text-secondary">{p.client ? getClientDisplayName(p.client) : 'Internal Project'}</p>
                       </div>
                       <div className="flex-1 w-full">
-                        <div className="relative h-8 rounded-lg bg-[#F3F4F6] overflow-hidden">
+                        <div className="relative h-8 rounded-lg bg-surface-sunken overflow-hidden">
                           <div className="absolute inset-y-0 left-0 rounded-lg bg-primary/10" style={{ width: `${pct}%` }} />
                           <div className="absolute inset-y-0 left-0 rounded-lg bg-primary" style={{ width: `${p.progress}%`, maxWidth: `${pct}%` }} />
                           <div className="absolute inset-0 flex items-center px-3">
@@ -734,7 +740,7 @@ function ProjectsContent() {
             <CalendarView projects={projects} />
           )}
 
-          {view === 'gantt' && (
+          {view === 'gantt' && !isMobile && (
             <ProjectGanttView projects={projects} loading={loading} />
           )}
 
@@ -759,15 +765,15 @@ function ProjectsContent() {
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setShowCreate(false)} />
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-modal shadow-black/10 overflow-y-auto">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-surface-sunken">
                 <h2 className="text-lg font-semibold text-primary">New Project</h2>
-                <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><Icon as={X} size="md" className="text-secondary" /></button>
+                <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl hover:bg-surface-sunken"><Icon as={X} size="md" className="text-secondary" /></button>
               </div>
               <form onSubmit={handleCreate} className="relative p-6 pb-24 md:pb-6 space-y-8">
                 {formError && <div className="absolute top-0 left-6 right-6 -mt-2 z-10 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 border border-red-100">{formError}</div>}
 
                 {templates.length > 0 && (
-                  <div className="mb-2 pb-4 border-b border-[#F3F4F6]">
+                  <div className="mb-2 pb-4 border-b border-surface-sunken">
                     <label className="flex text-sm font-medium text-[#374151] mb-1.5 items-center gap-2">
                       Start from a Template <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">New</span>
                     </label>
@@ -790,7 +796,7 @@ function ProjectsContent() {
 
                 {/* Basic Info */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Basic Info</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-surface-sunken pb-2">Basic Info</h3>
                   <div>
                     <Field label="Project Name *" value={formValues.name} onChange={(v) => setValue('name', v, { shouldValidate: true })} required />
                     {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>}
@@ -853,7 +859,7 @@ function ProjectsContent() {
 
                 {/* Client & Ownership */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Client & Ownership</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-surface-sunken pb-2">Client & Ownership</h3>
                   <div className="flex flex-col gap-4">
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Client</label>
@@ -906,7 +912,7 @@ function ProjectsContent() {
 
                 {/* Timeline */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Timeline</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-surface-sunken pb-2">Timeline</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Field label="Start Date" type="date" value={formValues.startDate || ''} onChange={(v) => setValue('startDate', v, { shouldValidate: true })} />
@@ -925,7 +931,7 @@ function ProjectsContent() {
 
                 {/* Scope */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Scope</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-surface-sunken pb-2">Scope</h3>
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Scope of Work</label>
                     <RichTextEditor

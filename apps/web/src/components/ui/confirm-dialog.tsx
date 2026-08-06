@@ -103,7 +103,7 @@ export function ConfirmDialog() {
             {/* Close Button */}
             <button
               onClick={onCancel}
-              className="absolute right-4 top-4 rounded-lg p-1.5 text-secondary hover:bg-[#F3F4F6] hover:text-[#4B5563] transition-colors"
+              className="absolute right-4 top-4 rounded-lg p-1.5 text-secondary hover:bg-surface-sunken hover:text-text-on-sunken transition-colors"
             >
               <Icon as={X} size="md" />
             </button>
@@ -145,11 +145,11 @@ export function ConfirmDialog() {
             </div>
 
             {/* Footer Buttons */}
-            <div className="mt-6 flex justify-end gap-3 border-t border-[#F3F4F6] pt-4">
+            <div className="mt-6 flex justify-end gap-3 border-t border-surface-sunken pt-4">
               <button
                 type="button"
                 onClick={onCancel}
-                className="px-4 py-2 text-sm font-semibold text-[#4B5563] bg-white border border-border rounded-xl hover:bg-[#F9FAFB] transition-[transform,background-color,border-color,color] duration-200 active:scale-95"
+                className="px-4 py-2 text-sm font-semibold text-text-on-sunken bg-white border border-border rounded-xl hover:bg-[#F9FAFB] transition-[transform,background-color,border-color,color] duration-200 active:scale-95"
               >
                 {cancelText}
               </button>

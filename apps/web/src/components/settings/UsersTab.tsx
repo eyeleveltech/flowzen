@@ -237,7 +237,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                 <tr key={u.id} className="hover:bg-surface transition-colors">
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded-full bg-[#F3F4F6] text-primary flex items-center justify-center text-xs font-medium border border-border">
+                      <div className="h-8 w-8 rounded-full bg-surface-sunken text-primary flex items-center justify-center text-xs font-medium border border-border">
                         {getInitials(u.name)}
                       </div>
                       <div>
@@ -256,7 +256,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                     {u.designation || '—'}
                   </td>
                   <td className="px-5 py-3">
-                    {u.status === 'ACTIVE' && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[#F3F4F6] text-primary border border-border uppercase tracking-wide">Active</span>}
+                    {u.status === 'ACTIVE' && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-surface-sunken text-primary border border-border uppercase tracking-wide">Active</span>}
                     {u.status === 'PENDING' && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-surface-sunken text-text-on-sunken border border-border uppercase tracking-wide">Pending</span>}
                     {u.status === 'INACTIVE' && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[#F9FAFB] text-secondary border border-border uppercase tracking-wide">Inactive</span>}
                   </td>
@@ -283,7 +283,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                       <button
                         onClick={() => setEditingUser(u)}
                         title="Edit user"
-                        className="p-1.5 text-secondary hover:text-primary hover:bg-[#F3F4F6] rounded-md transition-colors"
+                        className="p-1.5 text-secondary hover:text-primary hover:bg-surface-sunken rounded-md transition-colors"
                       >
                         <Icon as={Edit2} size="md" />
                       </button>
@@ -334,7 +334,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
             <div key={u.id} className="p-3.5 sm:p-4 hover:bg-[#F9FAFB] transition-colors relative">
               <div className="flex items-start justify-between gap-2 mb-3">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="h-9 w-9 rounded-full bg-[#F3F4F6] text-primary flex items-center justify-center text-xs font-semibold border border-border shrink-0">
+                  <div className="h-9 w-9 rounded-full bg-surface-sunken text-primary flex items-center justify-center text-xs font-semibold border border-border shrink-0">
                     {getInitials(u.name)}
                   </div>
                   <div className="min-w-0">
@@ -355,7 +355,7 @@ export function UsersTab({ users, fetchUsers, teams, currentUser }: { users: any
                   <button
                     onClick={() => setEditingUser(u)}
                     title="Edit user"
-                    className="p-1.5 text-secondary hover:text-primary bg-white border border-border hover:bg-[#F3F4F6] rounded-xl transition-colors duration-150 motion-reduce:transition-none"
+                    className="p-1.5 text-secondary hover:text-primary bg-white border border-border hover:bg-surface-sunken rounded-xl transition-colors duration-150 motion-reduce:transition-none"
                   >
                     <Icon as={Edit2} size="md" />
                   </button>

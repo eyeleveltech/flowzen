@@ -381,7 +381,7 @@ export default function ClientDetailPage() {
               <div className="space-y-6">
                 {/* Company Details */}
                 <div>
-                  <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-[#F3F4F6]">Company Details</h4>
+                  <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-surface-sunken">Company Details</h4>
                   <div className="grid grid-cols-2 gap-y-4 gap-x-2">
                     <InfoRow icon={Building2} label="Industry" value={client.industry || '—'} />
                     <InfoRow icon={Globe} label="Website" value={client.website || '—'} />
@@ -411,7 +411,7 @@ export default function ClientDetailPage() {
 
                 {/* Billing / Address */}
                 <div>
-                  <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-[#F3F4F6]">Billing & Address</h4>
+                  <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-surface-sunken">Billing & Address</h4>
                   <div className="grid grid-cols-2 gap-y-4 gap-x-2 mb-4">
                     <InfoRow icon={MapPin} label="City" value={client.city || '—'} />
                     <InfoRow icon={MapPin} label="State" value={client.state || '—'} />
@@ -431,7 +431,7 @@ export default function ClientDetailPage() {
 
                 {/* Engagement */}
                 <div>
-                  <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-[#F3F4F6]">Engagement</h4>
+                  <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-surface-sunken">Engagement</h4>
                   <div className="grid grid-cols-2 gap-y-4 gap-x-2 mb-4">
                     <InfoRow icon={Briefcase} label="Engagement Type" value={client.engagementType || '—'} />
                     <InfoRow icon={Calendar} label="Start Date" value={client.startDate ? formatDate(client.startDate) : '—'} />
@@ -460,7 +460,7 @@ export default function ClientDetailPage() {
                 {/* CRM Details */}
                 {activeModule !== 'PM' && (
                   <div>
-                    <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-[#F3F4F6]">CRM Details</h4>
+                    <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-surface-sunken">CRM Details</h4>
                     <div className="grid grid-cols-2 gap-y-4 gap-x-2">
                       <InfoRow icon={Briefcase} label="Job Title" value={client.jobTitle || '—'} />
                       <InfoRow icon={Globe} label="LinkedIn" value={client.linkedinUrl || '—'} />
@@ -481,7 +481,7 @@ export default function ClientDetailPage() {
             )}
 
             {client.contacts && client.contacts.length > 0 && (
-              <div className="pt-4 border-t border-[#F3F4F6]">
+              <div className="pt-4 border-t border-surface-sunken">
                 <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3">Contacts</h4>
                 <div className="space-y-3">
                   {client.contacts.map((c) => (
@@ -547,7 +547,7 @@ export default function ClientDetailPage() {
                   {/* Header */}
                   <div className="flex items-start justify-between gap-3 mb-4">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-9 w-9 rounded-xl bg-[#F3F4F6] border border-border flex items-center justify-center shrink-0">
+                      <div className="h-9 w-9 rounded-xl bg-surface-sunken border border-border flex items-center justify-center shrink-0">
                         <FolderKanban className="h-4 w-4 text-secondary" />
                       </div>
                       <div className="min-w-0">
@@ -584,7 +584,7 @@ export default function ClientDetailPage() {
                       <span className="text-[11px] font-medium text-secondary uppercase tracking-wide">Progress</span>
                       <span className="text-xs font-semibold text-primary tabular-nums">{p.progress}%</span>
                     </div>
-                    <div className="h-2 w-full rounded-full bg-[#F3F4F6] overflow-hidden">
+                    <div className="h-2 w-full rounded-full bg-surface-sunken overflow-hidden">
                       <div className={`h-full rounded-full ${p.status === 'COMPLETED' ? 'bg-emerald-500' : 'bg-primary'}`} style={{ width: `${p.progress}%` }} />
                     </div>
                   </div>
@@ -637,9 +637,9 @@ export default function ClientDetailPage() {
               exit={{ opacity: 0, x: 20 }}
               className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto"
             >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-surface-sunken">
                 <h2 className="text-lg font-semibold text-primary">Edit Client</h2>
-                <button onClick={() => setShowEdit(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
+                <button onClick={() => setShowEdit(false)} className="p-2 rounded-xl hover:bg-surface-sunken transition-colors">
                   <X className="h-4 w-4 text-secondary" />
                 </button>
               </div>
@@ -672,7 +672,7 @@ export default function ClientDetailPage() {
                 <Field label="Start Date" type="date" value={editForm.startDate} onChange={(v) => setEditForm({ ...editForm, startDate: v })} />
 
                 {activeModule !== 'PM' && (
-                  <div className="space-y-4 pt-4 border-t border-[#F3F4F6]">
+                  <div className="space-y-4 pt-4 border-t border-surface-sunken">
                     <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider">CRM Details</h4>
 
                     {/* Contact Info */}
@@ -819,11 +819,11 @@ export default function ClientDetailPage() {
 
 
 
-                <div className="space-y-3 pt-2 pb-2 border-y border-[#F3F4F6]">
+                <div className="space-y-3 pt-2 pb-2 border-y border-surface-sunken">
                   <div className="flex items-center justify-between">
                     <label className="block text-sm font-medium text-[#374151]">Contacts</label>
                     {editForm.contacts.length < 5 && (
-                      <button type="button" onClick={() => setEditForm({ ...editForm, contacts: [...editForm.contacts, { id: '', name: '', designation: '', email: '', phone: '' }] })} className="text-xs font-medium text-primary flex items-center gap-1 hover:bg-[#F3F4F6] px-2 py-1 rounded transition-colors">
+                      <button type="button" onClick={() => setEditForm({ ...editForm, contacts: [...editForm.contacts, { id: '', name: '', designation: '', email: '', phone: '' }] })} className="text-xs font-medium text-primary flex items-center gap-1 hover:bg-surface-sunken px-2 py-1 rounded transition-colors">
                         <Plus className="h-3 w-3" /> Add Contact
                       </button>
                     )}
@@ -908,9 +908,9 @@ export default function ClientDetailPage() {
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-60 bg-black/20 backdrop-blur-sm" onClick={() => setViewModalContent(null)} />
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-60 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 flex flex-col">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] shrink-0">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-surface-sunken shrink-0">
                 <h2 className="text-lg font-semibold text-primary">{viewModalContent.title}</h2>
-                <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><X className="h-4 w-4 text-secondary" /></button>
+                <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-surface-sunken"><X className="h-4 w-4 text-secondary" /></button>
               </div>
               <div className="p-6 overflow-y-auto flex-1">
                 <SafeHtml

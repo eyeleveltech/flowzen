@@ -163,7 +163,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
         <span className="flex items-center gap-2 min-w-0">
           {leadingIcon && <span className="shrink-0 flex items-center">{leadingIcon}</span>}
           {selectedOption?.avatar && (
-            <span className="h-5 w-5 shrink-0 rounded-full bg-[#F3F4F6] border border-border text-primary text-[9px] font-semibold flex items-center justify-center">{selectedOption.avatar}</span>
+            <span className="h-5 w-5 shrink-0 rounded-full bg-surface-sunken border border-border text-primary text-[9px] font-semibold flex items-center justify-center">{selectedOption.avatar}</span>
           )}
           <span className={`min-w-0 truncate ${selectedOption && selectedOption.value !== '' ? 'text-primary' : 'text-[#374151]'}`}>
             {selectedOption ? selectedOption.label : placeholder}
@@ -209,13 +209,13 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                   setIsOpen(false);
                 }}
                 className={`w-full text-left px-4 py-2 rounded-xl text-sm transition-colors ${value === option.value
-                  ? 'bg-[#F3F4F6] text-primary font-semibold'
+                  ? 'bg-surface-sunken text-primary font-semibold'
                   : 'text-[#374151] active:bg-[#F9FAFB]'
                   }`}
               >
                 <span className="flex items-center gap-3">
                   {option.avatar && (
-                    <span className="h-8 w-8 shrink-0 rounded-full bg-[#F3F4F6] border border-border text-primary text-xs font-semibold flex items-center justify-center">{option.avatar}</span>
+                    <span className="h-8 w-8 shrink-0 rounded-full bg-surface-sunken border border-border text-primary text-xs font-semibold flex items-center justify-center">{option.avatar}</span>
                   )}
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">{option.label}</span>
@@ -255,7 +255,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                   }}
                 >
                   {showSearch && (
-                    <div className="sticky top-0 z-10 -mx-1.5 -mt-1.5 mb-1 border-b border-[#F3F4F6] bg-white px-1.5 pt-1.5 pb-1.5">
+                    <div className="sticky top-0 z-10 -mx-1.5 -mt-1.5 mb-1 border-b border-surface-sunken bg-white px-1.5 pt-1.5 pb-1.5">
                       <div className="relative">
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-secondary" aria-hidden="true" />
                         <input
@@ -333,13 +333,13 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                         }
                       }}
                       className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/10 focus:bg-[#F9FAFB] ${value === option.value
-                        ? 'bg-[#F3F4F6] text-primary font-medium'
+                        ? 'bg-surface-sunken text-primary font-medium'
                         : 'text-[#374151] hover:bg-[#F9FAFB]'
                         }`}
                     >
                       <span className="flex items-center gap-2.5">
                         {option.avatar && (
-                          <span className="h-7 w-7 shrink-0 rounded-full bg-[#F3F4F6] border border-border text-primary text-[10px] font-semibold flex items-center justify-center">{option.avatar}</span>
+                          <span className="h-7 w-7 shrink-0 rounded-full bg-surface-sunken border border-border text-primary text-[10px] font-semibold flex items-center justify-center">{option.avatar}</span>
                         )}
                         <span className="min-w-0 flex-1">
                           <span className="block truncate">{option.label}</span>

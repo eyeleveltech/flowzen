@@ -238,7 +238,7 @@ export default function TeamPage() {
         </div>
 
         {/* Tab Buttons */}
-        <div className="flex bg-[#F3F4F6] p-1 rounded-xl">
+        <div className="flex bg-surface-sunken p-1 rounded-xl">
           <button
             onClick={() => setActiveTab('tasks')}
             className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-colors duration-150 motion-reduce:transition-none ${activeTab === 'tasks'
@@ -383,7 +383,7 @@ export default function TeamPage() {
               className="space-y-6"
             >
               {/* Contact Info Card */}
-              <div className="bg-surface rounded-2xl p-5 border border-border/80 space-y-3.5 text-xs text-[#4B5563]">
+              <div className="bg-surface rounded-2xl p-5 border border-border/80 space-y-3.5 text-xs text-text-on-sunken">
                 <h4 className="text-xs text-secondary font-medium uppercase tracking-wide mb-1">Contact Information</h4>
                 <div className="flex items-center gap-3">
                   <Icon as={Mail} size="md" className="text-secondary" />
@@ -546,7 +546,7 @@ export default function TeamPage() {
                       </div>
                     </div>
 
-                    <div className="mt-auto pt-4 border-t border-[#F3F4F6] flex items-center justify-between text-xs">
+                    <div className="mt-auto pt-4 border-t border-surface-sunken flex items-center justify-between text-xs">
                       <div className="flex items-center gap-3 text-secondary">
                         <span className="flex items-center gap-1">
                           <span className="font-semibold text-primary">{m.activeTasks}</span>

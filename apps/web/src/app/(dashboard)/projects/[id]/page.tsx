@@ -350,13 +350,13 @@ export default function ProjectDetailPage() {
       {/* Header Skeleton */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-border">
         <div className="space-y-3">
-          <div className="h-4 w-24 bg-[#F3F4F6] rounded-md animate-pulse" />
+          <div className="h-4 w-24 bg-surface-sunken rounded-md animate-pulse" />
           <div className="h-8 w-64 bg-border rounded-lg animate-pulse" />
-          <div className="h-4 w-48 bg-[#F3F4F6] rounded-md animate-pulse" />
+          <div className="h-4 w-48 bg-surface-sunken rounded-md animate-pulse" />
         </div>
         <div className="flex gap-2">
-          <div className="h-10 w-28 bg-[#F3F4F6] rounded-xl animate-pulse" />
-          <div className="h-10 w-28 bg-[#F3F4F6] rounded-xl animate-pulse" />
+          <div className="h-10 w-28 bg-surface-sunken rounded-xl animate-pulse" />
+          <div className="h-10 w-28 bg-surface-sunken rounded-xl animate-pulse" />
         </div>
       </div>
 
@@ -364,10 +364,10 @@ export default function ProjectDetailPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[...Array(4)].map((_, i) => (
           <div key={i} className="bg-white rounded-2xl border border-border p-5 h-32 flex flex-col justify-between">
-            <div className="h-4 w-1/3 bg-[#F3F4F6] rounded-md animate-pulse mb-4" />
+            <div className="h-4 w-1/3 bg-surface-sunken rounded-md animate-pulse mb-4" />
             <div className="space-y-3">
               <div className="h-4 w-full bg-border rounded-md animate-pulse" />
-              <div className="h-4 w-2/3 bg-[#F3F4F6] rounded-md animate-pulse" />
+              <div className="h-4 w-2/3 bg-surface-sunken rounded-md animate-pulse" />
             </div>
           </div>
         ))}
@@ -375,15 +375,15 @@ export default function ProjectDetailPage() {
 
       {/* Main Content Skeleton */}
       <div className="bg-white rounded-2xl border border-border h-96 flex flex-col p-6">
-        <div className="flex gap-6 mb-6 border-b border-[#F3F4F6] pb-4">
+        <div className="flex gap-6 mb-6 border-b border-surface-sunken pb-4">
           <div className="h-6 w-20 bg-border rounded-md animate-pulse" />
-          <div className="h-6 w-24 bg-[#F3F4F6] rounded-md animate-pulse" />
-          <div className="h-6 w-20 bg-[#F3F4F6] rounded-md animate-pulse" />
+          <div className="h-6 w-24 bg-surface-sunken rounded-md animate-pulse" />
+          <div className="h-6 w-20 bg-surface-sunken rounded-md animate-pulse" />
         </div>
         <div className="flex-1 space-y-4">
-          <div className="h-4 w-full bg-[#F3F4F6] rounded-md animate-pulse" />
-          <div className="h-4 w-full bg-[#F3F4F6] rounded-md animate-pulse" />
-          <div className="h-4 w-3/4 bg-[#F3F4F6] rounded-md animate-pulse" />
+          <div className="h-4 w-full bg-surface-sunken rounded-md animate-pulse" />
+          <div className="h-4 w-full bg-surface-sunken rounded-md animate-pulse" />
+          <div className="h-4 w-3/4 bg-surface-sunken rounded-md animate-pulse" />
         </div>
       </div>
     </div>
@@ -573,7 +573,7 @@ export default function ProjectDetailPage() {
               <span className="text-2xl font-semibold text-primary leading-none">{project.progress}%</span>
               <span className="text-xs text-secondary">{completedTasks}/{totalTasks} tasks</span>
             </div>
-            <div className="h-2 w-full rounded-full bg-[#F3F4F6] overflow-hidden">
+            <div className="h-2 w-full rounded-full bg-surface-sunken overflow-hidden">
               <div className="h-full rounded-full bg-primary" style={{ width: `${project.progress}%` }} />
             </div>
           </div>
@@ -766,7 +766,7 @@ export default function ProjectDetailPage() {
                 )}
 
                 {/* List / Board Toggle Buttons */}
-                <div className="flex bg-[#F3F4F6] p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center">
+                <div className="flex bg-surface-sunken p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center">
                   <button
                     type="button"
                     onClick={() => {
@@ -816,7 +816,7 @@ export default function ProjectDetailPage() {
               <div className="hidden md:block rounded-2xl border border-border bg-white overflow-hidden">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-[#F3F4F6]">
+                    <tr className="border-b border-surface-sunken">
                       {visibleTaskColumns.includes('task') && <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Task</th>}
                       {visibleTaskColumns.includes('type') && <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Department</th>}
                       {visibleTaskColumns.includes('assignee') && <th className="px-6 py-3 text-left text-xs font-medium text-secondary uppercase tracking-wide">Assignee</th>}
@@ -887,7 +887,7 @@ export default function ProjectDetailPage() {
                                 exit={{ opacity: 0, y: 5 }}
                                 className="absolute right-0 top-full mt-2 w-48 bg-white border border-border rounded-xl shadow-lg z-50 overflow-hidden py-1"
                               >
-                                <div className="px-3 py-2 border-b border-[#F3F4F6] text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
+                                <div className="px-3 py-2 border-b border-surface-sunken text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
                                   Visible Columns
                                 </div>
                                 {ALL_TASK_COLUMNS.map(col => (
@@ -913,7 +913,7 @@ export default function ProjectDetailPage() {
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#F3F4F6]">
+                  <tbody className="divide-y divide-surface-sunken">
                     {finalTasks.length === 0 ? (
                       <tr><td colSpan={visibleTaskColumns.length + 1} className="px-6 py-8 text-center text-sm text-secondary">{hasTaskFilters ? 'No tasks match your filters' : 'No tasks yet'}</td></tr>
                     ) : (
@@ -1188,14 +1188,14 @@ export default function ProjectDetailPage() {
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setShowEditProject(false)} />
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-modal shadow-black/10 overflow-y-auto">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-surface-sunken">
                 <h2 className="text-lg font-semibold text-primary">Edit Project</h2>
-                <button onClick={() => setShowEditProject(false)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><Icon as={X} size="md" className="text-secondary" /></button>
+                <button onClick={() => setShowEditProject(false)} className="p-2 rounded-xl hover:bg-surface-sunken"><Icon as={X} size="md" className="text-secondary" /></button>
               </div>
               <form onSubmit={handleEditProject} className="p-6 pb-24 md:pb-6 space-y-8">
                 {/* Basic Info */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Basic Info</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-surface-sunken pb-2">Basic Info</h3>
                   <div>
                     <label htmlFor="pe-name" className="block text-sm font-medium text-[#374151] mb-1.5">Project Name *</label>
                     <input id="pe-name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none" />
@@ -1270,7 +1270,7 @@ export default function ProjectDetailPage() {
 
                 {/* Client & Ownership */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Client & Ownership</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-surface-sunken pb-2">Client & Ownership</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Client</label>
@@ -1305,7 +1305,7 @@ export default function ProjectDetailPage() {
 
                 {/* Timeline */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Timeline</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-surface-sunken pb-2">Timeline</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label htmlFor="pe-startDate" className="block text-sm font-medium text-[#374151] mb-1.5">Start Date</label>
@@ -1320,7 +1320,7 @@ export default function ProjectDetailPage() {
 
                 {/* Scope */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">Scope</h3>
+                  <h3 className="text-sm font-semibold text-primary border-b border-surface-sunken pb-2">Scope</h3>
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Scope of Work</label>
                     <RichTextEditor
@@ -1352,9 +1352,9 @@ export default function ProjectDetailPage() {
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setViewModalContent(null)} />
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-modal shadow-black/10 flex flex-col">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] shrink-0">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-surface-sunken shrink-0">
                 <h2 className="text-lg font-semibold text-primary">{viewModalContent.title}</h2>
-                <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-[#F3F4F6]"><Icon as={X} size="md" className="text-secondary" /></button>
+                <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-surface-sunken"><Icon as={X} size="md" className="text-secondary" /></button>
               </div>
               <div className="p-6 pb-24 md:pb-6 overflow-y-auto flex-1">
                 <SafeHtml

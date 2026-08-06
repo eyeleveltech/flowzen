@@ -172,7 +172,7 @@ export default function TeamsPage() {
         </div>
         <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden p-6 space-y-4">
           {[1, 2, 3].map(i => (
-            <div key={i} className="flex items-center gap-4 py-3 border-b border-[#F3F4F6] last:border-0">
+            <div key={i} className="flex items-center gap-4 py-3 border-b border-surface-sunken last:border-0">
               <div className="flex items-center gap-3">
                 <Skeleton className="h-10 w-10 rounded-xl" />
                 <div>
@@ -228,7 +228,7 @@ export default function TeamsPage() {
                     <tr key={team.id} className="hover:bg-[#F9FAFB] transition-colors group">
                       <td className="px-6 py-5">
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-xl bg-[#F3F4F6] text-primary flex items-center justify-center border border-border shrink-0">
+                          <div className="h-10 w-10 rounded-xl bg-surface-sunken text-primary flex items-center justify-center border border-border shrink-0">
                             <Icon as={Users} size="lg" />
                           </div>
                           <div>
@@ -275,7 +275,7 @@ export default function TeamsPage() {
                             ))}
                             {team.members.length > 5 && (
                               <div
-                                className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-2 ring-white bg-[#F3F4F6] text-primary border border-border text-[10px] font-semibold"
+                                className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-2 ring-white bg-surface-sunken text-primary border border-border text-[10px] font-semibold"
                                 style={{ zIndex: 0 }}
                               >
                                 +{team.members.length - 5}
@@ -289,7 +289,7 @@ export default function TeamsPage() {
                         {(canEdit(team) || canDelete) && (
                           <div className="flex gap-2 justify-end opacity-100 lg:opacity-0 lg:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                             {canEdit(team) && (
-                              <button onClick={() => openEdit(team)} className="p-2 text-secondary hover:text-primary bg-white border border-border hover:bg-[#F3F4F6] rounded-xl transition-colors duration-150 motion-reduce:transition-none hover:shadow-sm">
+                              <button onClick={() => openEdit(team)} className="p-2 text-secondary hover:text-primary bg-white border border-border hover:bg-surface-sunken rounded-xl transition-colors duration-150 motion-reduce:transition-none hover:shadow-sm">
                                 <Icon as={Edit2} size="md" />
                               </button>
                             )}
@@ -329,7 +329,7 @@ export default function TeamsPage() {
                     {(canEdit(team) || canDelete) && (
                       <div className="flex gap-1.5 shrink-0">
                         {canEdit(team) && (
-                          <button onClick={() => openEdit(team)} className="p-1.5 text-secondary hover:text-primary bg-white border border-border hover:bg-[#F3F4F6] rounded-xl transition-colors duration-150 motion-reduce:transition-none hover:shadow-sm">
+                          <button onClick={() => openEdit(team)} className="p-1.5 text-secondary hover:text-primary bg-white border border-border hover:bg-surface-sunken rounded-xl transition-colors duration-150 motion-reduce:transition-none hover:shadow-sm">
                             <Icon as={Edit2} size="md" />
                           </button>
                         )}
@@ -369,7 +369,7 @@ export default function TeamsPage() {
                         ))}
                         {team.members.length > 4 && (
                           <div
-                            className="relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-2 ring-[#F9FAFB] bg-[#F3F4F6] text-primary border border-border text-[7px] font-semibold"
+                            className="relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-2 ring-[#F9FAFB] bg-surface-sunken text-primary border border-border text-[7px] font-semibold"
                             style={{ zIndex: 0 }}
                           >
                             +{team.members.length - 4}

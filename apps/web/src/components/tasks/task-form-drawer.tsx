@@ -350,9 +350,9 @@ export function TaskFormDrawer({ isOpen, onClose, taskToEdit, projectId: propPro
             exit={{ opacity: 0, x: 20 }}
             className="fixed right-0 top-0 bottom-0 z-101 w-full max-w-lg bg-white border-l border-border shadow-modal shadow-black/10 overflow-y-auto"
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6] sticky top-0 bg-white z-10">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-surface-sunken sticky top-0 bg-white z-10">
               <h2 className="text-lg font-semibold text-primary">{isEditing ? 'Edit Task' : 'New Task'}</h2>
-              <button onClick={guardedClose} className="p-2 rounded-xl hover:bg-[#F3F4F6] transition-colors">
+              <button onClick={guardedClose} className="p-2 rounded-xl hover:bg-surface-sunken transition-colors">
                 <Icon as={X} size="md" className="text-secondary" />
               </button>
             </div>

@@ -200,12 +200,12 @@ function QuotationsContent() {
                   <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                     {/* Desktop Viewport — icon row */}
                     <div className="hidden md:flex items-center justify-end gap-1.5 text-secondary">
-                      <button title="View / Edit" onClick={() => openEdit(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Eye className="h-4 w-4" /></button>
-                      <button title="Generate / Download PDF" onClick={() => q.pdfUrl ? window.open(fileUrl(q.pdfUrl), '_blank') : generatePdf(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Download className="h-4 w-4" /></button>
+                      <button title="View / Edit" onClick={() => openEdit(q.id)} className="p-1.5 rounded-lg hover:bg-surface-sunken hover:text-primary transition-colors"><Eye className="h-4 w-4" /></button>
+                      <button title="Generate / Download PDF" onClick={() => q.pdfUrl ? window.open(fileUrl(q.pdfUrl), '_blank') : generatePdf(q.id)} className="p-1.5 rounded-lg hover:bg-surface-sunken hover:text-primary transition-colors"><Download className="h-4 w-4" /></button>
                       {q.status !== 'CANCELLED' && (
-                        <button title="Email to client" onClick={() => sendToClient(q)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Send className="h-4 w-4" /></button>
+                        <button title="Email to client" onClick={() => sendToClient(q)} className="p-1.5 rounded-lg hover:bg-surface-sunken hover:text-primary transition-colors"><Send className="h-4 w-4" /></button>
                       )}
-                      <button title="Duplicate" onClick={() => duplicate(q.id)} className="p-1.5 rounded-lg hover:bg-[#F3F4F6] hover:text-primary transition-colors"><Copy className="h-4 w-4" /></button>
+                      <button title="Duplicate" onClick={() => duplicate(q.id)} className="p-1.5 rounded-lg hover:bg-surface-sunken hover:text-primary transition-colors"><Copy className="h-4 w-4" /></button>
                       {q.status === 'ACCEPTED' && (
                         <button title="Move to Invoice Draft" onClick={async () => { if (await confirm({ title: 'Create Invoice', message: 'Move this quote to an Invoice Draft?', confirmText: 'Create Invoice', cancelText: 'Cancel' })) createInvoiceDraft(q); }} className="p-1.5 rounded-lg hover:bg-emerald-50 hover:text-emerald-600 transition-colors">
                           <Icon as={FileText} size="md" />
@@ -220,7 +220,7 @@ function QuotationsContent() {
                     {/* Mobile Viewport — ⋯ menu with text labels */}
                     <div className="relative md:hidden flex justify-end">
                       <button
-                        className="p-1.5 rounded-lg hover:bg-[#F3F4F6] text-secondary hover:text-primary transition-colors"
+                        className="p-1.5 rounded-lg hover:bg-surface-sunken text-secondary hover:text-primary transition-colors"
                         onClick={() => setActiveDropdownId(activeDropdownId === q.id ? null : q.id)}
                       >
                         <Icon as={MoreHorizontal} size="md" />
@@ -312,7 +312,7 @@ function QuotationsContent() {
 
               <div className="relative" onClick={e => e.stopPropagation()}>
                 <button
-                  className="p-1.5 rounded-lg hover:bg-[#F3F4F6] text-secondary hover:text-primary transition-colors"
+                  className="p-1.5 rounded-lg hover:bg-surface-sunken text-secondary hover:text-primary transition-colors"
                   onClick={() => setActiveDropdownId(activeDropdownId === q.id ? null : q.id)}
                 >
                   <Icon as={MoreHorizontal} size="md" />

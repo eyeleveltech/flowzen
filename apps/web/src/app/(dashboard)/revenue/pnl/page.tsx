@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import { PieChart, DollarSign, Receipt, Clock } from 'lucide-react';
@@ -42,11 +43,12 @@ export default function PnLPage() {
     return <ErrorPanel message="Failed to load P&L data" onRetry={loadPnL} />;
   }
 
-  const totalRev = data.reduce((acc, curr) => acc + curr.revenue, 0);
-  const totalExp = data.reduce((acc, curr) => acc + curr.expenses, 0);
-  const totalLabour = data.reduce((acc, curr) => acc + (curr.labourCost || 0), 0);
-  const totalHours = data.reduce((acc, curr) => acc + (curr.labourHours || 0), 0);
-  const totalNet = data.reduce((acc, curr) => acc + curr.net, 0);
+  const safeData = Array.isArray(data) ? data : [];
+  const totalRev = safeData.reduce((acc, curr) => acc + (curr.revenue || 0), 0);
+  const totalExp = safeData.reduce((acc, curr) => acc + (curr.expenses || 0), 0);
+  const totalLabour = safeData.reduce((acc, curr) => acc + (curr.labourCost || 0), 0);
+  const totalHours = safeData.reduce((acc, curr) => acc + (curr.labourHours || 0), 0);
+  const totalNet = safeData.reduce((acc, curr) => acc + (curr.net || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -54,6 +56,20 @@ export default function PnLPage() {
         <div>
           <h1 className="text-2xl font-semibold text-primary tracking-tight">Per-Project P&L</h1>
           <p className="mt-1 text-sm text-secondary">Revenue versus what delivery actually cost — vendor bills and the team&apos;s own hours.</p>
+        </div>
+        <div className="flex bg-surface-sunken p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center self-start sm:self-auto overflow-x-auto max-w-full">
+          <Link
+            href="/revenue"
+            className="px-3 py-1 rounded-lg text-xs font-semibold transition-colors text-secondary hover:text-primary"
+          >
+            Overview
+          </Link>
+          <Link
+            href="/revenue/pnl"
+            className="px-3 py-1 rounded-lg text-xs font-semibold transition-colors bg-white text-primary shadow-sm"
+          >
+            Per-Project P&L
+          </Link>
         </div>
       </div>
 
@@ -76,10 +92,7 @@ export default function PnLPage() {
             <p className="text-2xl font-bold text-primary">{formatCurrency(totalExp)}</p>
           </div>
         </div>
-        {/* Labour is shown NEXT TO vendor expenses rather than folded into them: a project
-            bleeding on its own team's hours needs a different conversation from one bleeding on
-            subcontractors. Until time entries existed this cost was simply absent, and every
-            project therefore looked profitable. */}
+        {/* Labour is shown NEXT TO vendor expenses rather than folded into them */}
         <div className="flex items-center gap-4 rounded-2xl border border-border bg-white p-5 shadow-sm">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
             <Clock className="h-6 w-6" />
@@ -102,8 +115,8 @@ export default function PnLPage() {
       </div>
 
       <div className="rounded-2xl border border-border bg-white shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+        <div className="overflow-x-auto max-w-full">
+          <table className="w-full text-left text-sm min-w-160 sm:min-w-200">
             <thead className="bg-[#F9FAFB] text-secondary">
               <tr>
                 <th className="px-6 py-4 font-medium">Project</th>
@@ -115,12 +128,12 @@ export default function PnLPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {data.length === 0 ? (
+              {safeData.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-8 text-center text-secondary">No projects found.</td>
                 </tr>
               ) : (
-                data.map((row) => (
+                safeData.map((row) => (
                   <tr key={row.projectId} className="hover:bg-[#F9FAFB] transition-colors">
                     <td className="px-6 py-4 font-medium text-primary">{row.projectName}</td>
                     <td className="px-6 py-4 text-secondary">{row.clientName}</td>

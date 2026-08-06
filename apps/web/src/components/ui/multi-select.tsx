@@ -145,7 +145,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
           {selectedOptions.map(opt => (
             <span
               key={opt.value}
-              className="flex items-center gap-1 bg-[#F3F4F6] text-[#374151] px-2 py-1 rounded-lg text-xs font-medium"
+              className="flex items-center gap-1 bg-surface-sunken text-[#374151] px-2 py-1 rounded-lg text-xs font-medium"
             >
               {opt.image && <div className={`h-4 w-4 rounded-full flex items-center justify-center text-[8px] font-semibold ${opt.colorClass || 'bg-primary text-white'}`}>{opt.image}</div>}
               {opt.label}
@@ -229,7 +229,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
                       key={opt.value}
                       onClick={(e) => { e.stopPropagation(); handleSelect(opt.value); }}
                       className={`flex w-full items-center text-left gap-3 px-4 py-3.5 rounded-xl text-base transition-colors ${isSelected
-                          ? 'bg-[#F3F4F6] text-primary font-semibold'
+                          ? 'bg-surface-sunken text-primary font-semibold'
                           : 'text-[#374151] active:bg-[#F9FAFB]'
                         }`}
                     >
@@ -269,7 +269,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
             }}
           >
             {compact && options.length > 7 && (
-              <div className="sticky top-0 z-10 -mt-1.5 mb-1 bg-white px-1.5 pt-1.5 pb-1.5 border-b border-[#F3F4F6]">
+              <div className="sticky top-0 z-10 -mt-1.5 mb-1 bg-white px-1.5 pt-1.5 pb-1.5 border-b border-surface-sunken">
                 <input
                   autoFocus
                   value={search}

@@ -72,13 +72,13 @@ export function TaskTimeLog({ taskId, onChanged }: { taskId: string; onChanged?:
   };
 
   return (
-    <div className="mt-8 border-t border-[#F3F4F6] pt-6">
+    <div className="mt-8 border-t border-surface-sunken pt-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-primary flex items-center gap-2">
           <Clock className="h-4 w-4 text-secondary" /> Time Logged
         </h3>
         {totalHours > 0 && (
-          <span className="text-xs font-semibold text-primary bg-[#F3F4F6] border border-border px-2 py-0.5 rounded-md tabular-nums">
+          <span className="text-xs font-semibold text-primary bg-surface-sunken border border-border px-2 py-0.5 rounded-md tabular-nums">
             {totalHours}h total
           </span>
         )}

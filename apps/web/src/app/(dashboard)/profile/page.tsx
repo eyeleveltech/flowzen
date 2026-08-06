@@ -135,7 +135,7 @@ export default function ProfilePage() {
         {/* Personal Information Section */}
         <section className="rounded-2xl border border-border bg-white shadow-sm">
           <div className="border-b border-border px-4 sm:px-6 py-4 sm:py-5 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F3F4F6] shrink-0">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-sunken shrink-0">
               <Icon as={User} size="lg" className="text-secondary" />
             </div>
             <div>
@@ -208,7 +208,7 @@ export default function ProfilePage() {
         {/* Security Section */}
         <section className="rounded-2xl border border-border bg-white shadow-sm overflow-hidden">
           <div className="border-b border-border px-4 sm:px-6 py-4 sm:py-5 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F3F4F6] shrink-0">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-sunken shrink-0">
               <Icon as={KeyRound} size="lg" className="text-secondary" />
             </div>
             <div>

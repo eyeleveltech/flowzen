@@ -39,7 +39,7 @@ export function BottomTabs() {
     ...BOTTOM_NAV_ITEMS,
   ];
 
-  const visiblePrimary = primaryNavItems.filter(allowed);
+  const visiblePrimary = primaryNavItems.filter(allowed).slice(0, 4);
   const filteredMoreItems = moreNavItems.filter(allowed);
 
   const isMoreActive = filteredMoreItems.some(
@@ -77,7 +77,7 @@ export function BottomTabs() {
                 <h3 className="text-base font-semibold text-primary">More</h3>
                 <button
                   onClick={() => setShowMore(false)}
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F3F4F6] text-secondary hover:bg-border transition-colors"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-sunken text-secondary hover:bg-border transition-colors"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -119,7 +119,7 @@ export function BottomTabs() {
               </nav>
 
               {/* Sign Out */}
-              <div className="border-t border-[#F3F4F6] px-3 py-2 pb-20">
+              <div className="border-t border-surface-sunken px-3 py-2 pb-20">
                 <button
                   onClick={() => {
                     logout();

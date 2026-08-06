@@ -212,19 +212,19 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   never forces a company to exist twice. */}
               <button
                 onClick={() => router.push(`/quotations?create=true&leadId=${leadId}`)}
-                className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-[#4B5563] bg-white border border-border rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-text-on-sunken bg-white border border-border rounded-lg hover:bg-gray-50 transition-colors"
               >
                 <Icon as={Receipt} size="md" /> <span className="hidden sm:inline">Raise Quotation</span>
               </button>
               <button
                 onClick={() => setIsPipelineDetailsModalOpen(true)}
-                className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-[#4B5563] bg-white border border-border rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-text-on-sunken bg-white border border-border rounded-lg hover:bg-gray-50 transition-colors"
               >
                 <Icon as={Tag} size="md" /> <span className="hidden sm:inline">Stage Data</span>
               </button>
               <button
                 onClick={() => setIsEditModalOpen(true)}
-                className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-[#4B5563] bg-white border border-border rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-text-on-sunken bg-white border border-border rounded-lg hover:bg-gray-50 transition-colors"
               >
                 <Icon as={Pencil} size="md" /> <span className="hidden sm:inline">Edit</span>
               </button>
@@ -294,7 +294,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
             </div>
 
             {/* Deal Value */}
-            <div className="flex flex-col sm:flex-row sm:items-center lg:items-stretch gap-4 sm:gap-6 bg-gray-50/80 p-4 rounded-xl border border-border shrink-0 w-full lg:w-auto">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-6 bg-gray-50/80 p-4 rounded-xl border border-border shrink-0 w-full lg:w-auto">
               <div className="flex flex-col sm:items-end justify-center">
                 <span className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-1">Deal Value</span>
                 <span className="text-2xl font-bold text-primary leading-none">{lead.dealValue ? formatCurrency(lead.dealValue) : '—'}</span>
@@ -349,7 +349,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                       label: `${PIPELINE_STAGES.indexOf(s) + 1}. ${leadStageLabel(s)}`,
                       value: s
                     }))}
-                    className="w-40 sm:w-48 text-sm"
+                    className="w-full sm:w-48 text-sm"
                   />
 
                 </div>
@@ -588,7 +588,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                                 <span className="text-[11px] font-medium text-secondary">by {history.changedBy?.name || 'System'}</span>
                               </div>
                               {history.notes && (
-                                <p className="mt-2.5 text-sm text-[#4B5563] bg-gray-50/80 p-3 rounded-lg border border-gray-100 whitespace-pre-wrap leading-relaxed">{history.notes}</p>
+                                <p className="mt-2.5 text-sm text-text-on-sunken bg-gray-50/80 p-3 rounded-lg border border-gray-100 whitespace-pre-wrap leading-relaxed">{history.notes}</p>
                               )}
                             </div>
                           </div>

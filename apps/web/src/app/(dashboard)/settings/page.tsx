@@ -129,7 +129,7 @@ export default function SettingsPage() {
         <div
           ref={tabStripRef}
           onScroll={updateTabScroll}
-          className="flex gap-2 p-1 bg-[#F3F4F6] rounded-xl overflow-x-auto no-scrollbar pr-10"
+          className="flex gap-2 p-1 bg-surface-sunken rounded-xl overflow-x-auto no-scrollbar pr-10"
         >
           {tabs.map((t) => (
             <button
@@ -151,7 +151,7 @@ export default function SettingsPage() {
           <>
             <div
               aria-hidden
-              className="pointer-events-none absolute inset-y-0 right-0 w-12 rounded-r-xl bg-linear-to-l from-[#F3F4F6] via-[#F3F4F6]/80 to-transparent"
+              className="pointer-events-none absolute inset-y-0 right-0 w-12 rounded-r-xl bg-linear-to-l from-surface-sunken via-surface-sunken/80 to-transparent"
             />
             <button
               type="button"

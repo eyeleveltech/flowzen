@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useClients } from '@/hooks/useQueries';
@@ -26,11 +26,6 @@ export function ContractFormModal({ onClose, onSaved }: Props) {
   });
 
   const queryClient = useQueryClient();
-  // useClients() owns the ['clients'] key and returns the unwrapped array. Declaring a second
-  // query on the same key with a different queryFn meant whichever component mounted first
-  // decided the cached shape — this one caches the raw { clients, total } envelope, so a
-  // ContractFormModal opened before any consumer of useClients() got an object where it expected
-  // an array and rendered an empty dropdown.
   const { data: clients = [] } = useClients();
 
   const saveMutation = useMutation({
@@ -59,9 +54,9 @@ export function ContractFormModal({ onClose, onSaved }: Props) {
     <>
       <div className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={onClose} />
       <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-modal flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-surface-sunken">
           <h2 className="text-lg font-semibold text-primary">New Contract</h2>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-[#F3F4F6]">
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-surface-sunken">
             <Icon as={X} size="md" className="text-secondary" />
           </button>
         </div>
@@ -76,7 +71,7 @@ export function ContractFormModal({ onClose, onSaved }: Props) {
               className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
             >
               <option value="">Select Client</option>
-              {clients.map(c => (
+              {clients.map((c: any) => (
                 <option key={c.id} value={c.id}>{c.company || c.name}</option>
               ))}
             </select>
@@ -158,7 +153,7 @@ export function ContractFormModal({ onClose, onSaved }: Props) {
           </div>
         </form>
 
-        <div className="p-6 border-t border-[#F3F4F6] bg-gray-50 flex justify-end gap-3">
+        <div className="p-6 border-t border-surface-sunken bg-gray-50 flex justify-end gap-3">
           <button
             type="button"
             onClick={onClose}

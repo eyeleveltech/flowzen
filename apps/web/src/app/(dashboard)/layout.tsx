@@ -89,7 +89,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
           <button
             onClick={clearToast}
-            className="flex shrink-0 items-center justify-center rounded-lg p-1 text-secondary hover:bg-[#F3F4F6] hover:text-primary transition-colors"
+            className="flex shrink-0 items-center justify-center rounded-lg p-1 text-secondary hover:bg-surface-sunken hover:text-primary transition-colors"
           >
             <Icon as={X} size="md" />
           </button>

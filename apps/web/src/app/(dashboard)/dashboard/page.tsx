@@ -137,7 +137,7 @@ const PendingApprovalItem = ({
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3 min-w-0">
               {task.assignee && (
-                <div className="h-8 w-8 rounded-full bg-[#F3F4F6] text-primary text-[10px] font-bold flex items-center justify-center shrink-0 border border-border mt-0.5">
+                <div className="h-8 w-8 rounded-full bg-surface-sunken text-primary text-[10px] font-bold flex items-center justify-center shrink-0 border border-border mt-0.5">
                   {getInitials(task.assignee.name)}
                 </div>
               )}
@@ -688,7 +688,7 @@ export default function DashboardPage() {
               >
                 <Link href="/tasks?filter=approval" className="flex items-center gap-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm">
                   <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Icon as={CheckCircle2} size="md" className="text-secondary" /> Pending Approvals</h2>
-                  {pendingApprovals.length > 0 && <span className="text-xs font-medium text-primary bg-[#F3F4F6] border border-border px-2 py-0.5 rounded-md">{pendingApprovals.length}</span>}
+                  {pendingApprovals.length > 0 && <span className="text-xs font-medium text-primary bg-surface-sunken border border-border px-2 py-0.5 rounded-md">{pendingApprovals.length}</span>}
                 </Link>
 
                 {pendingApprovals.length > 0 && (
@@ -853,7 +853,7 @@ export default function DashboardPage() {
                           <p className="text-xs text-secondary truncate">{d.project?.name || 'No project'}</p>
                         </div>
                       </div>
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 border rounded-sm shrink-0 ${new Date(d.dueDate) < todayStart ? 'bg-red-50 text-red-600 border-red-200' : 'bg-[#F3F4F6] text-primary border-border'}`}>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 border rounded-sm shrink-0 ${new Date(d.dueDate) < todayStart ? 'bg-red-50 text-red-600 border-red-200' : 'bg-surface-sunken text-primary border-border'}`}>
                         {new Date(d.dueDate) < todayStart ? `OVERDUE: ${formatShortDate(d.dueDate)}` : formatShortDate(d.dueDate)}
                       </span>
                     </Link>
@@ -924,7 +924,7 @@ export default function DashboardPage() {
                       <p className="text-sm font-semibold text-primary truncate group-hover:text-black transition-colors">{p.name}</p>
                       <p className="text-xs text-secondary truncate">{p.client?.company || p.client?.name || 'No Client'}</p>
                     </div>
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 border rounded-sm bg-[#F3F4F6] text-primary border-border shrink-0">
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 border rounded-sm bg-surface-sunken text-primary border-border shrink-0">
                       {p.progress}%
                     </span>
                   </Link>

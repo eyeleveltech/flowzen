@@ -355,7 +355,7 @@ export default function CalendarPage() {
 
           {/* Right Side: Segmented switcher */}
           <div className="flex justify-center sm:justify-end flex-1">
-            <div className="flex bg-[#F3F4F6] p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center">
+            <div className="flex bg-surface-sunken p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center">
               <button
                 type="button"
                 onClick={() => setView('month')}
@@ -380,7 +380,7 @@ export default function CalendarPage() {
           <div className="min-w-full md:min-w-175">
 
             {/* Desktop Grid Headers */}
-            <div className="hidden md:grid grid-cols-7 border-b border-[#F3F4F6]">
+            <div className="hidden md:grid grid-cols-7 border-b border-surface-sunken">
               {(view === 'month' ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] : weekDays).map((d, i) => (
                 <div key={i} className="px-2 py-2.5 text-center text-xs font-medium text-secondary uppercase tracking-wide">
                   {view === 'month' ? d as string : new Intl.DateTimeFormat('en-US', { weekday: 'short', day: 'numeric' }).format(d as Date)}
@@ -392,14 +392,14 @@ export default function CalendarPage() {
             {view === 'month' && (
               <div className="hidden md:grid grid-cols-7">
                 {days.map((day, i) => {
-                  if (day === null) return <div key={i} className="min-h-27.5 border-b border-r border-[#F3F4F6] bg-surface" />;
+                  if (day === null) return <div key={i} className="min-h-27.5 border-b border-r border-surface-sunken bg-surface" />;
 
                   const dObj = new Date(year, month, day);
                   const isToday = today.toDateString() === dObj.toDateString();
                   const dayTasks = getTasksForDate(dObj);
 
                   return (
-                    <div key={i} className="min-h-27.5 border-b border-r border-[#F3F4F6] p-2 hover:bg-[#F9FAFB] transition-colors">
+                    <div key={i} className="min-h-27.5 border-b border-r border-surface-sunken p-2 hover:bg-[#F9FAFB] transition-colors">
                       <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium mb-1.5 ${isToday ? 'bg-primary text-white' : 'text-[#374151]'}`}>
                         {day}
                       </span>
@@ -422,7 +422,7 @@ export default function CalendarPage() {
                   const dayTasks = getTasksForDate(dObj);
 
                   return (
-                    <div key={i} className="min-h-100 border-b border-r border-[#F3F4F6] p-2 hover:bg-[#F9FAFB] transition-colors flex flex-col gap-2">
+                    <div key={i} className="min-h-100 border-b border-r border-surface-sunken p-2 hover:bg-[#F9FAFB] transition-colors flex flex-col gap-2">
                       <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium self-center mb-2 ${isToday ? 'bg-primary text-white' : 'text-[#374151]'}`}>
                         {dObj.getDate()}
                       </span>
@@ -451,7 +451,7 @@ export default function CalendarPage() {
 
                 return agendaDays.map((day, i) => (
                   <div key={i} className="flex flex-col gap-3 bg-white p-4 rounded-xl border border-border">
-                    <h3 className="text-sm font-semibold text-primary border-b border-[#F3F4F6] pb-2">
+                    <h3 className="text-sm font-semibold text-primary border-b border-surface-sunken pb-2">
                       {new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'short', day: 'numeric' }).format(day.date)}
                     </h3>
                     <div className="flex flex-col gap-2">

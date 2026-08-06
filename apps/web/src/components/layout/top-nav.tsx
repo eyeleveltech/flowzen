@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useUIStore, useAuthStore } from '@/stores';
 import { api } from '@/lib/api';
@@ -10,6 +10,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { getInitials, formatRelativeDate, getAvatarColor } from '@/lib/utils';
 import {
   Search,
+  ArrowLeft,
   Bell,
   Plus,
   ChevronDown,
@@ -60,8 +61,10 @@ const notificationIcons: Record<string, typeof CheckSquare> = {
 export function TopNav({ isMobile }: { isMobile?: boolean }) {
   const shouldReduceMotion = useReducedMotion();
   const router = useRouter();
+  const pathname = usePathname();
   const { setCommandPaletteOpen, setMobileSidebarOpen } = useUIStore();
   const { user, logout } = useAuthStore();
+  const showBack = isMobile && pathname !== '/dashboard';
 
   const queryClient = useQueryClient();
   const { data: notifData } = useNotifications();
@@ -137,26 +140,50 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
   ];
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 md:h-16 items-center justify-between border-b border-border bg-white/80 backdrop-blur-xl px-4 sm:px-6">
-      <div className="flex items-center">
+    <header className="sticky top-0 z-30 flex h-14 md:h-16 items-center justify-between border-b border-border bg-white/80 backdrop-blur-xl px-3 sm:px-6">
+      <div className="flex items-center flex-1 min-w-0 pr-2 gap-2">
+        {showBack ? (
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-white text-secondary hover:bg-surface hover:text-primary transition-colors"
+            title="Go back"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+        ) : isMobile ? (
+          <div className="flex items-center gap-1.5 shrink-0 sm:hidden">
+            <div className="h-7 w-7 rounded-lg bg-primary text-white font-bold flex items-center justify-center text-xs shadow-xs">
+              F
+            </div>
+            <span className="font-semibold text-primary text-sm tracking-tight">Flowzen</span>
+          </div>
+        ) : null}
 
-
-        {/* Search */}
+        {/* Search button on Mobile (compact icon button) */}
         <button
           onClick={() => setCommandPaletteOpen(true)}
-          className="flex items-center gap-2.5 rounded-xl border border-border bg-surface px-3 sm:px-4 py-2 text-sm text-secondary hover:bg-white hover:border-[#D1D5DB] transition-colors duration-150 motion-reduce:transition-none w-auto sm:w-80"
+          className="flex sm:hidden h-9 w-9 items-center justify-center rounded-xl border border-border bg-surface text-secondary hover:bg-white hover:text-primary transition-colors shrink-0"
+          title="Search"
+        >
+          <Search className="h-4 w-4" />
+        </button>
+
+        {/* Search bar on Desktop */}
+        <button
+          onClick={() => setCommandPaletteOpen(true)}
+          className="hidden sm:flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm text-secondary hover:bg-white hover:border-[#D1D5DB] transition-colors duration-150 motion-reduce:transition-none sm:w-80"
         >
           <Search className="h-4 w-4 shrink-0" />
-          <span className="hidden sm:inline truncate">Search clients, projects, tasks, team...</span>
-          <span className="sm:hidden">Search...</span>
-          <kbd className="ml-auto hidden sm:inline-flex items-center gap-0.5 rounded-md border border-border bg-white px-1.5 py-0.5 text-[10px] font-medium text-secondary">
+          <span className="truncate">Search clients, projects, tasks, team...</span>
+          <kbd className="ml-auto inline-flex items-center gap-0.5 rounded-md border border-border bg-white px-1.5 py-0.5 text-[10px] font-medium text-secondary">
             ⌘K
           </kbd>
         </button>
       </div>
 
       {/* Right side */}
-      <div className="flex items-center gap-2 dropdown-container">
+      <div className="flex items-center gap-1.5 sm:gap-2 dropdown-container shrink-0">
         {/* Quick Create */}
         <div className="relative">
           <button
@@ -173,9 +200,9 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                   <button
                     key={item.label}
                     onClick={() => { router.push(item.href); setShowQuickCreate(false); }}
-                    className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-[#374151] hover:bg-[#F9FAFB] active:bg-[#F3F4F6] transition-colors"
+                    className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-[#374151] hover:bg-[#F9FAFB] active:bg-surface-sunken transition-colors"
                   >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#F3F4F6]">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-sunken">
                       <item.icon className="h-5 w-5 text-secondary" />
                     </div>
                     {item.label}
@@ -236,7 +263,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                   </button>
                 </div>
               )}
-              <div className="max-h-[60vh] overflow-y-auto divide-y divide-[#F3F4F6] -mx-6 border-t border-[#F3F4F6]">
+              <div className="max-h-[60vh] overflow-y-auto divide-y divide-surface-sunken -mx-6 border-t border-surface-sunken">
                 {notifications.length === 0 ? (
                   <div className="py-8 text-center text-sm text-secondary">No notifications yet</div>
                 ) : (
@@ -256,7 +283,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                         onClick={handleNotificationClick}
                         className={`flex gap-3 px-6 py-4 cursor-pointer hover:bg-[#F9FAFB] transition-colors ${!n.read ? 'bg-blue-50/50' : ''}`}
                       >
-                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F3F4F6]">
+                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface-sunken">
                           <Icon className="h-4 w-4 text-secondary" />
                         </div>
                         <div className="min-w-0 flex-1">
@@ -280,7 +307,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                   transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.15 }}
                   className="absolute right-0 mt-2 w-96 rounded-2xl border border-border bg-white shadow-lg shadow-black/5"
                 >
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-[#F3F4F6]">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-surface-sunken">
                     <div>
                       <h3 className="text-sm font-semibold text-primary">In-App Notifications</h3>
                       <p className="text-xs text-secondary mt-0.5">Real-time activity logs</p>
@@ -291,7 +318,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                       </button>
                     )}
                   </div>
-                  <div className="max-h-80 overflow-y-auto divide-y divide-[#F3F4F6]">
+                  <div className="max-h-80 overflow-y-auto divide-y divide-surface-sunken">
                     {notifications.length === 0 ? (
                       <div className="py-8 text-center text-sm text-secondary">No notifications yet</div>
                     ) : (
@@ -311,7 +338,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                             onClick={handleNotificationClick}
                             className={`flex gap-3 px-4 py-3 cursor-pointer hover:bg-[#F9FAFB] transition-colors ${!n.read ? 'bg-blue-50/50' : ''}`}
                           >
-                            <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#F3F4F6]">
+                            <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface-sunken">
                               <Icon className="h-3.5 w-3.5 text-secondary" />
                             </div>
                             <div className="min-w-0 flex-1">
@@ -356,9 +383,9 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
               <div className="flex flex-col gap-1 pb-4">
                 <button
                   onClick={() => { router.push('/profile'); setShowUserMenu(false); }}
-                  className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-[#374151] hover:bg-[#F9FAFB] active:bg-[#F3F4F6] transition-colors"
+                  className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-[#374151] hover:bg-[#F9FAFB] active:bg-surface-sunken transition-colors"
                 >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#F3F4F6]">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-sunken">
                     <UserIcon className="h-5 w-5 text-secondary" />
                   </div>
                   My Profile
@@ -366,9 +393,9 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                 {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
                   <button
                     onClick={() => { router.push('/settings'); setShowUserMenu(false); }}
-                    className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-[#374151] hover:bg-[#F9FAFB] active:bg-[#F3F4F6] transition-colors"
+                    className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-[#374151] hover:bg-[#F9FAFB] active:bg-surface-sunken transition-colors"
                   >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#F3F4F6]">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-sunken">
                       <Settings className="h-5 w-5 text-secondary" />
                     </div>
                     Settings
@@ -399,7 +426,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                     <p className="text-sm font-medium text-primary">{user?.name}</p>
                     <p className="text-xs text-secondary">{user?.email}</p>
                   </div>
-                  <div className="border-t border-[#F3F4F6] pt-1">
+                  <div className="border-t border-surface-sunken pt-1">
                     <button
                       onClick={() => { router.push('/profile'); setShowUserMenu(false); }}
                       className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-[#374151] hover:bg-[#F9FAFB] transition-colors"
