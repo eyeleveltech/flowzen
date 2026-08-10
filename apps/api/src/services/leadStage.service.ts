@@ -106,7 +106,8 @@ export async function applyLeadStageEffects(tx: Tx, params: StageEffectParams): 
 
   if (clientId) {
     // 3. Client status — only ever moves the account forward. Dragging a won deal backwards
-    //    must never demote a real, billed customer to PROSPECT.
+    //    must never write a status that says a real, billed customer isn't one; the worst it
+    //    does is pause the account (ONHOLD, see the unwind case below).
     let newStatus: 'ACTIVE' | 'ONHOLD' | 'PROJECT_COMPLETED' | 'CHURNED' | null = null;
     if (['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(toStage)) newStatus = 'ACTIVE';
     else if (toStage === 'ON_HOLD') newStatus = 'ONHOLD';

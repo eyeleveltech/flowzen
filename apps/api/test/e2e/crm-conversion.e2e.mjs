@@ -138,7 +138,10 @@ const run = async () => {
   const survived = await call('GET', `/clients/${cid}`);
   check('client data intact (GST)', survived.data?.gstNumber === '27AAAAA0000A1Z5');
   check('client contacts intact', (survived.data?.contacts || []).length > 0);
-  check('client not demoted to PROSPECT', survived.data?.status !== 'PROSPECT', `status=${survived.data?.status}`);
+  // Unwinding parks the account (ONHOLD) rather than losing it. Any of the four lifecycle values
+  // is a customer, so the assertion is that the status is still one of them — PROSPECT is gone
+  // from the enum entirely, so "not demoted below customer" is now structurally guaranteed.
+  check('client still on the customer lifecycle', ['ACTIVE', 'ONHOLD', 'CHURNED', 'PROJECT_COMPLETED'].includes(survived.data?.status), `status=${survived.data?.status}`);
 
   console.log('\n7. Partial client update must NOT wipe contacts');
   // Regression guard: a PUT that does not send a `contacts` array (e.g. the user just changed

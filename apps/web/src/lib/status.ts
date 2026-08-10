@@ -23,7 +23,6 @@ export interface StatusConfig {
 
 export const STATUS_LABELS: Record<string, string> = {
   // Client statuses
-  PROSPECT: 'Prospect',
   ACTIVE: 'Active',
   ONHOLD: 'On Hold',
   CHURNED: 'Churned',
@@ -85,7 +84,7 @@ export const STATUS_LABELS: Record<string, string> = {
  * rose, red, teal) on 29 statuses, and several of them said the same thing twice: red AND rose
  * both meant "bad", emerald AND teal both meant "good", and purple meant nothing in particular.
  *
- * The rule now is: in a monochrome product, colour means "act on this". Blue on "Prospect" spent
+ * The rule now is: in a monochrome product, colour means "act on this". Blue on "Planning" spends
  * attention on a state that needs no action, and every colour spent that way makes a red
  * "Overdue" harder to find. So anything that is merely a normal step in a process is neutral,
  * and the three semantic tones are kept for states a person should actually do something about.
@@ -110,7 +109,6 @@ const GOOD = { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-
 
 export const STATUS_COLORS: Record<string, StatusConfig> = {
   // Client & General Active statuses
-  PROSPECT: { label: 'Prospect', ...NEUTRAL },
   ACTIVE: { label: 'Active', ...GOOD },
   ONHOLD: { label: 'On Hold', ...WARN },
   CHURNED: { label: 'Churned', ...QUIET },

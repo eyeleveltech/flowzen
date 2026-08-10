@@ -146,7 +146,7 @@ clientRouter.post('/bulk', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN
       return;
     }
 
-    const validStatuses = ['PROSPECT', 'ACTIVE', 'ONHOLD', 'CHURNED', 'PROJECT_COMPLETED'];
+    const validStatuses = ['ACTIVE', 'ONHOLD', 'CHURNED', 'PROJECT_COMPLETED'];
     const emailRe = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
     // Account managers are addressed by email in the CSV — nobody filling a spreadsheet knows a
@@ -234,9 +234,12 @@ clientRouter.post('/bulk', requireModule('CRM'), authorize('SUPER_ADMIN', 'ADMIN
         accountManagerId = data.accountManagerId;
       }
 
+      // A blank Status column means ACTIVE. This import exists to bring across customers you
+      // already have, so "running" is the only honest default; a row that isn't a customer yet
+      // belongs in the pipeline, and the entry created below puts it on the board either way.
       const status = validStatuses.includes(data.status?.toString().toUpperCase())
         ? data.status.toString().toUpperCase()
-        : 'PROSPECT';
+        : 'ACTIVE';
 
       try {
         const created = await prisma.client.create({

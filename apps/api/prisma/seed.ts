@@ -215,7 +215,7 @@ async function main() {
       phone: '+1 (555) 456-7890',
       address: '789 Wall Street, New York, NY',
       contractValue: 120000,
-      status: 'PROSPECT',
+      status: 'ONHOLD',
       organizationId: org.id,
     },
   });

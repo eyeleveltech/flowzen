@@ -104,7 +104,7 @@ export default function ClientDetailPage() {
   // Edit State
   const [showEdit, setShowEdit] = useState(false);
   const [editForm, setEditForm] = useState({
-    name: '', company: '', industry: '', address: '', contractValue: '', status: 'PROSPECT',
+    name: '', company: '', industry: '', address: '', contractValue: '', status: 'ACTIVE',
     engagementType: '', website: '', city: '', state: '', billingAddress: '', gstNumber: '', scope: '', assetLinks: '', accountManagerId: '', startDate: '',
     jobTitle: '', linkedinUrl: '', companySize: '', landlinePhone: '', zip: '', country: '',
     instagramHandle: '', facebookPage: '', source: '', priority: '', contractType: '', healthStatus: '', expectedRevenue: '', currency: 'INR',
@@ -881,11 +881,10 @@ export default function ClientDetailPage() {
                       live in leadStage.service.ts) — never manually editable here, in either module,
                       so this can't drift out of sync with the pipeline or skip its cascade effects. */}
                   <div className="w-full rounded-xl border border-border bg-gray-50 px-4 py-2.5 text-sm text-secondary cursor-not-allowed select-none">
-                    {editForm.status === 'PROSPECT' ? 'Prospect' :
-                      editForm.status === 'ACTIVE' ? 'Active' :
-                        editForm.status === 'ONHOLD' ? 'On Hold' :
-                          editForm.status === 'PROJECT_COMPLETED' ? 'Completed' :
-                            editForm.status === 'CHURNED' ? 'Churned' : editForm.status}
+                    {editForm.status === 'ACTIVE' ? 'Active' :
+                      editForm.status === 'ONHOLD' ? 'On Hold' :
+                        editForm.status === 'PROJECT_COMPLETED' ? 'Completed' :
+                          editForm.status === 'CHURNED' ? 'Churned' : editForm.status}
                     <span className="ml-2 text-xs text-amber-500 font-medium">(Managed via CRM pipeline)</span>
                   </div>
                 </div>

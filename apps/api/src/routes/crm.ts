@@ -1220,8 +1220,8 @@ crmRouter.post('/leads/:id/unhold', authorize('SUPER_ADMIN', 'ADMIN'), async (re
       : 'NEW_LEAD';
 
     if (existingLead.clientId) {
-      // A Client only exists once the deal was won, so unparking never demotes it back to
-      // PROSPECT — if the restored stage says nothing about the account, leave it as it was.
+      // A Client only exists once the deal was won, so unparking never writes a "not a customer"
+      // status — if the restored stage says nothing about the account, leave it as it was.
       let clientStatus: 'ACTIVE' | 'PROJECT_COMPLETED' | 'CHURNED' | null = null;
       if (['CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT'].includes(targetStage)) clientStatus = 'ACTIVE';
       else if (targetStage === 'PROJECT_COMPLETED') clientStatus = 'PROJECT_COMPLETED';

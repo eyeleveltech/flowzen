@@ -333,7 +333,7 @@ function ClientsContent() {
         name: resolveClientName(row),
         company: row.Company ?? row.company ?? '',
         industry: row.Industry ?? row.industry ?? '',
-        status: row.Status ?? row.status ?? 'PROSPECT',
+        status: row.Status ?? row.status ?? 'ACTIVE',
         engagementType: row.EngagementType ?? row.engagementType ?? '',
         contractValue: row.ContractValue ?? row.contractValue ?? '',
         email: row.Email ?? row.email ?? '',
@@ -516,7 +516,6 @@ function ClientsContent() {
                     showSelectAll={true}
                     triggerClassName="w-full h-9 rounded-xl border border-border bg-white px-3 text-xs"
                     options={[
-                      { label: 'Prospect', value: 'PROSPECT' },
                       { label: 'Active', value: 'ACTIVE' },
                       { label: 'On Hold', value: 'ONHOLD' },
                       { label: 'Churned', value: 'CHURNED' },
@@ -601,7 +600,6 @@ function ClientsContent() {
                 showSelectAll={true}
                 triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
                 options={[
-                  { label: 'Prospect', value: 'PROSPECT' },
                   { label: 'Active', value: 'ACTIVE' },
                   { label: 'On Hold', value: 'ONHOLD' },
                   { label: 'Churned', value: 'CHURNED' },
@@ -1106,7 +1104,7 @@ function ClientsContent() {
 
                 {importResult && (
                   <div className={`p-4 rounded-xl border ${importResult.rejectedCount > 0 ? 'border-amber-200 bg-amber-50' : 'border-green-200 bg-green-50'}`}>
-                    <h4 className={`text-sm font-semibold mb-1 ${importResult.rejectedCount > 0 ? 'text-amber-900' : 'text-emerald-900'}`}>
+                    <h4 className={`text-sm font-semibold mb-1 ${importResult.rejectedCount > 0 ? 'text-amber-900' : 'text-green-900'}`}>
                       Imported {importResult.imported} of {importResult.imported + importResult.rejectedCount}
                     </h4>
                     {importResult.rejectedCount > 0 ? (

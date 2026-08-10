@@ -26,16 +26,16 @@ type Tx = Prisma.TransactionClient;
  * Status decides first, because it says whether the relationship is actually running. Only an
  * ACTIVE account is a won deal; the engagement type then picks which kind of Active it is.
  *
- * PROSPECT matters most here: it is the DEFAULT status for any imported row that doesn't set one,
- * so treating it as an engagement-type case would file unqualified prospects as won retainers —
- * inflating Renewals, and counting them at weight 1.0 in the executive report.
+ * Every client status now describes a customer, so there is no "not yet won" case to catch: an
+ * account with no engagement type falls through to ACTIVE_RETAINER, which is what puts it in
+ * Renewals. That is the point of importing it — an ongoing retainer nobody is tracking the end
+ * date of is exactly the row worth having on the board.
  */
 export function stageForClient(status: string | null | undefined, engagementType: string | null | undefined): LeadStage {
   switch (status) {
     case 'CHURNED': return 'CHURNED' as LeadStage;
     case 'PROJECT_COMPLETED': return 'PROJECT_COMPLETED' as LeadStage;
     case 'ONHOLD': return 'ON_HOLD' as LeadStage;
-    case 'PROSPECT': return 'NEW_LEAD' as LeadStage;
   }
   const e = (engagementType || '').toLowerCase();
   if (e.includes('project') || e.includes('one-time') || e.includes('one time')) {

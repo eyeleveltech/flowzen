@@ -1,4 +1,6 @@
-export const CLIENT_STATUSES = ['PROSPECT', 'ACTIVE', 'ONHOLD', 'CHURNED', 'PROJECT_COMPLETED'] as const;
+// A customer lifecycle: running, paused, finished, gone. There is deliberately no "prospect" —
+// a not-yet-customer is a Lead on the pipeline board, not a Client.
+export const CLIENT_STATUSES = ['ACTIVE', 'ONHOLD', 'CHURNED', 'PROJECT_COMPLETED'] as const;
 
 export const PROJECT_STATUSES = ['PLANNING', 'IN_PROGRESS', 'REVIEW', 'COMPLETED', 'ON_HOLD', 'CANCELLED'] as const;
 
@@ -12,7 +14,6 @@ export const USER_ROLES = ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER', 'TEAM_MEMB
 
 export const STATUS_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
   // Client statuses
-  PROSPECT: { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500' },
   ACTIVE: { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
   ONHOLD: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
   CHURNED: { bg: 'bg-gray-100', text: 'text-gray-600', dot: 'bg-gray-400' },
@@ -58,7 +59,6 @@ export const ROLE_LABELS: Record<string, string> = {
 };
 
 export const STATUS_LABELS: Record<string, string> = {
-  PROSPECT: 'Prospect',
   ACTIVE: 'Active',
   ONHOLD: 'On Hold',
   CHURNED: 'Churned',

@@ -24,8 +24,11 @@ enum UserStatus {
   INACTIVE
 }
 
+// A Client is a customer, so every value here is a point in a CUSTOMER lifecycle: running,
+// paused, finished, gone. PROSPECT was removed because a not-yet-customer is a Lead — it lives
+// on the pipeline board, and duplicating it here gave the same relationship two homes and made
+// "Active Clients" mean two different things depending on which one you read.
 enum ClientStatus {
-  PROSPECT
   ACTIVE
   ONHOLD
   CHURNED
@@ -357,7 +360,7 @@ model Client {
   address        String?
   contractValue  Decimal?     @db.Decimal(12, 2) // money — never Float (FZ-020)
   startDate      DateTime?
-  status         ClientStatus @default(PROSPECT)
+  status         ClientStatus @default(ACTIVE)
   currency       String       @default("INR")
   engagementType String?
   website        String?

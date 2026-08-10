@@ -30,7 +30,7 @@ export interface Organization {
 // Client
 // ──────────────────────────────────────────────
 
-export type ClientStatus = 'PROSPECT' | 'ACTIVE' | 'ONHOLD' | 'CHURNED' | 'PROJECT_COMPLETED';
+export type ClientStatus = 'ACTIVE' | 'ONHOLD' | 'CHURNED' | 'PROJECT_COMPLETED';
 
 export interface Client {
   id: string;

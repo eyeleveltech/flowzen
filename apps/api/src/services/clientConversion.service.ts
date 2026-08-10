@@ -110,8 +110,11 @@ export async function ensureClientForLead(
   orgId: string,
 ): Promise<ConversionResult> {
   if (lead.clientId) {
+    // Reaching this function at all means a deal is being converted, so the account is running
+    // again whatever it was before — a churned or completed customer who buys again is ACTIVE.
+    // (This used to promote only from PROSPECT, which no longer exists as a client status.)
     const existingClient = await tx.client.findUnique({ where: { id: lead.clientId }, select: { id: true, status: true } });
-    if (existingClient && existingClient.status === 'PROSPECT') {
+    if (existingClient && existingClient.status !== 'ACTIVE') {
       await tx.client.update({ where: { id: lead.clientId }, data: { status: 'ACTIVE' } });
     }
     return { clientId: lead.clientId, created: false };
@@ -131,7 +134,7 @@ export async function ensureClientForLead(
   if (existing) {
     await tx.lead.update({ where: { id: lead.id }, data: { clientId: existing.id } });
     await repointLeadQuotes(tx, lead.id, existing.id);
-    if (existing.status === 'PROSPECT') {
+    if (existing.status !== 'ACTIVE') {
       await tx.client.update({ where: { id: existing.id }, data: { status: 'ACTIVE' } });
     }
     return { clientId: existing.id, created: false };
