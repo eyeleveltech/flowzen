@@ -579,7 +579,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                       <div className="relative border-l-2 border-gray-100 ml-2 space-y-6">
                         {lead.stageHistory.map((history: any, index: number) => (
                           <div key={history.id || index} className="relative pl-5">
-                            <div className="absolute -left-2.25 top-1.5 h-4 w-4 rounded-full bg-subtle border-2 border-blue-500 ring-2 ring-white"></div>
+                            <div className="absolute -left-2.25 top-1.5 h-4 w-4 rounded-full bg-subtle border-2 border-primary ring-2 ring-white"></div>
                             <div className="flex flex-col">
                               <span className="text-sm font-bold text-primary">{leadStageLabel(history.toStage)}</span>
                               <div className="flex items-center gap-1.5 mt-0.5">

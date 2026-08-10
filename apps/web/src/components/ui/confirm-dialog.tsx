@@ -40,18 +40,23 @@ export function ConfirmDialog() {
   // Gate the confirm button on an exact text match when requireText is set.
   const matched = !requireText || typed.trim() === requireText.trim();
 
-  // Icon depending on the variant
+  // Icon depending on the variant.
+  //
+  // Only `danger` gets a colour. A confirm dialog is already the most attention-demanding thing on
+  // screen — it has stopped the person and taken their focus — so tinting it as well spends the
+  // alert colour on something that cannot be missed. Keeping red for destructive actions alone
+  // means the red still says something when it does appear.
   const getIcon = () => {
     switch (variant) {
       case 'danger':
         return (
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-500">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-600">
             <AlertTriangle className="h-6 w-6" />
           </div>
         );
       case 'warning':
         return (
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-500">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-subtle text-body">
             <AlertTriangle className="h-6 w-6" />
           </div>
         );
@@ -65,14 +70,16 @@ export function ConfirmDialog() {
     }
   };
 
-  // Button styles depending on variant
+  // Button styles depending on variant. `warning` now uses the standard primary button: the
+  // wording ("Discard", "Cancel Document") already carries the consequence, and an amber button
+  // read as a third kind of severity sitting between neutral and destructive that nothing else
+  // in the product uses.
   const getConfirmButtonClass = () => {
-    const baseClass = "px-4 py-2 text-sm font-semibold rounded-xl transition-[transform,background-color,border-color,color] duration-200 shadow-sm active:scale-95";
+    const baseClass = "px-4 py-2 text-sm font-semibold rounded-xl transition-[transform,background-color,border-color,color] duration-200 shadow-sm active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1";
     switch (variant) {
       case 'danger':
-        return `${baseClass} bg-danger text-white hover:bg-danger-hover hover:shadow-red-100`;
+        return `${baseClass} bg-danger text-white hover:bg-danger-hover`;
       case 'warning':
-        return `${baseClass} bg-warning text-white hover:bg-warning-hover hover:shadow-amber-100`;
       case 'info':
       default:
         return `${baseClass} bg-primary text-white hover:bg-primary-hover`;
@@ -103,7 +110,8 @@ export function ConfirmDialog() {
             {/* Close Button */}
             <button
               onClick={onCancel}
-              className="absolute right-4 top-4 rounded-lg p-1.5 text-secondary hover:bg-subtle hover:text-body-soft transition-colors"
+              aria-label="Close"
+              className="absolute right-4 top-4 rounded-lg p-1.5 text-secondary hover:bg-subtle hover:text-body-soft transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1"
             >
               <Icon as={X} size="md" />
             </button>
@@ -137,7 +145,9 @@ export function ConfirmDialog() {
                       placeholder={requireText}
                       autoComplete="off"
                       spellCheck={false}
-                      className="w-full rounded-xl border border-border px-3 py-2 text-sm text-primary outline-none transition-colors focus:border-red-400 focus:ring-2 focus:ring-red-100 placeholder:text-secondary"
+                      // House focus convention. This was a red ring on every variant, including
+                      // the non-destructive ones, which made an ordinary text field look alarming.
+                      className="w-full rounded-xl border border-border px-3 py-2 text-sm text-primary outline-none transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 placeholder:text-secondary"
                     />
                   </div>
                 )}
@@ -149,7 +159,7 @@ export function ConfirmDialog() {
               <button
                 type="button"
                 onClick={onCancel}
-                className="px-4 py-2 text-sm font-semibold text-body-soft bg-white border border-border rounded-xl hover:bg-surface transition-[transform,background-color,border-color,color] duration-200 active:scale-95"
+                className="px-4 py-2 text-sm font-semibold text-body-soft bg-white border border-border rounded-xl hover:bg-surface transition-[transform,background-color,border-color,color] duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1"
               >
                 {cancelText}
               </button>

@@ -318,7 +318,7 @@ export default function TeamsPage() {
                 <div key={team.id} className="p-3.5 sm:p-4 hover:bg-surface transition-colors relative">
                   <div className="flex items-start justify-between gap-2 mb-3">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="h-9 w-9 rounded-xl bg-linear-to-br from-subtle to-subtle text-body flex items-center justify-center border border-border/50 shrink-0">
+                      <div className="h-9 w-9 rounded-xl bg-subtle text-body flex items-center justify-center border border-border/50 shrink-0">
                         <Icon as={Users} size="md" />
                       </div>
                       <div className="min-w-0">

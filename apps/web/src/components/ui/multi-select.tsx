@@ -147,7 +147,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
               key={opt.value}
               className="flex items-center gap-1 bg-subtle text-body px-2 py-1 rounded-lg text-xs font-medium"
             >
-              {opt.image && <div className={`h-4 w-4 rounded-full flex items-center justify-center text-[8px] font-semibold ${opt.colorClass || 'bg-primary text-white'}`}>{opt.image}</div>}
+              {opt.image && <div className={`h-4 w-4 rounded-full flex items-center justify-center text-[8px] font-semibold ${opt.colorClass || 'bg-subtle text-primary border border-border'}`}>{opt.image}</div>}
               {opt.label}
               <button
                 type="button"
@@ -236,7 +236,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
                       <div className={`flex items-center justify-center h-5 w-5 rounded border shrink-0 ${isSelected ? 'bg-primary border-primary' : 'border-line'}`}>
                         {isSelected && <Icon as={Check} size="sm" className="text-white" />}
                       </div>
-                      {opt.image && <div className={`h-6 w-6 shrink-0 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-primary text-white'}`}>{opt.image}</div>}
+                      {opt.image && <div className={`h-6 w-6 shrink-0 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-subtle text-primary border border-border'}`}>{opt.image}</div>}
                       <span className="truncate flex-1">{opt.label}</span>
                       {opt.capacity !== undefined && (
                         <span className="flex items-center gap-1.5 shrink-0 ml-2" title={`Capacity: ${opt.capacity}%`}>
@@ -338,7 +338,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
                       <div className={`flex items-center justify-center h-4 w-4 rounded border shrink-0 ${isSelected ? 'bg-primary border-primary' : 'border-line'}`}>
                         {isSelected && <Check className="h-3 w-3 text-white" />}
                       </div>
-                      {opt.image && <div className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-primary text-white'}`}>{opt.image}</div>}
+                      {opt.image && <div className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-subtle text-primary border border-border'}`}>{opt.image}</div>}
                       <span className="text-body truncate flex-1">{opt.label}</span>
                       {opt.capacity !== undefined && (
                         <span className="flex items-center gap-1.5 shrink-0 ml-2" title={`Capacity: ${opt.capacity}%`}>

@@ -23,28 +23,24 @@ describe('Utility Functions', () => {
   describe('getAvatarColor', () => {
     // getAvatarColor returns a PAIR of classes so the initials stay legible on the tint.
     //
-    // This used to assert the shape /^bg-\w+-\d+ text-\w+-\d+$/, which encoded the numbered
-    // Tailwind palette the avatars were built from ("bg-orange-100 text-orange-700"). The tints
-    // are now steps of the neutral ramp, named from the theme tokens, so that regex described a
-    // design decision rather than a requirement. What actually has to hold is that a caller gets
-    // one background and one text class, from the known set — assert that instead.
-    const RAMP = ['bg-subtle text-body', 'bg-line text-primary', 'bg-secondary text-white', 'bg-primary text-white'];
-
-    it('should return a background and a text class from the neutral ramp', () => {
-      const color = getAvatarColor('John Doe');
-      expect(RAMP).toContain(color);
-      expect(color).toMatch(/^bg-\S+ text-\S+$/);
-    });
-
-    // The point of tinting at all is telling people apart in a list of assignees, so the ramp
-    // must actually spread names across more than one step.
-    it('should spread different names across the ramp', () => {
+    // The assertions here have followed the design twice, which is the point: they now pin the
+    // requirement (every avatar looks the same) rather than the implementation. The original
+    // /^bg-\w+-\d+ text-\w+-\d+$/ encoded the numbered Tailwind palette; a later version asserted
+    // the four-step ramp spread names across more than one step. Both described a decision that
+    // has since changed.
+    it('should give every name the same background and text class', () => {
       const names = ['Alice', 'Bob', 'Charlie', 'Diana', 'Ethan', 'Fatima', 'Grace', 'Hassan'];
-      const used = new Set(names.map(getAvatarColor));
-      expect(used.size).toBeGreaterThan(1);
+      const used = new Set(names.map((n) => getAvatarColor(n)));
+      expect(used.size).toBe(1);
+      expect(used.has(getAvatarColor(''))).toBe(true);
     });
 
-    it('should fall back to a neutral swatch for an empty name', () => {
+    it('should return a background and a text class', () => {
+      expect(getAvatarColor('John Doe')).toMatch(/(^|\s)bg-\S+/);
+      expect(getAvatarColor('John Doe')).toMatch(/(^|\s)text-\S+/);
+    });
+
+    it('should use a neutral swatch', () => {
       expect(getAvatarColor('')).toContain('bg-subtle');
     });
 

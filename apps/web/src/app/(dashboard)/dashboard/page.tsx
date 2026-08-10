@@ -724,7 +724,7 @@ export default function DashboardPage() {
                       <button
                         onClick={() => handleBulkApprove(selectedTaskIds)}
                         disabled={bulkApproving}
-                        className="px-2.5 py-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 transition-colors rounded-lg flex items-center gap-1 shadow-sm"
+                        className="px-2.5 py-1 text-xs font-bold text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 transition-colors rounded-lg flex items-center gap-1 shadow-sm"
                       >
                         {bulkApproving ? 'Approving…' : `Approve Selected (${selectedTaskIds.length})`}
                       </button>

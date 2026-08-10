@@ -136,19 +136,28 @@ export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLead
     });
   }, [documentType, clientId, leadId, form, lineItems]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      initialSnapshotRef.current = getFormSnapshotString();
-    }, 150);
-    return () => clearTimeout(timer);
-  }, [initialEditId, duplicateOf, prefillLeadId]);
-
   const isDirty = useCallback(() => {
     if (!initialSnapshotRef.current) return false;
     return getFormSnapshotString() !== initialSnapshotRef.current;
   }, [getFormSnapshotString]);
 
-  const { guardedClose, panelRef } = useModalSafety({ onClose, isDirty });
+  const { guardedClose, panelRef, hasInteracted } = useModalSafety({ onClose, isDirty });
+
+  // Re-baseline on every change until the person first touches the form.
+  //
+  // This used to snapshot once on a 150ms timer, which raced the requests that fill this form in:
+  // the standard terms from /settings/company/quote-context, and for a prefilled or edited
+  // document the client and line items too. Any of those landing after 150ms — an ordinary
+  // network round trip — left the form differing from its own baseline, so closing without
+  // typing anything still asked "Discard changes?".
+  //
+  // Anything that arrives before the first interaction is by definition not the user's edit, so
+  // it belongs in the baseline. `hasInteracted` comes from useModalSafety, which owns the panel
+  // element those listeners hang off.
+  useEffect(() => {
+    if (hasInteracted()) return;
+    initialSnapshotRef.current = getFormSnapshotString();
+  }, [getFormSnapshotString, hasInteracted]);
 
   // Already matched and narrowed by the server — these only cap how many rows the dropdown shows.
   const filteredClients = clients.slice(0, 8);

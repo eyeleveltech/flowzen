@@ -32,31 +32,35 @@ dashboardRouter.get('/stats', async (req: AuthRequest, res: Response, next) => {
 
     const [activeClients, activeProjects, openTasks, completedTasks, delayedProjects, totalMembers, overdueTasks] =
       await Promise.all([
-        // §2.1 Active Clients: clients with ≥1 project in an open/active status OR ≥1 task in open status
+        // Active Clients: clients whose STATUS is ACTIVE.
+        //
+        // This used to count clients with >= 1 open project OR >= 1 open task and never looked at
+        // status at all, so an ACTIVE client with no work attached yet was missing from the card
+        // while appearing as Active everywhere else. Reported as a bug because it read 1 against
+        // 4 ACTIVE clients on the Clients page.
+        //
+        // Matches the Clients page exactly — same archived and Internal exclusions (clients.ts)
+        // — because two screens disagreeing about a headline number is the actual defect here.
+        //
+        // The date range is deliberately NOT applied. It filtered on the *project's* createdAt,
+        // so "this week" quietly meant "clients whose projects were created this week", which is
+        // not a thing anyone would ask for. How many active clients you have is a fact about now,
+        // not about a period, so the number should hold still when the preset changes.
         prisma.client.count({
           where: {
             organizationId: orgId,
+            status: 'ACTIVE',
+            archivedAt: null,
+            // The hidden per-org "Internal" account holds the org's own projects and is not a
+            // client. Excluded here the same way the Clients page excludes it.
+            AND: [
+              { OR: [{ engagementType: null }, { engagementType: { not: 'INTERNAL' } }] },
+              { name: { notIn: ['Internal', 'internal'] } },
+              { NOT: { name: { contains: '(Internal)', mode: 'insensitive' } } },
+            ],
             ...(role === 'TEAM_MEMBER' ? {
               projects: { some: { members: { some: { userId } } } }
             } : {}),
-            OR: [
-              {
-                projects: {
-                  some: {
-                    status: { in: ['PLANNING', 'IN_PROGRESS', 'REVIEW', 'ON_HOLD'] },
-                    ...dateFilter,
-                  }
-                }
-              },
-              {
-                tasks: {
-                  some: {
-                    status: { in: ['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'BLOCKED', 'ON_HOLD'] },
-                    ...dateFilter,
-                  }
-                }
-              }
-            ]
           }
         }),
         // §2.2 Active Projects: projects in open status with ≥1 non-completed task

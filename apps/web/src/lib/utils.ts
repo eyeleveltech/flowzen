@@ -143,33 +143,29 @@ export function getInitials(name: string): string {
 }
 
 /**
- * Avatar tints — four steps of the neutral ramp, light to dark.
+ * Avatar tint — one neutral, for everybody.
  *
- * This used to be nine colour families (red, orange, amber, green, teal, blue, indigo, purple,
- * pink) picked by hashing a person's name. That colour never meant anything — someone was pink
- * because of the letters in their name — but avatars appear in every table row, board card and
- * assignee chip, so it was the single loudest source of colour in a product whose palette is
- * otherwise deliberately monochrome. It also competed with the status colours, which DO mean
- * something: a red "Overdue" badge is harder to spot next to a red avatar.
+ * The history here is worth keeping, because it went one step at a time. Originally nine colour
+ * families (red, orange, amber, green, teal, blue, indigo, purple, pink) were picked by hashing a
+ * person's NAME, so someone was pink because of the letters they were born with. That put the
+ * loudest colour on screen — avatars appear in every table row, board card and assignee chip — on
+ * the one thing carrying no information, and it competed with the status colours that do mean
+ * something: a red "Overdue" badge is harder to find next to a red avatar.
  *
- * Four steps rather than one flat grey, because the point of tinting an avatar is to tell two
- * people apart at a glance in a list of assignees — that still works without hue.
+ * The nine then became four steps of the neutral ramp, on the theory that some variation helps
+ * tell people apart in a list. In practice that just made one row in five noticeably darker than
+ * its neighbours for no reason a reader could name, so it is now a single pairing. The initials
+ * already say who someone is; the swatch does not need to.
  *
- * All four pairings clear WCAG AA for normal text (9.3:1, 12.1:1, 4.8:1, 17.8:1), which matters
- * because initials are set small and bold.
+ * 9.3:1 on white — AA for normal text, which matters because initials are set small and bold.
+ *
+ * `name` is kept in the signature so the ~67 call sites stay untouched, and so a future
+ * per-person treatment (a photo, say) has somewhere to hook in.
  */
-const AVATAR_COLORS = [
-  'bg-subtle text-body',
-  'bg-line text-primary',
-  'bg-secondary text-white',
-  'bg-primary text-white',
-];
+const AVATAR_CLASSES = 'bg-subtle text-primary border border-border';
 
-export function getAvatarColor(name: string): string {
-  if (!name) return 'bg-subtle text-primary border border-border';
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
-  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+export function getAvatarColor(_name?: string): string {
+  return AVATAR_CLASSES;
 }
 
 export function capitalize(str: string): string {
@@ -235,8 +231,9 @@ export function getProjectStatusFromClient(client: any): 'PLANNING' | 'IN_PROGRE
       return 'COMPLETED';
     case 'CHURNED':
       return 'CANCELLED';
-    case 'PROSPECT':
     default:
+      // Pre-win pipeline stages (NEW_LEAD … NEGOTIATION) land here. A client status never does
+      // any more — every one of the four is handled above.
       return 'PLANNING';
   }
 }
