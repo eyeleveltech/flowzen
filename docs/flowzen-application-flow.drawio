@@ -1,0 +1,166 @@
+<mxfile host="app.diagrams.net" agent="flowzen-docs" version="24.0.0" type="device">
+  <diagram id="flowzen-application-flow" name="Flowzen Application Flow">
+    <mxGraphModel dx="2900" dy="1240" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2900" pageHeight="1240" math="0" shadow="0">
+      <root><mxCell id="0"/><mxCell id="1" parent="0"/>
+        <mxCell id="band_crm" value="CRM — winning the work
+from first contact to a verdict" style="rounded=1;arcSize=4;fillColor=#FFFFFF;strokeColor=#E5E7EB;verticalAlign=top;align=left;spacingLeft=14;spacingTop=8;fontSize=13;fontStyle=1;fontColor=#111827;html=1;" vertex="1" parent="1"><mxGeometry x="30" y="120" width="2840" height="262" as="geometry"/></mxCell>
+        <mxCell id="band_co" value="THE COMPANY — the relationship
+one record, from prospect to customer" style="rounded=1;arcSize=4;fillColor=#FAFAFA;strokeColor=#E5E7EB;verticalAlign=top;align=left;spacingLeft=14;spacingTop=8;fontSize=13;fontStyle=1;fontColor=#111827;html=1;" vertex="1" parent="1"><mxGeometry x="30" y="402" width="2840" height="172" as="geometry"/></mxCell>
+        <mxCell id="band_pm" value="DELIVERY — doing the work
+projects and tasks" style="rounded=1;arcSize=4;fillColor=#FFFFFF;strokeColor=#E5E7EB;verticalAlign=top;align=left;spacingLeft=14;spacingTop=8;fontSize=13;fontStyle=1;fontColor=#111827;html=1;" vertex="1" parent="1"><mxGeometry x="30" y="594" width="2840" height="180" as="geometry"/></mxCell>
+        <mxCell id="band_rev" value="REVENUE — getting paid
+engagements, invoices, money" style="rounded=1;arcSize=4;fillColor=#FAFAFA;strokeColor=#E5E7EB;verticalAlign=top;align=left;spacingLeft=14;spacingTop=8;fontSize=13;fontStyle=1;fontColor=#111827;html=1;" vertex="1" parent="1"><mxGeometry x="30" y="794" width="2840" height="346" as="geometry"/></mxCell>
+        <mxCell id="src1" value="Added by hand" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D1D5DB;fontColor=#374151;fontSize=11;" vertex="1" parent="1"><mxGeometry x="210" y="162" width="150" height="34" as="geometry"/></mxCell>
+        <mxCell id="src2" value="CSV import" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D1D5DB;fontColor=#374151;fontSize=11;" vertex="1" parent="1"><mxGeometry x="210" y="204" width="150" height="34" as="geometry"/></mxCell>
+        <mxCell id="src3" value="Public API" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D1D5DB;fontColor=#374151;fontSize=11;" vertex="1" parent="1"><mxGeometry x="210" y="246" width="150" height="34" as="geometry"/></mxCell>
+        <mxCell id="dup" value="Already know
+this company?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#FCD34D;fontColor=#B45309;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="410" y="188" width="170" height="68" as="geometry"/></mxCell>
+        <mxCell id="exist" value="Open the one
+you already have" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#FCD34D;fontColor=#B45309;fontSize=11;" vertex="1" parent="1"><mxGeometry x="415" y="288" width="160" height="40" as="geometry"/></mxCell>
+        <mxCell id="comp" value="COMPANY created
+status PROSPECT
++ owner  + follow-up" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#86EFAC;fontColor=#15803D;fontSize=11;" vertex="1" parent="1"><mxGeometry x="630" y="182" width="190" height="80" as="geometry"/></mxCell>
+        <mxCell id="deal" value="DEAL created
+one pursuit" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#93C5FD;fontColor=#1D4ED8;fontSize=11;" vertex="1" parent="1"><mxGeometry x="870" y="192" width="160" height="60" as="geometry"/></mxCell>
+        <mxCell id="s1" value="New" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D1D5DB;fontColor=#374151;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1090" y="197" width="132" height="46" as="geometry"/></mxCell>
+        <mxCell id="s2" value="Outreach" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D1D5DB;fontColor=#374151;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1236" y="197" width="132" height="46" as="geometry"/></mxCell>
+        <mxCell id="s3" value="Meeting" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D1D5DB;fontColor=#374151;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1382" y="197" width="132" height="46" as="geometry"/></mxCell>
+        <mxCell id="s4" value="Proposal" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D1D5DB;fontColor=#374151;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1528" y="197" width="132" height="46" as="geometry"/></mxCell>
+        <mxCell id="s5" value="Negotiation" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#FCD34D;fontColor=#B45309;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1674" y="197" width="132" height="46" as="geometry"/></mxCell>
+        <mxCell id="verdict" value="Outcome?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#111827;strokeColor=#111827;fontColor=#FFFFFF;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1830" y="188" width="150" height="64" as="geometry"/></mxCell>
+        <mxCell id="lost" value="LOST
+reason required" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FEE2E2;strokeColor=#FCA5A5;fontColor=#B91C1C;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1996" y="144" width="190" height="56" as="geometry"/></mxCell>
+        <mxCell id="won" value="WON
+Retainer or Project?
++ start date" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#86EFAC;fontColor=#15803D;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1996" y="242" width="190" height="68" as="geometry"/></mxCell>
+        <mxCell id="coP" value="PROSPECT
+not a customer yet" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D1D5DB;fontColor=#374151;fontSize=11;" vertex="1" parent="1"><mxGeometry x="630" y="438" width="190" height="44" as="geometry"/></mxCell>
+        <mxCell id="coA" value="ACTIVE
+nothing was copied —
+the same record" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#86EFAC;fontColor=#15803D;fontSize=11;" vertex="1" parent="1"><mxGeometry x="910" y="428" width="200" height="62" as="geometry"/></mxCell>
+        <mxCell id="coPage" value="THE COMPANY PAGE
+contacts · timeline · deals
+engagements · projects · invoices" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#93C5FD;fontColor=#1D4ED8;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1170" y="418" width="300" height="100" as="geometry"/></mxCell>
+        <mxCell id="coHold" value="ON HOLD
+billing paused" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#FCD34D;fontColor=#B45309;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1540" y="420" width="170" height="44" as="geometry"/></mxCell>
+        <mxCell id="coChurn" value="CHURNED
+billing stopped" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FEE2E2;strokeColor=#FCA5A5;fontColor=#B91C1C;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1540" y="484" width="170" height="44" as="geometry"/></mxCell>
+        <mxCell id="proj" value="PROJECT
+belongs to the COMPANY
+(optionally names the engagement)" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#93C5FD;fontColor=#1D4ED8;fontSize=11;" vertex="1" parent="1"><mxGeometry x="630" y="620" width="220" height="74" as="geometry"/></mxCell>
+        <mxCell id="task" value="TASKS
+assignee + reviewer
+due date · priority · subtasks" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#93C5FD;fontColor=#1D4ED8;fontSize=11;" vertex="1" parent="1"><mxGeometry x="910" y="620" width="250" height="74" as="geometry"/></mxCell>
+        <mxCell id="tflow" value="Backlog → To Do → In Progress → Review → Approved → Done" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D1D5DB;fontColor=#374151;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1200" y="616" width="420" height="40" as="geometry"/></mxCell>
+        <mxCell id="health" value="HEALTH computed
+from overdue tasks" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#FCD34D;fontColor=#B45309;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1200" y="674" width="200" height="46" as="geometry"/></mxCell>
+        <mxCell id="pdone" value="Project
+completed" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D1D5DB;fontColor=#374151;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1450" y="674" width="170" height="46" as="geometry"/></mxCell>
+        <mxCell id="eng" value="ENGAGEMENT created
+ONE per won deal —
+enforced by the database" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#86EFAC;fontColor=#15803D;fontSize=11;" vertex="1" parent="1"><mxGeometry x="630" y="818" width="220" height="76" as="geometry"/></mxCell>
+        <mxCell id="etype" value="Which type?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#111827;strokeColor=#111827;fontColor=#FFFFFF;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="910" y="820" width="150" height="70" as="geometry"/></mxCell>
+        <mxCell id="ret" value="RETAINER
+recurring — monthly,
+quarterly or yearly" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#86EFAC;fontColor=#15803D;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1110" y="798" width="230" height="62" as="geometry"/></mxCell>
+        <mxCell id="prj" value="PROJECT
+one-time, with an end date" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#86EFAC;fontColor=#15803D;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1110" y="872" width="230" height="54" as="geometry"/></mxCell>
+        <mxCell id="endq" value="End date set?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#111827;strokeColor=#111827;fontColor=#FFFFFF;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1390" y="816" width="160" height="66" as="geometry"/></mxCell>
+        <mxCell id="roll" value="ROLLING
+it simply runs
+→ reviewed every 6 months" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#86EFAC;fontColor=#15803D;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1590" y="800" width="220" height="62" as="geometry"/></mxCell>
+        <mxCell id="fixed" value="FIXED TERM
+→ renewal prompt" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#93C5FD;fontColor=#1D4ED8;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1590" y="872" width="220" height="54" as="geometry"/></mxCell>
+        <mxCell id="inv" value="INVOICE
+Draft → Sent → Paid
+frozen once issued" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#86EFAC;fontColor=#15803D;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1870" y="798" width="220" height="74" as="geometry"/></mxCell>
+        <mxCell id="pay" value="PAYMENT
+against the invoice" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#86EFAC;fontColor=#15803D;fontSize=11;" vertex="1" parent="1"><mxGeometry x="2150" y="808" width="190" height="56" as="geometry"/></mxCell>
+        <mxCell id="exp" value="EXPENSES
+vendors, tools, ads" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D1D5DB;fontColor=#374151;fontSize=11;" vertex="1" parent="1"><mxGeometry x="2150" y="880" width="190" height="44" as="geometry"/></mxCell>
+        <mxCell id="gm" value="GROSS MARGIN
+revenue − money paid out
+(not profit)" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#FCD34D;fontColor=#B45309;fontSize=11;" vertex="1" parent="1"><mxGeometry x="2390" y="832" width="210" height="64" as="geometry"/></mxCell>
+        <mxCell id="review" value="REVIEW / RENEW
+price may change" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#86EFAC;fontColor=#15803D;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1590" y="948" width="240" height="60" as="geometry"/></mxCell>
+        <mxCell id="rev2" value="EngagementRevision
+written — history kept" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#86EFAC;fontColor=#15803D;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1890" y="948" width="210" height="46" as="geometry"/></mxCell>
+        <mxCell id="endit" value="Or end it → CHURNED" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#FEE2E2;strokeColor=#FCA5A5;fontColor=#B91C1C;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1590" y="1032" width="240" height="46" as="geometry"/></mxCell>
+        <mxCell id="e2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="src1" target="dup"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="385" y="179"/><mxPoint x="385" y="222"/></Array></mxGeometry></mxCell>
+        <mxCell id="e3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="src2" target="dup"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
+        <mxCell id="e4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="src3" target="dup"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="385" y="263"/><mxPoint x="385" y="222"/></Array></mxGeometry></mxCell>
+        <mxCell id="e5" value="yes" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="dup" target="exist"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="495" y="272"/><mxPoint x="495" y="272"/></Array></mxGeometry></mxCell>
+        <mxCell id="e6" value="no" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="dup" target="comp"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
+        <mxCell id="e7" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="comp" target="deal"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
+        <mxCell id="e8" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="deal" target="s1"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
+        <mxCell id="e9" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="s1" target="s2"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
+        <mxCell id="e10" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="s2" target="s3"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
+        <mxCell id="e11" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="s3" target="s4"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
+        <mxCell id="e12" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="s4" target="s5"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
+        <mxCell id="e13" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="s5" target="verdict"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
+        <mxCell id="e14" value="lost" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="verdict" target="lost"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1988" y="220"/><mxPoint x="1988" y="172"/></Array></mxGeometry></mxCell>
+        <mxCell id="e15" value="won" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="verdict" target="won"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1988" y="220"/><mxPoint x="1988" y="276"/></Array></mxGeometry></mxCell>
+        <mxCell id="e16" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="comp" target="coP"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="725" y="420"/><mxPoint x="725" y="420"/></Array></mxGeometry></mxCell>
+        <mxCell id="e17" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="won" target="coA"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="2091" y="410"/><mxPoint x="1010" y="410"/></Array></mxGeometry></mxCell>
+        <mxCell id="e18" value="a deal is won" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="coP" target="coA"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
+        <mxCell id="e19" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="coA" target="coPage"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
+        <mxCell id="e20" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="coPage" target="coHold"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1505" y="468"/><mxPoint x="1505" y="442"/></Array></mxGeometry></mxCell>
+        <mxCell id="e21" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="coPage" target="coChurn"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1505" y="468"/><mxPoint x="1505" y="506"/></Array></mxGeometry></mxCell>
+        <mxCell id="e22" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="coPage" target="proj"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1320" y="602"/><mxPoint x="740" y="602"/></Array></mxGeometry></mxCell>
+        <mxCell id="e23" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="proj" target="task"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
+        <mxCell id="e24" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="task" target="tflow"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
+        <mxCell id="e25" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="tflow" target="health"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1410" y="658"/><mxPoint x="1300" y="658"/></Array></mxGeometry></mxCell>
+        <mxCell id="e26" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="health" target="pdone"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
+        <mxCell id="e27" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="won" target="eng"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="2091" y="800"/><mxPoint x="740" y="800"/></Array></mxGeometry></mxCell>
+        <mxCell id="e28" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="eng" target="etype"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
+        <mxCell id="e29" value="retainer" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="etype" target="ret"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1085" y="855"/><mxPoint x="1085" y="829"/></Array></mxGeometry></mxCell>
+        <mxCell id="e30" value="project" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="etype" target="prj"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1085" y="855"/><mxPoint x="1085" y="899"/></Array></mxGeometry></mxCell>
+        <mxCell id="e31" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="ret" target="endq"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
+        <mxCell id="e32" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="prj" target="inv"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1840" y="899"/><mxPoint x="1840" y="835"/></Array></mxGeometry></mxCell>
+        <mxCell id="e33" value="no" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="endq" target="roll"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
+        <mxCell id="e34" value="yes" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="endq" target="fixed"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1570" y="849"/><mxPoint x="1570" y="899"/></Array></mxGeometry></mxCell>
+        <mxCell id="e35" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="roll" target="inv"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
+        <mxCell id="e36" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="fixed" target="inv"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1840" y="899"/><mxPoint x="1840" y="835"/></Array></mxGeometry></mxCell>
+        <mxCell id="e37" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="inv" target="pay"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
+        <mxCell id="e38" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="pay" target="gm"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="2365" y="836"/><mxPoint x="2365" y="864"/></Array></mxGeometry></mxCell>
+        <mxCell id="e39" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="exp" target="gm"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="2365" y="902"/><mxPoint x="2365" y="864"/></Array></mxGeometry></mxCell>
+        <mxCell id="e40" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="roll" target="review"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1700" y="930"/><mxPoint x="1710" y="930"/></Array></mxGeometry></mxCell>
+        <mxCell id="e41" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="fixed" target="review"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1700" y="930"/><mxPoint x="1710" y="930"/></Array></mxGeometry></mxCell>
+        <mxCell id="e42" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="review" target="rev2"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
+        <mxCell id="e43" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="review" target="endit"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1710" y="1014"/><mxPoint x="1710" y="1014"/></Array></mxGeometry></mxCell>
+        <mxCell id="e44" value="the engagement continues" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="review" target="eng"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1550" y="978"/><mxPoint x="1550" y="1050"/><mxPoint x="740" y="1050"/></Array></mxGeometry></mxCell>
+        <mxCell id="e45" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9CA3AF;strokeWidth=1.8;fontSize=10;fontColor=#6B7280;endArrow=classic;" edge="1" parent="1" source="endit" target="coChurn"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1710" y="1008"/><mxPoint x="1625" y="1008"/></Array></mxGeometry></mxCell>
+        <mxCell id="t46" value="Nothing asked —
+the drag is the action" style="text;html=1;align=left;verticalAlign=top;fontSize=10;fontColor=#6B7280;strokeColor=none;fillColor=none;whiteSpace=wrap;" vertex="1" parent="1"><mxGeometry x="1086" y="244" width="260" height="46" as="geometry"/></mxCell>
+        <mxCell id="t47" value="Meeting logged
+as an activity" style="text;html=1;align=left;verticalAlign=top;fontSize=10;fontColor=#6B7280;strokeColor=none;fillColor=none;whiteSpace=wrap;" vertex="1" parent="1"><mxGeometry x="1378" y="244" width="260" height="46" as="geometry"/></mxCell>
+        <mxCell id="t48" value="A quotation
+is raised" style="text;html=1;align=left;verticalAlign=top;fontSize=10;fontColor=#6B7280;strokeColor=none;fillColor=none;whiteSpace=wrap;" vertex="1" parent="1"><mxGeometry x="1524" y="244" width="260" height="46" as="geometry"/></mxCell>
+        <mxCell id="t49" value="REQUIRED: value
++ close date" style="text;html=1;align=left;verticalAlign=top;fontSize=10;fontColor=#B45309;strokeColor=none;fillColor=none;whiteSpace=wrap;" vertex="1" parent="1"><mxGeometry x="1670" y="244" width="260" height="46" as="geometry"/></mxCell>
+        <mxCell id="t50" value="Along the way: log calls and meetings · add contacts · create tasks · set follow-ups · park a stalled deal (it keeps its stage) · every move written to history" style="text;html=1;align=left;verticalAlign=top;fontSize=10;fontColor=#6B7280;strokeColor=none;fillColor=none;whiteSpace=wrap;" vertex="1" parent="1"><mxGeometry x="1086" y="298" width="900" height="46" as="geometry"/></mxCell>
+        <mxCell id="t51" value="A lost deal never reopens.
+If they return, that is a NEW deal." style="text;html=1;align=left;verticalAlign=top;fontSize=10;fontColor=#B91C1C;strokeColor=none;fillColor=none;whiteSpace=wrap;" vertex="1" parent="1"><mxGeometry x="1996" y="206" width="220" height="46" as="geometry"/></mxCell>
+        <mxCell id="t52" value="A company is ONE record whether or not they have ever bought. Winning changes its status — it does not create a second record." style="text;html=1;align=left;verticalAlign=top;fontSize=10;fontColor=#6B7280;strokeColor=none;fillColor=none;whiteSpace=wrap;" vertex="1" parent="1"><mxGeometry x="630" y="488" width="520" height="46" as="geometry"/></mxCell>
+        <mxCell id="t53" value="Pausing a CUSTOMER is a
+deliberate action here — not a
+side effect of dragging a deal." style="text;html=1;align=left;verticalAlign=top;fontSize=10;fontColor=#B45309;strokeColor=none;fillColor=none;whiteSpace=wrap;" vertex="1" parent="1"><mxGeometry x="1730" y="410" width="260" height="46" as="geometry"/></mxCell>
+        <mxCell id="t54" value="Delivery hangs off the company, not the deal — a customer won three times has one body of work." style="text;html=1;align=left;verticalAlign=top;fontSize=10;fontColor=#6B7280;strokeColor=none;fillColor=none;whiteSpace=wrap;" vertex="1" parent="1"><mxGeometry x="630" y="696" width="250" height="46" as="geometry"/></mxCell>
+        <mxCell id="t55" value="Recurring tasks cover retainer work
+that repeats every month.
+Tasks also appear on the calendar." style="text;html=1;align=left;verticalAlign=top;fontSize=10;fontColor=#6B7280;strokeColor=none;fillColor=none;whiteSpace=wrap;" vertex="1" parent="1"><mxGeometry x="1660" y="610" width="280" height="46" as="geometry"/></mxCell>
+        <mxCell id="t56" value="Winning creates the engagement.
+The deal is finished and leaves the board." style="text;html=1;align=left;verticalAlign=top;fontSize=10;fontColor=#6B7280;strokeColor=none;fillColor=none;whiteSpace=wrap;" vertex="1" parent="1"><mxGeometry x="630" y="898" width="250" height="46" as="geometry"/></mxCell>
+        <mxCell id="t57" value="No end date is not missing data —
+it means &quot;this one just runs&quot;." style="text;html=1;align=left;verticalAlign=top;fontSize=10;fontColor=#6B7280;strokeColor=none;fillColor=none;whiteSpace=wrap;" vertex="1" parent="1"><mxGeometry x="1390" y="886" width="230" height="46" as="geometry"/></mxCell>
+        <mxCell id="t58" value="Overdue is worked out, never stored.
+Wrong invoice? Void + credit note." style="text;html=1;align=left;verticalAlign=top;fontSize=10;fontColor=#6B7280;strokeColor=none;fillColor=none;whiteSpace=wrap;" vertex="1" parent="1"><mxGeometry x="1870" y="882" width="250" height="46" as="geometry"/></mxCell>
+        <mxCell id="t59" value="Flowzen does not track hours or
+cost rates, so it reports gross
+margin and never claims profit." style="text;html=1;align=left;verticalAlign=top;fontSize=10;fontColor=#B45309;strokeColor=none;fillColor=none;whiteSpace=wrap;" vertex="1" parent="1"><mxGeometry x="2390" y="898" width="240" height="46" as="geometry"/></mxCell>
+        <mxCell id="ttl" value="Flowzen — the complete application flow" style="text;html=1;align=left;fontSize=26;fontStyle=1;fontColor=#111827;strokeColor=none;fillColor=none;" vertex="1" parent="1"><mxGeometry x="40" y="30" width="1200" height="36" as="geometry"/></mxCell>
+        <mxCell id="sub" value="A lead arrives, becomes a deal, is won, becomes a customer, gets delivered and billed, and is kept or lost. Follow the arrows." style="text;html=1;align=left;fontSize=13;fontColor=#6B7280;strokeColor=none;fillColor=none;" vertex="1" parent="1"><mxGeometry x="40" y="68" width="1400" height="20" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

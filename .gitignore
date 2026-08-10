@@ -52,3 +52,6 @@ scratch_*.js
 clean-schema.js
 schema_errors.txt
 apps/api/schema_errors.txt
+
+# Local state from the dummy-data seeder — machine-specific, not shared
+apps/api/test/e2e/.seed-manifest.json
