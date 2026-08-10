@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useUIStore, useAuthStore } from '@/stores';
 import { api } from '@/lib/api';
@@ -10,6 +10,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { getInitials, formatRelativeDate, getAvatarColor } from '@/lib/utils';
 import {
   Search,
+  ArrowLeft,
   Bell,
   Plus,
   ChevronDown,
@@ -60,8 +61,10 @@ const notificationIcons: Record<string, typeof CheckSquare> = {
 export function TopNav({ isMobile }: { isMobile?: boolean }) {
   const shouldReduceMotion = useReducedMotion();
   const router = useRouter();
+  const pathname = usePathname();
   const { setCommandPaletteOpen, setMobileSidebarOpen } = useUIStore();
   const { user, logout } = useAuthStore();
+  const showBack = isMobile && pathname !== '/dashboard';
 
   const queryClient = useQueryClient();
   const { data: notifData } = useNotifications();
@@ -137,26 +140,50 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
   ];
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 md:h-16 items-center justify-between border-b border-border bg-white/80 backdrop-blur-xl px-4 sm:px-6">
-      <div className="flex items-center">
+    <header className="sticky top-0 z-30 flex h-14 md:h-16 items-center justify-between border-b border-border bg-white/80 backdrop-blur-xl px-3 sm:px-6">
+      <div className="flex items-center flex-1 min-w-0 pr-2 gap-2">
+        {showBack ? (
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-white text-secondary hover:bg-surface hover:text-primary transition-colors"
+            title="Go back"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+        ) : isMobile ? (
+          <div className="flex items-center gap-1.5 shrink-0 sm:hidden">
+            <div className="h-7 w-7 rounded-lg bg-primary text-white font-bold flex items-center justify-center text-xs shadow-xs">
+              F
+            </div>
+            <span className="font-semibold text-primary text-sm tracking-tight">Flowzen</span>
+          </div>
+        ) : null}
 
-
-        {/* Search */}
+        {/* Search button on Mobile (compact icon button) */}
         <button
           onClick={() => setCommandPaletteOpen(true)}
-          className="flex items-center gap-2.5 rounded-xl border border-border bg-surface px-3 sm:px-4 py-2 text-sm text-secondary hover:bg-white hover:border-line transition-colors duration-150 motion-reduce:transition-none w-auto sm:w-80"
+          className="flex sm:hidden h-9 w-9 items-center justify-center rounded-xl border border-border bg-surface text-secondary hover:bg-white hover:text-primary transition-colors shrink-0"
+          title="Search"
+        >
+          <Search className="h-4 w-4" />
+        </button>
+
+        {/* Search bar on Desktop */}
+        <button
+          onClick={() => setCommandPaletteOpen(true)}
+          className="hidden sm:flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm text-secondary hover:bg-white hover:border-line transition-colors duration-150 motion-reduce:transition-none sm:w-80"
         >
           <Search className="h-4 w-4 shrink-0" />
-          <span className="hidden sm:inline truncate">Search clients, projects, tasks, team...</span>
-          <span className="sm:hidden">Search...</span>
-          <kbd className="ml-auto hidden sm:inline-flex items-center gap-0.5 rounded-md border border-border bg-white px-1.5 py-0.5 text-[10px] font-medium text-secondary">
+          <span className="truncate">Search clients, projects, tasks, team...</span>
+          <kbd className="ml-auto inline-flex items-center gap-0.5 rounded-md border border-border bg-white px-1.5 py-0.5 text-[10px] font-medium text-secondary">
             ⌘K
           </kbd>
         </button>
       </div>
 
       {/* Right side */}
-      <div className="flex items-center gap-2 dropdown-container">
+      <div className="flex items-center gap-1.5 sm:gap-2 dropdown-container shrink-0">
         {/* Quick Create */}
         <div className="relative">
           <button

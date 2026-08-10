@@ -228,25 +228,26 @@ export function PipelineDashboard() {
 
   return (
     <div className="space-y-6 pb-8">
-
       {/* Filter Bar */}
-      <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-2xl border border-border shadow-sm">
+      <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 bg-white p-3.5 sm:p-4 rounded-2xl border border-border shadow-sm w-full">
 
         {/* Date Range */}
-        <div className="flex items-center gap-2">
-          <Select
-            value={dateRange}
-            onChange={setDateRange}
-            options={[
-              { label: 'All Time', value: 'ALL' },
-              { label: 'This Month', value: 'THIS_MONTH' },
-              { label: 'Last Month', value: 'LAST_MONTH' },
-              { label: 'This Quarter', value: 'THIS_QUARTER' },
-              { label: 'Last Quarter', value: 'LAST_QUARTER' },
-              { label: 'This Year', value: 'THIS_YEAR' },
-              { label: 'Custom Range', value: 'CUSTOM' }
-            ]}
-          />
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <div className="flex-1 sm:flex-initial">
+            <Select
+              value={dateRange}
+              onChange={setDateRange}
+              options={[
+                { label: 'All Time', value: 'ALL' },
+                { label: 'This Month', value: 'THIS_MONTH' },
+                { label: 'Last Month', value: 'LAST_MONTH' },
+                { label: 'This Quarter', value: 'THIS_QUARTER' },
+                { label: 'Last Quarter', value: 'LAST_QUARTER' },
+                { label: 'This Year', value: 'THIS_YEAR' },
+                { label: 'Custom Range', value: 'CUSTOM' }
+              ]}
+            />
+          </div>
           {dateRange !== 'ALL' && (
             <button
               onClick={() => setDateFilterType(prev => prev === 'CREATED' ? 'CLOSE' : 'CREATED')}
@@ -258,15 +259,15 @@ export function PipelineDashboard() {
         </div>
 
         {dateRange === 'CUSTOM' && (
-          <div className="flex items-center gap-2">
-            <input type="date" value={customDateFrom} onChange={(e) => setCustomDateFrom(e.target.value)} className="rounded-lg border border-border p-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 text-secondary" />
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <input type="date" value={customDateFrom} onChange={(e) => setCustomDateFrom(e.target.value)} className="w-full sm:w-auto rounded-lg border border-border p-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 text-secondary" />
             <span className="text-secondary">-</span>
-            <input type="date" value={customDateTo} onChange={(e) => setCustomDateTo(e.target.value)} className="rounded-lg border border-border p-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 text-secondary" />
+            <input type="date" value={customDateTo} onChange={(e) => setCustomDateTo(e.target.value)} className="w-full sm:w-auto rounded-lg border border-border p-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 text-secondary" />
           </div>
         )}
 
         {/* Owner Filter */}
-        <div className="w-56">
+        <div className="w-full sm:w-56">
           <MultiSelect
             value={ownerFilter}
             onChange={setOwnerFilter}
@@ -276,10 +277,10 @@ export function PipelineDashboard() {
         </div>
 
         {/* Stage Multi-Select */}
-        <div className="relative" ref={stageDropdownRef}>
+        <div className="relative w-full sm:w-auto" ref={stageDropdownRef}>
           <button
             onClick={() => setShowStageDropdown(!showStageDropdown)}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-secondary hover:text-primary transition-colors min-w-40 justify-between"
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-secondary hover:text-primary transition-colors w-full sm:min-w-40 justify-between"
           >
             <span>Stages ({selectedStages.length === ALL_STAGES.length ? 'All' : selectedStages.length})</span>
             <Icon as={ChevronDown} size="md" />
@@ -291,7 +292,7 @@ export function PipelineDashboard() {
                 initial={{ opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 5 }}
-                className="absolute top-full left-0 mt-2 w-64 bg-white border border-border rounded-xl shadow-lg z-50 max-h-80 overflow-y-auto"
+                className="absolute top-full left-0 sm:left-auto sm:right-0 mt-2 w-full sm:w-64 bg-white border border-border rounded-xl shadow-lg z-50 max-h-80 overflow-y-auto"
               >
                 <div className="p-2 space-y-1">
                   <button
@@ -323,7 +324,7 @@ export function PipelineDashboard() {
       </div>
 
       {/* Metrics Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 relative">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 relative">
         {isFiltering && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-2xl"><div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}
 
         <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full relative overflow-hidden">
@@ -331,7 +332,7 @@ export function PipelineDashboard() {
             <p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Total Pipeline Value</p>
             <Icon as={IndianRupee} size="md" className="shrink-0 text-secondary" />
           </div>
-          <p className="text-3xl font-semibold text-primary">{formatCurrency(metrics.pipelineValue)}</p>
+          <p className="text-2xl sm:text-3xl font-semibold text-primary truncate">{formatCurrency(metrics.pipelineValue)}</p>
         </div>
 
         <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full">
@@ -339,7 +340,7 @@ export function PipelineDashboard() {
             <p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Closed / Won Value</p>
             <Icon as={TrendingUp} size="md" className="shrink-0 text-secondary" />
           </div>
-          <p className="text-3xl font-semibold text-primary">{formatCurrency(metrics.wonValue)}</p>
+          <p className="text-2xl sm:text-3xl font-semibold text-primary truncate">{formatCurrency(metrics.wonValue)}</p>
         </div>
 
         <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full">
@@ -347,7 +348,7 @@ export function PipelineDashboard() {
             <p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Active leads</p>
             <Icon as={Target} size="md" className="shrink-0 text-secondary" />
           </div>
-          <p className="text-3xl font-semibold text-primary">{metrics.activeLeads}</p>
+          <p className="text-2xl sm:text-3xl font-semibold text-primary">{metrics.activeLeads}</p>
         </div>
 
         <div className="flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-white border border-border hover:shadow-sm transition-shadow h-full">
@@ -355,7 +356,7 @@ export function PipelineDashboard() {
             <p className="text-[11px] sm:text-xs font-medium text-secondary uppercase tracking-wide">Total Leads Tracked</p>
             <Icon as={Briefcase} size="md" className="shrink-0 text-secondary" />
           </div>
-          <p className="text-3xl font-semibold text-primary">{metrics.totalLeads}</p>
+          <p className="text-2xl sm:text-3xl font-semibold text-primary">{metrics.totalLeads}</p>
         </div>
 
       </div>
@@ -484,7 +485,7 @@ export function PipelineDashboard() {
         <div className="p-5 border-b border-border flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-primary"><Icon as={Clock} size="md" className="text-secondary" /> Recent Leads</h2>
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-w-full">
           <table className="w-full text-left min-w-150">
             <thead>
               <tr className="border-b border-border bg-surface">

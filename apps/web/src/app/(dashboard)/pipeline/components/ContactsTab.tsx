@@ -120,7 +120,7 @@ export function ContactsTab({ leadId, lead, onChanged }: { leadId: string; lead:
                       {c.phone && <a href={`tel:${c.phone}`} className="flex items-center gap-1 hover:text-primary"><Phone className="h-3 w-3" /> {c.phone}</a>}
                       {c.linkedinUrl && <a href={c.linkedinUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-primary"><Link2 className="h-3 w-3" /> LinkedIn</a>}
                     </div>
-                    {c.notes && <p className="mt-1.5 text-xs text-body-soft">{c.notes}</p>}
+                    {c.notes && <p className="mt-1.5 text-xs text-text-on-sunken">{c.notes}</p>}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     {!c.isPrimary && (

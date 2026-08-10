@@ -230,17 +230,26 @@ revenueRouter.get('/overview', async (req: AuthRequest, res: Response, next: Nex
 
 revenueRouter.get('/pnl', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const orgId = req.user!.organizationId;
+    const orgId = req.user?.organizationId;
+    if (!orgId) {
+      res.json([]);
+      return;
+    }
+
     const { startDate, endDate } = req.query;
 
     let paymentDateFilter = {};
     let expenseDateFilter = {};
+    let timeEntryDateFilter = {};
 
     if (startDate && endDate) {
       const start = new Date(startDate as string);
       const end = new Date(endDate as string);
-      paymentDateFilter = { paidOn: { gte: start, lte: end } };
-      expenseDateFilter = { date: { gte: start, lte: end } };
+      if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+        paymentDateFilter = { paidOn: { gte: start, lte: end } };
+        expenseDateFilter = { date: { gte: start, lte: end } };
+        timeEntryDateFilter = { date: { gte: start, lte: end } };
+      }
     }
     
     // Fetch clients for this org to find their projects
@@ -251,45 +260,48 @@ revenueRouter.get('/pnl', async (req: AuthRequest, res: Response, next: NextFunc
     const clientMap = new Map(clients.map(c => [c.id, c]));
     const clientIds = clients.map(c => c.id);
 
-    const projects = await prisma.project.findMany({
-      where: { clientId: { in: clientIds } },
-      select: { id: true, name: true, clientId: true }
-    });
+    const projects = clientIds.length > 0
+      ? await prisma.project.findMany({
+          where: { clientId: { in: clientIds } },
+          select: { id: true, name: true, clientId: true }
+        })
+      : [];
     
     const projectIds = projects.map(p => p.id);
     
     // Fetch expenses for these projects
-    const expenses = await prisma.expense.findMany({
-      where: { projectId: { in: projectIds }, ...expenseDateFilter }
-    });
+    const expenses = projectIds.length > 0
+      ? await prisma.expense.findMany({
+          where: { projectId: { in: projectIds }, ...expenseDateFilter }
+        })
+      : [];
 
-    // Labour. Until time entries existed this P&L was payments MINUS VENDOR BILLS ONLY, with no
-    // cost for the team's own effort — so a retainer that ate eighty hours of the month scored
-    // exactly like one that ate eight, and every project looked profitable. Costed at the rate
-    // SNAPSHOTTED on each entry, not the person's rate today, so a pay rise cannot retroactively
-    // change what past work is reported to have cost.
-    const timeEntries = await prisma.timeEntry.findMany({
-      where: { projectId: { in: projectIds }, ...(startDate && endDate ? { date: { gte: new Date(startDate as string), lte: new Date(endDate as string) } } : {}) },
-      select: { projectId: true, hours: true, costRate: true },
-    });
+    const timeEntries = projectIds.length > 0
+      ? await prisma.timeEntry.findMany({
+          where: { projectId: { in: projectIds }, ...timeEntryDateFilter },
+          select: { projectId: true, hours: true, costRate: true },
+        })
+      : [];
+
     const labourByProject = new Map<string, { hours: number; cost: number }>();
     for (const t of timeEntries) {
       if (!t.projectId) continue;
       const b = labourByProject.get(t.projectId) || { hours: 0, cost: 0 };
-      b.hours += Number(t.hours);
-      b.cost += Number(t.hours) * Number(t.costRate || 0);
+      const hoursNum = Number(t.hours) || 0;
+      const costRateNum = Number(t.costRate) || 0;
+      b.hours += hoursNum;
+      b.cost += hoursNum * costRateNum;
       labourByProject.set(t.projectId, b);
     }
 
     // To get revenue, we will fetch contracts per client
-    const contracts = await prisma.contract.findMany({
-      where: { organizationId: orgId, clientId: { in: clientIds } },
-      include: { payments: { where: { status: 'PAID', ...paymentDateFilter } } }
-    });
+    const contracts = clientIds.length > 0
+      ? await prisma.contract.findMany({
+          where: { organizationId: orgId, clientId: { in: clientIds } },
+          include: { payments: { where: { status: 'PAID', ...paymentDateFilter } } }
+        })
+      : [];
 
-    // Contracts are per-client (no projectId), so a client's paid revenue is split
-    // EVENLY across that client's projects — otherwise each project would be credited
-    // the client's full total and revenue would be multiplied by the project count.
     const projectCountByClient = new Map<string, number>();
     for (const p of projects) {
       if (p.clientId) projectCountByClient.set(p.clientId, (projectCountByClient.get(p.clientId) || 0) + 1);
@@ -297,28 +309,34 @@ revenueRouter.get('/pnl', async (req: AuthRequest, res: Response, next: NextFunc
 
     const result = projects.map(p => {
       const projExpenses = expenses.filter(e => e.projectId === p.id);
-      const totalExpenses = projExpenses.reduce((acc: number, e: any) => acc + Number(e.amount), 0);
+      const totalExpenses = projExpenses.reduce((acc: number, e: any) => acc + (Number(e.amount) || 0), 0);
 
-      // approximate project revenue as an even share of the client's paid contract revenue
       const projectContracts = contracts.filter(c => c.clientId === p.clientId);
-      const clientRevenue = projectContracts.reduce((acc: number, c: any) => acc + c.payments.reduce((pAcc: number, pmt: any) => pAcc + Number(pmt.amount), 0), 0);
-      const projectsForClient = projectCountByClient.get(p.clientId) || 1;
+      const clientRevenue = projectContracts.reduce((acc: number, c: any) => {
+        const pmts = Array.isArray(c.payments) ? c.payments : [];
+        return acc + pmts.reduce((pAcc: number, pmt: any) => pAcc + (Number(pmt.amount) || 0), 0);
+      }, 0);
+
+      const projectsForClient = Math.max(1, projectCountByClient.get(p.clientId) || 1);
       const revenue = clientRevenue / projectsForClient;
 
       const client = clientMap.get(p.clientId);
       const labour = labourByProject.get(p.id) || { hours: 0, cost: 0 };
+
+      const revNum = isNaN(revenue) ? 0 : Number(revenue.toFixed(2));
+      const expNum = isNaN(totalExpenses) ? 0 : Number(totalExpenses.toFixed(2));
+      const labourCostNum = isNaN(labour.cost) ? 0 : Number(labour.cost.toFixed(2));
+      const netNum = Number((revNum - expNum - labourCostNum).toFixed(2));
+
       return {
         projectId: p.id,
-        projectName: p.name,
-        clientName: client?.company || client?.name || 'Unknown',
-        revenue,
-        expenses: totalExpenses,
-        // Reported separately from vendor expenses rather than folded into them: the two are
-        // acted on differently, and a project bleeding on labour needs a different conversation
-        // from one bleeding on subcontractors.
-        labourHours: labour.hours,
-        labourCost: labour.cost,
-        net: revenue - totalExpenses - labour.cost
+        projectName: p.name || 'Untitled Project',
+        clientName: client?.company || client?.name || 'Unknown Client',
+        revenue: revNum,
+        expenses: expNum,
+        labourHours: isNaN(labour.hours) ? 0 : Number(labour.hours.toFixed(1)),
+        labourCost: labourCostNum,
+        net: isNaN(netNum) ? 0 : netNum
       };
     });
 

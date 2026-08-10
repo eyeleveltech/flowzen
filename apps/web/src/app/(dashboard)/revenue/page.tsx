@@ -70,6 +70,20 @@ export default function RevenueOverviewPage() {
           <h1 className="text-2xl font-semibold text-primary tracking-tight">Revenue Overview</h1>
           <p className="mt-1 text-sm text-secondary">Monitor your monthly payments, MRR, and receivables.</p>
         </div>
+        <div className="flex bg-surface-sunken p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center self-start sm:self-auto">
+          <Link
+            href="/revenue"
+            className="px-3 py-1 rounded-lg text-xs font-semibold transition-colors bg-white text-primary shadow-sm"
+          >
+            Overview
+          </Link>
+          <Link
+            href="/revenue/pnl"
+            className="px-3 py-1 rounded-lg text-xs font-semibold transition-colors text-secondary hover:text-primary"
+          >
+            Per-Project P&L
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
