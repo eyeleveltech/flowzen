@@ -1,283 +1,277 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useAuthStore } from '@/stores';
-import { api } from '@/lib/api';
-import { User, KeyRound, Save, Eye, EyeOff, AlertCircle } from 'lucide-react';
-import toast from 'react-hot-toast';
-import { Select } from '@/components/ui/select';
-import { useTeams, useMembers } from '@/hooks/useQueries';
-import { useQueryClient } from '@tanstack/react-query';
+/**
+ * Your own account.
+ *
+ * Deliberately narrow. Email is not editable because it is what you sign in as,
+ * and your role is not here at all — nobody promotes themselves, and a screen
+ * that appears to offer it invites the attempt (master plan §5).
+ */
 
-import { usePageTitle } from '@/hooks/usePageTitle';
-import { Icon } from '@/components/ui/icon';
-import { NarrowPage } from '@/components/layout/narrow-page';
+import { useCallback, useEffect, useState } from 'react';
+import { Check, KeyRound, ShieldCheck } from 'lucide-react';
+import { api, ApiError, formatDate, type OrgConfig, type Profile, type Role } from '@/lib/api-v2';
+import { useAuthStore } from '@/stores';
+import { PageHeader } from '@/components/PageHeader';
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardBody, CardFooter } from '@/components/ui/card';
+import { Field } from '@/components/ui/field';
+import { ErrorNote, Note } from '@/components/ui/empty-state';
+import { PageSkeleton } from '@/components/ui/skeleton-loaders';
+import { getInitials, getAvatarColor } from '@/lib/utils';
+
+const ROLE_LABEL: Record<Role, string> = {
+  SUPER_ADMIN: 'Super Admin',
+  ADMIN: 'Admin',
+  MANAGER: 'Manager',
+  SALES: 'Sales',
+  MEMBER: 'Member',
+};
 
 export default function ProfilePage() {
-  usePageTitle('Profile');
-  const { user, setAuth } = useAuthStore();
-  const queryClient = useQueryClient();
-  const { data: teams = [] } = useTeams();
-  const { data: members = [] } = useMembers();
-  const designationOptions = Array.from(new Set((members as any[]).map((m) => m.designation).filter(Boolean))) as string[];
+  const { setAuth, user } = useAuthStore();
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [config, setConfig] = useState<OrgConfig | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
 
-  const [profileForm, setProfileForm] = useState({
-    name: '',
-    designation: '',
-  });
+  const [name, setName] = useState('');
+  const [designation, setDesignation] = useState('');
+  const [phone, setPhone] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  const [passwordForm, setPasswordForm] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmNewPassword: '',
-  });
-
-  const [showPassword, setShowPassword] = useState(false);
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [savingPassword, setSavingPassword] = useState(false);
-  const [profileError, setProfileError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (user) {
-      setProfileForm({
-        name: user.name || '',
-        designation: user.designation || '',
-      });
+  const load = useCallback(async () => {
+    try {
+      const [me, cfg] = await Promise.all([api.profile.get(), api.config.get()]);
+      setProfile(me);
+      setConfig(cfg);
+      setName(me.name);
+      setDesignation(me.designation ?? '');
+      setPhone(me.phone ?? '');
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load your profile');
+    } finally {
+      setLoading(false);
     }
-  }, [user]);
-
-  // The cached session can be stale (e.g. designation changed later via
-  // Settings → Users), so pull the latest profile from the server on open and
-  // sync it back into the auth store.
-  useEffect(() => {
-    setProfileError(null);
-    api.get('/profile').then((fresh: any) => {
-      setProfileForm({
-        name: fresh.name || '',
-        designation: fresh.designation || '',
-      });
-      setAuth(fresh);
-    }).catch((e: any) => {
-      setProfileError(e.message || 'Failed to sync latest profile data');
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleProfileSubmit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSavingProfile(true);
+    setSaving(true);
+    setError(null);
+    setSaved(false);
     try {
-      const updatedUser = await api.put('/profile', profileForm);
-      // Update local store with new data
-      setAuth(updatedUser as any);
-      // Refresh the shared member/team caches so the new designation
-      // shows in assignee dropdowns and member lists everywhere.
-      queryClient.invalidateQueries({ queryKey: ['members'] });
-      queryClient.invalidateQueries({ queryKey: ['teams'] });
-      toast.success('Profile updated successfully');
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to update profile');
+      await api.profile.update({ name, designation: designation || null, phone: phone || null });
+      // Keep the header and sidebar in step without a reload.
+      if (user) setAuth({ ...user, name, designation: designation || null });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save');
     } finally {
-      setSavingProfile(false);
+      setSaving(false);
     }
   };
 
-  const handlePasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (passwordForm.newPassword !== passwordForm.confirmNewPassword) {
-      toast.error('New passwords do not match');
-      return;
-    }
+  if (loading) return <PageSkeleton />;
 
-    if (passwordForm.newPassword.length < 8) {
-      toast.error('New password must be at least 8 characters');
-      return;
-    }
-
-    setSavingPassword(true);
-    try {
-      await api.put('/profile/password', {
-        currentPassword: passwordForm.currentPassword,
-        newPassword: passwordForm.newPassword,
-      });
-      toast.success('Password updated successfully');
-      setPasswordForm({
-        currentPassword: '',
-        newPassword: '',
-        confirmNewPassword: '',
-      });
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to update password');
-    } finally {
-      setSavingPassword(false);
-    }
-  };
-
-  if (!user) return null;
+  const tz = config?.organization.timezone ?? 'Asia/Kolkata';
+  const locale = config?.organization.locale ?? 'en-IN';
 
   return (
-    <NarrowPage className="space-y-6 sm:space-y-8">
-      <div>
-        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-primary">My Profile</h1>
-        <p className="mt-1 sm:mt-2 text-xs sm:text-sm text-secondary">
-          Manage your personal information and security settings.
-        </p>
-      </div>
+    <div className="max-w-2xl">
+      <PageHeader title="Your profile" subtitle={profile?.organization.name} />
 
-      {profileError && (
-        <div className="flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
-          <Icon as={AlertCircle} size="md" className="shrink-0 text-amber-600" />
-          <span>Could not refresh latest profile data: {profileError}. Showing cached profile information.</span>
-        </div>
-      )}
+      <div className="space-y-5">
+        {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
 
-      <div className="space-y-6">
-        {/* Personal Information Section */}
-        <section className="rounded-2xl border border-border bg-white shadow-sm">
-          <div className="border-b border-border px-4 sm:px-6 py-4 sm:py-5 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-subtle shrink-0">
-              <Icon as={User} size="lg" className="text-secondary" />
-            </div>
-            <div>
-              <h2 className="text-base font-semibold text-primary">Personal Information</h2>
-              <p className="text-xs sm:text-sm text-secondary">Update your name and department details.</p>
-            </div>
-          </div>
-          <div className="p-4 sm:p-6">
-            <form onSubmit={handleProfileSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label htmlFor="profile-name" className="text-sm font-medium text-body">Full Name</label>
-                  <input
-                    id="profile-name"
-                    type="text"
-                    required
-                    value={profileForm.name}
-                    onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
-                    className="w-full rounded-xl border border-border px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label htmlFor="profile-email" className="text-sm font-medium text-body">Email Address</label>
-                  <input
-                    id="profile-email"
-                    type="email"
-                    disabled
-                    value={user.email}
-                    className="w-full rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-secondary cursor-not-allowed"
-                    title="Email cannot be changed"
-                  />
-                </div>
-                <div className="space-y-1.5 sm:col-span-2">
-                  <label htmlFor="profile-designation" className="text-sm font-medium text-body">Designation (Job Title)</label>
-                  <input
-                    id="profile-designation"
-                    type="text"
-                    list="designation-options"
-                    placeholder="Select or type a designation…"
-                    value={profileForm.designation}
-                    onChange={(e) => setProfileForm({ ...profileForm, designation: e.target.value })}
-                    className="w-full rounded-xl border border-border px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
-                  />
-                  <datalist id="designation-options">
-                    {designationOptions.map((d) => <option key={d} value={d} />)}
-                  </datalist>
-                </div>
-                <div className="space-y-1.5 sm:col-span-2">
-                  <label className="text-sm font-medium text-body">Department</label>
-                  <p className="w-full bg-white border border-border rounded-xl px-4 py-2.5 text-sm font-medium text-primary">
-                    {user.team?.name || '—'}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">Contact an admin to change your department.</p>
-                </div>
-              </div>
-              <div className="flex justify-end pt-2">
-                <button
-                  type="submit"
-                  disabled={savingProfile}
-                  className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
+        <Card padding="none">
+          <form onSubmit={save}>
+            <CardBody className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${profile ? getAvatarColor(profile.name) : 'bg-primary text-white'}`}
                 >
-                  <Icon as={Save} size="md" />
-                  {savingProfile ? 'Saving...' : 'Save Profile'}
-                </button>
+                  {profile ? getInitials(profile.name) : '—'}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-primary">{profile?.name}</p>
+                  <p className="truncate text-xs text-secondary">{profile?.email}</p>
+                </div>
               </div>
-            </form>
-          </div>
-        </section>
 
-        {/* Security Section */}
-        <section className="rounded-2xl border border-border bg-white shadow-sm overflow-hidden">
-          <div className="border-b border-border px-4 sm:px-6 py-4 sm:py-5 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-subtle shrink-0">
-              <Icon as={KeyRound} size="lg" className="text-secondary" />
-            </div>
-            <div>
-              <h2 className="text-base font-semibold text-primary">Security & Password</h2>
-              <p className="text-xs sm:text-sm text-secondary">Update your password to keep your account secure.</p>
-            </div>
-          </div>
-          <div className="p-4 sm:p-6">
-            <form onSubmit={handlePasswordSubmit} className="space-y-4 max-w-md">
-              <div className="space-y-1.5 relative">
-                <label htmlFor="profile-current-password" className="text-sm font-medium text-body">Current Password</label>
-                <div className="relative">
-                  <input
-                    id="profile-current-password"
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={passwordForm.currentPassword}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                    className="w-full rounded-xl border border-border px-4 py-2.5 pr-10 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-secondary hover:text-primary"
-                  >
-                    {showPassword ? <Icon as={EyeOff} size="md" /> : <Icon as={Eye} size="md" />}
-                  </button>
-                </div>
+              <Field label="Name" value={name} onChange={setName} required />
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Job title" value={designation} onChange={setDesignation} />
+                <Field label="Phone" type="tel" value={phone} onChange={setPhone} />
               </div>
-              <div className="space-y-1.5 relative">
-                <label htmlFor="profile-new-password" className="text-sm font-medium text-body">New Password</label>
-                <div className="relative">
-                  <input
-                    id="profile-new-password"
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={passwordForm.newPassword}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                    className="w-full rounded-xl border border-border px-4 py-2.5 pr-10 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5 relative">
-                <label htmlFor="profile-confirm-password" className="text-sm font-medium text-body">Confirm New Password</label>
-                <div className="relative">
-                  <input
-                    id="profile-confirm-password"
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={passwordForm.confirmNewPassword}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, confirmNewPassword: e.target.value })}
-                    className="w-full rounded-xl border border-border px-4 py-2.5 pr-10 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
-                  />
-                </div>
-              </div>
-              <div className="flex pt-2">
-                <button
-                  type="submit"
-                  disabled={savingPassword}
-                  className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
-                >
-                  <Icon as={Save} size="md" />
-                  {savingPassword ? 'Updating...' : 'Update Password'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </section>
+            </CardBody>
+
+            <CardFooter>
+              {saved && (
+                <span className="mr-auto inline-flex items-center gap-1 text-xs text-green-700">
+                  <Check className="h-3.5 w-3.5" /> Saved
+                </span>
+              )}
+              <Button type="submit" variant="primary" loading={saving} disabled={!name}>
+                Save
+              </Button>
+            </CardFooter>
+          </form>
+        </Card>
+
+        {/* ── What cannot be changed here, and why ────────────────────────── */}
+        <Card padding="none">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-secondary" strokeWidth={1.75} />
+              Your account
+            </CardTitle>
+          </CardHeader>
+          <CardBody>
+            <dl className="space-y-2.5">
+              <Row label="Email" value={profile?.email ?? '—'} hint="This is what you sign in as." />
+              <Row
+                label="Level"
+                value={profile ? ROLE_LABEL[profile.role] : '—'}
+                hint="Only an admin can change this — nobody promotes themselves."
+              />
+              <Row label="Organisation" value={profile?.organization.name ?? '—'} />
+              <Row label="Joined" value={formatDate(profile?.joiningDate, tz, locale)} />
+              <Row
+                label="Sign in with"
+                value={
+                  [profile?.signIn.password && 'a password', profile?.signIn.google && 'Google']
+                    .filter(Boolean)
+                    .join(' and ') || '—'
+                }
+              />
+            </dl>
+          </CardBody>
+        </Card>
+
+        <PasswordCard hasPassword={Boolean(profile?.signIn.password)} />
       </div>
-    </NarrowPage>
+    </div>
+  );
+}
+
+function Row({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div>
+      <div className="flex flex-wrap items-baseline gap-x-3">
+        <dt className="w-28 shrink-0 text-xs text-secondary">{label}</dt>
+        <dd className="text-sm text-body">{value}</dd>
+      </div>
+      {hint && <p className="mt-0.5 pl-28 text-xs text-secondary">{hint}</p>}
+    </div>
+  );
+}
+
+/**
+ * Changing a password ends every session, including this one.
+ *
+ * Said before the button rather than discovered after it — otherwise the
+ * redirect to the sign-in screen reads as the app breaking.
+ */
+function PasswordCard({ hasPassword }: { hasPassword: boolean }) {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (next !== confirm) {
+      setError('The two passwords do not match.');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await api.profile.setPassword({
+        currentPassword: hasPassword ? current : undefined,
+        newPassword: next,
+      });
+      // The cookie this page holds is now stale, so go and sign in rather than
+      // letting the next click look like a random logout.
+      window.location.href = '/login';
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not change the password');
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card padding="none">
+      <form onSubmit={submit}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4 text-secondary" strokeWidth={1.75} />
+            {hasPassword ? 'Change your password' : 'Set a password'}
+          </CardTitle>
+        </CardHeader>
+
+        <CardBody className="space-y-4">
+          {!hasPassword && (
+            <Note>
+              You signed in with Google. Setting a password gives you a second way in, and does not
+              remove the first.
+            </Note>
+          )}
+
+          {hasPassword && (
+            <Field
+              label="Current password"
+              type="password"
+              value={current}
+              onChange={setCurrent}
+              required
+              autoComplete="current-password"
+            />
+          )}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="New password"
+              type="password"
+              value={next}
+              onChange={setNext}
+              required
+              autoComplete="new-password"
+              hint="At least 8 characters."
+            />
+            <Field
+              label="Again"
+              type="password"
+              value={confirm}
+              onChange={setConfirm}
+              required
+              autoComplete="new-password"
+            />
+          </div>
+
+          {error && <ErrorNote>{error}</ErrorNote>}
+        </CardBody>
+
+        <CardFooter>
+          <p className="mr-auto text-xs text-secondary">
+            This signs you out everywhere, including here.
+          </p>
+          <Button type="submit" variant="primary" loading={saving} disabled={next.length < 8}>
+            {hasPassword ? 'Change it' : 'Set it'}
+          </Button>
+        </CardFooter>
+      </form>
+    </Card>
   );
 }

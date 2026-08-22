@@ -1,687 +1,696 @@
-import { Router, Response } from 'express';
+/**
+ * Projects and tasks.
+ *
+ * A project belongs to the CLIENT and only to the client. What the client is on —
+ * retainer or project, and at what price — is DISPLAYED on the project, read from
+ * the company. Context, not a connection, so nothing needs re-pointing when an
+ * engagement renews or ends (master plan §3.12).
+ */
+
+import { Router, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { authenticate, authorize, AuthRequest } from '../middleware/auth.js';
-import { validate } from '../middleware/validate.js';
-import { emitToOrganization } from '../sse.js';
-import { invalidateOrganizationCache } from '../lib/cacheInvalidator.js';
-import { NotificationService } from '../services/notifications.js';
-import { toList, whereIn, parsePagination } from '../utils/query.js';
-import { createAuditLog } from '../utils/audit.js';
-import { sanitizeRichText } from '../utils/html.js';
-import { buildSearchFilter } from '../utils/search-utils.js';
+import { authenticate, atLeast, param, requireRole, requireModule, type AuthRequest } from '../middleware/auth.js';
+import { getOrgConfig } from '../lib/orgConfig.js';
+import { isBeforeToday, daysBetween } from '../utils/orgDay.js';
+import { notifyTaskAssigned, notifyTaskInReview } from '../services/scanner.js';
 
-export const projectRouter = Router();
-projectRouter.use(authenticate);
+export const projectsRouter = Router();
 
-export const projectSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().optional(),
-  type: z.enum(['RETAINER', 'ONE_TIME', 'EVENT', 'INTERNAL']).optional().or(z.literal('')),
-  scope: z.string().optional(),
-  reportingCadence: z.enum(['WEEKLY', 'FORTNIGHTLY', 'MONTHLY', 'NONE']).optional().or(z.literal('')),
-  clientApprovalRequired: z.boolean().optional(),
-  tags: z.array(z.string()).optional(),
-  projectNotes: z.string().optional(),
-  folderLink: z.string().url().optional().or(z.literal('')),
-  clientId: z.string().optional(),
-  ownerId: z.string(),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional().or(z.literal('')),
-  status: z.enum(['PLANNING', 'IN_PROGRESS', 'REVIEW', 'COMPLETED', 'ON_HOLD', 'CANCELLED']).optional().or(z.literal('')),
-  budget: z.number().min(0, 'Budget cannot be negative').optional(),
-  platform: z.enum(['INSTAGRAM', 'FACEBOOK', 'LINKEDIN', 'X_TWITTER', 'TIKTOK', 'YOUTUBE', 'GOOGLE_ADS', 'WEBSITE', 'MOBILE_APP', 'E_COMMERCE', 'CROSS_PLATFORM', 'OTHER']).optional().nullable().or(z.literal('')),
-  memberIds: z.array(z.string()).optional(),
-  teamIds: z.array(z.string()).optional(),
-}).superRefine((data, ctx) => {
-  if (data.type === 'ONE_TIME' || data.type === 'EVENT') {
-    if (!data.endDate || data.endDate.trim() === '') {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'End date is required for One-Time or Event projects',
-        path: ['endDate'],
-      });
-    }
+projectsRouter.use(authenticate, requireModule('PM'));
+
+export type Health = 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK';
+
+/**
+ * Project health, computed.
+ *
+ * Never stored. A health flag someone sets by hand is green everywhere forever —
+ * nobody remembers to go back and turn their own project amber (§4.8).
+ */
+export const computeHealth = (
+  project: { status: string; dueDate: Date | null },
+  openTasks: number,
+  overdueTasks: number,
+  timezone: string,
+  now: Date = new Date(),
+): Health => {
+  if (project.status === 'COMPLETED' || project.status === 'CANCELLED') return 'ON_TRACK';
+  if (project.dueDate && isBeforeToday(project.dueDate, timezone, now)) return 'OFF_TRACK';
+  if (overdueTasks > 0) return 'AT_RISK';
+  if (project.dueDate && openTasks > 0 && daysBetween(project.dueDate, now, timezone) <= 7) {
+    return 'AT_RISK';
   }
+  return 'ON_TRACK';
+};
 
-  if (data.startDate) {
-    const startYear = new Date(data.startDate).getFullYear();
-    if (isNaN(startYear) || startYear > 2100 || startYear < 1970) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Start date must be a valid date between 1970 and 2100',
-        path: ['startDate'],
-      });
-    }
-  }
-
-  if (data.endDate) {
-    const endYear = new Date(data.endDate).getFullYear();
-    if (isNaN(endYear) || endYear > 2100 || endYear < 1970) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'End date must be a valid date between 1970 and 2100',
-        path: ['endDate'],
-      });
-    }
-  }
-
-  if (data.startDate && data.endDate && data.startDate.trim() !== '' && data.endDate.trim() !== '') {
-    const start = new Date(data.startDate);
-    const end = new Date(data.endDate);
-    if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end < start) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'End date cannot be before start date',
-        path: ['endDate'],
-      });
-    }
-  }
-});
-
-// GET /api/projects
-projectRouter.get('/', async (req: AuthRequest, res: Response, next) => {
+projectsRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const orgId = req.user!.organizationId;
-    const { search, status, priority, clientId, ownerId, endDate } = req.query;
-    const { page, limit, skip, take } = parsePagination(req.query as any, { defaultLimit: 20 });
+    const org = await getOrgConfig(orgId);
+    // Sales and above see every project; a Member sees the ones they are on.
+    // Written as a rank comparison, not `role === 'MEMBER'` — an exact match on
+    // a ladder catches one rung and silently admits every rung above it.
+    const onlyTheirs = !atLeast(req.user!.role, 'SALES');
 
-    const where: Record<string, unknown> = { client: { organizationId: orgId } };
-    
-    if (req.user!.role === 'TEAM_MEMBER') {
-      where.OR = [
-        { members: { some: { userId: req.user!.userId } } },
-        { teams: { some: { team: { members: { some: { id: req.user!.userId } } } } } },
-      ];
-    }
-    const statuses = toList(status);
-    if (statuses) {
-      // DELAYED carries an extra endDate constraint; keep that only when it's the sole filter.
-      if (statuses.length === 1 && statuses[0] === 'DELAYED') {
-        where.status = { in: ['IN_PROGRESS', 'REVIEW'] };
-        where.endDate = { lt: new Date() };
-      } else {
-        const real = new Set<string>();
-        for (const s of statuses) {
-          if (s === 'ACTIVE') ['PLANNING', 'IN_PROGRESS', 'REVIEW'].forEach((x) => real.add(x));
-          else if (s === 'DELAYED') ['IN_PROGRESS', 'REVIEW'].forEach((x) => real.add(x));
-          else real.add(s);
-        }
-        where.status = { in: [...real] };
-      }
-    }
-    if (priority) where.priority = whereIn(priority);
-    if (clientId) where.clientId = whereIn(clientId);
-    if (ownerId) where.ownerId = whereIn(ownerId);
-    if (endDate) {
-      where.endDate = { lte: new Date(endDate as string) };
-    }
-    if (search) {
-      const searchCondition = buildSearchFilter(['name', 'description'], search as string);
-      if (where.OR) {
-        where.AND = [
-          { OR: where.OR },
-          searchCondition
-        ];
-        delete where.OR;
-      } else {
-        where.OR = searchCondition.OR;
-      }
-    }
-
-    const [projects, total] = await Promise.all([
-      prisma.project.findMany({
-        where: where as any,
-        include: {
-          client: { select: { id: true, name: true, company: true, contacts: { select: { name: true } } } },
-          owner: { select: { id: true, name: true, avatar: true } },
-          members: { include: { user: { select: { id: true, name: true, avatar: true } } } },
-          teams: { include: { team: { include: { members: { select: { id: true, name: true, avatar: true } } } } } },
-          _count: { select: { tasks: true } },
+    const projects = await prisma.project.findMany({
+      where: {
+        organizationId: orgId,
+        ...(req.query.companyId ? { companyId: String(req.query.companyId) } : {}),
+        // A Member sees the projects they are on, not every project in the agency.
+        // Row-level filtering rather than a 403: people should see their own world
+        // rather than hit walls (§3.10).
+        ...(onlyTheirs
+          ? {
+              OR: [
+                { members: { some: { userId: req.user!.userId } } },
+                { ownerId: req.user!.userId },
+                // Nobody is added to ProjectMember yet — that endpoint does not
+                // exist (backlog item 8) — so an assigned task is the only
+                // evidence most people have of being on a project. Without this
+                // a Member's project list is empty while their task list is not.
+                { tasks: { some: { assigneeId: req.user!.userId } } },
+              ],
+            }
+          : {}),
+      },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            // The amount is not selected, not merely withheld. Fetching a figure
+            // you must not send is how it ends up in a response six months later,
+            // when somebody spreads the object to add a field.
+            engagements: {
+              where: { status: 'ACTIVE' },
+              select: { id: true, type: true, billingFrequency: true },
+            },
+          },
         },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take,
-      }),
-      prisma.project.count({ where: where as any }),
-    ]);
+        owner: { select: { id: true, name: true, avatar: true } },
+        members: { include: { user: { select: { id: true, name: true, avatar: true } } } },
+        tasks: { select: { id: true, status: true, dueDate: true } },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
 
-    res.json({ projects, total, page, totalPages: Math.ceil(total / limit) });
-  } catch (error) {
-    next(error);
+    const now = new Date();
+
+    res.json({
+      success: true,
+      data: projects.map((p) => {
+        const open = p.tasks.filter((t) => t.status !== 'DONE');
+        const overdue = open.filter((t) => t.dueDate && isBeforeToday(t.dueDate, org.timezone, now));
+
+        return {
+          ...p,
+          tasks: undefined,
+          taskCount: p.tasks.length,
+          openTaskCount: open.length,
+          overdueTaskCount: overdue.length,
+          health: computeHealth(p, open.length, overdue.length, org.timezone, now),
+          // What the client is ON, which is context for delivery: retainer work
+          // keeps arriving, project work ends (§3.12). The AMOUNT is deliberately
+          // absent for every role — these are the project screens, and a price is
+          // not something delivery is deciding. Whoever needs the number opens
+          // the client in CRM or Revenue, where the question belongs.
+          engagementContext: p.company.engagements.map((e) => ({
+            type: e.type,
+            billingFrequency: e.billingFrequency,
+          })),
+          company: { id: p.company.id, name: p.company.name, status: p.company.status },
+        };
+      }),
+    });
+  } catch (e) {
+    next(e);
   }
 });
 
-// GET /api/projects/:id
-projectRouter.get('/:id', async (req: AuthRequest, res: Response, next) => {
+const projectSchema = z.object({
+  companyId: z.string().min(1, 'A project belongs to a client.'),
+  name: z.string().min(1),
+  description: z.string().optional().nullable(),
+  type: z.string().optional().nullable(),
+  scope: z.string().optional().nullable(),
+  platform: z.string().optional().nullable(),
+  status: z.enum(['PLANNING', 'ACTIVE', 'ON_HOLD', 'COMPLETED', 'CANCELLED']).optional(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
+  startDate: z.coerce.date().optional().nullable(),
+  dueDate: z.coerce.date().optional().nullable(),
+  ownerId: z.string().optional().nullable(),
+  memberIds: z.array(z.string()).optional(),
+});
+
+projectsRouter.post('/', requireRole('MANAGER'), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const where: Record<string, unknown> = { id: (req.params.id as string), client: { organizationId: req.user!.organizationId } };
-    if (req.user!.role === 'TEAM_MEMBER') {
-      where.OR = [
-        { members: { some: { userId: req.user!.userId } } },
-        { teams: { some: { team: { members: { some: { id: req.user!.userId } } } } } },
-      ];
-    }
-
-    const project = await prisma.project.findFirst({
-      where: where as any,
-      include: {
-        client: { select: { id: true, name: true, company: true, contacts: { select: { name: true } }, leads: { select: { id: true }, orderBy: { createdAt: 'desc' }, take: 1 } } },
-        owner: { select: { id: true, name: true, avatar: true, email: true } },
-        members: { include: { user: { select: { id: true, name: true, avatar: true, role: true, designation: true } } } },
-        teams: { include: { team: { include: { members: { select: { id: true, name: true, avatar: true, role: true, designation: true } } } } } },
-        tasks: {
-          where: req.user!.role === 'TEAM_MEMBER'
-            ? { OR: [{ assigneeId: req.user!.userId }, { assignees: { some: { id: req.user!.userId } } }] }
-            : undefined,
-          include: {
-            assignee: { select: { id: true, name: true, avatar: true, teamId: true } },
-            assignees: { select: { id: true, name: true, avatar: true, teamId: true } },
-            _count: { select: { subtasks: true, comments: true } },
-          },
-          orderBy: [{ status: 'asc' }, { order: 'asc' }],
-        },
-        activities: {
-          include: { user: { select: { id: true, name: true, avatar: true } } },
-          orderBy: { createdAt: 'desc' },
-          take: 20,
-        },
-        comments: {
-          include: { author: { select: { id: true, name: true, avatar: true } } },
-          orderBy: { createdAt: 'desc' },
-        },
-      },
-    });
-
-    if (!project) {
-      res.status(404).json({ error: 'Project not found' });
+    const orgId = req.user!.organizationId;
+    const parsed = projectSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
       return;
     }
 
-    res.json(project);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// POST /api/projects
-projectRouter.post('/', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), validate(projectSchema), async (req: AuthRequest, res: Response, next) => {
-  try {
-    const { memberIds, teamIds, folderLink, ...projectData } = req.body;
-
-
-
-    if (projectData.platform === '') projectData.platform = null;
-    if (projectData.reportingCadence === '') projectData.reportingCadence = 'NONE';
-    if (projectData.type === '') projectData.type = 'ONE_TIME';
-    if (projectData.priority === '') projectData.priority = 'MEDIUM';
-    if (projectData.status === '') projectData.status = 'PLANNING';
-
-    if (projectData.type === 'RETAINER' && !projectData.reportingCadence) {
-      projectData.reportingCadence = 'MONTHLY';
+    const company = await prisma.company.findFirst({
+      where: { id: parsed.data.companyId, organizationId: orgId },
+      select: { id: true },
+    });
+    if (!company) {
+      res.status(404).json({ success: false, error: 'Client not found' });
+      return;
     }
 
-    // Rich-text HTML fields: strip anything executable before it ever hits the DB.
-    projectData.description = sanitizeRichText(projectData.description);
-    projectData.scope = sanitizeRichText(projectData.scope);
-    projectData.projectNotes = sanitizeRichText(projectData.projectNotes);
-
-    let finalClientId = projectData.clientId;
-    if (!finalClientId) {
-      const org = await prisma.organization.findUnique({ where: { id: req.user!.organizationId } });
-
-      let internalClient = await prisma.client.findFirst({
-        where: {
-          organizationId: req.user!.organizationId,
-          OR: [
-            { engagementType: 'INTERNAL' },
-            { name: { equals: 'Internal', mode: 'insensitive' } },
-            { name: { contains: 'Internal', mode: 'insensitive' } },
-          ],
-        },
-        orderBy: { createdAt: 'asc' },
-      });
-
-      if (!internalClient) {
-        internalClient = await prisma.client.create({
-          data: {
-            name: 'Internal',
-            company: org?.name || '',
-            organizationId: req.user!.organizationId,
-            status: 'ACTIVE',
-            engagementType: 'INTERNAL',
-          },
-        });
-      } else if (internalClient.engagementType !== 'INTERNAL') {
-        await prisma.client.update({
-          where: { id: internalClient.id },
-          data: { engagementType: 'INTERNAL' },
-        });
-      }
-      finalClientId = internalClient.id;
-    }
-
-    // Validate every referenced entity belongs to the caller's org (no cross-tenant injection).
-    {
-      const orgId = req.user!.organizationId;
-      const clientOk = await prisma.client.findFirst({ where: { id: finalClientId, organizationId: orgId, archivedAt: null }, select: { id: true } });
-      if (!clientOk) { res.status(400).json({ error: 'Client not found in your organization' }); return; }
-
-      const userIds = Array.from(new Set([...(req.body.memberIds || []), ...(req.body.ownerId ? [req.body.ownerId] : [])])) as string[];
-      if (userIds.length) {
-        const cnt = await prisma.user.count({ where: { id: { in: userIds }, organizationId: orgId } });
-        if (cnt !== userIds.length) { res.status(400).json({ error: 'One or more members are outside your organization' }); return; }
-      }
-
-      const teamIds = (req.body.teamIds || []) as string[];
-      if (teamIds.length) {
-        const cnt = await prisma.team.count({ where: { id: { in: teamIds }, organizationId: orgId } });
-        if (cnt !== teamIds.length) { res.status(400).json({ error: 'One or more teams are outside your organization' }); return; }
-      }
-    }
-
+    const { memberIds, ...data } = parsed.data;
     const project = await prisma.project.create({
       data: {
-        ...projectData,
-        folderLink: folderLink || null,
-        clientId: finalClientId,
-        startDate: projectData.startDate ? new Date(projectData.startDate) : undefined,
-        endDate: projectData.endDate ? new Date(projectData.endDate) : undefined,
-        members: {
-          create: req.body.memberIds 
-            ? Array.from(new Set([...req.body.memberIds, req.body.ownerId])).map((id: string) => ({ userId: id as string }))
-            : [{ userId: req.body.ownerId }],
-        },
-        teams: req.body.teamIds ? {
-          create: req.body.teamIds.map((id: string) => ({ teamId: id }))
-        } : undefined,
-      },
-      include: {
-        client: { select: { id: true, name: true, company: true } },
-        owner: { select: { id: true, name: true, avatar: true } },
+        ...data,
+        organizationId: orgId,
+        ownerId: data.ownerId ?? req.user!.userId,
+        ...(memberIds?.length
+          ? { members: { create: memberIds.map((userId) => ({ userId })) } }
+          : {}),
       },
     });
 
-    await prisma.activity.create({
-      data: {
-        type: 'PROJECT_CREATED',
-        message: `created project "${project.name}"`,
-        entityType: 'PROJECT',
-        entityId: project.id,
-        userId: req.user!.userId,
-        projectId: project.id,
-        clientId: project.clientId,
-      },
-    });
-
-    const io = req.app.get('io');
-    emitToOrganization(io, req.user!.organizationId, 'project:created', project);
-    await invalidateOrganizationCache(req.user!.organizationId);
-
-    res.status(201).json(project);
-  } catch (error) {
-    next(error);
+    res.status(201).json({ success: true, data: project });
+  } catch (e) {
+    next(e);
   }
 });
 
-// PUT /api/projects/:id
-projectRouter.put('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), async (req: AuthRequest, res: Response, next) => {
+projectsRouter.get('/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const existing = await prisma.project.findFirst({
-      where: { id: (req.params.id as string), client: { organizationId: req.user!.organizationId } },
-    });
-
-    if (!existing) {
-      res.status(404).json({ error: 'Project not found' });
-      return;
-    }
-
-    const { memberIds, teamIds, folderLink, ...projectData } = req.body;
-
-
-
-    if (projectData.platform === '') projectData.platform = null;
-    if (projectData.reportingCadence === '') projectData.reportingCadence = 'NONE';
-    if (projectData.type === '') projectData.type = 'ONE_TIME';
-    if (projectData.priority === '') projectData.priority = 'MEDIUM';
-    if (projectData.status === '') projectData.status = 'PLANNING';
-
-    if (projectData.type === 'RETAINER' && !projectData.reportingCadence) {
-      projectData.reportingCadence = 'MONTHLY';
-    }
-
-    // Rich-text HTML fields: strip anything executable before it ever hits the DB.
-    projectData.description = sanitizeRichText(projectData.description);
-    projectData.scope = sanitizeRichText(projectData.scope);
-    projectData.projectNotes = sanitizeRichText(projectData.projectNotes);
-
-    let finalClientId = projectData.clientId;
-    if (finalClientId === '') {
-      const org = await prisma.organization.findUnique({ where: { id: req.user!.organizationId } });
-
-      let internalClient = await prisma.client.findFirst({
-        where: { organizationId: req.user!.organizationId, engagementType: 'INTERNAL' }
-      });
-
-      if (!internalClient) {
-        internalClient = await prisma.client.create({
-          data: {
-            name: 'Internal',
-            company: org?.name || '',
-            organizationId: req.user!.organizationId,
-            status: 'ACTIVE',
-            engagementType: 'INTERNAL'
-          }
-        });
-      }
-      finalClientId = internalClient.id;
-    } else if (finalClientId === undefined) {
-      finalClientId = existing.clientId;
-    }
-
-    // Validate every referenced entity belongs to the caller's org (no cross-tenant injection).
-    {
-      const orgId = req.user!.organizationId;
-      const clientOk = await prisma.client.findFirst({ where: { id: finalClientId, organizationId: orgId, archivedAt: null }, select: { id: true } });
-      if (!clientOk) { res.status(400).json({ error: 'Client not found in your organization' }); return; }
-
-      const userIds = Array.from(new Set([...(req.body.memberIds || []), ...(req.body.ownerId ? [req.body.ownerId] : [])])) as string[];
-      if (userIds.length) {
-        const cnt = await prisma.user.count({ where: { id: { in: userIds }, organizationId: orgId } });
-        if (cnt !== userIds.length) { res.status(400).json({ error: 'One or more members are outside your organization' }); return; }
-      }
-
-      const teamIds = (req.body.teamIds || []) as string[];
-      if (teamIds.length) {
-        const cnt = await prisma.team.count({ where: { id: { in: teamIds }, organizationId: orgId } });
-        if (cnt !== teamIds.length) { res.status(400).json({ error: 'One or more teams are outside your organization' }); return; }
-      }
-    }
-
-    const project = await prisma.project.update({
-      where: { id: (req.params.id as string) },
-      data: {
-        ...projectData,
-        ...(folderLink !== undefined ? { folderLink: folderLink || null } : {}),
-        clientId: finalClientId,
-        ...(projectData.startDate !== undefined ? { startDate: projectData.startDate ? new Date(projectData.startDate) : null } : {}),
-        ...(projectData.endDate !== undefined ? { endDate: projectData.endDate ? new Date(projectData.endDate) : null } : {}),
-        ...(req.body.memberIds !== undefined ? {
-          members: {
-            deleteMany: {},
-            create: Array.from(new Set([...req.body.memberIds, req.body.ownerId || existing.ownerId])).map((id: string) => ({ userId: id as string })),
-          },
-        } : {}),
-        ...(req.body.teamIds !== undefined ? {
-          teams: {
-            deleteMany: {},
-            create: req.body.teamIds.map((id: string) => ({ teamId: id })),
-          },
-        } : {}),
-      },
+    const org = await getOrgConfig(req.user!.organizationId);
+    const project = await prisma.project.findFirst({
+      where: { id: param(req, 'id'), organizationId: req.user!.organizationId },
       include: {
-        client: { select: { id: true, name: true, company: true } },
+        company: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            // The same rule as the list, and it was NOT the same here: this
+            // included the whole engagement, so a project page handed every role
+            // the retainer amount while the list carefully withheld it. One
+            // endpoint enforcing a rule and its neighbour assembling around it
+            // is the shape of nearly every leak found so far.
+            engagements: {
+              where: { status: 'ACTIVE' },
+              select: { id: true, type: true, billingFrequency: true, startDate: true, endDate: true },
+            },
+          },
+        },
         owner: { select: { id: true, name: true, avatar: true } },
-        members: { include: { user: { select: { id: true, name: true, avatar: true, role: true, designation: true } } } },
-        teams: { include: { team: { include: { members: { select: { id: true, name: true, avatar: true, role: true, designation: true } } } } } },
+        members: { include: { user: { select: { id: true, name: true, avatar: true } } } },
         tasks: {
-          where: req.user!.role === 'TEAM_MEMBER'
-            ? { OR: [{ assigneeId: req.user!.userId }, { assignees: { some: { id: req.user!.userId } } }] }
-            : undefined,
           include: {
             assignee: { select: { id: true, name: true, avatar: true } },
-            assignees: { select: { id: true, name: true, avatar: true } },
-            _count: { select: { subtasks: true, comments: true } },
+            reviewer: { select: { id: true, name: true, avatar: true } },
           },
-          orderBy: [{ status: 'asc' }, { order: 'asc' }],
+          orderBy: [{ status: 'asc' }, { position: 'asc' }],
         },
-        activities: {
-          include: { user: { select: { id: true, name: true, avatar: true } } },
-          orderBy: { createdAt: 'desc' },
-          take: 20,
-        },
+        activities: { orderBy: { occurredAt: 'desc' }, take: 50 },
       },
-    });
-
-    if (existing.status !== project.status) {
-      await prisma.activity.create({
-        data: {
-          type: 'PROJECT_STATUS_CHANGED',
-          message: `changed project "${project.name}" status to ${project.status}`,
-          entityType: 'PROJECT',
-          entityId: project.id,
-          userId: req.user!.userId,
-          projectId: project.id,
-        },
-      });
-
-      if (project.status === 'CANCELLED' || project.status === 'ON_HOLD') {
-        await prisma.task.updateMany({
-          where: {
-            projectId: project.id,
-            status: { notIn: ['COMPLETED', 'ON_HOLD'] },
-          },
-          data: { status: 'ON_HOLD' },
-        });
-      }
-
-      // Completing a project closes out its remaining open tasks too (FZ-067) — otherwise a
-      // COMPLETED project keeps "open" work that clutters task lists and holds progress < 100%.
-      if (project.status === 'COMPLETED') {
-        await prisma.task.updateMany({
-          where: {
-            projectId: project.id,
-            status: { not: 'COMPLETED' },
-          },
-          data: { status: 'COMPLETED', completedAt: new Date() },
-        });
-        await prisma.project.update({ where: { id: project.id }, data: { progress: 100 } });
-      }
-
-      if (project.status === 'COMPLETED' || project.status === 'CANCELLED') {
-        await createAuditLog({
-          organizationId: req.user!.organizationId,
-          userId: req.user!.userId,
-          action: 'PROJECT_ARCHIVE',
-          entityType: 'PROJECT',
-          entityId: project.id,
-          details: { name: project.name, status: project.status }
-        });
-      }
-    }
-
-    const io = req.app.get('io');
-    emitToOrganization(io, req.user!.organizationId, 'project:updated', project);
-    await invalidateOrganizationCache(req.user!.organizationId);
-
-    res.json(project);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// DELETE /api/projects/:id
-projectRouter.delete('/:id', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), async (req: AuthRequest, res: Response, next) => {
-  try {
-    const project = await prisma.project.findFirst({
-      where: { id: (req.params.id as string), client: { organizationId: req.user!.organizationId } },
     });
 
     if (!project) {
-      res.status(404).json({ error: 'Project not found' });
+      res.status(404).json({ success: false, error: 'Project not found' });
       return;
     }
 
-    // Nullify projectId on associated expenses to prevent foreign key constraint violation
-    await prisma.expense.updateMany({
-      where: { projectId: project.id },
-      data: { projectId: null }
+    const now = new Date();
+    const open = project.tasks.filter((t) => t.status !== 'DONE');
+    const overdue = open.filter((t) => t.dueDate && isBeforeToday(t.dueDate, org.timezone, now));
+
+    res.json({
+      success: true,
+      data: { ...project, health: computeHealth(project, open.length, overdue.length, org.timezone, now) },
     });
-
-    await prisma.project.delete({ where: { id: (req.params.id as string) } });
-
-    const io = req.app.get('io');
-    emitToOrganization(io, req.user!.organizationId, 'project:deleted', { id: (req.params.id as string) });
-    await invalidateOrganizationCache(req.user!.organizationId);
-
-    await createAuditLog({
-      organizationId: req.user!.organizationId,
-      userId: req.user!.userId,
-      action: 'PROJECT_DELETE',
-      entityType: 'PROJECT',
-      entityId: project.id,
-      details: { name: project.name }
-    });
-
-    res.json({ message: 'Project deleted' });
-  } catch (error: any) {
-    if (error.code === 'P2003' || (error.message && /foreign key/i.test(error.message))) {
-      res.status(400).json({ error: 'Cannot delete project due to associated records that cannot be deleted.' });
-    } else {
-      next(error);
-    }
+  } catch (e) {
+    next(e);
   }
 });
 
-// POST /api/projects/from-template
-projectRouter.post('/from-template', authorize('SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'), async (req: AuthRequest, res: Response, next) => {
-  try {
-    const { templateId, clientId, ownerId, name, startDate, endDate } = req.body;
+// ── Members ──────────────────────────────────────────────────────────────────
 
-    // Templates are org-scoped, so the template must belong to the caller's org —
-    // an unscoped lookup would let one tenant instantiate another's template
-    // (and read its `structure` playbook JSON) by guessing an id.
-    const template = await prisma.projectTemplate.findFirst({
-      where: { id: templateId, organizationId: req.user!.organizationId },
-    });
-    if (!template) {
-      res.status(404).json({ error: 'Template not found' });
+const updateProjectSchema = z.object({
+  companyId: z.string().optional(),
+  name: z.string().min(1).optional(),
+  description: z.string().optional().nullable(),
+  type: z.string().optional().nullable(),
+  scope: z.string().optional().nullable(),
+  platform: z.string().optional().nullable(),
+  status: z.enum(['PLANNING', 'ACTIVE', 'ON_HOLD', 'COMPLETED', 'CANCELLED']).optional(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
+  startDate: z.coerce.date().optional().nullable(),
+  dueDate: z.coerce.date().optional().nullable(),
+  ownerId: z.string().optional().nullable(),
+  memberIds: z.array(z.string()).optional(),
+});
+
+projectsRouter.patch('/:id', requireRole('MANAGER'), async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const id = param(req, 'id');
+    const parsed = updateProjectSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
       return;
     }
 
-    // clientId/ownerId must belong to the caller's org (no cross-tenant injection).
-    {
-      const orgId = req.user!.organizationId;
-      const clientOk = await prisma.client.findFirst({ where: { id: clientId, organizationId: orgId, archivedAt: null }, select: { id: true } });
-      if (!clientOk) { res.status(400).json({ error: 'Client not found in your organization' }); return; }
-      const ownerOk = await prisma.user.findFirst({ where: { id: ownerId, organizationId: orgId }, select: { id: true } });
-      if (!ownerOk) { res.status(400).json({ error: 'Owner not found in your organization' }); return; }
+    const project = await prisma.project.findFirst({
+      where: { id, organizationId: req.user!.organizationId },
+      select: { id: true },
+    });
+    if (!project) {
+      res.status(404).json({ success: false, error: 'Project not found' });
+      return;
     }
 
-    const structure = template.structure as { tasks?: { title: string; subtasks?: { title: string }[] }[] };
+    const { memberIds, ...data } = parsed.data;
 
-    const project = await prisma.project.create({
+    const updated = await prisma.project.update({
+      where: { id },
       data: {
-        name: name || template.name,
-        description: sanitizeRichText(template.description), // rendered raw in the UI
-        clientId,
-        ownerId,
-        templateId,
-        startDate: startDate ? new Date(startDate) : undefined,
-        endDate: endDate ? new Date(endDate) : undefined,
-        members: { create: { userId: ownerId } },
-      },
-    });
-
-    // Create tasks from template
-    if (structure.tasks) {
-      for (let i = 0; i < structure.tasks.length; i++) {
-        const taskDef = structure.tasks[i];
-        const task = await prisma.task.create({
-          data: {
-            title: taskDef.title,
-            projectId: project.id,
-            order: i,
-            status: 'TODO',
-          },
-        });
-
-        if (taskDef.subtasks) {
-          for (let j = 0; j < taskDef.subtasks.length; j++) {
-            await prisma.task.create({
-              data: {
-                title: taskDef.subtasks[j].title,
-                projectId: project.id,
-                parentId: task.id,
-                order: j,
-                status: 'TODO',
+        ...data,
+        ...(memberIds !== undefined
+          ? {
+              members: {
+                deleteMany: {},
+                ...(memberIds.length ? { create: memberIds.map((userId) => ({ userId })) } : {}),
               },
-            });
-          }
-        }
-      }
-    }
+            }
+          : {}),
+      },
+    });
 
-    await invalidateOrganizationCache(req.user!.organizationId);
-    res.status(201).json(project);
-  } catch (error) {
-    next(error);
+    res.json({ success: true, data: updated });
+  } catch (e) {
+    next(e);
   }
 });
 
-// POST /api/projects/:id/comments
-projectRouter.post('/:id/comments', async (req: AuthRequest, res: Response, next) => {
-  try {
-    const existing = await prisma.project.findFirst({
-      where: { id: (req.params.id as string), client: { organizationId: req.user!.organizationId } },
-    });
 
-    if (!existing) {
-      res.status(404).json({ error: 'Project not found' });
+projectsRouter.get('/:id/members', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const members = await prisma.projectMember.findMany({
+      where: { projectId: param(req, 'id'), project: { organizationId: req.user!.organizationId } },
+      include: { user: { select: { id: true, name: true, avatar: true } } },
+      orderBy: { addedAt: 'asc' },
+    });
+    res.json({ success: true, data: members });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * Add a member to a project.
+ *
+ * Like assigning a task, staffing a project is Manager and above.
+ */
+projectsRouter.post('/:id/members', requireRole('MANAGER'), async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { userId } = req.body ?? {};
+    if (!userId) {
+      res.status(400).json({ success: false, error: 'A user is required.' });
       return;
     }
 
-    if (req.user!.role === 'TEAM_MEMBER') {
-      const isMember = await prisma.projectMember.findFirst({
-        where: { projectId: existing.id, userId: req.user!.userId }
-      });
-      let isTeamMember = false;
-      if (!isMember) {
-        const projectTeams = await prisma.projectTeam.findMany({
-          where: { projectId: existing.id },
-          include: { team: { include: { members: true } } }
-        });
-        isTeamMember = projectTeams.some((pt: any) => pt.team.members.some((m: any) => m.id === req.user!.userId));
-      }
-      if (!isMember && !isTeamMember) {
-        res.status(403).json({ error: 'You are not a member of this project' });
-        return;
-      }
+    const projectId = param(req, 'id');
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, organizationId: req.user!.organizationId },
+    });
+    if (!project) {
+      res.status(404).json({ success: false, error: 'Project not found' });
+      return;
     }
 
-    const comment = await prisma.comment.create({
-      data: {
-        content: req.body.content,
-        mentions: req.body.mentions || [],
-        projectId: (req.params.id as string),
-        authorId: req.user!.userId,
-      },
-      include: { author: { select: { id: true, name: true, avatar: true } } },
+    const member = await prisma.projectMember.upsert({
+      where: { projectId_userId: { projectId, userId } },
+      update: {}, // if already a member, do nothing
+      create: { projectId, userId },
+      include: { user: { select: { id: true, name: true, avatar: true } } },
     });
 
-    const io = req.app.get('io');
-    emitToOrganization(io, req.user!.organizationId, 'project_comment:created', { ...comment, projectId: (req.params.id as string) });
+    res.status(201).json({ success: true, data: member });
+  } catch (e) {
+    next(e);
+  }
+});
 
-    // Notify the project owner + anyone mentioned (excluding the commenter).
-    const authorId = req.user!.userId;
-    const meta = { projectId: existing.id };
-    const mentioned = (comment.mentions || []).filter((id) => id && id !== authorId);
-    const mentionedSet = new Set(mentioned);
+projectsRouter.delete('/:id/members/:userId', requireRole('MANAGER'), async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const projectId = param(req, 'id');
+    const userId = param(req, 'userId');
+    
+    // Ensure project exists and belongs to org
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, organizationId: req.user!.organizationId },
+    });
+    if (!project) {
+      res.status(404).json({ success: false, error: 'Project not found' });
+      return;
+    }
 
-    await NotificationService.sendMany(
-      mentioned,
-      { type: 'MENTION', message: `${comment.author.name} mentioned you on "${existing.name}"`, metadata: meta },
-      authorId,
-    );
-    await NotificationService.sendMany(
-      [existing.ownerId].filter((id) => !mentionedSet.has(id as string)),
-      { type: 'COMMENT_ADDED', message: `${comment.author.name} commented on "${existing.name}"`, metadata: meta },
-      authorId,
-    );
+    await prisma.projectMember.deleteMany({
+      where: { projectId, userId },
+    });
 
-    res.status(201).json(comment);
-  } catch (error) {
-    next(error);
+    res.json({ success: true });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ── Tasks ────────────────────────────────────────────────────────────────────
+
+const taskSchema = z
+  .object({
+    projectId: z.string().optional().nullable(),
+    dealId: z.string().optional().nullable(),
+    title: z.string().min(1),
+    description: z.string().optional().nullable(),
+    taskType: z.string().optional().nullable(),
+    status: z.enum(['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'APPROVED', 'DONE', 'BLOCKED', 'ON_HOLD']).optional(),
+    priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
+    assigneeId: z.string().optional().nullable(),
+    /** Separate from the assignee: agency work is checked before a client sees it. */
+    reviewerId: z.string().optional().nullable(),
+    dueDate: z.coerce.date().optional().nullable(),
+    parentTaskId: z.string().optional().nullable(),
+    recurrence: z.object({
+      frequency: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY']),
+      interval: z.number().optional(),
+    }).optional().nullable(),
+  })
+  .refine((v) => Boolean(v.projectId) !== Boolean(v.dealId), {
+    message: 'A task belongs to exactly one of a project or a deal — never both, never neither.',
+  });
+
+/**
+ * Create a task.
+ *
+ * Anybody may write down their own work. **Giving work to somebody else is
+ * staffing**, and staffing is Manager and above (§3.10, "assign people to work").
+ * Below that, the task is forced onto the person creating it rather than
+ * refused — writing your own to-do is not the thing being restricted, and a 403
+ * for leaving a field blank would be a confusing way to say so.
+ */
+projectsRouter.post('/tasks', requireRole('MEMBER'), async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const parsed = taskSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
+
+    const canStaff = atLeast(req.user!.role, 'MANAGER');
+    if (!canStaff && parsed.data.assigneeId && parsed.data.assigneeId !== req.user!.userId) {
+      res.status(403).json({
+        success: false,
+        error: 'You can only create work for yourself. Ask a manager to assign it to somebody else.',
+      });
+      return;
+    }
+
+    const task = await prisma.task.create({
+      data: {
+        ...parsed.data,
+        assigneeId: canStaff ? parsed.data.assigneeId : req.user!.userId,
+        // A reviewer is also a person being given work.
+        reviewerId: canStaff ? parsed.data.reviewerId : null,
+        organizationId: req.user!.organizationId,
+        ...(parsed.data.recurrence !== undefined ? { recurrence: parsed.data.recurrence as any } : {}),
+      },
+      include: { project: { select: { id: true, name: true } } },
+    });
+
+    // Notify immediately — a task notification that waits until tomorrow arrives
+    // after the standup where it mattered.
+    if (task.assigneeId && task.assigneeId !== req.user!.userId) {
+      notifyTaskAssigned({
+        id: task.id,
+        title: task.title,
+        assigneeId: task.assigneeId,
+        projectId: task.project?.id,
+        projectName: task.project?.name,
+      }).catch(() => {}); // fire-and-forget: a failed notification must not fail the create
+    }
+
+    res.status(201).json({ success: true, data: task });
+  } catch (e) {
+    next(e);
+  }
+});
+
+projectsRouter.get('/tasks/all', requireRole('MANAGER'), async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const org = await getOrgConfig(req.user!.organizationId);
+    
+    const { companyId, projectId, status, departmentId, assigneeId, priority, taskType } = req.query;
+
+    const parseMultiFilter = (val: unknown) => {
+      if (!val) return undefined;
+      const list = String(val).split(',').map((s) => s.trim()).filter(Boolean);
+      if (list.length === 0) return undefined;
+      if (list.length === 1) return list[0];
+      return { in: list };
+    };
+
+    const statusFilter = parseMultiFilter(status);
+    const taskTypeFilter = parseMultiFilter(taskType);
+    const companyFilter = parseMultiFilter(companyId);
+    const projectFilter = parseMultiFilter(projectId);
+    const departmentFilter = parseMultiFilter(departmentId);
+    const assigneeFilter = parseMultiFilter(assigneeId);
+    const priorityFilter = parseMultiFilter(priority);
+
+    const whereClause: any = {
+      organizationId: req.user!.organizationId,
+      ...(statusFilter ? { status: statusFilter } : {}),
+      ...(taskTypeFilter ? { taskType: taskTypeFilter } : {}),
+      ...(companyFilter ? { project: { companyId: companyFilter } } : {}),
+      ...(projectFilter ? { projectId: projectFilter } : {}),
+      ...(departmentFilter ? { departmentId: departmentFilter } : {}),
+      ...(assigneeFilter ? { assigneeId: assigneeFilter } : {}),
+      ...(priorityFilter ? { priority: priorityFilter } : {}),
+    };
+
+    const tasks = await prisma.task.findMany({
+      where: whereClause,
+      include: {
+        project: { select: { id: true, name: true, company: { select: { id: true, name: true } } } },
+        deal: { select: { id: true, title: true } },
+        assignee: { select: { id: true, name: true, avatar: true, designation: true } },
+        reviewer: { select: { id: true, name: true, avatar: true, designation: true } },
+        department: { select: { id: true, name: true } }
+      },
+      orderBy: [{ dueDate: 'asc' }],
+    });
+
+    const now = new Date();
+    res.json({
+      success: true,
+      data: tasks.map((t) => ({
+        ...t,
+        isOverdue: Boolean(
+          t.dueDate &&
+          isBeforeToday(t.dueDate, org.timezone, now) &&
+          t.status !== 'DONE' &&
+          t.status !== 'ON_HOLD' &&
+          t.status !== 'BLOCKED'
+        ),
+        awaitingMyReview: t.reviewerId === req.user!.userId && t.status === 'IN_REVIEW',
+      })),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+projectsRouter.get('/tasks/mine', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const org = await getOrgConfig(req.user!.organizationId);
+    const tasks = await prisma.task.findMany({
+      where: {
+        organizationId: req.user!.organizationId,
+        status: { not: 'DONE' },
+        OR: [{ assigneeId: req.user!.userId }, { reviewerId: req.user!.userId }],
+      },
+      include: {
+        project: { select: { id: true, name: true, company: { select: { id: true, name: true } } } },
+        deal: { select: { id: true, title: true } },
+        assignee: { select: { id: true, name: true, avatar: true, designation: true } },
+        reviewer: { select: { id: true, name: true, avatar: true, designation: true } },
+        department: { select: { id: true, name: true } },
+      },
+      orderBy: [{ dueDate: 'asc' }],
+    });
+
+    const now = new Date();
+    res.json({
+      success: true,
+      data: tasks.map((t) => ({
+        ...t,
+        isOverdue: Boolean(
+          t.dueDate &&
+          isBeforeToday(t.dueDate, org.timezone, now) &&
+          t.status !== 'DONE' &&
+          t.status !== 'ON_HOLD' &&
+          t.status !== 'BLOCKED'
+        ),
+        // Work sitting with a reviewer is neither done nor in progress.
+        awaitingMyReview: t.reviewerId === req.user!.userId && t.status === 'IN_REVIEW',
+      })),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+projectsRouter.patch('/tasks/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const id = param(req, 'id');
+    const existing = await prisma.task.findFirst({
+      where: { id, organizationId: req.user!.organizationId },
+      select: { id: true, assigneeId: true, status: true, reviewerId: true },
+    });
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+
+    // Changing somebody else's work is STAFFING, which is Manager and above
+    // (§3.10). Sales and Member both get "own" on tasks.
+    //
+    // This compared `role === 'MEMBER'` — an exact match on a ladder, so it
+    // caught the bottom rung and let every rung above it through. A salesperson
+    // could rename and close delivery work assigned to anyone. Comparing rank is
+    // the rule everywhere else in this codebase, and it is the rule here.
+    const canStaff = atLeast(req.user!.role, 'MANAGER');
+    const isOwn = existing.assigneeId === req.user!.userId;
+    if (!canStaff && !isOwn) {
+      res.status(403).json({ success: false, error: 'You can only edit your own tasks.' });
+      return;
+    }
+
+    const parsed = taskSchema.innerType().partial().safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
+
+    // A non-manager editing their own task cannot change who it belongs to.
+    if (!canStaff && parsed.data.assigneeId && parsed.data.assigneeId !== existing.assigneeId) {
+      res.status(403).json({ success: false, error: 'Only a manager can reassign work.' });
+      return;
+    }
+
+    // A non-manager editing their own task cannot change its reviewer.
+    if (
+      !canStaff &&
+      parsed.data.reviewerId !== undefined &&
+      parsed.data.reviewerId !== existing.reviewerId
+    ) {
+      res.status(403).json({ success: false, error: 'Only a manager can assign a reviewer.' });
+      return;
+    }
+
+    // Enforcement: Only the assigned reviewer (or a manager) can approve a task in review (or transition from IN_REVIEW to APPROVED/DONE).
+    const isApproving =
+      (parsed.data.status === 'APPROVED' || parsed.data.status === 'DONE') &&
+      existing.status === 'IN_REVIEW';
+    const isReviewer = existing.reviewerId === req.user!.userId;
+
+    if (isApproving && !canStaff && !isReviewer) {
+      res.status(403).json({
+        success: false,
+        error: 'Only the assigned reviewer can approve tasks that are under review.',
+      });
+      return;
+    }
+
+    const { recurrence, ...restData } = parsed.data;
+
+    const task = await prisma.task.update({
+      where: { id },
+      data: {
+        ...restData,
+        ...(parsed.data.status === 'DONE' && existing.status !== 'DONE'
+          ? { completedAt: new Date() }
+          : {}),
+        ...(parsed.data.status && parsed.data.status !== 'DONE' && existing.status === 'DONE'
+          ? { completedAt: null }
+          : {}),
+        ...(recurrence !== undefined ? { recurrence: recurrence ? (recurrence as any) : Prisma.DbNull } : {}),
+      },
+      include: {
+        project: { select: { id: true, name: true, company: { select: { name: true } } } },
+        deal: { select: { id: true, title: true } },
+        assignee: { select: { id: true, name: true, avatar: true, designation: true } },
+        reviewer: { select: { id: true, name: true, avatar: true, designation: true } },
+        department: { select: { id: true, name: true } },
+      },
+    });
+
+    if (task.status === 'DONE' && existing.status !== 'DONE' && task.recurrence && task.dueDate) {
+      // Lazy import to avoid circular dependency since they are in different places? No, just standard import.
+      const { spawnNextTask } = await import('../services/taskRecurrence.js');
+      await spawnNextTask(task, req.user!.userId);
+    }
+    // Event-driven notifications — same reasoning as the create route.
+    const assigneeChanged = parsed.data.assigneeId && parsed.data.assigneeId !== existing.assigneeId;
+    if (assigneeChanged && task.assigneeId && task.assigneeId !== req.user!.userId) {
+      notifyTaskAssigned({
+        id: task.id,
+        title: task.title,
+        assigneeId: task.assigneeId,
+        projectId: task.project?.id,
+        projectName: task.project?.name,
+      }).catch(() => {});
+    }
+
+    const movedToReview = parsed.data.status === 'IN_REVIEW' && existing.status !== 'IN_REVIEW';
+    if (movedToReview && task.reviewerId && task.reviewerId !== req.user!.userId) {
+      notifyTaskInReview({
+        id: task.id,
+        title: task.title,
+        reviewerId: task.reviewerId,
+        projectId: task.project?.id,
+        projectName: task.project?.name,
+      }).catch(() => {});
+    }
+
+    res.json({ success: true, data: task });
+  } catch (e) {
+    next(e);
+  }
+});
+
+projectsRouter.delete('/tasks/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const id = param(req, 'id');
+    const existing = await prisma.task.findFirst({
+      where: { id, organizationId: req.user!.organizationId },
+      select: { id: true, assigneeId: true },
+    });
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+
+    const canStaff = atLeast(req.user!.role, 'MANAGER');
+    const isOwn = existing.assigneeId === req.user!.userId;
+    if (!canStaff && !isOwn) {
+      res.status(403).json({ success: false, error: 'You can only delete your own tasks.' });
+      return;
+    }
+
+    await prisma.task.delete({ where: { id } });
+    res.json({ success: true, message: 'Task deleted' });
+  } catch (e) {
+    next(e);
   }
 });

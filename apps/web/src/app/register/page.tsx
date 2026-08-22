@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api-v2';
 import { useAuthStore } from '@/stores';
 import { Zap, Eye, EyeOff } from 'lucide-react';
 
@@ -29,13 +29,14 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const data = await api.post<{ user: any }>('/auth/register', {
-        name, email, password, organizationName,
-      });
-      setAuth(data.user);
-      router.push('/modules');
-    } catch (err: any) {
-      setError(err.message || 'Registration failed');
+      // Registering also builds the organisation's pipeline, stages, lost
+      // reasons, sources and services — it used to create modules and nothing
+      // else, which left the board answering "No pipeline configured".
+      const data = await api.auth.register({ name, email, password, organizationName });
+      setAuth(data.user as never);
+      router.push('/dashboard');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not create the workspace');
     } finally {
       setLoading(false);
     }

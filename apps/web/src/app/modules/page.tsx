@@ -1,98 +1,118 @@
 'use client';
 
+/**
+ * Choosing which part of Flowzen to work in.
+ *
+ * The modules are not separate products — they are the same client, the same
+ * deal, the same money, seen from where you are standing. Somebody selling wants
+ * a short list of selling screens; somebody delivering wants delivery. What you
+ * pick decides what the sidebar lists, and nothing else (master plan §7.5).
+ *
+ * A module you cannot reach is not shown as locked. It is either off for the
+ * organisation or above your level, and in both cases it is not yours to open.
+ */
+
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
-import { api } from '@/lib/api';
+import Link from 'next/link';
+import { Building2, DollarSign, FolderKanban, Loader2, TrendingUp } from 'lucide-react';
+import { api } from '@/lib/api-v2';
 import { useAuthStore, useModuleStore } from '@/stores';
-import { accessibleModules, ModuleKey } from '@/lib/modules';
-import { FolderKanban, TrendingUp, ArrowRight, DollarSign } from 'lucide-react';
+import { accessibleModules, type ModuleKey, type ModuleDef } from '@/lib/modules';
 
-const moduleIcons: Record<ModuleKey, typeof FolderKanban> = {
-  PM: FolderKanban,
+const ICON: Record<ModuleKey, typeof Building2> = {
   CRM: TrendingUp,
+  PM: FolderKanban,
   REVENUE: DollarSign,
 };
 
-import { usePageTitle } from '@/hooks/usePageTitle';
-
-export default function ModulePickerPage() {
-  usePageTitle('Modules');
+export default function ModulesPage() {
   const router = useRouter();
-  const { user, loadFromStorage, setAuth } = useAuthStore();
+  const { user, setAuth } = useAuthStore();
   const setActiveModule = useModuleStore((s) => s.setActiveModule);
-  const [ready, setReady] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadFromStorage();
-    api.get('/auth/me')
-      .then((fresh: any) => setAuth(fresh))
+    // /auth/me answers { user: … }. Storing the envelope leaves role and
+    // enabledModules undefined, which makes every module look unreachable and
+    // this screen spin forever — the exact failure this page had before.
+    api.auth
+      .me()
+      .then((fresh: { user?: unknown }) => setAuth((fresh?.user ?? fresh) as never))
       .catch(() => {})
-      .finally(() => setReady(true));
-  }, []);
+      .finally(() => setLoading(false));
+  }, [setAuth]);
 
-  const mods = accessibleModules(user);
-
-  // Auto-route: no auth → login; exactly one module → straight in.
-  useEffect(() => {
-    if (!ready) return;
-    if (!user) { router.replace('/login'); return; }
-    if (mods.length === 1) {
-      setActiveModule(mods[0].key);
-      router.replace(mods[0].home);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, user, mods.length]);
-
-  const enter = (key: ModuleKey, home: string) => {
-    setActiveModule(key);
-    router.replace(home);
+  const open = (m: ModuleDef) => {
+    setActiveModule(m.key);
+    router.push(m.home);
   };
 
-  if (!ready || !user || mods.length <= 1) {
+  if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-surface">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-secondary" />
       </div>
     );
   }
 
-  return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-surface px-6">
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="w-full max-w-3xl">
-        <div className="mb-2 flex items-center justify-center">
-          <img src="/logo_flowzen.png" alt="Flowzen" className="h-11 w-auto object-contain" />
-        </div>
-        <h1 className="text-center text-2xl font-semibold text-primary tracking-tight">Choose a workspace</h1>
-        <p className="mt-1 text-center text-sm text-secondary">Hi {user.name?.split(' ')[0]} — pick a module to get started. You can switch anytime.</p>
+  const reachable = accessibleModules(user);
 
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-5 max-w-4xl mx-auto">
-          {mods.map((m, i) => {
-            const Icon = moduleIcons[m.key];
-            return (
-              <motion.button
-                key={m.key}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.05 * i }}
-                onClick={() => enter(m.key, m.home)}
-                className="group flex flex-col items-start gap-4 rounded-2xl border border-border bg-white p-6 text-left hover:border-primary hover:shadow-md transition-all"
-              >
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-subtle text-primary group-hover:bg-primary group-hover:text-white transition-colors">
-                  <Icon className="h-6 w-6" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-primary">{m.label}</h2>
-                  <p className="mt-1 text-sm text-secondary">{m.description}</p>
-                </div>
-                <span className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-primary">
-                  Enter <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
-                </span>
-              </motion.button>
-            );
-          })}
-        </div>
-      </motion.div>
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-surface px-6 py-12">
+      <div className="w-full max-w-2xl">
+        <img src="/logo_flowzen.png" alt="Flowzen" className="mb-8 h-12 w-auto object-contain" />
+
+        <h1 className="text-2xl font-bold text-primary">
+          {user?.name ? `Hello ${user.name.split(' ')[0]}` : 'Where are you working?'}
+        </h1>
+        <p className="mb-8 mt-1 text-sm text-secondary">
+          Pick where to start. You can switch at any time from the sidebar — it is the same data
+          either way.
+        </p>
+
+        {reachable.length === 0 ? (
+          // A dead end with an explanation beats a spinner that never resolves.
+          <div className="rounded-card border border-amber-200 bg-amber-50 p-6">
+            <p className="text-sm text-amber-900">
+              Nothing is open to you yet. Either every module is switched off for this
+              organisation, or your level does not admit any of them — an admin can change both.
+            </p>
+            <Link
+              href="/profile"
+              className="mt-3 inline-block text-sm font-medium text-primary hover:underline"
+            >
+              See your account
+            </Link>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {reachable.map((m) => {
+              const Icon = ICON[m.key];
+              return (
+                <button
+                  key={m.key}
+                  onClick={() => open(m)}
+                  className="rounded-card border border-border bg-white p-5 text-left transition-shadow hover:shadow-overlay"
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-subtle">
+                    <Icon className="h-5 w-5 text-primary" />
+                  </div>
+                  <p className="mt-3 text-sm font-semibold text-primary">{m.label}</p>
+                  <p className="mt-0.5 text-xs text-secondary">{m.description}</p>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <p className="mt-8 text-center text-xs text-secondary">
+          Signed in as {user?.email ?? '—'}.{' '}
+          <Link href="/dashboard" className="font-medium text-primary hover:underline">
+            Skip to Today
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

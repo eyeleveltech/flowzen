@@ -5,14 +5,10 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useUIStore, useAuthStore, useModuleStore } from '@/stores';
-import { moduleForPath, accessibleModules, ModuleKey, MODULES } from '@/lib/modules';
+import { moduleForPath, accessibleModules, MODULES, type ModuleKey } from '@/lib/modules';
 import { cn, getInitials, getAvatarColor } from '@/lib/utils';
-import { NAV_ITEMS, BOTTOM_NAV_ITEMS, NavItem } from '@/config/navigation';
-import {
-  ChevronLeft,
-  LogOut,
-  ArrowLeftRight,
-} from 'lucide-react';
+import { NAV_ITEMS, BOTTOM_NAV_ITEMS, NavItem, canSee } from '@/config/navigation';
+import { ChevronLeft, LogOut, ArrowLeftRight } from 'lucide-react';
 
 export function Sidebar({ isMobile }: { isMobile?: boolean }) {
   const shouldReduceMotion = useReducedMotion();
@@ -27,20 +23,35 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
   const userRole = mounted ? (user?.role || '') : '';
 
   // The route is the primary signal for the current module; fall back to the
-  // last-used module on shared/core pages (Clients, Settings, Profile).
+  // last-used one on shared pages (Clients, Settings, Profile).
   const routeModule = moduleForPath(pathname);
   useEffect(() => { if (routeModule) setActiveModule(routeModule); }, [routeModule, setActiveModule]);
   const activeModule: ModuleKey = routeModule ?? storeModule;
 
-  const canSwitch = mounted && accessibleModules(user).length > 1;
+  const reachable = accessibleModules(user);
+  const canSwitch = mounted && reachable.length > 1;
+  const activeLabel = MODULES.find((m) => m.key === activeModule)?.label ?? '';
+
+  /**
+   * What belongs in the section you are working in.
+   *
+   * Two gates, and they are different questions. `canSee` asks whether the
+   * person's ROLE reaches the item — the ladder, so naming SALES admits Admin
+   * above it (§3.10). `inActiveModule` asks whether the item belongs to the
+   * module currently open, which is what keeps each section a short list rather
+   * than one long one.
+   */
   const inActiveModule = (item: NavItem) => {
+    // An item that declares no module belongs to all of them. "Today" is not a
+    // CRM screen or a PM screen — it is the thing you open first, whichever
+    // section you are in, and filtering it out hid it completely.
+    if (!item.module) return true;
     const mods = Array.isArray(item.module) ? item.module : [item.module];
     return mods.includes(activeModule);
   };
   const visibleNav = NAV_ITEMS.filter(
-    (item) => (!item.roles || item.roles.includes(userRole)) && inActiveModule(item),
+    (item) => canSee(item, userRole) && inActiveModule(item),
   );
-  const activeLabel = MODULES.find((m) => m.key === activeModule)?.label ?? '';
 
   return (
     <motion.aside
@@ -67,13 +78,12 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-        {/* Module switcher — only when the user can access more than one module */}
+        {/*
+          The switcher, shown only when there is more than one section to switch
+          between — a control that changes nothing is worse than no control.
+        */}
         {canSwitch && (
-          <Link
-            href="/modules"
-            title={sidebarCollapsed ? activeLabel : undefined}
-            aria-label={activeLabel}
-          >
+          <Link href="/modules" title={sidebarCollapsed ? activeLabel : undefined} aria-label={`Section: ${activeLabel}`}>
             <div className={cn('group flex items-center gap-3 rounded-xl px-3 py-2.5 mb-2 text-sm font-medium border border-border bg-surface text-secondary hover:text-primary hover:border-line transition-colors duration-150 motion-reduce:transition-none', sidebarCollapsed && 'justify-center px-0')}>
               <ArrowLeftRight className="h-4.5 w-4.5 shrink-0 text-secondary group-hover:text-primary" />
               <AnimatePresence>
@@ -136,7 +146,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
 
       {/* Bottom */}
       <div className="px-3 py-3 space-y-1 border-t border-border">
-        {BOTTOM_NAV_ITEMS.filter(item => item.href !== '/profile' && (!item.roles || item.roles.includes(userRole))).map((item) => {
+        {BOTTOM_NAV_ITEMS.filter(item => item.href !== '/profile' && canSee(item, userRole)).map((item) => {
           const isActive = pathname.startsWith(item.href);
           return (
             <Link

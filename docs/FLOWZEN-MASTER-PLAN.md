@@ -28,6 +28,8 @@ below gets a line.
 | 2026-08 | Time tracking and internal cost rates **removed** — system reports gross margin, never profit |
 | 2026-08 | Client-facing portal **rejected for now** — Flowzen stays internal |
 | 2026-08 | Confirmed **full rewrite** over staged migration |
+| 2026-08 | **Revenue flow specified** — what creates an invoice, how the billing date advances, invoice status following payments with one writer, and MRR / billed / collected kept as three separate numbers. `FLOWZEN-WORKFLOW.md` added as the end-to-end walkthrough |
+| 2026-08 | **Configuration screens dropped, tables kept.** Stages and stage forms stay as rows but are **seeded from code** — no settings UI, which moves to backlog B8. Also records that the billing fix does not depend on stages being configurable, and corrects a false claim about `DealField` |
 | 2026-08 | **Configuration round settled** — organisation `state` + `gstNumber` with the tax split computed; the default pipeline seed written out; lost reasons, sources and services made configurable; file storage, compression and upload caps specified; build order updated |
 | 2026-08 | **Scope narrowed to internal use.** Flowzen is not being given to other agencies yet — there is no environment for it. §8 becomes a map rather than a plan, the rewrite's justification drops its product leg, and §3.11 keeps its columns but not the per-organisation scheduler |
 | 2026-08 | **Invite and sign-in flow specified** — the invitation creates the account, accepting it activates it via Google *or* a password, and one account may carry both |
@@ -216,7 +218,8 @@ Every settled decision. Amend rather than delete.
 | **Approach** | **Full rewrite of the core** | No parallel developer, no production data at risk, and the §1.3 defects are structural — a one-off project billing monthly forever is a bug whoever is using it |
 | **Lead and Client** | **Merged into one `Company`** | Two records for one organisation always drift apart; the copy at the win is the origin of half the bugs |
 | **Company / Deal split** | **Required** | Concurrent deals with one customer are normal everywhere; today phone uniqueness blocks it |
-| **Pipeline stages** | **Configurable rows, not an enum** | Every agency sells differently — an enum means every customer works your way |
+| **Pipeline stages** | **Rows, not an enum — but seeded from code, with no settings screen** | A stage list is the likeliest thing here to change, and changing a Postgres enum is the create-new/swap/drop-old dance the `PROSPECT` removal just went through. As rows it is an `INSERT`. The screen would save a ten-minute change made twice a year, so it stays in the backlog |
+| **Stage forms and custom fields** | **Tables now, no builder** | Eight of the ten fields in use become real columns anyway, leaving roughly one genuine custom field. Custom fields exist so users can avoid waiting for a developer — internally, the person asking and the person adding it are the same team |
 | **Subscription + Contract** | **Merged into one `Engagement`** | They differ in how often they bill. That is a field, not a table — and two tables gave two MRR answers |
 | **Retainer vs project** | Decided at **Won**, stored once in `contractType` | The stage duplicating it is what allows them to disagree |
 | **Active as two stages** | **Collapsed** | Fixes the billing bug by construction, not by patch |
@@ -250,6 +253,9 @@ Every settled decision. Amend rather than delete.
 | **Currency** | **One per organisation** | Confirmed. Already stored on every money record, so multi-currency needs no migration later |
 | **Engagement type** | **On the quote *and* confirmed at the win** | A quote total of ₹4,80,000 could be ₹40,000 monthly or a one-off build, and the deal value follows the quote — so an unstated type inflates the forecast twelvefold. But quotes are used on 0 of 9 real deals, so the win cannot depend on one existing |
 | **Review triggers** | **Calendar as the floor, signals as the trigger** | A date is a reminder people dismiss. Signals fire when something is actually true — accepting that without hours they are proxies, not measurements |
+| **What creates an invoice** | **The engagement's next billing date** — raised by a person in v1 | The model said what an invoice is and never what makes one. B2 automates the draft later; the date itself must never roll forward on a timer, or the month nobody billed disappears quietly |
+| **Invoice status** | **Follows its payments, one writer** | Same rule as company status. Two places deciding whether something is paid is how a list and a dashboard disagree about money |
+| **MRR, billed, collected** | **Three separate numbers, none derived from another** | They are routinely treated as one. A month can look strong on MRR while nothing has arrived |
 | **Company status** | **Stored, not derived** — five values | Unlike overdue or project health, it has a single natural moment of change: an engagement starting or ending. That makes it safe to store, and keeps the client list a plain query |
 | **`PROJECT_COMPLETED` kept** | **Yes** — a finished project is not churn | An agency delivering 20 websites a year would otherwise show 20 churned customers in its best year. Churn measures lost recurring revenue, not endings |
 | **Who writes the status** | **Exactly one function** | *"Dashboard says 1, list says 5"* was never caused by storing a value — it was caused by several places each deciding it independently |
@@ -473,16 +479,26 @@ model Deal {
 Gone from the old stage enum: `ACTIVE_RETAINER` / `ACTIVE_PROJECT` (that is `contractType`),
 `ON_HOLD` (a flag), `PROJECT_COMPLETED` (the engagement's state), `CHURNED` (the company's).
 
-## 3.4 Move 3 · Stages are rows, not an enum
+## 3.4 Move 3 · Stages are rows, not an enum — seeded, not configured
 
-**This is the change the billing bug is asking for.** `ACTIVE_RETAINER` and `ACTIVE_PROJECT` are
-stage *values*, which is precisely why one column has to map to two of them and why the drop handler
-picks the wrong one (§1.3 ①). Stages stop being an enum, the two values leave it, and the bug has
-nowhere left to live. Renaming and reordering your own columns is the part you notice; removing the
-defect is the reason.
+**Two separate things, and it is worth not confusing them.**
 
-*(It is also what would make Flowzen sellable — but that is a side effect, not the justification.
-See §8.)*
+**The bug fix** is that `ACTIVE_RETAINER` and `ACTIVE_PROJECT` leave the stage list. They are stage
+*values* today, which is precisely why one board column maps to two of them and why the drop handler
+picks the wrong one (§1.3 ①). Removing them fixes it — and that would work whether stages were an
+enum or rows.
+
+**Stages being rows** is a different decision, taken for a plainer reason: **a stage list is the most
+likely thing in this schema to change, and changing a Postgres enum is the create-new / swap /
+drop-old dance.** The `PROSPECT` removal was exactly that. As rows, adding a stage is an `INSERT`.
+
+It also turns probability, patience threshold and order into **data** rather than three parallel
+constant maps in `stage-config.ts`.
+
+> **There is no stage settings screen.** The rows are **seeded from code** — changing them is a seed
+> edit by a developer, not something anyone does in the browser. Flowzen is internal (§2), so the
+> screen would save a ten-minute change that happens perhaps twice a year. The table is the cheap
+> half and it is the half worth having; the screen is in the backlog (§7.1).
 
 ```prisma
 model Pipeline {
@@ -523,12 +539,14 @@ enum StageKind {
 **`kind` is the load-bearing part.** Rename "Won & Closed" to "Signed" and every rule still fires,
 because no rule ever reads a name.
 
-**What agencies can change:** names, order, adding and removing stages, probability, patience
-threshold, and which custom fields each stage prompts for.
+**What a seed edit can change:** names, order, adding and removing stages, probability, patience
+threshold, and which fields each stage prompts for (§3.5).
 
-**What they cannot:** removing the won or lost stage, having two of either, or placing anything after
-them. If stages were entirely free-form, someone would add "Onboarding" after Won and won deals would
-never leave the board — which is the exact problem this design removes.
+**What nothing may change — enforced, not conventional:** removing the won or lost stage, having two
+of either, or placing any stage after them. Left free-form, someone eventually adds "Onboarding"
+after Won and won deals never leave the board — which is the exact problem this design removes. The
+check belongs in the seed *and* in the service, because a rule that only a developer remembers is
+not a rule.
 
 **When stages change:** renaming and reordering are free (history points at ids). Deleting a stage
 with deals in it is **blocked** until they are moved. Deleting an empty stage **archives** it, so old
@@ -570,22 +588,114 @@ describe the agency's own way of working; fixed when they drive logic.**
 Each configurable list is **archived rather than deleted**, so historical records stay readable —
 the same rule as stages and custom fields.
 
-## 3.5 Move 4 · Custom fields
+## 3.5 Move 4 · Stage forms
 
-An agency defines its own fields on deals, companies or contacts — each with a real type: text,
-number, date, dropdown, multi-select, checkbox, link. A **stage** then chooses which it prompts for.
+Each stage prompts for a small set of fields when a deal arrives in it — today that lives in
+`stage-config.ts`, hardcoded, storing answers in a free key/value table called `DealField`.
 
-**The field belongs to the record, not the stage.** A field owned by a stage cannot be filtered,
-reported on, or seen once the deal moves past — and is orphaned when the stage is deleted. This
-replaces today's `DealField`, a free key/value table with seven keys in use that nothing reads.
+**Ten fields are in use across six stages, and eight of them are not custom fields at all.** They are
+core concepts that had nowhere to live:
 
-Fields can be marked required to enter a stage — **optional by default**, because a product full of
-mandatory fields teaches people to type rubbish to get past them.
+| Stage field today | Where it belongs in this design |
+|---|---|
+| Billing Frequency · Start Date | `Engagement` columns |
+| Completion Date | `Engagement.endDate` / `Project.completedAt` |
+| Proposal Sent Date | **`Quote.sentAt`** |
+| Services Agreed in Scope | **Quote line items + the `Service` catalogue** (§3.12) |
+| Payment Terms | `Quote` and `Engagement` |
+| Signed Contract Link | A document on the `Engagement` |
+| Meeting Date · Deliverables Sign-off | `Activity`, with `occurredAt` |
+| **Audit Required?** | ← genuinely a custom field |
 
-Deleting a field **archives** it; historical values stay readable.
+So the stage form is mostly a **view onto real columns**, and the custom-field machinery exists to
+hold the remainder.
 
-> **Design note for later modules:** custom fields are generic across entity types from day one. A
-> future HR module then inherits them for free. See §7.
+```prisma
+model CustomField {
+  id             String          @id @default(cuid())
+  organizationId String
+  entity         CustomEntity    @default(DEAL)   // DEAL | COMPANY | CONTACT
+  key            String                            // stable — never changes
+  label          String                            // renameable
+  type           CustomFieldType
+  options        Json?                             // for select / multi-select
+  position       Int             @default(0)
+  archivedAt     DateTime?
+
+  @@unique([organizationId, entity, key])
+  @@map("custom_fields")
+}
+
+enum CustomEntity    { DEAL  COMPANY  CONTACT }
+enum CustomFieldType { TEXT  TEXTAREA  NUMBER  DATE  SELECT  MULTI_SELECT  CHECKBOX  LINK }
+
+// Which stage prompts for which field — the form, as data
+model StageField {
+  id       String  @id @default(cuid())
+  stageId  String
+  fieldId  String
+  required Boolean @default(false)   // required to ENTER this stage
+  position Int     @default(0)
+
+  @@unique([stageId, fieldId])
+  @@map("stage_fields")
+}
+
+model CustomFieldValue {
+  id           String    @id @default(cuid())
+  fieldId      String
+  dealId       String?
+  companyId    String?
+  contactId    String?
+
+  valueText    String?   @db.Text
+  valueNumber  Decimal?  @db.Decimal(14, 4)
+  valueDate    DateTime?
+  valueBool    Boolean?
+  valueOptions String[]                            // multi-select
+
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([fieldId, dealId])
+  @@index([fieldId])
+  @@map("custom_field_values")
+}
+```
+
+**Some prompts cannot be removed.** The Won stage always asks for engagement type and start date
+(§4.7) because billing is built from the answers. Those are hard rules attached to the stage *kind*,
+not rows in `StageField` — so no seed edit can delete them.
+
+```
+┌─ hard rules for this stage kind ──┐   ← not configurable, ever
+├─ rows in StageField ──────────────┤   ← the rest of the form
+└───────────────────────────────────┘
+```
+
+**The field belongs to the record, not the stage.** A field owned by a stage cannot be filtered or
+reported on, vanishes once the deal moves past, and is orphaned when the stage is deleted. Here the
+same field can be prompted at two stages, and the answer stays on the deal forever.
+
+**`key` is stable; `label` is renameable.** Rename "Audit Required?" and every existing answer
+follows.
+
+**Typed columns, not one JSON blob.** *"Every deal where Services in Scope includes SEO"* is a query
+against a real column. Against JSON it is not, reliably — and the whole point of moving off
+`DealField` is being able to report on these.
+
+**Optional by default.** Every field is one more thing somebody must type to move a deal; a form full
+of mandatory fields teaches people to enter rubbish to get past it. The current config has 0–4 fields
+per stage, which is a good ceiling.
+
+**Deleting a field archives it**; historical values stay readable.
+
+> **No field-definition screen either.** Like stages (§3.4), these rows are **seeded from code**. The
+> tables are the half worth building now; the settings UI is in the backlog (§7.1). Building them as
+> tables rather than constants means that screen is later an addition, not a rewrite.
+
+> **Correction.** An earlier draft of this section said `DealField` had "seven keys in use that
+> nothing reads". Both halves were wrong: there are ten, and they are read — rendered on the deal
+> detail page.
 
 ## 3.6 Move 5 · One Engagement, not Subscription and Contract
 
@@ -710,6 +820,45 @@ nightly job — and the night that job fails, receivables are silently wrong.
 
 **Payments attach to the invoice**, not just the company, or "which invoice did this ₹50,000 settle?"
 has no answer.
+
+### Where an invoice comes from
+
+The model above says what an invoice *is* and never said what *creates* one. It is the engagement:
+
+```
+engagement.nextBillingDate arrives  →  an invoice for that period
+```
+
+**The billing date moves only when an invoice is actually raised — never on a timer.** If nobody
+raises May's invoice the date stays at 1 May and keeps surfacing as due. A cycle that rolls forward
+by itself silently hides the month you forgot to bill, which is the failure this design exists to
+prevent.
+
+**Raising it is a human action in v1.** Flowzen surfaces that one is due; a person creates it. B2 in
+the backlog makes the engagement raise its own draft for approval — that is the automation, and it is
+deliberately not in the first build.
+
+**Invoice status follows its payments, decided in one place:**
+
+```
+paid total  =  0        →  SENT
+paid total  <  total    →  PARTIALLY_PAID
+paid total  >= total    →  PAID
+```
+
+Same rule as company status (§3.2): stored, but with exactly **one writer**. Recording a payment
+recalculates it; nothing else may set it.
+
+### Three numbers that are not the same
+
+```
+MRR         what active engagements say you earn
+billed      what has actually been invoiced
+collected   what has actually arrived
+```
+
+They are routinely treated as one number, and a month can look strong on the first while the third is
+empty. All three are reported separately, and none is derived from another.
 
 ## 3.9 Move 8 · One timeline
 
@@ -1457,7 +1606,11 @@ flowchart LR
 
 Configure once per organisation: currency, timezone, locale, date format, fiscal year start,
 document prefix, tax defaults. Switch on the modules you want. Invite people and give them roles and
-teams. Define your pipeline and any custom fields.
+teams.
+
+**The pipeline and its stage forms arrive already set up**, seeded from code (§3.4, §3.5) — there is
+nothing to configure and no blank board to fill in. Changing them is a developer's seed edit until
+the settings screens are built (§7.1).
 
 New organisations get a **default pipeline seeded on signup** — nobody's first experience should be a
 blank configuration screen.
@@ -1696,7 +1849,7 @@ Not shipping stages — the order that keeps the build coherent.
 | **7** | Repoint `Project` at Company | Delivery |
 | **8** | `Invoice` + `Payment` | Money in |
 | **9** | `Activity` as the one timeline | Cross-cutting; needs the rest to exist |
-| **10** | Custom fields | Generic across entity types |
+| **10** | Stage forms — `CustomField`, `StageField`, `CustomFieldValue`, **seeded** | Under a day, because there is no builder to write. Generic across entity types, so a future module inherits it |
 | **11** | **Identity, roles and permissions** — the five rungs, row and field filtering, **Google sign-in and the invite fork** | Everything they protect now exists, so each rung can be tested against real objects. Login and roles share the members screen, so building them apart means building that page twice |
 | **12** | The owner's view — dashboards and reports | Reads everything above |
 
@@ -1746,6 +1899,7 @@ New ideas go here first. When agreed, they move up into §3 or §4 and gain a ro
 | **B4** | **Milestone billing** — a project engagement billed 50/50, in thirds, or on phase delivery | A ₹6,00,000 website is rarely one invoice. Agencies live on advances | medium |
 | ~~**B5**~~ | ~~Quote accept link~~ — **replaced by manual acceptance, folded into §3.12** | Flowzen already emails the quote; it is the client's *answer* that arrives outside the system. Instead of a link, marking a quote accepted records **when they actually said yes** and through which channel — recovering the timestamp accuracy the link was wanted for, without anything customer-facing | done |
 | **B6** | **Rotting badge on the board** — the per-stage thresholds already exist and are scanned daily, but nothing is shown on the card | Smallest work on the list; probably the biggest behaviour change | small |
+| **B8** | **The configuration screens** — pipeline stages, stage forms, custom field definitions, lost reasons, sources, services. The tables all exist and are seeded (§3.4, §3.5); this is the browser UI on top | The tables were built now precisely so this is an addition rather than a rewrite. **The trigger is a person, not a date:** the day somebody who is not a developer needs to change a stage or a form and cannot wait, it is worth the 3–4 days. Until then a seed edit does the same job in ten minutes | medium |
 | **B7** | **Job functions** — org-defined labels a person can hold several of at once: Designer, SEO, Copywriter, Account Manager. Replaces the free-text `designation` | A **third axis**, and not a permission one: what someone *does*, not what they may *see*. Turns "which designers are on something this week" from a guess into a filter. Explicitly **not** capacity planning (§7.3) — no hours, just who does what | small |
 
 ## 7.2 Design changes still to fold in
@@ -1822,7 +1976,9 @@ row, gate the routes, gate the navigation.
 
 **HR / employee profiles** is wanted eventually. Two things to keep clean now, both free:
 
-- **Custom fields are generic across entity types** (§3.5), so HR inherits them
+- **Custom fields are generic across entity types** (§3.5) — `CustomEntity` takes a new value and HR
+  inherits the whole mechanism. This is also where custom fields finally earn their keep: an HR
+  module is full of fields that genuinely differ per agency, in a way a sales pipeline is not
 - **Do not add more person-about-the-human fields to `User`.** It is already both a login account and
   an employee record. When HR starts, add an `EmployeeProfile` alongside — one-to-one for people who
   log in, standalone for those who do not, because an employee exists before they have a login, keeps

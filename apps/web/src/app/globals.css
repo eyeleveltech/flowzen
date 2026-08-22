@@ -52,9 +52,9 @@
   --radius-card: 16px;
   --radius-button: 12px;
   --radius-input: 12px;
-  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.04);
-  --shadow-overlay: 0 8px 24px rgb(0 0 0 / 0.08);
-  --shadow-modal: 0 24px 48px rgb(0 0 0 / 0.12);
+  --shadow-raised: none;
+  --shadow-overlay: none;
+  --shadow-modal: none;
   --z-100: 100;
   --z-101: 101;
   --ease-out: cubic-bezier(0.25, 0.1, 0.25, 1);

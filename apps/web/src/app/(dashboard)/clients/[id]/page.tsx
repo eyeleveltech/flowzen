@@ -1,972 +1,737 @@
 'use client';
 
-import { useState, useEffect, useId } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+/**
+ * Client Detail Page
+ * 
+ * Comprehensive view of a single client, adaptively rendering:
+ * - Basic info (contacts, location, owner)
+ * - Projects & Tasks
+ * - Engagements & Retainers (commercial view)
+ * - Deals & Pipeline (CRM view)
+ * - Activity Timeline
+ */
+
+import { useEffect, useState, useCallback, use } from 'react';
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'framer-motion';
-import { api } from '@/lib/api';
-import { getSSE } from '@/lib/sse';
-import { formatDate, formatCurrency, getInitials, getAvatarColor, getClientDisplayName, formatRelativeDate, toDateInput } from '@/lib/utils';
-import { ArrowLeft, Mail, Phone, MapPin, Building2, DollarSign, X, Plus, Users, Globe, Briefcase, Trash2, Calendar, FolderKanban, Target, Link2, RotateCcw, Archive } from 'lucide-react';
-import { Select } from '@/components/ui/select';
-import { CurrencySelect } from '@/components/ui/currency-select';
-import { RichTextEditor } from '@/components/ui/rich-text-editor';
-import { SafeHtml } from '@/components/ui/safe-html';
-import toast from 'react-hot-toast';
-import { useMembers } from '@/hooks/useQueries';
-import { useConfirmStore, useModuleStore, useAuthStore } from '@/stores';
-import { CreateProjectModal } from '@/components/projects/create-project-modal';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { NoAccess } from '@/components/ui/no-access';
-import { NotFoundPanel } from '@/components/ui/not-found-panel';
+import {
+  Building2,
+  Clock,
+  Mail,
+  Phone,
+  RefreshCw,
+  Star,
+  Plus,
+  ArrowLeft,
+  Calendar,
+  FolderKanban,
+  FileText,
+  DollarSign,
+  User,
+  MapPin,
+  FileSpreadsheet,
+  MessageSquare,
+  Pencil,
+} from 'lucide-react';
+import {
+  api,
+  ApiError,
+  atLeast,
+  formatDate,
+  formatMoney,
+  type CompanyStatus,
+  type OrgConfig,
+  type Role,
+} from '@/lib/api-v2';
+import { Button } from '@/components/ui/button';
+import { Badge, COMPANY_TONE } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
+import { Field, FieldSelect } from '@/components/ui/field';
+import { EmptyState, ErrorNote } from '@/components/ui/empty-state';
+import { ClientDetailSkeleton } from '@/components/ui/skeleton-loaders';
+import { useModuleStore } from '@/stores';
+import { NewProjectModal } from '@/components/projects/NewProjectModal';
+import { NewContactModal } from '@/components/clients/NewContactModal';
+import { EditClientModal } from '@/components/clients/EditClientModal';
+import { ActivityFeed } from '@/components/activities/ActivityFeed';
+import { LogActivityDialog } from '@/components/activities/LogActivityDialog';
 
-type ContactRole = 'DECISION_MAKER' | 'INFLUENCER' | 'GATEKEEPER' | 'CHAMPION' | 'CC_ONLY';
-
-const CONTACT_ROLES: { value: ContactRole; label: string }[] = [
-  { value: 'DECISION_MAKER', label: 'Decision Maker' },
-  { value: 'INFLUENCER', label: 'Influencer' },
-  { value: 'GATEKEEPER', label: 'Gatekeeper' },
-  { value: 'CHAMPION', label: 'Champion' },
-  { value: 'CC_ONLY', label: 'CC Only' },
-];
-const roleLabel = (r?: ContactRole | null) => CONTACT_ROLES.find((x) => x.value === r)?.label ?? null;
-
-interface ClientContact {
-  id: string; name: string; designation?: string | null; email?: string | null; phone?: string | null;
-  linkedinUrl?: string | null; role?: ContactRole | null; notes?: string | null;
-  // Exactly one contact per account carries this; it is the person a quotation is addressed to.
-  isPrimary?: boolean;
-}
-
-/** The account's contact of record — the flagged one, falling back to the first. */
-function primaryContactName(client: { contacts?: ClientContact[] } | null): string | null {
-  const contacts = client?.contacts || [];
-  return (contacts.find((c) => c.isPrimary) || contacts[0])?.name || null;
-}
-
-interface ClientDetail {
-  id: string; name: string; company?: string | null; industry?: string | null;
-  contacts?: ClientContact[];
-  address?: string | null; contractValue?: number | null;
-  engagementType?: string | null; website?: string | null; city?: string | null; state?: string | null; billingAddress?: string | null; gstNumber?: string | null; scope?: string | null; assetLinks?: string | null; accountManagerId?: string | null;
-  accountManager?: { id: string; name: string; avatar?: string | null } | null;
-  startDate?: string | null; status: string; createdAt: string; archivedAt?: string | null;
-  projects: { id: string; name: string; status: string; progress: number; endDate?: string | null; owner?: { id: string; name: string; avatar?: string | null }; _count?: { tasks: number } }[];
-  notes: { id: string; content: string; type: string; createdAt: string; author: { name: string } }[];
-  activities: { id: string; type: string; message: string; createdAt: string; user: { name: string } }[];
-  jobTitle?: string | null;
-  linkedinUrl?: string | null;
-  companySize?: string | null;
-  landlinePhone?: string | null;
-  zip?: string | null;
-  country?: string | null;
-  instagramHandle?: string | null;
-  facebookPage?: string | null;
-  source?: string | null;
-  priority?: string | null;
-  contractType?: string | null;
-  healthStatus?: string | null;
-  expectedRevenue?: number | null;
-  currency?: string | null;
-  dossierJson?: any;
-  dossierStatus?: string | null;
-  leads?: { id: string; stage: string }[];
-}
-
-type Tab = 'overview' | 'projects' | 'activity' | 'notes';
-
-const projectStatusColors: Record<string, string> = {
-  PLANNING: 'bg-subtle text-body',
-  IN_PROGRESS: 'bg-subtle text-body',
-  REVIEW: 'bg-amber-50 text-amber-700',
-  COMPLETED: 'bg-green-50 text-green-700',
-  ON_HOLD: 'bg-subtle text-body',
-  CANCELLED: 'bg-red-50 text-red-700',
+type Engagement = {
+  id: string;
+  type: 'RETAINER' | 'PROJECT';
+  status: 'ACTIVE' | 'PAUSED' | 'ENDED';
+  amount: string;
+  billingFrequency: string;
+  startDate: string;
+  endDate: string | null;
+  nextBillingDate: string | null;
+  nextReviewDate: string | null;
+  revisions: { id: string; amount: string; effectiveFrom: string; reason: string | null }[];
 };
 
-export default function ClientDetailPage() {
-  const { id } = useParams();
-  const confirm = useConfirmStore((s) => s.confirm);
-  const { activeModule } = useModuleStore();
-  const { user } = useAuthStore();
-  // Client master data is CRM-owned: only SUPER_ADMIN / ADMIN may edit or delete it. PM roles
-  // get a read-only view (they can still see clients to attach to projects).
-  const canManageClients = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
-  const router = useRouter();
+type ClientDetail = {
+  id: string;
+  name: string;
+  status: CompanyStatus;
+  statusMeaning: { label: string; nextAction: string };
+  email: string | null;
+  phone: string | null;
+  state: string | null;
+  gstNumber: string | null;
+  monthlyValue: string;
+  owner: { id: string; name: string } | null;
+  contacts: { id: string; name: string; designation: string | null; email: string | null; role: string | null; isPrimary: boolean }[];
+  deals: { id: string; title: string | null; value: string | null; stage: { name: string; kind: string } }[];
+  engagements: Engagement[];
+  projects: { id: string; name: string; status: string; dueDate: string | null }[];
+  invoices: { id: string; number: string; total: string; status: string; issueDate: string; dueDate: string }[];
+  activities: { id: string; type: string; message: string; body: string | null; occurredAt: string; user?: { name: string } }[];
+};
+
+export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const [client, setClient] = useState<ClientDetail | null>(null);
-  const [tab, setTab] = useState<Tab>('overview');
-  const [showCreateProject, setShowCreateProject] = useState(false);
-  const [noteContent, setNoteContent] = useState('');
-  const [viewModalContent, setViewModalContent] = useState<{ title: string, content: string } | null>(null);
-
-  const { data: members = [] } = useMembers();
-
-  // Edit State
-  const [showEdit, setShowEdit] = useState(false);
-  const [editForm, setEditForm] = useState({
-    name: '', company: '', industry: '', address: '', contractValue: '', status: 'ACTIVE',
-    engagementType: '', website: '', city: '', state: '', billingAddress: '', gstNumber: '', scope: '', assetLinks: '', accountManagerId: '', startDate: '',
-    jobTitle: '', linkedinUrl: '', companySize: '', landlinePhone: '', zip: '', country: '',
-    instagramHandle: '', facebookPage: '', source: '', priority: '', contractType: '', healthStatus: '', expectedRevenue: '', currency: 'INR',
-    contacts: [{ id: '', name: '', designation: '', email: '', phone: '' }] as ClientContact[]
-  });
-  const [editError, setEditError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [orgProfile, setOrgProfile] = useState<any>(null);
+  const [config, setConfig] = useState<OrgConfig | null>(null);
   const [loading, setLoading] = useState(true);
-  const [errorStatus, setErrorStatus] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [reviewing, setReviewing] = useState<Engagement | null>(null);
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [creatingContact, setCreatingContact] = useState(false);
+  const [editingClient, setEditingClient] = useState(false);
+  const [logging, setLogging] = useState(false);
+  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'PROJECTS' | 'ENGAGEMENTS' | 'DEALS' | 'INVOICES'>('OVERVIEW');
+
+  const activeModule = useModuleStore((s) => s.activeModule);
+  const hydrateModule = useModuleStore((s) => s.hydrate);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const fetchClient = () =>
-      api.get<ClientDetail>(`/clients/${id}`)
-        .then((data) => {
-          setClient(data);
-          setErrorStatus(null);
-        })
-        .catch((err: any) => {
-          if (err?.status === 403) setErrorStatus(403);
-          else setErrorStatus(404);
-        })
-        .finally(() => setLoading(false));
+    hydrateModule();
+    setMounted(true);
+  }, [hydrateModule]);
 
-    fetchClient();
-
-    const sse = getSSE();
-    if (sse) {
-      const handleUpdate = (data: any) => {
-        if (!data || !data.id || data.id === id) {
-          fetchClient();
-        }
-      };
-      sse.on('client:updated', handleUpdate);
-      return () => {
-        sse.off('client:updated', handleUpdate);
-      };
+  const load = useCallback(async () => {
+    try {
+      const [c, cfg] = await Promise.all([
+        api.companies.get(id) as Promise<unknown> as Promise<ClientDetail>,
+        api.config.get(),
+      ]);
+      setClient(c);
+      setConfig(cfg);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load this client');
+    } finally {
+      setLoading(false);
     }
   }, [id]);
 
   useEffect(() => {
-    if (client && client.name === 'Internal') {
-      api.get('/settings/organization').then(setOrgProfile).catch(() => { });
-    }
-  }, [client]);
+    void load();
+  }, [load]);
 
-  async function addNote() {
-    if (!noteContent.trim()) return;
-    try {
-      await api.post(`/clients/${id}/notes`, { content: noteContent, type: 'INTERNAL' });
-      toast.success('Note added');
-      setNoteContent('');
-      const updated = await api.get<ClientDetail>(`/clients/${id}`);
-      setClient(updated);
-    } catch (err: any) { toast.error(err.message || 'Failed to add note'); }
+  if (loading || !mounted) return <ClientDetailSkeleton />;
+
+  if (error || !client) {
+    return (
+      <EmptyState
+        title="Client Not Found"
+        hint={error ?? undefined}
+        action={
+          <Link href="/clients">
+            <Button variant="primary">Back to Clients</Button>
+          </Link>
+        }
+      />
+    );
   }
 
+  const currency = config?.organization.currency ?? 'INR';
+  const locale = config?.organization.locale ?? 'en-IN';
+  const tz = config?.organization.timezone ?? 'Asia/Kolkata';
+  const role = config?.me.role as Role | undefined;
+  const money = (v: string | null | undefined) => formatMoney(v, currency, locale);
+  const date = (v: string | null | undefined) => formatDate(v, tz, locale);
 
-  async function handleDelete() {
-    // This archives the client (sets archivedAt + status: CHURNED) — it does NOT delete projects,
-    // contracts, or any other history, and it can be undone via "Restore" while archived.
-    const isConfirmed = await confirm({
-      title: 'Archive Client',
-      message: 'This archives the client and hides it from the default list. Projects and other records are kept, and you can restore it later from this page.',
-      confirmText: 'Archive Client',
-      cancelText: 'Cancel',
-      variant: 'danger',
-      requireText: getClientDisplayName(client),
-    });
-    if (!isConfirmed) return;
-    try {
-      await api.delete(`/clients/${id}`);
-      toast.success('Client archived');
-      router.push('/clients');
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to archive client');
-    }
-  }
-
-  async function handleRestore() {
-    try {
-      await api.post(`/clients/${id}/restore`, {});
-      // Re-fetch rather than adopting the restore response: that payload is a bare client row
-      // with no contacts/projects/leads/quotes, and the page reads client.projects.length — so
-      // setting it directly blanked the page. Same mutate-then-refetch shape as the edit paths.
-      const updated = await api.get<ClientDetail>(`/clients/${id}`);
-      setClient(updated);
-      toast.success('Client restored');
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to restore client');
-    }
-  }
-
-  function openEdit() {
-    setEditForm({
-      name: client!.name || '',
-      company: client!.company || '',
-      industry: client!.industry || '',
-      address: client!.address || '',
-      contractValue: client!.contractValue?.toString() || '',
-      startDate: toDateInput(client!.startDate),
-      status: client!.status,
-      engagementType: client!.engagementType || '',
-      website: client!.website || '',
-      city: client!.city || '',
-      state: client!.state || '',
-      billingAddress: client!.billingAddress || '',
-      gstNumber: client!.gstNumber || '',
-      scope: client!.scope || '',
-      assetLinks: client!.assetLinks || '',
-      accountManagerId: client!.accountManagerId || '',
-      jobTitle: client!.jobTitle || '',
-      linkedinUrl: client!.linkedinUrl || '',
-      companySize: client!.companySize || '',
-      landlinePhone: client!.landlinePhone || '',
-      zip: client!.zip || '',
-      country: client!.country || '',
-      instagramHandle: client!.instagramHandle || '',
-      facebookPage: client!.facebookPage || '',
-      source: client!.source || '',
-      priority: client!.priority || '',
-      contractType: client!.contractType || '',
-      healthStatus: client!.healthStatus || '',
-      expectedRevenue: client!.expectedRevenue?.toString() || '',
-      currency: client!.currency || 'INR',
-      contacts: client!.contacts?.length ? [...client!.contacts] : [{ id: '', name: '', designation: '', email: '', phone: '' }]
-    });
-    setShowEdit(true);
-  }
-
-  async function handleEdit(e: React.FormEvent) {
-    e.preventDefault();
-    setEditError('');
-    setSubmitting(true);
-    try {
-      await api.put(`/crm/clients/${id}`, {
-        ...editForm,
-        contractValue: editForm.contractValue ? parseFloat(editForm.contractValue) : undefined,
-        expectedRevenue: editForm.expectedRevenue ? parseFloat(editForm.expectedRevenue) : undefined,
-        startDate: editForm.startDate || undefined,
-        contacts: editForm.contacts.filter(c => c.name.trim() !== ''),
-      });
-      toast.success('Client updated successfully');
-      setShowEdit(false);
-      const updated = await api.get<ClientDetail>(`/clients/${id}`);
-      setClient(updated);
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to update client');
-      setEditError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  if (loading) return <div className="py-20 text-center text-sm text-secondary">Loading...</div>;
-  if (errorStatus === 403) {
-    return <NoAccess title="Access Restricted" message="You do not have permission or module access to view this client." backHref="/clients" backLabel="Back to Clients" />;
-  }
-  if (errorStatus === 404 || !client) {
-    return <NotFoundPanel title="Client Not Found" message="The requested client could not be found or has been removed." backHref="/clients" backLabel="Back to Clients" />;
-  }
-
-  const tabs = [
-    { id: 'overview' as Tab, label: 'Overview' },
-    { id: 'projects' as Tab, label: `Projects (${client.projects.length})` },
-    { id: 'activity' as Tab, label: 'Activity' },
-    { id: 'notes' as Tab, label: `Notes (${client.notes.length})` },
-  ];
+  const live = client.engagements.filter((e) => e.status !== 'ENDED');
+  const commercial = activeModule !== 'PM';
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-      <button onClick={() => router.push('/clients')} className="flex items-center gap-1.5 text-sm text-secondary hover:text-primary mb-6 transition-colors">
-        <ArrowLeft className="h-4 w-4" /> Back to Clients
-      </button>
+    <div className="space-y-6 pb-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* ── Top Back Navigation ─────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between">
+        <Link
+          href="/clients"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-secondary hover:text-primary transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back to Clients
+        </Link>
+      </div>
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 sm:gap-4 mb-8">
-        <div className="flex items-start gap-4">
-          <div className={`flex h-16 w-16 items-center justify-center rounded-2xl text-xl font-bold ${getAvatarColor(getClientDisplayName(client))}`}>
-            {getInitials(getClientDisplayName(client))}
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-primary">
-              {getClientDisplayName(client)}
-            </h1>
-            <div className="flex items-center gap-3 mt-1">
-              {/* The primary contact, not simply the first one — contacts arrive primary-first
-                  from the API, but relying on position would put the wrong name in the header the
-                  moment that ordering changed. */}
-              {client.name !== 'Internal' && client.company && (primaryContactName(client) || client.name !== client.company) && (
-                <span className="text-sm text-secondary font-medium">
-                  {primaryContactName(client) || client.name}
-                </span>
-              )}
-              {client.name === 'Internal' && <span className="text-sm font-medium text-secondary">(Internal)</span>}
-              <StatusBadge status={client.status} />
+      {/* ── Client Header Card ────────────────────────────────────────────────── */}
+      <div className="rounded-xl border border-border bg-white p-6 space-y-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="flex items-start gap-4">
+            {/* Avatar Badge */}
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-700 text-xl font-bold">
+              {client.name.charAt(0).toUpperCase()}
+            </div>
+
+            <div>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-2xl font-bold tracking-tight text-primary">{client.name}</h1>
+                <Badge tone={COMPANY_TONE[client.status].tone}>
+                  {COMPANY_TONE[client.status].label}
+                </Badge>
+              </div>
+              <p className="mt-1 text-xs text-secondary">
+                {commercial ? client.statusMeaning?.nextAction : shapeOfWork(live)}
+              </p>
             </div>
           </div>
+
+          {/* Right Header Actions */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {commercial && atLeast(role, 'SALES') && (
+              <Button size="sm" variant="ghost" className="gap-1.5 border border-border" onClick={() => setEditingClient(true)}>
+                <Pencil className="h-3.5 w-3.5" /> Edit Client
+              </Button>
+            )}
+
+            {commercial && (
+              <Button size="sm" variant="ghost" className="gap-1.5 border border-border" onClick={() => setLogging(true)}>
+                <MessageSquare className="h-3.5 w-3.5" /> Log Activity
+              </Button>
+            )}
+
+            {(activeModule === 'PM' || atLeast(role, 'MANAGER')) && (
+              <Button size="sm" variant="primary" className="gap-1.5" onClick={() => setCreatingProject(true)}>
+                <Plus className="h-3.5 w-3.5" /> New Project
+              </Button>
+            )}
+          </div>
         </div>
-        {client.name !== 'Internal' && (
-          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
-            {!client.archivedAt && !['PROJECT_COMPLETED', 'CHURNED'].includes(client.status) && (
-              <button
-                onClick={() => setShowCreateProject(true)}
-                className="flex-1 sm:flex-none justify-center px-4 py-2 bg-primary text-white rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap"
-              >
-                <Plus className="h-4 w-4" /> Create Project
-              </button>
-            )}
-            {client.leads?.[0] && canManageClients && (
-              <button
-                onClick={() => router.push(`/pipeline/${client.leads![0].id}`)}
-                className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-body hover:bg-gray-50 transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap"
-              >
-                <Target className="h-4 w-4 text-body" /> View Lead
-              </button>
-            )}
-            {activeModule !== 'PM' && canManageClients && (
-              client.archivedAt ? (
-                <button onClick={handleRestore} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-body hover:bg-gray-50 transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap">
-                  <RotateCcw className="h-4 w-4" />
-                  Restore Client
-                </button>
-              ) : (
-                <>
-                  <button onClick={openEdit} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-border rounded-xl text-sm font-medium text-body hover:bg-gray-50 transition-colors shadow-sm whitespace-nowrap">
-                    Edit Client
-                  </button>
-                  <button onClick={handleDelete} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-red-200 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap">
-                    <Trash2 className="h-4 w-4" />
-                    Archive
-                  </button>
-                </>
-              )
-            )}
+
+        {/* Client Metadata Info Bar */}
+        <div className="grid gap-3 pt-4 border-t border-border sm:grid-cols-2 lg:grid-cols-4 text-xs text-secondary">
+          {client.email && (
+            <div className="flex items-center gap-2 truncate">
+              <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
+              <a href={`mailto:${client.email}`} className="truncate hover:text-primary font-medium">
+                {client.email}
+              </a>
+            </div>
+          )}
+          {client.phone && (
+            <div className="flex items-center gap-2 truncate">
+              <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
+              <a href={`tel:${client.phone}`} className="truncate hover:text-primary font-medium">
+                {client.phone}
+              </a>
+            </div>
+          )}
+          {client.owner && (
+            <div className="flex items-center gap-2 truncate">
+              <User className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="truncate">Owner: <strong className="text-primary">{client.owner.name}</strong></span>
+            </div>
+          )}
+          {client.gstNumber && (
+            <div className="flex items-center gap-2 truncate">
+              <FileSpreadsheet className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="truncate">GST: <strong className="text-primary font-mono">{client.gstNumber}</strong></span>
+            </div>
+          )}
+        </div>
+
+        {/* Commercial Revenue Summary Metric Banner */}
+        {commercial && atLeast(role, 'SALES') && Number(client.monthlyValue) > 0 && (
+          <div className="flex items-center justify-between rounded-xl bg-surface border border-border p-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-secondary">Monthly Retainer Value</p>
+              <p className="text-xl font-bold tracking-tight text-primary mt-0.5">{money(client.monthlyValue)}<span className="text-xs font-normal text-secondary"> / month</span></p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-medium text-secondary">{live.length} Active Engagement{live.length === 1 ? '' : 's'}</p>
+            </div>
           </div>
         )}
       </div>
 
-      {client.archivedAt && (
-        <div className="flex items-center gap-2 mb-6 px-4 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-sm text-amber-800">
-          <Archive className="h-4 w-4 shrink-0" />
-          This client is archived and hidden from the default client list. Use "Restore Client" above to bring it back.
-        </div>
-      )}
+      {/* ── Sub Navigation Tabs ──────────────────────────────────────────────── */}
+      <div className="flex items-center gap-1 rounded-xl border border-border bg-surface p-1 max-w-full overflow-x-auto">
+        <button
+          onClick={() => setActiveTab('OVERVIEW')}
+          className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-colors ${
+            activeTab === 'OVERVIEW'
+              ? 'bg-white border border-border text-primary'
+              : 'text-secondary hover:text-primary'
+          }`}
+        >
+          <Building2 className="h-3.5 w-3.5" /> Overview
+        </button>
 
-      {/* Tabs */}
-      <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto no-scrollbar whitespace-nowrap -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 pr-8 pb-1">
-        {tabs.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)} className={`px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 transition-colors duration-150 motion-reduce:transition-none ${tab === t.id ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-primary'}`}>
-            {t.label}
+        <button
+          onClick={() => setActiveTab('PROJECTS')}
+          className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-colors ${
+            activeTab === 'PROJECTS'
+              ? 'bg-white border border-border text-primary'
+              : 'text-secondary hover:text-primary'
+          }`}
+        >
+          <FolderKanban className="h-3.5 w-3.5" /> Projects ({client.projects.length})
+        </button>
+
+        {commercial && atLeast(role, 'SALES') && (
+          <button
+            onClick={() => setActiveTab('ENGAGEMENTS')}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-colors ${
+              activeTab === 'ENGAGEMENTS'
+                ? 'bg-white border border-border text-primary'
+                : 'text-secondary hover:text-primary'
+            }`}
+          >
+            <DollarSign className="h-3.5 w-3.5" /> Engagements ({live.length})
           </button>
-        ))}
+        )}
+
+        {activeModule === 'CRM' && atLeast(role, 'SALES') && (
+          <button
+            onClick={() => setActiveTab('DEALS')}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-colors ${
+              activeTab === 'DEALS'
+                ? 'bg-white border border-border text-primary'
+                : 'text-secondary hover:text-primary'
+            }`}
+          >
+            <FileText className="h-3.5 w-3.5" /> Deals ({client.deals.length})
+          </button>
+        )}
+
+        {commercial && atLeast(role, 'ADMIN') && client.invoices.length > 0 && (
+          <button
+            onClick={() => setActiveTab('INVOICES')}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-colors ${
+              activeTab === 'INVOICES'
+                ? 'bg-white border border-border text-primary'
+                : 'text-secondary hover:text-primary'
+            }`}
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" /> Invoices ({client.invoices.length})
+          </button>
+        )}
       </div>
 
-      {/* Tab Content */}
-      {tab === 'overview' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="rounded-2xl border border-border bg-white p-6 space-y-4">
-            <h3 className="text-sm font-semibold text-primary">
-              {client.name === 'Internal' ? 'Organization Profile' : 'Company Details'}
-            </h3>
+      {/* ── TAB CONTENT ──────────────────────────────────────────────────────── */}
 
-            {client.name === 'Internal' && orgProfile ? (
-              <div className="space-y-4 pt-1">
-                <p className="text-sm text-body leading-relaxed">
-                  {orgProfile.description || 'No organization description provided.'}
-                </p>
-                <InfoRow icon={Briefcase} label="Industry" value={orgProfile.industry || 'Not specified'} />
-                <InfoRow icon={MapPin} label="Address" value={orgProfile.address || 'Not specified'} />
-                <InfoRow icon={Phone} label="Main Phone" value={orgProfile.phone || 'Not specified'} />
+      {activeTab === 'OVERVIEW' && (
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Left 2-Cols: Projects & Engagements Summary */}
+          <div className="space-y-6 lg:col-span-2">
+            {/* Active Projects */}
+            <div className="rounded-xl border border-border bg-white p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-primary">Active Projects</h3>
+                {(activeModule === 'PM' || atLeast(role, 'MANAGER')) && (
+                  <Button size="sm" variant="ghost" onClick={() => setCreatingProject(true)} className="text-xs">
+                    + New Project
+                  </Button>
+                )}
               </div>
-            ) : (
-              <div className="space-y-6">
-                {/* Company Details */}
-                <div>
-                  <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-subtle">Company Details</h4>
-                  <div className="grid grid-cols-2 gap-y-4 gap-x-2">
-                    <InfoRow icon={Building2} label="Industry" value={client.industry || '—'} />
-                    <InfoRow icon={Globe} label="Website" value={client.website || '—'} />
-                    <InfoRow icon={Users} label="Account Manager" value={client.accountManager?.name || '—'} />
-                    {client.assetLinks ? (
-                      <div className="flex items-start gap-3">
-                        <div className="p-2 rounded-lg bg-gray-50 text-secondary border border-border">
-                          <Link2 className="h-4 w-4" />
+
+              {client.projects.length === 0 ? (
+                <p className="text-xs text-secondary italic">No projects created yet for this client.</p>
+              ) : (
+                <div className="divide-y divide-border">
+                  {client.projects.map((p) => (
+                    <div key={p.id} className="flex items-center justify-between py-3">
+                      <div>
+                        <Link href={`/projects/${p.id}`} className="text-sm font-semibold text-primary hover:underline block">
+                          {p.name}
+                        </Link>
+                        <span className="text-xs text-secondary">
+                          Status: <span className="font-medium capitalize text-primary">{p.status.toLowerCase()}</span>
+                        </span>
+                      </div>
+                      <span className="text-xs text-secondary font-medium">
+                        Due {date(p.dueDate)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Activity Feed */}
+            <div className="rounded-xl border border-border bg-white p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-primary">Activity Timeline</h3>
+                {commercial && (
+                  <Button size="sm" variant="ghost" onClick={() => setLogging(true)} className="text-xs">
+                    + Log Activity
+                  </Button>
+                )}
+              </div>
+              <ActivityFeed
+                items={client.activities.map((a) => ({
+                  key: a.id,
+                  at: a.occurredAt,
+                  text: a.message,
+                  body: a.body,
+                  userName: a.user?.name,
+                }))}
+              />
+            </div>
+          </div>
+
+          {/* Right Col: Stakeholders & Quick Info */}
+          <div className="space-y-6">
+            {/* Key Contacts — Only visible in CRM module */}
+            {activeModule === 'CRM' && (
+              <div className="rounded-xl border border-border bg-white p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-primary">Key Stakeholders</h3>
+                  {atLeast(role, 'MANAGER') && (
+                    <Button size="sm" variant="ghost" onClick={() => setCreatingContact(true)} className="text-xs">
+                      + Add
+                    </Button>
+                  )}
+                </div>
+
+                {client.contacts.length === 0 ? (
+                  <p className="text-xs text-secondary italic">No contacts added yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {client.contacts.map((c) => (
+                      <div key={c.id} className="flex items-start gap-3 rounded-lg border border-border bg-surface p-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-white text-xs font-bold">
+                          {c.name.charAt(0)}
                         </div>
-                        <div>
-                          <span className="block text-xs text-secondary font-medium">Asset Links</span>
-                          <a
-                            href={client.assetLinks.startsWith('http') ? client.assetLinks : `https://${client.assetLinks}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm font-medium text-body hover:underline truncate block max-w-50"
-                          >
-                            {client.assetLinks}
-                          </a>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <p className="truncate text-xs font-semibold text-primary">{c.name}</p>
+                            {c.isPrimary && <Star className="h-3 w-3 fill-amber-400 text-amber-500 shrink-0" />}
+                          </div>
+                          {c.designation && <p className="truncate text-[11px] text-secondary">{c.designation}</p>}
+                          {c.email && (
+                            <a href={`mailto:${c.email}`} className="truncate text-[11px] text-blue-600 hover:underline block mt-0.5">
+                              {c.email}
+                            </a>
+                          )}
                         </div>
                       </div>
-                    ) : (
-                      <InfoRow icon={Link2} label="Asset Links" value="—" />
-                    )}
-                  </div>
-                </div>
-
-                {/* Billing / Address */}
-                <div>
-                  <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-subtle">Billing & Address</h4>
-                  <div className="grid grid-cols-2 gap-y-4 gap-x-2 mb-4">
-                    <InfoRow icon={MapPin} label="City" value={client.city || '—'} />
-                    <InfoRow icon={MapPin} label="State" value={client.state || '—'} />
-                  </div>
-                  {client.gstNumber && (
-                    <div className="mb-4">
-                      <InfoRow icon={Building2} label="GST Number" value={client.gstNumber} />
-                    </div>
-                  )}
-                  {client.billingAddress && (
-                    <div className="text-sm text-body bg-gray-50 p-3 rounded-xl border border-gray-100">
-                      <span className="block text-xs font-semibold text-secondary mb-1">Billing Address</span>
-                      {client.billingAddress}
-                    </div>
-                  )}
-                </div>
-
-                {/* Engagement */}
-                <div>
-                  <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-subtle">Engagement</h4>
-                  <div className="grid grid-cols-2 gap-y-4 gap-x-2 mb-4">
-                    <InfoRow icon={Briefcase} label="Engagement Type" value={client.engagementType || '—'} />
-                    <InfoRow icon={Calendar} label="Start Date" value={client.startDate ? formatDate(client.startDate) : '—'} />
-                    <InfoRow icon={DollarSign} label="Contract Value" value={client.contractValue ? formatCurrency(client.contractValue) : '—'} />
-                  </div>
-
-                  {client.scope ? (
-                    <div className="mt-2 bg-subtle/50 p-4 rounded-xl border border-border/50">
-                      <span className="block text-xs font-semibold text-primary mb-2">Scope of Work</span>
-                      <SafeHtml
-                        className="text-sm text-body line-clamp-3 prose prose-sm max-w-none"
-                        html={client.scope}
-                      />
-                      <button
-                        onClick={() => setViewModalContent({ title: 'Scope', content: client.scope || '' })}
-                        className="mt-3 text-xs font-medium text-[#2563EB] hover:text-[#1D4ED8]"
-                      >
-                        View full scope
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-secondary">No scope defined.</p>
-                  )}
-                </div>
-
-                {/* CRM Details */}
-                {activeModule !== 'PM' && (
-                  <div>
-                    <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 pb-2 border-b border-subtle">CRM Details</h4>
-                    <div className="grid grid-cols-2 gap-y-4 gap-x-2">
-                      <InfoRow icon={Briefcase} label="Job Title" value={client.jobTitle || '—'} />
-                      <InfoRow icon={Globe} label="LinkedIn" value={client.linkedinUrl || '—'} />
-                      <InfoRow icon={Phone} label="Landline" value={client.landlinePhone || '—'} />
-                      <InfoRow icon={Users} label="Company Size" value={client.companySize || '—'} />
-                      <InfoRow icon={MapPin} label="Zip / Country" value={[client.zip, client.country].filter(Boolean).join(', ') || '—'} />
-                      <InfoRow icon={Globe} label="Instagram" value={client.instagramHandle || '—'} />
-                      <InfoRow icon={Globe} label="Facebook" value={client.facebookPage || '—'} />
-                      <InfoRow icon={Briefcase} label="Source" value={client.source?.replace(/_/g, ' ') || '—'} />
-                      <InfoRow icon={Briefcase} label="Priority" value={client.priority || '—'} />
-                      <InfoRow icon={Briefcase} label="Contract Type" value={client.contractType?.replace(/_/g, ' ') || '—'} />
-                      <InfoRow icon={Briefcase} label="Health Status" value={client.healthStatus || '—'} />
-                      <InfoRow icon={DollarSign} label="Expected Revenue" value={client.expectedRevenue ? formatCurrency(client.expectedRevenue) : '—'} />
-                    </div>
+                    ))}
                   </div>
                 )}
               </div>
             )}
 
-            {client.contacts && client.contacts.length > 0 && (
-              <div className="pt-4 border-t border-subtle">
-                <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3">Contacts</h4>
-                <div className="space-y-3">
-                  {client.contacts.map((c) => (
-                    <div key={c.id} className={`p-3 rounded-xl border ${c.isPrimary ? 'border-primary/30 bg-primary/3' : 'bg-surface border-border'}`}>
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-primary flex items-center gap-2">
-                          {c.name}
-                          {/* Shown here too, not just in the edit form — this is the person a
-                              quotation for this account is addressed to. */}
-                          {c.isPrimary && <span className="shrink-0 px-1.5 py-0.5 rounded bg-primary text-white text-[9px] font-semibold uppercase tracking-wide">Primary</span>}
-                        </p>
-                        {roleLabel(c.role) && (
-                          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-primary/10 text-primary">{roleLabel(c.role)}</span>
-                        )}
-                      </div>
-                      {c.designation && <p className="text-xs text-secondary mb-2">{c.designation}</p>}
-                      <div className="space-y-1 mt-2">
-                        {c.email && <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5 text-secondary" /><span className="text-xs text-body">{c.email}</span></div>}
-                        {c.phone && <div className="flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-secondary" /><span className="text-xs text-body">{c.phone}</span></div>}
-                        {c.linkedinUrl && <div className="flex items-center gap-2"><Globe className="h-3.5 w-3.5 text-secondary" /><a href={c.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline truncate">LinkedIn</a></div>}
-                      </div>
-                      {c.notes && <p className="text-xs text-secondary mt-2 whitespace-pre-wrap">{c.notes}</p>}
-                    </div>
-                  ))}
-                </div>
+            {/* Quick Details */}
+            <div className="rounded-xl border border-border bg-white p-5 space-y-3 text-xs">
+              <h3 className="text-sm font-bold text-primary mb-2">Company Information</h3>
+              <div className="flex items-center justify-between border-b border-border pb-2">
+                <span className="text-secondary font-medium">State / Region</span>
+                <span className="font-semibold text-primary">{client.state ?? '—'}</span>
               </div>
-            )}
-          </div>
-          <div className="rounded-2xl border border-border bg-white p-6">
-            <h3 className="text-sm font-semibold text-primary mb-4">Project Summary</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="text-center p-3 rounded-xl bg-surface">
-                <p className="text-2xl font-bold text-primary">{client.projects.length}</p>
-                <p className="text-xs text-secondary">Total Projects</p>
+              <div className="flex items-center justify-between border-b border-border pb-2">
+                <span className="text-secondary font-medium">Account Owner</span>
+                <span className="font-semibold text-primary">{client.owner?.name ?? '—'}</span>
               </div>
-              <div className="text-center p-3 rounded-xl bg-surface">
-                <p className="text-2xl font-bold text-primary">{client.projects.filter((p) => p.status === 'COMPLETED').length}</p>
-                <p className="text-xs text-secondary">Completed</p>
+              <div className="flex items-center justify-between">
+                <span className="text-secondary font-medium">GST / Tax ID</span>
+                <span className="font-mono font-semibold text-primary">{client.gstNumber ?? '—'}</span>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {tab === 'projects' && (
-        <div className="space-y-3">
+      {/* ── PROJECTS TAB ─────────────────────────────────────────────────────── */}
+      {activeTab === 'PROJECTS' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-bold text-primary">All Projects ({client.projects.length})</h2>
+            {(activeModule === 'PM' || atLeast(role, 'MANAGER')) && (
+              <Button size="sm" variant="primary" onClick={() => setCreatingProject(true)}>
+                + New Project
+              </Button>
+            )}
+          </div>
+
           {client.projects.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border bg-white p-10 text-center">
-              <FolderKanban className="h-10 w-10 text-line mx-auto mb-3" />
-              <p className="text-sm font-medium text-primary">No projects yet</p>
-              <p className="text-xs text-secondary mt-1">Create a project for this client to get started.</p>
-            </div>
+            <EmptyState title="No Projects Found" hint="Create a new project for this client." />
           ) : (
-            client.projects.map((p) => {
-              const overdue = !!(p.endDate && new Date(p.endDate) < new Date() && p.status !== 'COMPLETED');
-              const ptype = (p as any).type as string | undefined;
-              return (
-                <Link
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {client.projects.map((p) => (
+                <div
                   key={p.id}
-                  href={`/projects/${p.id}`}
-                  className="group rounded-2xl border border-border bg-white p-5 hover:shadow-sm hover:border-gray-300 block transition-colors duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  className="rounded-xl border border-border bg-white p-4 space-y-3 hover:border-primary transition-colors cursor-pointer"
+                  onClick={() => (window.location.href = `/projects/${p.id}`)}
                 >
-                  {/* Header */}
-                  <div className="flex items-start justify-between gap-3 mb-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-9 w-9 rounded-xl bg-subtle border border-border flex items-center justify-center shrink-0">
-                        <FolderKanban className="h-4 w-4 text-secondary" />
-                      </div>
-                      <div className="min-w-0">
-                        <h3 className="text-sm font-semibold text-primary truncate group-hover:text-black transition-colors">{p.name}</h3>
-                        {ptype && <p className="text-xs text-secondary mt-0.5 capitalize">{ptype.toLowerCase().replace(/_/g, ' ')}</p>}
-                      </div>
-                    </div>
-                    <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium shrink-0 ${projectStatusColors[p.status] || 'bg-gray-50 text-gray-600'}`}>
-                      {p.status.replace(/_/g, ' ')}
-                    </span>
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="text-sm font-bold text-primary truncate">{p.name}</h3>
+                    <Badge tone="neutral" className="capitalize">{p.status.toLowerCase()}</Badge>
                   </div>
-
-                  {/* Meta */}
-                  <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-secondary mb-4">
-                    <span className="flex items-center gap-1.5">
-                      {p.owner ? (
-                        <>
-                          <span className={`h-5 w-5 rounded-full text-[9px] font-semibold flex items-center justify-center ${getAvatarColor(p.owner.name)}`}>{getInitials(p.owner.name)}</span>
-                          <span className="text-body font-medium">{p.owner.name}</span>
-                        </>
-                      ) : (
-                        <span className="text-secondary">Unassigned</span>
-                      )}
-                    </span>
-                    <span className="flex items-center gap-1.5"><Briefcase className="h-3.5 w-3.5 text-secondary" /> {p._count?.tasks ?? 0} tasks</span>
-                    <span className={`flex items-center gap-1.5 ${overdue ? 'text-red-600 font-medium' : ''}`}>
-                      <Calendar className="h-3.5 w-3.5 text-secondary" /> {p.endDate ? formatDate(p.endDate) : 'No due date'}{overdue ? ' · Overdue' : ''}
-                    </span>
+                  <div className="flex items-center justify-between border-t border-border pt-3 text-xs text-secondary">
+                    <span>Due Date</span>
+                    <span className="font-semibold text-primary">{date(p.dueDate)}</span>
                   </div>
-
-                  {/* Progress */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[11px] font-medium text-secondary uppercase tracking-wide">Progress</span>
-                      <span className="text-xs font-semibold text-primary tabular-nums">{p.progress}%</span>
-                    </div>
-                    <div className="h-2 w-full rounded-full bg-subtle overflow-hidden">
-                      <div className={`h-full rounded-full ${p.status === 'COMPLETED' ? 'bg-emerald-500' : 'bg-primary'}`} style={{ width: `${p.progress}%` }} />
-                    </div>
-                  </div>
-                </Link>
-              );
-            })
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
 
-      {tab === 'activity' && (
-        <div className="space-y-3">
-          {client.activities.map((a) => (
-            <div key={a.id} className="flex items-start gap-3 py-2">
-              <div className={`h-7 w-7 rounded-full text-[10px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(a.user.name)}`}>{getInitials(a.user.name)}</div>
-              <div>
-                <p className="text-sm text-body"><span className="font-medium">{a.user.name}</span> {a.message}</p>
-                <p className="text-xs text-secondary">{formatRelativeDate(a.createdAt)}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {tab === 'notes' && (
-        <div>
-          <div className="flex gap-3 mb-6">
-            <input value={noteContent} onChange={(e) => setNoteContent(e.target.value)} placeholder="Add a note..." className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none" />
-            <button onClick={addNote} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover transition-colors duration-150 motion-reduce:transition-none">Add Note</button>
-          </div>
-          <div className="space-y-3">
-            {client.notes.map((n) => (
-              <div key={n.id} className="rounded-2xl border border-border bg-white p-4">
-                <p className="text-sm text-body">{n.content}</p>
-                <p className="text-xs text-secondary mt-2">{n.author.name} · {formatRelativeDate(n.createdAt)}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Edit Modal */}
-      <AnimatePresence>
-        {showEdit && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setShowEdit(false)} />
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 overflow-y-auto"
-            >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-subtle">
-                <h2 className="text-lg font-semibold text-primary">Edit Client</h2>
-                <button onClick={() => setShowEdit(false)} className="p-2 rounded-xl hover:bg-subtle transition-colors">
-                  <X className="h-4 w-4 text-secondary" />
-                </button>
-              </div>
-              <form onSubmit={handleEdit} className="relative p-6 space-y-4">
-                {editError && <div className="absolute top-0 left-6 right-6 -mt-2 z-10 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 shadow-sm border border-red-100">{editError}</div>}
-                <Field label="Company Name *" value={editForm.company || editForm.name} onChange={(v) => setEditForm({ ...editForm, name: v, company: v })} required />
-                <Field label="Industry" value={editForm.industry} onChange={(v) => setEditForm({ ...editForm, industry: v })} />
-
-                <div>
-                  <label className="block text-sm font-medium text-body mb-1.5">Engagement Type</label>
-                  <Select
-                    value={editForm.engagementType}
-                    onChange={(v) => setEditForm({ ...editForm, engagementType: v })}
-                    options={[
-                      { label: 'Select type', value: '' },
-                      { label: 'Retainer', value: 'Retainer' },
-                      { label: 'Project', value: 'Project' },
-                      { label: 'Event', value: 'Event' },
-                      { label: 'Ad-hoc', value: 'Ad-hoc' }
-                    ]}
-                  />
-                </div>
-
-                <Field label="Website" value={editForm.website} onChange={(v) => setEditForm({ ...editForm, website: v })} />
-                <Field label="City" value={editForm.city} onChange={(v) => setEditForm({ ...editForm, city: v })} />
-                <div>
-                  <label className="block text-sm font-medium text-body mb-1.5">Billing Address</label>
-                  <textarea value={editForm.billingAddress} onChange={(e) => setEditForm({ ...editForm, billingAddress: e.target.value })} rows={2} placeholder="Used to auto-fill quotations" className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 resize-none" />
-                </div>
-                <Field label="Start Date" type="date" value={editForm.startDate} onChange={(v) => setEditForm({ ...editForm, startDate: v })} />
-
-                {activeModule !== 'PM' && (
-                  <div className="space-y-4 pt-4 border-t border-subtle">
-                    <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider">CRM Details</h4>
-
-                    {/* Contact Info */}
-                    <div className="space-y-3">
-                      <p className="text-xs font-medium text-primary">Contact Info</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field label="Job Title" value={editForm.jobTitle} onChange={(v) => setEditForm({ ...editForm, jobTitle: v })} />
-                        <Field label="Landline Phone" value={editForm.landlinePhone} onChange={(v) => setEditForm({ ...editForm, landlinePhone: v })} />
-                      </div>
-                      <Field label="LinkedIn URL" value={editForm.linkedinUrl} onChange={(v) => setEditForm({ ...editForm, linkedinUrl: v })} />
+      {/* ── ENGAGEMENTS TAB ───────────────────────────────────────────────────── */}
+      {activeTab === 'ENGAGEMENTS' && commercial && atLeast(role, 'SALES') && (
+        <div className="space-y-4">
+          <h2 className="text-base font-bold text-primary">Engagements & Retainers</h2>
+          {live.length === 0 ? (
+            <EmptyState title="No Running Engagements" hint="There are no active retainers or projects for this client." />
+          ) : (
+            <div className="space-y-3">
+              {live.map((e) => (
+                <div key={e.id} className="rounded-xl border border-border bg-white p-5 space-y-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="text-base font-bold text-primary">
+                        {money(e.amount)}{' '}
+                        <span className="text-xs font-normal text-secondary">
+                          {e.billingFrequency === 'ONE_TIME' ? 'one-time' : e.billingFrequency.toLowerCase()}
+                        </span>
+                      </p>
+                      <p className="mt-0.5 text-xs text-secondary">
+                        {e.type === 'RETAINER' ? 'Retainer' : 'Project'} · Started {date(e.startDate)}
+                        {e.endDate ? ` · Ends ${date(e.endDate)}` : ' · Rolling contract'}
+                      </p>
                     </div>
 
-                    {/* Location */}
-                    <div className="space-y-3">
-                      <p className="text-xs font-medium text-primary">Location</p>
-                      <Field label="State" value={editForm.state} onChange={(v) => setEditForm({ ...editForm, state: v })} />
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field label="ZIP Code" value={editForm.zip} onChange={(v) => setEditForm({ ...editForm, zip: v })} />
-                        <Field label="Country" value={editForm.country} onChange={(v) => setEditForm({ ...editForm, country: v })} />
-                      </div>
-                    </div>
-
-                    {/* Social */}
-                    <div className="space-y-3">
-                      <p className="text-xs font-medium text-primary">Social Handles</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field label="Instagram Handle" value={editForm.instagramHandle} onChange={(v) => setEditForm({ ...editForm, instagramHandle: v })} />
-                        <Field label="Facebook Page" value={editForm.facebookPage} onChange={(v) => setEditForm({ ...editForm, facebookPage: v })} />
-                      </div>
-                    </div>
-
-                    {/* Sales */}
-                    <div className="space-y-3">
-                      <p className="text-xs font-medium text-primary">Sales Info</p>
-                      <div>
-                        <label className="block text-sm font-medium text-body mb-1.5">Source</label>
-                        <Select
-                          value={editForm.source}
-                          onChange={(v) => setEditForm({ ...editForm, source: v })}
-                          options={[
-                            { label: 'Select Source', value: '' },
-                            { label: 'Excel', value: 'EXCEL' },
-                            { label: 'Manual', value: 'MANUAL' },
-                            { label: 'API', value: 'API' },
-                            { label: 'Referral', value: 'REFERRAL' },
-                            { label: 'Inbound', value: 'INBOUND' },
-                            { label: 'LinkedIn', value: 'LINKEDIN' },
-                            { label: 'Instagram', value: 'INSTAGRAM' },
-                            { label: 'WhatsApp', value: 'WHATSAPP' },
-                            { label: 'Other', value: 'OTHER' },
-                            { label: 'Outbound', value: 'OUTBOUND' },
-                            { label: 'Social Media', value: 'SOCIAL_MEDIA' },
-                            { label: 'Event', value: 'EVENT' },
-                            { label: 'Cold Call', value: 'COLD_CALL' },
-                            { label: 'Existing Client', value: 'EXISTING_CLIENT' }
-                          ]}
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-sm font-medium text-body mb-1.5">Priority</label>
-                          <Select
-                            value={editForm.priority}
-                            onChange={(v) => setEditForm({ ...editForm, priority: v })}
-                            options={[
-                              { label: 'Select Priority', value: '' },
-                              { label: 'High', value: 'HIGH' },
-                              { label: 'Medium', value: 'MEDIUM' },
-                              { label: 'Low', value: 'LOW' }
-                            ]}
-                          />
-                        </div>
-                        <Field label="Expected Revenue" type="number" value={editForm.expectedRevenue} onChange={(v) => setEditForm({ ...editForm, expectedRevenue: v })} />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-body mb-1.5">Currency</label>
-                        <CurrencySelect value={editForm.currency} onChange={(v) => setEditForm({ ...editForm, currency: v })} />
-                      </div>
-                    </div>
-
-                    {/* Billing & Tax */}
-                    <div className="space-y-3">
-                      <p className="text-xs font-medium text-primary">Billing & Tax</p>
-                      <Field label="GST Number" value={editForm.gstNumber} onChange={(v) => setEditForm({ ...editForm, gstNumber: v })} />
-                      <Field label="Contract Value" type="number" value={editForm.contractValue} onChange={(v) => setEditForm({ ...editForm, contractValue: v })} />
-                      <Field label="Asset Links" value={editForm.assetLinks} onChange={(v) => setEditForm({ ...editForm, assetLinks: v })} />
-                    </div>
-
-                    {/* Account */}
-                    <div className="space-y-3">
-                      <p className="text-xs font-medium text-primary">Account Details</p>
-                      <Field label="Company Size" value={editForm.companySize} onChange={(v) => setEditForm({ ...editForm, companySize: v })} />
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-sm font-medium text-body mb-1.5">Contract Type</label>
-                          <Select
-                            value={editForm.contractType}
-                            onChange={(v) => setEditForm({ ...editForm, contractType: v })}
-                            options={[
-                              { label: 'Select Contract Type', value: '' },
-                              { label: 'Retainer', value: 'RETAINER' },
-                              { label: 'One Time', value: 'ONE_TIME' }
-                            ]}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-body mb-1.5">Health Status</label>
-                          <Select
-                            value={editForm.healthStatus}
-                            onChange={(v) => setEditForm({ ...editForm, healthStatus: v })}
-                            options={[
-                              { label: 'Select Health Status', value: '' },
-                              { label: 'Green', value: 'GREEN' },
-                              { label: 'Amber', value: 'AMBER' },
-                              { label: 'Red', value: 'RED' }
-                            ]}
-                          />
-                        </div>
-                      </div>
-                    </div>
+                    <span
+                      className={`rounded-lg border px-2.5 py-1 text-xs font-semibold ${
+                        e.status === 'ACTIVE'
+                          ? 'border-green-200 bg-green-50 text-green-700'
+                          : 'border-amber-200 bg-amber-50 text-amber-700'
+                      }`}
+                    >
+                      {e.status === 'ACTIVE' ? 'Active' : 'Paused'}
+                    </span>
                   </div>
-                )}
 
-                <div>
-                  <label className="block text-sm font-medium text-body mb-1.5">Scope</label>
-                  <RichTextEditor
-                    value={editForm.scope}
-                    onChange={(val) => setEditForm({ ...editForm, scope: val })}
-                    placeholder="Enter the scope of work..."
-                  />
-                </div>
+                  <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3 text-xs text-secondary">
+                    {!e.endDate && e.nextReviewDate && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <RefreshCw className="h-3.5 w-3.5 text-secondary" />
+                        Price review due: <strong className="text-primary">{date(e.nextReviewDate)}</strong>
+                      </span>
+                    )}
+                    {e.endDate && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5 text-secondary" />
+                        Renewal due: <strong className="text-primary">{date(e.endDate)}</strong>
+                      </span>
+                    )}
 
-                <div>
-                  <label className="block text-sm font-medium text-body mb-1.5">Account Manager</label>
-                  <Select
-                    value={editForm.accountManagerId}
-                    onChange={(v) => setEditForm({ ...editForm, accountManagerId: v })}
-                    options={[
-                      { label: 'Unassigned', value: '' },
-                      ...members.map((m: any) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
-                    ]}
-                  />
-                </div>
-
-
-
-                <div className="space-y-3 pt-2 pb-2 border-y border-subtle">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-sm font-medium text-body">Contacts</label>
-                    {editForm.contacts.length < 5 && (
-                      <button type="button" onClick={() => setEditForm({ ...editForm, contacts: [...editForm.contacts, { id: '', name: '', designation: '', email: '', phone: '' }] })} className="text-xs font-medium text-primary flex items-center gap-1 hover:bg-subtle px-2 py-1 rounded transition-colors">
-                        <Plus className="h-3 w-3" /> Add Contact
+                    {atLeast(role, 'ADMIN') && (
+                      <button
+                        onClick={() => setReviewing(e)}
+                        className="ml-auto rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-primary hover:bg-subtle transition-colors"
+                      >
+                        {e.endDate ? 'Renew Contract' : 'Review Price'}
                       </button>
                     )}
                   </div>
-                  {editForm.contacts.map((contact, i) => (
-                    <div key={i} className={`p-4 border rounded-xl relative ${contact.isPrimary ? 'border-primary/30 bg-primary/3' : 'border-border bg-surface'}`}>
-                      {editForm.contacts.length > 1 && (
-                        <button type="button" onClick={() => setEditForm({ ...editForm, contacts: editForm.contacts.filter((_, idx) => idx !== i) })} className="absolute top-2 right-2 p-1.5 text-secondary hover:text-red-500 rounded-lg hover:bg-white transition-colors border border-transparent hover:border-red-100 shadow-sm hover:shadow">
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                      {/* Which contact is primary decides whose name, email and phone go on this
-                          account's quotations. The API preserves the flag, but until now nothing
-                          could SET it once a lead had converted — the choice was frozen at
-                          whatever it was at the win. Exactly one is primary, so this is a radio. */}
-                      <label className="inline-flex items-center gap-2 mb-3 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="client-primary-contact"
-                          checked={Boolean(contact.isPrimary)}
-                          onChange={() => setEditForm({
-                            ...editForm,
-                            contacts: editForm.contacts.map((c, idx) => ({ ...c, isPrimary: idx === i })),
-                          })}
-                          className="w-3.5 h-3.5 text-primary border-gray-300 focus:ring-primary cursor-pointer"
-                        />
-                        <span className={`text-xs font-semibold ${contact.isPrimary ? 'text-primary' : 'text-secondary'}`}>
-                          {contact.isPrimary ? 'Primary contact' : 'Make primary'}
-                        </span>
-                      </label>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field label="Name *" value={contact.name} onChange={(v) => { const c = [...editForm.contacts]; c[i].name = v; setEditForm({ ...editForm, contacts: c }); }} required />
-                        <Field label="Designation" value={contact.designation || ''} onChange={(v) => { const c = [...editForm.contacts]; c[i].designation = v; setEditForm({ ...editForm, contacts: c }); }} />
-                        <Field label="Email" type="email" value={contact.email || ''} onChange={(v) => { const c = [...editForm.contacts]; c[i].email = v; setEditForm({ ...editForm, contacts: c }); }} />
-                        <Field label="Phone" value={contact.phone || ''} onChange={(v) => { const c = [...editForm.contacts]; c[i].phone = v; setEditForm({ ...editForm, contacts: c }); }} />
-                        <div>
-                          <label className="block text-xs font-medium text-secondary mb-1">Role</label>
-                          <Select
-                            value={contact.role || ''}
-                            onChange={(val) => { const c = [...editForm.contacts]; c[i].role = (val || null) as ContactRole | null; setEditForm({ ...editForm, contacts: c }); }}
-                            options={[{ label: '— None —', value: '' }, ...CONTACT_ROLES]}
-                          />
-                        </div>
-                        <Field label="LinkedIn URL" value={contact.linkedinUrl || ''} onChange={(v) => { const c = [...editForm.contacts]; c[i].linkedinUrl = v; setEditForm({ ...editForm, contacts: c }); }} />
-                      </div>
-                    </div>
-                  ))}
                 </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
-                <div>
-                  <label className="block text-sm font-medium text-body mb-1.5">
-                    Lifecycle Stage
-                  </label>
-                  {/* Status is derived entirely from the lead's pipeline stage (win/hold/churn cascades
-                      live in leadStage.service.ts) — never manually editable here, in either module,
-                      so this can't drift out of sync with the pipeline or skip its cascade effects. */}
-                  <div className="w-full rounded-xl border border-border bg-gray-50 px-4 py-2.5 text-sm text-secondary cursor-not-allowed select-none">
-                    {editForm.status === 'ACTIVE' ? 'Active' :
-                      editForm.status === 'ONHOLD' ? 'On Hold' :
-                        editForm.status === 'PROJECT_COMPLETED' ? 'Completed' :
-                          editForm.status === 'CHURNED' ? 'Churned' : editForm.status}
-                    <span className="ml-2 text-xs text-amber-500 font-medium">(Managed via CRM pipeline)</span>
+      {/* ── DEALS TAB ────────────────────────────────────────────────────────── */}
+      {activeTab === 'DEALS' && activeModule === 'CRM' && atLeast(role, 'SALES') && (
+        <div className="space-y-4">
+          <h2 className="text-base font-bold text-primary">Deals & Opportunities</h2>
+          {client.deals.length === 0 ? (
+            <EmptyState title="No Deals Found" hint="No pipeline deals recorded for this client." />
+          ) : (
+            <div className="divide-y divide-border rounded-xl border border-border bg-white p-4">
+              {client.deals.map((d) => (
+                <div key={d.id} className="flex items-center justify-between py-3">
+                  <div>
+                    <Link href={`/pipeline/${d.id}`} className="text-sm font-semibold text-primary hover:underline block">
+                      {d.title ?? 'Untitled deal'}
+                    </Link>
+                    <span className="text-xs text-secondary font-medium">
+                      Stage: {d.stage.name}
+                    </span>
+                  </div>
+                  <span className="text-sm font-bold text-primary">{money(d.value)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── INVOICES TAB ─────────────────────────────────────────────────────── */}
+      {activeTab === 'INVOICES' && commercial && atLeast(role, 'ADMIN') && (
+        <div className="space-y-4">
+          <h2 className="text-base font-bold text-primary">Invoices</h2>
+          {client.invoices.length === 0 ? (
+            <EmptyState title="No Invoices Found" hint="No billing invoices recorded." />
+          ) : (
+            <div className="divide-y divide-border rounded-xl border border-border bg-white p-4">
+              {client.invoices.map((i) => (
+                <div key={i.id} className="flex items-center justify-between py-3 text-sm">
+                  <div>
+                    <p className="font-bold text-primary">{i.number}</p>
+                    <p className="text-xs text-secondary">Issued {date(i.issueDate)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-primary">{money(i.total)}</p>
+                    <span className="text-xs uppercase font-semibold text-secondary">{i.status}</span>
                   </div>
                 </div>
-                <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setShowEdit(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-body hover:bg-surface transition-colors duration-150 motion-reduce:transition-none">
-                    Cancel
-                  </button>
-                  <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none">
-                    {submitting ? 'Saving...' : 'Save Changes'}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
-      <AnimatePresence>
-        {viewModalContent && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-60 bg-black/20 backdrop-blur-sm" onClick={() => setViewModalContent(null)} />
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-60 w-full max-w-lg bg-white border-l border-border shadow-2xl shadow-black/10 flex flex-col">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-subtle shrink-0">
-                <h2 className="text-lg font-semibold text-primary">{viewModalContent.title}</h2>
-                <button onClick={() => setViewModalContent(null)} className="p-2 rounded-xl hover:bg-subtle"><X className="h-4 w-4 text-secondary" /></button>
-              </div>
-              <div className="p-6 overflow-y-auto flex-1">
-                <SafeHtml
-                  className="prose prose-sm max-w-none text-body"
-                  html={viewModalContent.content}
-                />
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      {/* Modals & Dialogs */}
+      {reviewing && (
+        <ReviewPriceDialog
+          engagement={reviewing}
+          currency={currency}
+          locale={locale}
+          onClose={() => setReviewing(null)}
+          onDone={() => {
+            setReviewing(null);
+            void load();
+          }}
+        />
+      )}
 
-      <AnimatePresence>
-        {showCreateProject && client && (
-          <CreateProjectModal
-            clientId={client.id}
-            clientName={getClientDisplayName(client)}
-            onClose={() => setShowCreateProject(false)}
-            onSuccess={() => {
-              setShowCreateProject(false);
-              setTab('projects');
-              api.get<ClientDetail>(`/clients/${id}`).then(setClient).catch(() => toast.error('Project created — reload to see it in the list.'));
-            }}
-          />
-        )}
-      </AnimatePresence>
-    </motion.div>
-  );
-}
+      {creatingProject && (
+        <NewProjectModal
+          companyId={client.id}
+          engagements={client.engagements}
+          onConfirm={(project) => {
+            setCreatingProject(false);
+            window.location.href = `/projects/${project.id}`;
+          }}
+          onCancel={() => setCreatingProject(false)}
+        />
+      )}
 
-function InfoRow({ icon: Icon, label, value }: { icon: typeof Mail; label: string; value: string }) {
-  return (
-    <div className="flex items-center gap-3">
-      <Icon className="h-4 w-4 text-secondary" />
-      <div>
-        <p className="text-xs text-secondary">{label}</p>
-        <p className="text-sm text-body">{value}</p>
-      </div>
-    </div>
-  );
-}
+      {creatingContact && (
+        <NewContactModal
+          companyId={client.id}
+          onConfirm={() => {
+            setCreatingContact(false);
+            void load();
+          }}
+          onCancel={() => setCreatingContact(false)}
+        />
+      )}
 
-function Field({ label, value, onChange, type = 'text', required = false }: {
-  label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean;
-}) {
-  const id = useId();
-  return (
-    <div>
-      <label htmlFor={id} className="block text-sm font-medium text-body mb-1.5">{label}</label>
-      <input
-        id={id}
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        required={required}
-        className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none"
+      {editingClient && (
+        <EditClientModal
+          client={client}
+          onConfirm={() => {
+            setEditingClient(false);
+            void load();
+          }}
+          onCancel={() => setEditingClient(false)}
+        />
+      )}
+
+      <LogActivityDialog
+        open={logging}
+        companyId={client.id}
+        onClose={() => setLogging(false)}
+        onLogged={() => {
+          setLogging(false);
+          void load();
+        }}
       />
     </div>
+  );
+}
+
+function shapeOfWork(live: Engagement[]): string {
+  if (live.length === 0) return 'No active work running';
+  const types = Array.from(new Set(live.map((e) => e.type)));
+  if (types.length === 2) return 'Retainer & project work running';
+  return types[0] === 'RETAINER' ? 'Rolling retainer work' : 'Fixed project work';
+}
+
+function ReviewPriceDialog({
+  engagement,
+  currency,
+  locale,
+  onClose,
+  onDone,
+}: {
+  engagement: Engagement;
+  currency: string;
+  locale: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [amount, setAmount] = useState(engagement.amount);
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await api.companies.reviseEngagement(engagement.id, {
+        amount,
+        reason: reason || null,
+      });
+      onDone();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not revise price');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} title="Revise Commercial Terms">
+      <form onSubmit={submit}>
+        <ModalBody className="space-y-4">
+          <Field
+            label="New Amount"
+            value={amount}
+            onChange={setAmount}
+            placeholder={engagement.amount}
+            required
+          />
+          <Field
+            label="Reason for Change"
+            value={reason}
+            onChange={setReason}
+            placeholder="e.g. Scope increase or annual pricing review"
+            required
+          />
+          {error && <ErrorNote>{error}</ErrorNote>}
+        </ModalBody>
+
+        <ModalFooter>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" loading={saving}>
+            Save New Terms
+          </Button>
+        </ModalFooter>
+      </form>
+    </Modal>
   );
 }

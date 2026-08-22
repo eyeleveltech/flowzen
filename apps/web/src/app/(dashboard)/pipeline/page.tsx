@@ -1,238 +1,268 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
-import { useAuthStore } from '@/stores';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { motion } from 'framer-motion';
-import { api } from '@/lib/api';
-import { getSSE } from '@/lib/sse';
-import { LeadListView } from './components/LeadListView';
-import { PipelineDashboard } from './components/PipelineDashboard';
-import { PipelineBoardView } from './components/PipelineBoardView';
-import { Plus, Settings } from 'lucide-react';
-import { LeadModal } from './components/LeadModal';
-import { AnimatePresence } from 'framer-motion';
-import { ViewSettingsPanel } from '@/components/ui/view-settings-panel';
-import toast from 'react-hot-toast';
+/**
+ * The pipeline board.
+ *
+ * One column per stage, read from the database rather than a constant — so
+ * renaming or reordering a stage changes the board without a deploy (§3.4).
+ *
+ * The Active column is gone. It mapped to two stages and the drop handler always
+ * picked the first, which is how a one-off project ended up billing monthly
+ * forever (§1.3 ①). Winning now goes through a dialog that asks, and a server
+ * that refuses without an answer.
+ */
 
-import { usePageTitle } from '@/hooks/usePageTitle';
-import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
-import { Icon } from '@/components/ui/icon';
+import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
+import { Clock, Pause } from 'lucide-react';
+import {
+  api,
+  ApiError,
+  formatMoney,
+  type BoardColumn,
+  type BoardDeal,
+  type OrgConfig,
+} from '@/lib/api-v2';
+import { PageHeader } from '@/components/PageHeader';
+import { Note } from '@/components/ui/empty-state';
+import { PageSkeleton } from '@/components/ui/skeleton-loaders';
+import { getInitials, getAvatarColor } from '@/lib/utils';
+import { WinDealDialog } from './components/WinDealDialog';
+import { ExtendedCompanyInfoModal } from '@/components/clients/ExtendedCompanyInfoModal';
+import { NewDealModal } from './components/NewDealModal';
+import { Button } from '@/components/ui/button';
 
-function PipelineContent() {
-  usePageTitle('Pipeline');
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { user } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<'BOARD' | 'LIST' | 'DASHBOARD'>('BOARD');
-  const [totalLeads, setTotalLeads] = useState(0);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+export default function PipelinePage() {
+  const [columns, setColumns] = useState<BoardColumn[]>([]);
+  const [config, setConfig] = useState<OrgConfig | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState<BoardDeal | null>(null);
+  const [winning, setWinning] = useState<BoardDeal | null>(null);
+  const [needsInfo, setNeedsInfo] = useState<{ deal: BoardDeal; columnId: string } | null>(null);
+  const [creating, setCreating] = useState(false);
 
-  // Quick Create ("+ → New Lead") lands here as /pipeline?create=true. The page defaults to the
-  // BOARD tab, which never read the param — so the header button silently did nothing. Honor it
-  // at page level, whatever tab is active.
-  useEffect(() => {
-    if (searchParams.get('create') === 'true') {
-      setIsModalOpen(true);
-      // Drop the param so tab switches / refreshes don't re-trigger the modal.
-      router.replace('/pipeline');
-    }
-  }, [searchParams, router]);
-  const [showViewSettings, setShowViewSettings] = useState(false);
-  const [viewName, setViewName] = useState('All Leads');
-
-  const LOCAL_STORAGE_KEY = 'flowzen_view_pipeline';
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (parsed.name) setViewName(parsed.name);
-          if (parsed.visibleColumns) setVisibleColumns(parsed.visibleColumns);
-          // Always default CRM pipeline to BOARD (Kanban) on mount
-          setActiveTab('BOARD');
-        } catch (e) {
-          console.error(e);
-        }
-      }
+  const load = useCallback(async () => {
+    try {
+      const [board, cfg] = await Promise.all([api.deals.board(), api.config.get()]);
+      setColumns(board.columns);
+      setConfig(cfg);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load the board');
+    } finally {
+      setLoading(false);
     }
   }, []);
 
-  const PIPELINE_COLUMNS = [
-    { id: 'lead', label: 'Lead' },
-    { id: 'company', label: 'Company' },
-    { id: 'value', label: 'Value' },
-    { id: 'stage', label: 'Stage' },
-    { id: 'owner', label: 'Owner' },
-  ];
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(PIPELINE_COLUMNS.map(c => c.id));
-
-  // Debounced because a bulk action (importing 500 leads, deleting a selection) fires one
-  // lead:updated per row. Without this the header would re-count once per event.
-  const refreshTotal = useDebouncedCallback(() => { fetchTotal(); }, 300);
-
   useEffect(() => {
-    fetchTotal();
-    const sse = getSSE();
-    if (sse) {
-      sse.on('lead:updated', refreshTotal);
-      return () => { sse.off('lead:updated', refreshTotal); };
+    void load();
+  }, [load]);
+
+  const drop = async (deal: BoardDeal, column: BoardColumn) => {
+    setDragging(null);
+
+    // Winning is not a drag. It creates billing and needs terms the board does
+    // not carry, so the drop opens the dialog instead of guessing.
+    if (column.kind === 'WON') {
+      setWinning(deal);
+      return;
     }
-  }, [refreshTotal]);
 
-  // Removed mobile view-override useEffect to default to BOARD view on both desktop and mobile.
+    if (column.kind === 'LOST') {
+      // Losing needs a reason, or "why do we lose?" is unanswerable.
+      const reason = config?.lostReasons[0];
+      if (!reason) return;
+      window.location.href = `/pipeline/${deal.id}?lose=1`;
+      return;
+    }
 
-  async function fetchTotal() {
+    if (column.requiresForecast) {
+      if (!deal.company.gstNumber || !deal.company.billingAddress) {
+        setNeedsInfo({ deal, columnId: column.id });
+        return;
+      }
+    }
+
     try {
-      // Counts in the database. This used to fetch every lead with all its relations and read
-      // `.length` off the array — ~780 KB at 500 leads, to render one number.
-      const data = await api.get<{ count: number }>('/crm/leads/count');
-      setTotalLeads(data.count || 0);
-    } catch (err) { }
-  }
+      await api.deals.moveStage(deal.id, column.id);
+      await load();
+    } catch (e) {
+      // The server reports every missing field at once, so the person is told
+      // everything they need rather than one thing per attempt.
+      if (e instanceof ApiError && e.fieldErrors.length) {
+        setError(e.fieldErrors.map((f) => f.message).join(' '));
+      } else {
+        setError(e instanceof Error ? e.message : 'Could not move the deal');
+      }
+      await load();
+    }
+  };
 
-  if (user && user.role === 'TEAM_MEMBER') {
-    router.push('/dashboard');
-    return null;
-  }
+  if (loading) return <PageSkeleton />;
+
+  const currency = config?.organization.currency ?? 'INR';
+  const locale = config?.organization.locale ?? 'en-IN';
+
+  const openDeals = columns
+    .filter((c) => c.kind === 'OPEN')
+    .reduce((n, c) => n + c.deals.length, 0);
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header & Tabs */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-primary tracking-tight flex items-center gap-2">
-            Pipeline
-            <span className="text-xs font-normal text-body-soft bg-subtle px-2 py-0.5 rounded-lg border border-border">
-              {viewName}
-            </span>
-          </h1>
-          <p className="text-sm text-secondary mt-1">{totalLeads} total leads</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-4 self-start sm:self-auto w-full sm:w-auto">
-          {activeTab === 'BOARD' && (
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="flex items-center justify-center rounded-xl bg-primary h-9.5 w-9.5 shrink-0 text-white hover:bg-primary-hover transition-all shadow-sm"
-              title="Add Lead"
-            >
-              <Icon as={Plus} size="md" />
-            </button>
-          )}
-          <div className="flex items-center gap-2 shrink-0 max-w-full overflow-x-auto no-scrollbar">
-            <div className="flex items-center gap-1 p-1 bg-subtle rounded-xl shrink-0">
-              <button
-                onClick={() => setActiveTab('BOARD')}
-                className={`px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium rounded-lg transition-all ${activeTab === 'BOARD' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-body'}`}
-              >
-                Board
-              </button>
-              <button
-                onClick={() => setActiveTab('LIST')}
-                className={`px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium rounded-lg transition-all ${activeTab === 'LIST' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-body'}`}
-              >
-                List
-              </button>
-              <button
-                onClick={() => setActiveTab('DASHBOARD')}
-                className={`px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium rounded-lg transition-all ${activeTab === 'DASHBOARD' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-body'}`}
-              >
-                Analytics
-              </button>
-            </div>
-            <button
-              onClick={() => setShowViewSettings(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-secondary hover:text-primary bg-white border border-border rounded-lg shadow-sm transition-colors hover:bg-gray-50 h-9 shrink-0"
-              title="Configure View Settings"
-            >
-              <Icon as={Settings} size="sm" />
-              <span className="hidden sm:inline">View Settings</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content Area */}
-      <motion.div
-        key={activeTab}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2 }}
-        className="flex-1"
-      >
-        {activeTab === 'BOARD' ? <PipelineBoardView /> : activeTab === 'LIST' ? <LeadListView /> : <PipelineDashboard />}
-      </motion.div>
-
-      <AnimatePresence>
-        {isModalOpen && (
-          <LeadModal
-            initialMode="MANUAL"
-            onClose={() => setIsModalOpen(false)}
-            onSuccess={() => {
-              setIsModalOpen(false);
-              fetchTotal();
-            }}
-          />
-        )}
-      </AnimatePresence>
-      <ViewSettingsPanel
-        isOpen={showViewSettings}
-        onClose={() => setShowViewSettings(false)}
-        viewName={viewName}
-        onViewNameChange={setViewName}
-        viewType={activeTab === 'LIST' ? 'list' : 'board'}
-        onViewTypeChange={(type) => setActiveTab(type === 'list' ? 'LIST' : 'BOARD')}
-        columns={PIPELINE_COLUMNS}
-        visibleColumns={visibleColumns}
-        onVisibleColumnsChange={setVisibleColumns}
-        onSave={() => {
-          if (typeof window !== 'undefined') {
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({
-              name: viewName,
-              visibleColumns,
-              viewType: activeTab
-            }));
-          }
-          toast.success('View Settings saved successfully!');
-          setShowViewSettings(false);
-        }}
-        onReset={() => {
-          if (typeof window !== 'undefined') {
-            localStorage.removeItem(LOCAL_STORAGE_KEY);
-          }
-          setViewName('All Leads');
-          setActiveTab('BOARD');
-          setVisibleColumns(PIPELINE_COLUMNS.map(c => c.id));
-          toast.success('View Settings reset to defaults');
-        }}
-        onClone={() => {
-          const clonedName = viewName + ' (Copy)';
-          setViewName(clonedName);
-          if (typeof window !== 'undefined') {
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({
-              name: clonedName,
-              visibleColumns,
-              viewType: activeTab
-            }));
-          }
-          toast.success('Cloned successfully to a new view copy!');
-          setShowViewSettings(false);
-        }}
+    <>
+      <PageHeader 
+        title="Pipeline" 
+        subtitle={`${openDeals} open deals`} 
+        action={<Button variant="primary" onClick={() => setCreating(true)}>New Deal</Button>}
       />
-    </div>
-  );
-}
 
-export default function PipelinePage() {
-  return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center min-h-100">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      {/*
+        A refused move is a rule, not a failure — the server names every missing
+        field at once so the person is told everything they need.
+      */}
+      {error && (
+        <div className="mb-4">
+          <Note tone="warn">
+            {error}{' '}
+            <button onClick={() => setError(null)} className="font-medium underline">
+              Dismiss
+            </button>
+          </Note>
+        </div>
+      )}
+
+      <div className="flex gap-4 overflow-x-auto pb-4" style={{ minHeight: 'calc(100vh - 200px)' }}>
+        {columns.map((column) => (
+          <div
+            key={column.id}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={() => dragging && drop(dragging, column)}
+            className="flex w-72 shrink-0 flex-col rounded-card border border-border bg-surface max-h-[calc(100vh-220px)]"
+          >
+            <div className="border-b border-border p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-primary">{column.name}</span>
+                <span className="rounded-full bg-subtle px-2 py-0.5 text-xs tabular-nums text-secondary">
+                  {column.deals.length}
+                </span>
+              </div>
+              <div className="mt-1 flex items-center gap-2 text-xs text-secondary">
+                <span className="tabular-nums">{formatMoney(column.total, currency, locale)}</span>
+                {column.requiresForecast && (
+                  <span title="A deal needs a value and a close date to enter this stage">
+                    · needs a forecast
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-1 flex-col gap-2 p-2 overflow-y-auto">
+              {column.deals.map((deal) => (
+                <article
+                  key={deal.id}
+                  draggable
+                  onDragStart={() => setDragging(deal)}
+                  onDragEnd={() => setDragging(null)}
+                  className={`cursor-grab rounded-xl border bg-white p-3 hover:border-primary transition-colors active:cursor-grabbing ${
+                    deal.isRotting ? 'border-amber-300' : 'border-border'
+                  }`}
+                >
+                  <Link href={`/pipeline/${deal.id}`} className="block">
+                    <p className="inline-block rounded-md bg-blue-50 px-2 py-0.5 text-[13px] font-semibold text-blue-700 border border-blue-100 mb-1">{deal.company.name}</p>
+                    <p className="mt-0.5 text-xs text-secondary">{deal.title ?? 'Untitled deal'}</p>
+                  </Link>
+
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className="text-sm font-semibold tabular-nums text-primary">
+                      {formatMoney(deal.value, currency, locale)}
+                    </span>
+                    {deal.owner && (
+                      <span
+                        title={deal.owner.name}
+                        className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold ${getAvatarColor(deal.owner.name)}`}
+                      >
+                        {getInitials(deal.owner.name)}
+                      </span>
+                    )}
+                  </div>
+
+                  {/*
+                    The two stall signals, on the card rather than only in an
+                    overnight scan. The thresholds already existed and were
+                    scanned daily but never shown (§1.3 ⑧).
+                  */}
+                  {(deal.isRotting || deal.blockedOn || deal.isOnHold) && (
+                    <div className="mt-2 space-y-1 border-t border-border pt-2">
+                      {deal.isOnHold && (
+                        <p className="flex items-center gap-1 text-[11px] text-secondary">
+                          <Pause className="h-3 w-3" />
+                          Parked{deal.holdReason ? ` — ${deal.holdReason}` : ''}
+                        </p>
+                      )}
+                      {deal.isRotting && !deal.isOnHold && (
+                        <p className="flex items-center gap-1 text-[11px] font-medium text-amber-700">
+                          <Clock className="h-3 w-3" />
+                          {deal.daysInStage} days in {column.name}
+                        </p>
+                      )}
+                      {deal.blockedOn && (
+                        <p className="text-[11px] text-secondary">Waiting on: {deal.blockedOn}</p>
+                      )}
+                    </div>
+                  )}
+                </article>
+              ))}
+
+              {column.deals.length === 0 && (
+                <p className="px-2 py-6 text-center text-xs text-secondary">Nothing here</p>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
-    }>
-      <PipelineContent />
-    </Suspense>
+
+      {winning && (
+        <WinDealDialog
+          dealId={winning.id}
+          dealTitle={winning.title ?? 'Untitled deal'}
+          companyName={winning.company.name}
+          defaults={winning.value ? { amount: winning.value } : undefined}
+          onClose={() => setWinning(null)}
+          onWon={() => {
+            setWinning(null);
+            void load();
+          }}
+        />
+      )}
+
+      {creating && (
+        <NewDealModal 
+          onConfirm={(deal) => {
+            setCreating(false);
+            window.location.href = `/pipeline/${deal.id}`;
+          }} 
+          onCancel={() => setCreating(false)} 
+        />
+      )}
+
+      {needsInfo && (
+        <ExtendedCompanyInfoModal
+          company={needsInfo.deal.company as any}
+          onConfirm={async (updated) => {
+            const { deal, columnId } = needsInfo;
+            setNeedsInfo(null);
+            
+            // Proceed with moving the deal now that company info is updated
+            try {
+              await api.deals.moveStage(deal.id, columnId);
+              await load();
+            } catch (e: any) {
+              setError(e.message || 'Could not move the deal');
+            }
+          }}
+          onCancel={() => setNeedsInfo(null)}
+        />
+      )}
+    </>
   );
 }

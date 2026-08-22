@@ -16,7 +16,7 @@ export async function createAuditLog(params: {
         action: params.action,
         entityType: params.entityType,
         entityId: params.entityId,
-        details: params.details || null
+        after: params.details || null
       }
     });
   } catch (error) {

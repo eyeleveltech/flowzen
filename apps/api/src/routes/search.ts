@@ -1,155 +1,101 @@
-import { Router, Response } from 'express';
+/**
+ * One search box over everything.
+ *
+ * Scoped to the organisation on every branch — a search that forgets its
+ * organisation is the most direct way to leak one client's data to another, and
+ * it looks like a working feature while it does it (master plan §5).
+ *
+ * Money is not searchable text, so invoices and quotations match on their NUMBER.
+ * That is what somebody has in front of them when they come looking.
+ */
+
+import { Router, type Response, type NextFunction } from 'express';
 import { prisma } from '../lib/prisma.js';
-import { authenticate, AuthRequest } from '../middleware/auth.js';
-import { getEnabledModuleKeys } from '../lib/modules.js';
-import { buildSearchFilter } from '../utils/search-utils.js';
-import { withPrimaryContactFields } from '../services/leadContact.service.js';
+import { authenticate, queryParam, rankOf, type AuthRequest } from '../middleware/auth.js';
 
 export const searchRouter = Router();
+
 searchRouter.use(authenticate);
 
-// GET /api/search?q=term
-searchRouter.get('/', async (req: AuthRequest, res: Response, next) => {
-  try {
-    const orgId = req.user!.organizationId;
-    const query = req.query.q as string;
+const LIMIT = 6;
 
-    if (!query || query.length < 2) {
-      res.json({ clients: [], projects: [], tasks: [], members: [], leads: [], quotes: [] });
+searchRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const q = (queryParam(req, 'q') ?? '').trim();
+    // Two characters is the point where results stop being everything.
+    if (q.length < 2) {
+      res.json({ success: true, data: { companies: [], deals: [], projects: [], tasks: [], quotes: [], invoices: [] } });
       return;
     }
 
-    const enabledModules = await getEnabledModuleKeys(orgId);
-    const hasCrm = enabledModules.includes('CRM');
-    const hasPm = enabledModules.includes('PM');
+    const orgId = req.user!.organizationId;
+    const contains = { contains: q, mode: 'insensitive' as const };
+    // Money is the one real dividing line, so quotations and invoices are only
+    // searched for people who are allowed to see them (§3.10).
+    const seesMoney = rankOf(req.user!.role) >= rankOf('ADMIN');
 
-    const isTeamMember = req.user!.role === 'TEAM_MEMBER';
-    const isCrmRole = ['SUPER_ADMIN', 'ADMIN'].includes(req.user!.role);
-    const userId = req.user!.userId;
-
-    const canSearchClients = hasCrm || hasPm;
-    const canSearchProjects = hasPm;
-    const canSearchTasks = hasPm;
-    const canSearchMembers = hasCrm || hasPm;
-    // Leads and quotations are CRM objects — searchable only by the roles the CRM API itself
-    // admits (SUPER_ADMIN/ADMIN, see /api/crm gating), so search can't leak pipeline data.
-    const canSearchCrm = hasCrm && isCrmRole;
-
-    const projectWhere: any = {
-      client: { organizationId: orgId },
-      ...buildSearchFilter(['name', 'description'], query),
-    };
-    if (isTeamMember) {
-      projectWhere.AND = [
-        {
-          OR: [
-            { members: { some: { userId } } },
-            { teams: { some: { team: { members: { some: { id: userId } } } } } },
-          ],
+    const [companies, deals, projects, tasks, quotes, invoices] = await Promise.all([
+      prisma.company.findMany({
+        where: { organizationId: orgId, OR: [{ name: contains }, { email: contains }, { phone: contains }] },
+        select: { id: true, name: true, status: true },
+        take: LIMIT,
+      }),
+      prisma.deal.findMany({
+        where: { organizationId: orgId, title: contains },
+        select: { id: true, title: true, company: { select: { name: true } }, stage: { select: { name: true } } },
+        take: LIMIT,
+      }),
+      prisma.project.findMany({
+        where: { organizationId: orgId, name: contains },
+        select: { id: true, name: true, company: { select: { name: true } } },
+        take: LIMIT,
+      }),
+      prisma.task.findMany({
+        where: { organizationId: orgId, title: contains },
+        select: {
+          id: true,
+          title: true,
+          projectId: true,
+          dealId: true,
+          project: { select: { name: true } },
         },
-      ];
-    }
-
-    const taskWhere: any = {
-      project: { client: { organizationId: orgId } },
-      ...buildSearchFilter(['title', 'description'], query),
-    };
-    if (isTeamMember) {
-      taskWhere.AND = [
-        {
-          OR: [
-            { assigneeId: userId },
-            { assignees: { some: { id: userId } } },
-          ],
-        },
-      ];
-    }
-
-    const [clients, projects, tasks, members, leads, quotes] = await Promise.all([
-      canSearchClients
-        ? prisma.client.findMany({
-            where: {
-              organizationId: orgId,
-              archivedAt: null,
-              ...buildSearchFilter(['name', 'company'], query),
-            },
-            select: { id: true, name: true, company: true, status: true },
-            take: 5,
+        take: LIMIT,
+      }),
+      seesMoney
+        ? prisma.quote.findMany({
+            where: { organizationId: orgId, number: contains },
+            select: { id: true, number: true, total: true, company: { select: { name: true } } },
+            take: LIMIT,
           })
-        : Promise.resolve([]),
-      canSearchProjects
-        ? prisma.project.findMany({
-            where: projectWhere,
-            select: { id: true, name: true, status: true, client: { select: { name: true, company: true } } },
-            take: 5,
+        : [],
+      seesMoney
+        ? prisma.invoice.findMany({
+            where: { organizationId: orgId, number: contains },
+            select: { id: true, number: true, total: true, company: { select: { name: true } } },
+            take: LIMIT,
           })
-        : Promise.resolve([]),
-      canSearchTasks
-        ? prisma.task.findMany({
-            where: taskWhere,
-            select: { id: true, title: true, status: true, project: { select: { name: true } } },
-            take: 5,
-          })
-        : Promise.resolve([]),
-      canSearchMembers
-        ? prisma.user.findMany({
-            where: {
-              organizationId: orgId,
-              status: 'ACTIVE',
-              ...(isTeamMember ? { id: userId } : buildSearchFilter(['name', 'email'], query)),
-            },
-            select: { id: true, name: true, email: true, avatar: true, role: true },
-            take: 5,
-          })
-        : Promise.resolve([]),
-      canSearchCrm
-        ? prisma.lead.findMany({
-            where: {
-              organizationId: orgId,
-              // Searches the company plus ANY of the lead's contacts — a lead is a company with
-              // several people on it, so finding it by a secondary contact's email is expected.
-              ...buildSearchFilter([
-                'companyName', 'leadId',
-                {
-                  contacts: {
-                    some: {
-                      OR: [
-                        { name: { contains: query.trim(), mode: 'insensitive' as const } },
-                        { email: { contains: query.trim(), mode: 'insensitive' as const } },
-                        { phone: { contains: query.trim(), mode: 'insensitive' as const } },
-                      ],
-                    },
-                  },
-                },
-              ], query),
-            },
-            select: {
-              id: true, leadId: true, companyName: true, stage: true,
-              contacts: {
-                select: { name: true, isPrimary: true },
-                orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
-                take: 1,
-              },
-            },
-            take: 5,
-          })
-        : Promise.resolve([]),
-      canSearchCrm
-        ? prisma.quoteDocument.findMany({
-            where: {
-              organizationId: orgId,
-              ...buildSearchFilter(['documentNumber', 'clientName'], query),
-            },
-            select: { id: true, documentNumber: true, clientName: true, status: true, documentType: true },
-            take: 5,
-          })
-        : Promise.resolve([]),
+        : [],
     ]);
 
-    // Shape contactName from the primary contact so the palette keeps showing a person once the
-    // lead's flat columns are gone.
-    res.json({ clients, projects, tasks, members, leads: leads.map(withPrimaryContactFields), quotes });
-  } catch (error) {
-    next(error);
+    res.json({
+      success: true,
+      data: {
+        companies,
+        deals,
+        projects,
+        // A task belongs to exactly one of a project or a deal, so where it
+        // links to follows from which parent it has.
+        tasks: tasks.map((t) => ({
+          id: t.id,
+          title: t.title,
+          context: t.project?.name ?? 'On a deal',
+          href: t.projectId ? `/projects/${t.projectId}` : t.dealId ? `/pipeline/${t.dealId}` : '/tasks',
+        })),
+        quotes: quotes.map((q) => ({ ...q, total: q.total.toString() })),
+        invoices: invoices.map((i) => ({ ...i, total: i.total.toString() })),
+      },
+    });
+  } catch (e) {
+    next(e);
   }
 });

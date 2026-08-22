@@ -1,457 +1,388 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
-import toast from 'react-hot-toast';
-import { useAuthStore, useConfirmStore } from '@/stores';
-import { api } from '@/lib/api';
-import { getSSE } from '@/lib/sse';
+import { useEffect, useState, useCallback } from 'react';
+import { Building2, Plus, Users, Pencil, Trash2, UserPlus, UserMinus, Crown, X } from 'lucide-react';
+import { api, ApiError, atLeast, type OrgConfig, type Member } from '@/lib/api-v2';
 import { getInitials, getAvatarColor } from '@/lib/utils';
-import { Plus, X, Users, Edit2, Trash2 } from 'lucide-react';
-import { MultiSelect } from '@/components/ui/multi-select';
-import { Select } from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
-import { ErrorPanel } from '@/components/ui/error-panel';
-import { Drawer } from '@/components/ui/drawer';
+import { PageHeader } from '@/components/PageHeader';
+import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
+import { EmptyState, ErrorNote } from '@/components/ui/empty-state';
+import { PageSkeleton } from '@/components/ui/skeleton-loaders';
+import { Button } from '@/components/ui/button';
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
+import { Field, FieldSelect } from '@/components/ui/field';
 
-interface User {
+type DepartmentUser = {
   id: string;
   name: string;
-  email: string;
-  avatar?: string | null;
-}
+  avatar: string | null;
+  email?: string;
+};
 
-interface TeamManagerItem {
-  user: User;
-}
-
-interface Team {
+type Department = {
   id: string;
   name: string;
-  description?: string | null;
-  managers: TeamManagerItem[];
-  members: User[];
-}
+  headId?: string | null;
+  head?: DepartmentUser | null;
+  users?: DepartmentUser[];
+  _count?: { users: number; tasks: number };
+};
 
-import { usePageTitle } from '@/hooks/usePageTitle';
-import { Icon } from '@/components/ui/icon';
-
-export default function TeamsPage() {
-  usePageTitle('Departments');
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const { user } = useAuthStore();
-  const confirm = useConfirmStore((s) => s.confirm);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [teamsError, setTeamsError] = useState<string | null>(null);
-  const [usersError, setUsersError] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editingId, setEditingId] = useState('');
-
-  const [form, setForm] = useState({ name: '', description: '', managerIds: [] as string[], memberIds: [] as string[] });
-  const [formError, setFormError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-
-  const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
-  const canEdit = (t: Team) => isAdmin || (user?.role === 'PROJECT_MANAGER' && t.managers?.some(m => m.user.id === user?.id));
-  const canDelete = isAdmin;
+function DepartmentModal({
+  open,
+  initial,
+  team,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  initial: Department | null; // null = create
+  team: Member[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [headId, setHeadId] = useState('');
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
+  const [addingMemberId, setAddingMemberId] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user && (user.role === 'TEAM_MEMBER' || user.role === 'PROJECT_MANAGER')) {
-      router.push('/dashboard');
-      return;
+    if (open) {
+      setName(initial?.name ?? '');
+      setHeadId(initial?.headId ?? initial?.head?.id ?? '');
+      setSelectedMemberIds(initial?.users?.map((u) => u.id) ?? []);
+      setAddingMemberId('');
+      setError(null);
     }
-    fetchTeams();
-    fetchUsers();
-  }, [user, router]);
+  }, [open, initial]);
 
-  // Live-update the page when teams/members change anywhere (other users too).
-  useEffect(() => {
-    const sse = getSSE();
-    if (!sse) return;
-    sse.on('team:changed', fetchTeams);
-    sse.on('member:changed', fetchUsers);
-    return () => { sse.off('team:changed', fetchTeams); sse.off('member:changed', fetchUsers); };
-  }, []);
+  const handleAddMember = () => {
+    if (addingMemberId && !selectedMemberIds.includes(addingMemberId)) {
+      setSelectedMemberIds([...selectedMemberIds, addingMemberId]);
+      setAddingMemberId('');
+    }
+  };
 
-  async function fetchTeams() {
-    setTeamsError(null);
+  const handleRemoveMember = (userId: string) => {
+    setSelectedMemberIds(selectedMemberIds.filter((id) => id !== userId));
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setSaving(true);
+    setError(null);
     try {
-      const data = await api.get<{ teams: Team[] }>('/teams');
-      setTeams(data.teams);
-    } catch (e: any) {
-      setTeamsError(e.message || 'Failed to load departments');
+      const payload = {
+        name: name.trim(),
+        headId: headId || null,
+        memberIds: selectedMemberIds,
+      };
+      if (initial) {
+        await api.departments.update(initial.id, payload);
+      } else {
+        await api.departments.create(payload);
+      }
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save department');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const userOptions = [
+    { value: '', label: '— Select Manager / Head —' },
+    ...team.map((m) => ({ value: m.id, label: `${m.name} (${m.role})` })),
+  ];
+
+  const availableUsersToAdd = team.filter((m) => !selectedMemberIds.includes(m.id));
+
+  return (
+    <Modal open={open} onClose={onClose} title={initial ? 'Edit Department' : 'New Department'}>
+      <form onSubmit={submit}>
+        <ModalBody className="space-y-5 max-h-[75vh] overflow-y-auto pr-1">
+          {error && <p className="text-sm font-medium text-red-600 bg-red-50 p-2.5 rounded-md border border-red-200">{error}</p>}
+
+          {/* Department Name */}
+          <Field
+            label="Department Name"
+            value={name}
+            onChange={setName}
+            required
+            placeholder="e.g. Engineering, Design, Marketing"
+          />
+
+          {/* Department Head / Manager */}
+          <div>
+            <FieldSelect
+              label="Department Head / Manager"
+              value={headId}
+              onChange={setHeadId}
+              options={userOptions}
+            />
+            <p className="mt-1 text-xs text-secondary">
+              The person leading this department.
+            </p>
+          </div>
+
+          {/* Members / People Section */}
+          <div className="space-y-3 pt-3 border-t border-border">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold uppercase tracking-wider text-secondary">
+                Department Members ({selectedMemberIds.length})
+              </label>
+            </div>
+
+            {/* List of current assigned members */}
+            {selectedMemberIds.length === 0 ? (
+              <p className="text-sm text-secondary italic bg-subtle/50 p-3 rounded-md border border-dashed border-border text-center">
+                No team members added yet. Choose from below to add people.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 bg-surface rounded-md border border-border">
+                {selectedMemberIds.map((userId) => {
+                  const user = team.find((t) => t.id === userId);
+                  const isHead = userId === headId;
+                  return (
+                    <div
+                      key={userId}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                        isHead
+                          ? 'bg-amber-500/10 text-amber-500 border-amber-500/30'
+                          : 'bg-subtle text-primary border-border shadow-xs'
+                      }`}
+                    >
+                      {user?.avatar ? (
+                        <img src={user.avatar} alt="" className="h-4 w-4 rounded-full object-cover shrink-0" />
+                      ) : (
+                        <span className={`h-4 w-4 rounded-full text-[9px] font-semibold flex items-center justify-center shrink-0 ${getAvatarColor(user?.name)}`}>
+                          {getInitials(user?.name ?? '')}
+                        </span>
+                      )}
+                      {isHead && <Crown className="h-3 w-3 text-amber-500 shrink-0" />}
+                      <span>{user?.name ?? 'Unknown user'}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveMember(userId)}
+                        className="ml-1 text-secondary hover:text-red-500 rounded-full p-0.5"
+                        title="Remove person"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Add Person Selector */}
+            {availableUsersToAdd.length > 0 && (
+              <div className="flex items-center gap-2 pt-1">
+                <select
+                  value={addingMemberId}
+                  onChange={(e) => setAddingMemberId(e.target.value)}
+                  className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm text-primary shadow-xs focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="">Select a person to add…</option>
+                  {availableUsersToAdd.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.role})
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleAddMember}
+                  disabled={!addingMemberId}
+                  className="bg-subtle text-primary hover:bg-muted font-medium border border-border"
+                >
+                  <UserPlus className="h-4 w-4 mr-1" /> Add
+                </Button>
+              </div>
+            )}
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" loading={saving} disabled={!name.trim()}>
+            {initial ? 'Save Changes' : 'Create Department'}
+          </Button>
+        </ModalFooter>
+      </form>
+    </Modal>
+  );
+}
+
+export default function DepartmentsPage() {
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [team, setTeam] = useState<Member[]>([]);
+  const [config, setConfig] = useState<OrgConfig | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<Department | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [list, cfg, teamList] = await Promise.all([
+        api.departments.list() as unknown as Promise<Department[]>,
+        api.config.get(),
+        api.users.list().catch(() => [] as Member[]),
+      ]);
+      setDepartments(Array.isArray(list) ? list : []);
+      setConfig(cfg);
+      setTeam(teamList.filter((u) => u.status === 'ACTIVE'));
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load departments');
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  async function fetchUsers() {
-    setUsersError(null);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this department? Tasks assigned to it will become unassigned.')) return;
+    setDeleting(id);
     try {
-      const data = await api.get<User[]>('/settings/users');
-      setUsers(data);
-    } catch (e: any) {
-      setUsersError(e.message || 'Failed to load users');
-    }
-  }
-
-  function openCreate() {
-    setIsEditing(false);
-    setForm({ name: '', description: '', managerIds: [], memberIds: [] });
-    setShowCreate(true);
-  }
-
-  function openEdit(team: Team) {
-    setIsEditing(true);
-    setEditingId(team.id);
-    setForm({
-      name: team.name,
-      description: team.description || '',
-      managerIds: team.managers?.map(m => m.user.id) || [],
-      memberIds: team.members.map(m => m.id),
-    });
-    setShowCreate(true);
-  }
-
-  async function handleDelete(id: string) {
-    const confirmed = await confirm({
-      title: 'Delete Department',
-      message: 'Are you sure you want to delete this department? This action cannot be undone.',
-      confirmText: 'Delete',
-      cancelText: 'Cancel',
-      variant: 'danger',
-    });
-    if (!confirmed) return;
-    try {
-      await api.delete(`/teams/${id}`);
-      toast.success('Department deleted successfully');
-      fetchTeams();
-      queryClient.invalidateQueries({ queryKey: ['teams'] });
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to delete department');
-    }
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setFormError('');
-    if (form.memberIds.length === 0) { setFormError('Select at least one member.'); setSubmitting(false); return; }
-    if (form.managerIds.length === 0) { setFormError('Select at least one manager.'); setSubmitting(false); return; }
-    setSubmitting(true);
-    try {
-      if (isEditing) {
-        await api.put(`/teams/${editingId}`, form);
-        toast.success('Department updated successfully');
-      } else {
-        await api.post('/teams', form);
-        toast.success('Department created successfully');
-      }
-      setShowCreate(false);
-      fetchTeams();
-      queryClient.invalidateQueries({ queryKey: ['teams'] });
-    } catch (err: any) {
-      setFormError(err.message || 'An error occurred');
-      toast.error(err.message || 'Failed to save department');
+      await api.departments.delete(id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not delete department');
     } finally {
-      setSubmitting(false);
+      setDeleting(null);
     }
-  }
+  };
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-10 w-36 rounded-xl" />
-        </div>
-        <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden p-6 space-y-4">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="flex items-center gap-4 py-3 border-b border-subtle last:border-0">
-              <div className="flex items-center gap-3">
-                <Skeleton className="h-10 w-10 rounded-xl" />
-                <div>
-                  <Skeleton className="h-5 w-32 mb-1" />
-                  <Skeleton className="h-4 w-48" />
-                </div>
-              </div>
-              <Skeleton className="h-6 w-24 ml-auto" />
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
+  const canManage = atLeast(config?.me.role as any, 'MANAGER');
+
+  if (loading) return <PageSkeleton />;
 
   return (
-    <div>
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-semibold text-primary">Departments</h1>
-          <p className="text-secondary mt-1 text-xs sm:text-sm">Manage departments and groups within your organization.</p>
-        </div>
-        {isAdmin && (
-          <button
-            onClick={openCreate}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover transition-colors duration-150 motion-reduce:transition-none hover:shadow-sm self-start sm:self-auto"
-          >
-            <Icon as={Plus} size="md" />
-            Create Department
-          </button>
-        )}
-      </div>
+    <div className="space-y-6 pb-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <PageHeader
+        title="Departments"
+        subtitle={`${departments.length} department${departments.length !== 1 ? 's' : ''}`}
+        action={
+          canManage && (
+            <Button
+              className="gap-2"
+              onClick={() => { setEditing(null); setModalOpen(true); }}
+            >
+              <Plus className="h-4 w-4" />
+              Add Department
+            </Button>
+          )
+        }
+      />
 
-      <div className="bg-white rounded-2xl border border-border overflow-hidden">
-        {teamsError ? (
-          <div className="py-12">
-            <ErrorPanel message={teamsError} onRetry={fetchTeams} />
-          </div>
-        ) : (
-          <>
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-200">
-                <thead>
-                  <tr className="bg-surface border-b border-border">
-                    <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide">Department Name</th>
-                    <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide">Managers</th>
-                    <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide">Members</th>
-                    <th className="px-6 py-4 text-xs font-medium text-secondary uppercase tracking-wide text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {teams.map(team => (
-                    <tr key={team.id} className="hover:bg-surface transition-colors group">
-                      <td className="px-6 py-5">
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-xl bg-subtle text-primary flex items-center justify-center border border-border shrink-0">
-                            <Icon as={Users} size="lg" />
-                          </div>
-                          <div>
-                            <h3 className="font-semibold text-primary">{team.name}</h3>
-                            <p className="text-xs text-secondary line-clamp-1 max-w-62.5">{team.description || 'No description'}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-5">
-                        {team.managers && team.managers.length > 0 ? (
-                          <div className="flex items-center gap-2">
-                            <div className="flex -space-x-1.5">
-                              {team.managers.slice(0, 3).map((mgr, i) => (
-                                <div
-                                  key={mgr.user.id}
-                                  className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-2 ring-white text-[10px] font-bold ${getAvatarColor(mgr.user.name)}`}
-                                  style={{ zIndex: 3 - i }}
-                                  title={mgr.user.name}
-                                >
-                                  {getInitials(mgr.user.name)}
-                                </div>
-                              ))}
-                            </div>
-                            <span className="text-xs font-medium text-primary">
-                              {team.managers.map(m => m.user.name).join(', ')}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-sm text-secondary italic">No Managers</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-5">
-                        <div className="flex items-center gap-3">
-                          <div className="flex -space-x-2">
-                            {team.members.slice(0, 5).map((m, i) => (
-                              <div
-                                key={m.id}
-                                className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-2 ring-white text-[10px] font-bold ${getAvatarColor(m.name)}`}
-                                style={{ zIndex: 5 - i }}
-                                title={m.name}
-                              >
-                                {getInitials(m.name)}
-                              </div>
-                            ))}
-                            {team.members.length > 5 && (
-                              <div
-                                className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-2 ring-white bg-subtle text-primary border border-border text-[10px] font-semibold"
-                                style={{ zIndex: 0 }}
-                              >
-                                +{team.members.length - 5}
-                              </div>
-                            )}
-                          </div>
-                          <span className="text-xs font-medium text-secondary">{team.members.length} members</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-5 text-right">
-                        {(canEdit(team) || canDelete) && (
-                          <div className="flex gap-2 justify-end opacity-100 lg:opacity-0 lg:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                            {canEdit(team) && (
-                              <button onClick={() => openEdit(team)} className="p-2 text-secondary hover:text-primary bg-white border border-border hover:bg-subtle rounded-xl transition-colors duration-150 motion-reduce:transition-none hover:shadow-sm">
-                                <Icon as={Edit2} size="md" />
-                              </button>
-                            )}
-                            {canDelete && (
-                              <button onClick={() => handleDelete(team.id)} className="p-2 text-secondary hover:text-red-600 bg-white border border-border hover:bg-red-50 hover:border-red-100 rounded-xl transition-colors duration-150 motion-reduce:transition-none hover:shadow-sm">
-                                <Icon as={Trash2} size="md" />
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {teams.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-6 py-8 text-center text-sm text-secondary">No departments found.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+      {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
 
-            {/* Mobile Card View (Optimized for 320px+) */}
-            <div className="md:hidden flex flex-col divide-y divide-border">
-              {teams.map((team) => (
-                <div key={team.id} className="p-3.5 sm:p-4 hover:bg-surface transition-colors relative">
-                  <div className="flex items-start justify-between gap-2 mb-3">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="h-9 w-9 rounded-xl bg-subtle text-body flex items-center justify-center border border-border/50 shrink-0">
-                        <Icon as={Users} size="md" />
-                      </div>
-                      <div className="min-w-0">
-                        <h3 className="font-semibold text-primary text-sm truncate">{team.name}</h3>
-                        <p className="text-xs text-secondary truncate max-w-37.5 sm:max-w-none">{team.description || 'No description'}</p>
-                      </div>
-                    </div>
-                    {(canEdit(team) || canDelete) && (
-                      <div className="flex gap-1.5 shrink-0">
-                        {canEdit(team) && (
-                          <button onClick={() => openEdit(team)} className="p-1.5 text-secondary hover:text-primary bg-white border border-border hover:bg-subtle rounded-xl transition-colors duration-150 motion-reduce:transition-none hover:shadow-sm">
-                            <Icon as={Edit2} size="md" />
-                          </button>
-                        )}
-                        {canDelete && (
-                          <button onClick={() => handleDelete(team.id)} className="p-1.5 text-secondary hover:text-red-600 bg-white border border-border hover:bg-red-50 hover:border-red-100 rounded-xl transition-colors duration-150 motion-reduce:transition-none hover:shadow-sm">
-                            <Icon as={Trash2} size="md" />
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 mt-3 bg-surface p-2.5 rounded-xl border border-border">
-                    <div className="min-w-0">
-                      <span className="text-[10px] font-medium text-secondary uppercase tracking-wide block mb-1">Managers</span>
-                      {team.managers && team.managers.length > 0 ? (
-                        <span className="text-xs font-medium text-primary block truncate">
-                          {team.managers.map(m => m.user.name).join(', ')}
-                        </span>
+      {departments.length === 0 ? (
+        <EmptyState
+          icon={Building2}
+          title="No departments yet"
+          hint="Create your first department to organise your team's tasks."
+          action={
+            canManage ? (
+              <Button onClick={() => { setEditing(null); setModalOpen(true); }}>
+                Add Department
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : (
+        <Table>
+          <THead>
+            <TR className="bg-surface hover:bg-surface">
+              <TH>DEPARTMENT</TH>
+              <TH>HEAD / MANAGER</TH>
+              <TH>MEMBERS</TH>
+              <TH>ACTIVE TASKS</TH>
+              {canManage && <TH className="text-right">ACTIONS</TH>}
+            </TR>
+          </THead>
+          <TBody>
+            {departments.map((dept) => (
+              <TR key={dept.id} className="hover:bg-subtle group transition-colors">
+                <TD className="font-semibold text-primary py-3.5 text-xs">{dept.name}</TD>
+                <TD>
+                  {dept.head ? (
+                    <div className="flex items-center gap-2">
+                      {dept.head.avatar ? (
+                        <img src={dept.head.avatar} alt="" className="h-6 w-6 rounded-full object-cover shrink-0 border border-border" />
                       ) : (
-                        <span className="text-xs text-secondary italic">No Managers</span>
+                        <span className={`h-6 w-6 rounded-full font-bold text-[10px] flex items-center justify-center shrink-0 ${getAvatarColor(dept.head.name)}`}>
+                          {getInitials(dept.head.name)}
+                        </span>
                       )}
+                      <span className="text-xs text-primary font-medium">{dept.head.name}</span>
                     </div>
-
-                    <div className="min-w-0">
-                      <span className="text-[10px] font-medium text-secondary uppercase tracking-wide block mb-1">Members ({team.members.length})</span>
-                      <div className="flex -space-x-1.5">
-                        {team.members.slice(0, 4).map((m, i) => (
-                          <div
-                            key={m.id}
-                            className={`relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-2 ring-surface text-[8px] font-bold ${getAvatarColor(m.name)}`}
-                            style={{ zIndex: 4 - i }}
-                            title={m.name}
-                          >
-                            {getInitials(m.name)}
-                          </div>
-                        ))}
-                        {team.members.length > 4 && (
-                          <div
-                            className="relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-2 ring-[#F9FAFB] bg-subtle text-primary border border-border text-[7px] font-semibold"
-                            style={{ zIndex: 0 }}
-                          >
-                            +{team.members.length - 4}
-                          </div>
-                        )}
-                      </div>
+                  ) : (
+                    <span className="text-xs text-muted">— Unassigned —</span>
+                  )}
+                </TD>
+                <TD>
+                  <button
+                    onClick={() => { setEditing(dept); setModalOpen(true); }}
+                    className="flex items-center gap-1.5 text-secondary hover:text-primary transition-colors text-xs font-medium hover:underline"
+                  >
+                    <Users className="h-3.5 w-3.5" />
+                    <span>{dept._count?.users ?? dept.users?.length ?? 0} members</span>
+                  </button>
+                </TD>
+                <TD className="text-xs text-secondary font-medium">{dept._count?.tasks ?? 0} tasks</TD>
+                {canManage && (
+                  <TD className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="Edit Department"
+                        onClick={() => { setEditing(dept); setModalOpen(true); }}
+                        className="h-8 w-8 p-0 text-secondary hover:text-primary"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 text-secondary hover:text-red-600"
+                        title="Delete Department"
+                        onClick={() => handleDelete(dept.id)}
+                        disabled={deleting === dept.id}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
-                  </div>
-                </div>
-              ))}
-              {teams.length === 0 && (
-                <div className="p-8 text-center text-sm text-secondary">No departments found.</div>
-              )}
-            </div>
-          </>
-        )}
-      </div>
+                  </TD>
+                )}
+              </TR>
+            ))}
+          </TBody>
+        </Table>
+      )}
 
-      <Drawer
-        variant="slideover"
-        isOpen={showCreate}
-        onClose={() => setShowCreate(false)}
-        title={isEditing ? 'Edit Department' : 'Create Department'}
-      >
-        <form onSubmit={handleSubmit} className="relative space-y-4">
-          {formError && <div className="absolute top-0 left-0 right-0 -mt-2 z-10 rounded-xl bg-red-50 p-3 text-sm text-red-600 shadow-sm border border-red-100">{formError}</div>}
-
-          <div>
-            <label className="block text-sm font-medium text-body mb-1.5">Department Name *</label>
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none" />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-body mb-1.5">Description</label>
-            <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none resize-none" />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-body mb-1.5">Department Members *</label>
-            <MultiSelect
-              compact={false}
-              options={users.map(u => ({
-                label: u.name,
-                value: u.id,
-                image: getInitials(u.name),
-                colorClass: getAvatarColor(u.name)
-              }))}
-              value={form.memberIds}
-              onChange={(val) => {
-                const validManagerIds = form.managerIds.filter(id => val.includes(id));
-                setForm({ ...form, memberIds: val, managerIds: validManagerIds });
-              }}
-              placeholder="Search and select members..."
-            />
-            {usersError && <p className="text-xs text-red-500 mt-1">{usersError}</p>}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-body mb-1.5">Managers *</label>
-            <MultiSelect
-              compact={false}
-              options={users.filter(u => form.memberIds.includes(u.id)).map(u => ({
-                label: u.name,
-                value: u.id,
-                image: getInitials(u.name),
-                colorClass: getAvatarColor(u.name)
-              }))}
-              value={form.managerIds}
-              onChange={(val) => setForm({ ...form, managerIds: val })}
-              placeholder="Search and select managers..."
-            />
-            {form.memberIds.length === 0 && (
-              <p className="text-xs text-secondary mt-1">Please add members first before assigning managers.</p>
-            )}
-          </div>
-
-          <div className="pt-4 flex gap-3">
-            <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-body hover:bg-surface transition-colors duration-150 motion-reduce:transition-none">Cancel</button>
-            <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none">{submitting ? 'Saving...' : 'Save Department'}</button>
-          </div>
-        </form>
-      </Drawer>
+      <DepartmentModal
+        open={modalOpen}
+        initial={editing}
+        team={team}
+        onClose={() => setModalOpen(false)}
+        onSaved={load}
+      />
     </div>
   );
 }

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { api } from '@/lib/api';
+import { api } from '@/lib/api-v2';
 import { useAuthStore, useUIStore, useModuleStore } from '@/stores';
 import { moduleForPath, canAccessModule } from '@/lib/modules';
 import { Sidebar } from '@/components/layout/sidebar';
@@ -26,8 +26,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     loadFromStorage();
     hydrateModule();
-    // Refresh the session (incl. enabledModules) so module gating reflects the server.
-    api.get('/auth/me').then((fresh: any) => setAuth(fresh)).catch(() => { });
+    // Refresh the session (incl. role and enabledModules) so gating reflects the
+    // server. /auth/me answers { user: … } — storing the envelope instead of the
+    // user left role and name undefined, which silently hid every nav item that
+    // names a role and rendered the avatar as "??".
+    api.auth
+      .me()
+      .then((fresh: any) => setAuth(fresh?.user ?? fresh))
+      .catch(() => { });
   }, [loadFromStorage]);
 
   useEffect(() => {
@@ -37,11 +43,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [isAuthenticated, router]);
 
-  // Module guard: if the current route belongs to a module the user can't access
-  // (org disabled it, or role not allowed), bounce to the picker.
+  // If the route belongs to a module this person cannot reach — the
+  // organisation switched it off, or their role does not admit it — send them
+  // to the picker rather than to a screen that will fail on its first request.
   const pathname = usePathname();
   useEffect(() => {
-    if (!user || user.enabledModules == null) return; // wait for modules to load
+    if (!user || user.enabledModules == null) return; // wait for the session
     const mod = moduleForPath(pathname);
     if (mod && !canAccessModule(user, mod)) router.replace('/modules');
   }, [pathname, user, router]);
@@ -78,7 +85,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           initial={{ opacity: 0, y: 50, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 20, scale: 0.95 }}
-          className={`fixed ${isMobile ? 'bottom-20 left-4 right-4' : 'bottom-6 right-6 w-80'} z-50 flex items-start gap-3 rounded-2xl border border-border bg-white p-4 shadow-xl shadow-black/5`}
+          className={`fixed ${isMobile ? 'bottom-20 left-4 right-4' : 'bottom-6 right-6 w-80'} z-50 flex items-start gap-3 rounded-card border border-border bg-white p-4 shadow-modal`}
         >
           <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-subtle text-body">
             <Icon as={Bell} size="md" />

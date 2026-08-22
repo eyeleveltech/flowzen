@@ -1,198 +1,593 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import { api } from '@/lib/api';
-import { getSSE } from '@/lib/sse';
-import { useAuthStore } from '@/stores';
-import { useRouter } from 'next/navigation';
-import { Building2, Users, FileText, Shield, Zap, Boxes, Receipt, Bell, Key, ChevronRight } from 'lucide-react';
-import { OrganizationTab } from '@/components/settings/OrganizationTab';
-import { NotificationsTab } from '@/components/settings/NotificationsTab';
-import { UsersTab } from '@/components/settings/UsersTab';
-import { WorkflowsTab } from '@/components/settings/WorkflowsTab';
-import { TemplatesTab } from '@/components/settings/TemplatesTab';
-import { PermissionsTab } from '@/components/settings/PermissionsTab';
-import { ModulesTab } from '@/components/settings/ModulesTab';
-import { BillingTab } from '@/components/settings/BillingTab';
-import { AuditLogsTab } from '@/components/settings/AuditLogsTab';
-import { ApiKeysTab } from '@/components/settings/ApiKeysTab';
-import { Skeleton } from '@/components/ui/skeleton';
-import { ErrorPanel } from '@/components/ui/error-panel';
+/**
+ * Settings.
+ *
+ * Everything here is read by something that would otherwise be a constant: the
+ * timezone decides where a day ends, the state decides CGST+SGST versus IGST,
+ * the prefix and financial year decide what a document is called (master plan
+ * §3.11). That is why it is a screen and not a config file.
+ *
+ * Tabbed rather than one long form, because the sections answer different
+ * questions and are edited at different times — the tax identity is set once,
+ * the team changes constantly.
+ */
 
-type Tab = 'organization' | 'modules' | 'billing' | 'users' | 'templates' | 'permissions' | 'workflows' | 'notifications' | 'audit' | 'api';
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { Check } from 'lucide-react';
+import {
+  api,
+  ApiError,
+  atLeast,
+  formatDate,
+  type AuditEntry,
+  type Member,
+  type OrgConfig,
+  type Role,
+} from '@/lib/api-v2';
+import { PageHeader } from '@/components/PageHeader';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardHeader, CardTitle, CardBody } from '@/components/ui/card';
+import { Field, FieldSelect } from '@/components/ui/field';
+import { Toggle } from '@/components/ui/toggle';
+import { ErrorNote, Note } from '@/components/ui/empty-state';
+import { PageSkeleton } from '@/components/ui/skeleton-loaders';
+import { MailTab } from './components/MailTab';
+import { ConfigList } from './components/ConfigList';
+import { OnboardingTab } from './components/OnboardingTab';
 
-import { usePageTitle } from '@/hooks/usePageTitle';
-import { Icon } from '@/components/ui/icon';
+const TABS = [
+  { key: 'organisation', label: 'Organisation' },
+  { key: 'documents', label: 'Tax & numbering' },
+  { key: 'email', label: 'Email' },
+  { key: 'team', label: 'Team' },
+  { key: 'modules', label: 'Modules' },
+  { key: 'lists', label: 'Lists' },
+  { key: 'onboarding', label: 'Onboarding' },
+  { key: 'activity', label: 'Activity' },
+] as const;
+
+type TabKey = (typeof TABS)[number]['key'];
+
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+].map((label, i) => ({ value: String(i + 1), label }));
+
+/**
+ * The states and union territories GST recognises.
+ *
+ * A free-text box would let "TN", "Tamilnadu" and "Tamil Nadu" all exist, and
+ * the split is decided by comparing the seller's state to the buyer's — so a
+ * spelling difference silently becomes an IGST invoice that should have been
+ * CGST+SGST (§3.11).
+ */
+const STATES = [
+  'Andaman and Nicobar Islands', 'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar',
+  'Chandigarh', 'Chhattisgarh', 'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Goa',
+  'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jammu and Kashmir', 'Jharkhand', 'Karnataka',
+  'Kerala', 'Ladakh', 'Lakshadweep', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya',
+  'Mizoram', 'Nagaland', 'Odisha', 'Puducherry', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu',
+  'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+].map((s) => ({ value: s, label: s }));
+
+const MODULE_META: Record<string, { label: string; what: string }> = {
+  CRM: { label: 'CRM', what: 'The pipeline, quotations and everything before a client is won.' },
+  PM: { label: 'Project Management', what: 'Projects, tasks and who is doing what.' },
+  REVENUE: { label: 'Revenue', what: 'What clients agreed to pay, invoices and payments.' },
+};
+
+type Form = {
+  name: string;
+  website: string;
+  phone: string;
+  address: string;
+  state: string;
+  gstNumber: string;
+  currency: string;
+  timezone: string;
+  locale: string;
+  documentPrefix: string;
+  fiscalYearStart: string;
+  mailFromName: string;
+  mailFromEmail: string;
+  allowPasswordLogin: boolean;
+};
 
 export default function SettingsPage() {
-  usePageTitle('Settings');
-  const { user } = useAuthStore();
-  const router = useRouter();
-  const [tab, setTab] = useState<Tab>('organization');
+  const [tab, setTab] = useState<TabKey>('organisation');
+  const [config, setConfig] = useState<OrgConfig | null>(null);
+  const [form, setForm] = useState<Form | null>(null);
+  const [team, setTeam] = useState<Member[]>([]);
+  const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // The tab strip scrolls horizontally on narrow screens. Without a visible cue,
-  // the 6 off-screen tabs are undiscoverable on touch (scrollbars are hidden there).
-  const tabStripRef = useRef<HTMLDivElement>(null);
-  const [canScrollRight, setCanScrollRight] = useState(false);
-
-  const updateTabScroll = useCallback(() => {
-    const el = tabStripRef.current;
-    if (!el) return;
-    // 1px tolerance for sub-pixel widths
-    setCanScrollRight(el.scrollWidth - el.clientWidth - el.scrollLeft > 1);
-  }, []);
-
-  useEffect(() => {
-    updateTabScroll();
-    window.addEventListener('resize', updateTabScroll);
-    return () => window.removeEventListener('resize', updateTabScroll);
-  }, [updateTabScroll]);
-
-  // Data
-  const [orgData, setOrgData] = useState<any>({});
-  const [users, setUsers] = useState<any[]>([]);
-  const [templates, setTemplates] = useState<any[]>([]);
-  const [workflows, setWorkflows] = useState<any[]>([]);
-  const [teams, setTeams] = useState<any[]>([]);
-  const [modules, setModules] = useState<any[]>([]);
-  const [fetchErrors, setFetchErrors] = useState<Record<string, string | null>>({});
-
-  const fetchUsers = () => api.get<any[]>('/settings/users').then((d) => { setUsers(d); setFetchErrors(p => ({ ...p, users: null })); }).catch((e: any) => setFetchErrors(p => ({ ...p, users: e.message || 'Failed to load users' })));
-  const fetchWorkflows = () => api.get<any[]>('/settings/workflows').then((d) => { setWorkflows(d); setFetchErrors(p => ({ ...p, workflows: null })); }).catch((e: any) => setFetchErrors(p => ({ ...p, workflows: e.message || 'Failed to load workflows' })));
-  const fetchTemplates = () => api.get<any[]>('/settings/templates').then((d) => { setTemplates(d); setFetchErrors(p => ({ ...p, templates: null })); }).catch((e: any) => setFetchErrors(p => ({ ...p, templates: e.message || 'Failed to load templates' })));
-  const fetchOrg = () => api.get<any>('/settings/organization').then((d) => { setOrgData(d); setFetchErrors(p => ({ ...p, organization: null })); }).catch((e: any) => setFetchErrors(p => ({ ...p, organization: e.message || 'Failed to load organization' })));
-  const fetchTeams = () => api.get<{ teams: any[] }>('/teams').then((res) => setTeams(res.teams || [])).catch(() => { });
-  const fetchModules = () => api.get<any[]>('/settings/modules').then((d) => { setModules(d); setFetchErrors(p => ({ ...p, modules: null })); }).catch((e: any) => setFetchErrors(p => ({ ...p, modules: e.message || 'Failed to load modules' })));
-
-  useEffect(() => {
-    if (user && (user.role === 'TEAM_MEMBER' || user.role === 'PROJECT_MANAGER')) {
-      router.push('/dashboard');
-      return;
+  const load = useCallback(async () => {
+    try {
+      const cfg = await api.config.get();
+      const o = cfg.organization;
+      setConfig(cfg);
+      setForm({
+        name: o.name,
+        website: o.website ?? '',
+        phone: o.phone ?? '',
+        address: o.address ?? '',
+        state: o.state ?? '',
+        gstNumber: o.gstNumber ?? '',
+        currency: o.currency,
+        timezone: o.timezone,
+        locale: o.locale,
+        documentPrefix: o.documentPrefix,
+        fiscalYearStart: String(o.fiscalYearStart),
+        mailFromName: o.mailFromName ?? '',
+        mailFromEmail: o.mailFromEmail ?? '',
+        allowPasswordLogin: o.allowPasswordLogin,
+      });
+      setError(null);
+      // Both are admin-only, so a refusal is expected for anyone below and is
+      // not worth showing as an error.
+      void api.users.list().then(setTeam).catch(() => {});
+      void api.config.auditLog().then(setAudit).catch(() => {});
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load settings');
+    } finally {
+      setLoading(false);
     }
-    Promise.all([
-      fetchOrg(),
-      fetchUsers(),
-      fetchWorkflows(),
-      fetchTemplates(),
-      fetchTeams(),
-      fetchModules()
-    ]).finally(() => setLoading(false));
-  }, [user, router]);
-
-  // Live-update the users table + department list when members/teams change (other users too).
-  useEffect(() => {
-    const sse = getSSE();
-    if (!sse) return;
-    sse.on('member:changed', fetchUsers);
-    sse.on('team:changed', fetchTeams);
-    return () => { sse.off('member:changed', fetchUsers); sse.off('team:changed', fetchTeams); };
   }, []);
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex gap-4">
-          <Skeleton className="h-10 w-32 rounded-xl" />
-          <Skeleton className="h-10 w-32 rounded-xl" />
-        </div>
-        <Skeleton className="h-100 w-full rounded-2xl" />
-      </div>
-    );
-  }
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  const tabs = [
-    { id: 'organization', label: 'Organization', icon: Building2 },
-    { id: 'modules', label: 'Modules', icon: Boxes },
-    { id: 'billing', label: 'Billing', icon: Receipt },
-    { id: 'users', label: 'Users', icon: Users },
-    { id: 'workflows', label: 'Workflows', icon: Zap },
-    { id: 'templates', label: 'Templates', icon: FileText },
-    { id: 'notifications', label: 'Notifications', icon: Bell },
-    { id: 'permissions', label: 'Permissions', icon: Shield },
-  ];
+  const canEdit = atLeast(config?.me.role as Role | undefined, 'ADMIN');
 
-  if (user?.role === 'SUPER_ADMIN') {
-    tabs.push({ id: 'api', label: 'API Keys', icon: Key });
-    tabs.push({ id: 'audit', label: 'Audit Logs', icon: FileText });
-  }
+  const set = <K extends keyof Form>(key: K, value: Form[K]) =>
+    setForm((f) => (f ? { ...f, [key]: value } : f));
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form) return;
+    setSaving(true);
+    setError(null);
+    setSaved(false);
+    try {
+      await api.config.update({
+        name: form.name,
+        website: form.website || null,
+        phone: form.phone || null,
+        address: form.address || null,
+        state: form.state || null,
+        gstNumber: form.gstNumber || null,
+        currency: form.currency,
+        timezone: form.timezone,
+        locale: form.locale,
+        documentPrefix: form.documentPrefix,
+        fiscalYearStart: Number(form.fiscalYearStart),
+        mailFromName: form.mailFromName || null,
+        mailFromEmail: form.mailFromEmail || null,
+        allowPasswordLogin: form.allowPasswordLogin,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleModule = async (key: string, enabled: boolean) => {
+    setBusy(key);
+    setError(null);
+    try {
+      await api.config.setModule(key, enabled);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not change that');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (loading || !form || !config) return <PageSkeleton />;
+
+  const tz = config.organization.timezone;
+  const locale = config.organization.locale;
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold text-primary tracking-tight">Settings</h1>
-        <p className="text-sm text-secondary mt-1">Manage your organization, team, and preferences.</p>
-      </div>
+    <div className="max-w-3xl">
+      <PageHeader title="Settings" subtitle={config.organization.name} />
 
-      <div className="relative w-max max-w-full">
-        <div
-          ref={tabStripRef}
-          onScroll={updateTabScroll}
-          className="flex gap-2 p-1 bg-subtle rounded-xl overflow-x-auto no-scrollbar pr-10"
-        >
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id as Tab)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 motion-reduce:transition-none ${tab === t.id
-                  ? 'bg-white text-primary shadow-sm'
-                  : 'text-secondary hover:text-primary hover:bg-white/50'
-                }`}
-            >
-              <t.icon className="h-4 w-4" />
-              {t.label}
+      <div className="space-y-5">
+        {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
+
+        {/*
+          The one setting whose absence stops work. Shown on every tab, not just
+          the one it belongs to — quotations refuse without it, which is correct
+          and unhelpful if nothing says which setting is missing.
+        */}
+        {!config.organization.state && (
+          <Note tone="warn">
+            No state is set, so quotations and invoices cannot work out the tax.{' '}
+            <button onClick={() => setTab('documents')} className="font-medium underline">
+              Set it under Tax &amp; numbering
             </button>
+            .
+          </Note>
+        )}
+
+        <div className="flex flex-wrap gap-1 border-b border-border pb-3">
+          {TABS.map((t) => (
+            <Button
+              key={t.key}
+              size="sm"
+              variant={tab === t.key ? 'primary' : 'ghost'}
+              onClick={() => setTab(t.key)}
+            >
+              {t.label}
+            </Button>
           ))}
         </div>
 
-        {/* Scroll affordance fade & interactive button */}
-        {canScrollRight && (
-          <>
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-y-0 right-0 w-12 rounded-r-xl bg-linear-to-l from-surface-sunken via-surface-sunken/80 to-transparent"
-            />
-            <button
-              type="button"
-              aria-label="Scroll tab list right"
-              onClick={() => tabStripRef.current?.scrollBy({ left: 160, behavior: 'smooth' })}
-              className="absolute right-1 top-1/2 -translate-y-1/2 z-10 flex h-7 w-7 items-center justify-center rounded-lg bg-white shadow-xs border border-border/50 text-secondary hover:text-primary hover:bg-surface active:scale-95 transition-all"
-            >
-              <Icon as={ChevronRight} size="sm" />
-            </button>
-          </>
+        {tab === 'organisation' && (
+          <form onSubmit={save} className="space-y-5">
+            <Card padding="none">
+              <CardHeader>
+                <CardTitle>Who you are</CardTitle>
+              </CardHeader>
+              <CardBody className="space-y-4">
+                <p className="text-xs text-secondary">Printed on every document you send out.</p>
+                <Field
+                  label="Organisation name"
+                  value={form.name}
+                  onChange={(v) => set('name', v)}
+                  required
+                  disabled={!canEdit}
+                />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Website" value={form.website} onChange={(v) => set('website', v)} disabled={!canEdit} />
+                  <Field label="Phone" value={form.phone} onChange={(v) => set('phone', v)} disabled={!canEdit} />
+                </div>
+                <Field
+                  label="Address"
+                  value={form.address}
+                  onChange={(v) => set('address', v)}
+                  textarea
+                  rows={3}
+                  disabled={!canEdit}
+                />
+              </CardBody>
+            </Card>
+
+            <Card padding="none">
+              <CardHeader>
+                <CardTitle>Authentication & Security</CardTitle>
+              </CardHeader>
+              <CardBody className="space-y-4">
+                <div className="rounded-xl border border-border bg-surface p-3">
+                  <Toggle
+                    checked={form.allowPasswordLogin}
+                    onChange={(v) => set('allowPasswordLogin', v)}
+                    label="Allow signing in with a password"
+                  />
+                  <p className="mt-1 text-xs text-secondary">
+                    Turn off only once everyone is using Google Workspace authentication, or people will be locked out.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-border bg-surface p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-primary">Outbound Mail Server (SMTP)</p>
+                      <p className="text-xs text-secondary mt-0.5">
+                        Configure SMTP credentials and sender identities for quotations, invitations, and alerts.
+                      </p>
+                    </div>
+                    <Button type="button" size="sm" onClick={() => setTab('email')}>
+                      Configure Email
+                    </Button>
+                  </div>
+                </div>
+              </CardBody>
+            </Card>
+
+            {canEdit && <SaveBar saving={saving} saved={saved} />}
+          </form>
+        )}
+
+        {tab === 'documents' && (
+          <form onSubmit={save} className="space-y-5">
+            <Card padding="none">
+              <CardHeader>
+                <CardTitle>Tax identity</CardTitle>
+              </CardHeader>
+              <CardBody className="space-y-4">
+                <p className="text-xs text-secondary">
+                  Decides which tax applies on every quotation and invoice.
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FieldSelect
+                    label="State"
+                    value={form.state}
+                    onChange={(v) => set('state', v)}
+                    disabled={!canEdit}
+                    placeholder="Not set"
+                    options={STATES}
+                  />
+                  <Field
+                    label="GSTIN"
+                    value={form.gstNumber}
+                    onChange={(v) => set('gstNumber', v.toUpperCase())}
+                    placeholder="33ABCDE1234F1Z5"
+                    disabled={!canEdit}
+                  />
+                </div>
+                <p className="text-xs text-secondary">
+                  Compared with the client&apos;s state: same means CGST+SGST, different means IGST.
+                </p>
+              </CardBody>
+            </Card>
+
+            <Card padding="none">
+              <CardHeader>
+                <CardTitle>Numbering</CardTitle>
+              </CardHeader>
+              <CardBody className="space-y-4">
+                <p className="font-mono text-xs text-secondary">
+                  {form.documentPrefix || 'XX'}/QT/2026-27/001
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field
+                    label="Prefix"
+                    value={form.documentPrefix}
+                    onChange={(v) => set('documentPrefix', v.toUpperCase())}
+                    required
+                    disabled={!canEdit}
+                  />
+                  <FieldSelect
+                    label="Financial year starts"
+                    value={form.fiscalYearStart}
+                    onChange={(v) => set('fiscalYearStart', v)}
+                    disabled={!canEdit}
+                    options={MONTHS}
+                  />
+                </div>
+                {/*
+                  Counters only ever go forward. Saying so stops somebody
+                  "tidying up" a gap and handing out a number already taken.
+                */}
+                <Note>
+                  Numbers are never reused. A gap means a document was created and removed, which is
+                  expected.
+                </Note>
+              </CardBody>
+            </Card>
+
+            <Card padding="none">
+              <CardHeader>
+                <CardTitle>Dates and money</CardTitle>
+              </CardHeader>
+              <CardBody className="space-y-4">
+                <p className="text-xs text-secondary">
+                  Every due date and day boundary is worked out here, never in the browser.
+                </p>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  {/* "IST" is a valid identifier meaning India, Israel AND Ireland. */}
+                  <Field
+                    label="Timezone"
+                    value={form.timezone}
+                    onChange={(v) => set('timezone', v)}
+                    placeholder="Asia/Kolkata"
+                    hint="Full name, e.g. Asia/Kolkata."
+                    disabled={!canEdit}
+                  />
+                  <Field
+                    label="Currency"
+                    value={form.currency}
+                    onChange={(v) => set('currency', v.toUpperCase())}
+                    disabled={!canEdit}
+                  />
+                  <Field
+                    label="Number format"
+                    value={form.locale}
+                    onChange={(v) => set('locale', v)}
+                    placeholder="en-IN"
+                    disabled={!canEdit}
+                  />
+                </div>
+              </CardBody>
+            </Card>
+
+            {canEdit && <SaveBar saving={saving} saved={saved} />}
+          </form>
+        )}
+
+        {tab === 'email' && (
+          <MailTab
+            canEdit={canEdit}
+            orgName={config.organization.name}
+            // Reloads the page's own config, so `mailConfigured` is current
+            // everywhere else the moment sending is switched on.
+            onChanged={() => void load()}
+          />
+        )}
+
+        {tab === 'team' && (
+          <Card padding="none">
+            <CardHeader>
+              <CardTitle>The people here</CardTitle>
+              <Link href="/members">
+                <Button size="sm">Invite and change levels</Button>
+              </Link>
+            </CardHeader>
+            <CardBody>
+              <ul className="divide-y divide-border">
+                {team.map((m) => (
+                  <li key={m.id} className="flex flex-wrap items-center gap-2 py-2.5 first:pt-0">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-primary">{m.name}</p>
+                      <p className="truncate text-xs text-secondary">{m.email}</p>
+                    </div>
+                    <Badge>{m.role.replace('_', ' ').toLowerCase()}</Badge>
+                    <Badge
+                      tone={m.status === 'ACTIVE' ? 'good' : m.status === 'PENDING' ? 'warn' : 'neutral'}
+                    >
+                      {m.status.toLowerCase()}
+                    </Badge>
+                  </li>
+                ))}
+                {team.length === 0 && (
+                  <li className="py-2 text-sm text-secondary">Just you so far.</li>
+                )}
+              </ul>
+              <p className="mt-3 text-xs text-secondary">
+                Roles are a ladder — each level includes everything below it.
+              </p>
+            </CardBody>
+          </Card>
+        )}
+
+        {tab === 'modules' && (
+          <Card padding="none">
+            <CardHeader>
+              <CardTitle>What this organisation uses</CardTitle>
+            </CardHeader>
+            <CardBody className="space-y-3">
+              <p className="text-xs text-secondary">
+                Turning one off hides its screens and refuses its endpoints — it is not only
+                cosmetic.
+              </p>
+              {Object.entries(config.modules).map(([key, on]) => (
+                <div key={key} className="flex items-start gap-3 rounded-xl border border-border p-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-primary">
+                      {MODULE_META[key]?.label ?? key}
+                    </p>
+                    <p className="text-xs text-secondary">{MODULE_META[key]?.what ?? ''}</p>
+                  </div>
+                  <Toggle
+                    checked={on}
+                    onChange={(v) => toggleModule(key, v)}
+                    className={!canEdit || busy === key ? 'pointer-events-none opacity-50' : ''}
+                  />
+                </div>
+              ))}
+              <Note>
+                At least one has to stay on. Which one you are working in is chosen from the
+                sidebar.
+              </Note>
+            </CardBody>
+          </Card>
+        )}
+
+        {tab === 'lists' && (
+          <Card padding="none">
+            <CardHeader>
+              <CardTitle>Your lists</CardTitle>
+            </CardHeader>
+            <CardBody className="space-y-4">
+              <p className="text-xs text-secondary">
+                Rows in the database rather than values baked into the code — renaming one is an
+                edit, not a migration (§3.4).
+              </p>
+              <div className="grid gap-5 sm:grid-cols-2">
+                <ConfigList
+                  label="Pipeline stages"
+                  items={config.stages}
+                  endpoint="stages"
+                  onChanged={() => void load()}
+                  canEdit={canEdit}
+                  canReorder={true}
+                  renderExtra={(s) => s.requiresForecast ? <p className="text-xs text-secondary mt-1">Needs a forecast</p> : null}
+                />
+                <ConfigList 
+                  label="Services" 
+                  items={config.services} 
+                  endpoint="services"
+                  onChanged={() => void load()}
+                  canEdit={canEdit}
+                />
+                <ConfigList 
+                  label="Lost reasons" 
+                  items={config.lostReasons} 
+                  endpoint="lost-reasons"
+                  onChanged={() => void load()}
+                  canEdit={canEdit}
+                />
+                <ConfigList 
+                  label="Lead sources" 
+                  items={config.sources} 
+                  endpoint="sources"
+                  onChanged={() => void load()}
+                  canEdit={canEdit}
+                />
+              </div>
+            </CardBody>
+          </Card>
+        )}
+
+        {tab === 'onboarding' && (
+          <OnboardingTab config={config} onSaved={() => void load()} />
+        )}
+
+        {tab === 'activity' && (
+          <Card padding="none">
+            <CardHeader>
+              <CardTitle>Who changed what</CardTitle>
+            </CardHeader>
+            <CardBody>
+              <p className="mb-3 text-xs text-secondary">
+                The last hundred changes to people and money. Read-only — an audit log something can
+                edit is not one.
+              </p>
+              {audit.length === 0 ? (
+                <p className="text-sm text-secondary">Nothing recorded yet.</p>
+              ) : (
+                <ol className="divide-y divide-border">
+                  {audit.map((entry) => (
+                    <li
+                      key={entry.id}
+                      className="flex flex-wrap items-baseline gap-2 py-2.5 first:pt-0"
+                    >
+                      <span className="text-sm text-body">
+                        {entry.action.replace(/_/g, ' ').toLowerCase()}
+                      </span>
+                      <span className="text-xs text-secondary">
+                        {entry.user?.name ?? 'System'} · {entry.entityType}
+                      </span>
+                      <span className="ml-auto text-xs text-secondary">
+                        {formatDate(entry.createdAt, tz, locale)}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </CardBody>
+          </Card>
         )}
       </div>
+    </div>
+  );
+}
 
-      <motion.div
-        key={tab}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2 }}
-        className="bg-white p-4 sm:p-6 rounded-2xl border border-border overflow-hidden min-w-0"
-      >
-        {tab === 'organization' && (fetchErrors.organization
-          ? <ErrorPanel message={fetchErrors.organization} onRetry={fetchOrg} />
-          : <OrganizationTab initialData={orgData} onSaved={fetchOrg} />)}
-        {tab === 'modules' && (fetchErrors.modules
-          ? <ErrorPanel message={fetchErrors.modules} onRetry={fetchModules} />
-          : <ModulesTab modules={modules} fetchModules={fetchModules} userCount={users.length} />)}
-        {tab === 'billing' && <BillingTab />}
-        {tab === 'users' && (fetchErrors.users
-          ? <ErrorPanel message={fetchErrors.users} onRetry={fetchUsers} />
-          : <UsersTab users={users} fetchUsers={fetchUsers} teams={teams} currentUser={user} />)}
-        {tab === 'workflows' && (fetchErrors.workflows
-          ? <ErrorPanel message={fetchErrors.workflows} onRetry={fetchWorkflows} />
-          : <WorkflowsTab workflows={workflows} fetchWorkflows={fetchWorkflows} users={users} />)}
-        {tab === 'templates' && (fetchErrors.templates
-          ? <ErrorPanel message={fetchErrors.templates} onRetry={fetchTemplates} />
-          : <TemplatesTab templates={templates} fetchTemplates={fetchTemplates} />)}
-        {tab === 'notifications' && <NotificationsTab />}
-        {tab === 'permissions' && <PermissionsTab />}
-        {tab === 'audit' && <AuditLogsTab />}
-        {tab === 'api' && <ApiKeysTab />}
-      </motion.div>
+function SaveBar({ saving, saved }: { saving: boolean; saved: boolean }) {
+  return (
+    <div className="flex items-center justify-end gap-3">
+      {saved && (
+        <span className="inline-flex items-center gap-1 text-xs text-green-700">
+          <Check className="h-3.5 w-3.5" /> Saved
+        </span>
+      )}
+      <Button type="submit" variant="primary" loading={saving}>
+        Save
+      </Button>
     </div>
   );
 }

@@ -1,763 +1,634 @@
 'use client';
 
-import { useState, use, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+/**
+ * One deal.
+ *
+ * The screen the board's cards point at. Three rules from the plan are visible in
+ * how it behaves:
+ *
+ * ① Stages can be moved freely, EXCEPT to Won. Winning needs terms — the type of
+ *    work, the amount, the start date — so it goes through the dialog, and the
+ *    server refuses a stage move that would win (master plan §1.3 ①).
+ * ② The timeline records when things HAPPENED, not when they were typed (§3.9).
+ * ③ A lost deal needs a reason. It is the only thing that makes "why do we lose?"
+ *    answerable a year later (§3.4).
+ */
+
+import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Building2, User, Phone, Mail, Calendar, MapPin, Tag, Clock, Globe, Pencil, Trash2, FolderPlus, Briefcase, Receipt, StickyNote, History, CheckSquare, Plus } from 'lucide-react';
-import { api } from '@/lib/api';
-import { getInitials, getAvatarColor, formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
-import toast from 'react-hot-toast';
-import { STAGE_FIELDS, stageNeedsTransitionInput } from '../lib/stage-config';
-import { StageTransitionModal } from '../components/StageTransitionModal';
-import { WonCelebrationModal } from '../components/WonCelebrationModal';
-import { EditLeadModal } from '../components/EditLeadModal';
-import { PipelineDetailsModal } from '../components/PipelineDetailsModal';
-import { Select } from '@/components/ui/select';
-import { IntelligenceTab } from '../components/IntelligenceTab';
-import { TimelineTab } from '../components/TimelineTab';
-import { ContactsTab } from '../components/ContactsTab';
-import { LeadTasksTab } from '../components/LeadTasksTab';
-import { OverflowMarquee } from '@/components/ui/overflow-marquee';
-import { useConfirmStore } from '@/stores';
-import { NoAccess } from '@/components/ui/no-access';
-import { NotFoundPanel } from '@/components/ui/not-found-panel';
-import { leadStageLabel } from '@/lib/lead-stage';
-import { Icon } from '@/components/ui/icon';
+import {
+  ArrowLeft,
+  Ban,
+  Clock,
+  FileText,
+  Pause,
+  Play,
+  Plus,
+  Trophy,
+} from 'lucide-react';
+import {
+  api,
+  ApiError,
+  atLeast,
+  formatDate,
+  formatMoney,
+  type OrgConfig,
+  type Role,
+  type Stage,
+} from '@/lib/api-v2';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardHeader, CardTitle, CardBody } from '@/components/ui/card';
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
+import { Field, FieldSelect } from '@/components/ui/field';
+import { EmptyState, ErrorNote, Note } from '@/components/ui/empty-state';
+import { PageSkeleton } from '@/components/ui/skeleton-loaders';
+import { WinDealDialog } from '../components/WinDealDialog';
+import { QuoteFormModal } from '../../quotations/components/QuoteFormModal';
+import { CustomFieldsPanel } from './components/CustomFieldsPanel';
+import { StageMoveModal } from './components/StageMoveModal';
+import { LogActivityDialog } from '@/components/activities/LogActivityDialog';
+import { ActivityFeed } from '@/components/activities/ActivityFeed';
 
-function SocialLink({ platform, input }: { platform: 'linkedin' | 'instagram' | 'facebook', input?: string | null }) {
-  if (!input) return <span className="text-sm font-medium text-muted">—</span>;
+type Deal = {
+  id: string;
+  title: string | null;
+  value: string | null;
+  expectedCloseDate: string | null;
+  priority: string;
+  isOnHold: boolean;
+  holdReason: string | null;
+  blockedOn: string | null;
+  wonAt: string | null;
+  lostAt: string | null;
+  lostNote: string | null;
+  createdAt: string;
+  company: { id: string; name: string; status: string };
+  stage: Stage;
+  owner: { id: string; name: string } | null;
+  source: { id: string; name: string } | null;
+  lostReason: { id: string; name: string } | null;
+  engagement: { id: string; type: string; amount: string; billingFrequency: string } | null;
+  quotes: {
+    id: string;
+    number: string;
+    status: string;
+    total: string;
+    sentAt: string | null;
+    acceptedAt: string | null;
+  }[];
+  tasks: { id: string; title: string; status: string; dueDate: string | null }[];
+  stageHistory: {
+    id: string;
+    enteredAt: string;
+    fromStage: { name: string } | null;
+    toStage: { name: string };
+  }[];
+  activities: { id: string; type: string; message: string; body: string | null; occurredAt: string }[];
+  fieldValues: { fieldId: string; key: string; label: string; type: string; value: any }[];
+};
 
-  let cleanInput = input.trim();
-  let handle = cleanInput;
+export default function DealPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
 
-  try {
-    if (cleanInput.startsWith('http') || cleanInput.includes('.com/')) {
-      const urlString = cleanInput.startsWith('http') ? cleanInput : `https://${cleanInput}`;
-      const url = new URL(urlString);
-      const parts = url.pathname.replace(/\/$/, '').split('/');
-      handle = parts[parts.length - 1];
+  const [deal, setDeal] = useState<Deal | null>(null);
+  const [config, setConfig] = useState<OrgConfig | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [winning, setWinning] = useState(false);
+  const [losing, setLosing] = useState(false);
+  const [quoting, setQuoting] = useState(false);
+  const [logging, setLogging] = useState(false);
+  const [parking, setParking] = useState(false);
+  const [movingToStage, setMovingToStage] = useState<Stage | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [d, cfg] = await Promise.all([
+        api.deals.get(id) as Promise<unknown> as Promise<Deal>,
+        api.config.get(),
+      ]);
+      setDeal(d);
+      setConfig(cfg);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load this deal');
+    } finally {
+      setLoading(false);
     }
-  } catch (e) { }
+  }, [id]);
 
-  handle = handle.replace(/^@/, '');
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  let href = '';
-  let display = '';
+  if (loading) return <PageSkeleton />;
 
-  if (platform === 'linkedin') {
-    href = `https://www.linkedin.com/in/${handle}`;
-    display = `in/${handle}`;
-  } else if (platform === 'instagram') {
-    href = `https://www.instagram.com/${handle}`;
-    display = `@${handle}`;
-  } else if (platform === 'facebook') {
-    href = `https://www.facebook.com/${handle}`;
-    display = `@${handle}`;
+  if (!deal) {
+    return (
+      <EmptyState
+        title="That deal does not exist"
+        hint={error ?? undefined}
+        action={
+          <Link href="/pipeline">
+            <Button>Back to the pipeline</Button>
+          </Link>
+        }
+      />
+    );
   }
 
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      className="text-sm font-medium text-body hover:text-body hover:underline inline-flex items-center gap-1 transition-colors"
-    >
-      {display}
-    </a>
-  );
-}
+  const currency = config?.organization.currency ?? 'INR';
+  const locale = config?.organization.locale ?? 'en-IN';
+  const tz = config?.organization.timezone ?? 'Asia/Kolkata';
+  const money = (v: string | null | undefined) => formatMoney(v, currency, locale);
+  const date = (v: string | null | undefined) => formatDate(v, tz, locale);
+  const canWrite = atLeast(config?.me.role as Role | undefined, 'SALES');
 
-const PIPELINE_STAGES = [
-  'NEW_LEAD', 'OUTREACH', 'MEETING', 'PROPOSAL', 'NEGOTIATION',
-  'CONTRACT', 'ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'ON_HOLD', 'PROJECT_COMPLETED', 'CHURNED'
-];
+  const closed = deal.stage.kind !== 'OPEN';
+  const accepted = deal.quotes.find((q) => q.status === 'ACCEPTED');
 
-export default function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [targetStage, setTargetStage] = useState('');
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isPipelineDetailsModalOpen, setIsPipelineDetailsModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'details' | 'tasks' | 'timeline' | 'contacts'>('details');
-  const [autoOpenTaskForm, setAutoOpenTaskForm] = useState(false);
-  const [preparingProject, setPreparingProject] = useState(false);
-  const [wonModalLead, setWonModalLead] = useState<any>(null);
-  const confirm = useConfirmStore((s) => s.confirm);
-
-  // Safe unwrapping for Next.js 15 async params
-  const { id: leadId } = use(params);
-
-  const { data: lead, isLoading, error } = useQuery({
-    queryKey: ['lead', leadId],
-    queryFn: () => api.get<any>(`/crm/leads/${leadId}`),
-    retry: false,
-  });
-
-  const stageMutation = useMutation({
-    mutationFn: (payload: any) => api.post(`/crm/leads/${leadId}/stage`, payload),
-    onSuccess: (data: any, variables: any) => {
-      queryClient.setQueryData(['lead', leadId], data);
-      queryClient.invalidateQueries({ queryKey: ['leads'] });
-      setIsModalOpen(false);
-      toast.success('Stage updated successfully');
-      if (variables?.stage === 'CONTRACT') {
-        setWonModalLead(data || { ...lead, ...variables });
-      }
-    }
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: () => api.delete(`/crm/leads/${leadId}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leads'] });
-      toast.success('Lead deleted successfully');
-      router.push('/pipeline');
-    }
-  });
-
-
-  if (isLoading) {
-    return <div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>;
-  }
-
-  if ((error as any)?.status === 403) {
-    return <NoAccess title="Access Restricted" message="You do not have permission or CRM module access to view this lead." backHref="/pipeline" backLabel="Back to Pipeline" />;
-  }
-
-  if (error || !lead) {
-    return <NotFoundPanel title="Lead Not Found" message="The requested lead could not be found or has been removed." backHref="/pipeline" backLabel="Back to Pipeline" />;
-  }
-
-  const displayName = lead.companyName || lead.contactName || lead.client?.company || lead.client?.name || 'Lead';
-  const website = lead.website || lead.client?.website;
-  const location = [lead.city, lead.state, lead.country].filter(Boolean).join(', ') || lead.client?.city;
-
-  // Helper to format field labels nicely
-  const getFieldLabel = (key: string) => {
-    for (const fields of Object.values(STAGE_FIELDS)) {
-      const f = fields.find(f => f.key === key);
-      if (f) return f.label;
-    }
-    return key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-  };
-
-  const handleDelete = async () => {
-    const isConfirmed = await confirm({
-      title: 'Delete Lead',
-      message: 'This permanently deletes the lead. This action cannot be undone.',
-      confirmText: 'Delete Lead',
-      cancelText: 'Cancel',
-      variant: 'danger',
-      requireText: lead.stage === 'NEW_LEAD' ? undefined : displayName,
-    });
-    if (isConfirmed) {
-      deleteMutation.mutate();
+  const act = async (fn: () => Promise<unknown>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+      await load();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'That did not work');
+    } finally {
+      setBusy(false);
     }
   };
 
   return (
-    <div className="bg-gray-50/50 min-h-full">
+    <>
+      <Link
+        href="/pipeline"
+        className="mb-4 inline-flex items-center gap-1.5 text-sm text-secondary transition-colors hover:text-primary"
+      >
+        <ArrowLeft className="h-4 w-4" strokeWidth={1.75} /> Pipeline
+      </Link>
 
-      {/* Top Banner / Actions */}
-      <div className="bg-white border-b border-border px-5 py-6 md:px-8">
-        <div className="max-w-7xl mx-auto flex flex-col gap-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <Link href="/pipeline" className="flex items-center gap-2 text-sm font-medium text-secondary hover:text-primary transition-colors">
-              <Icon as={ArrowLeft} size="md" /> Back to Pipeline
-            </Link>
-            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-              <button
-                onClick={() => {
-                  setActiveTab('tasks');
-                  setAutoOpenTaskForm(true);
-                }}
-                className="flex items-center justify-center gap-2 px-3.5 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-hover transition-colors shadow-sm"
-              >
-                <Icon as={Plus} size="md" />
-                <span className="hidden sm:inline">Add Task</span>
-              </button>
-              {['ACTIVE_RETAINER', 'ACTIVE_PROJECT', 'CONTRACT'].includes(lead.stage) && (
-                <button
-                  disabled={preparingProject}
-                  onClick={async () => {
-                    // Starting delivery is the moment this lead becomes a client account.
-                    // prepare-project performs that conversion (copying identity, billing
-                    // details and contacts across) and hands back what the project form needs.
-                    setPreparingProject(true);
-                    try {
-                      const prep = await api.post<{ clientId: string; ownerId: string; suggestedName: string }>(
-                        `/crm/leads/${leadId}/prepare-project`, {}
-                      );
-                      const params = new URLSearchParams({ create: 'true' });
-                      params.set('prefillName', prep.suggestedName || `${displayName} Project`);
-                      params.set('prefillClientId', prep.clientId);
-                      if (lead.dealValue) params.set('prefillBudget', String(lead.dealValue));
-                      params.set('prefillOwnerId', prep.ownerId || lead.assignedToId || '');
-                      router.push(`/projects?${params.toString()}`);
-                    } catch (e: any) {
-                      toast.error(e?.message || 'Could not start a project for this lead');
-                      setPreparingProject(false);
-                    }
-                  }}
-                  className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-hover disabled:opacity-60 transition-colors"
-                >
-                  <Icon as={FolderPlus} size="md" />
-                  <span className="hidden sm:inline">{preparingProject ? 'Preparing…' : 'Create Project'}</span>
-                </button>
-              )}
-              {/* Quote straight from the lead — no client account needed, so a quotation
-                  never forces a company to exist twice. */}
-              <button
-                onClick={() => router.push(`/quotations?create=true&leadId=${leadId}`)}
-                className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-text-on-sunken bg-white border border-border rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <Icon as={Receipt} size="md" /> <span className="hidden sm:inline">Raise Quotation</span>
-              </button>
-              <button
-                onClick={() => setIsPipelineDetailsModalOpen(true)}
-                className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-text-on-sunken bg-white border border-border rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <Icon as={Tag} size="md" /> <span className="hidden sm:inline">Stage Data</span>
-              </button>
-              <button
-                onClick={() => setIsEditModalOpen(true)}
-                className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-text-on-sunken bg-white border border-border rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <Icon as={Pencil} size="md" /> <span className="hidden sm:inline">Edit</span>
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={deleteMutation.isPending}
-                className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 border border-red-100 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
-              >
-                <Icon as={Trash2} size="md" /> <span className="hidden sm:inline">{deleteMutation.isPending ? 'Deleting...' : 'Delete'}</span>
-              </button>
-            </div>
+      <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight text-primary">
+              {deal.title ?? 'Untitled deal'}
+            </h1>
+            <Badge tone={closed ? (deal.stage.kind === 'WON' ? 'good' : 'bad') : 'neutral'}>
+              {deal.stage.name}
+            </Badge>
           </div>
+          <Link
+            href={`/clients/${deal.company.id}`}
+            className="mt-1 inline-block text-sm text-secondary hover:underline"
+          >
+            {deal.company.name}
+          </Link>
+        </div>
 
-          <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6 mt-2">
-            {/* Avatar & Identity */}
-            <div className="flex items-start gap-4 md:gap-5 min-w-0">
-              <div className={`h-16 w-16 shrink-0 rounded-2xl flex items-center justify-center text-2xl font-bold border ${getAvatarColor(displayName)}`}>
-                {getInitials(displayName)}
-              </div>
-              <div className="flex flex-col gap-1.5 min-w-0">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 min-w-0">
-                  <OverflowMarquee className="w-full sm:w-auto sm:max-w-md">
-                    <h1 className="text-2xl font-bold text-primary leading-none truncate">{displayName}</h1>
-                  </OverflowMarquee>
-                  <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-1 rounded-md bg-subtle text-body text-[10px] font-bold tracking-wider uppercase border border-border whitespace-nowrap">
-                      {leadStageLabel(lead.stage)}
-                    </span>
-                    {lead.client?.status === 'ONHOLD' && (
-                      <span className="px-2.5 py-1 rounded-md bg-amber-50 text-amber-700 text-[10px] font-bold tracking-wider uppercase border border-amber-200 whitespace-nowrap">
-                        On Hold
-                      </span>
+        {canWrite && !closed && (
+          <div className="flex flex-wrap gap-2">
+            <Button icon={FileText} onClick={() => setQuoting(true)}>
+              Quote
+            </Button>
+            {deal.isOnHold ? (
+              <Button icon={Play} disabled={busy} onClick={() => act(() => api.deals.unhold(deal.id))}>
+                Resume
+              </Button>
+            ) : (
+              <Button icon={Pause} disabled={busy} onClick={() => setParking(true)}>
+                Park
+              </Button>
+            )}
+            <Button variant="danger" icon={Ban} onClick={() => setLosing(true)}>
+              Lost
+            </Button>
+            <Button variant="primary" icon={Trophy} onClick={() => setWinning(true)}>
+              Win
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-5">
+        {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
+
+        {deal.isOnHold && (
+          <Note tone="warn">
+            Parked{deal.holdReason ? ` — ${deal.holdReason}` : ''}. It keeps its place in{' '}
+            {deal.stage.name}.{' '}
+            {/* Parked keeps its column. A deal pushed to a "waiting" stage loses
+                where it actually was, and never comes back accurately (§3.4). */}
+          </Note>
+        )}
+
+        <div className="grid gap-5 lg:grid-cols-3">
+          <div className="space-y-5 lg:col-span-2">
+            {/* ── Modals ──────────────────────────────────────────────────────────── */}
+      {movingToStage && (
+        <StageMoveModal
+          dealId={deal.id}
+          stage={movingToStage}
+          currentFieldValues={deal.fieldValues}
+          onConfirm={() => {
+            setMovingToStage(null);
+            void load();
+          }}
+          onCancel={() => setMovingToStage(null)}
+        />
+      )}
+
+      {/* ── Stage ───────────────────────────────────────────────── */}
+            <Card padding="none">
+              <CardHeader>
+                <CardTitle>Stage</CardTitle>
+              </CardHeader>
+              <CardBody>
+                {closed ? (
+                  <>
+                    <p className="text-sm text-primary">
+                      {deal.stage.kind === 'WON' ? 'Won' : 'Lost'} on {date(deal.wonAt ?? deal.lostAt)}
+                    </p>
+                    {deal.lostReason && (
+                      <p className="mt-1 text-sm text-secondary">
+                        {deal.lostReason.name}
+                        {deal.lostNote ? ` — ${deal.lostNote}` : ''}
+                      </p>
                     )}
-                    {lead.priority && (
-                      <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold tracking-wider uppercase border whitespace-nowrap ${lead.priority === 'HIGH' ? 'bg-red-50 text-red-700 border-red-200' : lead.priority === 'MEDIUM' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
-                        {lead.priority} Priority
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {lead.leadId && (
-                  <p className="text-sm font-medium text-secondary/80 font-mono">{lead.leadId}</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap gap-1.5">
+                      {config?.stages
+                        .filter((s) => s.kind === 'OPEN')
+                        .map((s) => (
+                          <Button
+                            key={s.id}
+                            size="sm"
+                            variant={s.id === deal.stage.id ? 'primary' : 'secondary'}
+                            disabled={!canWrite || busy || s.id === deal.stage.id}
+                            onClick={() => setMovingToStage(s)}
+                          >
+                            {s.name}
+                          </Button>
+                        ))}
+                    </div>
+                    {/*
+                      Won is deliberately not in that row. Winning creates what
+                      bills the client, so it asks for terms first — a drag that
+                      quietly starts billing is the bug this rewrite exists for.
+                    */}
+                    <p className="mt-3 text-xs text-secondary">
+                      Won is not a stage you drag to — it needs the terms, so it has its own button.
+                      {deal.stage.requiresForecast &&
+                        ' From here on a deal needs a value and an expected close date.'}
+                    </p>
+                  </>
                 )}
-                <div className="flex flex-wrap items-center gap-3 sm:gap-5 mt-1.5">
-                  {lead.contactName && (
-                    <span className="flex items-center gap-1.5 text-sm text-secondary font-medium">
-                      <Icon as={User} size="md" className="text-secondary" /> {lead.contactName}
-                    </span>
-                  )}
-                  {(lead.contactEmail || lead.client?.email) && (
-                    <a href={`mailto:${lead.contactEmail || lead.client?.email}`} className="flex items-center gap-1.5 text-sm text-secondary font-medium hover:text-primary transition-colors">
-                      <Icon as={Mail} size="md" className="text-secondary" /> {lead.contactEmail || lead.client?.email}
-                    </a>
-                  )}
-                  {(lead.contactPhone || lead.client?.phone) && (
-                    <a href={`tel:${lead.contactPhone || lead.client?.phone}`} className="flex items-center gap-1.5 text-sm text-secondary font-medium hover:text-primary transition-colors">
-                      <Icon as={Phone} size="md" className="text-secondary" /> {lead.contactPhone || lead.client?.phone}
-                    </a>
-                  )}
-                  {location && (
-                    <span className="flex items-center gap-1.5 text-sm text-secondary font-medium">
-                      <Icon as={MapPin} size="md" className="text-secondary" /> {location}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
+              </CardBody>
+            </Card>
 
-            {/* Deal Value */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-6 bg-gray-50/80 p-4 rounded-xl border border-border shrink-0 w-full lg:w-auto">
-              <div className="flex flex-col sm:items-end justify-center">
-                <span className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-1">Deal Value</span>
-                <span className="text-2xl font-bold text-primary leading-none">{lead.dealValue ? formatCurrency(lead.dealValue) : '—'}</span>
-              </div>
-              <div className="w-px bg-border hidden sm:block"></div>
-              <div className="flex flex-col sm:items-end justify-center">
-                <span className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-1">Next Follow-up Date</span>
-                <span className="text-sm font-bold text-primary leading-none">
-                  {formatDate(lead.followUpDate)}
-                </span>
-              </div>
-              <div className="w-px bg-border hidden sm:block"></div>
-              <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-2">Stage Action</span>
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={lead.stage}
-                    onChange={(val) => {
-                      if (val && val !== lead.stage) {
-                        if (stageNeedsTransitionInput(val)) {
-                          setTargetStage(val);
-                          setIsModalOpen(true);
-                        } else {
-                          // Nothing to ask for this stage (§3.4) — commit directly, no modal.
-                          stageMutation.mutate({ stage: val }, {
-                            onError: async (err: any) => {
-                              // Closed deal or a won deal being unwound past Contract — same
-                              // guard the kanban board honors (leadStage.service.ts), so give this
-                              // dropdown the same reopen-confirm path instead of a dead-end toast.
-                              if (err?.code === 'DEAL_CLOSED') {
-                                const okReopen = await confirm({
-                                  title: 'Confirm stage change',
-                                  message: err.message || 'This move needs confirmation. Continue?',
-                                  confirmText: 'Continue',
-                                  cancelText: 'Cancel',
-                                  variant: 'warning',
-                                });
-                                if (okReopen) {
-                                  stageMutation.mutate({ stage: val, reopen: true }, {
-                                    onError: (e: any) => toast.error(e.message || 'Failed to update stage'),
-                                  });
-                                }
-                                return;
-                              }
-                              toast.error(err.message || 'Failed to update stage');
-                            },
-                          });
-                        }
-                      }
-                    }}
-                    options={PIPELINE_STAGES.map(s => ({
-                      label: `${PIPELINE_STAGES.indexOf(s) + 1}. ${leadStageLabel(s)}`,
-                      value: s
-                    }))}
-                    className="w-full sm:w-48 text-sm"
-                  />
+            <CustomFieldsPanel 
+              dealId={deal.id} 
+              fieldValues={deal.fieldValues} 
+              config={config!} 
+              canEdit={canWrite} 
+              onChanged={() => void load()} 
+            />
 
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Stepper Component (Refined) */}
-          <div className="mt-2 flex items-center justify-between overflow-x-auto no-scrollbar py-2">
-            {PIPELINE_STAGES.slice(0, 8).map((stage, idx) => {
-              const isCompleted = PIPELINE_STAGES.indexOf(lead.stage) >= idx;
-              const isCurrent = lead.stage === stage;
-              return (
-                <div key={stage} className="flex flex-col items-center gap-2.5 relative min-w-30 shrink-0">
-                  <div className={`h-7 w-7 rounded-full flex items-center justify-center text-[11px] font-bold z-10 transition-colors ${isCurrent ? 'bg-primary text-white ring-4 ring-primary/10' : isCompleted ? 'bg-subtle text-body ring-4 ring-white' : 'bg-gray-50 text-secondary ring-4 ring-white border border-border'}`}>
-                    {idx + 1}
-                  </div>
-                  <span className={`text-[10px] font-bold uppercase tracking-wider text-center ${isCurrent ? 'text-primary' : isCompleted ? 'text-secondary' : 'text-secondary'}`}>
-                    {leadStageLabel(stage)}
-                  </span>
-                  {idx < 7 && (
-                    <div className={`absolute top-3.5 left-1/2 w-full h-0.5 z-0 ${isCompleted && !isCurrent ? 'bg-subtle' : 'bg-gray-100'}`} />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Follow-up banner */}
-      {(() => {
-        if (!lead.followUpDate) return null;
-        const today = new Date(); today.setHours(0, 0, 0, 0);
-        const fud = new Date(lead.followUpDate); fud.setHours(0, 0, 0, 0);
-        if (fud > today) return null;
-        const overdue = fud < today;
-        return (
-          <div className={`px-5 md:px-8 py-3 text-sm font-medium flex items-center gap-2 ${overdue ? 'bg-red-50 text-red-700 border-b border-red-100' : 'bg-amber-50 text-amber-800 border-b border-amber-100'}`}>
-            <Icon as={Clock} size="md" className="shrink-0" /> Follow-up {overdue ? 'overdue since' : 'due'} {formatDate(lead.followUpDate)}. Update the follow-up date to clear this.
-          </div>
-        );
-      })()}
-
-      {/* Tabs */}
-      <div className="border-b border-border bg-white px-5 md:px-8 sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto flex gap-8 overflow-x-auto no-scrollbar">
-          {([['details', 'Details'], ['tasks', 'Tasks'], ['timeline', 'Timeline'], ['contacts', 'Contacts']] as const).map(([k, label]) => (
-            <button key={k} onClick={() => setActiveTab(k)} className={`py-4 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${activeTab === k ? 'border-primary text-primary' : 'border-transparent text-secondary hover:text-primary'}`}>
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="p-5 md:p-8">
-        <div className="max-w-7xl mx-auto">
-          {activeTab === 'details' && (
-            <div className="flex flex-col gap-6">
-              <div className="flex flex-col lg:flex-row gap-6 items-start">
-
-                {/* LEFT COLUMN */}
-                <div className="w-full lg:w-7/12 flex flex-col gap-6">
-
-                  {/* Lead Details Card */}
-                  <div className="bg-white rounded-2xl border border-border p-6 shadow-sm">
-                    <h2 className="text-xs font-bold text-secondary flex items-center gap-2 mb-6 uppercase tracking-wider">
-                      <Icon as={Building2} size="md" /> Lead Details
-                    </h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-6 gap-x-4">
-                      <Detail label="Client" value={lead.companyName || lead.client?.company} />
-                      <Detail label="Industry" value={lead.industry || lead.client?.industry} />
-                      <Detail label="Company Size" value={lead.companySize} />
-                      <Detail label="Website">
-                        {website ? (
-                          <a href={website.startsWith('http') ? website : `https://${website}`} target="_blank" rel="noreferrer" className="text-sm font-medium text-body hover:underline flex items-center gap-1.5 truncate">
-                            <Icon as={Globe} size="sm" className="shrink-0" /> <span className="truncate">{website}</span>
-                          </a>
-                        ) : <span className="text-sm text-muted">—</span>}
-                      </Detail>
-                      <Detail label="Source" value={lead.source?.replace(/_/g, ' ')} />
-                      <Detail label="Assigned User">
-                        <div className="flex items-center gap-2">
-                          {lead.assignedTo?.avatar ? (
-                            <img src={lead.assignedTo.avatar} alt="" className="h-6 w-6 rounded-full" />
-                          ) : (
-                            <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${lead.assignedTo ? getAvatarColor(lead.assignedTo.name) : 'bg-gray-100 text-body-soft'}`}>
-                              {lead.assignedTo ? getInitials(lead.assignedTo.name) : '?'}
-                            </div>
-                          )}
-                          <span className="text-sm font-medium text-primary">{lead.assignedTo?.name || 'Unassigned'}</span>
-                        </div>
-                      </Detail>
-                      <Detail label="Expected Close">
-                        <p className="text-sm font-medium text-primary flex items-center gap-1.5">
-                          <Icon as={Calendar} size="sm" className="text-secondary" />
-                          {formatDate(lead.expectedCloseDate)}
-                        </p>
-                      </Detail>
-                      <Detail label="Next Follow-up Date">
-                        <p className="text-sm font-medium text-primary flex items-center gap-1.5">
-                          <Icon as={Clock} size="sm" className="text-secondary" />
-                          {formatDate(lead.followUpDate)}
-                        </p>
-                      </Detail>
-                      <Detail label="Last Contacted Date">
-                        <p className="text-sm font-medium text-primary flex items-center gap-1.5">
-                          <Icon as={Calendar} size="sm" className="text-secondary" />
-                          {formatDate(lead.lastContactedDate)}
-                        </p>
-                      </Detail>
-                      <Detail label="Created" value={formatDate(lead.createdAt)} />
-                    </div>
-                  </div>
-
-                  {/* Company Information Card */}
-                  {(lead.billingAddress || lead.gstNumber || location) && (
-                    <div className="bg-white rounded-2xl border border-border p-6 shadow-sm">
-                      <h2 className="text-xs font-bold text-secondary flex items-center gap-2 mb-6 uppercase tracking-wider">
-                        <Icon as={Receipt} size="md" /> Company Information
-                      </h2>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-6 gap-x-4">
-                        <Detail label="Billing Address" value={lead.billingAddress} />
-                        <Detail label="GST Number" value={lead.gstNumber} />
-                        <Detail label="Location" value={location} />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Social Presence Card */}
-                  <div className="bg-white rounded-2xl border border-border p-6 shadow-sm">
-                    <h2 className="text-xs font-bold text-secondary flex items-center gap-2 mb-6 uppercase tracking-wider">
-                      <Icon as={Globe} size="md" /> Social Presence
-                    </h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-6 gap-x-4">
-                      <Detail label="LinkedIn">
-                        <div className="flex flex-col gap-1">
-                          <SocialLink platform="linkedin" input={lead.linkedinUrl} />
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <Globe className={`h-3.5 w-3.5 ${lead.linkedinChecked ? 'text-body' : 'text-gray-300'}`} />
-                            <span className="text-[10px] text-secondary font-medium uppercase tracking-wider">{lead.linkedinChecked ? (lead.linkedinFound ? 'Found' : 'Not Found') : 'Not Checked'}</span>
-                          </div>
-                        </div>
-                      </Detail>
-                      <Detail label="Instagram">
-                        <SocialLink platform="instagram" input={lead.instagramHandle} />
-                      </Detail>
-                      <Detail label="Facebook">
-                        <SocialLink platform="facebook" input={lead.facebookPage} />
-                      </Detail>
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* RIGHT COLUMN */}
-                <div className="w-full lg:w-5/12 flex flex-col gap-6">
-
-                  {/* Deal Summary Card */}
-                  <div className="bg-white rounded-2xl border border-border p-6 shadow-sm">
-                    <h2 className="text-xs font-bold text-secondary flex items-center gap-2 mb-6 uppercase tracking-wider">
-                      <Icon as={Briefcase} size="md" /> Deal Summary
-                    </h2>
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center justify-between py-2.5 border-b border-gray-50">
-                        <span className="text-sm text-secondary font-medium">Deal Value</span>
-                        <span className="text-sm font-bold text-primary">{lead.dealValue ? formatCurrency(lead.dealValue) : '—'}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5 border-b border-gray-50">
-                        <span className="text-sm text-secondary font-medium">Expected Revenue</span>
-                        <span className="text-sm font-bold text-primary">{lead.expectedRevenue ? formatCurrency(lead.expectedRevenue) : '—'}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5 border-b border-gray-50">
-                        <span className="text-sm text-secondary font-medium">Current Stage</span>
-                        <span className="text-sm font-bold text-primary">{leadStageLabel(lead.stage)}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5 border-b border-gray-50">
-                        <span className="text-sm text-secondary font-medium">Expected Close</span>
-                        <span className="text-sm font-bold text-primary">{formatDate(lead.expectedCloseDate)}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5">
-                        <span className="text-sm text-secondary font-medium">Priority</span>
-                        {lead.priority ? (
-                          <span className={`px-2 py-0.5 rounded text-[11px] font-bold tracking-wider uppercase border ${lead.priority === 'HIGH' ? 'bg-red-50 text-red-700 border-red-200' : lead.priority === 'MEDIUM' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
-                            {lead.priority}
-                          </span>
-                        ) : <span className="text-sm font-bold text-primary">—</span>}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Contract & Renewal Card */}
-                  <div className="bg-white rounded-2xl border border-border p-6 shadow-sm">
-                    <h2 className="text-xs font-bold text-secondary flex items-center gap-2 mb-6 uppercase tracking-wider">
-                      <Icon as={Calendar} size="md" /> Contract & Renewal
-                    </h2>
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center justify-between py-2.5 border-b border-gray-50">
-                        <span className="text-sm text-secondary font-medium">Contract Start Date</span>
-                        <span className="text-sm font-bold text-primary">{formatDate(lead.contractStartDate)}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5 border-b border-gray-50">
-                        <span className="text-sm text-secondary font-medium">Contract End Date</span>
-                        <span className="text-sm font-bold text-primary">{formatDate(lead.contractEndDate)}</span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5 border-b border-gray-50">
-                        <span className="text-sm text-secondary font-medium">Auto Renewal</span>
-                        <span className={`px-2 py-0.5 rounded text-[11px] font-bold tracking-wider uppercase border ${lead.autoRenewal ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
-                          {lead.autoRenewal ? 'Enabled' : 'Disabled'}
+            {/* ── Quotations ──────────────────────────────────────────── */}
+            <Card padding="none">
+              <CardHeader>
+                <CardTitle>Quotations</CardTitle>
+                {canWrite && !closed && (
+                  <Button size="sm" icon={Plus} onClick={() => setQuoting(true)}>
+                    New
+                  </Button>
+                )}
+              </CardHeader>
+              <CardBody>
+                {deal.quotes.length === 0 ? (
+                  <p className="text-sm text-secondary">None yet.</p>
+                ) : (
+                  <ul className="divide-y divide-border">
+                    {deal.quotes.map((q) => (
+                      <li key={q.id} className="flex flex-wrap items-center gap-2 py-2 first:pt-0">
+                        <Link href="/quotations" className="font-mono text-xs text-primary hover:underline">
+                          {q.number}
+                        </Link>
+                        <span className="text-sm tabular-nums text-primary">{money(q.total)}</span>
+                        <span className="ml-auto text-xs text-secondary">
+                          {q.status === 'ACCEPTED'
+                            ? `accepted ${date(q.acceptedAt)}`
+                            : q.sentAt
+                              ? `sent ${date(q.sentAt)}`
+                              : q.status.toLowerCase()}
                         </span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5">
-                        <span className="text-sm text-secondary font-medium">Renewal Status</span>
-                        <span className="text-sm font-bold text-primary">
-                          {lead.renewalStatus ? lead.renewalStatus.replace(/_/g, ' ') : 'Upcoming'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
 
-                  {/* Pipeline History Card */}
-                  {lead.stageHistory && lead.stageHistory.length > 0 && (
-                    <div className="bg-white rounded-2xl border border-border p-6 shadow-sm">
-                      <h2 className="text-xs font-bold text-secondary flex items-center gap-2 mb-6 uppercase tracking-wider">
-                        <Icon as={History} size="md" /> Pipeline History
-                      </h2>
-                      <div className="relative border-l-2 border-gray-100 ml-2 space-y-6">
-                        {lead.stageHistory.map((history: any, index: number) => (
-                          <div key={history.id || index} className="relative pl-5">
-                            <div className="absolute -left-2.25 top-1.5 h-4 w-4 rounded-full bg-subtle border-2 border-primary ring-2 ring-white"></div>
-                            <div className="flex flex-col">
-                              <span className="text-sm font-bold text-primary">{leadStageLabel(history.toStage)}</span>
-                              <div className="flex items-center gap-1.5 mt-0.5">
-                                <span className="text-[11px] font-medium text-secondary">{formatDateTime(history.changedAt)}</span>
-                                <span className="text-[11px] text-gray-300">•</span>
-                                <span className="text-[11px] font-medium text-secondary">by {history.changedBy?.name || 'System'}</span>
-                              </div>
-                              {history.notes && (
-                                <p className="mt-2.5 text-sm text-text-on-sunken bg-gray-50/80 p-3 rounded-lg border border-gray-100 whitespace-pre-wrap leading-relaxed">{history.notes}</p>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                {accepted && !closed && (
+                  <Note tone="info">
+                    {accepted.number} is accepted. Winning the deal is what starts the billing.
+                  </Note>
+                )}
+              </CardBody>
+            </Card>
 
-                  {/* Notes Card */}
-                  {lead.notes && lead.notes.length > 0 && (
-                    <div className="bg-white rounded-2xl border border-border p-6 shadow-sm max-h-125 overflow-y-auto">
-                      <h2 className="text-xs font-bold text-secondary flex items-center gap-2 mb-6 uppercase tracking-wider">
-                        <Icon as={StickyNote} size="md" /> Notes
-                      </h2>
-                      <div className="flex flex-col gap-4">
-                        {lead.notes.map((note: any) => (
-                          <div key={note.id} className="bg-amber-50/50 p-4 rounded-xl border border-amber-100/50 relative">
-                            <div className="flex items-center gap-2 mb-3">
-                              <div className={`h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-bold ${note.author ? getAvatarColor(note.author.name) : 'bg-gray-100 text-body-soft'}`}>
-                                {note.author ? getInitials(note.author.name) : 'S'}
-                              </div>
-                              <span className="text-xs font-bold text-primary">{note.author?.name || 'System'}</span>
-                              <span className="text-[10px] text-secondary font-medium ml-auto">{formatDate(note.createdAt)}</span>
-                            </div>
-                            <p className="text-sm text-primary whitespace-pre-wrap leading-relaxed">{note.body || note.content || '—'}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                </div>
-              </div>
-
-              {/* FULL WIDTH SECTION */}
-              <div className="flex flex-col gap-6">
-                {/* Intelligence Tab */}
-                <IntelligenceTab
-                  leadId={leadId}
-                  linkedinUrl={lead.linkedinUrl}
-                  dossier={lead.dossierJson}
-                  onRefetch={() => queryClient.invalidateQueries({ queryKey: ['lead', leadId] })}
+            {/* ── What happened ───────────────────────────────────────── */}
+            <Card padding="none">
+              <CardHeader>
+                <CardTitle>What happened</CardTitle>
+                {canWrite && (
+                  <Button size="sm" icon={Plus} onClick={() => setLogging(true)}>
+                    Log something
+                  </Button>
+                )}
+              </CardHeader>
+              <CardBody>
+                <ActivityFeed
+                  items={[
+                    ...deal.activities.map((a) => ({
+                      key: `a-${a.id}`,
+                      at: a.occurredAt,
+                      text: a.message,
+                      body: a.body,
+                    })),
+                    ...deal.stageHistory.map((h) => ({
+                      key: `h-${h.id}`,
+                      at: h.enteredAt,
+                      text: h.fromStage
+                        ? `Moved from ${h.fromStage.name} to ${h.toStage.name}`
+                        : `Started in ${h.toStage.name}`,
+                      body: null,
+                    })),
+                  ]}
                 />
+              </CardBody>
+            </Card>
+          </div>
 
-                {/* Dynamic Deal Fields Rendering */}
-                {lead.dealFields && lead.dealFields.length > 0 && (
-                  <div className="bg-white rounded-2xl border border-border p-6 shadow-sm">
-                    <h2 className="text-xs font-bold text-secondary mb-6 flex items-center gap-2 uppercase tracking-wider">
-                      <Icon as={Tag} size="md" /> Stage Data
-                    </h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                      {lead.dealFields.map((field: any) => (
-                        <div key={field.id} className="bg-gray-50/80 p-4 rounded-xl border border-gray-100">
-                          <p className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-1.5">{getFieldLabel(field.fieldKey)}</p>
-                          <p className="text-sm text-primary font-medium">{field.fieldValue || '—'}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          {/* ── The facts ─────────────────────────────────────────────── */}
+          <aside className="space-y-5">
+            <Card padding="none">
+              <CardHeader>
+                <CardTitle>Details</CardTitle>
+              </CardHeader>
+              <CardBody>
+                <dl className="space-y-2">
+                  <Detail label="Value" value={money(deal.value)} />
+                  <Detail label="Expected close" value={date(deal.expectedCloseDate)} />
+                  <Detail label="Owner" value={deal.owner?.name ?? 'Nobody'} />
+                  <Detail label="Source" value={deal.source?.name ?? '—'} />
+                  <Detail label="Priority" value={deal.priority.toLowerCase()} />
+                  <Detail label="Created" value={date(deal.createdAt)} />
+                  {deal.blockedOn && <Detail label="Waiting on" value={deal.blockedOn} />}
+                </dl>
+              </CardBody>
+            </Card>
 
-          {activeTab === 'tasks' && (
-            <div className="w-full">
-              <LeadTasksTab leadId={leadId} initialAdding={autoOpenTaskForm} />
-            </div>
-          )}
+            {deal.engagement && (
+              <Card className="border-green-200 bg-green-50/40">
+                <h2 className="text-sm font-semibold text-primary">What this became</h2>
+                <p className="mt-2 text-sm text-primary">
+                  {deal.engagement.type === 'RETAINER' ? 'Retainer' : 'Project'} ·{' '}
+                  {money(deal.engagement.amount)}
+                </p>
+                <p className="mt-0.5 text-xs text-secondary">
+                  Bills {deal.engagement.billingFrequency.toLowerCase().replace('_', ' ')}.
+                </p>
+                <Link
+                  href="/revenue"
+                  className="mt-2 inline-block text-xs font-medium text-primary hover:underline"
+                >
+                  See it in Revenue
+                </Link>
+              </Card>
+            )}
 
-          {activeTab === 'timeline' && (
-            <div className="max-w-7xl">
-              <TimelineTab leadId={leadId} />
-            </div>
-          )}
-
-          {activeTab === 'contacts' && (
-            <div className="w-full">
-              <ContactsTab
-                leadId={leadId}
-                lead={lead}
-                // The lead's displayed name/email/phone come from its primary contact, so any
-                // change in this tab can change the header and the board card too.
-                onChanged={() => {
-                  queryClient.invalidateQueries({ queryKey: ['lead', leadId] });
-                  queryClient.invalidateQueries({ queryKey: ['leads'] });
-                }}
-              />
-            </div>
-          )}
+            {deal.tasks.length > 0 && (
+              <Card padding="none">
+                <CardHeader>
+                  <CardTitle>Tasks</CardTitle>
+                </CardHeader>
+                <CardBody>
+                  <ul className="space-y-2">
+                    {deal.tasks.map((t) => (
+                      <li key={t.id} className="flex items-center gap-2 text-sm">
+                        <Clock className="h-3.5 w-3.5 shrink-0 text-secondary" strokeWidth={1.75} />
+                        <span className="min-w-0 flex-1 truncate text-body">{t.title}</span>
+                        <span className="shrink-0 text-xs text-secondary">{date(t.dueDate)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardBody>
+              </Card>
+            )}
+          </aside>
         </div>
       </div>
 
-      {/* Modals */}
-      <AnimatePresence>
-        {isModalOpen && (
-          <StageTransitionModal
-            lead={lead}
-            currentStage={lead.stage}
-            targetStage={targetStage}
-            onClose={() => setIsModalOpen(false)}
-            onSubmit={async (payload) => {
-              // The reopen-confirm has to live here too, not only on the no-modal branch above:
-              // unwinding a won deal lands on Negotiation / Proposal / Meeting, and those stages
-              // DO collect input — so they always come through the modal, where a DEAL_CLOSED 409
-              // was an inescapable error toast. Mirrors PipelineBoardView's handler.
-              try {
-                await stageMutation.mutateAsync(payload);
-              } catch (err) {
-                const apiErr = err as { code?: string; message?: string };
-                if (apiErr?.code !== 'DEAL_CLOSED') throw err;
-                const okReopen = await confirm({
-                  title: 'Confirm stage change',
-                  message: apiErr.message || 'This move needs confirmation. Continue?',
-                  confirmText: 'Continue',
-                  cancelText: 'Cancel',
-                  variant: 'warning',
-                });
-                if (!okReopen) return;
-                await stageMutation.mutateAsync({ ...payload, reopen: true });
-              }
-            }}
-            isLoading={stageMutation.isPending}
-          />
-        )}
-      </AnimatePresence>
+      {winning && (
+        <WinDealDialog
+          dealId={deal.id}
+          dealTitle={deal.title ?? 'Deal'}
+          companyName={deal.company.name}
+          // Pre-filled from the accepted quotation when there is one, so nobody
+          // retypes a figure that is already agreed (§3.12).
+          defaults={
+            accepted ? { amount: accepted.total } : deal.value ? { amount: deal.value } : undefined
+          }
+          onClose={() => setWinning(false)}
+          onWon={() => {
+            setWinning(false);
+            void load();
+          }}
+        />
+      )}
 
-      <AnimatePresence>
-        {wonModalLead && (
-          <WonCelebrationModal lead={wonModalLead} onClose={() => setWonModalLead(null)} />
-        )}
-      </AnimatePresence>
+      <LoseDialog
+        open={losing}
+        dealId={deal.id}
+        reasons={config?.lostReasons ?? []}
+        onClose={() => setLosing(false)}
+        onLost={() => {
+          setLosing(false);
+          void load();
+        }}
+      />
 
-      <AnimatePresence>
-        {isEditModalOpen && (
-          <EditLeadModal
-            lead={lead}
-            onClose={() => setIsEditModalOpen(false)}
-            onSuccess={() => {
-              queryClient.invalidateQueries({ queryKey: ['lead', leadId] });
-              queryClient.invalidateQueries({ queryKey: ['leads'] });
-              setIsEditModalOpen(false);
-            }}
-          />
-        )}
-      </AnimatePresence>
+      <ParkDialog
+        open={parking}
+        onClose={() => setParking(false)}
+        onPark={(reason) => {
+          setParking(false);
+          void act(() => api.deals.hold(deal.id, reason));
+        }}
+      />
 
-      <AnimatePresence>
-        {isPipelineDetailsModalOpen && (
-          <PipelineDetailsModal
-            lead={lead}
-            onClose={() => setIsPipelineDetailsModalOpen(false)}
-            onSuccess={() => {
-              queryClient.invalidateQueries({ queryKey: ['lead', leadId] });
-              queryClient.invalidateQueries({ queryKey: ['leads'] });
-              setIsPipelineDetailsModalOpen(false);
-            }}
-          />
-        )}
-      </AnimatePresence>
+      <QuoteFormModal
+        open={quoting}
+        dealId={deal.id}
+        onClose={() => setQuoting(false)}
+        onCreated={() => {
+          setQuoting(false);
+          void load();
+        }}
+      />
+
+      <LogActivityDialog
+        open={logging}
+        dealId={deal.id}
+        companyId={deal.company.id}
+        onClose={() => setLogging(false)}
+        onLogged={() => {
+          setLogging(false);
+          void load();
+        }}
+      />
+    </>
+  );
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <dt className="shrink-0 text-xs text-secondary">{label}</dt>
+      <dd className="text-right text-sm text-body">{value}</dd>
     </div>
   );
 }
 
-function Detail({ label, value, children }: { label: string; value?: string | null; children?: ReactNode }) {
+/**
+ * Losing a deal.
+ *
+ * The reason is required, from a fixed list rather than free text — a year of
+ * unique sentences cannot be counted, and "why do we lose?" is the question the
+ * field exists to answer (§3.4).
+ */
+function LoseDialog({
+  open,
+  dealId,
+  reasons,
+  onClose,
+  onLost,
+}: {
+  open: boolean;
+  dealId: string;
+  reasons: { id: string; name: string }[];
+  onClose: () => void;
+  onLost: () => void;
+}) {
+  const [reasonId, setReasonId] = useState('');
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setReasonId('');
+      setNote('');
+      setError(null);
+    }
+  }, [open]);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await api.deals.lose(dealId, reasonId, note || undefined);
+      onLost();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not close it');
+      setSaving(false);
+    }
+  };
+
   return (
-    <div className="min-w-0">
-      <p className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-1.5">{label}</p>
-      {children ?? <p className="text-sm font-medium text-primary truncate">{value || '—'}</p>}
-    </div>
+    <Modal open={open} onClose={onClose} title="Mark this lost">
+      <form onSubmit={submit}>
+        <ModalBody>
+          <FieldSelect
+            label="Why?"
+            required
+            value={reasonId}
+            onChange={setReasonId}
+            placeholder="Choose a reason…"
+            options={reasons.map((r) => ({ value: r.id, label: r.name }))}
+          />
+          <p className="-mt-3 text-xs text-secondary">
+            A fixed list, so a year of these can actually be counted.
+          </p>
+
+          <Field label="Anything else" value={note} onChange={setNote} textarea rows={3} />
+
+          {error && <ErrorNote>{error}</ErrorNote>}
+
+          <Note>Nothing is deleted. The deal stays, with its history, and can be reopened.</Note>
+        </ModalBody>
+
+        <ModalFooter>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" loading={saving} disabled={!reasonId}>
+            Mark lost
+          </Button>
+        </ModalFooter>
+      </form>
+    </Modal>
+  );
+}
+
+/** Parking keeps the deal's column — it is a flag, not a stage (§3.4). */
+function ParkDialog({
+  open,
+  onClose,
+  onPark,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onPark: (reason: string) => void;
+}) {
+  const [reason, setReason] = useState('');
+
+  useEffect(() => {
+    if (open) setReason('');
+  }, [open]);
+
+  return (
+    <Modal open={open} onClose={onClose} title="Park this deal">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          onPark(reason);
+        }}
+      >
+        <ModalBody>
+          <Field
+            label="What is it waiting on?"
+            value={reason}
+            onChange={setReason}
+            required
+            placeholder="Their budget cycle, a decision from the founder…"
+            hint="It keeps its place on the board — parked is a flag, not a stage."
+          />
+        </ModalBody>
+        <ModalFooter>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" disabled={!reason}>
+            Park it
+          </Button>
+        </ModalFooter>
+      </form>
+    </Modal>
   );
 }

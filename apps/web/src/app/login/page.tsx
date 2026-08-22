@@ -4,11 +4,12 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api-v2';
 import { useAuthStore } from '@/stores';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { Zap, Eye, EyeOff } from 'lucide-react';
 import { Icon } from '@/components/ui/icon';
+import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 
 export default function LoginPage() {
   usePageTitle('Login');
@@ -26,11 +27,13 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const data = await api.post<{ user: any }>('/auth/login', { email, password });
-      setAuth(data.user);
+      const data = await api.auth.login(email, password);
+      setAuth(data.user as never);
+      // The picker, because the sidebar lists one section at a time — landing
+      // straight on a dashboard would silently choose one.
       router.push('/modules');
-    } catch (err: any) {
-      setError(err.message || 'Login failed');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not sign you in');
     } finally {
       setLoading(false);
     }
@@ -64,6 +67,42 @@ export default function LoginPage() {
               </motion.div>
             )}
 
+            <GoogleOAuthProvider clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || 'dummy-client-id'}>
+              <div className="flex justify-center w-full">
+                <GoogleLogin
+                  onSuccess={async (credentialResponse) => {
+                    setError('');
+                    setLoading(true);
+                    try {
+                      const data = await api.auth.loginWithGoogle(credentialResponse.credential!);
+                      setAuth(data.user as never);
+                      router.push('/modules');
+                    } catch (err) {
+                      setError(err instanceof ApiError ? err.message : 'Could not sign you in with Google');
+                      setLoading(false);
+                    }
+                  }}
+                  onError={() => {
+                    setError('Google sign-in failed');
+                  }}
+                  useOneTap
+                  theme="outline"
+                  size="large"
+                  text="continue_with"
+                  width="100%"
+                />
+              </div>
+            </GoogleOAuthProvider>
+
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="bg-white px-2 text-secondary">or continue with email</span>
+              </div>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-body mb-1.5">Email</label>
               <input
@@ -79,9 +118,14 @@ export default function LoginPage() {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-sm font-medium text-body">Password</label>
-                <Link href="/forgot-password" className="text-xs font-medium text-primary hover:underline">
-                  Forgot password?
-                </Link>
+                {/*
+                  No self-service reset: the link has to reach the person, and
+                  Flowzen has no mail account connected. An admin issues one
+                  from the Team screen instead (§3.12).
+                */}
+                <span className="text-xs text-secondary" title="An admin can issue a reset link from the Team screen">
+                  Locked out? Ask an admin
+                </span>
               </div>
               <div className="relative">
                 <input

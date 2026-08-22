@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useUIStore, useAuthStore } from '@/stores';
-import { api } from '@/lib/api';
-import { useNotifications } from '@/hooks/useQueries';
+import { api } from '@/lib/api-v2';
+import { useNotifications } from '@/hooks/useNotifications';
 import { useQueryClient } from '@tanstack/react-query';
 import { getInitials, formatRelativeDate, getAvatarColor } from '@/lib/utils';
 import {
@@ -31,15 +31,6 @@ import {
 } from 'lucide-react';
 import { Drawer } from '@/components/ui/drawer';
 import toast from 'react-hot-toast';
-
-interface Notification {
-  id: string;
-  type: string;
-  message: string;
-  read: boolean;
-  createdAt: string;
-  metadata?: { leadId?: string; taskId?: string; projectId?: string; milestone?: string };
-}
 
 const notificationIcons: Record<string, typeof CheckSquare> = {
   TASK_ASSIGNED: CheckSquare,
@@ -85,7 +76,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
       };
     });
     try {
-      await api.patch(`/notifications/${id}/read`);
+      await api.notifications.markRead(id);
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
     } catch (err: any) {
       queryClient.setQueryData(['notifications'], previous); // rollback
@@ -101,7 +92,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
       unreadCount: 0,
     }) : old);
     try {
-      await api.patch('/notifications/read-all');
+      await api.notifications.markAllRead();
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       toast.success('All marked as read');
     } catch (err: any) {
@@ -175,7 +166,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
           className="hidden sm:flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm text-secondary hover:bg-white hover:border-line transition-colors duration-150 motion-reduce:transition-none sm:w-80"
         >
           <Search className="h-4 w-4 shrink-0" />
-          <span className="truncate">Search clients, projects, tasks, team...</span>
+          <span className="truncate">Search clients, deals, projects, tasks…</span>
           <kbd className="ml-auto inline-flex items-center gap-0.5 rounded-md border border-border bg-white px-1.5 py-0.5 text-[10px] font-medium text-secondary">
             ⌘K
           </kbd>
@@ -218,7 +209,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.96 }}
                   transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.15 }}
-                  className="absolute right-0 mt-2 w-48 rounded-2xl border border-border bg-white p-1.5 shadow-lg shadow-black/5"
+                  className="absolute right-0 mt-2 w-48 rounded-2xl border border-border bg-white p-1.5"
                 >
                   {quickCreateItems.map((item) => (
                     <button
@@ -273,8 +264,10 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                     const handleNotificationClick = async () => {
                       if (!n.read) markAsRead(n.id);
                       setShowNotifications(false);
-                      if (n.metadata?.taskId) router.push(`/tasks?taskId=${n.metadata.taskId}`);
-                      else if (n.metadata?.projectId) router.push(`/projects/${n.metadata.projectId}`); else if (n.metadata?.leadId) router.push(`/pipeline/${n.metadata.leadId}`);
+                      // A notification carries the route it points at, rather
+                      // than ids this component has to reassemble into one. A
+                      // new kind of notification then needs no change here.
+                      if (n.link) router.push(n.link);
                     };
 
                     return (
@@ -305,7 +298,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.96 }}
                   transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.15 }}
-                  className="absolute right-0 mt-2 w-96 rounded-2xl border border-border bg-white shadow-lg shadow-black/5"
+                  className="absolute right-0 mt-2 w-96 rounded-2xl border border-border bg-white"
                 >
                   <div className="flex items-center justify-between px-4 py-3 border-b border-subtle">
                     <div>
@@ -328,8 +321,9 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                         const handleNotificationClick = async () => {
                           if (!n.read) markAsRead(n.id);
                           setShowNotifications(false);
-                          if (n.metadata?.taskId) router.push(`/tasks?taskId=${n.metadata.taskId}`);
-                          else if (n.metadata?.projectId) router.push(`/projects/${n.metadata.projectId}`); else if (n.metadata?.leadId) router.push(`/pipeline/${n.metadata.leadId}`);
+                          // The notification carries the route it points at, so
+                          // a new kind of notification needs no change here.
+                          if (n.link) router.push(n.link);
                         };
 
                         return (
@@ -363,8 +357,8 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
             onClick={() => { setShowUserMenu(!showUserMenu); setShowNotifications(false); setShowQuickCreate(false); }}
             className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-surface transition-colors duration-150 motion-reduce:transition-none"
           >
-            <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${user ? getAvatarColor(user.name) : 'bg-primary text-white'}`}>
-              {user ? getInitials(user.name) : '??'}
+            <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${user?.name ? getAvatarColor(user.name) : 'bg-subtle text-secondary'}`}>
+              {user?.name ? getInitials(user.name) : <UserIcon className="h-4 w-4 text-secondary" />}
             </div>
             <ChevronDown className="h-3.5 w-3.5 text-secondary" />
           </button>
@@ -372,12 +366,12 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
           {isMobile ? (
             <Drawer isOpen={showUserMenu} onClose={() => setShowUserMenu(false)} title="Account">
               <div className="px-4 py-3.5 mb-3 bg-surface rounded-xl border border-border flex items-center gap-3">
-                <div className={`flex h-12 w-12 items-center justify-center rounded-full text-sm font-semibold ${user ? getAvatarColor(user.name) : 'bg-primary text-white'}`}>
-                  {user ? getInitials(user.name) : '??'}
+                <div className={`flex h-12 w-12 items-center justify-center rounded-full text-sm font-semibold ${user?.name ? getAvatarColor(user.name) : 'bg-subtle text-secondary'}`}>
+                  {user?.name ? getInitials(user.name) : <UserIcon className="h-5 w-5 text-secondary" />}
                 </div>
                 <div>
-                  <p className="text-base font-semibold text-primary leading-snug">{user?.name}</p>
-                  <p className="text-sm text-secondary">{user?.email}</p>
+                  <p className="text-base font-semibold text-primary leading-snug">{user?.name || 'User Profile'}</p>
+                  <p className="text-sm text-secondary">{user?.email || 'Loading...'}</p>
                 </div>
               </div>
               <div className="flex flex-col gap-1 pb-4">
@@ -420,7 +414,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.96 }}
                   transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.15 }}
-                  className="absolute right-0 mt-2 w-56 rounded-2xl border border-border bg-white p-1.5 shadow-lg shadow-black/5"
+                  className="absolute right-0 mt-2 w-56 rounded-2xl border border-border bg-white p-1.5"
                 >
                   <div className="px-3 py-2 mb-1">
                     <p className="text-sm font-medium text-primary">{user?.name}</p>

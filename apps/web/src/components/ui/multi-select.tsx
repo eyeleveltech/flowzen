@@ -7,10 +7,11 @@ import { Drawer } from '@/components/ui/drawer';
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/ui/icon';
 
-interface Option {
+export interface Option {
   value: string;
   label: string;
   image?: string;
+  icon?: React.ReactNode;
   colorClass?: string;
   capacity?: number;
   isOverloaded?: boolean;
@@ -119,7 +120,6 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
           }}
           className={cn(
             "flex h-10.5 w-full items-center justify-between rounded-xl border border-border bg-white px-4 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none text-left",
-            triggerClassName ? "h-auto border-transparent focus:ring-0 focus:border-transparent px-0 rounded-none shadow-none" : "",
             triggerClassName
           )}
         >
@@ -147,6 +147,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
               key={opt.value}
               className="flex items-center gap-1 bg-subtle text-body px-2 py-1 rounded-lg text-xs font-medium"
             >
+              {opt.icon && <span className="shrink-0 text-primary flex items-center">{opt.icon}</span>}
               {opt.image && <div className={`h-4 w-4 rounded-full flex items-center justify-center text-[8px] font-semibold ${opt.colorClass || 'bg-subtle text-primary border border-border'}`}>{opt.image}</div>}
               {opt.label}
               <button
@@ -236,6 +237,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
                       <div className={`flex items-center justify-center h-5 w-5 rounded border shrink-0 ${isSelected ? 'bg-primary border-primary' : 'border-line'}`}>
                         {isSelected && <Icon as={Check} size="sm" className="text-white" />}
                       </div>
+                      {opt.icon && <span className="shrink-0 text-secondary flex items-center">{opt.icon}</span>}
                       {opt.image && <div className={`h-6 w-6 shrink-0 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-subtle text-primary border border-border'}`}>{opt.image}</div>}
                       <span className="truncate flex-1">{opt.label}</span>
                       {opt.capacity !== undefined && (
@@ -258,7 +260,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
             data-multiselect-dropdown
             role="listbox"
             aria-multiselectable="true"
-            className="fixed z-9999 overflow-y-auto rounded-xl border border-border bg-white py-1.5 shadow-lg shadow-black/5"
+            className="fixed z-9999 overflow-y-auto rounded-xl border border-border bg-white py-1.5"
             style={{
               width: rect ? Math.max(rect.width, 200) : 'auto',
               left: rect ? rect.left : 0,
@@ -338,6 +340,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
                       <div className={`flex items-center justify-center h-4 w-4 rounded border shrink-0 ${isSelected ? 'bg-primary border-primary' : 'border-line'}`}>
                         {isSelected && <Check className="h-3 w-3 text-white" />}
                       </div>
+                      {opt.icon && <span className="shrink-0 text-secondary flex items-center">{opt.icon}</span>}
                       {opt.image && <div className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-subtle text-primary border border-border'}`}>{opt.image}</div>}
                       <span className="text-body truncate flex-1">{opt.label}</span>
                       {opt.capacity !== undefined && (

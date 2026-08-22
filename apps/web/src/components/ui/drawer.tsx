@@ -2,7 +2,6 @@
 
 import React, { ReactNode, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useMediaQuery } from '@/hooks/use-media-query';
 import { useIsMobile } from '@/hooks/use-breakpoint';
 import { X } from 'lucide-react';
 import { createPortal } from 'react-dom';
@@ -12,6 +11,7 @@ interface DrawerProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
+  description?: string;
   children: ReactNode;
   className?: string;
   variant?: 'modal' | 'slideover';
@@ -22,6 +22,7 @@ export function Drawer({
   isOpen,
   onClose,
   title,
+  description,
   children,
   className = '',
   variant = 'modal',
@@ -58,7 +59,6 @@ export function Drawer({
   useEffect(() => {
     if (isOpen) {
       previousFocusRef.current = document.activeElement as HTMLElement;
-      // Small delay to let the animation start, then focus first field
       const timer = setTimeout(() => {
         const el = panelRef.current?.querySelector<HTMLElement>(
           'input, button, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -114,23 +114,26 @@ export function Drawer({
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className={`fixed bottom-0 left-0 right-0 z-201 max-h-[90dvh] overflow-y-auto rounded-t-2xl bg-white shadow-modal ${className}`}
+              className={`fixed bottom-0 left-0 right-0 z-201 max-h-[90dvh] overflow-hidden rounded-t-2xl bg-white border-t border-border flex flex-col ${className}`}
               role="dialog"
               aria-modal="true"
               aria-label={title || ariaLabel || 'Drawer'}
             >
-              <div className="sticky top-0 z-10 flex flex-col items-center justify-center bg-white pt-3 pb-2 border-b border-border">
+              <div className="sticky top-0 z-10 flex flex-col items-center justify-center bg-white pt-3 pb-2 border-b border-border shrink-0">
                 <div className="h-1.5 w-12 rounded-full bg-gray-300" />
                 {title && (
-                  <div className="mt-4 flex w-full items-center justify-between px-6 pb-2">
-                    <h2 className="text-lg font-semibold text-primary">{title}</h2>
+                  <div className="mt-3 flex w-full items-center justify-between px-6 pb-1">
+                    <div>
+                      <h2 className="text-base font-bold text-primary">{title}</h2>
+                      {description && <p className="text-xs text-secondary mt-0.5">{description}</p>}
+                    </div>
                     <button onClick={onClose} className="rounded-full p-1 hover:bg-gray-100" aria-label="Close">
                       <Icon as={X} size="lg" className="text-gray-500" />
                     </button>
                   </div>
                 )}
               </div>
-              <div className="px-6 pb-8 pt-4">{children}</div>
+              <div className="flex-1 overflow-y-auto px-6 pb-8 pt-4">{children}</div>
             </motion.div>
           ) : variant === 'slideover' ? (
             /* DESKTOP: Slideover Panel */
@@ -141,20 +144,32 @@ export function Drawer({
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-              className={`fixed right-0 top-0 bottom-0 z-201 w-full max-w-md bg-white border-l border-border shadow-modal overflow-y-auto flex flex-col ${className}`}
+              className={`fixed right-0 top-0 bottom-0 z-201 w-full max-w-md bg-white border-l border-border overflow-hidden flex flex-col ${className}`}
               role="dialog"
               aria-modal="true"
               aria-label={title || ariaLabel || 'Drawer'}
             >
               {title && (
-                <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface sticky top-0 z-10 shrink-0">
-                  <h3 className="text-base font-semibold text-primary">{title}</h3>
-                  <button type="button" onClick={onClose} className="text-secondary hover:text-primary p-1.5 rounded-xl hover:bg-gray-100 transition-colors" aria-label="Close">
-                    <Icon as={X} size="lg" />
-                  </button>
+                <div className="flex flex-col border-b border-border bg-white sticky top-0 z-10 shrink-0">
+                  <div className="flex items-center justify-between px-6 pt-5 pb-3">
+                    <h3 className="text-base font-bold text-primary">{title}</h3>
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="text-secondary hover:text-primary p-1.5 rounded-xl hover:bg-subtle transition-colors"
+                      aria-label="Close"
+                    >
+                      <Icon as={X} size="lg" />
+                    </button>
+                  </div>
+                  {description && (
+                    <div className="px-6 pb-3 text-xs font-medium text-secondary">
+                      {description}
+                    </div>
+                  )}
                 </div>
               )}
-              <div className="p-6 flex-1 overflow-y-auto">{children}</div>
+              <div className="flex-1 overflow-y-auto">{children}</div>
             </motion.div>
           ) : (
             /* DESKTOP: Centered Modal */
@@ -166,20 +181,23 @@ export function Drawer({
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 1 }}
                 transition={{ duration: 0.15 }}
-                className={`w-full max-w-lg pointer-events-auto rounded-2xl bg-white shadow-xl ${className}`}
+                className={`w-full max-w-lg pointer-events-auto rounded-2xl bg-white border border-border overflow-hidden ${className}`}
                 role="dialog"
                 aria-modal="true"
                 aria-label={title || ariaLabel || 'Modal'}
               >
                 {title && (
-                  <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-                    <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+                  <div className="flex items-center justify-between border-b border-border px-6 py-4">
+                    <div>
+                      <h2 className="text-base font-bold text-primary">{title}</h2>
+                      {description && <p className="text-xs text-secondary mt-0.5">{description}</p>}
+                    </div>
                     <button onClick={onClose} className="rounded-full p-1 hover:bg-gray-100" aria-label="Close">
                       <Icon as={X} size="lg" className="text-gray-500" />
                     </button>
                   </div>
                 )}
-                <div className={title ? "p-6" : ""}>{children}</div>
+                <div className={title ? "" : "p-6"}>{children}</div>
               </motion.div>
             </div>
           )}

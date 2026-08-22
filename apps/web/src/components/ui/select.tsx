@@ -244,7 +244,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 4 }}
                   transition={{ duration: 0.15 }}
-                  className="fixed z-9999 overflow-y-auto rounded-xl border border-border bg-white p-1.5 shadow-lg shadow-black/5"
+                  className="fixed z-9999 overflow-y-auto rounded-xl border border-border bg-white p-1.5"
                   style={{
                     width: rect ? Math.max(rect.width, 160) : 'auto',
                     left: rect ? rect.left : 0,

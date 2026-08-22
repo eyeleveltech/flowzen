@@ -3,29 +3,35 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { useUIStore, useAuthStore } from '@/stores';
-import { getClientDisplayName } from '@/lib/utils';
-import { api } from '@/lib/api';
-import { leadStageLabel } from '@/lib/lead-stage';
+import { useUIStore } from '@/stores';
+import { api } from '@/lib/api-v2';
 import {
   Search,
-  Users,
+  Building2,
   FolderKanban,
   CheckSquare,
-  UsersRound,
   TrendingUp,
   FileText,
+  Receipt,
   ArrowRight,
   X,
 } from 'lucide-react';
 
+/**
+ * What one search box finds.
+ *
+ * Quotations and invoices are only searched for people allowed to see money, and
+ * that is decided by the SERVER — this component never filters by role, so a
+ * mistake here cannot expose a figure (master plan §5).
+ */
 interface SearchResults {
-  clients: { id: string; name: string; company?: string; status: string }[];
-  projects: { id: string; name: string; status: string; client: { name: string } }[];
-  tasks: { id: string; title: string; status: string; project: { name: string } }[];
-  members: { id: string; name: string; email: string; role: string }[];
-  leads?: { id: string; leadId?: string; companyName?: string; contactName?: string; stage: string }[];
-  quotes?: { id: string; documentNumber: string; clientName: string; status: string; documentType: string }[];
+  companies: { id: string; name: string; status: string }[];
+  deals: { id: string; title: string | null; company: { name: string }; stage: { name: string } }[];
+  projects: { id: string; name: string; company: { name: string } }[];
+  /** The API works out where a task links to — it belongs to a project OR a deal. */
+  tasks: { id: string; title: string; context: string; href: string }[];
+  quotes: { id: string; number: string; company: { name: string } }[];
+  invoices: { id: string; number: string; company: { name: string } }[];
 }
 
 interface FlatItem {
@@ -39,7 +45,6 @@ export function CommandPalette() {
   const shouldReduceMotion = useReducedMotion();
   const router = useRouter();
   const { commandPaletteOpen, setCommandPaletteOpen } = useUIStore();
-  const { user: currentUser } = useAuthStore();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResults | null>(null);
   const [loading, setLoading] = useState(false);
@@ -52,8 +57,7 @@ export function CommandPalette() {
     }
     setLoading(true);
     try {
-      const data = await api.get<SearchResults>(`/search?q=${encodeURIComponent(q)}`);
-      setResults(data);
+      setResults(await api.search(q));
     } catch {
       setResults(null);
     } finally {
@@ -66,89 +70,81 @@ export function CommandPalette() {
     return () => clearTimeout(timer);
   }, [query, search]);
 
-  const isCrmRole = currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'ADMIN';
-  const showMembers = currentUser?.role !== 'TEAM_MEMBER';
-
-  // The sections in the exact order they render — drives both the list UI and keyboard
-  // navigation, so ↑↓ always moves through what's actually on screen.
+  // The sections in the exact order they render — drives both the list UI and
+  // keyboard navigation, so up/down always moves through what is on screen.
   const sections = useMemo(() => {
-    if (!results) return [] as { title: string; icon: typeof Users; items: FlatItem[] }[];
-    const s: { title: string; icon: typeof Users; items: FlatItem[] }[] = [];
-    if (isCrmRole && results.leads && results.leads.length > 0) {
-      s.push({
-        title: 'Leads',
-        icon: TrendingUp,
-        items: results.leads.map((l) => ({
-          id: l.id,
-          label: l.companyName || l.contactName || l.leadId || 'Lead',
-          sub: [l.contactName && l.companyName ? l.contactName : null, leadStageLabel(l.stage)].filter(Boolean).join(' · '),
-          href: `/pipeline/${l.id}`,
-        })),
-      });
-    }
-    if (results.clients.length > 0) {
+    if (!results) return [] as { title: string; icon: typeof Building2; items: FlatItem[] }[];
+    const s: { title: string; icon: typeof Building2; items: FlatItem[] }[] = [];
+
+    if (results.companies.length) {
       s.push({
         title: 'Clients',
-        icon: Users,
-        items: results.clients.map((c) => ({
+        icon: Building2,
+        items: results.companies.map((c) => ({
           id: c.id,
           label: c.name,
-          sub: c.company || '',
+          sub: c.status.toLowerCase().replace('_', ' '),
           href: `/clients/${c.id}`,
         })),
       });
     }
-    if (results.projects.length > 0) {
+    if (results.deals.length) {
+      s.push({
+        title: 'Deals',
+        icon: TrendingUp,
+        items: results.deals.map((d) => ({
+          id: d.id,
+          label: d.title ?? 'Untitled deal',
+          sub: `${d.company.name} · ${d.stage.name}`,
+          href: `/pipeline/${d.id}`,
+        })),
+      });
+    }
+    if (results.projects.length) {
       s.push({
         title: 'Projects',
         icon: FolderKanban,
         items: results.projects.map((p) => ({
           id: p.id,
           label: p.name,
-          sub: p.client ? getClientDisplayName(p.client) : 'Internal',
+          sub: p.company.name,
           href: `/projects/${p.id}`,
         })),
       });
     }
-    if (results.tasks.length > 0) {
+    if (results.tasks.length) {
       s.push({
         title: 'Tasks',
         icon: CheckSquare,
-        items: results.tasks.map((t) => ({
-          id: t.id,
-          label: t.title,
-          sub: t.project?.name || '',
-          // The tasks page opens the detail drawer from ?taskId= — ?highlight= was a dead link.
-          href: `/tasks?taskId=${t.id}`,
-        })),
+        items: results.tasks.map((t) => ({ id: t.id, label: t.title, sub: t.context, href: t.href })),
       });
     }
-    if (isCrmRole && results.quotes && results.quotes.length > 0) {
+    if (results.quotes.length) {
       s.push({
         title: 'Quotations',
         icon: FileText,
         items: results.quotes.map((q) => ({
           id: q.id,
-          label: q.documentNumber,
-          sub: `${q.clientName} · ${q.status}`,
+          label: q.number,
+          sub: q.company.name,
           href: '/quotations',
         })),
       });
     }
-    if (showMembers && results.members.length > 0) {
+    if (results.invoices.length) {
       s.push({
-        title: 'Team',
-        icon: UsersRound,
-        items: results.members.map((m) => ({
-          id: m.id,
-          label: m.name,
-          sub: m.email,
-          href: `/members?memberId=${m.id}`,
+        title: 'Invoices',
+        icon: Receipt,
+        items: results.invoices.map((i) => ({
+          id: i.id,
+          label: i.number,
+          sub: i.company.name,
+          href: '/revenue',
         })),
       });
     }
     return s;
-  }, [results, isCrmRole, showMembers]);
+  }, [results]);
 
   const flatItems = useMemo(() => sections.flatMap((s) => s.items), [sections]);
 
@@ -225,7 +221,7 @@ export function CommandPalette() {
                 autoFocus
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={isCrmRole ? 'Search leads, clients, projects, tasks, quotes...' : 'Search clients, projects, tasks, team...'}
+                placeholder="Search clients, deals, projects, tasks, documents…"
                 className="flex-1 text-sm text-primary placeholder:text-secondary outline-none bg-transparent"
               />
               {query && (
@@ -294,7 +290,7 @@ function ResultSection({
   onNavigate,
 }: {
   title: string;
-  icon: typeof Users;
+  icon: typeof Building2;
   items: FlatItem[];
   startIndex: number;
   selectedIndex: number;

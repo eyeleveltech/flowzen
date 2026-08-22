@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useAuthStore, useModuleStore } from '@/stores';
-import { moduleForPath, accessibleModules, ModuleKey } from '@/lib/modules';
-import { NAV_ITEMS, BOTTOM_NAV_ITEMS, NavItem } from '@/config/navigation';
+import { moduleForPath, accessibleModules, type ModuleKey } from '@/lib/modules';
+import { NAV_ITEMS, BOTTOM_NAV_ITEMS, NavItem, canSee } from '@/config/navigation';
 import {
   MoreHorizontal,
   ArrowLeftRight,
@@ -26,12 +26,15 @@ export function BottomTabs() {
   const activeModule: ModuleKey = routeModule ?? storeModule;
   const canSwitch = accessibleModules(user).length > 1;
 
+  // Matches the sidebar: the section you are in decides what is listed.
   const inModule = (item: NavItem) => {
     if (!item.module) return true; // core (Settings, Profile)
     const mods = Array.isArray(item.module) ? item.module : [item.module];
     return mods.includes(activeModule);
   };
-  const allowed = (item: NavItem) => (!item.roles || item.roles.includes(user?.role || '')) && inModule(item);
+  // Roles are a LADDER. `roles.includes(user.role)` was exact matching, so an
+  // item marked SALES was invisible to the Admin above it (§3.10).
+  const allowed = (item: NavItem) => canSee(item, user?.role || '') && inModule(item);
 
   const primaryNavItems = NAV_ITEMS.filter((item) => item.isPrimaryMobile);
   const moreNavItems = [

@@ -1,1289 +1,820 @@
 'use client';
 
-import { useState, useEffect, useMemo, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
-import { api } from '@/lib/api';
-import { formatDate, formatShortDate, getInitials, getAvatarColor, triggerHaptic, getClientDisplayName } from '@/lib/utils';
-import { TASK_STATUSES, TASK_STATUS_LABELS, TASK_STATUS_COLORS, TASK_STATUS_OPTIONS } from '@/lib/task-status';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { Search, Plus, Filter, MessageSquare, X, Trash2, Settings, Check, ChevronRight, LayoutList, Kanban, SlidersHorizontal } from 'lucide-react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import {
+  CheckCircle2,
+  Search,
+  Plus,
+  X,
+  List,
+  LayoutDashboard,
+  Calendar as CalendarIcon,
+  Filter,
+  RotateCcw,
+  AlertCircle,
+  Eye,
+  Check,
+  Code,
+  Palette,
+  PenTool,
+  Bug,
+  Users,
+  Package,
+} from 'lucide-react';
+import { api, formatDate, type OrgConfig, type Member } from '@/lib/api-v2';
+import { Badge } from '@/components/ui/badge';
+import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
+import { EmptyState, ErrorNote } from '@/components/ui/empty-state';
+import { PageSkeleton } from '@/components/ui/skeleton-loaders';
+import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
-import { MultiSelect } from '@/components/ui/multi-select';
-import { Drawer } from '@/components/ui/drawer';
-import { useIsMobile } from '@/hooks/use-breakpoint';
-import { ActiveFilterChip } from '@/components/ui/active-filter-chip';
-import { Skeleton } from '@/components/ui/skeleton';
-import { ViewSettingsPanel } from '@/components/ui/view-settings-panel';
-import toast from 'react-hot-toast';
-import { useAuthStore, useConfirmStore } from '@/stores';
-import { useTasks, useProjects, useMembers, useTeams, useClients } from '@/hooks/useQueries';
-import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { useQueryClient } from '@tanstack/react-query';
-import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { TaskDetailDrawer } from '@/components/tasks/task-detail-drawer';
-import { TaskFormDrawer } from '@/components/tasks/task-form-drawer';
-import { Toggle } from '@/components/ui/toggle';
-import { ColumnDropdown } from '@/components/ui/column-dropdown';
-import { SwipeableCard } from '@/components/ui/swipeable-card';
+import { MultiSelect, type Option } from '@/components/ui/multi-select';
+import { NewTaskPanel } from '@/components/tasks/NewTaskPanel';
+import { TaskDetailPanel } from '@/components/tasks/TaskDetailPanel';
+import { CalendarView } from '@/components/ui/calendar-view';
 
-interface Task {
-  id: string; title: string; description?: string | null; priority: string; status: string;
-  dueDate?: string | null; assignedDate?: string | null; completedAt?: string | null; createdAt: string; projectId: string;
-  type: string; driveLink?: string | null; reviewerId?: string | null;
-  project?: { id: string; name: string; client?: { name: string; company?: string } };
-  // Pre-sales tasks hang off a Lead instead of a Project, so both are optional.
-  lead?: { id: string; leadId?: string | null; companyName?: string | null; contactName?: string | null; stage?: string } | null;
-  assignee?: { id: string; name: string; avatar?: string | null } | null;
-  assignees?: { id: string; name: string; avatar?: string | null }[];
-  assignedBy?: { id: string; name: string; avatar?: string | null } | null;
-  reviewer?: { id: string; name: string; avatar?: string | null } | null;
-  isRecurring?: boolean | null;
-  recurrenceFrequency?: string | null;
-  _count?: { subtasks: number; comments: number };
-  comments?: { id: string; content: string; createdAt: string; author: { id: string; name: string; avatar?: string | null } }[];
-}
-
-interface Project { id: string; name: string; members?: { user: { id: string; name: string } }[]; teams?: { team: { members: { user: { id: string; name: string } }[] } }[] }
-interface Member { id: string; name: string; }
-
-const isTaskOverdue = (task: Task) => {
-  if (!task.dueDate || task.status === 'COMPLETED' || task.status === 'ON_HOLD') return false;
-  const due = new Date(task.dueDate);
-  due.setHours(23, 59, 59, 999);
-  return due < new Date();
+type Task = {
+  id: string;
+  title: string;
+  taskType?: string | null;
+  status: 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'APPROVED' | 'DONE' | 'BLOCKED' | 'ON_HOLD';
+  priority: string;
+  createdAt: string;
+  startDate?: string | null;
+  dueDate: string | null;
+  dueTime?: string | null;
+  isOverdue: boolean;
+  awaitingMyReview: boolean;
+  project: { id: string; name: string; company: { id?: string; name: string } | null } | null;
+  deal: { id: string; title: string | null } | null;
+  assignee?: { id: string; name: string; avatar: string | null; designation?: string | null } | null;
+  reviewer?: { id: string; name: string; avatar: string | null; designation?: string | null } | null;
+  department?: { id: string; name: string } | null;
 };
 
-const getDaysLate = (task: Task) => {
-  if (!task.dueDate || task.status === 'COMPLETED') return 0;
-  const due = new Date(task.dueDate);
-  due.setHours(23, 59, 59, 999);
-  const now = new Date();
-  if (due >= now) return 0;
-  const diffTime = Math.abs(now.getTime() - due.getTime());
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+const STATUS_OPTIONS: Option[] = [
+  { value: 'TODO', label: 'To do' },
+  { value: 'IN_PROGRESS', label: 'In progress' },
+  { value: 'IN_REVIEW', label: 'In review' },
+  { value: 'APPROVED', label: 'Approved' },
+  { value: 'BLOCKED', label: 'Blocked' },
+  { value: 'ON_HOLD', label: 'On hold' },
+  { value: 'DONE', label: 'Done' },
+];
+
+const COLUMNS: { status: Task['status']; label: string }[] = [
+  { status: 'TODO', label: 'To Do' },
+  { status: 'IN_PROGRESS', label: 'In Progress' },
+  { status: 'IN_REVIEW', label: 'In Review' },
+  { status: 'APPROVED', label: 'Approved' },
+  { status: 'BLOCKED', label: 'Blocked' },
+  { status: 'ON_HOLD', label: 'On Hold' },
+  { status: 'DONE', label: 'Done' },
+];
+
+const PRIORITY_OPTIONS: Option[] = [
+  { value: 'LOW', label: 'Low' },
+  { value: 'MEDIUM', label: 'Medium' },
+  { value: 'HIGH', label: 'High' },
+  { value: 'URGENT', label: 'Urgent' },
+];
+
+const PRIORITY_TONE: Record<string, 'good' | 'neutral' | 'bad' | 'info' | 'warn'> = {
+  LOW: 'info',
+  MEDIUM: 'neutral',
+  HIGH: 'warn',
+  URGENT: 'bad',
 };
 
-import { getPriorityDot, getPriorityBadge } from '@/lib/priority';
+const TASK_TYPE_OPTIONS: Option[] = [
+  { value: 'DEVELOPMENT', label: 'Development', icon: <Code className="h-3.5 w-3.5 text-blue-500" /> },
+  { value: 'DESIGN', label: 'Design', icon: <Palette className="h-3.5 w-3.5 text-purple-500" /> },
+  { value: 'CONTENT', label: 'Content', icon: <PenTool className="h-3.5 w-3.5 text-emerald-500" /> },
+  { value: 'SEO', label: 'SEO', icon: <Search className="h-3.5 w-3.5 text-amber-500" /> },
+  { value: 'BUG', label: 'Bug Fix', icon: <Bug className="h-3.5 w-3.5 text-red-500" /> },
+  { value: 'MEETING', label: 'Meeting', icon: <Users className="h-3.5 w-3.5 text-indigo-500" /> },
+  { value: 'OTHER', label: 'Other', icon: <Package className="h-3.5 w-3.5 text-gray-500" /> },
+];
 
-type AssigneePerson = { id: string; name: string; avatar?: string | null };
-function taskAssignees(task: { assignees?: AssigneePerson[]; assignee?: AssigneePerson | null }): AssigneePerson[] {
-  return task.assignees && task.assignees.length ? task.assignees : (task.assignee ? [task.assignee] : []);
-}
-function assigneeLabel(task: { assignees?: AssigneePerson[]; assignee?: AssigneePerson | null }): string {
-  const people = taskAssignees(task);
-  if (!people.length) return 'Unassigned';
-  return people.length === 1 ? people[0].name : `${people[0].name} +${people.length - 1}`;
-}
-function AssigneeAvatars({ task, size = 26 }: { task: { assignees?: AssigneePerson[]; assignee?: AssigneePerson | null }; size?: number }) {
-  const people = taskAssignees(task);
-  if (!people.length) return null;
-  const shown = people.slice(0, 3);
-  const extra = people.length - shown.length;
+const TASK_TYPE_LABELS: Record<string, { label: string; tone: 'info' | 'neutral' | 'bad' | 'good' | 'warn' }> = {
+  DEVELOPMENT: { label: 'Development', tone: 'info' },
+  DESIGN: { label: 'Design', tone: 'warn' },
+  CONTENT: { label: 'Content', tone: 'good' },
+  SEO: { label: 'SEO', tone: 'warn' },
+  BUG: { label: 'Bug Fix', tone: 'bad' },
+  MEETING: { label: 'Meeting', tone: 'info' },
+  OTHER: { label: 'Other', tone: 'neutral' },
+};
+
+const isTaskOverdue = (t: { isOverdue?: boolean; status: string }) => {
+  if (t.status === 'DONE' || t.status === 'ON_HOLD' || t.status === 'BLOCKED') return false;
+  return Boolean(t.isOverdue);
+};
+
+function UserChip({
+  user,
+}: {
+  user?: { id: string; name: string; avatar?: string | null } | null;
+}) {
+  if (!user) return <span className="text-muted text-xs">—</span>;
   return (
-    <div className="flex -space-x-1.5">
-      {shown.map((p) => (
-        <div key={p.id} title={p.name} style={{ height: size, width: size }} className={`flex items-center justify-center rounded-full text-[10px] font-medium ring-2 ring-white ${getAvatarColor(p.name)}`}>
-          {getInitials(p.name)}
+    <div className="flex items-center gap-2 min-w-0">
+      {user.avatar ? (
+        <img src={user.avatar} alt="" className="h-6 w-6 rounded-full object-cover shrink-0 border border-border" />
+      ) : (
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface border border-border text-[11px] font-semibold text-primary">
+          {user.name.charAt(0)}
         </div>
-      ))}
-      {extra > 0 && (
-        <div style={{ height: size, width: size }} className="flex items-center justify-center rounded-full text-[10px] font-medium ring-2 ring-white bg-subtle text-body-soft">+{extra}</div>
       )}
+      <span className="text-xs font-semibold text-primary truncate">
+        {user.name}
+      </span>
     </div>
   );
 }
 
-import { usePageTitle } from '@/hooks/usePageTitle';
-import { Icon } from '@/components/ui/icon';
+export default function TasksPage() {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [config, setConfig] = useState<OrgConfig | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-function TasksContent() {
-  usePageTitle('Tasks');
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { user } = useAuthStore();
-  const { confirm } = useConfirmStore();
-  const queryClient = useQueryClient();
-  const [isMounted, setIsMounted] = useState(false);
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+  const [view, setView] = useState<'LIST' | 'BOARD' | 'CALENDAR'>('LIST');
+  const [draggingTask, setDraggingTask] = useState<Task | null>(null);
 
+  const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+
+  // Dynamic filter options
+  const [companyOptions, setCompanyOptions] = useState<Option[]>([]);
+  const [projectOptions, setProjectOptions] = useState<Option[]>([]);
+  const [departmentOptions, setDepartmentOptions] = useState<Option[]>([]);
+  const [assigneeOptions, setAssigneeOptions] = useState<Option[]>([]);
+
+  // Multi-select filters
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string[]>(() => {
-    const val = searchParams.get('statuses');
-    return val ? val.split(',') : [];
-  });
-  const [clientFilter, setClientFilter] = useState<string[]>(() => {
-    const val = searchParams.get('clients');
-    return val ? val.split(',') : [];
-  });
-  const [projectFilter, setProjectFilter] = useState<string[]>(() => {
-    const val = searchParams.get('projects');
-    return val ? val.split(',') : [];
-  });
-  // Default to all tasks. Team members are scoped to their own tasks by the API
-  // (the assignee filter isn't shown to them); admins/managers see everyone and
-  // can narrow with the people filter.
-  const [assigneeFilter, setAssigneeFilter] = useState<string[]>(() => {
-    const val = searchParams.get('assignees');
-    return val ? val.split(',') : [];
-  });
-  const [hasSetDefaultAssignee, setHasSetDefaultAssignee] = useState(() => {
-    return !!searchParams.get('assignees');
-  });
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
+  const [showDone, setShowDone] = useState(false);
+  const [onlyOverdue, setOnlyOverdue] = useState(false);
+  const [onlyAwaitingReview, setOnlyAwaitingReview] = useState(false);
 
-  // Restore saved localStorage filters after mount if query params are not present
+  // Load filter option lists once
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('flowzen_tasks_filters');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (!searchParams.get('statuses') && parsed.statuses) setStatusFilter(parsed.statuses);
-          if (!searchParams.get('clients') && parsed.clients) setClientFilter(parsed.clients);
-          if (!searchParams.get('projects') && parsed.projects) setProjectFilter(parsed.projects);
-          if (!searchParams.get('assignees') && parsed.assignees && parsed.assignees.length > 0) {
-            setAssigneeFilter(parsed.assignees);
-            setHasSetDefaultAssignee(true);
-          }
-          if (!searchParams.get('teams') && parsed.teams) setTeamFilter(parsed.teams);
-        } catch { /* ignore */ }
-      }
-    }
+    void Promise.all([
+      api.companies.list().then((list) =>
+        setCompanyOptions(
+          (list as { id: string; name: string }[]).map((c) => ({ value: c.id, label: c.name }))
+        )
+      ).catch(() => { }),
+      api.projects.list().then((list) =>
+        setProjectOptions(
+          (list as { id: string; name: string }[]).map((p) => ({ value: p.id, label: p.name }))
+        )
+      ).catch(() => { }),
+      api.departments.list().then((list) =>
+        setDepartmentOptions(
+          (list as { id: string; name: string }[]).map((d) => ({ value: d.id, label: d.name }))
+        )
+      ).catch(() => { }),
+      api.users.list().then((list) =>
+        setAssigneeOptions(
+          (list as Member[]).filter((u) => u.status === 'ACTIVE').map((u) => ({
+            value: u.id,
+            label: u.name,
+          }))
+        )
+      ).catch(() => { }),
+    ]);
   }, []);
 
-  // Sync state with URL searchParams when navigation or URL changes occur
-  useEffect(() => {
-    const statusParam = searchParams.get('statuses');
-    const clientParam = searchParams.get('clients');
-    const projectParam = searchParams.get('projects');
-    const assigneeParam = searchParams.get('assignees');
-    const teamParam = searchParams.get('teams');
-
-    if (assigneeParam !== null) {
-      setHasSetDefaultAssignee(true);
-    }
-
-    const newStatuses = statusParam ? statusParam.split(',') : [];
-    const newClients = clientParam ? clientParam.split(',') : [];
-    const newProjects = projectParam ? projectParam.split(',') : [];
-    const newAssignees = assigneeParam ? assigneeParam.split(',') : [];
-    const newTeams = teamParam ? teamParam.split(',') : [];
-
-    setStatusFilter(prev => prev.join(',') !== newStatuses.join(',') ? newStatuses : prev);
-    setClientFilter(prev => prev.join(',') !== newClients.join(',') ? newClients : prev);
-    setProjectFilter(prev => prev.join(',') !== newProjects.join(',') ? newProjects : prev);
-    setAssigneeFilter(prev => prev.join(',') !== newAssignees.join(',') ? newAssignees : prev);
-    setTeamFilter(prev => prev.join(',') !== newTeams.join(',') ? newTeams : prev);
-  }, [searchParams]);
-
-  useEffect(() => {
-    if (isMounted && user?.id && user.role !== 'TEAM_MEMBER' && !hasSetDefaultAssignee && !searchParams.get('assignees')) {
-      setAssigneeFilter([user.id]);
-      setHasSetDefaultAssignee(true);
-    }
-  }, [user, hasSetDefaultAssignee, isMounted, searchParams]);
-
-  const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
-  const [teamFilter, setTeamFilter] = useState<string[]>(() => {
-    const val = searchParams.get('teams');
-    return val ? val.split(',') : [];
-  });
-  const [showCompleted, setShowCompleted] = useState(false);
-  const [sort, setSort] = useState<string>('createdAt_desc');
-  const [dueDateFrom, setDueDateFrom] = useState('');
-  const [dueDateTo, setDueDateTo] = useState('');
-
-  // Sync filter states with URL query parameters and localStorage
-  useEffect(() => {
-    const params = new URLSearchParams(searchParams.toString());
-
-    if (clientFilter.length > 0) params.set('clients', clientFilter.join(','));
-    else params.delete('clients');
-
-    if (projectFilter.length > 0) params.set('projects', projectFilter.join(','));
-    else params.delete('projects');
-
-    if (statusFilter.length > 0) params.set('statuses', statusFilter.join(','));
-    else params.delete('statuses');
-
-    if (assigneeFilter.length > 0) params.set('assignees', assigneeFilter.join(','));
-    else params.delete('assignees');
-
-    if (teamFilter.length > 0) params.set('teams', teamFilter.join(','));
-    else params.delete('teams');
-
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('flowzen_tasks_filters', JSON.stringify({
-        clients: clientFilter,
-        projects: projectFilter,
-        statuses: statusFilter,
-        assignees: assigneeFilter,
-        teams: teamFilter
-      }));
-    }
-
-    const currentQuery = searchParams.toString();
-    const newQuery = params.toString();
-    if (currentQuery !== newQuery) {
-      router.replace(`?${newQuery}`, { scroll: false });
-    }
-  }, [clientFilter, projectFilter, statusFilter, assigneeFilter, teamFilter, router, searchParams]);
-
-  const ALL_TASK_COLUMNS = [
-    { id: 'task', label: 'Task' },
-    { id: 'client', label: 'Client' },
-    { id: 'project', label: 'Project' },
-    { id: 'assignee', label: 'Assignee' },
-    { id: 'priority', label: 'Priority' },
-    { id: 'status', label: 'Status' },
-    { id: 'dueDate', label: 'Due Date' },
-  ];
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(ALL_TASK_COLUMNS.map(c => c.id));
-  const [showColumnDropdown, setShowColumnDropdown] = useState(false);
-  const [showViewSettings, setShowViewSettings] = useState(false);
-  const [viewName, setViewName] = useState('All Tasks');
-
-  const LOCAL_STORAGE_KEY = 'flowzen_view_tasks';
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (parsed.name) setViewName(parsed.name);
-          if (parsed.visibleColumns) setVisibleColumns(parsed.visibleColumns);
-          if (parsed.viewType) setView(parsed.viewType);
-        } catch (e) {
-          console.error(e);
-        }
-      }
-    }
-  }, []);
-
-  const [view, setView] = useState<'list' | 'board'>('list');
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
-  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
-  const isMobile = useIsMobile();
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      setView('list');
-    }
-  }, []);
-
-  const showCreate = searchParams.get('create') === 'true';
-  const setShowCreate = (open: boolean) => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (open) params.set('create', 'true');
-    else params.delete('create');
-    router.replace(`?${params.toString()}`, { scroll: false });
-  };
-
-  const currentFilter = searchParams.get('filter') || '';
-  const setQuickFilter = (val: string) => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (val) params.set('filter', val);
-    else params.delete('filter');
-    router.replace(`?${params.toString()}`, { scroll: false });
-  };
-
-  const taskIdParam = searchParams.get('taskId');
-  const [selectedTask, setSelectedTaskState] = useState<Task | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-
-  // Lock body scroll when create or edit drawer is open on mobile
-  useEffect(() => {
-    const shouldLock = showCreate || (selectedTask && isEditing);
-    if (shouldLock) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [showCreate, selectedTask, isEditing]);
-
-  const statusParam = useMemo(() => {
-    if (statusFilter.length > 0) return statusFilter.join(',');
-    if (!showCompleted) return TASK_STATUSES.filter(s => s !== 'COMPLETED').join(',');
-    return '';
-  }, [statusFilter, showCompleted]);
-
-  const { data: clients = [] } = useClients();
-
-  const debouncedSearch = useDebouncedValue(search, 300);
-
-  const {
-    data,
-    isLoading: isLoadingTasks,
-    refetch: refetchTasks,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage
-  } = useTasks(debouncedSearch, statusParam, projectFilter.join(','), assigneeFilter.join(','), priorityFilter.join(','), teamFilter.join(','), searchParams.get('filter'), sort, dueDateFrom, dueDateTo, clientFilter.join(','));
-
-  const tasks = useMemo(() => {
-    const rawTasks = data?.pages.flatMap((page) => page.tasks) || [];
-    if (sort === 'createdAt_desc') {
-      const statusOrder: Record<string, number> = {
-        IN_PROGRESS: 1,
-        REVIEW: 2,
-        TODO: 3,
-        APPROVED: 4,
-        BACKLOG: 5,
-        BLOCKED: 6,
-        ON_HOLD: 7,
-        COMPLETED: 8
-      };
-      return [...rawTasks].sort((a, b) => {
-        const orderA = statusOrder[a.status] ?? 99;
-        const orderB = statusOrder[b.status] ?? 99;
-        if (orderA !== orderB) {
-          return orderA - orderB;
-        }
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      });
-    }
-    return rawTasks;
-  }, [data, sort]);
-  const { data: projectsData } = useProjects();
-  const projects = useMemo(() => projectsData?.pages.flatMap((page) => page.projects) || [], [projectsData]);
-  const filteredProjectsForDropdown = useMemo(() => {
-    if (clientFilter.length === 0) return projects;
-    return projects.filter((p: any) => clientFilter.includes(p.client?.id || p.clientId));
-  }, [projects, clientFilter]);
-  const { data: members = [] } = useMembers();
-  const { data: teams = [] } = useTeams();
-  const loading = isLoadingTasks;
-
-  const [boardTasks, setBoardTasks] = useState<Task[]>([]);
-  useEffect(() => {
-    setBoardTasks(tasks);
-  }, [tasks]);
-
-  useEffect(() => {
-    if (taskIdParam) {
-      const t = tasks.find((x) => x.id === taskIdParam);
-      if (t) {
-        if (t.id !== selectedTask?.id) {
-          setSelectedTaskState(t);
-          api.get<Task>(`/tasks/${t.id}`).then((fullTask) => {
-            setSelectedTaskState(prev => prev?.id === fullTask.id ? fullTask : prev);
-          }).catch(() => { });
-        }
-      } else if (!selectedTask || selectedTask.id !== taskIdParam) {
-        // Not in the current list (e.g. from a notification), fetch it directly
-        api.get<Task>(`/tasks/${taskIdParam}`).then((fullTask) => {
-          setSelectedTaskState(fullTask);
-        }).catch(() => { });
-      }
-    } else {
-      setSelectedTaskState(null);
-    }
-  }, [taskIdParam, tasks, selectedTask?.id]);
-
-  const setSelectedTask = async (task: Task | null) => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (task) params.set('taskId', task.id);
-    else params.delete('taskId');
-    router.replace(`?${params.toString()}`, { scroll: false });
-
-    // Immediate UI update
-    if (task && task.id !== selectedTask?.id) {
-      setSelectedTaskState(task);
-      api.get<Task>(`/tasks/${task.id}`).then((fullTask) => {
-        setSelectedTaskState(prev => prev?.id === fullTask.id ? fullTask : prev);
-      }).catch(() => { });
-    } else if (!task) {
-      setSelectedTaskState(null);
-    }
-  };
-
-  function startEditing(taskArg?: Task) {
-    const t = taskArg || selectedTask;
-    if (!t) return;
-    if (taskArg) {
-      setSelectedTask(taskArg);
-    }
-    setIsEditing(true);
-  }
-
-  async function updateTaskStatus(taskId: string, status: string) {
-    // Optimistic update so the UI reflects the change immediately (list, board, and panel).
-    queryClient.setQueriesData({ queryKey: ['tasks'] }, (old: any) => {
-      if (!old?.pages) return old;
-      return {
-        ...old,
-        pages: old.pages.map((page: any) => ({
-          ...page,
-          tasks: page.tasks.map((t: any) => (t.id === taskId ? { ...t, status } : t)),
-        })),
-      };
-    });
-    setBoardTasks(prev => prev.map(t => (t.id === taskId ? { ...t, status } : t)));
-    setSelectedTaskState(prev => (prev?.id === taskId ? { ...prev, status } : prev));
+  const load = useCallback(async () => {
     try {
-      await api.put(`/tasks/${taskId}`, { status });
-      toast.success('Task status updated');
-      refetchTasks();
+      setLoading(true);
+      const cfg = await api.config.get();
+      setConfig(cfg);
 
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to update status');
-      refetchTasks(); // revert optimistic change on failure
+      // Fetch tasks without restrictive status filter so all KPI counts are live & accurate
+      const list = (await api.projects.allTasks({})) as unknown as Task[];
+      setTasks(Array.isArray(list) ? list : []);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load tasks');
+    } finally {
+      setLoading(false);
     }
-  }
+  }, []);
 
-  async function deleteTask(target?: Task) {
-    const t = target ?? selectedTask;
-    if (!t) return;
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-    const isConfirmed = await confirm({
-      title: 'Delete Task',
-      message: 'Are you sure you want to delete this task? This action cannot be undone.',
-      confirmText: 'Delete Task',
-      cancelText: 'Cancel',
-    });
-
-    if (isConfirmed) {
-      try {
-        await api.delete(`/tasks/${t.id}`);
-        toast.success('Task deleted successfully');
-        setSelectedTask(null);
-        refetchTasks();
-      } catch (error: any) {
-        toast.error(error.message || 'Failed to delete task');
-        console.error('Failed to delete task', error);
-      }
-    }
-  }
-
-  const onDragEnd = async (result: DropResult) => {
-    const { destination, source, draggableId } = result;
-    if (!destination) return;
-    if (destination.droppableId === source.droppableId && destination.index === source.index) return;
-
-    const newStatus = destination.droppableId;
-
-    // Optimistic UI update
-    setBoardTasks(prev => prev.map(t => t.id === draggableId ? { ...t, status: newStatus } : t));
-    triggerHaptic('medium');
-
+  const complete = async (task: Task, newStatus: Task['status'] = 'DONE') => {
+    setTasks((t) => t.map((x) => (x.id === task.id ? { ...x, status: newStatus } : x)));
     try {
-      await api.put(`/tasks/${draggableId}`, { status: newStatus });
-      toast.success('Task moved successfully');
-      refetchTasks();
-
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to move task');
-      setBoardTasks(tasks);
+      await api.projects.updateTask(task.id, { status: newStatus });
+    } finally {
+      void load();
     }
   };
 
-  const isCustomSortActive = sort && sort !== 'createdAt_desc';
+  const timezone = config?.organization.timezone ?? 'Asia/Kolkata';
+  const locale = config?.organization.locale ?? 'en-IN';
 
-  const hasActiveFilters = isMounted && !!(
-    search ||
-    clientFilter.length > 0 ||
-    projectFilter.length > 0 ||
-    statusFilter.length > 0 ||
-    priorityFilter.length > 0 ||
-    teamFilter.length > 0 ||
-    assigneeFilter.length > 0 ||
-    isCustomSortActive ||
-    showCompleted ||
-    searchParams.get('filter')
-  );
+  // Comprehensive client-side filtering logic
+  const filtered = useMemo(() => {
+    return tasks.filter((t) => {
+      // 1. Text Search
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        const matches =
+          t.title.toLowerCase().includes(q) ||
+          (t.project?.name && t.project.name.toLowerCase().includes(q)) ||
+          (t.project?.company?.name && t.project.company.name.toLowerCase().includes(q)) ||
+          (t.department?.name && t.department.name.toLowerCase().includes(q)) ||
+          (t.assignee?.name && t.assignee.name.toLowerCase().includes(q));
+        if (!matches) return false;
+      }
 
-  const activeCount = (clientFilter.length > 0 ? 1 : 0) +
-    (projectFilter.length > 0 ? 1 : 0) +
-    (statusFilter.length > 0 ? 1 : 0) +
-    (teamFilter.length > 0 ? 1 : 0) +
-    (assigneeFilter.length > 0 ? 1 : 0) +
-    (priorityFilter.length > 0 ? 1 : 0) +
-    (isCustomSortActive ? 1 : 0) +
-    (showCompleted ? 1 : 0);
+      // 2. Status Filter
+      if (selectedStatuses.length > 0) {
+        if (!selectedStatuses.includes(t.status)) return false;
+      } else if (!showDone && t.status === 'DONE') {
+        return false;
+      }
+
+      // 3. Priority Filter
+      if (selectedPriorities.length > 0 && !selectedPriorities.includes(t.priority)) {
+        return false;
+      }
+
+      // 4. Task Type Filter
+      if (selectedTypes.length > 0) {
+        if (!t.taskType || !selectedTypes.includes(t.taskType)) return false;
+      }
+
+      // 5. Department Filter
+      if (selectedDepartments.length > 0) {
+        if (!t.department?.id || !selectedDepartments.includes(t.department.id)) return false;
+      }
+
+      // 6. Client / Company Filter
+      if (selectedCompanies.length > 0) {
+        const compId = t.project?.company?.id;
+        const compName = t.project?.company?.name;
+        const matchesCompany =
+          (compId && selectedCompanies.includes(compId)) ||
+          (compName && selectedCompanies.includes(compName));
+        if (!matchesCompany) return false;
+      }
+
+      // 7. Project Filter
+      if (selectedProjects.length > 0) {
+        if (!t.project?.id || !selectedProjects.includes(t.project.id)) return false;
+      }
+
+      // 8. Assignee Filter
+      if (selectedAssignees.length > 0) {
+        if (!t.assignee?.id || !selectedAssignees.includes(t.assignee.id)) return false;
+      }
+
+      // 9. Quick KPI Toggles
+      if (onlyOverdue && !isTaskOverdue(t)) {
+        return false;
+      }
+
+      if (onlyAwaitingReview && t.status !== 'IN_REVIEW') {
+        return false;
+      }
+
+      return true;
+    });
+  }, [
+    tasks,
+    search,
+    selectedStatuses,
+    selectedPriorities,
+    selectedTypes,
+    selectedDepartments,
+    selectedCompanies,
+    selectedProjects,
+    selectedAssignees,
+    showDone,
+    onlyOverdue,
+    onlyAwaitingReview,
+  ]);
+
+  // Metric counts (live across all tasks)
+  const openTasksCount = tasks.filter((t) => t.status !== 'DONE').length;
+  const overdueCount = tasks.filter(isTaskOverdue).length;
+  const reviewCount = tasks.filter((t) => t.status === 'IN_REVIEW').length;
+  const doneCount = tasks.filter((t) => t.status === 'DONE').length;
+
+  const hasFilters =
+    Boolean(search) ||
+    selectedStatuses.length > 0 ||
+    selectedPriorities.length > 0 ||
+    selectedTypes.length > 0 ||
+    selectedCompanies.length > 0 ||
+    selectedProjects.length > 0 ||
+    selectedDepartments.length > 0 ||
+    selectedAssignees.length > 0 ||
+    showDone ||
+    onlyOverdue ||
+    onlyAwaitingReview;
+
+  const clearFilters = () => {
+    setSearch('');
+    setSelectedStatuses([]);
+    setSelectedPriorities([]);
+    setSelectedTypes([]);
+    setSelectedCompanies([]);
+    setSelectedProjects([]);
+    setSelectedDepartments([]);
+    setSelectedAssignees([]);
+    setShowDone(false);
+    setOnlyOverdue(false);
+    setOnlyAwaitingReview(false);
+  };
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="h-full flex flex-col space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-primary tracking-tight flex items-center gap-2">
-            Tasks
-            <span className="text-xs font-normal text-body-soft bg-subtle px-2 py-0.5 rounded-lg border border-border">
-              {viewName}
+    <div className="space-y-5 pb-10">
+      {/* Page Title & KPI Metric Chips */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between shrink-0">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight text-primary">All Tasks</h1>
+
+          {/* Quick Filter Metric Chips */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-surface border border-border text-primary">
+              <span className="h-2 w-2 rounded-full bg-primary" />
+              {openTasksCount} Active
             </span>
-          </h1>
-          <p className="text-sm text-secondary mt-1">{tasks.length} tasks</p>
-        </div>
-      </div>
 
-      {/* Redesigned Clean Tasks Toolbar */}
-      <div className="bg-white border border-border rounded-2xl p-4 shadow-sm flex flex-col gap-4 w-full mb-6">
-        {/* Row 1: Search + Active Filter Pills */}
-        {isMobile ? (
-          <div className="flex flex-col gap-2.5 w-full">
-            <div className="flex items-center gap-2 w-full">
-              <div className="relative w-full shrink">
-                <Icon as={Search} size="md" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-secondary" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search tasks..."
-                  className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none placeholder:text-secondary"
-                />
-              </div>
+            {overdueCount > 0 && (
               <button
-                type="button"
-                onClick={() => setFilterSheetOpen(true)}
-                className="flex items-center gap-1.5 h-9 rounded-xl border border-border bg-white hover:bg-gray-50 px-3 text-xs font-semibold text-secondary shrink-0 transition-colors"
-              >
-                <SlidersHorizontal className="h-3.5 w-3.5" />
-                <span>Filters</span>
-                {activeCount > 0 && (
-                  <span className="ml-0.5 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-white">
-                    {activeCount}
-                  </span>
-                )}
-              </button>
-            </div>
-
-            {/* Active Chips Row */}
-            {activeCount > 0 && (
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-                {clientFilter.length > 0 && <ActiveFilterChip label={`Clients: ${clientFilter.length}`} onRemove={() => setClientFilter([])} />}
-                {projectFilter.length > 0 && <ActiveFilterChip label={`Projects: ${projectFilter.length}`} onRemove={() => setProjectFilter([])} />}
-                {statusFilter.length > 0 && <ActiveFilterChip label={`Status: ${statusFilter.length}`} onRemove={() => setStatusFilter([])} />}
-                {teamFilter.length > 0 && <ActiveFilterChip label={`Departments: ${teamFilter.length}`} onRemove={() => setTeamFilter([])} />}
-                {assigneeFilter.length > 0 && (
-                  <ActiveFilterChip
-                    label={
-                      assigneeFilter.length === 1
-                        ? `Assignee: ${members.find((m: any) => m.id === assigneeFilter[0])?.name || '1 selected'}`
-                        : `Assignees: ${assigneeFilter.length}`
-                    }
-                    onRemove={() => setAssigneeFilter([])}
-                  />
-                )}
-                {priorityFilter.length > 0 && <ActiveFilterChip label={`Priority: ${priorityFilter.length}`} onRemove={() => setPriorityFilter([])} />}
-                {isCustomSortActive && <ActiveFilterChip label="Custom Sort" onRemove={() => setSort('createdAt_desc')} />}
-                {showCompleted && <ActiveFilterChip label="Show Done" onRemove={() => setShowCompleted(false)} />}
-              </div>
-            )}
-
-            {/* Mobile Filter Drawer */}
-            <Drawer isOpen={filterSheetOpen} onClose={() => setFilterSheetOpen(false)} title="Filter Tasks">
-              <div className="p-4 space-y-4">
-                <div>
-                  <label className="text-xs font-medium text-secondary mb-1.5 block">Clients</label>
-                  <MultiSelect
-                    showSelectAll
-                    value={clientFilter}
-                    onChange={(val) => {
-                      setClientFilter(val);
-                      if (val.length > 0) {
-                        setProjectFilter(prev => prev.filter(projId => {
-                          const p = projects.find(proj => proj.id === projId);
-                          return val.includes(p?.client?.id || p?.clientId);
-                        }));
-                      }
-                    }}
-                    placeholder="Clients"
-                    triggerClassName="w-full h-9 rounded-xl border border-border bg-white px-3 text-xs"
-                    options={clients.map((c: any) => ({ label: getClientDisplayName(c), value: c.id }))}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-secondary mb-1.5 block">Projects</label>
-                  <MultiSelect
-                    showSelectAll
-                    value={projectFilter}
-                    onChange={setProjectFilter}
-                    placeholder="Projects"
-                    triggerClassName="w-full h-9 rounded-xl border border-border bg-white px-3 text-xs"
-                    options={filteredProjectsForDropdown.map((p) => ({ label: p.name, value: p.id }))}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-secondary mb-1.5 block">Status</label>
-                  <MultiSelect
-                    showSelectAll
-                    value={statusFilter}
-                    onChange={setStatusFilter}
-                    placeholder="Status"
-                    triggerClassName="w-full h-9 rounded-xl border border-border bg-white px-3 text-xs"
-                    options={TASK_STATUS_OPTIONS}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-secondary mb-1.5 block">Departments</label>
-                  <MultiSelect
-                    showSelectAll
-                    value={teamFilter}
-                    onChange={setTeamFilter}
-                    placeholder="Departments"
-                    triggerClassName="w-full h-9 rounded-xl border border-border bg-white px-3 text-xs"
-                    options={teams.map((t: any) => ({ label: t.name, value: t.id }))}
-                  />
-                </div>
-                {user?.role !== 'TEAM_MEMBER' && (
-                  <div>
-                    <label className="text-xs font-medium text-secondary mb-1.5 block">Assignees</label>
-                    <MultiSelect
-                      showSelectAll
-                      value={assigneeFilter}
-                      onChange={setAssigneeFilter}
-                      placeholder="Assignees"
-                      triggerClassName="w-full h-9 rounded-xl border border-border bg-white px-3 text-xs"
-                      options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
-                    />
-                  </div>
-                )}
-                <div>
-                  <label className="text-xs font-medium text-secondary mb-1.5 block">Priority</label>
-                  <MultiSelect
-                    showSelectAll
-                    value={priorityFilter}
-                    onChange={setPriorityFilter}
-                    placeholder="Priority"
-                    triggerClassName="w-full h-9 rounded-xl border border-border bg-white px-3 text-xs"
-                    options={[
-                      { label: 'Low', value: 'LOW' },
-                      { label: 'Medium', value: 'MEDIUM' },
-                      { label: 'High', value: 'HIGH' },
-                      { label: 'Urgent', value: 'URGENT' },
-                    ]}
-                  />
-                </div>
-                {view === 'list' && (
-                  <div>
-                    <label className="text-xs font-medium text-secondary mb-1.5 block">Sort By</label>
-                    <Select
-                      ariaLabel="Sort Tasks"
-                      value={sort}
-                      onChange={setSort}
-                      buttonClassName="w-full px-3 h-9 rounded-xl border border-border bg-white text-secondary text-xs font-medium"
-                      options={[
-                        { label: 'Sort: Created (New)', value: 'createdAt_desc' },
-                        { label: 'Sort: Project A-Z', value: 'project_asc' },
-                        { label: 'Sort: Project Z-A', value: 'project_desc' },
-                        { label: 'Sort: Priority (Low-High)', value: 'priority_asc' },
-                        { label: 'Sort: Priority (High-Low)', value: 'priority_desc' },
-                        { label: 'Sort: Status (To Do-Done)', value: 'status_asc' },
-                        { label: 'Sort: Status (Done-To Do)', value: 'status_desc' },
-                        { label: 'Sort: Name A-Z', value: 'title_asc' },
-                        { label: 'Sort: Name Z-A', value: 'title_desc' },
-                        { label: 'Sort: Created (Old)', value: 'createdAt_asc' },
-                        { label: 'Sort: Due Date', value: 'dueDate_desc' },
-                        { label: 'Sort: Updated', value: 'updatedAt_desc' },
-                      ]}
-                    />
-                  </div>
-                )}
-                <div className="pt-2 border-t border-border">
-                  <Toggle label="Show Done Tasks" checked={showCompleted} onChange={setShowCompleted} className="w-full justify-between flex-row-reverse" />
-                </div>
-              </div>
-            </Drawer>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center gap-2 w-full">
-            {/* Search Box */}
-            <div className="relative w-full sm:w-64 md:w-80 shrink-0">
-              <Icon as={Search} size="md" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-secondary" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search tasks..."
-                className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none placeholder:text-secondary"
-              />
-            </div>
-
-            {/* Filter Pills */}
-            <div className="shrink-0">
-              <MultiSelect
-                showSelectAll
-                value={clientFilter}
-                onChange={(val) => {
-                  setClientFilter(val);
-                  if (val.length > 0) {
-                    setProjectFilter(prev => prev.filter(projId => {
-                      const p = projects.find(proj => proj.id === projId);
-                      return val.includes(p?.client?.id || p?.clientId);
-                    }));
-                  }
-                }}
-                placeholder="Clients"
-                triggerClassName={clientFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
-                options={clients.map((c: any) => ({ label: getClientDisplayName(c), value: c.id }))}
-              />
-            </div>
-
-            <div className="shrink-0">
-              <MultiSelect
-                showSelectAll
-                value={projectFilter}
-                onChange={setProjectFilter}
-                placeholder="Projects"
-                triggerClassName={projectFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
-                options={filteredProjectsForDropdown.map((p) => ({ label: p.name, value: p.id }))}
-              />
-            </div>
-
-            <div className="shrink-0">
-              <MultiSelect
-                showSelectAll
-                value={statusFilter}
-                onChange={setStatusFilter}
-                placeholder="Status"
-                triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
-                options={TASK_STATUS_OPTIONS}
-              />
-            </div>
-
-            <div className="shrink-0">
-              <MultiSelect
-                showSelectAll
-                value={teamFilter}
-                onChange={setTeamFilter}
-                placeholder="Departments"
-                triggerClassName={teamFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
-                options={teams.map((t: any) => ({ label: t.name, value: t.id }))}
-              />
-            </div>
-
-            {user?.role !== 'TEAM_MEMBER' && (
-              <div className="shrink-0">
-                <MultiSelect
-                  showSelectAll
-                  value={assigneeFilter}
-                  onChange={setAssigneeFilter}
-                  placeholder="Assignees"
-                  triggerClassName={assigneeFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
-                  options={members.map((m: any) => ({ label: m.name, value: m.id, image: getInitials(m.name), colorClass: getAvatarColor(m.name), capacity: m.capacity, isOverloaded: m.activeTasks > (m.overloadThreshold ?? 25) }))}
-                />
-              </div>
-            )}
-
-            <div className="shrink-0">
-              <MultiSelect
-                showSelectAll
-                value={priorityFilter}
-                onChange={setPriorityFilter}
-                placeholder="Priority"
-                triggerClassName={priorityFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
-                options={[
-                  { label: 'Low', value: 'LOW' },
-                  { label: 'Medium', value: 'MEDIUM' },
-                  { label: 'High', value: 'HIGH' },
-                  { label: 'Urgent', value: 'URGENT' },
-                ]}
-              />
-            </div>
-
-            {view === 'list' && (
-              <div className="shrink-0">
-                <Select
-                  ariaLabel="Sort Tasks"
-                  value={sort}
-                  onChange={setSort}
-                  buttonClassName="px-3 h-9 rounded-xl border border-border bg-white text-secondary text-xs font-medium focus:ring-1 focus:ring-primary shadow-none"
-                  options={[
-                    { label: 'Sort: Created (New)', value: 'createdAt_desc' },
-                    { label: 'Sort: Project A-Z', value: 'project_asc' },
-                    { label: 'Sort: Project Z-A', value: 'project_desc' },
-                    { label: 'Sort: Priority (Low-High)', value: 'priority_asc' },
-                    { label: 'Sort: Priority (High-Low)', value: 'priority_desc' },
-                    { label: 'Sort: Status (To Do-Done)', value: 'status_asc' },
-                    { label: 'Sort: Status (Done-To Do)', value: 'status_desc' },
-                    { label: 'Sort: Name A-Z', value: 'title_asc' },
-                    { label: 'Sort: Name Z-A', value: 'title_desc' },
-                    { label: 'Sort: Created (Old)', value: 'createdAt_asc' },
-                    { label: 'Sort: Due Date', value: 'dueDate_desc' },
-                    { label: 'Sort: Updated', value: 'updatedAt_desc' },
-                  ]}
-                />
-              </div>
-            )}
-
-            <div className="flex items-center border border-border rounded-xl px-3 h-9 bg-white shadow-sm shrink-0">
-              <Toggle size="sm" label="Show Done" id="show-completed" checked={showCompleted} onChange={setShowCompleted} labelClassName="text-body-soft" />
-            </div>
-          </div>
-        )}
-
-        {/* Separator line */}
-        <div className="h-px bg-border/60 w-full" />
-
-        {/* Row 2: Tabs + Actions */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 w-full max-w-full">
-          {/* Left Side: Segmented tabs */}
-          <div className="flex bg-subtle p-1 rounded-xl gap-0.5 border border-border/50 w-full sm:w-auto max-w-full overflow-x-auto no-scrollbar">
-            {[
-              { id: '', label: 'All', activeColor: 'bg-white text-primary shadow-sm border border-black/5' },
-              { id: 'today', label: 'Today', activeColor: 'bg-white text-primary shadow-sm border border-black/5' },
-              { id: 'overdue', label: 'Overdue', activeColor: 'bg-red-500 text-white shadow-sm' },
-              { id: 'approval', label: 'Approval', activeColor: 'bg-amber-500 text-white shadow-sm' }
-            ].map(tab => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setQuickFilter(tab.id)}
-                className={`flex-1 sm:flex-none text-center px-3 sm:px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors duration-150 motion-reduce:transition-none whitespace-nowrap ${currentFilter === tab.id
-                  ? tab.activeColor
-                  : 'text-secondary hover:text-primary'
+                onClick={() => setOnlyOverdue(!onlyOverdue)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${onlyOverdue
+                  ? 'bg-red-600 text-white border-red-600'
+                  : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
                   }`}
               >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Right Side: View toggle, settings, new task, and clear filters */}
-          <div className="flex items-center justify-between sm:justify-end gap-2.5 w-full sm:w-auto">
-            {hasActiveFilters && (
-              <button
-                onClick={() => {
-                  setSearch('');
-                  setClientFilter([]);
-                  setProjectFilter([]);
-                  setStatusFilter([]);
-                  setPriorityFilter([]);
-                  setTeamFilter([]);
-                  setAssigneeFilter([]);
-                  setSort('createdAt_desc');
-                  setShowCompleted(false);
-                  if (typeof window !== 'undefined') {
-                    localStorage.removeItem('flowzen_tasks_filters');
-                  }
-                  router.replace('/tasks', { scroll: false });
-                }}
-                className="flex items-center gap-1.5 h-8.5 rounded-xl bg-red-50 px-3 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors border border-red-100"
-              >
-                <Icon as={X} size="sm" /> Clear Filters
+                <AlertCircle className="h-3.5 w-3.5" />
+                {overdueCount} Overdue
               </button>
             )}
 
-            {/* List / Board Toggle Buttons */}
-            <div className="flex bg-subtle p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-8.5 items-center">
+            {reviewCount > 0 && (
               <button
-                type="button"
-                onClick={() => setView('list')}
-                className={`p-1.5 rounded-lg transition-colors duration-150 motion-reduce:transition-none ${view === 'list' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
-                title="List View"
+                onClick={() => setOnlyAwaitingReview(!onlyAwaitingReview)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${onlyAwaitingReview
+                  ? 'bg-amber-500 text-white border-amber-500'
+                  : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                  }`}
               >
-                <Icon as={LayoutList} size="sm" />
+                <Eye className="h-3.5 w-3.5" />
+                {reviewCount} In Review
               </button>
-              <button
-                type="button"
-                onClick={() => setView('board')}
-                className={`p-1.5 rounded-lg transition-colors duration-150 motion-reduce:transition-none ${view === 'board' ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
-                title="Board View"
-              >
-                <Icon as={Kanban} size="sm" />
-              </button>
-            </div>
+            )}
 
-            <button onClick={() => setShowViewSettings(true)} className="p-2 rounded-xl border border-border bg-white hover:bg-gray-50 transition-colors text-secondary hover:text-primary h-8.5 w-8.5 flex items-center justify-center" title="View settings">
-              <Icon as={Settings} size="sm" />
+            {doneCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 border border-emerald-200 text-emerald-700">
+                <Check className="h-3.5 w-3.5" />
+                {doneCount} Done
+              </span>
+            )}
+          </div>
+        </div>
+
+        <Button className="gap-2 shrink-0" onClick={() => setIsNewTaskOpen(true)}>
+          <Plus className="h-4 w-4" />
+          Add Task
+        </Button>
+      </div>
+
+      {/* Filter Toolbar */}
+      <div className="rounded-xl border border-border bg-white p-3.5 space-y-3 shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Search Box */}
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search task, project, client, assignee..."
+              className="w-full rounded-xl border border-border bg-white pl-9 pr-8 py-1.5 text-sm text-body placeholder:text-muted focus:border-primary focus:outline-none"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-2.5 top-2.5 text-muted hover:text-primary"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {/* View Mode Switcher */}
+          <div className="flex items-center gap-1 rounded-xl border border-border bg-surface p-1">
+            <button
+              onClick={() => setView('LIST')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${view === 'LIST'
+                ? 'bg-white shadow-xs text-primary font-semibold'
+                : 'text-secondary hover:text-primary'
+                }`}
+            >
+              <List className="h-3.5 w-3.5" /> List
             </button>
-
-            <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary-hover transition-colors duration-150 motion-reduce:transition-none h-8.5">
-              <Icon as={Plus} size="sm" /> New Task
+            <button
+              onClick={() => setView('BOARD')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${view === 'BOARD'
+                ? 'bg-white shadow-xs text-primary font-semibold'
+                : 'text-secondary hover:text-primary'
+                }`}
+            >
+              <LayoutDashboard className="h-3.5 w-3.5" /> Board
+            </button>
+            <button
+              onClick={() => setView('CALENDAR')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${view === 'CALENDAR'
+                ? 'bg-white shadow-xs text-primary font-semibold'
+                : 'text-secondary hover:text-primary'
+                }`}
+            >
+              <CalendarIcon className="h-3.5 w-3.5" /> Calendar
             </button>
           </div>
         </div>
+
+        {/* Custom MultiSelect Filter Dropdowns */}
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-subtle">
+          <div className="flex items-center gap-1 text-xs font-medium text-muted mr-1">
+            <Filter className="h-3.5 w-3.5" /> Filters:
+          </div>
+
+          {/* Status Filter */}
+          <div className="w-34">
+            <MultiSelect
+              compact={true}
+              placeholder="All Statuses"
+              options={STATUS_OPTIONS}
+              value={selectedStatuses}
+              onChange={setSelectedStatuses}
+              triggerClassName="h-8.5 px-3 py-1 text-xs rounded-lg bg-surface border-border"
+            />
+          </div>
+
+          {/* Priority Filter */}
+          <div className="w-32">
+            <MultiSelect
+              compact={true}
+              placeholder="All Priorities"
+              options={PRIORITY_OPTIONS}
+              value={selectedPriorities}
+              onChange={setSelectedPriorities}
+              triggerClassName="h-8.5 px-3 py-1 text-xs rounded-lg bg-surface border-border"
+            />
+          </div>
+
+          {/* Task Type Filter (with SVG Icons!) */}
+          <div className="w-36">
+            <MultiSelect
+              compact={true}
+              placeholder="All Task Types"
+              options={TASK_TYPE_OPTIONS}
+              value={selectedTypes}
+              onChange={setSelectedTypes}
+              triggerClassName="h-8.5 px-3 py-1 text-xs rounded-lg bg-surface border-border"
+            />
+          </div>
+
+          {/* Department Filter */}
+          {departmentOptions.length > 0 && (
+            <div className="w-38">
+              <MultiSelect
+                compact={true}
+                placeholder="All Departments"
+                options={departmentOptions}
+                value={selectedDepartments}
+                onChange={setSelectedDepartments}
+                triggerClassName="h-8.5 px-3 py-1 text-xs rounded-lg bg-surface border-border"
+              />
+            </div>
+          )}
+
+          {/* Company / Client Filter */}
+          {companyOptions.length > 0 && (
+            <div className="w-38">
+              <MultiSelect
+                compact={true}
+                placeholder="All Clients"
+                options={companyOptions}
+                value={selectedCompanies}
+                onChange={setSelectedCompanies}
+                triggerClassName="h-8.5 px-3 py-1 text-xs rounded-lg bg-surface border-border"
+              />
+            </div>
+          )}
+
+          {/* Project Filter */}
+          {projectOptions.length > 0 && (
+            <div className="w-38">
+              <MultiSelect
+                compact={true}
+                placeholder="All Projects"
+                options={projectOptions}
+                value={selectedProjects}
+                onChange={setSelectedProjects}
+                triggerClassName="h-8.5 px-3 py-1 text-xs rounded-lg bg-surface border-border"
+              />
+            </div>
+          )}
+
+          {/* Assignee Filter */}
+          {assigneeOptions.length > 0 && (
+            <div className="w-38">
+              <MultiSelect
+                compact={true}
+                placeholder="All Assignees"
+                options={assigneeOptions}
+                value={selectedAssignees}
+                onChange={setSelectedAssignees}
+                triggerClassName="h-8.5 px-3 py-1 text-xs rounded-lg bg-surface border-border"
+              />
+            </div>
+          )}
+
+          {/* Show Done Toggle */}
+          <label className="flex items-center gap-1.5 text-xs text-secondary cursor-pointer select-none bg-surface border border-border px-2.5 py-1.5 rounded-lg hover:bg-subtle transition-colors">
+            <input
+              type="checkbox"
+              checked={showDone}
+              onChange={(e) => setShowDone(e.target.checked)}
+              className="rounded border-border text-primary focus:ring-primary"
+            />
+            Show Done
+          </label>
+
+          {/* Clear Filters */}
+          {hasFilters && (
+            <button
+              onClick={clearFilters}
+              className="flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-2.5 py-1.5 rounded-lg transition-colors ml-auto"
+            >
+              <RotateCcw className="h-3 w-3" /> Clear filters
+            </button>
+          )}
+        </div>
       </div>
+
+      {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
 
       {loading ? (
-        <div className="flex gap-4 overflow-x-auto pb-4 h-full">
-          {TASK_STATUSES.map((col) => (
-            <div key={col} className="min-w-65 flex-1 flex flex-col">
-              <div className="flex items-center gap-2 mb-3 px-1">
-                <Skeleton className="h-4 w-20" />
-                <Skeleton className="h-4 w-6 rounded-full ml-auto" />
-              </div>
-              <div className="flex-1 space-y-3">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="rounded-xl border border-border bg-white p-3.5">
-                    <div className="flex items-start gap-2 mb-3">
-                      <Skeleton className="h-4 w-32" />
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <Skeleton className="h-3 w-16" />
-                      <Skeleton className="h-6 w-6 rounded-full" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <>
-          {/* Board View */}
-          {view === 'board' && (
-            <DragDropContext onDragEnd={onDragEnd}>
-              <div className="flex gap-4 overflow-x-auto pb-4 h-full">
-                {TASK_STATUSES.map((col) => {
-                  const colTasks = boardTasks.filter((t) => t.status === col);
-                  return (
-                    <div key={col} className="min-w-65 flex-1 flex flex-col">
-                      <div className="flex items-center gap-2 mb-3 px-1">
-                        <div className={`h-2 w-2 rounded-full ${TASK_STATUS_COLORS[col]?.split(' ')[0] || 'bg-gray-200'}`} />
-                        <span className="text-xs font-medium text-body uppercase tracking-wide">{TASK_STATUS_LABELS[col]}</span>
-                        <span className="ml-auto text-xs text-body-soft bg-subtle rounded-full px-2 py-0.5 tabular-nums">{colTasks.length}</span>
-                      </div>
-                      <Droppable droppableId={col}>
-                        {(provided, snapshot) => (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.droppableProps}
-                            className={`flex-1 space-y-2 rounded-xl transition-colors ${snapshot.isDraggingOver ? 'bg-gray-50/50' : ''}`}
-                            style={{ minHeight: '150px' }}
-                          >
-                            {colTasks.map((t, index) => (
-                              <Draggable key={t.id} draggableId={t.id} index={index}>
-                                {(provided, snapshot) => (
-                                  <div
-                                    ref={provided.innerRef}
-                                    {...provided.draggableProps}
-                                    {...provided.dragHandleProps}
-                                    style={{ ...provided.draggableProps.style }}
-                                    className={`rounded-xl border border-border bg-white p-3.5 hover:shadow-sm cursor-pointer transition-shadow group ${snapshot.isDragging ? 'shadow-lg rotate-2' : ''}`}
-                                    onClick={() => setSelectedTask(t)}
-                                  >
-                                    <div className="flex items-start gap-2 mb-2">
-                                      <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${getPriorityBadge(t.priority)}`}>
-                                        {t.priority}
-                                      </span>
-                                      <p className="text-sm font-medium text-primary leading-snug">{t.title}</p>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-xs text-secondary">
-                                        {t.lead
-                                          ? `${t.lead.companyName || t.lead.contactName || 'Lead'} • Pre-sales`
-                                          : `${t.project?.client?.name ? `${t.project.client.name} • ` : ''}${t.project?.name || ''}`}
-                                      </span>
-                                      <div className="flex items-center gap-2">
-                                        {(t._count?.comments ?? 0) > 0 && (
-                                          <span className="flex items-center gap-0.5 text-xs text-secondary">
-                                            <MessageSquare className="h-3 w-3" /> {t._count?.comments}
-                                          </span>
-                                        )}
-                                        <span className="text-[11px] font-medium text-text-on-sunken">{assigneeLabel(t)}</span>
-                                      </div>
-                                    </div>
-                                    {t.dueDate && (
-                                      <div className="flex items-center gap-2 mt-2">
-                                        <p className={`text-xs ${isTaskOverdue(t) ? 'text-red-500 font-medium' : 'text-secondary'}`}>
-                                          {isTaskOverdue(t) ? `Overdue (${getDaysLate(t)} days late)` : formatShortDate(t.dueDate)}
-                                        </p>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </Draggable>
-                            ))}
-                            {provided.placeholder}
-                          </div>
-                        )}
-                      </Droppable>
-                    </div>
-                  );
-                })}
-              </div>
-            </DragDropContext>
-          )}
+        <PageSkeleton />
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon={CheckCircle2}
+          title="No tasks found"
+          hint={hasFilters ? 'Try adjusting the filters.' : 'There are no active tasks.'}
+        />
+      ) : view === 'BOARD' ? (
+        /* KANBAN BOARD VIEW */
+        <div className="flex gap-4 overflow-x-auto pb-4 max-w-full min-h-0 max-h-[calc(100vh-230px)]">
+          {COLUMNS.map((col) => {
+            const colTasks = filtered.filter((t) => t.status === col.status);
+            return (
+              <div
+                key={col.status}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => {
+                  if (draggingTask && draggingTask.status !== col.status) {
+                    void complete(draggingTask, col.status);
+                    setDraggingTask(null);
+                  }
+                }}
+                className="flex w-80 shrink-0 flex-col rounded-2xl border border-border bg-surface max-h-[calc(100vh-230px)] overflow-hidden"
+              >
+                {/* Column Header */}
+                <div className="sticky top-0 z-10 border-b border-border p-3 bg-white shrink-0 flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-2">
+                    {col.label}
+                    <span className="rounded-full bg-surface border border-border px-2 py-0.5 text-[10px] text-secondary tabular-nums">
+                      {colTasks.length}
+                    </span>
+                  </h3>
+                </div>
 
-          {/* List View */}
-          {view === 'list' && (
-            <>
-              {/* Desktop Table View */}
-              <div className="hidden md:block rounded-2xl border border-border bg-white overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-200">
-                    <thead>
-                      <tr className="border-b border-subtle">
-                        {visibleColumns.includes('task') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Task</th>}
-                        {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>}
-                        {visibleColumns.includes('project') && (
-                          <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
-                            <ColumnDropdown
-                              title="Project"
-                              sortAscValue="project_asc"
-                              sortDescValue="project_desc"
-                              sortAscLabel="Sort A to Z"
-                              sortDescLabel="Sort Z to A"
-                              currentSort={sort}
-                              onSortChange={setSort}
-                            />
-                          </th>
+                {/* Internal Scrollable Cards Body */}
+                <div className="flex flex-1 flex-col gap-2.5 p-3 overflow-y-auto min-h-0">
+                  {colTasks.map((t) => (
+                    <div
+                      key={t.id}
+                      draggable
+                      onDragStart={() => setDraggingTask(t)}
+                      onDragEnd={() => setDraggingTask(null)}
+                      onClick={() => setSelectedTask(t)}
+                      className={`cursor-grab rounded-xl border border-border bg-white p-3.5 hover:border-primary transition-all space-y-2.5 shrink-0 active:cursor-grabbing ${draggingTask?.id === t.id ? 'opacity-40' : ''
+                        }`}
+                    >
+                      {/* Card Tags: Type & Priority */}
+                      <div className="flex items-center justify-between gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {t.taskType && TASK_TYPE_LABELS[t.taskType] && (
+                            <Badge tone={TASK_TYPE_LABELS[t.taskType].tone}>
+                              {TASK_TYPE_LABELS[t.taskType].label}
+                            </Badge>
+                          )}
+                          <Badge tone={PRIORITY_TONE[t.priority] ?? 'neutral'}>
+                            {t.priority}
+                          </Badge>
+                        </div>
+                        {isTaskOverdue(t) && (
+                          <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">
+                            Overdue
+                          </span>
                         )}
-                        {visibleColumns.includes('assignee') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Assignee</th>}
-                        {visibleColumns.includes('priority') && (
-                          <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
-                            <ColumnDropdown
-                              title="Priority"
-                              sortAscValue="priority_asc"
-                              sortDescValue="priority_desc"
-                              sortAscLabel="Low to Urgent"
-                              sortDescLabel="Urgent to Low"
-                              currentSort={sort}
-                              onSortChange={setSort}
-                            />
-                          </th>
+                      </div>
+
+                      {/* Task Title */}
+                      <p className="text-sm font-semibold text-primary line-clamp-2 leading-snug">
+                        {t.title}
+                      </p>
+
+                      {/* Project / Client Context */}
+                      {(t.project?.name || t.project?.company?.name || t.department?.name) && (
+                        <p className="text-xs text-secondary truncate">
+                          {t.project?.company?.name ? `${t.project.company.name} · ` : ''}
+                          {t.project?.name ?? t.department?.name ?? '—'}
+                        </p>
+                      )}
+
+                      {/* Assignee Footer */}
+                      <div className="border-t border-subtle pt-2.5 flex items-center justify-between gap-2">
+                        <div className="max-w-[65%] truncate">
+                          <UserChip user={t.assignee} />
+                        </div>
+                        {t.dueDate && (
+                          <span className={`text-[11px] shrink-0 ${isTaskOverdue(t) ? 'text-red-600 font-bold' : 'text-secondary font-medium'}`}>
+                            {formatDate(t.dueDate, timezone, locale)}
+                          </span>
                         )}
-                        {visibleColumns.includes('status') && (
-                          <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
-                            <ColumnDropdown
-                              title="Status"
-                              sortAscValue="status_asc"
-                              sortDescValue="status_desc"
-                              sortAscLabel="To Do to Done"
-                              sortDescLabel="Done to To Do"
-                              currentSort={sort}
-                              onSortChange={setSort}
-                            />
-                          </th>
-                        )}
-                        {visibleColumns.includes('dueDate') && (
-                          <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">
-                            <ColumnDropdown
-                              title="Due Date"
-                              sortDescValue="dueDate_desc"
-                              sortDescLabel="Latest First"
-                              currentSort={sort}
-                              onSortChange={setSort}
-                            />
-                          </th>
-                        )}
-                        <th className="px-6 py-3.5 w-10 text-center relative select-none">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setShowColumnDropdown(!showColumnDropdown); }}
-                            className="inline-flex items-center justify-center h-6 w-6 rounded-md text-secondary hover:bg-gray-100 hover:text-primary transition-colors duration-150 motion-reduce:transition-none text-sm font-bold border border-transparent hover:border-gray-200"
-                            title="Toggle visible columns"
-                          >
-                            +
-                          </button>
-                          <AnimatePresence>
-                            {showColumnDropdown && (
-                              <>
-                                <div className="fixed inset-0 z-40" onClick={() => setShowColumnDropdown(false)} />
-                                <motion.div
-                                  initial={{ opacity: 0, y: 5 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  exit={{ opacity: 0, y: 5 }}
-                                  className="absolute right-0 top-full mt-2 w-48 bg-white border border-border rounded-xl shadow-lg z-50 overflow-hidden py-1"
-                                >
-                                  <div className="px-3 py-2 border-b border-subtle text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
-                                    Visible Columns
-                                  </div>
-                                  {ALL_TASK_COLUMNS.map(col => (
-                                    <button
-                                      key={col.id}
-                                      onClick={() => {
-                                        setVisibleColumns(prev =>
-                                          prev.includes(col.id)
-                                            ? prev.filter(c => c !== col.id)
-                                            : [...prev, col.id]
-                                        )
-                                      }}
-                                      className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-surface transition-colors"
-                                    >
-                                      <span className="text-body">{col.label}</span>
-                                      {visibleColumns.includes(col.id) && <Icon as={Check} size="md" className="text-primary" />}
-                                    </button>
-                                  ))}
-                                </motion.div>
-                              </>
-                            )}
-                          </AnimatePresence>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-subtle">
-                      {tasks.map((t) => (
-                        <tr key={t.id} className="hover:bg-surface cursor-pointer transition-colors" onClick={() => setSelectedTask(t)}>
-                          {visibleColumns.includes('task') && (
-                            <td className="px-6 py-3.5">
-                              <div className="flex items-center gap-2">
-                                <div className={`h-2 w-2 rounded-full shrink-0 ${getPriorityDot(t.priority)}`} />
-                                <span className="text-sm font-medium text-primary">{t.title}</span>
-                              </div>
-                            </td>
-                          )}
-                          {visibleColumns.includes('client') && <td className="px-6 py-3.5 text-sm text-secondary">{t.project?.client?.company || t.lead?.companyName || '-'}</td>}
-                          {visibleColumns.includes('project') && <td className="px-6 py-3.5 text-sm text-secondary">{t.project?.name || (t.lead ? 'Pre-sales (lead)' : '-')}</td>}
-                          {visibleColumns.includes('assignee') && (
-                            <td className="px-6 py-3.5">
-                              {taskAssignees(t).length ? (
-                                <div className="flex items-center gap-2">
-                                  <AssigneeAvatars task={t} size={24} />
-                                  <span className="text-sm text-body">{assigneeLabel(t)}</span>
-                                </div>
-                              ) : <span className="text-sm text-secondary">Unassigned</span>}
-                            </td>
-                          )}
-                          {visibleColumns.includes('priority') && (
-                            <td className="px-6 py-3.5">
-                              <span className="text-xs font-medium text-body capitalize">{t.priority.toLowerCase()}</span>
-                            </td>
-                          )}
-                          {visibleColumns.includes('status') && (
-                            <td className="px-6 py-3.5" onClick={(e) => e.stopPropagation()}>
-                              <div className="w-36">
-                                <Select
-                                  value={t.status}
-                                  onChange={(val) => updateTaskStatus(t.id, val)}
-                                  options={TASK_STATUS_OPTIONS}
-                                  buttonClassName={`py-1 px-2.5 text-xs font-medium border-transparent shadow-none ${TASK_STATUS_COLORS[t.status] || ''}`}
-                                />
-                              </div>
-                            </td>
-                          )}
-                          {visibleColumns.includes('dueDate') && (
-                            <td className="px-6 py-3.5 text-sm">
-                              {t.dueDate ? (
-                                <div className="flex items-center gap-2">
-                                  <span className={isTaskOverdue(t) ? 'text-red-500 font-medium' : 'text-secondary'}>
-                                    {isTaskOverdue(t) ? `Overdue (${getDaysLate(t)} ${getDaysLate(t) === 1 ? 'day' : 'days'} late)` : formatShortDate(t.dueDate)}
-                                  </span>
-                                </div>
-                              ) : (
-                                <span className="text-secondary">-</span>
-                              )}
-                            </td>
-                          )}
-                          <td className="px-6 py-3.5 text-right w-10 text-secondary">
-                            <Icon as={ChevronRight} size="md" className="inline-block" />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </div>
+                    </div>
+                  ))}
+                  {colTasks.length === 0 && (
+                    <div className="py-10 text-center text-xs text-secondary italic">No tasks</div>
+                  )}
                 </div>
               </div>
+            );
+          })}
+        </div>
+      ) : view === 'CALENDAR' ? (
+        /* CALENDAR VIEW */
+        <CalendarView
+          events={filtered.map((t) => ({
+            id: t.id,
+            title: t.title,
+            subtitle: t.project?.name ?? t.department?.name ?? undefined,
+            date: t.dueDate,
+            status: t.status,
+            priority: t.priority,
+            onClick: () => setSelectedTask(t),
+          }))}
+        />
+      ) : (
+        /* TABLE LIST VIEW */
+        <Table>
+          <THead>
+            <TR className="bg-surface hover:bg-surface">
+              <TH>DATE</TH>
+              <TH>TASK</TH>
+              <TH>TYPE</TH>
+              <TH>PROJECT / CLIENT</TH>
+              <TH>ASSIGNEE</TH>
+              <TH>PRIORITY</TH>
+              <TH>STATUS</TH>
+              <TH>DUE DATE</TH>
+            </TR>
+          </THead>
+          <TBody>
+            {filtered.map((task) => (
+              <TR
+                key={task.id}
+                onClick={() => setSelectedTask(task)}
+                className="cursor-pointer hover:bg-subtle transition-colors group"
+              >
+                {/* 1. Assigned Date (First Column) */}
+                <TD className="text-secondary whitespace-nowrap text-xs font-medium">
+                  {formatDate(task.createdAt, timezone, locale)}
+                </TD>
 
-              {/* Mobile Card View (Swipeable) */}
-              <div className="md:hidden flex flex-col pb-4">
-                {tasks.map((t) => (
-                  <SwipeableCard
-                    key={t.id}
-                    onSwipeLeft={() => {
-                      deleteTask(t);
-                    }}
-                    onSwipeRight={() => updateTaskStatus(t.id, 'COMPLETED')}
-                  >
-                    <div
-                      onClick={() => setSelectedTask(t)}
-                      className="p-4 cursor-pointer"
-                    >
-                      <div className="flex items-start gap-2 mb-2">
-                        <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${getPriorityDot(t.priority)}`} />
-                        <p className="text-sm font-medium text-primary leading-snug">{t.title}</p>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <StatusBadge status={t.status} size="xs" />
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-medium text-text-on-sunken">{assigneeLabel(t)}</span>
-                        </div>
-                      </div>
-                      {t.dueDate && (
-                        <div className="flex items-center gap-2 mt-2">
-                          <p className={`text-xs ${isTaskOverdue(t) ? 'text-red-500 font-medium' : 'text-secondary'}`}>{formatShortDate(t.dueDate)}</p>
-                        </div>
+                {/* 2. Task Title */}
+                <TD className="font-medium text-primary">
+                  <div className="flex items-center gap-2">
+                    {task.awaitingMyReview && (
+                      <span
+                        className="h-2 w-2 rounded-full bg-amber-400 shrink-0"
+                        title="Awaiting your review"
+                      />
+                    )}
+                    <span className={`truncate max-w-64 block font-semibold ${task.status === 'DONE' ? 'line-through text-muted' : 'text-primary'}`}>
+                      {task.title}
+                    </span>
+                  </div>
+                </TD>
+
+                {/* 3. Task Type */}
+                <TD>
+                  {task.taskType && TASK_TYPE_LABELS[task.taskType] ? (
+                    <Badge tone={TASK_TYPE_LABELS[task.taskType].tone}>
+                      {TASK_TYPE_LABELS[task.taskType].label}
+                    </Badge>
+                  ) : (
+                    <span className="text-muted text-xs">—</span>
+                  )}
+                </TD>
+
+                {/* 4. Project & Client */}
+                <TD className="text-secondary">
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-xs font-semibold text-primary truncate max-w-44">
+                      {task.project?.name ?? task.deal?.title ?? task.department?.name ?? '—'}
+                    </span>
+                    {task.project?.company?.name && (
+                      <span className="text-[11px] text-secondary truncate max-w-44">
+                        {task.project.company.name}
+                      </span>
+                    )}
+                  </div>
+                </TD>
+
+                {/* 5. Assignee (Avatar + Name) */}
+                <TD>
+                  <UserChip user={task.assignee} />
+                </TD>
+
+                {/* 6. Priority */}
+                <TD>
+                  <Badge tone={PRIORITY_TONE[task.priority] ?? 'neutral'}>
+                    {task.priority ?? 'MEDIUM'}
+                  </Badge>
+                </TD>
+
+                {/* 7. Status Dropdown */}
+                <TD onClick={(e) => e.stopPropagation()}>
+                  <Select
+                    value={task.status}
+                    onChange={(v) => complete(task, v as Task['status'])}
+                    options={STATUS_OPTIONS}
+                    ariaLabel={`Status for ${task.title}`}
+                    buttonClassName="px-2 py-1 text-xs w-28 bg-white border-border rounded-lg"
+                  />
+                </TD>
+
+                {/* 8. Due Date */}
+                <TD>
+                  {task.dueDate ? (
+                    <div className="flex flex-col">
+                      <span className={`text-xs font-medium ${isTaskOverdue(task) ? 'text-red-600 font-bold' : 'text-primary'}`}>
+                        {formatDate(task.dueDate, timezone, locale)}
+                      </span>
+                      {isTaskOverdue(task) && (
+                        <span className="text-[10px] font-bold text-red-600">
+                          Overdue
+                        </span>
                       )}
                     </div>
-                  </SwipeableCard>
-                ))}
-              </div>
-            </>
-          )}
-
-          {/* Load More Button */}
-          {hasNextPage && (
-            <div className="mt-6 flex justify-center pb-8">
-              <button
-                onClick={() => fetchNextPage()}
-                disabled={isFetchingNextPage}
-                className="rounded-xl border border-border bg-white px-6 py-2.5 text-sm font-medium text-body hover:bg-surface disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
-              >
-                {isFetchingNextPage ? 'Loading...' : 'Load More Tasks'}
-              </button>
-            </div>
-          )}
-        </>
+                  ) : (
+                    <span className="text-muted text-xs">—</span>
+                  )}
+                </TD>
+              </TR>
+            ))}
+          </TBody>
+        </Table>
       )}
 
-      {/* Task detail preview (shared component) */}
-      <AnimatePresence>
-        {selectedTask && !isEditing && (
-          <TaskDetailDrawer
-            taskId={selectedTask.id}
-            onClose={() => setSelectedTask(null)}
-            onChanged={refetchTasks}
-            onEdit={(t) => startEditing(t)}
-            canManage={user?.role !== 'TEAM_MEMBER'}
-            currentUserId={user?.id}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Shared Task Create/Edit Drawer */}
-      <TaskFormDrawer
-        isOpen={showCreate || (isEditing && !!selectedTask)}
-        taskToEdit={isEditing ? selectedTask : null}
-        onClose={() => {
-          if (showCreate) setShowCreate(false);
-          if (isEditing) {
-            setIsEditing(false);
-            setSelectedTask(null);
-          }
-        }}
-        onSuccess={() => {
-          refetchTasks();
-        }}
+      <NewTaskPanel
+        isOpen={isNewTaskOpen}
+        onClose={() => setIsNewTaskOpen(false)}
+        onSuccess={load}
       />
 
-      <ViewSettingsPanel
-        isOpen={showViewSettings}
-        onClose={() => setShowViewSettings(false)}
-        viewName={viewName}
-        onViewNameChange={setViewName}
-        viewType={view}
-        onViewTypeChange={setView}
-        columns={ALL_TASK_COLUMNS}
-        visibleColumns={visibleColumns}
-        onVisibleColumnsChange={setVisibleColumns}
-        onSave={() => {
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ viewType: view, visibleColumns, name: viewName }));
-          setShowViewSettings(false);
-          toast.success('View saved successfully');
-        }}
-        onReset={() => {
-          setView('list');
-          setVisibleColumns(ALL_TASK_COLUMNS.map(c => c.id));
-          setViewName('All Tasks');
-          localStorage.removeItem(LOCAL_STORAGE_KEY);
-          toast.success('View reset to default');
-        }}
+      <TaskDetailPanel
+        task={selectedTask}
+        isOpen={selectedTask !== null}
+        onClose={() => setSelectedTask(null)}
+        onUpdate={load}
+        timezone={timezone}
+        locale={locale}
       />
-    </motion.div>
-  );
-}
-
-export default function TasksPage() {
-  return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center min-h-100">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
-    }>
-      <TasksContent />
-    </Suspense>
+    </div>
   );
 }

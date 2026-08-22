@@ -1,524 +1,467 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import { X, Plus, Trash2, Save, FileDown, Search, Check, AlertTriangle } from 'lucide-react';
-import { api } from '@/lib/api';
-import { formatCurrency, toDateInput } from '@/lib/utils';
+/**
+ * Raising a quotation.
+ *
+ * Two things make this different from an ordinary line-items editor:
+ *
+ * ① Every figure shown is the SERVER's arithmetic. The running total comes back
+ *    from /quotes/preview rather than being added up here, so what somebody reads
+ *    while typing and what the document ends up billing cannot drift apart (§4.6).
+ *
+ * ② The document states what KIND of work it is. A total of 4,80,000 could be
+ *    40,000 a month for a year or a one-off build, and the quotation cannot say
+ *    which without the type and the frequency — while the deal's value follows
+ *    this total, so an unstated type inflates the forecast twelvefold (§3.12).
+ */
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Loader2, Plus, Trash2 } from 'lucide-react';
+import {
+  api,
+  ApiError,
+  formatMoney,
+  type BillingFrequency,
+  type BoardColumn,
+  type ContractType,
+  type OrgConfig,
+} from '@/lib/api-v2';
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
+import { Button } from '@/components/ui/button';
+import { Field, FieldSelect } from '@/components/ui/field';
 import { Select } from '@/components/ui/select';
-import { RichTextEditor } from '@/components/ui/rich-text-editor';
-import { useAuthStore } from '@/stores';
-import { TAX_TYPES, resolveTaxType, DEFAULT_TAX_TYPE } from '../lib/tax-catalog';
-import { fileUrl } from '@/lib/files';
-import { useModalSafety } from '@/hooks/useModalSafety';
-import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import toast from 'react-hot-toast';
-import { leadStageLabel } from '@/lib/lead-stage';
-import { Icon } from '@/components/ui/icon';
+import { ErrorNote, Note } from '@/components/ui/empty-state';
 
-const UNITS = ['Hours', 'Days', 'Months', 'Units', 'Lump Sum'];
-const PRESET_TERMS = ['Immediate', '100% Advance', '50-50', 'Monthly', 'Milestone-based'];
-const PAYMENT_TERMS = [...PRESET_TERMS, 'Custom'];
-const SALES_TEAMS = ['BD', 'Digital Marketing', 'Founder'];
-const PAY_METHODS = ['Bank Transfer', 'UPI', 'Cheque', 'Online'];
-const DEFAULT_TERMS = '1. This quotation is valid until the expiration date stated above.\n2. 50% advance is required to commence work unless otherwise agreed.\n3. Taxes as applicable (GST).\n4. Timelines are indicative and subject to timely inputs and approvals.';
+type Line = {
+  description: string;
+  quantity: string;
+  rate: string;
+  discountPercent: string;
+  serviceId: string;
+};
 
-type Line = { description: string; unit: string; quantity: string; unitPrice: string; discountPct: string; taxPct: string; taxType: string };
-const emptyLine = (): Line => ({ description: '', unit: 'Units', quantity: '1', unitPrice: '', discountPct: '', taxPct: '18', taxType: DEFAULT_TAX_TYPE });
+type Totals = { subtotal: string; cgst: string; sgst: string; igst: string; total: string };
+type DealOption = { id: string; title: string; companyId: string; companyName: string; stage: string };
 
-export function QuoteFormModal({ editId: initialEditId, duplicateOf, prefillLeadId, onClose, onSaved }: { editId: string | null; duplicateOf: any; prefillLeadId?: string | null; onClose: () => void; onSaved: () => void }) {
-  const { user } = useAuthStore();
-  const [clients, setClients] = useState<any[]>([]);
-  // Leads still in the pipeline can be quoted too — that's the whole point of not creating a
-  // client account until the deal is won. A quote is raised against a lead OR a client.
-  const [leads, setLeads] = useState<any[]>([]);
-  const [leadId, setLeadId] = useState('');
-  const [orgState, setOrgState] = useState<string>('');
-  const [submitting, setSubmitting] = useState(false);
-  // editId may change after first save (new doc -> DRAFT with ID)
-  const [editId, setEditId] = useState<string | null>(initialEditId);
+const emptyLine = (): Line => ({
+  description: '',
+  quantity: '1',
+  rate: '',
+  discountPercent: '0',
+  serviceId: '',
+});
 
-  const [documentType, setDocumentType] = useState<'QUOTATION' | 'PROFORMA_INVOICE'>('QUOTATION');
-  const [clientId, setClientId] = useState('');
-  const [clientName, setClientName] = useState('');
-  const [clientState, setClientState] = useState('');
-  const [form, setForm] = useState({
-    contactPerson: '', clientEmail: '', clientPhone: '', billingAddress: '',
-    documentDate: toDateInput(new Date()),
-    expirationDate: toDateInput(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)),
-    paymentTerms: 'Immediate', customerRef: '',
-    salesTeam: '', onlinePayment: false,
-    tags: '', paymentMethod: '', clientGst: '', projectStartDate: '', deliveryDate: '', projectNotes: '', scope: '',
-    termsConditions: DEFAULT_TERMS,
-  });
-  const [lineItems, setLineItems] = useState<Line[]>([emptyLine()]);
-  const [showOther, setShowOther] = useState(false);
+const PAYMENT_TERMS = [
+  { value: '', label: 'Not stated' },
+  { value: 'ADVANCE_100', label: '100% in advance' },
+  { value: 'SPLIT_50_50', label: '50% up front, 50% on delivery' },
+  { value: 'MONTHLY', label: 'Monthly' },
+  { value: 'MILESTONE', label: 'On milestones' },
+];
 
-  // Client lookup combobox
-  const [clientSearch, setClientSearch] = useState('');
-  const debouncedClientSearch = useDebouncedValue(clientSearch, 300);
-  const [showClientList, setShowClientList] = useState(false);
-  const clientRef = useRef<HTMLDivElement>(null);
+const FREQUENCIES = [
+  { value: 'MONTHLY', label: 'Monthly' },
+  { value: 'QUARTERLY', label: 'Quarterly' },
+  { value: 'YEARLY', label: 'Yearly' },
+  { value: 'ONE_TIME', label: 'Once' },
+];
 
-  // Both lists are searched by the SERVER, debounced as you type.
-  //
-  // This used to request ?limit=200 for each and match substrings in the browser. Both endpoints
-  // cap a page at 100, silently — so past 100 clients or 100 leads, the rest simply could not be
-  // picked, and the box said "No match" as if they did not exist.
-  useEffect(() => {
-    const q = debouncedClientSearch.trim();
-    const qs = q ? `&search=${encodeURIComponent(q)}` : '';
-    api.get<{ clients: any[] }>(`/clients?limit=50${qs}`).then((d) => setClients(d.clients || [])).catch(() => { });
-    // excludeConverted: once a lead is won you quote the account, not the lead. Filtered in the
-    // query rather than after the fact, so it cannot empty out an already-capped page.
-    api.get<any>(`/crm/leads?limit=50&excludeConverted=1${qs}`).then((d) => setLeads(d?.leads || d || [])).catch(() => { });
-  }, [debouncedClientSearch]);
+export function QuoteFormModal({
+  open,
+  dealId: fixedDealId,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  /** Set when raising from a deal — then the deal is not a choice. */
+  dealId?: string;
+  onClose: () => void;
+  onCreated: (quoteId: string) => void;
+}) {
+  const [config, setConfig] = useState<OrgConfig | null>(null);
+  const [deals, setDeals] = useState<DealOption[]>([]);
+
+  const [dealId, setDealId] = useState(fixedDealId ?? '');
+  const [engagementType, setEngagementType] = useState<ContractType>('RETAINER');
+  const [billingFrequency, setBillingFrequency] = useState<BillingFrequency>('MONTHLY');
+  const [paymentTerms, setPaymentTerms] = useState('');
+  const [taxRatePercent, setTaxRatePercent] = useState('18');
+  const [validUntil, setValidUntil] = useState('');
+  const [lines, setLines] = useState<Line[]>([emptyLine()]);
+
+  const [totals, setTotals] = useState<Totals | null>(null);
+  const [pricing, setPricing] = useState(false);
+  const [priceError, setPriceError] = useState<ApiError | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.get<any>('/settings/company/quote-context').then((c) => {
-      setOrgState(c?.state || '');
-      if (!editId && !duplicateOf && c?.standardTerms) setForm((f) => ({ ...f, termsConditions: c.standardTerms }));
-    }).catch(() => { });
-  }, []);
+    if (!open) return;
+    void Promise.all([api.config.get(), api.deals.board()])
+      .then(([cfg, board]) => {
+        setConfig(cfg);
+        // A quotation is raised against a deal that is still open. Quoting one
+        // already won or lost has no meaning, so those are not offered.
+        setDeals(
+          board.columns
+            .filter((column: BoardColumn) => column.kind === 'OPEN')
+            .flatMap((column) =>
+              column.deals.map((deal) => ({
+                id: deal.id,
+                title: deal.title ?? 'Untitled deal',
+                companyId: deal.company.id,
+                companyName: deal.company.name,
+                stage: column.name,
+              })),
+            ),
+        );
+      })
+      .catch(() => setError('Could not load deals and services'));
+  }, [open]);
 
-  // Deep-linked from a lead's "Raise Quotation" button.
-  useEffect(() => {
-    if (!prefillLeadId || editId || duplicateOf) return;
-    api.get<any>(`/crm/leads/${prefillLeadId}`).then((l) => { if (l) selectLead(l); }).catch(() => { });
-  }, [prefillLeadId, editId, duplicateOf]);
+  const deal = useMemo(() => deals.find((d) => d.id === dealId) ?? null, [deals, dealId]);
+  const currency = config?.organization.currency ?? 'INR';
+  const locale = config?.organization.locale ?? 'en-IN';
+  const money = (v: string | null | undefined) => formatMoney(v, currency, locale);
 
-  // Populate for edit / duplicate
-  useEffect(() => {
-    const src = editId ? null : duplicateOf;
-    async function load() {
-      const q = editId ? await api.get<any>(`/crm/quotes/${editId}`) : src;
-      if (!q) return;
-      setDocumentType(q.documentType);
-      setClientId(q.clientId);
-      setClientName(q.clientName);
-      setClientState(q.clientState || '');
-      setClientSearch(q.clientName || '');
-      setForm({
-        contactPerson: q.contactPerson || '', clientEmail: q.clientEmail || '', clientPhone: q.clientPhone || '', billingAddress: q.billingAddress || '',
-        documentDate: toDateInput(q.documentDate) || toDateInput(new Date()),
-        expirationDate: toDateInput(q.expirationDate),
-        paymentTerms: q.paymentTerms || '50-50', customerRef: q.customerRef || '',
-        salesTeam: q.salesTeam || '',
-        onlinePayment: q.onlinePayment || false,
-        tags: (q.tags || []).join(', '), paymentMethod: q.paymentMethod || '', clientGst: q.clientGst || '',
-        projectStartDate: toDateInput(q.projectStartDate),
-        deliveryDate: toDateInput(q.deliveryDate),
-        projectNotes: q.projectNotes || '', scope: q.scope || '', termsConditions: q.termsConditions || DEFAULT_TERMS,
-      });
-      setLineItems((q.lineItems || []).map((li: any) => ({
-        description: li.description, unit: li.unit, quantity: String(Number(li.quantity)), unitPrice: String(Number(li.unitPrice)),
-        discountPct: li.discountPct ? String(Number(li.discountPct)) : '', taxPct: String(Number(li.taxPct ?? 18)), taxType: li.taxType || DEFAULT_TAX_TYPE,
-      })));
-    }
-    load();
-  }, [editId, duplicateOf]);
+  const setLine = (index: number, patch: Partial<Line>) =>
+    setLines((current) => current.map((line, i) => (i === index ? { ...line, ...patch } : line)));
 
-  useEffect(() => {
-    function onClick(e: MouseEvent) { if (clientRef.current && !clientRef.current.contains(e.target as Node)) setShowClientList(false); }
-    document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
-  }, []);
-
-  const initialSnapshotRef = useRef<string | null>(null);
-
-  const getFormSnapshotString = useCallback(() => {
-    return JSON.stringify({
-      documentType,
-      clientId,
-      leadId,
-      form,
-      lineItems,
+  /** Picking a service fills the description and rate, then lets both be edited. */
+  const pickService = (index: number, serviceId: string) => {
+    const service = config?.services.find((s) => s.id === serviceId);
+    setLine(index, {
+      serviceId,
+      description: service?.name ?? lines[index].description,
+      rate: service?.defaultRate ?? lines[index].rate,
     });
-  }, [documentType, clientId, leadId, form, lineItems]);
+  };
 
-  const isDirty = useCallback(() => {
-    if (!initialSnapshotRef.current) return false;
-    return getFormSnapshotString() !== initialSnapshotRef.current;
-  }, [getFormSnapshotString]);
+  const priceable = useMemo(
+    () => lines.filter((l) => l.description.trim() !== '' && l.rate !== ''),
+    [lines],
+  );
 
-  const { guardedClose, panelRef, hasInteracted } = useModalSafety({ onClose, isDirty });
-
-  // Re-baseline on every change until the person first touches the form.
-  //
-  // This used to snapshot once on a 150ms timer, which raced the requests that fill this form in:
-  // the standard terms from /settings/company/quote-context, and for a prefilled or edited
-  // document the client and line items too. Any of those landing after 150ms — an ordinary
-  // network round trip — left the form differing from its own baseline, so closing without
-  // typing anything still asked "Discard changes?".
-  //
-  // Anything that arrives before the first interaction is by definition not the user's edit, so
-  // it belongs in the baseline. `hasInteracted` comes from useModalSafety, which owns the panel
-  // element those listeners hang off.
-  useEffect(() => {
-    if (hasInteracted()) return;
-    initialSnapshotRef.current = getFormSnapshotString();
-  }, [getFormSnapshotString, hasInteracted]);
-
-  // Already matched and narrowed by the server — these only cap how many rows the dropdown shows.
-  const filteredClients = clients.slice(0, 8);
-  const filteredLeads = leads.slice(0, 6);
-
-  function selectClient(c: any) {
-    setClientId(c.id);
-    setLeadId('');
-    setClientName(c.company || c.name);
-    setClientState(c.state || '');
-    setClientSearch(c.company || c.name);
-    setForm((f) => ({ ...f, contactPerson: c.contactPerson || c.contacts?.[0]?.name || c.name || f.contactPerson, clientEmail: c.email || '', clientPhone: c.phone || '', billingAddress: c.billingAddress || c.address || '', clientGst: c.gstNumber || '' }));
-    setShowClientList(false);
-  }
-
-  // A lead carries the same billing details a quotation needs (billingAddress, gstNumber),
-  // so no client account has to be created just to send a quote.
-  function selectLead(l: any) {
-    const label = l.companyName || l.contactName || 'Lead';
-    setLeadId(l.id);
-    setClientId('');
-    setClientName(label);
-    setClientState(l.state || '');
-    setClientSearch(label);
-    setForm((f) => ({
-      ...f,
-      contactPerson: l.contactName || f.contactPerson,
-      clientEmail: l.contactEmail || '',
-      clientPhone: l.contactPhone || '',
-      billingAddress: l.billingAddress || l.address || '',
-      clientGst: l.gstNumber || '',
-    }));
-    setShowClientList(false);
-  }
-
-  // Live financials — each line's tax TYPE drives the split (mirrors the server util).
-  const fin = useMemo(() => {
-    let untaxed = 0, disc = 0, cgst = 0, sgst = 0, igst = 0, rcm = false;
-    const amounts: number[] = [];
-    for (const it of lineItems) {
-      const gross = (parseFloat(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0);
-      const d = gross * ((parseFloat(it.discountPct) || 0) / 100);
-      const amt = gross - d;
-      amounts.push(amt);
-      untaxed += amt; disc += d;
-      const mode = resolveTaxType(it.taxType).mode;
-      const taxAmt = amt * ((parseFloat(it.taxPct) || 0) / 100);
-      if (mode === 'GST') { cgst += taxAmt / 2; sgst += taxAmt / 2; }
-      else if (mode === 'IGST') { igst += taxAmt; }
-      else if (mode === 'RC') { rcm = true; }
+  const price = useCallback(async () => {
+    if (priceable.length === 0) {
+      setTotals(null);
+      setPriceError(null);
+      return;
     }
-    return { untaxed, disc, cgst, sgst, igst, totalTax: cgst + sgst + igst, grand: untaxed + cgst + sgst + igst, amounts, rcm };
-  }, [lineItems]);
-
-  function setLine(i: number, key: keyof Line, val: string) {
-    setLineItems((rows) => rows.map((r, idx) => idx === i ? { ...r, [key]: val } : r));
-  }
-
-  function buildPayload() {
-    return {
-      documentType, clientId: clientId || undefined, leadId: leadId || undefined,
-      contactPerson: form.contactPerson, clientEmail: form.clientEmail, clientPhone: form.clientPhone,
-      billingAddress: form.billingAddress, documentDate: form.documentDate, expirationDate: form.expirationDate,
-      paymentTerms: form.paymentTerms,
-      salesTeam: form.salesTeam || undefined, onlinePayment: form.onlinePayment,
-      tags: form.tags ? form.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
-      paymentMethod: form.paymentMethod || undefined,
-      // Sent as-is, never coerced to undefined: '' is a deliberate "omit the GSTIN from this
-      // document", and undefined would make the API fall back to the client's stored number.
-      clientGst: form.clientGst,
-      projectStartDate: form.projectStartDate || undefined, deliveryDate: form.deliveryDate || undefined,
-      projectNotes: form.projectNotes || undefined, scope: form.scope || undefined, termsConditions: form.termsConditions,
-      lineItems: lineItems.map((li) => ({
-        description: li.description, unit: li.unit, quantity: parseFloat(li.quantity) || 0, unitPrice: parseFloat(li.unitPrice) || 0,
-        discountPct: parseFloat(li.discountPct) || 0, taxPct: parseFloat(li.taxPct) || 0, taxType: li.taxType || DEFAULT_TAX_TYPE,
-      })),
-    };
-  }
-
-  function validate(): string | null {
-    if (!clientId && !leadId) return 'Select a client or a lead.';
-    if (!form.contactPerson.trim()) return 'Contact person is required.';
-    if (!form.expirationDate) return 'Expiration date is required.';
-    if (!lineItems.length || lineItems.some((l) => !l.description.trim() || !(parseFloat(l.unitPrice) >= 0))) return 'Each line needs a description and unit price.';
-    return null;
-  }
-
-  async function save(): Promise<string | null> {
-    const err = validate();
-    if (err) { toast.error(err); return null; }
-    setSubmitting(true);
+    setPricing(true);
     try {
-      const payload = buildPayload();
-      const res = editId
-        ? await api.patch<any>(`/crm/quotes/${editId}`, payload)
-        : await api.post<any>('/crm/quotes', payload);
-      toast.success('Saved');
-      return res.id;
-    } catch (e: any) {
-      toast.error(e.message || 'Failed to save');
-      return null;
+      setTotals(
+        await api.quotes.preview({
+          lines: priceable,
+          taxRatePercent: Number(taxRatePercent || 0),
+          companyId: deal?.companyId,
+        }),
+      );
+      setPriceError(null);
+    } catch (e) {
+      setTotals(null);
+      setPriceError(e instanceof ApiError ? e : null);
     } finally {
-      setSubmitting(false);
+      setPricing(false);
     }
-  }
+  }, [priceable, taxRatePercent, deal?.companyId]);
 
-  async function onSaveDraft() {
-    const id = await save();
-    if (id) {
-      setEditId(id); // switch to edit mode so subsequent saves patch the same doc
-      onSaved();
-    }
-  }
+  // Repriced as the form settles rather than on every keystroke.
+  useEffect(() => {
+    if (!open) return;
+    const timer = setTimeout(() => void price(), 400);
+    return () => clearTimeout(timer);
+  }, [price, open]);
 
-  // Save draft but STAY in the modal so the user can keep editing
-  async function onSaveDraftStay() {
-    const id = await save();
-    if (id) {
-      setEditId(id); // patch on next save
-      onSaved(); // refresh the list in background
-      toast.success('Draft saved — you can keep editing');
-    }
-  }
-
-  async function onGeneratePdf() {
-    const id = await save();
-    if (!id) return;
-    const t = toast.loading('Generating PDF…');
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
     try {
-      const res = await api.post<{ pdfUrl: string }>(`/crm/quotes/${id}/generate-pdf`, {});
-      toast.dismiss(t); toast.success('PDF ready');
-      window.open(fileUrl(res.pdfUrl), '_blank');
-      onSaved();
-    } catch (e: any) { toast.dismiss(t); toast.error(e.message || 'PDF failed'); }
-  }
+      const quote = await api.quotes.create({
+        dealId,
+        engagementType,
+        billingFrequency,
+        paymentTerms: paymentTerms || null,
+        taxRatePercent: Number(taxRatePercent || 0),
+        validUntil: validUntil || null,
+        lines: priceable.map((l) => ({
+          description: l.description,
+          quantity: l.quantity,
+          rate: l.rate,
+          discountPercent: l.discountPercent,
+          serviceId: l.serviceId || null,
+        })),
+      });
+      onCreated(quote.id);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not create the quotation');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const serviceOptions = [
+    { value: '', label: 'Free text…' },
+    ...(config?.services.map((s) => ({ value: s.id, label: s.name })) ?? []),
+  ];
 
   return (
-    <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={guardedClose} />
-      <motion.div ref={panelRef} initial={{ opacity: 0, x: '100%' }} animate={{ opacity: 1, x: 0 }} transition={{ type: 'spring', damping: 26, stiffness: 220 }}
-        className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-4xl bg-white shadow-modal flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+    <Modal open={open} onClose={onClose} title="New quotation" size="xl">
+      <form onSubmit={submit}>
+        <ModalBody className="space-y-5">
+          {/* ── Which deal ──────────────────────────────────────────────── */}
+          <FieldSelect
+            label="Deal"
+            required
+            value={dealId}
+            onChange={setDealId}
+            disabled={Boolean(fixedDealId)}
+            placeholder="Choose a deal…"
+            options={deals.map((d) => ({
+              value: d.id,
+              label: `${d.companyName} — ${d.title}`,
+              sublabel: d.stage,
+            }))}
+          />
+          {/*
+            The deal is the quotation's only parent, and it is required. One
+            parent removes the re-pointing dance the old shape needed (§2).
+          */}
+          <p className="-mt-3 text-xs text-secondary">
+            A quotation belongs to a deal. Only open deals can be quoted.
+          </p>
+
+          {/* ── What kind of work ───────────────────────────────────────── */}
           <div>
-            <h2 className="text-lg font-semibold text-primary">{editId ? 'Edit Document' : 'New Document'}</h2>
-            <p className="text-sm text-secondary mt-0.5">Quotation or Proforma Invoice</p>
-          </div>
-          <button onClick={guardedClose} className="p-2 rounded-xl hover:bg-gray-100 transition-colors"><Icon as={X} size="lg" className="text-secondary" /></button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gray-50/30">
-          {/* Document type toggle */}
-          <div className="inline-flex rounded-xl border border-border bg-white p-1">
-            {(['QUOTATION', 'PROFORMA_INVOICE'] as const).map((t) => (
-              <button key={t} onClick={() => !editId && setDocumentType(t)} disabled={!!editId}
-                className={`px-2 md:px-4 py-2 text-xs md:text-sm font-medium rounded-lg transition-colors ${documentType === t ? 'bg-primary text-white' : 'text-secondary hover:text-primary'} ${editId ? 'opacity-70 cursor-not-allowed' : ''}`}>
-                {t === 'QUOTATION' ? 'Quotation' : 'Proforma Invoice'}
-              </button>
-            ))}
-          </div>
-
-          {/* Header fields */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="relative sm:col-span-2" ref={clientRef}>
-              <label className="block text-sm font-medium text-body mb-1.5">
-                Client or Lead <span className="text-red-500">*</span>
-                {leadId && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">Lead</span>}
-              </label>
-              <div className="relative">
-                <Icon as={Search} size="md" className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary" />
-                <input value={clientSearch} onChange={(e) => { setClientSearch(e.target.value); setShowClientList(true); }} onFocus={() => setShowClientList(true)}
-                  placeholder="Search clients or pipeline leads…" className={`w-full rounded-xl border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 ${clientId || leadId ? 'border-border bg-subtle/40' : 'border-border'}`} />
-                {(clientId || leadId) && <Icon as={Check} size="md" className="absolute right-3 top-1/2 -translate-y-1/2 text-body" />}
-              </div>
-              {showClientList && (
-                <div className="absolute z-20 w-full mt-1 bg-white border border-border rounded-xl shadow-lg max-h-56 overflow-auto p-1">
-                  {filteredClients.length === 0 && filteredLeads.length === 0 ? (
-                    <div className="px-3 py-2 text-sm text-secondary">
-                      {/* With server-side search an empty list means "nothing matched", not
-                          "nothing exists" — only say the org is empty when nothing was typed. */}
-                      {clientSearch.trim() ? `No match for “${clientSearch}”.` : 'Nothing to quote yet — add a lead in the Pipeline first.'}
-                    </div>
-                  ) : (
-                    <>
-                      {filteredClients.length > 0 && (
-                        <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-secondary/70">Clients</p>
-                      )}
-                      {filteredClients.map((c) => (
-                        <button key={c.id} onClick={() => selectClient(c)} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 rounded-lg">
-                          <span className="font-medium text-primary">{c.company || c.name}</span>
-                          {c.company && c.name && c.name !== c.company && <span className="text-xs text-secondary ml-2">{c.name}</span>}
-                        </button>
-                      ))}
-                      {filteredLeads.length > 0 && (
-                        <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-secondary/70">Pipeline leads (not yet won)</p>
-                      )}
-                      {filteredLeads.map((l) => (
-                        <button key={l.id} onClick={() => selectLead(l)} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 rounded-lg flex items-center justify-between gap-2">
-                          <span className="min-w-0">
-                            <span className="font-medium text-primary">{l.companyName || l.contactName}</span>
-                            {l.contactName && l.companyName && <span className="text-xs text-secondary ml-2">{l.contactName}</span>}
-                          </span>
-                          <span className="shrink-0 text-[10px] font-semibold text-secondary/80">{leadStageLabel(l.stage)}</span>
-                        </button>
-                      ))}
-                    </>
-                  )}
-                </div>
-              )}
+            <span className="mb-2 block text-sm font-medium text-body">What is being offered?</span>
+            <div className="grid grid-cols-2 gap-3">
+              {(
+                [
+                  { value: 'RETAINER', label: 'Retainer', hint: 'Bills again every period' },
+                  { value: 'PROJECT', label: 'Project', hint: 'A one-off piece of work' },
+                ] as const
+              ).map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    setEngagementType(option.value);
+                    setBillingFrequency(option.value === 'PROJECT' ? 'ONE_TIME' : 'MONTHLY');
+                  }}
+                  className={`rounded-xl border p-3 text-left transition-colors ${
+                    engagementType === option.value
+                      ? 'border-primary bg-subtle'
+                      : 'border-border hover:bg-subtle'
+                  }`}
+                >
+                  <span className="block text-sm font-semibold text-primary">{option.label}</span>
+                  <span className="mt-0.5 block text-xs text-secondary">{option.hint}</span>
+                </button>
+              ))}
             </div>
-            <Input label="Contact Person" required value={form.contactPerson} onChange={(v) => setForm({ ...form, contactPerson: v })} />
-            <Input label="Client GST Number" value={form.clientGst} onChange={(v) => setForm({ ...form, clientGst: v })} placeholder="Auto-filled from client" />
-            <Input label="Document Date" type="date" required value={form.documentDate} onChange={(v) => setForm({ ...form, documentDate: v })} />
-            <Input label="Expiration Date" type="date" required value={form.expirationDate} onChange={(v) => setForm({ ...form, expirationDate: v })} />
-            <div>
-              <label className="block text-sm font-medium text-body mb-1.5">Payment Terms <span className="text-red-500">*</span></label>
-              {(() => {
-                const isCustom = !PRESET_TERMS.includes(form.paymentTerms);
-                return (
-                  <div className="space-y-2">
-                    <Select
-                      ariaLabel="Payment Terms"
-                      value={isCustom ? 'Custom' : form.paymentTerms}
-                      onChange={(v) => setForm({ ...form, paymentTerms: v === 'Custom' ? '' : v })}
-                      options={PAYMENT_TERMS.map((t) => ({ label: t, value: t }))}
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <FieldSelect
+              label="Bills"
+              value={billingFrequency}
+              onChange={(v) => setBillingFrequency(v as BillingFrequency)}
+              options={FREQUENCIES}
+            />
+            <FieldSelect
+              label="Payment terms"
+              value={paymentTerms}
+              onChange={setPaymentTerms}
+              options={PAYMENT_TERMS}
+            />
+            <Field label="Valid until" type="date" value={validUntil} onChange={setValidUntil} />
+          </div>
+
+          {/* ── Lines ───────────────────────────────────────────────────── */}
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm font-medium text-body">Lines</span>
+              <Button
+                type="button"
+                size="sm"
+                icon={Plus}
+                onClick={() => setLines((l) => [...l, emptyLine()])}
+              >
+                Add line
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              {lines.map((line, index) => (
+                <div key={index} className="rounded-xl border border-border p-3">
+                  <div className="flex gap-2">
+                    <div className="w-44 shrink-0">
+                      <Select
+                        value={line.serviceId}
+                        onChange={(v) => pickService(index, v)}
+                        options={serviceOptions}
+                        placeholder="Free text…"
+                        ariaLabel="Service"
+                        buttonClassName="px-2.5 py-2 text-xs"
+                      />
+                    </div>
+                    <input
+                      value={line.description}
+                      onChange={(e) => setLine(index, { description: e.target.value })}
+                      placeholder="What this line is for"
+                      aria-label="Description"
+                      className="min-w-0 flex-1 rounded-input border border-border px-3 py-2 text-sm text-body outline-none focus-visible:border-primary"
                     />
-                    {isCustom && (
-                      <input
-                        value={form.paymentTerms}
-                        onChange={(e) => setForm({ ...form, paymentTerms: e.target.value })}
-                        placeholder="Enter custom payment terms (e.g. Net 30)"
-                        className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1"
+                    {lines.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        icon={Trash2}
+                        aria-label="Remove line"
+                        onClick={() => setLines((l) => l.filter((_, i) => i !== index))}
                       />
                     )}
                   </div>
-                );
-              })()}
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-body mb-1.5">Billing Address</label>
-              <textarea value={form.billingAddress} onChange={(e) => setForm({ ...form, billingAddress: e.target.value })} rows={2} placeholder="Auto-filled from client — edit if needed" className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 resize-none" />
+
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    <SmallField label="Quantity">
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={line.quantity}
+                        onChange={(e) => setLine(index, { quantity: e.target.value })}
+                        className={smallInput}
+                      />
+                    </SmallField>
+                    <SmallField label="Rate">
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={line.rate}
+                        onChange={(e) => setLine(index, { rate: e.target.value })}
+                        className={smallInput}
+                      />
+                    </SmallField>
+                    <SmallField label="Discount %">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="any"
+                        value={line.discountPercent}
+                        onChange={(e) => setLine(index, { discountPercent: e.target.value })}
+                        className={smallInput}
+                      />
+                    </SmallField>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
-
-          {/* Order lines */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-semibold text-primary">Order Lines</h3>
-              <button onClick={() => setLineItems((r) => [...r, emptyLine()])} className="flex items-center gap-1.5 text-xs font-medium text-primary border border-border rounded-lg px-2.5 py-1.5 hover:bg-gray-50"><Icon as={Plus} size="sm" /> Add Row</button>
-            </div>
-            <div className="overflow-x-auto rounded-xl border border-border bg-white">
-              <table className="w-full text-sm min-w-230">
-                <thead><tr className="text-left text-[11px] uppercase tracking-wider text-secondary border-b border-border">
-                  <th className="px-2 py-2 w-8">#</th><th className="px-2 py-2">Description</th><th className="px-2 py-2 w-24">Unit</th>
-                  <th className="px-2 py-2 w-16">Qty</th><th className="px-2 py-2 w-24">Unit Price</th><th className="px-2 py-2 w-16">Disc %</th>
-                  <th className="px-2 py-2 w-16">Tax %</th><th className="px-2 py-2 w-40">Tax Type</th><th className="px-2 py-2 w-28 text-right">Amount</th><th className="px-2 py-2 w-8"></th>
-                </tr></thead>
-                <tbody>
-                  {lineItems.map((li, i) => (
-                    <tr key={i} className="border-b border-gray-50">
-                      <td className="px-2 py-1.5 text-secondary">{i + 1}</td>
-                      <td className="px-2 py-1.5"><input value={li.description} onChange={(e) => setLine(i, 'description', e.target.value)} placeholder="Service description" className="w-full rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1" /></td>
-                      <td className="px-2 py-1.5">
-                        <select value={li.unit} onChange={(e) => setLine(i, 'unit', e.target.value)} className="w-full rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 bg-white">{UNITS.map((u) => <option key={u} value={u}>{u}</option>)}</select>
-                      </td>
-                      <td className="px-2 py-1.5"><input type="number" value={li.quantity} onChange={(e) => setLine(i, 'quantity', e.target.value)} className="w-full rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 text-right" /></td>
-                      <td className="px-2 py-1.5"><input type="number" value={li.unitPrice} onChange={(e) => setLine(i, 'unitPrice', e.target.value)} placeholder="0" className="w-full rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 text-right" /></td>
-                      <td className="px-2 py-1.5"><input type="number" value={li.discountPct} onChange={(e) => setLine(i, 'discountPct', e.target.value)} placeholder="0" className="w-full rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 text-right" /></td>
-                      <td className="px-2 py-1.5"><input type="number" value={li.taxPct} onChange={(e) => setLine(i, 'taxPct', e.target.value)} placeholder="18" className="w-full rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 text-right" /></td>
-                      <td className="px-2 py-1.5">
-                        <Select ariaLabel="Tax Type" rounded="rounded-lg" buttonClassName="px-2.5 py-1.5" value={li.taxType} onChange={(v) => setLine(i, 'taxType', v)} options={TAX_TYPES.map((t) => ({ label: t.label, value: t.value }))} />
-                      </td>
-                      <td className="px-2 py-1.5 text-right font-medium text-primary tabular-nums">{formatCurrency(fin.amounts[i] || 0)}</td>
-                      <td className="px-2 py-1.5 text-right">
-                        {lineItems.length > 1 && <button onClick={() => setLineItems((r) => r.filter((_, idx) => idx !== i))} className="p-1 text-secondary hover:text-red-500"><Icon as={Trash2} size="sm" /></button>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Financial summary */}
-          <div className="flex justify-end">
-            <div className="w-full sm:w-80 bg-white border border-border rounded-xl p-4 space-y-1.5 text-sm">
-              <Row label="Sub Total" value={formatCurrency(fin.untaxed + fin.disc)} />
-              {fin.disc > 0 && <Row label="Discount" value={`- ${formatCurrency(fin.disc)}`} />}
-              {fin.disc > 0 && <Row label="Taxable Amount" value={formatCurrency(fin.untaxed)} />}
-              {fin.totalTax > 0 && <Row label="Total Tax" value={formatCurrency(fin.totalTax)} />}
-              <div className="flex justify-between pt-2 mt-1 border-t border-border"><span className="font-bold text-primary">Grand Total</span><span className="font-bold text-primary text-base">{formatCurrency(fin.grand)}</span></div>
-              {fin.rcm && <p className="text-[11px] text-amber-700 pt-1">Tax payable under reverse charge (RCM).</p>}
-            </div>
-          </div>
-
-          {/* Scope & Terms */}
-          <div className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-body mb-1.5">Scope of Work</label>
-              <RichTextEditor value={form.scope} onChange={(v) => setForm({ ...form, scope: v })} placeholder="Enter scope of work..." />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-body mb-1.5">Terms &amp; Conditions</label>
-              <textarea value={form.termsConditions} onChange={(e) => setForm({ ...form, termsConditions: e.target.value })} rows={4} className="w-full rounded-xl border border-border bg-white px-4 py-3 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 resize-none" />
-            </div>
-          </div>
-
-          {/* Other Info (collapsible) */}
-          <div className="border-t border-border pt-4">
-            <button onClick={() => setShowOther((s) => !s)} className="text-sm font-semibold text-primary">{showOther ? '− Hide' : '+ Show'} Other Info (sales, invoicing, delivery)</button>
-            {showOther && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-                <div>
-                  <label className="block text-sm font-medium text-body mb-1.5">Sales Team</label>
-                  <Select ariaLabel="Sales Team" value={form.salesTeam} onChange={(v) => setForm({ ...form, salesTeam: v })} options={[{ label: '—', value: '' }, ...SALES_TEAMS.map((t) => ({ label: t, value: t }))]} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-body mb-1.5">Payment Method</label>
-                  <Select ariaLabel="Payment Method" value={form.paymentMethod} onChange={(v) => setForm({ ...form, paymentMethod: v })} options={[{ label: '—', value: '' }, ...PAY_METHODS.map((t) => ({ label: t, value: t }))]} />
-                </div>
-                <Input label="Project Start Date" type="date" value={form.projectStartDate} onChange={(v) => setForm({ ...form, projectStartDate: v })} />
-                <Input label="Delivery / Completion Date" type="date" value={form.deliveryDate} onChange={(v) => setForm({ ...form, deliveryDate: v })} />
-                <Input label="Tags (comma separated)" value={form.tags} onChange={(v) => setForm({ ...form, tags: v })} />
-                <div className="flex items-center gap-6 pt-7">
-                  <label className="flex items-center gap-2 text-sm text-body"><input type="checkbox" checked={form.onlinePayment} onChange={(e) => setForm({ ...form, onlinePayment: e.target.checked })} /> Online Payment</label>
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-sm font-medium text-body mb-1.5">Project Notes (internal)</label>
-                  <textarea value={form.projectNotes} onChange={(e) => setForm({ ...form, projectNotes: e.target.value })} rows={2} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 resize-none" />
-                </div>
+          {/* ── The totals, computed by the server ──────────────────────── */}
+          <div className="rounded-xl border border-border bg-surface p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="text-sm font-medium text-primary">Totals</span>
+              <div className="flex items-center gap-2">
+                {pricing && <Loader2 className="h-3.5 w-3.5 animate-spin text-secondary" />}
+                <label htmlFor="tax-rate" className="text-xs text-secondary">
+                  Tax %
+                </label>
+                <input
+                  id="tax-rate"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="any"
+                  value={taxRatePercent}
+                  onChange={(e) => setTaxRatePercent(e.target.value)}
+                  className="w-16 rounded-lg border border-border px-2 py-1 text-xs tabular-nums outline-none focus-visible:border-primary"
+                />
               </div>
+            </div>
+
+            {priceError ? (
+              // A missing organisation state is a SETTING, not a failure — and
+              // the tax split cannot be guessed, so it says which one (§3.11).
+              <Note tone="warn">{priceError.message}</Note>
+            ) : totals ? (
+              <dl className="space-y-1 text-sm">
+                <Row label="Subtotal" value={money(totals.subtotal)} />
+                {Number(totals.igst) > 0 ? (
+                  <Row label="IGST" value={money(totals.igst)} />
+                ) : (
+                  <>
+                    <Row label="CGST" value={money(totals.cgst)} />
+                    <Row label="SGST" value={money(totals.sgst)} />
+                  </>
+                )}
+                <div className="flex justify-between border-t border-border pt-2 text-base font-semibold text-primary">
+                  <dt>Total</dt>
+                  <dd className="tabular-nums">{money(totals.total)}</dd>
+                </div>
+                {/*
+                  Which split applies is decided by the two states, not by a
+                  dropdown someone can get wrong (§3.11).
+                */}
+                <p className="pt-1 text-[11px] text-secondary">
+                  {Number(totals.igst) > 0
+                    ? 'IGST — the client is in another state.'
+                    : 'CGST and SGST — the client is in your state.'}
+                </p>
+              </dl>
+            ) : (
+              <p className="text-xs text-secondary">
+                Fill in a description and a rate to see the figures.
+              </p>
             )}
           </div>
-        </div>
 
-        <div className="p-4 sm:p-5 border-t border-border bg-white flex flex-row justify-end gap-2 sm:gap-3">
-          <button onClick={guardedClose} className="px-4 py-2.5 text-sm font-medium text-body bg-white border border-border rounded-xl hover:bg-gray-50">Cancel</button>
-          <button onClick={onSaveDraftStay} disabled={submitting} className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-body bg-white border border-border rounded-xl hover:bg-gray-50 disabled:opacity-50">
-            <Icon as={Save} size="md" className="shrink-0" />
-            <span className="hidden sm:inline">Save Draft</span><span className="inline sm:hidden">Save</span>
-          </button>
-          <button onClick={onGeneratePdf} disabled={submitting} className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium text-white bg-primary rounded-xl hover:bg-primary-hover disabled:opacity-50">
-            <Icon as={FileDown} size="md" className="shrink-0" />
-            <span className="hidden sm:inline">Generate PDF</span><span className="inline sm:hidden">PDF</span>
-          </button>
-        </div>
+          {error && <ErrorNote>{error}</ErrorNote>}
+        </ModalBody>
 
-      </motion.div>
-    </>
+        <ModalFooter>
+          <p className="mr-auto text-xs text-secondary">
+            Created as a draft. Sending it is a separate step.
+          </p>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            loading={saving}
+            disabled={dealId === '' || priceable.length === 0 || totals === null}
+          >
+            Create quotation
+          </Button>
+        </ModalFooter>
+      </form>
+    </Modal>
   );
 }
 
-function Input({ label, value, onChange, type = 'text', required = false, placeholder }: { label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean; placeholder?: string }) {
+const smallInput =
+  'w-full rounded-lg border border-border px-2 py-1.5 text-sm tabular-nums text-body outline-none focus-visible:border-primary';
+
+function SmallField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div>
-      <label className="block text-sm font-medium text-body mb-1.5">{label} {required && <span className="text-red-500">*</span>}</label>
-      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1" />
-    </div>
+    <label className="block">
+      <span className="mb-1 block text-[11px] text-secondary">{label}</span>
+      {children}
+    </label>
   );
 }
 
 function Row({ label, value }: { label: string; value: string }) {
-  return <div className="flex justify-between text-body"><span className="text-secondary">{label}</span><span className="tabular-nums">{value}</span></div>;
+  return (
+    <div className="flex justify-between text-secondary">
+      <dt>{label}</dt>
+      <dd className="tabular-nums">{value}</dd>
+    </div>
+  );
 }

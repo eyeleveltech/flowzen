@@ -1,1026 +1,654 @@
 'use client';
 
-import { useState, useEffect, useRef, useId, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+/**
+ * Projects.
+ *
+ * A project belongs to the CLIENT and only to the client. What the client is on —
+ * retainer or project, and at what price — is SHOWN here, read from the company
+ * rather than linked to the project (master plan §3.12).
+ *
+ * Health is computed by the server from dates and overdue tasks. A flag someone
+ * sets by hand is green everywhere, forever (§4.8).
+ */
+
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'framer-motion';
-import { api } from '@/lib/api';
-import { getSSE } from '@/lib/sse';
-import { formatDate, formatShortDate, getInitials, getAvatarColor, getClientDisplayName, getProjectStatusFromClient } from '@/lib/utils';
-import { Plus, LayoutList, GanttChartSquare, Calendar, ChevronRight, BarChart3, Clock, LayoutGrid, Search, X, Check, Settings, Kanban, Filter, Lock, SlidersHorizontal } from 'lucide-react';
-import { Drawer } from '@/components/ui/drawer';
-import { useIsMobile } from '@/hooks/use-breakpoint';
-import { ActiveFilterChip } from '@/components/ui/active-filter-chip';
-import toast from 'react-hot-toast';
-import { useAuthStore } from '@/stores';
-import { useProjectFilters } from '@/stores/projectFilters';
-import { Select } from '@/components/ui/select';
-import { MultiSelect } from '@/components/ui/multi-select';
+import { useRouter } from 'next/navigation';
+import { FolderKanban, Plus, List, LayoutDashboard, Calendar, Columns3, Clock, Globe, Smartphone, ShoppingBag, FileCode, Share2, Search, Zap, Package, Filter, RotateCcw, X } from 'lucide-react';
+import { api, ApiError, formatMoney, formatDate, atLeast, type OrgConfig, type Company, type Role } from '@/lib/api-v2';
+import { PageHeader } from '@/components/PageHeader';
+import { Button } from '@/components/ui/button';
+import { Badge, type Tone } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
+import { Field, FieldSelect } from '@/components/ui/field';
+import { EmptyState, ErrorNote } from '@/components/ui/empty-state';
+import { PageSkeleton } from '@/components/ui/skeleton-loaders';
+import { CalendarView } from '@/components/ui/calendar-view';
+import { MultiSelect, type Option } from '@/components/ui/multi-select';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
-import { Skeleton } from '@/components/ui/skeleton';
-import { TagsInput } from '@/components/ui/tags-input';
-import { z } from 'zod';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useProjects, useClients, useMembers, useTeams, useTemplates } from '@/hooks/useQueries';
-import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { projectSchema, type ProjectFormValues } from '@/lib/validations';
-import { CalendarView } from '@/components/projects/calendar-view';
-import { ProjectGanttView } from '@/components/projects/project-gantt-view';
-import { ViewSettingsPanel } from '@/components/ui/view-settings-panel';
-import { ProjectBoardView } from './components/ProjectBoardView';
-import { StatusBadge } from '@/components/ui/status-badge';
 
-interface Project {
-  id: string; name: string; description?: string | null; status: string; priority: string; progress: number;
-  type: string; scope?: string | null; reportingCadence: string; clientApprovalRequired: boolean;
-  tags: string[]; projectNotes?: string | null; folderLink?: string | null;
-  startDate?: string | null; endDate?: string | null; budget?: number | null;
-  client?: { id: string; name: string };
-  owner?: { id: string; name: string; avatar?: string | null };
-  _count?: { tasks: number };
-}
+type Health = 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK';
 
-interface Client { id: string; name: string; }
-interface Member { id: string; name: string; }
-interface Team { id: string; name: string; }
+type Project = {
+  id: string;
+  name: string;
+  description: string | null;
+  type: string | null;
+  scope: string | null;
+  platform: string | null;
+  status: string;
+  priority: string;
+  startDate: string | null;
+  dueDate: string | null;
+  health: Health;
+  taskCount: number;
+  openTaskCount: number;
+  overdueTaskCount: number;
+  company: { id: string; name: string; status: string };
+  owner: { id: string; name: string } | null;
+  members: { user: { id: string; name: string } }[];
+  engagementContext: { type: string; billingFrequency: string; monthlyValue?: string }[];
+};
 
-type ViewMode = 'list' | 'board' | 'timeline' | 'calendar' | 'gantt';
+const HEALTH: Record<Health, { label: string; tone: Tone }> = {
+  ON_TRACK: { label: 'On track', tone: 'good' },
+  AT_RISK: { label: 'At risk', tone: 'warn' },
+  OFF_TRACK: { label: 'Off track', tone: 'bad' },
+};
 
+const STATUS_FILTER_OPTIONS: Option[] = [
+  { value: 'PLANNING', label: 'Planning' },
+  { value: 'ACTIVE', label: 'Active' },
+  { value: 'ON_HOLD', label: 'On Hold' },
+  { value: 'COMPLETED', label: 'Completed' },
+  { value: 'CANCELLED', label: 'Cancelled' },
+];
 
+const TYPE_FILTER_OPTIONS: Option[] = [
+  { value: 'ONE_TIME', label: 'One-Time Project' },
+  { value: 'RETAINER', label: 'Retainer' },
+];
 
+export default function ProjectsPage() {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [config, setConfig] = useState<OrgConfig | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [view, setView] = useState<'LIST' | 'BOARD' | 'TIMELINE' | 'CALENDAR' | 'GANTT'>('LIST');
 
+  // Custom MultiSelect Filter States
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [typeFilter, setTypeFilter] = useState<string[]>([]);
+  const [platformFilter, setPlatformFilter] = useState<string[]>([]);
+  const [clientFilter, setClientFilter] = useState<string[]>([]);
+  const [ownerFilter, setOwnerFilter] = useState<string[]>([]);
 
-import { usePageTitle } from '@/hooks/usePageTitle';
-import { Icon } from '@/components/ui/icon';
-
-function ProjectsContent() {
-  usePageTitle('Projects');
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const { user } = useAuthStore();
-  const [view, setView] = useState<ViewMode>('list');
-  const isMobile = useIsMobile();
-  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
-  const urlStatus = searchParams.get('status');
-  // Filters live in an in-memory store so they persist while navigating into a
-  // project and back, but reset on a full page refresh.
-  const { search, setSearch, statusFilter, setStatusFilter, clientFilter, setClientFilter, ownerFilter, setOwnerFilter, dueDateFilter, setDueDateFilter } = useProjectFilters();
 
-  const activeCount = (statusFilter.length > 0 ? 1 : 0) +
-    (clientFilter.length > 0 ? 1 : 0) +
-    (ownerFilter.length > 0 ? 1 : 0) +
-    (dueDateFilter ? 1 : 0);
-
-  const ALL_PROJECT_COLUMNS = [
-    { id: 'project', label: 'Project' },
-    { id: 'client', label: 'Client' },
-    { id: 'progress', label: 'Progress' },
-    { id: 'status', label: 'Status' },
-    { id: 'owner', label: 'Owner' },
-    { id: 'dueDate', label: 'Due Date' },
-  ];
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(ALL_PROJECT_COLUMNS.map(c => c.id));
-  const [showColumnDropdown, setShowColumnDropdown] = useState(false);
-  const [showViewSettings, setShowViewSettings] = useState(false);
-  const [viewName, setViewName] = useState('All Projects');
-
-  const LOCAL_STORAGE_KEY = 'flowzen_view_projects';
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (parsed.name) setViewName(parsed.name);
-          if (parsed.visibleColumns) setVisibleColumns(parsed.visibleColumns);
-          if (parsed.viewType) setView(parsed.viewType);
-        } catch (e) {
-          console.error(e);
-        }
-      }
+  const load = useCallback(async () => {
+    try {
+      const [list, cfg] = await Promise.all([
+        api.projects.list() as Promise<unknown> as Promise<Project[]>,
+        api.config.get(),
+      ]);
+      setProjects(Array.isArray(list) ? list : []);
+      setConfig(cfg);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load projects');
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (urlStatus) setStatusFilter([urlStatus]);
-  }, [urlStatus]);
+    void load();
+  }, [load]);
 
-  useEffect(() => {
-    if (isMobile && view === 'gantt') {
-      setView('list');
+  const currency = config?.organization.currency ?? 'INR';
+  const locale = config?.organization.locale ?? 'en-IN';
+  const timezone = config?.organization.timezone ?? 'Asia/Kolkata';
+  const role = config?.me.role as Role | undefined;
+
+  const uniqueClients = Array.from(
+    new Map(projects.map((p) => [p.company.id, p.company])).values()
+  );
+  const uniqueOwners = Array.from(
+    new Map(
+      projects.filter((p) => p.owner).map((p) => [p.owner!.id, p.owner!])
+    ).values()
+  );
+
+  const clientFilterOptions: Option[] = uniqueClients.map((c) => ({ value: c.id, label: c.name }));
+  const ownerFilterOptions: Option[] = uniqueOwners.map((o) => ({ value: o.id, label: o.name }));
+
+  const filtered = projects.filter((p) => {
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const matchName = p.name.toLowerCase().includes(q);
+      const matchCompany = p.company.name.toLowerCase().includes(q);
+      if (!matchName && !matchCompany) return false;
     }
-  }, [isMobile, view]);
-  const showCreate = searchParams.get('create') === 'true';
-  const setShowCreate = (open: boolean) => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (open) params.set('create', 'true');
-    else params.delete('create');
-    router.replace(`?${params.toString()}`, { scroll: false });
+    if (statusFilter.length > 0 && !statusFilter.includes(p.status)) return false;
+    if (typeFilter.length > 0 && p.type && !typeFilter.includes(p.type)) return false;
+    if (platformFilter.length > 0) {
+      if (!p.platform) return false;
+      const projectPlatforms = p.platform.split(',');
+      const hasMatch = platformFilter.some((pf) => projectPlatforms.includes(pf));
+      if (!hasMatch) return false;
+    }
+    if (clientFilter.length > 0 && !clientFilter.includes(p.company.id)) return false;
+    if (ownerFilter.length > 0 && p.owner && !ownerFilter.includes(p.owner.id)) return false;
+    return true;
+  });
+
+  const activeCount = projects.filter((p) => p.status === 'ACTIVE').length;
+  const hasActiveFilters = Boolean(
+    searchQuery ||
+    statusFilter.length > 0 ||
+    typeFilter.length > 0 ||
+    platformFilter.length > 0 ||
+    clientFilter.length > 0 ||
+    ownerFilter.length > 0
+  );
+
+  const resetFilters = () => {
+    setSearchQuery('');
+    setStatusFilter([]);
+    setTypeFilter([]);
+    setPlatformFilter([]);
+    setClientFilter([]);
+    setOwnerFilter([]);
   };
 
-  const { handleSubmit, formState: { errors }, reset, setValue, watch } = useForm<ProjectFormValues>({
-    resolver: zodResolver(projectSchema),
-    defaultValues: {
-      name: '', description: '', clientId: '', ownerId: '',
-      type: 'ONE_TIME', scope: '', reportingCadence: 'NONE', clientApprovalRequired: false, tags: [], projectNotes: '', folderLink: '',
-      startDate: '', endDate: '', priority: 'MEDIUM', status: 'PLANNING', memberIds: [], teamIds: [],
-    }
-  });
-  const formValues = watch();
-
-  // Pre-fill the create form when opened from the pipeline "Won" flow
-  // (e.g. /projects?create=true&prefillName=…&prefillClientId=…&prefillBudget=…&prefillOwnerId=…)
-  const prefillApplied = useRef(false);
-  useEffect(() => {
-    if (prefillApplied.current) return;
-    const pName = searchParams.get('prefillName');
-    const pClientId = searchParams.get('prefillClientId');
-    const pBudget = searchParams.get('prefillBudget');
-    const pOwnerId = searchParams.get('prefillOwnerId');
-    if (pName || pClientId || pBudget || pOwnerId) {
-      prefillApplied.current = true;
-      if (pName) setValue('name', pName);
-      if (pClientId) setValue('clientId', pClientId);
-
-      if (pOwnerId) setValue('ownerId', pOwnerId);
-      const params = new URLSearchParams(searchParams.toString());
-      ['prefillName', 'prefillClientId', 'prefillOwnerId'].forEach((k) => params.delete(k));
-      router.replace(`?${params.toString()}`, { scroll: false });
-    }
-  }, [searchParams, setValue, router]);
-
-  const debouncedSearch = useDebouncedValue(search, 300);
-
-  const {
-    data,
-    isLoading: isLoadingProjects,
-    refetch: refetchProjects,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage
-  } = useProjects(debouncedSearch, view === 'calendar', statusFilter.join(','), clientFilter.join(','), ownerFilter.join(','), dueDateFilter);
-
-  const projects = data?.pages.flatMap((page) => page.projects) || [];
-  const { data: clients = [] } = useClients();
-  const { data: members = [] } = useMembers();
-  const { data: teams = [] } = useTeams();
-  const { data: templates = [] } = useTemplates(
-    !!user && ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'].includes(user.role)
-  );
-  const loading = isLoadingProjects;
-
-  const selectedClientId = watch('clientId');
-  useEffect(() => {
-    if (selectedClientId && clients.length > 0) {
-      const selectedClient = clients.find((c: any) => c.id === selectedClientId);
-      if (selectedClient) {
-        setValue('status', getProjectStatusFromClient(selectedClient) as any);
-      }
-    }
-  }, [selectedClientId, clients, setValue]);
-
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
-  const [formError, setFormError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    const sse = getSSE();
-    if (sse) {
-      sse.on('project:created', refetchProjects);
-      sse.on('project:updated', refetchProjects);
-      sse.on('project:deleted', refetchProjects);
-      return () => { sse.off('project:created', refetchProjects); sse.off('project:updated', refetchProjects); sse.off('project:deleted', refetchProjects); };
-    }
-  }, [refetchProjects]);
-
-  // Lock body scroll when create project drawer is open
-  useEffect(() => {
-    if (showCreate) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [showCreate]);
-
-  const handleCreate = handleSubmit(async (data) => {
-    setFormError('');
-    setSubmitting(true);
-    try {
-      const payload = {
-        ...data,
-
-        startDate: data.startDate || undefined,
-        endDate: data.endDate || undefined,
-      };
-
-      if (selectedTemplateId) {
-        await api.post('/projects/from-template', { ...payload, templateId: selectedTemplateId });
-      } else {
-        await api.post('/projects', payload);
-      }
-      toast.success('Project created successfully');
-      setShowCreate(false);
-      reset();
-      setSelectedTemplateId('');
-      refetchProjects();
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to create project');
-      setFormError(err.message);
-    } finally { setSubmitting(false); }
-  });
-
-  const viewButtons = [
-    { mode: 'list' as ViewMode, icon: LayoutList, label: 'List' },
-    { mode: 'board' as ViewMode, icon: Kanban, label: 'Board' },
-    { mode: 'timeline' as ViewMode, icon: BarChart3, label: 'Timeline' },
-    { mode: 'calendar' as ViewMode, icon: Calendar, label: 'Calendar' },
-    ...(!isMobile ? [{ mode: 'gantt' as ViewMode, icon: GanttChartSquare, label: 'Gantt' }] : []),
-  ];
+  if (loading) return <PageSkeleton />;
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-primary tracking-tight flex items-center gap-2">
-            Projects
-            <span className="text-xs font-normal text-body-soft bg-subtle px-2 py-0.5 rounded-lg border border-border">
-              {viewName}
-            </span>
-          </h1>
-          <p className="text-sm text-secondary mt-1">{projects.length} projects</p>
-        </div>
-      </div>
+    <>
+      <PageHeader
+        title="Projects"
+        subtitle={`${activeCount} active`}
+        action={
+          atLeast(role, 'MANAGER') && (
+            <Button variant="primary" icon={Plus} onClick={() => setCreating(true)}>
+              New project
+            </Button>
+          )
+        }
+      />
 
-      {/* Redesigned Clean Projects Toolbar */}
-      <div className="bg-white border border-border rounded-2xl p-4 shadow-sm flex flex-col gap-4 w-full mb-6">
-        {/* Row 1: Search + Active Filter Pills */}
-        {isMobile ? (
-          <div className="flex flex-col gap-2.5 w-full">
-            <div className="flex items-center gap-2 w-full">
-              <div className="relative w-full shrink">
-                <Icon as={Search} size="md" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-secondary" />
+      {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
+
+      {projects.length === 0 && !error ? (
+        <EmptyState
+          icon={FolderKanban}
+          title="No projects yet"
+          hint="A project belongs to a client, so start one once a deal is won."
+        />
+      ) : (
+        <div className="space-y-4">
+          {/* Project Filter Toolbar */}
+          <div className="rounded-xl border border-border bg-white p-3 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              {/* Search Box */}
+              <div className="relative flex-1 min-w-[200px] max-w-sm">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted" />
                 <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search projects..."
-                  className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none placeholder:text-secondary"
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search project or client..."
+                  className="w-full rounded-xl border border-border bg-white pl-9 pr-8 py-1.5 text-sm text-body placeholder:text-muted focus:border-primary focus:outline-none"
                 />
-              </div>
-              <button
-                type="button"
-                onClick={() => setFilterSheetOpen(true)}
-                className="flex items-center gap-1.5 h-9 rounded-xl border border-border bg-white hover:bg-gray-50 px-3 text-xs font-semibold text-secondary shrink-0 transition-colors"
-              >
-                <SlidersHorizontal className="h-3.5 w-3.5" />
-                <span>Filters</span>
-                {activeCount > 0 && (
-                  <span className="ml-0.5 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-white">
-                    {activeCount}
-                  </span>
-                )}
-              </button>
-              {/* Action buttons on mobile right corner */}
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setShowViewSettings(true)}
-                  className="p-2 rounded-xl border border-border bg-white hover:bg-gray-50 transition-colors text-secondary hover:text-primary h-9 w-9 flex items-center justify-center shrink-0"
-                  title="Configure View Settings"
-                >
-                  <Icon as={Settings} size="sm" />
-                </button>
-                {user?.role !== 'TEAM_MEMBER' && (
+                {searchQuery && (
                   <button
-                    onClick={() => setShowCreate(true)}
-                    className="flex items-center justify-center rounded-xl bg-primary h-9 w-9 text-white hover:bg-primary-hover transition-colors shrink-0"
-                    title="New Project"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-2.5 text-muted hover:text-primary"
                   >
-                    <Icon as={Plus} size="sm" />
+                    <X className="h-4 w-4" />
                   </button>
                 )}
               </div>
-            </div>
 
-            {/* Active Chips Row */}
-            {activeCount > 0 && (
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-                {statusFilter.length > 0 && <ActiveFilterChip label={`Status: ${statusFilter.length}`} onRemove={() => setStatusFilter([])} />}
-                {clientFilter.length > 0 && <ActiveFilterChip label={`Clients: ${clientFilter.length}`} onRemove={() => setClientFilter([])} />}
-                {ownerFilter.length > 0 && <ActiveFilterChip label={`Managers: ${ownerFilter.length}`} onRemove={() => setOwnerFilter([])} />}
-                {dueDateFilter && <ActiveFilterChip label={`Due: ${dueDateFilter}`} onRemove={() => setDueDateFilter('')} />}
+              {/* View Switcher */}
+              <div className="flex items-center gap-1 rounded-xl border border-border bg-surface p-1">
+                <button
+                  onClick={() => setView('LIST')}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${view === 'LIST' ? 'bg-white shadow-xs text-primary font-semibold' : 'text-secondary hover:text-primary'
+                    }`}
+                >
+                  <List className="h-3.5 w-3.5" /> List
+                </button>
+                <button
+                  onClick={() => setView('BOARD')}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${view === 'BOARD' ? 'bg-white shadow-xs text-primary font-semibold' : 'text-secondary hover:text-primary'
+                    }`}
+                >
+                  <LayoutDashboard className="h-3.5 w-3.5" /> Board
+                </button>
+                <button
+                  onClick={() => setView('TIMELINE')}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${view === 'TIMELINE' ? 'bg-white shadow-xs text-primary font-semibold' : 'text-secondary hover:text-primary'
+                    }`}
+                >
+                  <Columns3 className="h-3.5 w-3.5" /> Timeline
+                </button>
+                <button
+                  onClick={() => setView('CALENDAR')}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${view === 'CALENDAR' ? 'bg-white shadow-xs text-primary font-semibold' : 'text-secondary hover:text-primary'
+                    }`}
+                >
+                  <Calendar className="h-3.5 w-3.5" /> Calendar
+                </button>
+                <button
+                  onClick={() => setView('GANTT')}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${view === 'GANTT' ? 'bg-white shadow-xs text-primary font-semibold' : 'text-secondary hover:text-primary'
+                    }`}
+                >
+                  <Clock className="h-3.5 w-3.5" /> Gantt
+                </button>
               </div>
-            )}
+            </div>
 
-            {/* Mobile Filter Drawer */}
-            <Drawer isOpen={filterSheetOpen} onClose={() => setFilterSheetOpen(false)} title="Filter Projects">
-              <div className="p-4 space-y-4">
-                <div>
-                  <label className="text-xs font-medium text-secondary mb-1.5 block">Status</label>
-                  <MultiSelect
-                    value={statusFilter}
-                    onChange={setStatusFilter}
-                    placeholder="Status"
-                    showSelectAll
-                    options={[
-                      { label: 'Active', value: 'ACTIVE' },
-                      { label: 'Delayed', value: 'DELAYED' },
-                      { label: 'Planning', value: 'PLANNING' },
-                      { label: 'In Progress', value: 'IN_PROGRESS' },
-                      { label: 'In Review', value: 'REVIEW' },
-                      { label: 'Completed', value: 'COMPLETED' },
-                      { label: 'On Hold', value: 'ON_HOLD' },
-                      { label: 'Cancelled', value: 'CANCELLED' }
-                    ]}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-secondary mb-1.5 block">Clients</label>
-                  <MultiSelect
-                    value={clientFilter}
-                    onChange={setClientFilter}
-                    placeholder="Clients"
-                    showSelectAll
-                    options={clients.filter(c => c._count?.projects > 0).map(c => ({ label: getClientDisplayName(c), value: c.id }))}
-                  />
-                </div>
-                {user?.role !== 'TEAM_MEMBER' && (
-                  <div>
-                    <label className="text-xs font-medium text-secondary mb-1.5 block">Project Managers</label>
-                    <MultiSelect
-                      value={ownerFilter}
-                      onChange={setOwnerFilter}
-                      placeholder="Project Managers"
-                      showSelectAll
-                      options={members.filter(m => m.totalProjects > 0).map(m => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
-                    />
-                  </div>
-                )}
-                <div>
-                  <label className="text-xs font-medium text-secondary mb-1.5 block">Due Date</label>
-                  <input
-                    type="date"
-                    value={dueDateFilter}
-                    onChange={(e) => setDueDateFilter(e.target.value)}
-                    className="w-full h-9 rounded-xl border border-border bg-white text-secondary px-3 text-xs outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 cursor-pointer"
-                  />
-                </div>
+            {/* Custom MultiSelect Filter Dropdowns */}
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-subtle">
+              <div className="flex items-center gap-1 text-xs font-medium text-muted mr-1">
+                <Filter className="h-3.5 w-3.5" /> Filters:
               </div>
-            </Drawer>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center gap-2 w-full">
-            {/* Search Box */}
-            <div className="relative w-full sm:w-64 md:w-80 shrink-0">
-              <Icon as={Search} size="md" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-secondary" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search projects..."
-                className="w-full h-9 rounded-xl border border-border bg-white pl-10 pr-4 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none placeholder:text-secondary"
-              />
-            </div>
 
-            {/* Filter Pills */}
-            <div className="shrink-0">
-              <MultiSelect
-                value={statusFilter}
-                onChange={setStatusFilter}
-                placeholder="Status"
-                showSelectAll
-                triggerClassName={statusFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
-                options={[
-                  { label: 'Active', value: 'ACTIVE' },
-                  { label: 'Delayed', value: 'DELAYED' },
-                  { label: 'Planning', value: 'PLANNING' },
-                  { label: 'In Progress', value: 'IN_PROGRESS' },
-                  { label: 'In Review', value: 'REVIEW' },
-                  { label: 'Completed', value: 'COMPLETED' },
-                  { label: 'On Hold', value: 'ON_HOLD' },
-                  { label: 'Cancelled', value: 'CANCELLED' }
-                ]}
-              />
-            </div>
-
-            <div className="shrink-0">
-              <MultiSelect
-                value={clientFilter}
-                onChange={setClientFilter}
-                placeholder="Clients"
-                showSelectAll
-                triggerClassName={clientFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
-                options={clients.filter(c => c._count?.projects > 0).map(c => ({ label: getClientDisplayName(c), value: c.id }))}
-              />
-            </div>
-
-            {user?.role !== 'TEAM_MEMBER' && (
-              <div className="shrink-0">
+              {/* Status MultiSelect Filter */}
+              <div className="w-36">
                 <MultiSelect
-                  value={ownerFilter}
-                  onChange={setOwnerFilter}
-                  placeholder="Project Managers"
-                  showSelectAll
-                  triggerClassName={ownerFilter.length > 0 ? "border-primary bg-primary/[0.02] text-primary h-9 rounded-xl px-3 text-xs font-semibold" : "h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs transition-colors duration-150 motion-reduce:transition-none"}
-                  options={members.filter(m => m.totalProjects > 0).map(m => ({ label: m.name, value: m.id, image: getInitials(m.name) }))}
+                  compact={true}
+                  placeholder="All Statuses"
+                  options={STATUS_FILTER_OPTIONS}
+                  value={statusFilter}
+                  onChange={setStatusFilter}
+                  triggerClassName="h-8.5 px-3 py-1 text-xs rounded-lg bg-surface border-border"
                 />
               </div>
-            )}
 
-            <div className="shrink-0">
-              <input
-                type="date"
-                value={dueDateFilter}
-                onChange={(e) => setDueDateFilter(e.target.value)}
-                className="h-9 rounded-xl border border-border bg-white hover:bg-gray-50 hover:border-gray-300 text-secondary px-3 text-xs outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none cursor-pointer"
-                title="Due Date Filter"
-              />
-            </div>
+              {/* Project Type MultiSelect Filter */}
+              <div className="w-38">
+                <MultiSelect
+                  compact={true}
+                  placeholder="All Types"
+                  options={TYPE_FILTER_OPTIONS}
+                  value={typeFilter}
+                  onChange={setTypeFilter}
+                  triggerClassName="h-8.5 px-3 py-1 text-xs rounded-lg bg-surface border-border"
+                />
+              </div>
 
-            <div className="flex items-center gap-2 ml-auto shrink-0">
-              <button
-                onClick={() => setShowViewSettings(true)}
-                className="p-2 rounded-xl border border-border bg-white hover:bg-gray-50 transition-colors text-secondary hover:text-primary h-9 w-9 flex items-center justify-center shrink-0"
-                title="Configure View Settings"
-              >
-                <Icon as={Settings} size="sm" />
-              </button>
+              {/* Platform / Technology MultiSelect Filter (with SVG Lucide Icons!) */}
+              <div className="w-40">
+                <MultiSelect
+                  compact={true}
+                  placeholder="All Platforms"
+                  options={PLATFORM_OPTIONS}
+                  value={platformFilter}
+                  onChange={setPlatformFilter}
+                  triggerClassName="h-8.5 px-3 py-1 text-xs rounded-lg bg-surface border-border"
+                />
+              </div>
 
-              {user?.role !== 'TEAM_MEMBER' && (
+              {/* Client MultiSelect Filter */}
+              {clientFilterOptions.length > 0 && (
+                <div className="w-40">
+                  <MultiSelect
+                    compact={true}
+                    placeholder="All Clients"
+                    options={clientFilterOptions}
+                    value={clientFilter}
+                    onChange={setClientFilter}
+                    triggerClassName="h-8.5 px-3 py-1 text-xs rounded-lg bg-surface border-border"
+                  />
+                </div>
+              )}
+
+              {/* Owner MultiSelect Filter */}
+              {ownerFilterOptions.length > 0 && (
+                <div className="w-40">
+                  <MultiSelect
+                    compact={true}
+                    placeholder="All Owners"
+                    options={ownerFilterOptions}
+                    value={ownerFilter}
+                    onChange={setOwnerFilter}
+                    triggerClassName="h-8.5 px-3 py-1 text-xs rounded-lg bg-surface border-border"
+                  />
+                </div>
+              )}
+
+              {/* Reset Filters */}
+              {hasActiveFilters && (
                 <button
-                  onClick={() => setShowCreate(true)}
-                  className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary-hover transition-colors duration-150 motion-reduce:transition-none h-9 shrink-0"
+                  onClick={resetFilters}
+                  className="flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-2.5 py-1.5 rounded-lg transition-colors ml-auto"
                 >
-                  <Icon as={Plus} size="sm" /> New Project
+                  <RotateCcw className="h-3 w-3" /> Clear filters
                 </button>
               )}
             </div>
           </div>
-        )}
 
-        {/* Separator line */}
-        <div className="h-px bg-border/60 w-full" />
-
-        {/* Row 2: Actions */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
-          {/* Left Side: Count summary */}
-          <div className="text-xs font-medium text-secondary">
-            Showing {projects.length} projects
-          </div>
-
-          {/* Right Side: Switchers, Settings, New project, Clear filters */}
-          <div className="flex flex-wrap items-center justify-end gap-2.5 ml-auto sm:ml-0">
-            {(!!search || statusFilter.length > 0 || clientFilter.length > 0 || ownerFilter.length > 0 || !!dueDateFilter) && (
-              <button
-                onClick={() => {
-                  setSearch('');
-                  setStatusFilter([]);
-                  setClientFilter([]);
-                  setOwnerFilter([]);
-                  setDueDateFilter('');
-                  router.replace('/projects', { scroll: false });
-                }}
-                className="flex items-center gap-1.5 h-9 rounded-xl bg-red-50 px-3 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors border border-red-100"
-              >
-                <Icon as={X} size="sm" /> Clear Filters
-              </button>
-            )}
-
-            {/* Segmented View Mode Switcher */}
-            <div className="flex bg-subtle p-1 rounded-xl gap-0.5 border border-border/50 shrink-0 h-9 items-center overflow-x-auto no-scrollbar max-w-full">
-              {viewButtons.map((v) => (
-                <button
-                  key={v.mode}
-                  onClick={() => {
-                    setView(v.mode);
-                    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ name: viewName, visibleColumns, viewType: v.mode }));
-                  }}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors duration-150 motion-reduce:transition-none whitespace-nowrap shrink-0 ${view === v.mode ? 'bg-white text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}
-                  title={`${v.label} View`}
+          {view === 'BOARD' ? (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {filtered.map((p) => (
+                <div
+                  key={p.id}
+                  onClick={() => router.push(`/projects/${p.id}`)}
+                  className="rounded-card cursor-pointer border border-border bg-white p-4 transition-colors hover:border-primary"
                 >
-                  <v.icon className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">{v.label}</span>
-                </button>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-primary">{p.name}</p>
+                      <p className="truncate text-xs text-secondary">{p.company.name}</p>
+                    </div>
+                    <Badge tone={HEALTH[p.health].tone}>{HEALTH[p.health].label}</Badge>
+                  </div>
+
+                  {p.engagementContext.length > 0 && (
+                    <p className="mt-2 text-xs text-secondary">
+                      {p.engagementContext
+                        .map((e) =>
+                          e.monthlyValue
+                            ? `${e.type === 'RETAINER' ? 'Retainer' : 'Project'} · ${formatMoney(e.monthlyValue, currency, locale)}/mo`
+                            : e.type === 'RETAINER'
+                              ? 'Retainer'
+                              : 'Project',
+                        )
+                        .join(' · ')}
+                    </p>
+                  )}
+
+                  <div className="mt-3 flex items-center justify-between border-t border-border pt-3 text-xs text-secondary">
+                    <span>
+                      {p.openTaskCount} open
+                      {p.overdueTaskCount > 0 && (
+                        <span className="ml-1 font-medium text-red-600">· {p.overdueTaskCount} overdue</span>
+                      )}
+                    </span>
+                    <span>{p.dueDate ? formatDate(p.dueDate, timezone, locale) : 'No due date'}</span>
+                  </div>
+                </div>
               ))}
             </div>
-          </div>
+          ) : view === 'LIST' ? (
+            <Table>
+              <THead>
+                <TR className="bg-surface hover:bg-surface">
+                  <TH>PROJECT</TH>
+                  <TH>COMPANY</TH>
+                  <TH>PROGRESS</TH>
+                  <TH>STATUS</TH>
+                  <TH>OWNER</TH>
+                  <TH>DUE DATE</TH>
+                </TR>
+              </THead>
+              <TBody>
+                {filtered.map(p => (
+                  <TR
+                    key={p.id}
+                    onClick={() => router.push(`/projects/${p.id}`)}
+                    className="cursor-pointer hover:bg-subtle transition-colors"
+                  >
+                    <TD className="font-medium text-primary">{p.name}</TD>
+                    <TD className="text-secondary">{p.company.name}</TD>
+                    <TD className="text-secondary">
+                      <div className="h-2 w-24 overflow-hidden rounded-full bg-surface">
+                        <div className="h-full bg-primary" style={{ width: p.taskCount > 0 ? `${Math.round(((p.taskCount - p.openTaskCount) / p.taskCount) * 100)}%` : '0%' }}></div>
+                      </div>
+                    </TD>
+                    <TD>
+                      <Badge tone={HEALTH[p.health].tone}>{HEALTH[p.health].label}</Badge>
+                    </TD>
+                    <TD className="text-secondary">{p.owner?.name ?? '—'}</TD>
+                    <TD className="text-secondary">{p.dueDate ? formatDate(p.dueDate, timezone, locale) : '—'}</TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+          ) : view === 'CALENDAR' ? (
+            <CalendarView
+              events={filtered.map((p) => ({
+                id: p.id,
+                title: p.name,
+                subtitle: p.company.name,
+                date: p.dueDate,
+                status: p.status,
+                onClick: () => router.push(`/projects/${p.id}`),
+              }))}
+            />
+          ) : (
+            <div className="rounded-xl border border-dashed border-border py-20 text-center text-sm text-secondary">
+              This view is under construction.
+            </div>
+          )}
         </div>
-      </div>
-
-      {loading ? (
-        <div className="rounded-2xl border border-border bg-white p-6 space-y-4">
-          {[1, 2, 3, 4, 5].map(i => (
-            <div key={i} className="flex items-center gap-4 py-3 border-b border-subtle last:border-0">
-              <Skeleton className="h-6 w-48" />
-              <Skeleton className="h-4 w-24 ml-auto" />
-              <Skeleton className="h-4 w-16" />
-              <Skeleton className="h-6 w-20 rounded-lg" />
-              <Skeleton className="h-6 w-6 rounded-full" />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <>
-          {/* Views */}
-          {view === 'list' && (
-            <>
-              {/* Desktop Table View */}
-              <div className="hidden md:block rounded-2xl border border-border bg-white overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-200">
-                    <thead>
-                      <tr className="border-b border-subtle">
-                        {visibleColumns.includes('project') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Project</th>}
-                        {visibleColumns.includes('client') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>}
-                        {visibleColumns.includes('progress') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Progress</th>}
-                        {visibleColumns.includes('status') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Status</th>}
-                        {visibleColumns.includes('owner') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Owner</th>}
-                        {visibleColumns.includes('dueDate') && <th className="px-6 py-3.5 text-left text-xs font-medium text-secondary uppercase tracking-wide">Due Date</th>}
-                        <th className="px-6 py-3.5 w-10 text-center relative select-none">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setShowColumnDropdown(!showColumnDropdown); }}
-                            className="inline-flex items-center justify-center h-6 w-6 rounded-md text-secondary hover:bg-gray-100 hover:text-primary transition-colors duration-150 motion-reduce:transition-none text-sm font-bold border border-transparent hover:border-gray-200"
-                            title="Toggle visible columns"
-                          >
-                            +
-                          </button>
-                          <AnimatePresence>
-                            {showColumnDropdown && (
-                              <>
-                                <div className="fixed inset-0 z-40" onClick={() => setShowColumnDropdown(false)} />
-                                <motion.div
-                                  initial={{ opacity: 0, y: 5 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  exit={{ opacity: 0, y: 5 }}
-                                  className="absolute right-0 top-full mt-2 w-48 bg-white border border-border rounded-xl shadow-lg z-50 overflow-hidden py-1"
-                                >
-                                  <div className="px-3 py-2 border-b border-subtle text-[10px] font-semibold text-secondary uppercase tracking-wider text-left">
-                                    Visible Columns
-                                  </div>
-                                  {ALL_PROJECT_COLUMNS.map(col => (
-                                    <button
-                                      key={col.id}
-                                      onClick={() => {
-                                        setVisibleColumns(prev =>
-                                          prev.includes(col.id)
-                                            ? prev.filter(c => c !== col.id)
-                                            : [...prev, col.id]
-                                        )
-                                      }}
-                                      className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-surface transition-colors"
-                                    >
-                                      <span className="text-body">{col.label}</span>
-                                      {visibleColumns.includes(col.id) && <Icon as={Check} size="md" className="text-primary" />}
-                                    </button>
-                                  ))}
-                                </motion.div>
-                              </>
-                            )}
-                          </AnimatePresence>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-subtle">
-                      {projects.map((p) => (
-                        <motion.tr key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="hover:bg-surface transition-colors relative">
-                          {visibleColumns.includes('project') && (
-                            <td className="px-6 py-4">
-                              <Link href={`/projects/${p.id}`} className="text-sm font-medium text-primary hover:underline after:absolute after:inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm">{p.name}</Link>
-                              <p className="text-xs text-secondary">{p._count?.tasks ?? 0} tasks</p>
-                            </td>
-                          )}
-                          {visibleColumns.includes('client') && <td className="px-6 py-4 text-sm text-secondary">{p.client ? getClientDisplayName(p.client) : '—'}</td>}
-                          {visibleColumns.includes('progress') && (
-                            <td className="px-6 py-4">
-                              <div className="flex items-center gap-2">
-                                <div className="h-1.5 w-20 rounded-full bg-subtle overflow-hidden">
-                                  <div className="h-full rounded-full bg-primary" style={{ width: `${p.progress}%` }} />
-                                </div>
-                                <span className="text-xs text-secondary tabular-nums">{p.progress}%</span>
-                              </div>
-                            </td>
-                          )}
-                          {visibleColumns.includes('status') && (
-                            <td className="px-6 py-4">
-                              <StatusBadge status={p.status} />
-                            </td>
-                          )}
-                          {visibleColumns.includes('owner') && (
-                            <td className="px-6 py-4">
-                              {p.owner && (
-                                <div className="flex items-center gap-2">
-                                  <div className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold ${getAvatarColor(p.owner.name)}`}>
-                                    {getInitials(p.owner.name)}
-                                  </div>
-                                  <span className="text-sm text-body">{p.owner.name}</span>
-                                </div>
-                              )}
-                            </td>
-                          )}
-                          {visibleColumns.includes('dueDate') && <td className="px-6 py-4 text-sm text-secondary">{formatShortDate(p.endDate)}</td>}
-                          <td className="px-6 py-4 text-right w-10 text-secondary"><Icon as={ChevronRight} size="md" className="inline-block" /></td>
-                        </motion.tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Mobile Card View */}
-              <div className="md:hidden flex flex-col gap-3">
-                {projects.length === 0 ? (
-                  <div className="p-8 text-center text-sm text-secondary bg-white rounded-xl border border-border">
-                    No projects found.
-                  </div>
-                ) : (
-                  projects.map((p) => (
-                    <Link
-                      key={p.id}
-                      href={`/projects/${p.id}`}
-                      className="block p-4 rounded-xl border border-border bg-white hover:shadow-sm transition-colors duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <p className="text-sm font-medium text-primary leading-tight">{p.name}</p>
-                          <p className="text-xs text-secondary mt-0.5">{p.client ? getClientDisplayName(p.client) : 'Internal Project'}</p>
-                        </div>
-                        <StatusBadge status={p.status} size="xs" />
-                      </div>
-
-                      <div className="mb-4">
-                        <div className="flex items-center gap-2">
-                          <div className="h-1.5 flex-1 rounded-full bg-subtle overflow-hidden">
-                            <div className="h-full rounded-full bg-primary" style={{ width: `${p.progress}%` }} />
-                          </div>
-                          <span className="text-xs text-secondary tabular-nums shrink-0">{p.progress}%</span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          {p.owner ? (
-                            <>
-                              <div className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold ${getAvatarColor(p.owner.name)}`}>
-                                {getInitials(p.owner.name)}
-                              </div>
-                              <span className="text-xs font-medium text-body">{p.owner.name}</span>
-                            </>
-                          ) : (
-                            <span className="text-xs text-secondary">Unassigned</span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-2 text-xs font-medium text-secondary">
-                          <span className="bg-subtle px-1.5 py-0.5 rounded">
-                            {p._count?.tasks ?? 0} tasks
-                          </span>
-                          {p.endDate && (
-                            <span className="bg-subtle px-1.5 py-0.5 rounded">
-                              {formatShortDate(p.endDate)}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </Link>
-                  ))
-                )}
-              </div>
-            </>
-          )}
-
-
-
-          {view === 'board' && (
-            <div className="mt-4">
-              <ProjectBoardView projects={projects} onUpdateProject={refetchProjects} userRole={user?.role} />
-            </div>
-          )}
-
-          {view === 'timeline' && (
-            <div className="rounded-2xl border border-border bg-white p-6">
-              <div className="space-y-3">
-                {projects.filter((p) => p.startDate && p.endDate).map((p) => {
-                  const start = new Date(p.startDate!);
-                  const end = new Date(p.endDate!);
-                  const now = new Date();
-                  const totalDays = Math.max(1, (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-                  const elapsed = Math.max(0, (now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-                  const pct = Math.min(100, (elapsed / totalDays) * 100);
-
-                  return (
-                    <Link key={p.id} href={`/projects/${p.id}`} className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4 py-3 md:py-2 hover:bg-surface rounded-xl px-3 -mx-3 transition-colors border-b border-subtle last:border-0 md:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-                      <div className="w-full md:w-48 shrink-0">
-                        <p className="text-sm font-medium text-primary truncate">{p.name}</p>
-                        <p className="text-xs text-secondary">{p.client ? getClientDisplayName(p.client) : 'Internal Project'}</p>
-                      </div>
-                      <div className="flex-1 w-full">
-                        <div className="relative h-8 rounded-lg bg-subtle overflow-hidden">
-                          <div className="absolute inset-y-0 left-0 rounded-lg bg-primary/10" style={{ width: `${pct}%` }} />
-                          <div className="absolute inset-y-0 left-0 rounded-lg bg-primary" style={{ width: `${p.progress}%`, maxWidth: `${pct}%` }} />
-                          <div className="absolute inset-0 flex items-center px-3">
-                            <span className="text-xs font-medium text-white mix-blend-difference">{p.progress}%</span>
-                          </div>
-                        </div>
-                        <div className="flex justify-between mt-1.5">
-                          <span className="text-xs text-secondary">{formatDate(p.startDate)}</span>
-                          <span className="text-xs text-secondary">{formatShortDate(p.endDate)}</span>
-                        </div>
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {view === 'calendar' && (
-            <CalendarView projects={projects} />
-          )}
-
-          {view === 'gantt' && !isMobile && (
-            <ProjectGanttView projects={projects} loading={loading} />
-          )}
-
-          {/* Load More Button */}
-          {hasNextPage && (
-            <div className="mt-6 flex justify-center pb-8">
-              <button
-                onClick={() => fetchNextPage()}
-                disabled={isFetchingNextPage}
-                className="rounded-xl border border-border bg-white px-6 py-2.5 text-sm font-medium text-body hover:bg-surface disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none"
-              >
-                {isFetchingNextPage ? 'Loading...' : 'Load More Projects'}
-              </button>
-            </div>
-          )}
-        </>
       )}
 
-      {/* Create Modal */}
-      <AnimatePresence>
-        {showCreate && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" onClick={() => setShowCreate(false)} />
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white border-l border-border shadow-modal shadow-black/10 overflow-y-auto">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-subtle">
-                <h2 className="text-lg font-semibold text-primary">New Project</h2>
-                <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl hover:bg-subtle"><Icon as={X} size="md" className="text-secondary" /></button>
-              </div>
-              <form onSubmit={handleCreate} className="relative p-6 pb-24 md:pb-6 space-y-8">
-                {formError && <div className="absolute top-0 left-6 right-6 -mt-2 z-10 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 border border-red-100">{formError}</div>}
-
-                {templates.length > 0 && (
-                  <div className="mb-2 pb-4 border-b border-subtle">
-                    <label className="flex text-sm font-medium text-body mb-1.5 items-center gap-2">
-                      Start from a Template <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">New</span>
-                    </label>
-                    <Select
-                      value={selectedTemplateId}
-                      onChange={(val) => {
-                        setSelectedTemplateId(val);
-                        if (val) {
-                          const t = templates.find(x => x.id === val);
-                          if (t && !formValues.name) setValue('name', t.name, { shouldValidate: true });
-                        }
-                      }}
-                      options={[
-                        { label: 'Start from scratch', value: '' },
-                        ...templates.map((t) => ({ label: t.name, value: t.id }))
-                      ]}
-                    />
-                  </div>
-                )}
-
-                {/* Basic Info */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-subtle pb-2">Basic Info</h3>
-                  <div>
-                    <Field label="Project Name *" value={formValues.name} onChange={(v) => setValue('name', v, { shouldValidate: true })} required />
-                    {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-body mb-1.5">Description</label>
-                    <RichTextEditor value={formValues.description || ''} onChange={(val) => setValue('description', val, { shouldValidate: true })} placeholder="Project description..." />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-body mb-1.5">Project Type</label>
-                      <Select
-                        value={formValues.type}
-                        onChange={(val) => {
-                          setValue('type', val as any, { shouldValidate: true });
-                          // Internal projects belong to the org itself — no customer client.
-                          if (val === 'INTERNAL') setValue('clientId', '', { shouldValidate: true });
-                        }}
-                        options={[
-                          { label: 'Retainer', value: 'RETAINER' },
-                          { label: 'One-Time Project', value: 'ONE_TIME' },
-                          { label: 'Event', value: 'EVENT' },
-                          { label: 'Internal', value: 'INTERNAL' },
-                        ]}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-body mb-1.5">Status</label>
-                      <Select
-                        value={formValues.status}
-                        onChange={(val) => setValue('status', val as any)}
-                        options={[
-                          { label: 'Planning', value: 'PLANNING' },
-                          { label: 'In Progress', value: 'IN_PROGRESS' },
-                          { label: 'In Review', value: 'REVIEW' },
-                          { label: 'Completed', value: 'COMPLETED' },
-                          { label: 'On Hold', value: 'ON_HOLD' },
-                          { label: 'Cancelled', value: 'CANCELLED' },
-                        ]}
-                      />
-                    </div>
-                    <div>
-                      {/* Project Priority */}
-                      <label className="block text-sm font-medium text-body mb-1.5">Priority</label>
-                      <Select
-                        value={formValues.priority}
-                        onChange={(val) => setValue('priority', val as any)}
-                        options={[
-                          { label: 'Low', value: 'LOW' },
-                          { label: 'Medium', value: 'MEDIUM' },
-                          { label: 'High', value: 'HIGH' },
-                          { label: 'Urgent', value: 'URGENT' },
-                        ]}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Client & Ownership */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-subtle pb-2">Client & Ownership</h3>
-                  <div className="flex flex-col gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-body mb-1.5">Client</label>
-                      {formValues.type === 'INTERNAL' ? (
-                        // Internal project → no client picker; it's locked to the org's own account.
-                        <div className="flex items-center gap-2 h-10 px-3 rounded-lg border border-border bg-surface text-sm text-secondary">
-                          <Icon as={Lock} size="sm" />
-                          <span>Internal · {user?.organization?.name || 'your organization'}</span>
-                        </div>
-                      ) : (
-                        <Select
-                          value={formValues.clientId || ''}
-                          onChange={(val) => setValue('clientId', val, { shouldValidate: true })}
-                          options={[
-                            { label: 'Select a client...', value: '' },
-                            // Don't offer inactive/churned clients when creating a project,
-                            // but keep a pre-filled client visible even if it's inactive.
-                            ...clients
-                              .filter((c: any) => !['PROJECT_COMPLETED', 'CHURNED'].includes(c.status) || c.id === formValues.clientId)
-                              .map((c) => ({ label: getClientDisplayName(c), value: c.id }))
-                          ]}
-                        />
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-body mb-1.5">Project Owner *</label>
-                      <Select
-                        required
-                        value={formValues.ownerId}
-                        onChange={(val) => setValue('ownerId', val, { shouldValidate: true })}
-                        options={[
-                          { label: 'Select owner', value: '' },
-                          ...members.map((m) => ({ label: m.name, value: m.id, sublabel: (m as any).designation, avatar: getInitials(m.name) }))
-                        ]}
-                      />
-                      {errors.ownerId && <p className="mt-1 text-xs text-red-500">{errors.ownerId.message}</p>}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-body mb-1.5">Team Members</label>
-                    <MultiSelect
-                      compact={false}
-                      options={members.filter(m => m.id !== formValues.ownerId).map(m => ({ value: m.id, label: m.name, image: getInitials(m.name), colorClass: getAvatarColor(m.name) }))}
-                      value={formValues.memberIds || []}
-                      onChange={(val) => setValue('memberIds', val)}
-                      placeholder="Search and select team members..."
-                    />
-                  </div>
-                </div>
-
-                {/* Timeline */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-subtle pb-2">Timeline</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Field label="Start Date" type="date" value={formValues.startDate || ''} onChange={(v) => setValue('startDate', v, { shouldValidate: true })} />
-                    </div>
-                    <div>
-                      <Field
-                        label="End Date"
-                        type="date"
-                        value={formValues.endDate || ''}
-                        onChange={(v) => setValue('endDate', v, { shouldValidate: true })}
-                      />
-                      {errors.endDate && <p className="mt-1 text-xs text-red-500">{errors.endDate.message}</p>}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Scope */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary border-b border-subtle pb-2">Scope</h3>
-                  <div>
-                    <label className="block text-sm font-medium text-body mb-1.5">Scope of Work</label>
-                    <RichTextEditor
-                      value={formValues.scope || ''}
-                      onChange={(val) => setValue('scope', val)}
-                      placeholder="Enter the scope of work..."
-                    />
-                  </div>
-
-                </div>
-
-
-                <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setShowCreate(false)} className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-body hover:bg-surface transition-colors duration-150 motion-reduce:transition-none">Cancel</button>
-                  <button type="submit" disabled={submitting} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none">{submitting ? 'Creating...' : 'Create Project'}</button>
-                </div>
-              </form>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-      <ViewSettingsPanel
-        isOpen={showViewSettings}
-        onClose={() => setShowViewSettings(false)}
-        viewName={viewName}
-        onViewNameChange={setViewName}
-        viewType={view === 'list' ? 'list' : 'board'}
-        onViewTypeChange={(type) => setView(type === 'list' ? 'list' : 'timeline')}
-        columns={ALL_PROJECT_COLUMNS}
-        visibleColumns={visibleColumns}
-        onVisibleColumnsChange={setVisibleColumns}
-        onSave={() => {
-          if (typeof window !== 'undefined') {
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({
-              name: viewName,
-              visibleColumns,
-              viewType: view
-            }));
-          }
-          toast.success('View Settings saved successfully!');
-          setShowViewSettings(false);
-        }}
-        onReset={() => {
-          if (typeof window !== 'undefined') {
-            localStorage.removeItem(LOCAL_STORAGE_KEY);
-          }
-          setViewName('All Projects');
-          setView('list');
-          setVisibleColumns(ALL_PROJECT_COLUMNS.map(c => c.id));
-          toast.success('View Settings reset to defaults');
-        }}
-        onClone={() => {
-          const clonedName = viewName + ' (Copy)';
-          setViewName(clonedName);
-          if (typeof window !== 'undefined') {
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({
-              name: clonedName,
-              visibleColumns,
-              viewType: view
-            }));
-          }
-          toast.success('Cloned successfully to a new view copy!');
-          setShowViewSettings(false);
+      <NewProjectDialog
+        open={creating}
+        onClose={() => setCreating(false)}
+        onCreated={() => {
+          setCreating(false);
+          void load();
         }}
       />
-    </div>
+    </>
   );
 }
 
-export default function ProjectsPage() {
-  return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center min-h-100">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
-    }>
-      <ProjectsContent />
-    </Suspense>
-  );
-}
+const PLATFORM_OPTIONS: Option[] = [
+  { value: 'WEB', label: 'Web Application', icon: <Globe className="h-4 w-4 text-sky-500" /> },
+  { value: 'MOBILE_APP', label: 'Mobile App (iOS / Android)', icon: <Smartphone className="h-4 w-4 text-emerald-500" /> },
+  { value: 'SHOPIFY', label: 'Shopify / E-Commerce', icon: <ShoppingBag className="h-4 w-4 text-indigo-500" /> },
+  { value: 'WORDPRESS', label: 'WordPress / CMS', icon: <FileCode className="h-4 w-4 text-blue-500" /> },
+  { value: 'SOCIAL_MEDIA', label: 'Social Media Marketing', icon: <Share2 className="h-4 w-4 text-pink-500" /> },
+  { value: 'SEO_MARKETING', label: 'SEO & Digital Marketing', icon: <Search className="h-4 w-4 text-amber-500" /> },
+  { value: 'CUSTOM_PLATFORM', label: 'Custom Platform', icon: <Zap className="h-4 w-4 text-violet-500" /> },
+  { value: 'OTHER', label: 'Other', icon: <Package className="h-4 w-4 text-gray-500" /> },
+];
 
-function Field({ label, value, onChange, type = 'text', required = false }: {
-  label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean;
+function NewProjectDialog({
+  open,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
 }) {
-  const id = useId();
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [team, setTeam] = useState<{ value: string; label: string }[]>([]);
+
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [platforms, setPlatforms] = useState<string[]>(['WEB']);
+  const [type, setType] = useState('ONE_TIME');
+  const [status, setStatus] = useState('PLANNING');
+  const [companyId, setCompanyId] = useState('');
+  const [ownerId, setOwnerId] = useState('');
+  const [memberIds, setMemberIds] = useState<string[]>([]);
+  const [startDate, setStartDate] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [scope, setScope] = useState('');
+
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setName('');
+    setDescription('');
+    setPlatforms(['WEB']);
+    setType('ONE_TIME');
+    setStatus('PLANNING');
+    setCompanyId('');
+    setOwnerId('');
+    setMemberIds([]);
+    setStartDate('');
+    setDueDate('');
+    setScope('');
+    setError(null);
+
+    void Promise.all([
+      api.companies.list().then(setCompanies).catch(() => { }),
+      api.users.list().then((list) =>
+        setTeam(list.filter((u) => u.status === 'ACTIVE').map((u) => ({ value: u.id, label: u.name })))
+      ).catch(() => { }),
+    ]);
+  }, [open]);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await api.projects.create({
+        name,
+        description: description || null,
+        platform: platforms.length > 0 ? platforms.join(',') : null,
+        type,
+        status: status as any,
+        companyId,
+        ownerId: ownerId || null,
+        memberIds,
+        startDate: startDate ? new Date(startDate).toISOString() : null,
+        dueDate: dueDate ? new Date(dueDate).toISOString() : null,
+        scope: scope || null,
+      });
+      onCreated();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not create the project');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const NONE = { value: '', label: '— Choose Project Owner —' };
+
   return (
-    <div>
-      <label htmlFor={id} className="block text-sm font-medium text-body mb-1.5">{label}</label>
-      <input id={id} type={type} value={value} onChange={(e) => onChange(e.target.value)} required={required} className="w-full rounded-xl border border-border bg-white px-4 py-2.5 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none" />
-    </div>
+    <Modal open={open} onClose={onClose} title="New project" size="lg">
+      <form onSubmit={submit}>
+        <ModalBody className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+          {/* 1. Project Name */}
+          <Field label="Project Name *" value={name} onChange={setName} placeholder="e.g. Website Redesign & Brand Strategy" required />
+
+          {/* 5. Client */}
+          <FieldSelect
+            label="Client / Company *"
+            required
+            value={companyId}
+            onChange={setCompanyId}
+            placeholder="Choose a client…"
+            options={companies.map((c) => ({ value: c.id, label: c.name }))}
+          />
+
+          {/* MultiSelect Platforms with Icons */}
+          <div className="space-y-1">
+            <label className="block text-xs font-semibold text-secondary">Platforms / Technologies</label>
+            <MultiSelect
+              compact={false}
+              placeholder="Select platforms (Web, Mobile, Social Media...)"
+              options={PLATFORM_OPTIONS}
+              value={platforms}
+              onChange={setPlatforms}
+            />
+          </div>
+
+          {/* Project Type & Status */}
+          <div className="grid grid-cols-2 gap-3">
+            <FieldSelect
+              label="Project Type"
+              value={type}
+              onChange={setType}
+              options={[
+                { value: 'ONE_TIME', label: 'One-Time Project' },
+                { value: 'RETAINER', label: 'Retainer' },
+              ]}
+            />
+          </div>
+
+          {/* Status & Project Owner */}
+          <div className="grid grid-cols-2 gap-3">
+            <FieldSelect
+              label="Status"
+              value={status}
+              onChange={setStatus}
+              options={[
+                { value: 'PLANNING', label: 'Planning' },
+                { value: 'ACTIVE', label: 'Active' },
+                { value: 'ON_HOLD', label: 'On Hold' },
+                { value: 'COMPLETED', label: 'Completed' },
+                { value: 'CANCELLED', label: 'Cancelled' },
+              ]}
+            />
+            <FieldSelect
+              label="Project Owner"
+              value={ownerId}
+              onChange={setOwnerId}
+              options={[NONE, ...team]}
+            />
+          </div>
+
+          {/* 7. Team Members (MultiSelect Dropdown) */}
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-secondary">Team Members</label>
+            <MultiSelect
+              compact={false}
+              placeholder="Click to add team members…"
+              options={team}
+              value={memberIds}
+              onChange={setMemberIds}
+            />
+          </div>
+
+          {/* 8 & 9. Start Date & End Date */}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Start Date" type="date" value={startDate} onChange={setStartDate} />
+            <Field label="End Date (Due Date)" type="date" value={dueDate} onChange={setDueDate} />
+          </div>
+
+          {/* 2. Description */}
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-secondary">Description</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Brief description of the project objectives…"
+              rows={2}
+              className="w-full rounded-xl border border-border bg-white p-3 text-sm text-body placeholder:text-muted focus:border-primary focus:outline-none"
+            />
+          </div>
+
+          {/* 10. Scope (Rich Text Editor) */}
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-secondary mb-1 block">Scope of Work (Rich Text)</label>
+            <RichTextEditor
+              value={scope}
+              onChange={setScope}
+              placeholder="Detailed scope, deliverables, and milestones…"
+            />
+          </div>
+
+          {error && <ErrorNote>{error}</ErrorNote>}
+        </ModalBody>
+
+        <ModalFooter>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" loading={saving} disabled={!companyId || !name}>
+            Create Project
+          </Button>
+        </ModalFooter>
+      </form>
+    </Modal>
   );
 }

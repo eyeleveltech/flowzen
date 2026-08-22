@@ -1,707 +1,1048 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { api } from '@/lib/api';
-import { useAuthStore, useModuleStore } from '@/stores';
-import { useRouter } from 'next/navigation';
-import { formatDate, formatCurrency, getAvatarColor, getInitials, getClientDisplayName } from '@/lib/utils';
-import { PieChart, ListTodo, Users, FolderKanban, Clock, AlertTriangle, TrendingUp, LayoutDashboard, IndianRupee, Target, Trophy, Download } from 'lucide-react';
-import { Select } from '@/components/ui/select';
-import { useExecutiveReport } from '@/hooks/useQueries';
-import { usePageTitle } from '@/hooks/usePageTitle';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer, PieChart as RPieChart, Pie, Cell, AreaChart, Area } from 'recharts';
-import { axisTick, gridStroke } from '@/lib/chart-theme';
+import { useCallback, useEffect, useState, useMemo } from 'react';
+import {
+  BarChart3,
+  TrendingUp,
+  FolderKanban,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  Eye,
+  Download,
+  RotateCcw,
+  Building,
+  Users,
+  ShieldAlert,
+  ArrowUpRight,
+  Code,
+  Palette,
+  PenTool,
+  Search,
+  Bug,
+  Package,
+} from 'lucide-react';
+import {
+  api,
+  formatDate,
+  type OrgConfig,
+  type PmSummaryData,
+  type PmProjectReport,
+  type PmTeamWorkloadReport,
+  type PmTaskTypesData,
+} from '@/lib/api-v2';
+import { Button } from '@/components/ui/button';
+import { Badge, type Tone } from '@/components/ui/badge';
+import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
+import { PageSkeleton } from '@/components/ui/skeleton-loaders';
+import { ErrorNote } from '@/components/ui/empty-state';
+import { getInitials, getAvatarColor } from '@/lib/utils';
 
-const COLORS = ['#111827', '#4B5563', '#9CA3AF', '#D1D5DB', '#F3F4F6'];
+type TimeRange = '7d' | '30d' | '90d' | 'ytd' | 'all';
+type ReportTab = 'OVERVIEW' | 'PROJECTS' | 'WORKLOAD' | 'TASK_TYPES';
 
-const datePresetOptions = [
-  { label: 'This Month', value: 'this_month' },
-  { label: 'This Quarter', value: 'this_quarter' },
-  { label: 'This Year', value: 'this_year' },
-  { label: 'All Time', value: 'all_time' },
-  { label: 'Custom Range', value: 'custom' },
-];
+const HEALTH_CONFIG: Record<
+  PmProjectReport['health'],
+  { label: string; tone: Tone }
+> = {
+  ON_TRACK: { label: 'On Track', tone: 'good' },
+  AT_RISK: { label: 'At Risk', tone: 'warn' },
+  DELAYED: { label: 'Delayed', tone: 'bad' },
+  ON_HOLD: { label: 'On Hold', tone: 'neutral' },
+  COMPLETED: { label: 'Completed', tone: 'good' },
+};
 
-// End-of-day / start-of-period dates → stable ISO strings within a day (avoids refetch loops).
-function computeRange(preset: string, custom: { start: string; end: string }): { startDate?: string; endDate?: string } {
-  if (preset === 'custom') {
-    if (!custom.start || !custom.end) return {};
-    const s = new Date(custom.start); s.setHours(0, 0, 0, 0);
-    const e = new Date(custom.end); e.setHours(23, 59, 59, 999);
-    return { startDate: s.toISOString(), endDate: e.toISOString() };
-  }
-  if (preset === 'all_time') return {};
-  const end = new Date(); end.setHours(23, 59, 59, 999);
-  const now = new Date();
-  let start: Date;
-  if (preset === 'this_month') start = new Date(now.getFullYear(), now.getMonth(), 1);
-  else if (preset === 'this_quarter') start = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
-  else start = new Date(now.getFullYear(), 0, 1); // this_year
-  return { startDate: start.toISOString(), endDate: end.toISOString() };
-}
+const LOAD_CONFIG: Record<
+  PmTeamWorkloadReport['loadStatus'],
+  { label: string; tone: Tone }
+> = {
+  AVAILABLE: { label: 'Available', tone: 'info' },
+  BALANCED: { label: 'Balanced', tone: 'good' },
+  HIGH: { label: 'High Load', tone: 'warn' },
+  OVERLOADED: { label: 'Overloaded', tone: 'bad' },
+};
 
-interface ProjectReport {
-  total: number; completed: number; active: number; delayed: number; planning: number; onHold: number; completionRate: number;
-  statusDistribution: { status: string; count: number }[];
-  projectsByClient: { client: string; count: number }[];
-  projectsByType: { type: string; count: number }[];
-}
+const TASK_TYPE_ICONS: Record<string, React.ReactNode> = {
+  DEVELOPMENT: <Code className="h-3.5 w-3.5 text-blue-600" />,
+  DESIGN: <Palette className="h-3.5 w-3.5 text-purple-600" />,
+  CONTENT: <PenTool className="h-3.5 w-3.5 text-emerald-600" />,
+  SEO: <Search className="h-3.5 w-3.5 text-amber-600" />,
+  BUG: <Bug className="h-3.5 w-3.5 text-red-600" />,
+  MEETING: <Users className="h-3.5 w-3.5 text-indigo-600" />,
+  OTHER: <Package className="h-3.5 w-3.5 text-secondary" />,
+};
 
-interface TaskReport {
-  total: number; completed: number; overdue: number; completionRate: number;
-  tasksByType: { type: string; count: number }[];
-  tasksByAssignee: { assignee: string; count: number }[];
-}
+export default function PmReportsPage() {
+  const [tab, setTab] = useState<ReportTab>('OVERVIEW');
+  const [range, setRange] = useState<TimeRange>('30d');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-interface TeamReport {
-  overallCompletionRate: number; totalTasks: number; totalCompleted: number;
-  members: { id: string; name: string; avatar?: string | null; totalTasks: number; completedTasks: number; activeTasks: number; completionRate: number }[];
-}
+  // Data states
+  const [config, setConfig] = useState<OrgConfig | null>(null);
+  const [summaryData, setSummaryData] = useState<PmSummaryData | null>(null);
+  const [projectsData, setProjectsData] = useState<PmProjectReport[]>([]);
+  const [workloadData, setWorkloadData] = useState<PmTeamWorkloadReport[]>([]);
+  const [taskTypesData, setTaskTypesData] = useState<PmTaskTypesData | null>(null);
 
-interface ClientReport {
-  totalClients: number; totalRevenue: number;
-  clients: {
-    id: string; name: string; company?: string | null; contractValue?: number | null;
-    contacts?: { name: string }[];
-    totalProjects: number; completedProjects: number; completionRate: number;
-    totalTasks: number; completedTasks: number; deliverablesRate: number;
-    overdueTasks: number; nextDueDate: string | null
-  }[];
-}
+  // Filters for projects tab
+  const [projectSearch, setProjectSearch] = useState('');
+  const [projectHealthFilter, setProjectHealthFilter] = useState<string>('ALL');
 
-type Tab = 'executive' | 'projects' | 'tasks' | 'team' | 'clients';
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [cfg, summaryRes, projectsRes, workloadRes, taskTypesRes] = await Promise.all([
+        api.config.get(),
+        api.reports.pmSummary({ range }),
+        api.reports.pmProjects({ range }),
+        api.reports.pmTeamWorkload({ range }),
+        api.reports.pmTaskTypes({ range }),
+      ]);
 
-const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
-const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
-
-export default function ReportsPage() {
-  const { user } = useAuthStore();
-  const { activeModule } = useModuleStore();
-  const router = useRouter();
-  const [tab, setTab] = useState<Tab>(activeModule === 'CRM' ? 'executive' : 'projects');
-
-  useEffect(() => {
-    if (activeModule === 'CRM' && !['executive', 'clients'].includes(tab)) {
-      setTab('executive');
-    } else if (activeModule === 'PM' && !['projects', 'tasks', 'team', 'clients'].includes(tab)) {
-      setTab('projects');
+      setConfig(cfg);
+      setSummaryData(summaryRes);
+      setProjectsData(Array.isArray(projectsRes) ? projectsRes : []);
+      setWorkloadData(Array.isArray(workloadRes) ? workloadRes : []);
+      setTaskTypesData(taskTypesRes);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load PM reports');
+    } finally {
+      setLoading(false);
     }
-  }, [activeModule, tab]);
+  }, [range]);
 
-  usePageTitle('Reports');
-  const [datePreset, setDatePreset] = useState('this_quarter');
-  const [customRange, setCustomRange] = useState({ start: '', end: '' });
-  const dateRange = computeRange(datePreset, customRange);
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
-  const canAccessReports = !!user && ['SUPER_ADMIN', 'ADMIN', 'PROJECT_MANAGER'].includes(user.role);
-  const { data: exec } = useExecutiveReport(dateRange, canAccessReports);
+  const tz = config?.organization.timezone ?? 'Asia/Kolkata';
+  const locale = config?.organization.locale ?? 'en-IN';
 
-  interface Department {
-    id: string;
-    name: string;
+  // Filtered projects
+  const filteredProjects = useMemo(() => {
+    return projectsData.filter((p) => {
+      if (projectSearch.trim()) {
+        const q = projectSearch.toLowerCase();
+        const matches =
+          p.name.toLowerCase().includes(q) ||
+          p.company?.name.toLowerCase().includes(q) ||
+          p.lead?.name.toLowerCase().includes(q);
+        if (!matches) return false;
+      }
+      if (projectHealthFilter !== 'ALL' && p.health !== projectHealthFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [projectsData, projectSearch, projectHealthFilter]);
+
+  // Export CSV
+  const exportToCsv = () => {
+    if (projectsData.length === 0) return;
+
+    const headers = [
+      'Project Name',
+      'Client',
+      'Lead',
+      'Status',
+      'Health',
+      'Progress %',
+      'Total Tasks',
+      'Completed Tasks',
+      'Open Tasks',
+      'Overdue Tasks',
+      'Due Date',
+    ];
+
+    const rows = projectsData.map((p) => [
+      `"${p.name.replace(/"/g, '""')}"`,
+      `"${p.company?.name ? p.company.name.replace(/"/g, '""') : '—'}"`,
+      `"${p.lead?.name ? p.lead.name.replace(/"/g, '""') : 'Unassigned'}"`,
+      p.status,
+      p.health,
+      `${p.progressPercent}%`,
+      p.taskStats.total,
+      p.taskStats.completed,
+      p.taskStats.open,
+      p.taskStats.overdue,
+      p.dueDate ? formatDate(p.dueDate, tz, locale) : '—',
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `flowzen_pm_report_${range}_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  if (loading && !summaryData) {
+    return <PageSkeleton />;
   }
 
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [selectedDepartment, setSelectedDepartment] = useState<string>('');
-
-  useEffect(() => {
-    if (!user) return;
-    if (!canAccessReports) return;
-    api.get<{ teams: Department[] }>('/teams').then((res) => setDepartments(res.teams || [])).catch(() => { });
-  }, [user, canAccessReports]);
-
-  const [projectReport, setProjectReport] = useState<ProjectReport | null>(null);
-  const [taskReport, setTaskReport] = useState<TaskReport | null>(null);
-  const [teamReport, setTeamReport] = useState<TeamReport | null>(null);
-  const [clientReport, setClientReport] = useState<ClientReport | null>(null);
-
-  useEffect(() => {
-    if (!user) return;
-    if (user.role === 'TEAM_MEMBER') {
-      router.push('/dashboard');
-      return;
-    }
-
-    const queryParams = selectedDepartment ? `?teamId=${selectedDepartment}` : '';
-
-    api.get<ProjectReport>(`/reports/projects${queryParams}`).then(setProjectReport).catch(() => { });
-    api.get<TaskReport>(`/reports/tasks${queryParams}`).then(setTaskReport).catch(() => { });
-    api.get<TeamReport>(`/reports/team${queryParams}`).then(setTeamReport).catch(() => { });
-    api.get<ClientReport>('/reports/clients').then(setClientReport).catch(() => { });
-  }, [user, router, selectedDepartment]);
-
-  const allTabs = [
-    { id: 'executive' as Tab, label: 'Executive', icon: LayoutDashboard, module: 'CRM' },
-    { id: 'projects' as Tab, label: 'Projects', icon: FolderKanban, module: 'PM' },
-    { id: 'tasks' as Tab, label: 'Tasks', icon: ListTodo, module: 'PM' },
-    { id: 'team' as Tab, label: 'Team', icon: Users, module: 'PM' },
-    { id: 'clients' as Tab, label: 'Clients', icon: PieChart, module: 'ALL' },
-  ];
-
-  const tabs = allTabs.filter(t => t.module === 'ALL' || t.module === activeModule);
-
-  const periodLabel = datePresetOptions.find(o => o.value === datePreset)?.label || '';
+  const s = summaryData?.summary;
+  const h = summaryData?.projectHealth;
+  const funnel = summaryData?.statusFunnel;
+  const blockers = summaryData?.blockerRadar;
 
   return (
-    <div className="w-full max-w-full overflow-x-hidden">
-      <div className="mb-6 sm:mb-8">
-        <h1 className="text-xl sm:text-2xl font-semibold text-primary tracking-tight">Reports & Analytics</h1>
-        <p className="text-xs sm:text-sm text-secondary mt-1">Deep operational visibility and performance metrics</p>
-      </div>
+    <div className="space-y-6 pb-12">
+      {/* Header & Controls Toolbar */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-primary">PM Reports</h1>
+          <p className="text-xs text-secondary mt-0.5">
+            Real-time delivery performance, project health, and team capacity.
+          </p>
+        </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-2 mb-6 sm:mb-8 overflow-x-auto no-scrollbar w-full max-w-full pb-2 snap-x scroll-px-4">
-        {tabs.map((t) => {
-          const Icon = t.icon;
-          const active = tab === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`flex items-center gap-2 px-3 sm:px-5 py-2.5 rounded-xl text-sm font-medium transition-colors duration-150 motion-reduce:transition-none border snap-start ${active
-                ? 'bg-primary text-white border-primary shadow-sm'
-                : 'bg-white text-secondary border-border hover:text-primary hover:bg-surface hover:border-line'
+        {/* Action Controls */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Time Range Selector */}
+          <div className="flex items-center rounded-xl bg-surface border border-border p-1">
+            {(
+              [
+                { id: '7d', label: '7D' },
+                { id: '30d', label: '30D' },
+                { id: '90d', label: '90D' },
+                { id: 'ytd', label: 'YTD' },
+                { id: 'all', label: 'All' },
+              ] as const
+            ).map((r) => (
+              <button
+                key={r.id}
+                onClick={() => setRange(r.id)}
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
+                  range === r.id
+                    ? 'bg-white text-primary shadow-xs border border-border'
+                    : 'text-secondary hover:text-primary'
                 }`}
-            >
-              <Icon className="h-4 w-4" />
-              {t.label}
-            </button>
-          );
-        })}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={Download}
+            onClick={exportToCsv}
+            className="text-xs h-8.5"
+          >
+            Export CSV
+          </Button>
+
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={RotateCcw}
+            onClick={() => void loadData()}
+            className="text-xs text-secondary hover:text-primary h-8.5"
+          >
+            Refresh
+          </Button>
+        </div>
       </div>
 
-      {/* Department Filter (Only for Projects, Tasks, and Team reports) */}
-      {['projects', 'tasks', 'team'].includes(tab) && (
-        <div className="no-print flex flex-col sm:flex-row sm:items-center gap-3 mb-6 bg-[#F9FAFB] border border-border rounded-2xl p-3.5 sm:p-4 w-full max-w-full">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
-            <span className="text-xs font-semibold text-secondary uppercase tracking-wider shrink-0">Filter by Department:</span>
-            <Select
-              value={selectedDepartment}
-              onChange={setSelectedDepartment}
-              options={[
-                { label: 'All Departments', value: '' },
-                ...departments.map((d) => ({ label: d.name, value: d.id }))
-              ]}
-              className="w-full sm:w-48"
+      {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
+
+      {/* 5 Clean KPI Metric Cards (Matching Flowzen Dashboard Aesthetic) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {/* 1. On-Time Delivery */}
+        <div className="rounded-xl border border-border bg-white p-4 space-y-1.5">
+          <div className="flex items-center justify-between text-secondary">
+            <span className="text-[11px] font-semibold uppercase tracking-wider">On-Time Rate</span>
+            <CheckCircle2 className="h-4 w-4 text-secondary" />
+          </div>
+          <p className="text-2xl font-bold tracking-tight text-primary">
+            {s?.onTimeDeliveryRate ?? 0}%
+          </p>
+          <p className="text-[11px] text-secondary">Delivered on schedule</p>
+        </div>
+
+        {/* 2. Active Projects */}
+        <div className="rounded-xl border border-border bg-white p-4 space-y-1.5">
+          <div className="flex items-center justify-between text-secondary">
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Active Projects</span>
+            <FolderKanban className="h-4 w-4 text-secondary" />
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold tracking-tight text-primary">
+              {s?.activeProjects ?? 0}
+            </span>
+            <span className="text-xs text-secondary">/ {s?.totalProjects ?? 0}</span>
+          </div>
+          <p className="text-[11px] text-secondary truncate">
+            {h?.onTrack ?? 0} on track · {h?.atRisk ?? 0} at risk
+          </p>
+        </div>
+
+        {/* 3. Task Velocity */}
+        <div className="rounded-xl border border-border bg-white p-4 space-y-1.5">
+          <div className="flex items-center justify-between text-secondary">
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Tasks Closed</span>
+            <TrendingUp className="h-4 w-4 text-secondary" />
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold tracking-tight text-primary">
+              {s?.completedTasks ?? 0}
+            </span>
+            <span
+              className={`text-xs font-semibold ${
+                (s?.velocityDeltaPercent ?? 0) >= 0 ? 'text-emerald-600' : 'text-red-600'
+              }`}
+            >
+              {(s?.velocityDeltaPercent ?? 0) >= 0 ? '+' : ''}
+              {s?.velocityDeltaPercent ?? 0}%
+            </span>
+          </div>
+          <p className="text-[11px] text-secondary">vs prior period</p>
+        </div>
+
+        {/* 4. Overdue Tasks */}
+        <div
+          className={`rounded-xl border p-4 space-y-1.5 transition-colors ${
+            (s?.overdueTasks ?? 0) > 0 ? 'border-red-200 bg-red-50/40' : 'border-border bg-white'
+          }`}
+        >
+          <div className="flex items-center justify-between text-secondary">
+            <span
+              className={`text-[11px] font-semibold uppercase tracking-wider ${
+                (s?.overdueTasks ?? 0) > 0 ? 'text-red-700' : 'text-secondary'
+              }`}
+            >
+              Overdue Tasks
+            </span>
+            <AlertCircle
+              className={`h-4 w-4 ${
+                (s?.overdueTasks ?? 0) > 0 ? 'text-red-600' : 'text-secondary'
+              }`}
             />
           </div>
-          {user?.teamId && (
-            <button
-              onClick={() => setSelectedDepartment(user.teamId || '')}
-              className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-colors duration-150 motion-reduce:transition-none flex items-center justify-center gap-1.5 w-full sm:w-auto shrink-0 ${selectedDepartment === user.teamId
-                  ? 'bg-primary text-white border-primary shadow-sm'
-                  : 'bg-white text-secondary border-border hover:text-primary hover:bg-surface'
-                }`}
-            >
-              <Users className="h-3.5 w-3.5" />
-              My Department
-            </button>
+          <p
+            className={`text-2xl font-bold tracking-tight ${
+              (s?.overdueTasks ?? 0) > 0 ? 'text-red-700' : 'text-primary'
+            }`}
+          >
+            {s?.overdueTasks ?? 0}
+          </p>
+          <p
+            className={`text-[11px] ${
+              (s?.overdueTasks ?? 0) > 0 ? 'text-red-600 font-medium' : 'text-secondary'
+            }`}
+          >
+            {(s?.overdueTasks ?? 0) > 0
+              ? `${s?.overduePressureRate ?? 0}% of open tasks`
+              : 'All tasks on track'}
+          </p>
+        </div>
+
+        {/* 5. Avg Turnaround */}
+        <div className="rounded-xl border border-border bg-white p-4 space-y-1.5">
+          <div className="flex items-center justify-between text-secondary">
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Avg Turnaround</span>
+            <Clock className="h-4 w-4 text-secondary" />
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl font-bold tracking-tight text-primary">
+              {s?.avgTurnaroundDays ?? 0}
+            </span>
+            <span className="text-xs text-secondary">days</span>
+          </div>
+          <p className="text-[11px] text-secondary">Creation to completion</p>
+        </div>
+      </div>
+
+      {/* Navigation Underline Tabs */}
+      <div className="flex items-center gap-4 border-b border-border text-xs font-semibold">
+        <button
+          onClick={() => setTab('OVERVIEW')}
+          className={`pb-2.5 px-1 border-b-2 transition-colors ${
+            tab === 'OVERVIEW'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-secondary hover:text-primary'
+          }`}
+        >
+          Executive Overview
+        </button>
+        <button
+          onClick={() => setTab('PROJECTS')}
+          className={`pb-2.5 px-1 border-b-2 transition-colors ${
+            tab === 'PROJECTS'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-secondary hover:text-primary'
+          }`}
+        >
+          Projects Matrix ({projectsData.length})
+        </button>
+        <button
+          onClick={() => setTab('WORKLOAD')}
+          className={`pb-2.5 px-1 border-b-2 transition-colors ${
+            tab === 'WORKLOAD'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-secondary hover:text-primary'
+          }`}
+        >
+          Team Workload ({workloadData.length})
+        </button>
+        <button
+          onClick={() => setTab('TASK_TYPES')}
+          className={`pb-2.5 px-1 border-b-2 transition-colors ${
+            tab === 'TASK_TYPES'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-secondary hover:text-primary'
+          }`}
+        >
+          Task Categories & Depts
+        </button>
+      </div>
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* TAB 1: EXECUTIVE OVERVIEW */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {tab === 'OVERVIEW' && (
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Project Health Breakdown Card */}
+            <div className="rounded-xl border border-border bg-white p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-primary">
+                    Project Health Breakdown
+                  </h2>
+                  <p className="text-xs text-secondary mt-0.5">
+                    Portfolio status across {s?.totalProjects ?? 0} projects
+                  </p>
+                </div>
+                <span className="rounded-md bg-surface px-2 py-0.5 text-xs font-semibold text-primary border border-border">
+                  {s?.activeProjects ?? 0} Active
+                </span>
+              </div>
+
+              {/* Stack Bar */}
+              {(s?.totalProjects ?? 0) > 0 && (
+                <div className="h-3 w-full overflow-hidden rounded-full bg-surface flex">
+                  <div
+                    className="bg-emerald-500 h-full transition-all"
+                    style={{
+                      width: `${Math.round(((h?.onTrack ?? 0) / (s?.totalProjects ?? 1)) * 100)}%`,
+                    }}
+                    title={`On Track: ${h?.onTrack}`}
+                  />
+                  <div
+                    className="bg-amber-500 h-full transition-all"
+                    style={{
+                      width: `${Math.round(((h?.atRisk ?? 0) / (s?.totalProjects ?? 1)) * 100)}%`,
+                    }}
+                    title={`At Risk: ${h?.atRisk}`}
+                  />
+                  <div
+                    className="bg-red-500 h-full transition-all"
+                    style={{
+                      width: `${Math.round(((h?.delayed ?? 0) / (s?.totalProjects ?? 1)) * 100)}%`,
+                    }}
+                    title={`Delayed: ${h?.delayed}`}
+                  />
+                  <div
+                    className="bg-blue-500 h-full transition-all"
+                    style={{
+                      width: `${Math.round(((h?.completed ?? 0) / (s?.totalProjects ?? 1)) * 100)}%`,
+                    }}
+                    title={`Completed: ${h?.completed}`}
+                  />
+                  <div
+                    className="bg-zinc-300 h-full transition-all"
+                    style={{
+                      width: `${Math.round(((h?.onHold ?? 0) / (s?.totalProjects ?? 1)) * 100)}%`,
+                    }}
+                    title={`On Hold: ${h?.onHold}`}
+                  />
+                </div>
+              )}
+
+              {/* Metric Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
+                <div className="rounded-lg border border-border bg-surface/50 p-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                    <span className="text-xs font-medium text-secondary">On Track</span>
+                  </div>
+                  <span className="text-lg font-bold text-primary block mt-1">
+                    {h?.onTrack ?? 0}
+                  </span>
+                </div>
+
+                <div className="rounded-lg border border-border bg-surface/50 p-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-amber-500" />
+                    <span className="text-xs font-medium text-secondary">At Risk</span>
+                  </div>
+                  <span className="text-lg font-bold text-primary block mt-1">
+                    {h?.atRisk ?? 0}
+                  </span>
+                </div>
+
+                <div className="rounded-lg border border-border bg-surface/50 p-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-red-500" />
+                    <span className="text-xs font-medium text-secondary">Delayed</span>
+                  </div>
+                  <span className="text-lg font-bold text-primary block mt-1">
+                    {h?.delayed ?? 0}
+                  </span>
+                </div>
+
+                <div className="rounded-lg border border-border bg-surface/50 p-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-blue-500" />
+                    <span className="text-xs font-medium text-secondary">Completed</span>
+                  </div>
+                  <span className="text-lg font-bold text-primary block mt-1">
+                    {h?.completed ?? 0}
+                  </span>
+                </div>
+
+                <div className="rounded-lg border border-border bg-surface/50 p-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-zinc-400" />
+                    <span className="text-xs font-medium text-secondary">On Hold</span>
+                  </div>
+                  <span className="text-lg font-bold text-primary block mt-1">
+                    {h?.onHold ?? 0}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Task Throughput Funnel Card */}
+            <div className="rounded-xl border border-border bg-white p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-primary">
+                    Task Throughput Pipeline
+                  </h2>
+                  <p className="text-xs text-secondary mt-0.5">
+                    Status progression across {s?.totalTasks ?? 0} tasks
+                  </p>
+                </div>
+                <span className="rounded-md bg-surface px-2 py-0.5 text-xs font-semibold text-primary border border-border">
+                  {s?.completedTasks ?? 0} Done
+                </span>
+              </div>
+
+              {/* Funnel Progress Bars */}
+              <div className="space-y-3 pt-1">
+                <div>
+                  <div className="flex items-center justify-between text-xs font-medium mb-1">
+                    <span className="text-secondary flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-zinc-400" /> To Do
+                    </span>
+                    <span className="font-bold text-primary">{funnel?.todo ?? 0}</span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-surface overflow-hidden">
+                    <div
+                      className="h-full bg-zinc-400 rounded-full"
+                      style={{
+                        width: `${Math.round(((funnel?.todo ?? 0) / (s?.totalTasks ?? 1)) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between text-xs font-medium mb-1">
+                    <span className="text-secondary flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-blue-500" /> In Progress
+                    </span>
+                    <span className="font-bold text-primary">{funnel?.inProgress ?? 0}</span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-surface overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 rounded-full"
+                      style={{
+                        width: `${Math.round(
+                          ((funnel?.inProgress ?? 0) / (s?.totalTasks ?? 1)) * 100
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between text-xs font-medium mb-1">
+                    <span className="text-secondary flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-amber-500" /> In Review
+                    </span>
+                    <span className="font-bold text-primary">{funnel?.inReview ?? 0}</span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-surface overflow-hidden">
+                    <div
+                      className="h-full bg-amber-500 rounded-full"
+                      style={{
+                        width: `${Math.round(
+                          ((funnel?.inReview ?? 0) / (s?.totalTasks ?? 1)) * 100
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between text-xs font-medium mb-1">
+                    <span className="text-secondary flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" /> Completed
+                    </span>
+                    <span className="font-bold text-primary">{funnel?.done ?? 0}</span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-surface overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full"
+                      style={{
+                        width: `${Math.round(((funnel?.done ?? 0) / (s?.totalTasks ?? 1)) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Attention & Blocker Indicators */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex items-center justify-between rounded-xl border border-border bg-white p-4">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-surface p-2 text-primary border border-border">
+                  <Eye className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-primary">In-Review Deliverables</h3>
+                  <p className="text-xs text-secondary mt-0.5">
+                    Tasks awaiting reviewer approval
+                  </p>
+                </div>
+              </div>
+              <span className="text-lg font-bold text-primary">
+                {blockers?.inReviewCount ?? 0}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between rounded-xl border border-border bg-white p-4">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-surface p-2 text-primary border border-border">
+                  <ShieldAlert className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-primary">Blocked Tasks</h3>
+                  <p className="text-xs text-secondary mt-0.5">
+                    Tasks paused on external dependencies
+                  </p>
+                </div>
+              </div>
+              <span className="text-lg font-bold text-primary">
+                {blockers?.blockedCount ?? 0}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* TAB 2: PROJECTS PERFORMANCE MATRIX */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {tab === 'PROJECTS' && (
+        <div className="space-y-4">
+          {/* Search and Filters */}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-white p-3.5">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted" />
+              <input
+                type="text"
+                value={projectSearch}
+                onChange={(e) => setProjectSearch(e.target.value)}
+                placeholder="Search project, client, lead..."
+                className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-1.5 text-xs text-body placeholder:text-muted focus:border-primary focus:outline-none"
+              />
+            </div>
+
+            {/* Health Filter Pills */}
+            <div className="flex items-center gap-1 text-xs">
+              {(['ALL', 'ON_TRACK', 'AT_RISK', 'DELAYED', 'COMPLETED', 'ON_HOLD'] as const).map(
+                (st) => (
+                  <button
+                    key={st}
+                    onClick={() => setProjectHealthFilter(st)}
+                    className={`rounded-lg px-2.5 py-1 font-semibold transition-all ${
+                      projectHealthFilter === st
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'bg-surface text-secondary hover:text-primary border border-border'
+                    }`}
+                  >
+                    {st === 'ALL'
+                      ? 'All'
+                      : st === 'ON_TRACK'
+                      ? 'On Track'
+                      : st === 'AT_RISK'
+                      ? 'At Risk'
+                      : st === 'DELAYED'
+                      ? 'Delayed'
+                      : st === 'COMPLETED'
+                      ? 'Completed'
+                      : 'On Hold'}
+                  </button>
+                )
+              )}
+            </div>
+          </div>
+
+          {/* Table */}
+          {filteredProjects.length === 0 ? (
+            <div className="py-16 text-center text-xs text-secondary italic rounded-xl border border-dashed border-border bg-surface/30">
+              No projects match the selected criteria.
+            </div>
+          ) : (
+            <Table>
+              <THead>
+                <TR className="bg-surface hover:bg-surface">
+                  <TH>PROJECT & CLIENT</TH>
+                  <TH>LEAD</TH>
+                  <TH>HEALTH STATUS</TH>
+                  <TH>PROGRESS</TH>
+                  <TH>OPEN / REVIEW / OVERDUE</TH>
+                  <TH>TARGET DATE</TH>
+                  <TH className="text-right">ACTIONS</TH>
+                </TR>
+              </THead>
+              <TBody>
+                {filteredProjects.map((p) => {
+                  const healthCfg = HEALTH_CONFIG[p.health] ?? HEALTH_CONFIG.ON_TRACK;
+
+                  return (
+                    <TR key={p.id} className="hover:bg-subtle transition-colors">
+                      {/* 1. Project & Client */}
+                      <TD>
+                        <div className="min-w-0 max-w-56">
+                          <p className="font-semibold text-primary text-xs truncate">{p.name}</p>
+                          {p.company && (
+                            <p className="text-[11px] text-secondary truncate mt-0.5">
+                              {p.company.name}
+                            </p>
+                          )}
+                        </div>
+                      </TD>
+
+                      {/* 2. Lead */}
+                      <TD>
+                        {p.lead ? (
+                          <div className="flex items-center gap-2">
+                            {p.lead.avatar ? (
+                              <img
+                                src={p.lead.avatar}
+                                alt=""
+                                className="h-6 w-6 rounded-full object-cover border border-border"
+                              />
+                            ) : (
+                              <div
+                                className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold ${getAvatarColor(
+                                  p.lead.name
+                                )}`}
+                              >
+                                {getInitials(p.lead.name)}
+                              </div>
+                            )}
+                            <span className="text-xs font-medium text-primary truncate max-w-28">
+                              {p.lead.name}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted">—</span>
+                        )}
+                      </TD>
+
+                      {/* 3. Health Status */}
+                      <TD>
+                        <Badge tone={healthCfg.tone}>{healthCfg.label}</Badge>
+                      </TD>
+
+                      {/* 4. Progress % */}
+                      <TD>
+                        <div className="w-32 space-y-1">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-semibold text-primary">
+                              {p.progressPercent}%
+                            </span>
+                            <span className="text-secondary text-[10px]">
+                              {p.taskStats.completed}/{p.taskStats.total}
+                            </span>
+                          </div>
+                          <div className="h-1.5 w-full rounded-full bg-surface overflow-hidden">
+                            <div
+                              className="h-full bg-emerald-500 rounded-full"
+                              style={{ width: `${p.progressPercent}%` }}
+                            />
+                          </div>
+                        </div>
+                      </TD>
+
+                      {/* 5. Tasks Breakdown */}
+                      <TD>
+                        <div className="flex items-center gap-1.5 text-xs">
+                          <span className="px-2 py-0.5 rounded bg-surface border border-border text-primary font-medium">
+                            {p.taskStats.open} open
+                          </span>
+                          {p.taskStats.inReview > 0 && (
+                            <span className="px-2 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-700 font-medium">
+                              {p.taskStats.inReview} review
+                            </span>
+                          )}
+                          {p.taskStats.overdue > 0 && (
+                            <span className="px-2 py-0.5 rounded bg-red-50 border border-red-200 text-red-700 font-bold">
+                              {p.taskStats.overdue} overdue
+                            </span>
+                          )}
+                        </div>
+                      </TD>
+
+                      {/* 6. Target Date */}
+                      <TD>
+                        {p.dueDate ? (
+                          <span
+                            className={`text-xs font-medium ${
+                              p.isOverdue ? 'text-red-600 font-bold' : 'text-primary'
+                            }`}
+                          >
+                            {formatDate(p.dueDate, tz, locale)}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted">—</span>
+                        )}
+                      </TD>
+
+                      {/* 7. Actions */}
+                      <TD className="text-right">
+                        <a
+                          href={`/projects/${p.id}`}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                        >
+                          View <ArrowUpRight className="h-3.5 w-3.5" />
+                        </a>
+                      </TD>
+                    </TR>
+                  );
+                })}
+              </TBody>
+            </Table>
           )}
         </div>
       )}
 
-      {/* ---------------- EXECUTIVE (BOSS VIEW) ---------------- */}
-      {tab === 'executive' && (
-        <div id="exec-report" className="w-full max-w-full">
-          <div className="no-print flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
-              <Select value={datePreset} onChange={setDatePreset} options={datePresetOptions} className="w-full sm:w-44" />
-              {datePreset === 'custom' && (
-                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                  <input type="date" value={customRange.start} onChange={(e) => setCustomRange({ ...customRange, start: e.target.value })} className="flex-1 sm:flex-none rounded-lg border border-border px-3 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 min-w-32" />
-                  <span className="text-secondary">–</span>
-                  <input type="date" value={customRange.end} onChange={(e) => setCustomRange({ ...customRange, end: e.target.value })} className="flex-1 sm:flex-none rounded-lg border border-border px-3 py-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 min-w-32" />
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* TAB 3: TEAM WORKLOAD & CAPACITY */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {tab === 'WORKLOAD' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {workloadData.map((u) => {
+              const loadCfg = LOAD_CONFIG[u.loadStatus] ?? LOAD_CONFIG.BALANCED;
+
+              return (
+                <div
+                  key={u.id}
+                  className="rounded-xl border border-border bg-white p-4 space-y-3.5 hover:border-primary/60 transition-colors"
+                >
+                  {/* Profile */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {u.avatar ? (
+                        <img
+                          src={u.avatar}
+                          alt=""
+                          className="h-9 w-9 rounded-full object-cover shrink-0 border border-border"
+                        />
+                      ) : (
+                        <div
+                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${getAvatarColor(
+                            u.name
+                          )}`}
+                        >
+                          {getInitials(u.name)}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <h3 className="text-xs font-bold text-primary truncate">{u.name}</h3>
+                        <p className="text-[11px] text-secondary truncate">
+                          {u.designation || 'Team Member'}
+                          {u.department && ` · ${u.department.name}`}
+                        </p>
+                      </div>
+                    </div>
+
+                    <Badge tone={loadCfg.tone}>{loadCfg.label}</Badge>
+                  </div>
+
+                  {/* Workload Stats */}
+                  <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-border/70 text-center">
+                    <div className="rounded bg-surface p-1.5">
+                      <span className="text-[10px] text-secondary font-medium block">Projects</span>
+                      <span className="text-xs font-bold text-primary mt-0.5 block">
+                        {u.activeProjectsCount}
+                      </span>
+                    </div>
+                    <div className="rounded bg-surface p-1.5">
+                      <span className="text-[10px] text-secondary font-medium block">Open</span>
+                      <span className="text-xs font-bold text-primary mt-0.5 block">
+                        {u.taskStats.open}
+                      </span>
+                    </div>
+                    <div className="rounded bg-surface p-1.5">
+                      <span className="text-[10px] text-secondary font-medium block">Review</span>
+                      <span className="text-xs font-bold text-amber-600 mt-0.5 block">
+                        {u.taskStats.inReview}
+                      </span>
+                    </div>
+                    <div className="rounded bg-surface p-1.5">
+                      <span className="text-[10px] text-secondary font-medium block">Overdue</span>
+                      <span
+                        className={`text-xs font-bold mt-0.5 block ${
+                          u.taskStats.overdue > 0 ? 'text-red-600' : 'text-primary'
+                        }`}
+                      >
+                        {u.taskStats.overdue}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Completion Rate */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-secondary font-medium">Completion Rate</span>
+                      <span className="font-bold text-primary">{u.completionRate}%</span>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-surface overflow-hidden">
+                      <div
+                        className="h-full bg-emerald-500 rounded-full"
+                        style={{ width: `${u.completionRate}%` }}
+                      />
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
-            <button onClick={() => window.print()} className="flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1F2937] transition-colors duration-150 motion-reduce:transition-none w-full sm:w-auto shrink-0">
-              <Download className="h-4 w-4" /> Export PDF
-            </button>
+              );
+            })}
           </div>
-
-          {/* Print-only header */}
-          <div className="hidden print:block mb-4">
-            <h1 className="text-2xl font-bold text-primary">Executive Report</h1>
-            <p className="text-sm text-secondary">Period: {periodLabel}</p>
-          </div>
-
-          {!exec ? <ReportSkeleton /> : <ExecutiveTab data={exec} periodLabel={periodLabel} />}
         </div>
       )}
 
-      {/* ---------------- PROJECT REPORTS ---------------- */}
-      {tab === 'projects' && !projectReport && <ReportSkeleton />}
-      {tab === 'projects' && projectReport && (
-        <motion.div variants={container} initial="hidden" animate="show" className="space-y-6 w-full max-w-full">
-          <motion.div variants={item} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-            <MetricCard label="Total Projects" value={projectReport.total} icon={FolderKanban} />
-            <MetricCard label="Completed" value={projectReport.completed} suffix={`(${projectReport.completionRate}%)`} icon={TrendingUp} />
-            <MetricCard label="Active" value={projectReport.active} icon={Clock} />
-            <MetricCard label="Overdue / Delayed" value={projectReport.delayed} danger={projectReport.delayed > 0} icon={AlertTriangle} />
-          </motion.div>
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* TAB 4: TASK CATEGORIES & DEPARTMENTS */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {tab === 'TASK_TYPES' && (
+        <div className="space-y-5">
+          {/* Categories Grid */}
+          <div className="rounded-xl border border-border bg-white p-5 space-y-4">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-primary">
+              Task Categories & Velocity Breakdown
+            </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <motion.div variants={item} className="rounded-2xl border border-border bg-white p-4 sm:p-6 hover:shadow-sm transition-shadow">
-              <h3 className="text-sm font-semibold text-primary mb-6">Status Distribution</h3>
-              <div className="space-y-4">
-                {projectReport.statusDistribution.map((s) => (
-                  <div key={s.status} className="flex items-center gap-3 sm:gap-4">
-                    <span className="text-xs sm:text-sm text-secondary font-medium w-20 sm:w-24 truncate">{s.status}</span>
-                    <div className="flex-1 h-2 rounded-full bg-subtle overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${projectReport.total > 0 ? (s.count / projectReport.total) * 100 : 0}%` }}
-                        transition={{ duration: 0.6 }}
-                        className={`h-full rounded-full ${s.status === 'Delayed' ? 'bg-red-500' : 'bg-primary'}`}
-                      />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {(taskTypesData?.taskTypes ?? []).map((t) => (
+                <div
+                  key={t.type}
+                  className="rounded-lg border border-border bg-surface/50 p-3.5 space-y-2.5"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="rounded-md bg-white p-1 border border-border">
+                        {TASK_TYPE_ICONS[t.type] ?? TASK_TYPE_ICONS.OTHER}
+                      </div>
+                      <span className="text-xs font-bold text-primary capitalize">
+                        {t.type.toLowerCase().replace('_', ' ')}
+                      </span>
                     </div>
-                    <span className="text-sm font-semibold text-primary tabular-nums w-8 text-right">{s.count}</span>
+                    <span className="text-xs font-semibold text-primary bg-white px-2 py-0.5 rounded border border-border">
+                      {t.total} tasks
+                    </span>
                   </div>
-                ))}
-              </div>
-            </motion.div>
 
-            <motion.div variants={item} className="rounded-2xl border border-border bg-white p-6 hover:shadow-sm transition-shadow flex flex-col gap-6">
-              <div>
-                <h3 className="text-sm font-semibold text-primary mb-4">Projects by Type</h3>
-                <div className="flex flex-wrap gap-2">
-                  {projectReport.projectsByType.map(t => (
-                    <div key={t.type} className="px-3 py-1.5 bg-surface border border-border rounded-lg text-xs font-medium text-body">
-                      {t.type.replace('_', ' ')}: <span className="text-primary ml-1 font-semibold">{t.count}</span>
+                  <div className="grid grid-cols-3 gap-1.5 text-center text-xs pt-1 border-t border-border/60">
+                    <div>
+                      <span className="text-[10px] text-secondary block">Completed</span>
+                      <span className="font-bold text-primary">{t.completed}</span>
                     </div>
-                  ))}
-                  {projectReport.projectsByType.length === 0 && <span className="text-sm text-secondary">No data available.</span>}
+                    <div>
+                      <span className="text-[10px] text-secondary block">In Prog</span>
+                      <span className="font-bold text-primary">{t.inProgress}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-secondary block">Avg Days</span>
+                      <span className="font-bold text-primary">{t.avgDaysToComplete}d</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-
-              <div className="flex-1 border-t border-subtle pt-6">
-                <h3 className="text-sm font-semibold text-primary mb-4">Active Projects by Client</h3>
-                <div className="space-y-3 max-h-50 overflow-y-auto pr-2">
-                  {projectReport.projectsByClient.map(c => (
-                    <div key={c.client} className="flex items-center justify-between">
-                      <span className="text-sm text-secondary truncate">{c.client}</span>
-                      <span className="text-sm font-semibold text-primary px-2 py-0.5 bg-subtle rounded-md">{c.count}</span>
-                    </div>
-                  ))}
-                  {projectReport.projectsByClient.length === 0 && <span className="text-sm text-secondary">No active projects.</span>}
-                </div>
-              </div>
-            </motion.div>
+              ))}
+            </div>
           </div>
-        </motion.div>
-      )}
 
-      {/* ---------------- TASK REPORTS ---------------- */}
-      {tab === 'tasks' && !taskReport && <ReportSkeleton />}
-      {tab === 'tasks' && taskReport && (
-        <motion.div variants={container} initial="hidden" animate="show" className="space-y-6 w-full max-w-full">
-          <motion.div variants={item} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-            <MetricCard label="Total Tasks" value={taskReport.total} icon={ListTodo} />
-            <MetricCard label="Completed" value={taskReport.completed} suffix={`(${taskReport.completionRate}%)`} icon={TrendingUp} />
-            <MetricCard label="Open" value={taskReport.total - taskReport.completed} icon={Clock} />
-            <MetricCard label="Overdue" value={taskReport.overdue} danger={taskReport.overdue > 0} icon={AlertTriangle} />
-          </motion.div>
+          {/* Department Efficiency */}
+          <div className="rounded-xl border border-border bg-white p-5 space-y-4">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-primary">
+              Departmental Delivery Efficiency
+            </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <motion.div variants={item} className="rounded-2xl border border-border bg-white p-4 sm:p-6 hover:shadow-sm transition-shadow">
-              <h3 className="text-sm font-semibold text-primary mb-6">Open Tasks Workload by Assignee</h3>
-              <div className="space-y-4">
-                {taskReport.tasksByAssignee.map((a) => (
-                  <div key={a.assignee} className="flex items-center gap-3 sm:gap-4">
-                    <span className="text-xs sm:text-sm text-secondary font-medium w-24 sm:w-32 truncate">{a.assignee}</span>
-                    <div className="flex-1 h-2 rounded-full bg-subtle overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${taskReport.total > 0 ? (a.count / taskReport.total) * 100 : 0}%` }}
-                        transition={{ duration: 0.6 }}
-                        className="h-full rounded-full bg-[#3B82F6]"
-                      />
-                    </div>
-                    <span className="text-sm font-semibold text-primary tabular-nums w-8 text-right">{a.count}</span>
-                  </div>
-                ))}
-                {taskReport.tasksByAssignee.length === 0 && <span className="text-sm text-secondary">No open assigned tasks.</span>}
-              </div>
-            </motion.div>
-
-            <motion.div variants={item} className="rounded-2xl border border-border bg-white p-6 hover:shadow-sm transition-shadow">
-              <h3 className="text-sm font-semibold text-primary mb-6">Tasks by Type (Open)</h3>
-              <div className="flex flex-wrap gap-3">
-                {taskReport.tasksByType.map(t => (
-                  <div key={t.type} className="px-4 py-2 bg-surface border border-border rounded-xl text-sm font-medium text-body flex items-center gap-2">
-                    <span className="capitalize">{t.type.toLowerCase().replace('_', ' ')}</span>
-                    <span className="bg-primary text-white text-[10px] px-1.5 py-0.5 rounded-md font-semibold">{t.count}</span>
-                  </div>
-                ))}
-                {taskReport.tasksByType.length === 0 && <span className="text-sm text-secondary">No open tasks.</span>}
-              </div>
-            </motion.div>
-          </div>
-        </motion.div>
-      )}
-
-      {/* ---------------- TEAM REPORTS ---------------- */}
-      {tab === 'team' && !teamReport && <ReportSkeleton />}
-      {tab === 'team' && teamReport && (
-        <motion.div variants={container} initial="hidden" animate="show" className="space-y-6 w-full max-w-full">
-          <motion.div variants={item} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-            <MetricCard label="Overall Completion" value={`${teamReport.overallCompletionRate}%`} icon={TrendingUp} />
-            <MetricCard label="Total Tasks" value={teamReport.totalTasks} icon={ListTodo} />
-            <MetricCard label="Completed" value={teamReport.totalCompleted} icon={Clock} />
-            <MetricCard label="Active Workload" value={teamReport.totalTasks - teamReport.totalCompleted} icon={Users} />
-          </motion.div>
-
-          <motion.div variants={item} className="rounded-2xl border border-border bg-white overflow-hidden hover:shadow-sm transition-shadow w-full max-w-full">
-            <div className="overflow-x-auto max-w-full">
-              <table className="w-full min-w-140 sm:min-w-175">
-                <thead>
-                  <tr className="border-b border-subtle bg-surface">
-                    <th className="px-6 py-4 text-left text-xs font-medium text-secondary uppercase tracking-wide">Member</th>
-                    <th className="px-6 py-4 text-center text-xs font-medium text-secondary uppercase tracking-wide">Active Workload</th>
-                    <th className="px-6 py-4 text-center text-xs font-medium text-secondary uppercase tracking-wide">Completion Rate</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-subtle">
-                  {teamReport.members.map((m) => (
-                    <tr key={m.id} className="hover:bg-surface transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className={`h-8 w-8 rounded-full text-[11px] font-semibold flex items-center justify-center ${getAvatarColor(m.name)}`}>{getInitials(m.name)}</div>
-                          <span className="text-sm font-semibold text-primary">{m.name}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-sm font-semibold bg-subtle text-body border border-border">
-                          {m.activeTasks} tasks
+            {(taskTypesData?.departments ?? []).length === 0 ? (
+              <p className="text-xs text-secondary italic">No department data recorded.</p>
+            ) : (
+              <Table>
+                <THead>
+                  <TR className="bg-surface hover:bg-surface">
+                    <TH>DEPARTMENT</TH>
+                    <TH>TOTAL TASKS</TH>
+                    <TH>COMPLETED</TH>
+                    <TH>OPEN</TH>
+                    <TH>OVERDUE</TH>
+                    <TH>COMPLETION RATE</TH>
+                  </TR>
+                </THead>
+                <TBody>
+                  {(taskTypesData?.departments ?? []).map((d) => (
+                    <TR key={d.id}>
+                      <TD className="font-semibold text-primary text-xs">{d.name}</TD>
+                      <TD className="text-xs text-primary font-medium">{d.totalTasks}</TD>
+                      <TD className="text-xs text-primary font-medium">{d.completedTasks}</TD>
+                      <TD className="text-xs text-secondary">{d.openTasks}</TD>
+                      <TD className="text-xs">
+                        <span
+                          className={`font-semibold ${
+                            d.overdueTasks > 0 ? 'text-red-600' : 'text-primary'
+                          }`}
+                        >
+                          {d.overdueTasks}
                         </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-center gap-3">
-                          <div className="h-2 w-24 rounded-full bg-subtle overflow-hidden">
-                            <div className="h-full rounded-full bg-[#10B981]" style={{ width: `${m.completionRate}%` }} />
+                      </TD>
+                      <TD>
+                        <div className="w-32 space-y-1">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-semibold text-primary">{d.completionRate}%</span>
                           </div>
-                          <span className="text-sm font-semibold text-primary tabular-nums w-10">{m.completionRate}%</span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {teamReport.members.length === 0 && (
-                    <tr><td colSpan={4} className="px-6 py-8 text-center text-sm text-secondary">No team members found.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-
-      {/* ---------------- CLIENT REPORTS ---------------- */}
-      {tab === 'clients' && !clientReport && <ReportSkeleton />}
-      {tab === 'clients' && clientReport && (
-        <motion.div variants={container} initial="hidden" animate="show" className="space-y-6 w-full max-w-full">
-          <motion.div variants={item} className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            <MetricCard label="Total Clients" value={clientReport.totalClients} icon={Users} />
-            <MetricCard label="Avg Completion Rate" value={`${Math.round(clientReport.clients.reduce((sum, c) => sum + c.completionRate, 0) / (clientReport.totalClients || 1))}%`} icon={TrendingUp} />
-          </motion.div>
-
-          <motion.div variants={item} className="rounded-2xl border border-border bg-white overflow-hidden hover:shadow-sm transition-shadow w-full max-w-full">
-            <div className="overflow-x-auto max-w-full">
-              <table className="w-full min-w-180 sm:min-w-225">
-                <thead>
-                  <tr className="border-b border-subtle bg-surface">
-                    <th className="px-6 py-4 text-left text-xs font-medium text-secondary uppercase tracking-wide">Client</th>
-                    <th className="px-6 py-4 text-center text-xs font-medium text-secondary uppercase tracking-wide">Projects Health</th>
-                    <th className="px-6 py-4 text-center text-xs font-medium text-secondary uppercase tracking-wide">Deliverables Tracker</th>
-                    <th className="px-6 py-4 text-center text-xs font-medium text-secondary uppercase tracking-wide">Overdue Tasks</th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-secondary uppercase tracking-wide">Next Deadline</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-subtle">
-                  {clientReport.clients.map((c) => (
-                    <tr key={c.id} className="hover:bg-surface transition-colors">
-                      <td className="px-6 py-4">
-                        <p className="text-sm font-semibold text-primary">{getClientDisplayName(c)}</p>
-                        {c.name !== 'Internal' && c.company && (c.contacts?.[0]?.name || c.name !== c.company) ? (
-                          <p className="text-xs text-secondary mt-0.5">{c.contacts?.[0]?.name || c.name}</p>
-                        ) : null}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <div className="flex flex-col items-center">
-                          <span className="text-sm font-semibold text-primary">{c.completedProjects} / {c.totalProjects}</span>
-                          <span className="text-xs font-medium text-secondary uppercase">Completed</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col items-center">
-                          <div className="flex items-center gap-2 mb-1">
-                            <div className="h-2 w-20 rounded-full bg-subtle overflow-hidden">
-                              <div className="h-full rounded-full bg-[#8B5CF6]" style={{ width: `${c.deliverablesRate}%` }} />
-                            </div>
-                            <span className="text-xs font-semibold text-primary w-8">{c.deliverablesRate}%</span>
+                          <div className="h-1.5 w-full rounded-full bg-surface overflow-hidden">
+                            <div
+                              className="h-full bg-emerald-500 rounded-full"
+                              style={{ width: `${d.completionRate}%` }}
+                            />
                           </div>
-                          <span className="text-[10px] font-medium text-secondary">{c.completedTasks} of {c.totalTasks} tasks</span>
                         </div>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        {c.overdueTasks > 0 ? (
-                          <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold bg-red-50 text-red-700 border border-red-100">
-                            {c.overdueTasks} Overdue
-                          </span>
-                        ) : (
-                          <span className="text-sm text-secondary">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-left">
-                        {c.nextDueDate ? (
-                          <span className="text-sm font-medium text-primary">{formatDate(c.nextDueDate)}</span>
-                        ) : (
-                          <span className="text-sm text-secondary italic">No upcoming</span>
-                        )}
-                      </td>
-                    </tr>
+                      </TD>
+                    </TR>
                   ))}
-                  {clientReport.clients.length === 0 && (
-                    <tr><td colSpan={5} className="px-6 py-8 text-center text-sm text-secondary">No clients found.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </motion.div>
-        </motion.div>
+                </TBody>
+              </Table>
+            )}
+          </div>
+        </div>
       )}
     </div>
-  );
-}
-
-function MetricCard({ label, value, suffix, danger, icon: Icon }: { label: string; value: string | number; suffix?: string; danger?: boolean; icon?: any }) {
-  return (
-    <div className={`flex flex-col justify-between h-full p-3.5 sm:p-5 rounded-2xl border ${danger ? 'border-red-200 bg-red-50' : 'border-border bg-white'} hover:shadow-sm transition-shadow min-w-0`}>
-      <div className="flex items-start justify-between gap-2 mb-2 sm:mb-3">
-        <p className={`min-h-[2em] sm:min-h-[2.5em] leading-tight text-[11px] sm:text-xs font-medium uppercase tracking-wide truncate ${danger ? 'text-red-600' : 'text-secondary'}`}>{label}</p>
-        {Icon && <Icon className={`h-4 w-4 shrink-0 ${danger ? 'text-red-500' : 'text-secondary'}`} />}
-      </div>
-      <p title={String(value)} className={`truncate ${String(value).length > 12 ? 'text-base sm:text-xl' : String(value).length > 8 ? 'text-lg sm:text-2xl' : 'text-xl sm:text-3xl'} font-semibold tabular-nums tracking-tight ${danger ? 'text-red-600' : 'text-primary'}`}>
-        {value}
-        {suffix && <span className={`text-xs sm:text-sm font-medium ml-1.5 ${danger ? 'text-red-400' : 'text-secondary'}`}>{suffix}</span>}
-      </p>
-    </div>
-  );
-}
-
-function ReportSkeleton() {
-  return (
-    <div className="space-y-6 animate-pulse">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[...Array(4)].map((_, i) => (
-          <div key={i} className="p-4 sm:p-5 rounded-2xl border border-border bg-white h-26">
-            <div className="h-3 w-24 bg-subtle rounded mb-4" />
-            <div className="h-8 w-16 bg-subtle rounded" />
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="rounded-2xl border border-border bg-white p-6 h-75">
-          <div className="h-4 w-32 bg-subtle rounded mb-6" />
-          <div className="space-y-6">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="flex gap-4">
-                <div className="h-4 w-24 bg-subtle rounded" />
-                <div className="h-4 flex-1 bg-subtle rounded" />
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="rounded-2xl border border-border bg-white p-6 h-75">
-          <div className="h-4 w-32 bg-subtle rounded mb-6" />
-          <div className="flex gap-2 flex-wrap">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-8 w-24 bg-subtle rounded-lg" />
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const titleCase = (s?: string) => s ? s.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '';
-
-function SectionTitle({ icon: Icon, title, subtitle }: { icon: any; title: string; subtitle?: string }) {
-  return (
-    <div className="flex items-end justify-between mb-4">
-      <h2 className="flex items-center gap-2 text-base font-semibold text-primary"><Icon className="h-4 w-4 text-secondary" /> {title}</h2>
-      {subtitle && <span className="text-xs text-secondary">{subtitle}</span>}
-    </div>
-  );
-}
-
-function StatRow({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'green' | 'red' }) {
-  const color = tone === 'green' ? 'text-green-600' : tone === 'red' ? 'text-red-600' : 'text-primary';
-  return (
-    <div className="rounded-2xl border border-border bg-white p-4 flex items-center justify-between">
-      <div>
-        <p className="text-xs font-medium text-secondary uppercase tracking-wide">{label}</p>
-        {sub && <p className="text-xs text-secondary mt-0.5">{sub}</p>}
-      </div>
-      <p className={`text-lg font-semibold tabular-nums ${color}`}>{value}</p>
-    </div>
-  );
-}
-
-function MiniLegend({ dot, label }: { dot: string; label: string }) {
-  return <span className="flex items-center gap-1.5 text-secondary"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: dot }} />{label}</span>;
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return <div className="h-45 flex items-center justify-center text-sm text-secondary">{children}</div>;
-}
-
-function ExecutiveTab({ data, periodLabel }: { data: any; periodLabel: string }) {
-  const { revenue, delivery, team, clients } = data;
-  return (
-    <motion.div variants={container} initial="hidden" animate="show" className="space-y-8">
-
-      {/* KPI ROW */}
-      <motion.div variants={item} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <MetricCard label="Active Revenue" value={formatCurrency(revenue.activeRevenue)} icon={IndianRupee} />
-        <MetricCard label="Weighted Forecast" value={formatCurrency(revenue.weightedPipelineValue || 0)} icon={PieChart} />
-        <MetricCard label="Raw Pipeline" value={formatCurrency(revenue.pipelineValue)} icon={TrendingUp} />
-        <MetricCard label="Win Rate" value={`${revenue.winRate}%`} icon={Trophy} />
-        <MetricCard label="On-Time Delivery" value={`${delivery.onTimeRate}%`} icon={Target} danger={delivery.onTimeRate < 70} />
-        <MetricCard label="Overdue Tasks" value={delivery.overdueTasks} icon={AlertTriangle} danger={delivery.overdueTasks > 0} />
-        <div className="col-span-1 sm:col-span-2 lg:col-span-1">
-          <MetricCard label="Churned (period)" value={clients.churnedInPeriod} icon={Users} danger={clients.churnedInPeriod > 0} />
-        </div>
-      </motion.div>
-
-      {/* REVENUE & SALES */}
-      <motion.div variants={item}>
-        <SectionTitle icon={IndianRupee} title="Revenue & Sales" subtitle={periodLabel} />
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-1 space-y-3">
-            <StatRow label="Won deals" value={formatCurrency(revenue.wonValue)} sub={`${revenue.wonCount} deals`} tone="green" />
-            <StatRow label="Lost leads" value={formatCurrency(revenue.lostValue)} sub={`${revenue.lostCount} leads`} tone="red" />
-            <StatRow label="Weighted forecast" value={formatCurrency(revenue.weightedPipelineValue || 0)} sub="probability adjusted" tone="green" />
-            <StatRow label="Open pipeline" value={formatCurrency(revenue.pipelineValue)} sub="raw active leads" />
-          </div>
-          <div className="lg:col-span-2 rounded-2xl border border-border bg-white p-4 sm:p-5 overflow-hidden">
-            <h3 className="text-sm font-semibold text-primary mb-4">Reasons for Loss</h3>
-            {revenue.lostReasons.length ? (
-              <div className="h-55 w-full max-w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={revenue.lostReasons.map((r: any) => ({ name: titleCase(r.reason), count: r.count }))} layout="vertical" margin={{ left: 0, right: 12 }}>
-                    <XAxis type="number" hide allowDecimals={false} />
-                    <YAxis type="category" dataKey="name" width={90} axisLine={false} tickLine={false} tick={axisTick} />
-                    <RTooltip cursor={{ fill: '#FAFAFA' }} />
-                    <Bar dataKey="count" radius={[0, 4, 4, 0]} fill="#dc2626" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            ) : <Empty>No lost leads in this period.</Empty>}
-          </div>
-        </div>
-      </motion.div>
-
-      {/* DELIVERY & OPERATIONS */}
-      <motion.div variants={item}>
-        <SectionTitle icon={Target} title="Delivery & Operations" />
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 rounded-2xl border border-border bg-white p-5">
-            <h3 className="text-sm font-semibold text-primary mb-4">Completion Velocity</h3>
-            <div className="h-55">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={delivery.velocity} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="execVel" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#111827" stopOpacity={0.18} />
-                      <stop offset="100%" stopColor="#111827" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={axisTick} interval="preserveStartEnd" minTickGap={24} />
-                  <YAxis axisLine={false} tickLine={false} tick={axisTick} allowDecimals={false} />
-                  <RTooltip cursor={{ stroke: '#E5E7EB' }} />
-                  <Area type="monotone" dataKey="tasks" name="Completed" stroke="#111827" strokeWidth={2} fill="url(#execVel)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div className="rounded-2xl border border-border bg-white p-5 flex flex-col">
-            <h3 className="text-sm font-semibold text-primary mb-2">Project Health</h3>
-            <div className="h-40">
-              <ResponsiveContainer width="100%" height="100%">
-                <RPieChart>
-                  <Pie
-                    data={[
-                      { name: 'On Track', value: delivery.projectHealth.onTrack },
-                      { name: 'At Risk', value: delivery.projectHealth.atRisk },
-                      { name: 'Delayed', value: delivery.projectHealth.delayed },
-                    ]}
-                    dataKey="value" innerRadius={42} outerRadius={66} paddingAngle={2}
-                  >
-                    <Cell fill="#22C55E" /><Cell fill="#F59E0B" /><Cell fill="#EF4444" />
-                  </Pie>
-                  <RTooltip />
-                </RPieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="flex flex-wrap justify-center gap-3 mt-2 text-xs">
-              <MiniLegend dot="#22C55E" label={`On track ${delivery.projectHealth.onTrack}`} />
-              <MiniLegend dot="#F59E0B" label={`At risk ${delivery.projectHealth.atRisk}`} />
-              <MiniLegend dot="#EF4444" label={`Delayed ${delivery.projectHealth.delayed}`} />
-            </div>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* TEAM & UTILIZATION */}
-      <motion.div variants={item}>
-        <SectionTitle icon={Users} title="Team & Utilization" subtitle={`Avg utilization ${team.avgUtilization}%`} />
-        <div className="rounded-2xl border border-border bg-white p-5">
-          {team.members.length ? (
-            <div className="h-65">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={team.members.slice(0, 10).map((m: any) => ({ name: (m.name || '').split(' ')[0], capacity: m.capacity }))} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={axisTick} />
-                  <YAxis axisLine={false} tickLine={false} tick={axisTick} domain={[0, 100]} />
-                  <RTooltip cursor={{ fill: '#FAFAFA' }} />
-                  <Bar dataKey="capacity" name="Utilization %" radius={[2, 2, 0, 0]}>
-                    {team.members.slice(0, 10).map((m: any, i: number) => (<Cell key={i} fill={m.capacity >= 90 ? '#6B7280' : '#111827'} />))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : <Empty>No active team members.</Empty>}
-        </div>
-      </motion.div>
-
-      {/* CLIENT PORTFOLIO */}
-      <motion.div variants={item}>
-        <SectionTitle icon={PieChart} title="Client Portfolio" subtitle={`${clients.active} active · ${clients.churned} churned · ${clients.inactive} completed`} />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="rounded-2xl border border-border bg-white p-5">
-            <h3 className="text-sm font-semibold text-primary mb-4 flex items-center gap-2"><Trophy className="h-4 w-4 text-secondary" /> Top Clients by Value</h3>
-            {clients.topClients.length ? clients.topClients.map((c: any, i: number) => (
-              <div key={i} className="flex items-center justify-between py-2 border-b border-subtle last:border-0">
-                <span className="text-sm text-primary truncate pr-3">{c.name}</span>
-                <span className="text-sm font-semibold text-primary tabular-nums shrink-0">{formatCurrency(c.contractValue)}</span>
-              </div>
-            )) : <Empty>No client revenue recorded.</Empty>}
-          </div>
-          <div className="rounded-2xl border border-border bg-white p-5">
-            <h3 className="text-sm font-semibold text-primary mb-4 flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-secondary" /> At-Risk Clients</h3>
-            {clients.atRisk.length ? clients.atRisk.map((c: any, i: number) => (
-              <div key={i} className="flex items-center justify-between py-2 border-b border-subtle last:border-0">
-                <span className="flex items-center gap-2 text-sm text-primary truncate pr-3"><span className={`h-2 w-2 rounded-full shrink-0 ${c.health === 'Red' ? 'bg-red-500' : 'bg-amber-500'}`} />{c.name}</span>
-                <span className="text-xs text-secondary shrink-0">{c.overdueTasks} overdue</span>
-              </div>
-            )) : <Empty>All clients healthy.</Empty>}
-          </div>
-        </div>
-      </motion.div>
-
-    </motion.div>
   );
 }

@@ -1,398 +1,351 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, FileText, Download, Copy, Ban, Search, Eye, Trash2, MoreHorizontal, Send } from 'lucide-react';
-import { api } from '@/lib/api';
-import { formatCurrency, formatDate } from '@/lib/utils';
-import { useRouter } from 'next/navigation';
-import { Select } from '@/components/ui/select';
-import toast from 'react-hot-toast';
-import { useConfirmStore } from '@/stores';
-import { fileUrl } from '@/lib/files';
-import { usePageTitle } from '@/hooks/usePageTitle';
-import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+/**
+ * Quotations.
+ *
+ * Flowzen produces the document. The client's ANSWER arrives outside Flowzen — by
+ * email, on a call, or in a meeting — so it is recorded by hand. There is no
+ * accept link and no client portal (master plan §7.3).
+ *
+ * That single fact shapes the screen. A quotation nobody answered is not a state
+ * anyone types in, so silence is the one thing the system has to raise by itself
+ * — hence the band at the top (§3.12).
+ */
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { Clock, FileText, Plus, Send } from 'lucide-react';
+import {
+  api,
+  atLeast,
+  formatDate,
+  formatMoney,
+  type OrgConfig,
+  type Role,
+  type WinTerms,
+} from '@/lib/api-v2';
+import { PageHeader } from '@/components/PageHeader';
+import { Button } from '@/components/ui/button';
+import { Badge, type Tone } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { EmptyState, ErrorNote, Note } from '@/components/ui/empty-state';
+import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
+import { TableSkeleton } from '@/components/ui/skeleton-loaders';
 import { QuoteFormModal } from './components/QuoteFormModal';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { Icon } from '@/components/ui/icon';
+import { RecordAnswerDialog } from './components/RecordAnswerDialog';
+import { MarkSentDialog } from './components/MarkSentDialog';
+import { WinDealDialog } from '../pipeline/components/WinDealDialog';
 
-function QuotationsContent() {
-  usePageTitle('Quotations');
-  const queryClient = useQueryClient();
-  const confirm = useConfirmStore((s) => s.confirm);
-  const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
-  const [duplicateOf, setDuplicateOf] = useState<any>(null);
-  const [prefillLeadId, setPrefillLeadId] = useState<string | null>(null);
-  const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
-  const router = useRouter();
-  const searchParams = useSearchParams();
+export type QuoteStatus = 'DRAFT' | 'SENT' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED';
 
-  // Deep link from a lead's "Raise Quotation" button: /quotations?create=true&leadId=…
+export type QuoteRow = {
+  id: string;
+  number: string;
+  status: QuoteStatus;
+  total: string;
+  subtotal: string;
+  engagementType: 'RETAINER' | 'PROJECT';
+  billingFrequency: string;
+  validUntil: string | null;
+  sentAt: string | null;
+  sentVia: string | null;
+  acceptedAt: string | null;
+  acceptedVia: string | null;
+  declinedAt: string | null;
+  declineReason: string | null;
+  createdAt: string;
+  company: { id: string; name: string };
+  deal: { id: string; title: string | null };
+};
+
+const STATUS: Record<QuoteStatus, { label: string; tone: Tone }> = {
+  DRAFT: { label: 'Draft', tone: 'neutral' },
+  SENT: { label: 'Sent', tone: 'info' },
+  ACCEPTED: { label: 'Accepted', tone: 'good' },
+  DECLINED: { label: 'Declined', tone: 'bad' },
+  // Expiry is a date passing, not a decision anybody made.
+  EXPIRED: { label: 'Expired', tone: 'warn' },
+};
+
+const FILTERS: { value: '' | QuoteStatus; label: string }[] = [
+  { value: '', label: 'All' },
+  { value: 'DRAFT', label: 'Draft' },
+  { value: 'SENT', label: 'Sent' },
+  { value: 'ACCEPTED', label: 'Accepted' },
+  { value: 'DECLINED', label: 'Declined' },
+];
+
+/** What the document is actually offering, in words rather than two enums. */
+const shape = (q: Pick<QuoteRow, 'engagementType' | 'billingFrequency'>): string => {
+  if (q.engagementType === 'PROJECT') return 'Project';
+  const every: Record<string, string> = {
+    MONTHLY: 'a month',
+    QUARTERLY: 'a quarter',
+    YEARLY: 'a year',
+    ONE_TIME: 'once',
+  };
+  return `Retainer · ${every[q.billingFrequency] ?? q.billingFrequency.toLowerCase()}`;
+};
+
+export default function QuotationsPage() {
+  const [quotes, setQuotes] = useState<QuoteRow[]>([]);
+  const [waiting, setWaiting] = useState<QuoteRow[]>([]);
+  const [config, setConfig] = useState<OrgConfig | null>(null);
+  const [filter, setFilter] = useState<'' | QuoteStatus>('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [creating, setCreating] = useState(false);
+  const [sending, setSending] = useState<QuoteRow | null>(null);
+  /** Confirmation that a message actually left, and where it went. */
+  const [sentNotice, setSentNotice] = useState<string | null>(null);
+  const [answering, setAnswering] = useState<QuoteRow | null>(null);
+  const [winning, setWinning] = useState<{ quote: QuoteRow; defaults: Partial<WinTerms> } | null>(
+    null,
+  );
+
+  const load = useCallback(async () => {
+    try {
+      const [list, awaiting, cfg] = await Promise.all([
+        api.quotes.list() as Promise<unknown> as Promise<QuoteRow[]>,
+        api.quotes.awaitingReply() as Promise<unknown> as Promise<QuoteRow[]>,
+        api.config.get(),
+      ]);
+      setQuotes(Array.isArray(list) ? list : []);
+      setWaiting(Array.isArray(awaiting) ? awaiting : []);
+      setConfig(cfg);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load quotations');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    if (searchParams.get('create') !== 'true') return;
-    setEditId(null);
-    setDuplicateOf(null);
-    setPrefillLeadId(searchParams.get('leadId'));
-    setShowForm(true);
-  }, [searchParams]);
+    void load();
+  }, [load]);
 
-  const debouncedSearch = useDebouncedValue(search, 300);
+  const currency = config?.organization.currency ?? 'INR';
+  const locale = config?.organization.locale ?? 'en-IN';
+  const tz = config?.organization.timezone ?? 'Asia/Kolkata';
+  const money = (v: string | null | undefined) => formatMoney(v, currency, locale);
+  const date = (v: string | null | undefined) => formatDate(v, tz, locale);
+  const canWrite = atLeast(config?.me.role as Role | undefined, 'SALES');
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['quotes', debouncedSearch, typeFilter, statusFilter],
-    queryFn: () => {
-      const p = new URLSearchParams();
-      if (debouncedSearch) p.set('search', debouncedSearch);
-      if (typeFilter) p.set('type', typeFilter);
-      if (statusFilter) p.set('status', statusFilter);
-      return api.get<{ quotes: any[] }>(`/crm/quotes?${p}`);
-    },
-    placeholderData: (previousData) => previousData,
-  });
-  const quotes = data?.quotes || [];
+  const visible = useMemo(
+    () => (filter ? quotes.filter((q) => q.status === filter) : quotes),
+    [quotes, filter],
+  );
 
-  const statusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) => api.patch(`/crm/quotes/${id}/status`, { status }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['quotes'] }); toast.success('Status updated'); },
-    onError: (e: any) => toast.error(e.message || 'Failed'),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/crm/quotes/${id}`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['quotes'] }); toast.success('Deleted successfully'); },
-    onError: (e: any) => toast.error(e.message || 'Failed to delete'),
-  });
-
-  async function generatePdf(id: string) {
-    const t = toast.loading('Generating PDF…');
-    try {
-      const res = await api.post<{ pdfUrl: string }>(`/crm/quotes/${id}/generate-pdf`, {});
-      toast.dismiss(t);
-      toast.success('PDF ready');
-      window.open(fileUrl(res.pdfUrl), '_blank');
-      queryClient.invalidateQueries({ queryKey: ['quotes'] });
-    } catch (e: any) {
-      toast.dismiss(t);
-      toast.error(e.message || 'PDF failed');
-    }
-  }
-
-  /**
-   * Email the document to the client. The server generates the PDF if one is missing, attaches
-   * it, and only flips the status to SENT once the mail actually went — so a failure leaves the
-   * quote honestly marked DRAFT rather than claiming it was sent.
-   */
-  async function sendToClient(q: any) {
-    const to = window.prompt(
-      `Send ${q.documentNumber} to which email address?`,
-      q.clientEmail || ''
-    );
-    if (to === null) return;                 // cancelled
-    if (!to.trim()) { toast.error('Enter an email address'); return; }
-
-    const t = toast.loading('Sending…');
-    try {
-      const res = await api.post<{ to: string }>(`/crm/quotes/${q.id}/send`, { to: to.trim() });
-      toast.dismiss(t);
-      toast.success(`Sent to ${res.to}`);
-      queryClient.invalidateQueries({ queryKey: ['quotes'] });
-    } catch (e: any) {
-      toast.dismiss(t);
-      toast.error(e.message || 'Could not send the email');
-    }
-  }
-
-  function openNew() { setEditId(null); setDuplicateOf(null); setShowForm(true); }
-  function openEdit(id: string) { setEditId(id); setDuplicateOf(null); setShowForm(true); }
-  async function duplicate(id: string) {
-    const q = await api.get<any>(`/crm/quotes/${id}`);
-    setDuplicateOf(q); setEditId(null); setShowForm(true);
-  }
-
-  async function createInvoiceDraft(q: any) {
-    const t = toast.loading('Creating invoice draft...');
-    try {
-      const payload = {
-        quoteId: q.id,
-        clientId: q.clientId,
-        clientName: q.clientName,
-        lineItems: q.lineItems,
-        grandTotal: q.grandTotal,
-        notes: 'Created from Quote ' + q.documentNumber,
-      };
-      await api.post('/revenue/invoice-drafts', payload);
-      toast.dismiss(t);
-      toast.success('Invoice draft created successfully');
-      router.push('/invoice-drafts'); // the editable invoice screen (the /invoices twin now redirects here)
-    } catch (e: any) {
-      toast.dismiss(t);
-      toast.error(e.message || 'Failed to create invoice draft');
-    }
-  }
+  if (loading) return <TableSkeleton rows={6} />;
 
   return (
-    <div>
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-primary tracking-tight">Quotations</h1>
-          <p className="text-sm text-secondary mt-1">{quotes.length} document{quotes.length === 1 ? '' : 's'}</p>
-        </div>
-        <button onClick={openNew} className="w-full sm:w-auto justify-center flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover transition-colors duration-150 motion-reduce:transition-none">
-          <Icon as={Plus} size="md" /> New Quotation
-        </button>
-      </div>
+    <>
+      <PageHeader
+        title="Quotations"
+        subtitle={`${quotes.length} in total`}
+        action={
+          canWrite && (
+            <Button variant="primary" icon={Plus} onClick={() => setCreating(true)}>
+              New quotation
+            </Button>
+          )
+        }
+      />
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 mb-6">
-        <div className="relative w-full sm:max-w-xs">
-          <Icon as={Search} size="md" className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search number or client..." className="w-full rounded-xl border border-border bg-white pl-9 pr-4 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 transition-colors duration-150 motion-reduce:transition-none" />
-        </div>
-        <div className="w-full sm:w-48">
-          <Select value={typeFilter} onChange={setTypeFilter} options={[{ label: 'Types', value: '' }, { label: 'Quotation', value: 'QUOTATION' }, { label: 'Proforma Invoice', value: 'PROFORMA_INVOICE' }]} />
-        </div>
-        <div className="w-full sm:w-44">
-          <Select value={statusFilter} onChange={setStatusFilter} options={[{ label: 'Status', value: '' }, ...['DRAFT', 'SENT', 'ACCEPTED', 'EXPIRED', 'CANCELLED'].map(s => ({ label: s[0] + s.slice(1).toLowerCase(), value: s }))]} />
-        </div>
-      </div>
+      <div className="space-y-5">
+        {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
+        {sentNotice && <Note onDismiss={() => setSentNotice(null)}>{sentNotice}</Note>}
 
-      {/* Desktop Table */}
-      <div className="hidden md:block bg-white rounded-2xl border border-border overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border text-left text-xs font-semibold text-secondary uppercase tracking-wider">
-                <th className="px-6 py-3">Document</th>
-                <th className="px-6 py-3">Client</th>
-                <th className="px-6 py-3">Date</th>
-                <th className="px-6 py-3 text-right">Amount</th>
-                <th className="px-6 py-3">Status</th>
-                <th className="px-6 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {isLoading ? (
-                <tr><td colSpan={6} className="px-6 py-10 text-center text-sm text-secondary">Loading…</td></tr>
-              ) : quotes.length === 0 ? (
-                <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-secondary">No documents yet. Create your first quotation.</td></tr>
-              ) : quotes.map((q) => (
-                <tr key={q.id} onClick={() => openEdit(q.id)} className="hover:bg-surface transition-colors cursor-pointer">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <Icon as={FileText} size="md" className="text-secondary shrink-0" />
-                      <div>
-                        <p className="text-sm font-medium text-primary font-mono">{q.documentNumber}</p>
-                        <p className="text-[11px] text-secondary">{q.documentType === 'QUOTATION' ? 'Quotation' : 'Proforma Invoice'}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-primary">{q.clientName}</td>
-                  <td className="px-6 py-4 text-sm text-secondary">{formatDate(q.documentDate)}</td>
-                  <td className="px-6 py-4 text-sm font-medium text-primary text-right">{formatCurrency(Number(q.grandTotal))}</td>
-                  <td className="px-6 py-4">
-                    <StatusBadge status={q.status} />
-                  </td>
-                  <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
-                    {/* Desktop Viewport — icon row */}
-                    <div className="hidden md:flex items-center justify-end gap-1.5 text-secondary">
-                      <button title="View / Edit" onClick={() => openEdit(q.id)} className="p-1.5 rounded-lg hover:bg-subtle hover:text-primary transition-colors"><Eye className="h-4 w-4" /></button>
-                      <button title="Generate / Download PDF" onClick={() => q.pdfUrl ? window.open(fileUrl(q.pdfUrl), '_blank') : generatePdf(q.id)} className="p-1.5 rounded-lg hover:bg-subtle hover:text-primary transition-colors"><Download className="h-4 w-4" /></button>
-                      {q.status !== 'CANCELLED' && (
-                        <button title="Email to client" onClick={() => sendToClient(q)} className="p-1.5 rounded-lg hover:bg-subtle hover:text-primary transition-colors"><Send className="h-4 w-4" /></button>
-                      )}
-                      <button title="Duplicate" onClick={() => duplicate(q.id)} className="p-1.5 rounded-lg hover:bg-subtle hover:text-primary transition-colors"><Copy className="h-4 w-4" /></button>
-                      {q.status === 'ACCEPTED' && (
-                        <button title="Move to Invoice Draft" onClick={async () => { if (await confirm({ title: 'Create Invoice', message: 'Move this quote to an Invoice Draft?', confirmText: 'Create Invoice', cancelText: 'Cancel' })) createInvoiceDraft(q); }} className="p-1.5 rounded-lg hover:bg-green-50 hover:text-green-600 transition-colors">
-                          <Icon as={FileText} size="md" />
-                        </button>
-                      )}
-                      {q.status !== 'CANCELLED' && (
-                        <button title="Cancel" onClick={async () => { if (await confirm({ title: 'Cancel Document', message: 'Are you sure you want to cancel this document?', confirmText: 'Cancel Document', cancelText: 'Keep', variant: 'warning' })) statusMutation.mutate({ id: q.id, status: 'CANCELLED' }); }} className="p-1.5 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors"><Icon as={Ban} size="md" /></button>
-                      )}
-                      <button title="Delete" onClick={async () => { if (await confirm({ title: 'Delete Document', message: 'Are you sure you want to delete this document? This cannot be undone.', confirmText: 'Delete', cancelText: 'Cancel', variant: 'danger' })) deleteMutation.mutate(q.id); }} className="p-1.5 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors"><Icon as={Trash2} size="md" /></button>
-                    </div>
-
-                    {/* Mobile Viewport — ⋯ menu with text labels */}
-                    <div className="relative md:hidden flex justify-end">
-                      <button
-                        className="p-1.5 rounded-lg hover:bg-subtle text-secondary hover:text-primary transition-colors"
-                        onClick={() => setActiveDropdownId(activeDropdownId === q.id ? null : q.id)}
-                      >
-                        <Icon as={MoreHorizontal} size="md" />
-                      </button>
-                      {activeDropdownId === q.id && (
-                        <>
-                          <div className="fixed inset-0 z-40" onClick={() => setActiveDropdownId(null)} />
-                          <div className="absolute right-0 top-8 z-50 w-52 rounded-xl bg-white shadow-modal border border-border py-1 flex flex-col text-left">
-                            <button
-                              onClick={() => { setActiveDropdownId(null); openEdit(q.id); }}
-                              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
-                            >
-                              <Icon as={Eye} size="md" /> View / Edit
-                            </button>
-                            <button
-                              onClick={() => { setActiveDropdownId(null); q.pdfUrl ? window.open(fileUrl(q.pdfUrl), '_blank') : generatePdf(q.id); }}
-                              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
-                            >
-                              <Icon as={Download} size="md" /> Download PDF
-                            </button>
-                            <button
-                              onClick={() => { setActiveDropdownId(null); duplicate(q.id); }}
-                              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
-                            >
-                              <Icon as={Copy} size="md" /> Duplicate
-                            </button>
-                            {q.status === 'ACCEPTED' && (
-                              <button
-                                onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Create Invoice', message: 'Move this quote to an Invoice Draft?', confirmText: 'Create Invoice', cancelText: 'Cancel' })) createInvoiceDraft(q); }}
-                                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-green-600 hover:bg-green-50 transition-colors text-left"
-                              >
-                                <Icon as={FileText} size="md" /> Move to Invoice Draft
-                              </button>
-                            )}
-                            {q.status !== 'CANCELLED' && (
-                              <button
-                                onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Cancel Document', message: 'Are you sure you want to cancel this document?', confirmText: 'Cancel Document', cancelText: 'Keep', variant: 'warning' })) statusMutation.mutate({ id: q.id, status: 'CANCELLED' }); }}
-                                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-amber-600 hover:bg-amber-50 transition-colors text-left"
-                              >
-                                <Icon as={Ban} size="md" /> Cancel
-                              </button>
-                            )}
-                            <button
-                              onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Delete Document', message: 'Are you sure you want to delete this document? This cannot be undone.', confirmText: 'Delete', cancelText: 'Cancel', variant: 'danger' })) deleteMutation.mutate(q.id); }}
-                              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors text-left"
-                            >
-                              <Icon as={Trash2} size="md" /> Delete
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Mobile Card View */}
-      <div className="md:hidden flex flex-col gap-3 pb-4">
-        {isLoading ? (
-          <div className="p-6 text-center text-sm text-secondary bg-white rounded-xl border border-border">Loading…</div>
-        ) : quotes.length === 0 ? (
-          <div className="p-8 text-center text-sm text-secondary bg-white rounded-xl border border-border">No documents yet.</div>
-        ) : quotes.map((q) => (
-          <div key={q.id} className="p-4 rounded-xl border border-border bg-white hover:shadow-sm cursor-pointer transition-colors duration-150 motion-reduce:transition-none" onClick={() => openEdit(q.id)}>
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-subtle text-body flex items-center justify-center shrink-0">
-                  <Icon as={FileText} size="lg" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-primary leading-tight font-mono">{q.documentNumber}</p>
-                  <p className="text-[11px] text-secondary mt-0.5">{q.documentType === 'QUOTATION' ? 'Quotation' : 'Proforma Invoice'}</p>
-                </div>
+        {/* ── Sent, and nobody has answered ───────────────────────────────────
+            Accepted and declined both get recorded by a person. Silence gets
+            recorded by nobody, which is exactly why it belongs here (§3.12). */}
+        {waiting.length > 0 && (
+          <Card className="border-amber-200 bg-amber-50/40">
+            <div className="mb-3 flex items-start gap-2">
+              <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" strokeWidth={1.75} />
+              <div>
+                <h2 className="text-sm font-semibold text-primary">Waiting on an answer</h2>
+                <p className="mt-0.5 text-xs text-secondary">
+                  Sent over a week ago with no reply recorded. Chase it, or record the answer if it
+                  already came.
+                </p>
               </div>
-              <StatusBadge status={q.status} size="xs" />
             </div>
 
-            <div className="mb-3">
-              <p className="text-sm font-medium text-primary">{q.clientName}</p>
-              <p className="text-xs text-secondary mt-0.5">Date: {formatDate(q.documentDate)}</p>
-            </div>
-
-            <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-50">
-              <p className="text-sm font-bold text-primary">{formatCurrency(Number(q.grandTotal))}</p>
-
-              <div className="relative" onClick={e => e.stopPropagation()}>
-                <button
-                  className="p-1.5 rounded-lg hover:bg-subtle text-secondary hover:text-primary transition-colors"
-                  onClick={() => setActiveDropdownId(activeDropdownId === q.id ? null : q.id)}
+            <ul className="space-y-1.5">
+              {waiting.map((q) => (
+                <li
+                  key={q.id}
+                  className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white px-3 py-2"
                 >
-                  <Icon as={MoreHorizontal} size="md" />
-                </button>
-                {activeDropdownId === q.id && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setActiveDropdownId(null)} />
-                    <div className="absolute right-0 bottom-8 z-50 w-52 rounded-xl bg-white shadow-modal border border-border py-1 flex flex-col text-left">
-                      <button
-                        onClick={() => { setActiveDropdownId(null); openEdit(q.id); }}
-                        className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
-                      >
-                        <Icon as={Eye} size="md" /> View / Edit
-                      </button>
-                      <button
-                        onClick={() => { setActiveDropdownId(null); q.pdfUrl ? window.open(fileUrl(q.pdfUrl), '_blank') : generatePdf(q.id); }}
-                        className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
-                      >
-                        <Icon as={Download} size="md" /> Download PDF
-                      </button>
-                      <button
-                        onClick={() => { setActiveDropdownId(null); duplicate(q.id); }}
-                        className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-secondary hover:bg-gray-50 hover:text-primary transition-colors text-left"
-                      >
-                        <Icon as={Copy} size="md" /> Duplicate
-                      </button>
-                      {q.status === 'ACCEPTED' && (
-                        <button
-                          onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Create Invoice', message: 'Move this quote to an Invoice Draft?', confirmText: 'Create Invoice', cancelText: 'Cancel' })) createInvoiceDraft(q); }}
-                          className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-green-600 hover:bg-green-50 transition-colors text-left"
-                        >
-                          <Icon as={FileText} size="md" /> Move to Invoice Draft
-                        </button>
-                      )}
-                      {q.status !== 'CANCELLED' && (
-                        <button
-                          onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Cancel Document', message: 'Are you sure you want to cancel this document?', confirmText: 'Cancel Document', cancelText: 'Keep', variant: 'warning' })) statusMutation.mutate({ id: q.id, status: 'CANCELLED' }); }}
-                          className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-amber-600 hover:bg-amber-50 transition-colors text-left"
-                        >
-                          <Icon as={Ban} size="md" /> Cancel
-                        </button>
-                      )}
-                      <button
-                        onClick={async () => { setActiveDropdownId(null); if (await confirm({ title: 'Delete Document', message: 'Are you sure you want to delete this document? This cannot be undone.', confirmText: 'Delete', cancelText: 'Cancel', variant: 'danger' })) deleteMutation.mutate(q.id); }}
-                        className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors text-left"
-                      >
-                        <Icon as={Trash2} size="md" /> Delete
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
+                  <span className="text-sm font-medium text-primary">{q.company.name}</span>
+                  <span className="text-xs text-secondary">
+                    {q.number} · {money(q.total)} · sent {date(q.sentAt)}
+                  </span>
+                  {canWrite && (
+                    <Button size="sm" className="ml-auto" onClick={() => setAnswering(q)}>
+                      Record the answer
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+
+        <div className="flex flex-wrap gap-1.5">
+          {FILTERS.map((f) => {
+            const count = f.value === '' ? quotes.length : quotes.filter((q) => q.status === f.value).length;
+            return (
+              <Button
+                key={f.value || 'all'}
+                size="sm"
+                variant={filter === f.value ? 'primary' : 'secondary'}
+                onClick={() => setFilter(f.value)}
+              >
+                {f.label}
+                <span className={filter === f.value ? 'text-white/60' : 'text-secondary'}>{count}</span>
+              </Button>
+            );
+          })}
+        </div>
+
+        {visible.length === 0 ? (
+          <EmptyState
+            icon={FileText}
+            title={quotes.length === 0 ? 'No quotations yet' : 'Nothing with that status'}
+            hint={
+              quotes.length === 0
+                ? 'A quotation is raised against a deal, so start one from the pipeline or with the button above.'
+                : undefined
+            }
+          />
+        ) : (
+          <Table>
+            <THead>
+              <TR className="hover:bg-transparent">
+                <TH>Number</TH>
+                <TH>Client</TH>
+                <TH>What it offers</TH>
+                <TH numeric>Total</TH>
+                <TH>Status</TH>
+                <TH>Latest</TH>
+                <TH />
+              </TR>
+            </THead>
+            <TBody>
+              {visible.map((q) => (
+                <TR key={q.id}>
+                  <TD className="font-mono text-xs text-secondary">{q.number}</TD>
+                  <TD>
+                    <Link
+                      href={`/clients/${q.company.id}`}
+                      className="font-medium text-primary hover:underline"
+                    >
+                      {q.company.name}
+                    </Link>
+                    <Link
+                      href={`/pipeline/${q.deal.id}`}
+                      className="block truncate text-xs text-secondary hover:underline"
+                    >
+                      {q.deal.title ?? 'Deal'}
+                    </Link>
+                  </TD>
+                  <TD className="text-xs text-secondary">{shape(q)}</TD>
+                  <TD numeric className="font-medium text-primary">
+                    {money(q.total)}
+                  </TD>
+                  <TD>
+                    <Badge tone={STATUS[q.status].tone}>{STATUS[q.status].label}</Badge>
+                  </TD>
+                  {/*
+                    The date shown is when the THING happened — the client agreed
+                    on Tuesday even if it was typed in on Friday (§3.12).
+                  */}
+                  <TD className="text-xs text-secondary">
+                    {q.status === 'ACCEPTED'
+                      ? `Accepted ${date(q.acceptedAt)}`
+                      : q.status === 'DECLINED'
+                        ? `Declined ${date(q.declinedAt)}`
+                        : q.sentAt
+                          ? `Sent ${date(q.sentAt)}`
+                          : `Drafted ${date(q.createdAt)}`}
+                  </TD>
+                  <TD>
+                    {canWrite && (q.status === 'DRAFT' || q.status === 'SENT') && (
+                      <div className="flex justify-end gap-1.5">
+                        {q.status === 'DRAFT' && (
+                          <Button size="sm" icon={Send} onClick={() => setSending(q)}>
+                            Mark sent
+                          </Button>
+                        )}
+                        <Button size="sm" onClick={() => setAnswering(q)}>
+                          Record answer
+                        </Button>
+                      </div>
+                    )}
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        )}
+
+        <Note>
+          Flowzen produces the document; the answer comes back outside it, so somebody records it.
+          There is no accept link and no client portal.
+        </Note>
       </div>
 
-      {showForm && (
-        <QuoteFormModal
-          editId={editId}
-          duplicateOf={duplicateOf}
-          prefillLeadId={prefillLeadId}
-          onClose={() => { setShowForm(false); setPrefillLeadId(null); }}
-          onSaved={() => { setShowForm(false); setPrefillLeadId(null); queryClient.invalidateQueries({ queryKey: ['quotes'] }); }}
+      <QuoteFormModal
+        open={creating}
+        onClose={() => setCreating(false)}
+        onCreated={() => {
+          setCreating(false);
+          void load();
+        }}
+      />
+
+      <MarkSentDialog
+        quote={sending}
+        mailConfigured={config?.mailConfigured ?? false}
+        onClose={() => setSending(null)}
+        onSent={(message) => {
+          setSending(null);
+          setSentNotice(message ?? null);
+          void load();
+        }}
+      />
+
+      <RecordAnswerDialog
+        quote={answering}
+        onClose={() => setAnswering(null)}
+        onRecorded={(win) => {
+          const quote = answering;
+          setAnswering(null);
+          void load();
+          // Accepting OFFERS the win, pre-filled from this quotation. It does
+          // not perform it — winning needs a start date this person may not
+          // have, and the terms are what start the billing (§3.12).
+          if (win && quote) setWinning({ quote, defaults: win });
+        }}
+      />
+
+      {winning && (
+        <WinDealDialog
+          dealId={winning.quote.deal.id}
+          dealTitle={winning.quote.deal.title ?? 'Deal'}
+          companyName={winning.quote.company.name}
+          defaults={winning.defaults}
+          onClose={() => setWinning(null)}
+          onWon={() => {
+            setWinning(null);
+            void load();
+          }}
         />
       )}
-    </div>
-  );
-}
-
-// useSearchParams needs a Suspense boundary or the production build fails
-// (missing-suspense-with-csr-bailout). Dev renders on demand and won't warn.
-export default function QuotationsPage() {
-  return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center min-h-100">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
-    }>
-      <QuotationsContent />
-    </Suspense>
+    </>
   );
 }

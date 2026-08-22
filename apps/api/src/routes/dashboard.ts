@@ -1,661 +1,178 @@
-import { Router, Response } from 'express';
+/**
+ * The morning screen.
+ *
+ * What needs attention today, addressed to the person reading it. Everything here
+ * is computed at read time — a stored "overdue" is wrong the night a job fails
+ * (master plan §3.8).
+ *
+ * What each role sees differs by ROWS and FIELDS rather than by a 403. People
+ * should see their own world rather than hit walls (§3.10).
+ */
+
+import { Router, type Response, type NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { authenticate, AuthRequest } from '../middleware/auth.js';
-import { cacheMiddleware } from '../middleware/cache.js';
-import { istStartOfDay } from '../utils/istDay.js';
+import { authenticate, type AuthRequest } from '../middleware/auth.js';
+import { getOrgConfig } from '../lib/orgConfig.js';
+import { startOfDay, endOfDay, isBeforeToday, daysBetween } from '../utils/orgDay.js';
+import { calculateMrr } from '../services/engagement.service.js';
+import { revenueSummary } from '../services/invoice.service.js';
+import { isRotting } from '../services/stageRules.js';
+import { findAwaitingReply } from '../services/quote.service.js';
 
 export const dashboardRouter = Router();
+
 dashboardRouter.use(authenticate);
 
-// Cache all dashboard routes for 5 minutes (invalidated on mutation)
-dashboardRouter.use(cacheMiddleware(300));
-
-// GET /api/dashboard/stats
-dashboardRouter.get('/stats', async (req: AuthRequest, res: Response, next) => {
+dashboardRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const orgId = req.user!.organizationId;
-    const role = req.user!.role;
     const userId = req.user!.userId;
+    const org = await getOrgConfig(orgId);
+    const now = new Date();
 
-    const todayStart = istStartOfDay();
+    // Every day boundary is calculated in the ORGANISATION's timezone, so "due
+    // today" means what the person reading it expects (§3.11).
+    const todayEnd = endOfDay(now, org.timezone);
+    const canSeeMoney = ['ADMIN', 'SUPER_ADMIN'].includes(req.user!.role);
+    const canSeePipeline = ['SALES', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'].includes(req.user!.role);
 
-    const { startDate, endDate } = req.query;
-    let dateFilter = {};
-    if (startDate && endDate) {
-      dateFilter = {
-        createdAt: {
-          gte: new Date(startDate as string),
-          lte: new Date(endDate as string)
-        }
+    // ── Everyone: their own work ────────────────────────────────────────────
+    const myTasks = await prisma.task.findMany({
+      where: {
+        organizationId: orgId,
+        status: { not: 'DONE' },
+        OR: [{ assigneeId: userId }, { reviewerId: userId }],
+      },
+      include: { project: { select: { id: true, name: true } } },
+      orderBy: { dueDate: 'asc' },
+      take: 50,
+    });
+
+    const work = {
+      overdue: myTasks.filter((t) => t.dueDate && isBeforeToday(t.dueDate, org.timezone, now)).length,
+      dueToday: myTasks.filter(
+        (t) => t.dueDate && t.dueDate <= todayEnd && !isBeforeToday(t.dueDate, org.timezone, now),
+      ).length,
+      awaitingMyReview: myTasks.filter((t) => t.reviewerId === userId && t.status === 'IN_REVIEW').length,
+      tasks: myTasks.slice(0, 10),
+    };
+
+    const payload: Record<string, unknown> = { work };
+
+    // ── Sales and above: the pipeline ───────────────────────────────────────
+    if (canSeePipeline) {
+      const [followUps, staleDeals, awaitingReply] = await Promise.all([
+        prisma.deal.findMany({
+          where: {
+            organizationId: orgId,
+            isOnHold: false,
+            followUpDate: { not: null, lte: todayEnd },
+            stage: { kind: 'OPEN' },
+            // Addressed to whoever owns it. A notification to the whole team is
+            // one nobody acts on (§4.12).
+            ownerId: userId,
+          },
+          include: { company: { select: { id: true, name: true } } },
+          orderBy: { followUpDate: 'asc' },
+          take: 20,
+        }),
+        prisma.deal.findMany({
+          where: { organizationId: orgId, isOnHold: false, stage: { kind: 'OPEN' }, ownerId: userId },
+          include: {
+            company: { select: { id: true, name: true } },
+            stage: { select: { name: true, kind: true, rottingDays: true } },
+            stageHistory: { orderBy: { enteredAt: 'desc' }, take: 1 },
+          },
+        }),
+        findAwaitingReply(orgId, 7),
+      ]);
+
+      const rotting = staleDeals
+        .map((d) => {
+          const enteredAt = d.stageHistory[0]?.enteredAt ?? d.createdAt;
+          const daysInStage = daysBetween(now, enteredAt, org.timezone);
+          return { deal: d, daysInStage };
+        })
+        .filter(({ deal, daysInStage }) =>
+          isRotting({ kind: deal.stage.kind, rottingDays: deal.stage.rottingDays }, daysInStage),
+        )
+        .map(({ deal, daysInStage }) => ({
+          id: deal.id,
+          title: deal.title,
+          company: deal.company,
+          stage: deal.stage.name,
+          daysInStage,
+          blockedOn: deal.blockedOn,
+        }));
+
+      payload.pipeline = {
+        followUpsDue: followUps,
+        rotting,
+        // Accepted and declined both get recorded by somebody. Silence is
+        // recorded by nobody, which is why it is surfaced here (§3.12).
+        quotesAwaitingReply: awaitingReply
+          .filter((q) => q.deal.ownerId === userId)
+          .map((q) => ({
+            id: q.id,
+            number: q.number,
+            company: q.company,
+            total: q.total.toString(),
+            sentAt: q.sentAt,
+            daysWaiting: q.sentAt ? daysBetween(now, q.sentAt, org.timezone) : null,
+          })),
       };
     }
 
-    const [activeClients, activeProjects, openTasks, completedTasks, delayedProjects, totalMembers, overdueTasks] =
-      await Promise.all([
-        // Active Clients: clients whose STATUS is ACTIVE.
-        //
-        // This used to count clients with >= 1 open project OR >= 1 open task and never looked at
-        // status at all, so an ACTIVE client with no work attached yet was missing from the card
-        // while appearing as Active everywhere else. Reported as a bug because it read 1 against
-        // 4 ACTIVE clients on the Clients page.
-        //
-        // Matches the Clients page exactly — same archived and Internal exclusions (clients.ts)
-        // — because two screens disagreeing about a headline number is the actual defect here.
-        //
-        // The date range is deliberately NOT applied. It filtered on the *project's* createdAt,
-        // so "this week" quietly meant "clients whose projects were created this week", which is
-        // not a thing anyone would ask for. How many active clients you have is a fact about now,
-        // not about a period, so the number should hold still when the preset changes.
-        prisma.client.count({
+    // ── Admin and above: the money ──────────────────────────────────────────
+    if (canSeeMoney) {
+      const monthStart = startOfDay(
+        new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
+        org.timezone,
+      );
+
+      const [mrr, summary, dueForBilling, attention] = await Promise.all([
+        calculateMrr(orgId),
+        revenueSummary(orgId, monthStart, now),
+        prisma.engagement.count({
+          where: { organizationId: orgId, status: 'ACTIVE', nextBillingDate: { not: null, lte: todayEnd } },
+        }),
+        prisma.engagement.count({
           where: {
             organizationId: orgId,
             status: 'ACTIVE',
-            archivedAt: null,
-            // The hidden per-org "Internal" account holds the org's own projects and is not a
-            // client. Excluded here the same way the Clients page excludes it.
-            AND: [
-              { OR: [{ engagementType: null }, { engagementType: { not: 'INTERNAL' } }] },
-              { name: { notIn: ['Internal', 'internal'] } },
-              { NOT: { name: { contains: '(Internal)', mode: 'insensitive' } } },
-            ],
-            ...(role === 'TEAM_MEMBER' ? {
-              projects: { some: { members: { some: { userId } } } }
-            } : {}),
-          }
-        }),
-        // §2.2 Active Projects: projects in open status with ≥1 non-completed task
-        prisma.project.count({
-          where: { 
-            client: { organizationId: orgId }, 
-            status: { in: ['PLANNING', 'IN_PROGRESS', 'REVIEW', 'ON_HOLD'] },
-            tasks: { some: { status: { not: 'COMPLETED' } } },
-            ...dateFilter,
-            ...(role === 'PROJECT_MANAGER' ? { ownerId: userId } : {}),
-            ...(role === 'TEAM_MEMBER' ? { members: { some: { userId } } } : {})
+            endDate: null,
+            nextReviewDate: { lte: new Date(now.getTime() + 30 * 86_400_000) },
           },
-        }),
-        prisma.task.count({
-          where: {
-            OR: [
-              { project: { client: { organizationId: orgId }, status: { not: 'CANCELLED' } } },
-              { lead: { organizationId: orgId } }
-            ],
-            status: { in: ['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'BLOCKED'] },
-            ...dateFilter,
-            ...(role === 'TEAM_MEMBER' ? { assigneeId: userId } : {})
-          },
-        }),
-        prisma.task.count({
-          where: { 
-            OR: [
-              { project: { client: { organizationId: orgId } } },
-              { lead: { organizationId: orgId } }
-            ], 
-            status: 'COMPLETED',
-            ...(startDate && endDate ? {
-              completedAt: {
-                gte: new Date(startDate as string),
-                lte: new Date(endDate as string)
-              }
-            } : {}),
-            ...(role === 'TEAM_MEMBER' ? { assigneeId: userId } : {})
-          },
-        }),
-        prisma.project.count({
-          where: {
-            client: { organizationId: orgId },
-            endDate: { lt: todayStart },
-            status: { notIn: ['COMPLETED', 'CANCELLED'] },
-            ...dateFilter,
-            ...(role === 'PROJECT_MANAGER' ? { ownerId: userId } : {}),
-            ...(role === 'TEAM_MEMBER' ? { members: { some: { userId } } } : {})
-          },
-        }),
-        prisma.user.count({
-          where: {
-            organizationId: orgId,
-            status: 'ACTIVE',
-            ...dateFilter,
-            ...(role === 'TEAM_MEMBER' ? { id: userId } : {})
-          }
-        }),
-        prisma.task.count({
-          where: {
-            OR: [
-              { project: { client: { organizationId: orgId } } },
-              { lead: { organizationId: orgId } }
-            ],
-            dueDate: { lt: todayStart },
-            status: { notIn: ['COMPLETED'] },
-            ...dateFilter,
-            ...(role === 'TEAM_MEMBER' ? { assigneeId: userId } : {})
-          }
         }),
       ]);
 
-    res.json({
-      activeClients,
-      activeProjects,
-      openTasks,
-      completedTasks,
-      delayedProjects,
-      totalMembers,
-      overdueTasks,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// GET /api/dashboard/project-health
-dashboardRouter.get('/project-health', async (req: AuthRequest, res: Response, next) => {
-  try {
-    const orgId = req.user!.organizationId;
-    const role = req.user!.role;
-    const userId = req.user!.userId;
-    const now = new Date();
-    const todayStart = istStartOfDay();
-
-    const projects = await prisma.project.findMany({
-      where: {
-        client: { organizationId: orgId },
-        status: { notIn: ['COMPLETED', 'CANCELLED'] },
-        ...(role === 'PROJECT_MANAGER' ? { ownerId: userId } : {}),
-        ...(role === 'TEAM_MEMBER' ? { members: { some: { userId } } } : {})
-      },
-      select: { id: true, endDate: true, progress: true, status: true },
-    });
-
-    let onTrack = 0;
-    let atRisk = 0;
-    let delayed = 0;
-
-    projects.forEach((p) => {
-      if (p.endDate && p.endDate < todayStart) {
-        delayed++;
-      } else if (p.endDate) {
-        const total = p.endDate.getTime() - now.getTime();
-        const daysLeft = total / (1000 * 60 * 60 * 24);
-        if (daysLeft < 7 && p.progress < 80) {
-          atRisk++;
-        } else {
-          onTrack++;
-        }
-      } else {
-        onTrack++;
-      }
-    });
-
-    res.json({ onTrack, atRisk, delayed, total: projects.length });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// GET /api/dashboard/activity
-dashboardRouter.get('/activity', async (req: AuthRequest, res: Response, next) => {
-  try {
-    const orgId = req.user!.organizationId;
-    const filter = (req.query.filter as string) || 'ALL';
-    const limit = parseInt(req.query.limit as string) || 20;
-    const skip = parseInt(req.query.skip as string) || 0;
-
-    let whereClause: any = { user: { organizationId: orgId } };
-
-    if (filter === 'TASKS') {
-      whereClause.entityType = 'TASK';
-    } else if (filter === 'PROJECTS') {
-      whereClause.entityType = 'PROJECT';
-    } else if (filter === 'ME') {
-      whereClause.userId = req.user!.userId;
-    } else if (filter === 'MY_PROJECTS') {
-      whereClause.project = {
-        OR: [
-          { ownerId: req.user!.userId },
-          { members: { some: { userId: req.user!.userId } } },
-          { teams: { some: { team: { members: { some: { id: req.user!.userId } } } } } },
-        ],
+      payload.money = {
+        // Three numbers, none derived from another. A month can look excellent on
+        // the first and be empty on the third (§3.8).
+        mrr: mrr.toString(),
+        billedThisMonth: summary.billed.toString(),
+        collectedThisMonth: summary.collected.toString(),
+        outstanding: summary.outstanding.toString(),
+        overdue: summary.overdue.toString(),
+        invoicesDueToRaise: dueForBilling,
+        pricesDueForReview: attention,
       };
     }
 
-    const activities = await prisma.activity.findMany({
-      where: whereClause,
-      include: { 
-        user: { select: { id: true, name: true, avatar: true } },
-        task: { select: { id: true, title: true, projectId: true } },
-        project: { select: { id: true, name: true } },
-        client: { select: { id: true, name: true } }
-      },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      skip: skip,
+    // ── The client picture ──────────────────────────────────────────────────
+    const statusCounts = await prisma.company.groupBy({
+      by: ['status'],
+      where: { organizationId: orgId, archivedAt: null },
+      _count: { _all: true },
     });
 
-    res.json(activities);
-  } catch (error) {
-    next(error);
-  }
-});
+    payload.clients = Object.fromEntries(
+      statusCounts.map((s) => [s.status, s._count._all]),
+    );
 
-// POST /api/dashboard/activity/read
-dashboardRouter.post('/activity/read', async (req: AuthRequest, res: Response, next) => {
-  try {
-    const userId = req.user!.userId;
-    const now = new Date();
-    // Use raw query to avoid Prisma Client out-of-date issues
-    await prisma.$executeRawUnsafe('UPDATE "users" SET "lastActivityReadAt" = $1 WHERE id = $2', now, userId);
-    res.json({ success: true, lastActivityReadAt: now });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// GET /api/dashboard/deadlines
-dashboardRouter.get('/deadlines', async (req: AuthRequest, res: Response, next) => {
-  try {
-    const orgId = req.user!.organizationId;
-    const role = req.user!.role;
-    const userId = req.user!.userId;
-    const now = new Date();
-    const todayStart = istStartOfDay();
-    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-
-    const tasks = await prisma.task.findMany({
-      where: {
-        project: { client: { organizationId: orgId } },
-        dueDate: { gte: todayStart, lte: nextWeek },
-        status: { notIn: ['COMPLETED'] },
-        ...(role === 'TEAM_MEMBER' ? { assigneeId: userId } : {})
-      },
-      include: {
-        project: { select: { id: true, name: true } },
-        assignee: { select: { id: true, name: true, avatar: true } },
-      },
-      orderBy: { dueDate: 'asc' },
-      take: 10,
-    });
-
-    res.json(tasks);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// GET /api/dashboard/team-workload
-dashboardRouter.get('/team-workload', async (req: AuthRequest, res: Response, next) => {
-  try {
-    const orgId = req.user!.organizationId;
-    const { startDate, endDate } = req.query;
-    let dateFilter = {};
-    if (startDate && endDate) {
-      dateFilter = {
-        createdAt: {
-          gte: new Date(startDate as string),
-          lte: new Date(endDate as string)
-        }
-      };
-    }
-
-    const members = await prisma.user.findMany({
-      where: {
-        organizationId: orgId,
-        status: 'ACTIVE',
-        ...(req.user!.role === 'TEAM_MEMBER' ? { id: req.user!.userId } : {})
-      },
-      select: {
-        id: true,
-        name: true,
-        avatar: true,
-        role: true,
-        team: { select: { name: true } },
-        assignedTasks: {
-          where: dateFilter,
-          select: { status: true }
-        },
-      },
-    });
-
-    const workload = members.map((m) => {
-      const activeTasks = m.assignedTasks.filter(t => t.status !== 'COMPLETED').length;
-      const completedTasks = m.assignedTasks.filter(t => t.status === 'COMPLETED').length;
-      const totalTasks = m.assignedTasks.length;
-      const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-      
-      return {
-        id: m.id,
-        name: m.name,
-        avatar: m.avatar,
-        role: m.role,
-        department: m.team?.name || null,
-        activeTasks,
-        capacity: Math.min(100, Math.round((activeTasks / 10) * 100)),
-        completionRate
-      };
-    });
-
-    res.json(workload);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// GET /api/dashboard/velocity
-dashboardRouter.get('/velocity', async (req: AuthRequest, res: Response, next) => {
-  try {
-    const orgId = req.user!.organizationId;
-    const role = req.user!.role;
-    const userId = req.user!.userId;
-    
-    const { startDate, endDate } = req.query;
-
-    // 30-day window anchored on IST day boundaries.
-    let start = istStartOfDay(new Date(Date.now() - 29 * 86400000));
-    let end = new Date(istStartOfDay().getTime() + 86400000 - 1);
-
-    if (startDate && endDate) {
-      start = new Date(startDate as string);
-      end = new Date(endDate as string);
-    }
-
-    const tasks = await prisma.task.findMany({
-      where: {
-        project: { client: { organizationId: orgId } },
-        status: 'COMPLETED',
-        completedAt: { gte: start, lte: end },
-        ...(role === 'TEAM_MEMBER' ? { assigneeId: userId } : {})
-      },
-      select: { completedAt: true },
-      take: 5000,
-    });
-
-    const dataMap = new Map();
-    
-    const diffDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-    
-    // Always restrict to max 60 data points to prevent cluttered UI
-    const totalDays = Math.min(diffDays, 60);
-    
-    for (let i = totalDays - 1; i >= 0; i--) {
-      const d = new Date(end.getTime());
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
-      const formattedStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      dataMap.set(dateStr, { name: formattedStr, tasks: 0 });
-    }
-
-    tasks.forEach(t => {
-      if (t.completedAt) {
-        const dateStr = t.completedAt.toISOString().split('T')[0];
-        if (dataMap.has(dateStr)) {
-          dataMap.get(dateStr).tasks += 1;
-        }
-      }
-    });
-
-    const data = Array.from(dataMap.values());
-    res.json(data);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// GET /api/dashboard/status-distribution
-dashboardRouter.get('/status-distribution', async (req: AuthRequest, res: Response, next) => {
-  try {
-    const orgId = req.user!.organizationId;
-    const role = req.user!.role;
-    const userId = req.user!.userId;
-    const { startDate, endDate } = req.query;
-
-    let dateFilter = {};
-    if (startDate && endDate) {
-      dateFilter = {
-        createdAt: {
-          gte: new Date(startDate as string),
-          lte: new Date(endDate as string)
-        }
-      };
-    }
-
-    const todayStart = istStartOfDay();
-
-    const [statusGroups, overdueCount] = await Promise.all([
-      prisma.task.groupBy({
-        by: ['status'],
-        where: {
-          project: { client: { organizationId: orgId } },
-          ...(role === 'TEAM_MEMBER' ? { assigneeId: userId } : {}),
-          ...dateFilter,
-          NOT: {
-            dueDate: { lt: todayStart },
-            status: { notIn: ['COMPLETED', 'ON_HOLD'] },
-          },
-        },
-        _count: { _all: true },
-      }),
-      prisma.task.count({
-        where: {
-          project: { client: { organizationId: orgId } },
-          ...(role === 'TEAM_MEMBER' ? { assigneeId: userId } : {}),
-          ...dateFilter,
-          dueDate: { lt: todayStart },
-          status: { notIn: ['COMPLETED', 'ON_HOLD'] },
-        },
-      }),
-    ]);
-
-    let buckets = {
-      TODO: 0,
-      IN_PROGRESS: 0,
-      REVIEW: 0,
-      APPROVED: 0,
-      COMPLETED: 0,
-      OVERDUE: overdueCount,
-    };
-
-    statusGroups.forEach((g) => {
-      const cnt = g._count._all;
-      if (g.status === 'TODO' || g.status === 'BACKLOG' || g.status === 'BLOCKED') buckets.TODO += cnt;
-      else if (g.status === 'IN_PROGRESS') buckets.IN_PROGRESS += cnt;
-      else if (g.status === 'REVIEW') buckets.REVIEW += cnt;
-      else if (g.status === 'APPROVED') buckets.APPROVED += cnt;
-      else if (g.status === 'COMPLETED') buckets.COMPLETED += cnt;
-    });
-
-    const data = [
-      { name: 'To Do', value: buckets.TODO, color: '#F3F4F6' },
-      { name: 'In Progress', value: buckets.IN_PROGRESS, color: '#111827' },
-      { name: 'In Review', value: buckets.REVIEW, color: '#4B5563' },
-      { name: 'Approved', value: buckets.APPROVED, color: '#9CA3AF' },
-      { name: 'Completed', value: buckets.COMPLETED, color: '#D1D5DB' },
-      { name: 'Overdue', value: buckets.OVERDUE, color: '#EF4444' }
-    ].filter(item => item.value > 0); // Only return segments with data
-    
-    res.json(data);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// GET /api/dashboard/my-tasks
-dashboardRouter.get('/my-tasks', async (req: AuthRequest, res: Response, next) => {
-  try {
-    const orgId = req.user!.organizationId;
-    const userId = req.user!.userId;
-
-    const tasks = await prisma.task.findMany({
-      where: {
-        assigneeId: userId,
-        status: { notIn: ['COMPLETED', 'ON_HOLD'] },
-        OR: [
-          {
-            project: {
-              client: { organizationId: orgId },
-              status: { notIn: ['COMPLETED', 'CANCELLED', 'ON_HOLD'] }
-            }
-          },
-          {
-            lead: {
-              organizationId: orgId
-            }
-          }
-        ]
-      },
-      include: {
-        project: { select: { id: true, name: true } },
-        lead: {
-          select: {
-            id: true,
-            leadId: true,
-            companyName: true,
-            stage: true
-          }
-        }
-      },
-      orderBy: [
-        { priority: 'desc' },
-        { dueDate: 'asc' }
-      ]
-    });
-    res.json(tasks);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// GET /api/dashboard/lead-tasks
-dashboardRouter.get('/lead-tasks', async (req: AuthRequest, res: Response, next) => {
-  try {
-    const orgId = req.user!.organizationId;
-    const userId = req.user!.userId;
-
-    const tasks = await prisma.task.findMany({
-      where: {
-        assigneeId: userId,
-        leadId: { not: null },
-        lead: { organizationId: orgId },
-        status: { notIn: ['COMPLETED', 'ON_HOLD'] }
-      },
-      include: {
-        lead: {
-          select: {
-            id: true,
-            leadId: true,
-            companyName: true,
-            stage: true
-          }
-        }
-      },
-      orderBy: [
-        { priority: 'desc' },
-        { dueDate: 'asc' }
-      ],
-      take: 20
-    });
-    res.json(tasks);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// GET /api/dashboard/pending-approvals
-dashboardRouter.get('/pending-approvals', async (req: AuthRequest, res: Response, next) => {
-  try {
-    const orgId = req.user!.organizationId;
-    const role = req.user!.role;
-    
-    if (role === 'TEAM_MEMBER') return res.json([]);
-
-    const tasks = await prisma.task.findMany({
-      where: {
-        project: { client: { organizationId: orgId } },
-        status: 'REVIEW'
-      },
-      include: {
-        project: {
-          select: {
-            id: true,
-            name: true,
-            client: { select: { id: true, name: true } }
-          }
-        },
-        assignee: { select: { id: true, name: true, avatar: true } }
-      },
-      orderBy: { updatedAt: 'desc' }
-    });
-    res.json(tasks);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// GET /api/dashboard/client-health
-dashboardRouter.get('/client-health', async (req: AuthRequest, res: Response, next) => {
-  try {
-    const orgId = req.user!.organizationId;
-    const { startDate, endDate } = req.query;
-    const todayStart = istStartOfDay();
-
-    let dateFilter = {};
-    if (startDate && endDate) {
-      dateFilter = {
-        createdAt: {
-          gte: new Date(startDate as string),
-          lte: new Date(endDate as string)
-        }
-      };
-    }
-    
-    const clients = await prisma.client.findMany({
-      where: { organizationId: orgId, status: 'ACTIVE', ...dateFilter },
-      select: {
-        id: true,
-        name: true,
-        company: true,
-        projects: {
-          where: { status: { notIn: ['COMPLETED', 'CANCELLED'] } },
-          select: {
-            endDate: true,
-            tasks: { select: { status: true, dueDate: true } }
-          }
-        }
-      }
-    });
-
-    const healthData = clients.map(c => {
-      let overdueTasks = 0;
-      let nextDueDate: Date | null = null;
-      let projectPastEndDate = false;
-
-      c.projects.forEach(p => {
-        if (p.endDate && new Date(p.endDate) < todayStart) projectPastEndDate = true;
-        p.tasks.forEach(t => {
-          if (t.status !== 'COMPLETED' && t.status !== 'ON_HOLD') {
-            if (t.dueDate && new Date(t.dueDate) < todayStart) overdueTasks++;
-            if (t.dueDate && new Date(t.dueDate) >= todayStart) {
-              if (!nextDueDate || new Date(t.dueDate) < nextDueDate) nextDueDate = new Date(t.dueDate);
-            }
-          }
-        });
-      });
-
-      let health = 'Green';
-      if (overdueTasks >= 4 || projectPastEndDate) health = 'Red';
-      else if (overdueTasks > 0) health = 'Amber';
-
-      return {
-        id: c.id,
-        name: c.name,
-        company: c.company,
-        activeProjects: c.projects.length,
-        overdueTasks,
-        nextDueDate,
-        health
-      };
-    });
-
-    res.json(healthData);
-  } catch (error) {
-    next(error);
+    res.json({ success: true, data: payload });
+  } catch (e) {
+    next(e);
   }
 });
