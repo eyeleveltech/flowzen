@@ -19,14 +19,14 @@ The intended workflow is:
 
 ```mermaid
 flowchart LR
-  A[Company] --> B[Lead]
-    B --> C[Quotation]
-      C -->|Accepted| D[Engagement]
-        D --> E[Project & tasks]
-          D --> F[Invoice]
-            F --> G[Payment]
-              E --> H[Client relationship]
-                G --> H
+  company[Company] --> lead[Lead]
+    lead --> quotation[Quotation]
+      quotation -->|Accepted| engagement[Engagement]
+        engagement --> project[Project tasks]
+          engagement --> invoice[Invoice]
+            invoice --> payment[Payment]
+              project --> relationship[Client relationship]
+                payment --> relationship
                 ```
 
                 The repository also contains a more detailed visual system design and application-flow diagram:
