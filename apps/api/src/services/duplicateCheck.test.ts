@@ -1,13 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  checkForDuplicates,
-  checkForImport,
-  namesAreSimilar,
-  normaliseCompanyName,
-  normalisePhone,
-  normaliseEmail,
-  type ExistingCompany,
-} from './duplicateCheck.js';
+import { checkForDuplicates, checkForImport, namesAreSimilar, normaliseCompanyName, normalisePhone, normaliseEmail, type ExistingCompany, type DuplicateVerdict } from './duplicateCheck.js';
 
 const co = (over: Partial<ExistingCompany> = {}): ExistingCompany => ({
   id: 'c1',
@@ -145,5 +137,49 @@ describe('checkForImport', () => {
 
   it('passes a clean row through', () => {
     expect(checkForImport({ name: 'Swiggy' }, [co()]).flagged).toBe(false);
+  });
+
+  describe('what the caller has to be told', () => {
+    // The verdict carries the MATCH, not just a decision. Both client screens
+    // used to keep only the error sentence — "a company with a similar name
+    // already exists" — which names nothing, links nowhere, and cannot be acted
+    // on. Everything the interface needs is already in here.
+    const existing = [
+      { id: 'c1', name: 'Suvai Foods', email: 'hello@suvai.example', phone: '+91 98765 43210' },
+    ];
+
+    /** The union has no `matches` on CREATE, which is the point of it. */
+    const matchesOf = (v: DuplicateVerdict) => (v.action === 'CREATE' ? [] : v.matches);
+
+    it('names the company a name clash is with, and gives its id', () => {
+      const v = checkForDuplicates({ name: 'SUVAI FOODS PRIVATE LIMITED' }, existing);
+      expect(v.action).toBe('WARN');
+      expect(matchesOf(v)[0]).toMatchObject({ id: 'c1', name: 'Suvai Foods', reason: 'name' });
+    });
+
+    it('says which email it matched, so the reader can see why', () => {
+      const v = checkForDuplicates({ name: 'Something Else', email: 'HELLO@Suvai.example' }, existing);
+      expect(v.action).toBe('BLOCK');
+      expect(matchesOf(v)[0]).toMatchObject({ reason: 'email', matchedOn: 'hello@suvai.example' });
+    });
+
+    it('matches a phone typed three different ways', () => {
+      for (const typed of ['9876543210', '09876543210', '+91 98765-43210']) {
+        const v = checkForDuplicates({ name: 'Something Else', phone: typed }, existing);
+        expect(v.action).toBe('BLOCK');
+        expect(matchesOf(v)[0].reason).toBe('phone');
+      }
+    });
+
+    it('prefers the blocking reason when a record matches on both', () => {
+      // Same name AND same email is one company, not a debatable warning.
+      const v = checkForDuplicates({ name: 'Suvai Foods', email: 'hello@suvai.example' }, existing);
+      expect(v.action).toBe('BLOCK');
+      expect(matchesOf(v).every((m) => m.reason === 'email')).toBe(true);
+    });
+
+    it('is silent about a genuinely new company', () => {
+      expect(checkForDuplicates({ name: 'Marina Realty' }, existing).action).toBe('CREATE');
+    });
   });
 });

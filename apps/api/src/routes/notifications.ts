@@ -1,102 +1,296 @@
+import { Router, type Response, type NextFunction } from 'express';
+import { prisma } from '../lib/prisma.js';
+import { authenticate, hasPermission, type AuthRequest } from '../middleware/auth.js';
+import type { PermissionKey } from '@flowzen/shared';
+
 /**
  * The bell.
  *
- * Reading notifications, not producing them. The scanner that WRITES a row every
- * morning is still unbuilt (master plan §4.9) — so this legitimately answers an
- * empty list today, and that is the point: the header polls this on every page,
- * and a 404 on every page is noise people learn to scroll past.
+ * ─── What this used to be ───────────────────────────────────────────────────
  *
- * `dedupeKey` is why nothing here creates rows ad hoc. One row per (user, key),
- * UPDATED rather than re-inserted, or a month of scans leaves thirty identical
- * "invoice #123 overdue" lines and the bell stops being read at all.
+ * Organisation-scoped and otherwise wide open — the same shape `activities.ts`
+ * had before it was fixed, and with the same consequence. Every signed-in
+ * person got the same twenty alerts, verified against the live database: the
+ * founder, a department head, business development and a designer with nothing
+ * but `work.own` all received an identical payload. Among it:
+ *
+ *   PROJECT_OVER_ESTIMATE  "…has spent past its estimate of 190000."
+ *   INVOICE_OVERDUE        client, invoice number, days past due
+ *   PERSON_UNDERLOADED     "Akmal (Founder) is at 20% of a normal load."
+ *
+ * A designer is refused /money, /forecast and every `money.figures` gate, and
+ * could read a project's cost estimate and the founder's utilisation out of
+ * the bell. Every alert rule now names the permission its own SCREEN needs.
+ *
+ * ─── And read state was shared by the whole company ─────────────────────────
+ *
+ * `Alert.acknowledgedById` is one column on a row the organisation shares, so
+ * the first person to press "Mark all read" cleared the badge for everybody.
+ * On the live database 41 of 44 open alerts carried one manager's id — which
+ * is why all four roles above reported an unread count of exactly 3. Reading
+ * is now per person (`AlertRead`), and acknowledgement stays what it always
+ * was: the organisation recording that somebody has taken this on.
  */
-
-import { Router, type Response, type NextFunction } from 'express';
-import { prisma } from '../lib/prisma.js';
-import { authenticate, param, type AuthRequest } from '../middleware/auth.js';
 
 export const notificationsRouter = Router();
 
 notificationsRouter.use(authenticate);
 
 /**
- * `readAt` is a timestamp, not a boolean — knowing WHEN something was read is
- * worth keeping. The wire carries a boolean because that is all a bell needs.
+ * The permission each alert's own screen requires.
+ *
+ * `undefined` means everybody — the asset register is open to anyone signed
+ * in, so an overdue camera is too. A rule NOT in this map is withheld rather
+ * than shown: a new rule should stay quiet until somebody decides who it is
+ * for, which is the safe direction to fail.
  */
-const present = (n: {
-  id: string;
-  type: string;
-  title: string;
-  message: string | null;
-  link: string | null;
-  readAt: Date | null;
-  createdAt: Date;
-}) => ({
-  id: n.id,
-  type: n.type,
-  title: n.title,
-  message: n.message ?? n.title,
-  link: n.link,
-  read: n.readAt !== null,
-  createdAt: n.createdAt,
-});
+const RULE_PERMISSION: Record<string, PermissionKey | undefined> = {
+  // Somebody else's workload and somebody else's overdue task are both facts
+  // about the team, not about you.
+  TASK_OVERDUE: 'work.team',
+  TASK_AGING: 'work.team',
+  TASK_WAITING_HOLD: 'work.team',
+  PERSON_OVERLOADED: 'work.team',
+  PERSON_UNDERLOADED: 'work.team',
+  MEMBER_OVERALLOCATED: 'work.team',
 
+  // The work itself.
+  PROJECT_BEHIND_SCHEDULE: 'work.all',
+  RETAINER_EXPIRING: 'work.all',
+  RETAINER_NO_CONTRACT: 'work.all',
+
+  // Names a cost estimate in the message, so it is a figure.
+  PROJECT_OVER_ESTIMATE: 'money.figures',
+
+  // Paid / unpaid / overdue is the status gate, not the figures gate.
+  INVOICE_OVERDUE: 'money.status',
+  INVOICE_AGING_60: 'money.status',
+  MONTH_CARD_NOT_INVOICED: 'money.status',
+
+  // Selling.
+  PROPOSAL_STALLED: 'pipeline.read',
+  VERBAL_NO_ADVANCE: 'pipeline.read',
+  PROFORMA_EXPIRED: 'pipeline.read',
+  PROFORMA_UNPAID: 'pipeline.read',
+  CLIENT_QUIET: 'company.read',
+
+  // The month's cost split, which is the Time split screen's own gate.
+  ALLOCATIONS_UNCONFIRMED: 'cost.enter',
+
+  // The register is open to everybody signed in, so its alerts are too — a
+  // designer needs to know the lens is late back more than anyone.
+  ASSET_OVERDUE: undefined,
+  ASSET_HELD_BY_INACTIVE_USER: undefined,
+  ASSET_REPAIR_STALE: undefined,
+  ASSET_WARRANTY_EXPIRING: undefined,
+};
+
+/**
+ * What corner of the business a notification is about.
+ *
+ * The rows said what had happened and never what KIND of thing it was, so a
+ * bell holding forty-four of them read as one undifferentiated column: an
+ * overdue invoice, a lens that has not come back and somebody's workload all
+ * looked alike until you had read the sentence.
+ *
+ * Taken from the entity type rather than the rule, because that is the same
+ * thing `linkFor` uses to decide where the row opens — so the label a person
+ * reads and the screen they land on can never drift apart.
+ */
+const SOURCE: Record<string, string> = {
+  Task: 'Tasks',
+  User: 'Team',
+  Project: 'Projects',
+  Retainer: 'Retainers',
+  Company: 'Clients',
+  Proposal: 'Pipeline',
+  Proforma: 'Pipeline',
+  Invoice: 'Money',
+  MonthCard: 'Money',
+  Asset: 'Assets',
+  Organization: 'Time split',
+};
+
+/**
+ * Where a notification actually goes.
+ *
+ * The link used to be built as `/${entityType.toLowerCase()}s/${entityId}`,
+ * which produced a real page for exactly two of the eight entity types in use.
+ * `Company` became `/companys/…`; Task, Proforma, User, Proposal and Invoice
+ * have no detail page at all. Thirty-six of the forty-four open alerts led to
+ * a hard 404 — verified by following each one.
+ *
+ * So: a record with a page opens that record, and a record without one opens
+ * the screen where you can actually deal with it. `null` means the row is not
+ * a link, which is honest and better than a dead one.
+ */
+const linkFor = (entityType: string, entityId: string): string | null => {
+  switch (entityType) {
+    case 'Project':
+      return `/projects/${entityId}`;
+    case 'Retainer':
+      return `/retainers/${entityId}`;
+    case 'Company':
+      return `/companies/${entityId}`;
+    case 'Asset':
+      return `/assets/${entityId}`;
+    // No page of their own — the list that holds them is the useful landing.
+    case 'Task':
+      return '/my-work';
+    case 'User':
+      return '/members';
+    case 'Invoice':
+      return '/money';
+    case 'Proposal':
+    case 'Proforma':
+      return '/quotations';
+    case 'MonthCard':
+      return '/live-work';
+    case 'Organization':
+      return '/allocations';
+    default:
+      return null;
+  }
+};
+
+/** How many alerts the bell carries. More than a glance, less than a report. */
+const FEED_LIMIT = 50;
+
+/**
+ * GET /api/notifications — what this person is allowed to be told.
+ */
 notificationsRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const orgId = req.user!.organizationId;
     const userId = req.user!.userId;
 
-    const [rows, unreadCount] = await Promise.all([
-      prisma.notification.findMany({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
-        take: 50,
-      }),
-      prisma.notification.count({ where: { userId, readAt: null } }),
-    ]);
-
-    // Bare shape rather than the { success, data } envelope, matching /auth/me.
-    // Both clients cope: the v2 one falls through to the payload when there is
-    // no `data` key.
-    res.json({ notifications: rows.map(present), unreadCount });
-  } catch (e) {
-    next(e);
-  }
-});
-
-notificationsRouter.patch('/read-all', async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const result = await prisma.notification.updateMany({
-      where: { userId: req.user!.userId, readAt: null },
-      data: { readAt: new Date() },
+    const allowedRules = Object.keys(RULE_PERMISSION).filter((rule) => {
+      const needed = RULE_PERMISSION[rule];
+      return needed === undefined || hasPermission(req.user!, needed);
     });
-    res.json({ marked: result.count });
-  } catch (e) {
-    next(e);
-  }
-});
 
-notificationsRouter.patch('/:id/read', async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const id = param(req, 'id');
-    const userId = req.user!.userId;
-
-    // Scoped by userId, so one person cannot mark another's notification read
-    // by guessing an id — and so a wrong id is "not found" rather than a leak
-    // that it exists.
-    const existing = await prisma.notification.findFirst({
-      where: { id, userId },
-      select: { readAt: true },
-    });
-    if (!existing) {
-      res.status(404).json({ success: false, error: 'Notification not found' });
+    if (allowedRules.length === 0) {
+      res.json({ success: true, notifications: [], unreadCount: 0, total: 0 });
       return;
     }
 
-    // Marking an already-read one is a no-op, not an error. Two clicks on the
-    // same row, or a retry, must not surface as a failure.
-    if (!existing.readAt) {
-      await prisma.notification.update({ where: { id }, data: { readAt: new Date() } });
+    const where = {
+      organizationId: orgId,
+      resolvedAt: null,
+      rule: { in: allowedRules },
+    };
+
+    const [alerts, total, myReads] = await Promise.all([
+      prisma.alert.findMany({
+        where,
+        // Worst first, then newest. A bell that orders purely by time buries
+        // an overdue invoice under six task reminders raised a minute later.
+        orderBy: [{ severity: 'asc' }, { createdAt: 'desc' }],
+        take: FEED_LIMIT,
+      }),
+      prisma.alert.count({ where }),
+      prisma.alertRead.findMany({ where: { userId }, select: { alertId: true } }),
+    ]);
+
+    const readIds = new Set(myReads.map((r) => r.alertId));
+
+    const notifications = alerts.map((a) => ({
+      id: a.id,
+      type: a.rule,
+      title: a.message,
+      message: a.message,
+      severity: a.severity,
+      /** "Money", "Tasks", "Pipeline" — what this is about, at a glance. */
+      source: SOURCE[a.entityType] ?? 'Other',
+      link: linkFor(a.entityType, a.entityId),
+      read: readIds.has(a.id),
+      createdAt: a.createdAt,
+    }));
+
+    // Counted across everything this person may see, not across the page just
+    // fetched — a badge computed from a slice under-reports the moment there
+    // are more unread alerts than the slice holds.
+    const unreadCount = await prisma.alert.count({
+      where: { ...where, reads: { none: { userId } } },
+    });
+
+    res.json({ success: true, notifications, unreadCount, total });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * PATCH /api/notifications/read-all — clear MY badge.
+ *
+ * Declared before `/:id/read` so "read-all" is never captured as an id.
+ */
+notificationsRouter.patch('/read-all', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const userId = req.user!.userId;
+
+    // Only what this person can see. Marking an alert read that they were
+    // never shown would be a strange thing for a button to do.
+    const allowedRules = Object.keys(RULE_PERMISSION).filter((rule) => {
+      const needed = RULE_PERMISSION[rule];
+      return needed === undefined || hasPermission(req.user!, needed);
+    });
+
+    const unread = await prisma.alert.findMany({
+      where: {
+        organizationId: orgId,
+        resolvedAt: null,
+        rule: { in: allowedRules },
+        reads: { none: { userId } },
+      },
+      select: { id: true },
+    });
+
+    if (unread.length > 0) {
+      await prisma.alertRead.createMany({
+        data: unread.map((a) => ({ alertId: a.id, userId })),
+        skipDuplicates: true,
+      });
     }
+
+    res.json({ success: true, marked: unread.length });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** PATCH /api/notifications/:id/read — clear one, for me. */
+notificationsRouter.patch('/:id/read', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const orgId = req.user!.organizationId;
+    const userId = req.user!.userId;
+
+    // Prove it is this organisation's alert before writing a row that points
+    // at it, and that this person was allowed to be told about it at all.
+    const alert = await prisma.alert.findFirst({
+      where: { id: String(id), organizationId: orgId },
+      select: { id: true, rule: true },
+    });
+    if (!alert) {
+      res.status(404).json({ success: false, error: 'That notification does not exist.' });
+      return;
+    }
+
+    const needed = RULE_PERMISSION[alert.rule];
+    const readable = alert.rule in RULE_PERMISSION && (needed === undefined || hasPermission(req.user!, needed));
+    if (!readable) {
+      res.status(403).json({ success: false, error: 'Insufficient permissions' });
+      return;
+    }
+
+    await prisma.alertRead.upsert({
+      where: { alertId_userId: { alertId: alert.id, userId } },
+      create: { alertId: alert.id, userId },
+      update: {},
+    });
+
     res.json({ success: true });
   } catch (e) {
     next(e);

@@ -6,9 +6,8 @@
  * Its own file rather than one hook in a 300-line barrel of v1 query hooks —
  * every other hook in that file called an endpoint that no longer exists.
  *
- * Nothing WRITES notifications yet, so this legitimately returns an empty list
- * today (BUILD-STATUS item 5). It still runs, because the alternative — an
- * unmounted endpoint — is a 404 on every page.
+ * Backed by real rule-based alerts — the hourly scanner (workers/scanner.cron.ts)
+ * writes to the Alert table, and GET /notifications reads straight from it.
  */
 
 import { useQuery } from '@tanstack/react-query';

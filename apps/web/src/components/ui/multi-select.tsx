@@ -10,6 +10,9 @@ import { Icon } from '@/components/ui/icon';
 export interface Option {
   value: string;
   label: string;
+  /** A second line under the label — a person's designation, usually. Same field name as `Select`'s. */
+  sublabel?: string;
+  /** Initials for the round badge. `Select` calls this `avatar`; this one predates it. */
   image?: string;
   icon?: React.ReactNode;
   colorClass?: string;
@@ -28,9 +31,11 @@ interface MultiSelectProps {
   compact?: boolean;
   showSelectAll?: boolean;
   triggerClassName?: string;
+  /** Accessible name when no visible label sits beside it. */
+  ariaLabel?: string;
 }
 
-export function MultiSelect({ id, options, value, onChange, placeholder = 'Select...', compact = true, showSelectAll = true, triggerClassName }: MultiSelectProps) {
+export function MultiSelect({ id, options, value, onChange, placeholder = 'Select...', compact = true, showSelectAll = true, triggerClassName, ariaLabel }: MultiSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -87,7 +92,11 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
   const dropdownMaxHeight = rect ? Math.max(140, Math.min(DROPDOWN_MAX, (openUp ? spaceAbove : spaceBelow) - 16)) : DROPDOWN_MAX;
 
   const selectedOptions = options.filter(opt => value.includes(opt.value));
-  const filteredOptions = options.filter(opt => opt.label.toLowerCase().includes(search.toLowerCase()));
+  // Matches the second line too — typing "designer" should find the designers.
+  const filteredOptions = options.filter((opt) => {
+    const q = search.toLowerCase();
+    return opt.label.toLowerCase().includes(q) || (opt.sublabel?.toLowerCase().includes(q) ?? false);
+  });
 
   const handleSelect = (optionValue: string) => {
     if (value.includes(optionValue)) {
@@ -135,7 +144,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
       ) : (
         <div
           id={id}
-          className="min-h-10.5 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary cursor-pointer flex flex-wrap gap-2 items-center transition-colors duration-150 motion-reduce:transition-none focus-within:border-primary focus-within:ring-1 focus-within:ring-primary"
+          className="min-h-10.5 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-primary cursor-pointer flex flex-wrap gap-2 items-center transition-colors duration-150 motion-reduce:transition-none focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25 focus-within:ring-offset-1"
           onClick={() => setIsOpen(true)}
         >
           {selectedOptions.length === 0 && (
@@ -148,12 +157,13 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
               className="flex items-center gap-1 bg-subtle text-body px-2 py-1 rounded-lg text-xs font-medium"
             >
               {opt.icon && <span className="shrink-0 text-primary flex items-center">{opt.icon}</span>}
-              {opt.image && <div className={`h-4 w-4 rounded-full flex items-center justify-center text-[8px] font-semibold ${opt.colorClass || 'bg-subtle text-primary border border-border'}`}>{opt.image}</div>}
+              {opt.image && <div className={`h-4 w-4 rounded-full flex items-center justify-center text-micro font-semibold ${opt.colorClass || 'bg-subtle text-primary border border-border'}`}>{opt.image}</div>}
               {opt.label}
               <button
                 type="button"
+                aria-label={`Remove ${opt.label}`}
                 onClick={(e) => handleRemove(e, opt.value)}
-                className="hover:bg-border rounded-full p-0.5"
+                className="hover:bg-border rounded-full p-0.5 outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -165,6 +175,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
             role="combobox"
             aria-expanded={isOpen}
             aria-haspopup="listbox"
+            aria-label={ariaLabel ?? placeholder}
             className="flex-1 min-w-12.5 bg-transparent outline-none text-sm placeholder:text-secondary"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -196,6 +207,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search..."
+                aria-label="Search options"
                 className="w-full rounded-xl border border-border bg-white py-2.5 px-3 text-base text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 mb-2"
               />
             )}
@@ -238,11 +250,14 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
                         {isSelected && <Icon as={Check} size="sm" className="text-white" />}
                       </div>
                       {opt.icon && <span className="shrink-0 text-secondary flex items-center">{opt.icon}</span>}
-                      {opt.image && <div className={`h-6 w-6 shrink-0 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-subtle text-primary border border-border'}`}>{opt.image}</div>}
-                      <span className="truncate flex-1">{opt.label}</span>
+                      {opt.image && <div className={`h-7 w-7 shrink-0 rounded-full flex items-center justify-center text-micro font-semibold ${opt.colorClass || 'bg-subtle text-primary border border-border'}`}>{opt.image}</div>}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">{opt.label}</span>
+                        {opt.sublabel && <span className="block truncate text-xs text-secondary">{opt.sublabel}</span>}
+                      </span>
                       {opt.capacity !== undefined && (
                         <span className="flex items-center gap-1.5 shrink-0 ml-2" title={`Capacity: ${opt.capacity}%`}>
-                          <span className={`h-2 w-2 rounded-full ${opt.isOverloaded || opt.capacity > 80 ? 'bg-red-500' : opt.capacity > 50 ? 'bg-amber-500' : 'bg-green-500'}`} />
+                          <span className={`h-2 w-2 rounded-full ${opt.isOverloaded || opt.capacity > 80 ? 'bg-danger' : opt.capacity > 50 ? 'bg-warning' : 'bg-success'}`} />
                           <span className="text-xs font-medium text-secondary">{opt.capacity}%</span>
                         </span>
                       )}
@@ -277,6 +292,7 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search..."
+                  aria-label="Search options"
                   className="w-full rounded-lg border border-border bg-white py-1.5 px-2.5 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1"
                 />
               </div>
@@ -341,11 +357,14 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
                         {isSelected && <Check className="h-3 w-3 text-white" />}
                       </div>
                       {opt.icon && <span className="shrink-0 text-secondary flex items-center">{opt.icon}</span>}
-                      {opt.image && <div className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-semibold ${opt.colorClass || 'bg-subtle text-primary border border-border'}`}>{opt.image}</div>}
-                      <span className="text-body truncate flex-1">{opt.label}</span>
+                      {opt.image && <div className={`h-7 w-7 shrink-0 rounded-full flex items-center justify-center text-micro font-semibold ${opt.colorClass || 'bg-subtle text-primary border border-border'}`}>{opt.image}</div>}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-body">{opt.label}</span>
+                        {opt.sublabel && <span className="block truncate text-xs text-secondary">{opt.sublabel}</span>}
+                      </span>
                       {opt.capacity !== undefined && (
                         <span className="flex items-center gap-1.5 shrink-0 ml-2" title={`Capacity: ${opt.capacity}%`}>
-                          <span className={`h-1.5 w-1.5 rounded-full ${opt.isOverloaded || opt.capacity > 80 ? 'bg-red-500' : opt.capacity > 50 ? 'bg-amber-500' : 'bg-green-500'}`} />
+                          <span className={`h-1.5 w-1.5 rounded-full ${opt.isOverloaded || opt.capacity > 80 ? 'bg-danger' : opt.capacity > 50 ? 'bg-warning' : 'bg-success'}`} />
                           <span className="text-xs font-medium text-secondary">{opt.capacity}%</span>
                         </span>
                       )}

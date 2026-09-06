@@ -1,8 +1,26 @@
 import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import { extendTailwindMerge } from 'tailwind-merge';
 import { format } from 'date-fns';
 
 import { ROLE_LABELS } from '@flowzen/shared';
+
+/**
+ * tailwind-merge, taught about this app's own type step.
+ *
+ * `--text-micro` is a real Tailwind v4 theme token, so `text-micro` is a real
+ * font-size utility — but tailwind-merge works off a built-in table, not the
+ * stylesheet, and `text-` is ambiguous: it prefixes both sizes and colours.
+ * Not recognising `micro` as a size, it filed it as a COLOUR, then dropped it
+ * as a conflict the moment a real colour followed.
+ *
+ * `<Badge tone="info">` was the visible case — `text-micro … text-info`
+ * merged down to `text-info` alone, and the pill fell back to the
+ * inherited 16px instead of 11. Every `cn()` call that pairs the two was
+ * silently doing the same thing.
+ */
+const twMerge = extendTailwindMerge({
+  extend: { classGroups: { 'font-size': [{ text: ['micro'] }] } },
+});
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -133,9 +151,16 @@ export function getInitials(name: string): string {
   if (!name) return '??';
   const cleanName = name.replace(/[^a-zA-Z0-9 ]/g, '').trim();
   if (!cleanName) return '??';
-  return cleanName
-    .split(' ')
-    .filter(Boolean)
+  const words = cleanName.split(' ').filter(Boolean);
+  // A one-word name gets its first two letters, not one.
+  //
+  // Names used to arrive as "Vikram (Developer)", so every avatar had a second
+  // word to take a letter from and this returned "VD". With the job title
+  // moved to its own column the names are single words, and first-letter-only
+  // turned the whole team into "P", "T", "V", "J" — an avatar that no longer
+  // tells two people apart.
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return words
     .map((n) => n[0])
     .join('')
     .toUpperCase()
@@ -143,26 +168,22 @@ export function getInitials(name: string): string {
 }
 
 /**
- * Avatar tint — one neutral, for everybody.
+ * Avatar tint — one colour, for everybody: the brand gold (--color-accent),
+ * white initials on top. Matches the prototype's own PERSON column swatch
+ * (EYELEVEL_OS_HANDOFF/prototype/01_APPLICATION_UI.html) rather than the
+ * neutral grey this used to be — the grey read as unstyled next to the rest
+ * of the app once the gold accent was introduced elsewhere.
  *
- * The history here is worth keeping, because it went one step at a time. Originally nine colour
- * families (red, orange, amber, green, teal, blue, indigo, purple, pink) were picked by hashing a
- * person's NAME, so someone was pink because of the letters they were born with. That put the
- * loudest colour on screen — avatars appear in every table row, board card and assignee chip — on
- * the one thing carrying no information, and it competed with the status colours that do mean
- * something: a red "Overdue" badge is harder to find next to a red avatar.
- *
- * The nine then became four steps of the neutral ramp, on the theory that some variation helps
- * tell people apart in a list. In practice that just made one row in five noticeably darker than
- * its neighbours for no reason a reader could name, so it is now a single pairing. The initials
- * already say who someone is; the swatch does not need to.
- *
- * 9.3:1 on white — AA for normal text, which matters because initials are set small and bold.
+ * Still one pairing for every name, not a per-person hash: initials already
+ * say who someone is, so the swatch doesn't need to carry identity too, and a
+ * single colour stays out of the way of status colours (a red "Overdue"
+ * badge next to a red avatar was the failure mode a hashed palette used to
+ * produce).
  *
  * `name` is kept in the signature so the ~67 call sites stay untouched, and so a future
  * per-person treatment (a photo, say) has somewhere to hook in.
  */
-const AVATAR_CLASSES = 'bg-subtle text-primary border border-border';
+const AVATAR_CLASSES = 'bg-accent text-white';
 
 export function getAvatarColor(_name?: string): string {
   return AVATAR_CLASSES;
@@ -241,9 +262,9 @@ export function getProjectStatusFromClient(client: any): 'PLANNING' | 'IN_PROGRE
 export type ProjectHealth = 'GREEN' | 'AMBER' | 'RED';
 
 export const PROJECT_HEALTH_CONFIG: Record<ProjectHealth, { color: string; label: string }> = {
-  GREEN: { color: 'bg-green-50 text-green-700 border-green-200', label: 'On Track' },
-  AMBER: { color: 'bg-amber-50 text-amber-700 border-amber-200', label: 'At Risk' },
-  RED: { color: 'bg-red-50 text-red-700 border-red-200', label: 'Off Track' },
+  GREEN: { color: 'bg-success-tint text-success border-success/30', label: 'On Track' },
+  AMBER: { color: 'bg-warning-tint text-warning-ink border-warning/30', label: 'At Risk' },
+  RED: { color: 'bg-danger-tint text-danger border-danger/30', label: 'Off Track' },
 };
 
 export function computeProjectHealth(
@@ -259,4 +280,74 @@ export function computeProjectHealth(
     return 'AMBER';
   }
   return 'GREEN';
+}
+
+/**
+ * A stored instant, split into the date and time inputs a form shows.
+ *
+ * Both halves are read in the SAME clock. The task panel used to take the date
+ * from `iso.slice(0, 10)` — which is UTC — and the time from `toTimeString()`,
+ * which is local. In Asia/Kolkata a task due 20:00 UTC showed "22 Aug" beside
+ * "01:30", two readings of one instant five and a half hours apart. Saving the
+ * form recombined them and moved the due date nineteen and a half hours
+ * backwards, without anybody editing anything.
+ *
+ * Midnight comes back as no time at all, because a task due "22 August" has no
+ * meaningful hour and inventing one puts a number in the box that the user never
+ * typed.
+ */
+export function splitLocalDateTime(value: string | Date | null | undefined): {
+  date: string;
+  time: string;
+} {
+  const d = safeDate(value);
+  if (!d) return { date: '', time: '' };
+
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const midnight = d.getHours() === 0 && d.getMinutes() === 0;
+
+  return { date, time: midnight ? '' : `${pad(d.getHours())}:${pad(d.getMinutes())}` };
+}
+
+/**
+ * The date and time inputs, back into one instant.
+ *
+ * Built field by field through the local Date constructor rather than by parsing
+ * `"2026-08-22"`, which the language reads as UTC midnight — so `setHours` on the
+ * result landed on the previous day for every reader west of Greenwich.
+ *
+ * No time means local midnight, which is what "due on the 22nd" means.
+ */
+export function joinLocalDateTime(date: string, time: string): string | null {
+  if (!date) return null;
+
+  const [y, m, d] = date.split('-').map(Number);
+  if (!y || !m || !d) return null;
+
+  const [hh, mm] = time ? time.split(':').map(Number) : [0, 0];
+  return new Date(y, m - 1, d, hh || 0, mm || 0, 0, 0).toISOString();
+}
+
+/**
+ * A count and its noun, agreeing.
+ *
+ * "across 1 tasks" was live on My Work — the first screen everybody opens. It
+ * was one of thirteen places that interpolated a number in front of a hardcoded
+ * plural, and the app already got it right in a few others by writing the
+ * ternary out longhand:
+ *
+ *     `${n} retainer${n === 1 ? '' : 's'}`
+ *
+ * So the convention existed and simply was not reachable. This is it, named.
+ *
+ *     plural(1, 'task')             -> "1 task"
+ *     plural(3, 'task')             -> "3 tasks"
+ *     plural(2, 'company', 'companies') -> "2 companies"
+ *
+ * Pass the irregular plural where -s is wrong; English has too many of those to
+ * infer, and guessing is how you get "companys".
+ */
+export function plural(n: number, one: string, many?: string): string {
+  return `${n} ${n === 1 ? one : (many ?? `${one}s`)}`;
 }

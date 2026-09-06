@@ -1,316 +1,138 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+/**
+ * Quick-add a task from ⌘K, always against a project someone just searched
+ * for (see lib/actions.ts — the "task" command only ever `applies: ['project']`).
+ * Same finalized field set as every other task-creation form in the app
+ * (NewWorkTaskModal, AssignTaskModal, My Work's own): title, assignee,
+ * priority, description, due date. This used to also collect Task Type,
+ * Reviewer, Recurrence and multiple assignees — none of which the backend's
+ * create schema has ever accepted, so every one of those fields was silently
+ * discarded on save. Removed rather than wired up; see the plan doc for why.
+ */
+
+import { useEffect, useState } from 'react';
 import { Drawer } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
-import { MultiSelect } from '@/components/ui/multi-select';
-import { RichTextEditor } from '@/components/ui/rich-text-editor';
-import { Toggle } from '@/components/ui/toggle';
 import { api, ApiError } from '@/lib/api-v2';
+import { PRIORITY_CONFIG } from '@/lib/priority';
+import { personOptions } from '@/lib/people';
+import { useAuthStore } from '@/stores';
 
 interface NewTaskPanelProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
-  /** Pre-set projectId when opened from inside a project page */
-  defaultProjectId?: string;
+  projectId: string;
+  projectName: string;
 }
 
-type OptionItem = { value: string; label: string };
+const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label }));
 
-const TASK_TYPE_OPTIONS = [
-  { value: 'CONTENT', label: 'Content & Copy' },
-  { value: 'DESIGN', label: 'Design Work' },
-  { value: 'DEVELOPMENT', label: 'Development' },
-  { value: 'SEO', label: 'SEO & Marketing' },
-  { value: 'BUG', label: 'Bug Fix' },
-  { value: 'MEETING', label: 'Meeting / Call' },
-  { value: 'OTHER', label: 'Other' },
-];
-
-const PRIORITY_OPTIONS = [
-  { value: 'LOW', label: 'Low' },
-  { value: 'MEDIUM', label: 'Medium' },
-  { value: 'HIGH', label: 'High' },
-  { value: 'URGENT', label: 'Urgent' },
-];
-
-const CREATE_STATUS_OPTIONS = [
-  { value: 'TODO', label: 'To Do (Default)' },
-  { value: 'IN_PROGRESS', label: 'In Progress' },
-  { value: 'IN_REVIEW', label: 'In Review' },
-  { value: 'ON_HOLD', label: 'On Hold' },
-  { value: 'BLOCKED', label: 'Blocked' },
-];
-
-export function NewTaskPanel({ isOpen, onClose, onSuccess, defaultProjectId }: NewTaskPanelProps) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Dropdown options (loaded on open)
-  const [companies, setCompanies] = useState<OptionItem[]>([]);
-  const [projects, setProjects] = useState<OptionItem[]>([]);
-  const [departments, setDepartments] = useState<OptionItem[]>([]);
-  const [team, setTeam] = useState<OptionItem[]>([]);
-
-  // Form state
+export function NewTaskPanel({ isOpen, onClose, onSuccess, projectId, projectName }: NewTaskPanelProps) {
   const [title, setTitle] = useState('');
-  const [dueDate, setDueDate] = useState('');
-  const [dueTime, setDueTime] = useState('');
-  const [description, setDescription] = useState('');
-  const [taskType, setTaskType] = useState('CONTENT');
-  const [reviewerId, setReviewerId] = useState('');
+  const me = useAuthStore((s) => s.user);
+  const [assigneeId, setAssigneeId] = useState('');
   const [assignedById, setAssignedById] = useState('');
   const [priority, setPriority] = useState('MEDIUM');
-  const [selectedAssigneeIds, setSelectedAssigneeIds] = useState<string[]>([]);
-  const [assignedDate, setAssignedDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [isRecurring, setIsRecurring] = useState(false);
-  const [status, setStatus] = useState('TODO');
+  const [description, setDescription] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [team, setTeam] = useState<{ id: string; name: string; dept: string }[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const [companyId, setCompanyId] = useState('');
-  const [projectId, setProjectId] = useState(defaultProjectId ?? '');
-  const [departmentId, setDepartmentId] = useState('');
-
-  // Load dropdown data when drawer opens
   useEffect(() => {
     if (!isOpen) return;
     setTitle('');
-    setDueDate('');
-    setDueTime('');
-    setDescription('');
-    setTaskType('CONTENT');
-    setReviewerId('');
-    setAssignedById('');
+    setAssigneeId('');
+    setAssignedById(me?.id ?? '');
     setPriority('MEDIUM');
-    setSelectedAssigneeIds([]);
-    setAssignedDate(new Date().toISOString().slice(0, 10));
-    setIsRecurring(false);
-    setStatus('TODO');
-    setCompanyId('');
-    setProjectId(defaultProjectId ?? '');
-    setDepartmentId('');
+    setDescription('');
+    setDueDate('');
     setError(null);
+    void api.team.members().then((res) => setTeam(res.members)).catch(() => {});
+  }, [isOpen, me?.id]);
 
-    void Promise.all([
-      api.companies.list().then((list) =>
-        setCompanies(
-          (list as { id: string; name: string }[]).map((c) => ({ value: c.id, label: c.name }))
-        )
-      ).catch(() => {}),
-      api.projects.list().then((list) =>
-        setProjects(
-          (list as { id: string; name: string }[]).map((p) => ({ value: p.id, label: p.name }))
-        )
-      ).catch(() => {}),
-      api.departments.list().then((list) =>
-        setDepartments(
-          (list as { id: string; name: string }[]).map((d) => ({ value: d.id, label: d.name }))
-        )
-      ).catch(() => {}),
-      api.users.list().then((list) =>
-        setTeam(list.filter((u) => u.status === 'ACTIVE').map((u) => ({ value: u.id, label: u.name })))
-      ).catch(() => {}),
-    ]);
-  }, [isOpen, defaultProjectId]);
-
-  const hasParent = Boolean(projectId || departmentId);
+  const canSave = Boolean(title.trim()) && Boolean(dueDate);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) {
-      setError('Title is required');
-      return;
-    }
-    if (!hasParent) {
-      setError('Please select a Project or Department to assign this task to.');
-      return;
-    }
+    if (!canSave) return;
+    setSaving(true);
     setError(null);
-    setLoading(true);
-
     try {
-      let finalDueDate: string | undefined = undefined;
-      if (dueDate) {
-        const dateObj = new Date(dueDate);
-        if (dueTime) {
-          const [hours, minutes] = dueTime.split(':');
-          dateObj.setHours(parseInt(hours, 10), parseInt(minutes, 10));
-        }
-        finalDueDate = dateObj.toISOString();
-      }
-
-      // If multiple assignees are selected, create task for each selected assignee
-      const assigneesToCreate = selectedAssigneeIds.length > 0 ? selectedAssigneeIds : [null];
-
-      for (const assigneeId of assigneesToCreate) {
-        await api.projects.createTask({
-          title,
-          description: description || null,
-          taskType,
-          status: status as any,
-          priority,
-          dueDate: finalDueDate,
-          projectId: projectId || null,
-          dealId: null,
-          departmentId: departmentId || null,
-          assigneeId: assigneeId || null,
-          reviewerId: reviewerId || null,
-          ...(isRecurring ? { recurrence: { frequency: 'DAILY', interval: 1 } } : {}),
-        });
-      }
-
+      await api.tasks.create({
+        title: title.trim(),
+        workType: 'PROJECT',
+        projectId,
+        assigneeId: assigneeId || undefined,
+        assignedById: assignedById || undefined,
+        dueDate,
+        priority,
+        notes: description.trim() || undefined,
+      });
       onSuccess?.();
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to create task');
+      setError(err instanceof ApiError ? err.message : 'Could not create the task');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  const NONE = { value: '', label: '— None —' };
-
   return (
-    <Drawer isOpen={isOpen} onClose={onClose} variant="slideover" title="New Task">
+    <Drawer isOpen={isOpen} onClose={onClose} variant="slideover" title="New task">
       <form onSubmit={handleSubmit} className="flex h-full flex-col bg-white">
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+          <div>
+            <span className="block text-sm font-medium text-body mb-1.5">Project</span>
+            <div className="w-full rounded-xl border border-border bg-subtle/40 px-4 py-2.5 text-sm text-primary font-medium">
+              {projectName}
+            </div>
+          </div>
+
+          <Field label="What needs doing?" value={title} onChange={setTitle} required />
+
+          <div className="grid grid-cols-2 gap-4">
+            <FieldSelect
+              label="Assign to"
+              value={assigneeId}
+              onChange={setAssigneeId}
+              placeholder="Defaults to you"
+              options={personOptions(team)}
+            />
+            <FieldSelect label="Priority" value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Due date" type="date" value={dueDate} onChange={setDueDate} required />
+            {/* Who wanted it done — not always the person typing it up. */}
+            <FieldSelect
+              label="Assigned by"
+              value={assignedById}
+              onChange={setAssignedById}
+              placeholder="Nobody in particular"
+              options={personOptions(team)}
+            />
+          </div>
+
+          <Field label="Description" value={description} onChange={setDescription} textarea rows={4} />
+
           {error && (
-            <div className="rounded-xl bg-red-50 p-3.5 text-sm text-red-700 border border-red-200 font-medium">
+            <div className="rounded-xl bg-danger-tint p-3.5 text-sm text-danger border border-danger/30 font-medium">
               {error}
             </div>
           )}
-
-          {/* 1. Title */}
-          <Field
-            label="Task Title"
-            value={title}
-            onChange={setTitle}
-            placeholder="e.g. Design Landing Page Hero Section"
-            required
-          />
-
-          {/* 2 & 3. Due Date & Due Time */}
-          <div className="grid grid-cols-2 gap-4">
-            <Field type="date" label="Due Date" value={dueDate} onChange={setDueDate} />
-            <Field type="time" label="Due Time (Optional)" value={dueTime} onChange={setDueTime} />
-          </div>
-
-          {/* 4. Description */}
-          <div>
-            <label className="block text-sm font-medium text-body mb-1.5">Description</label>
-            <RichTextEditor
-              value={description}
-              onChange={setDescription}
-              placeholder="Add task details, links, or instructions..."
-            />
-          </div>
-
-          {/* 5 & 6. Task Type & Reviewer */}
-          <div className="grid grid-cols-2 gap-4">
-            <FieldSelect
-              label="Task Type"
-              value={taskType}
-              onChange={setTaskType}
-              options={TASK_TYPE_OPTIONS}
-            />
-            <FieldSelect
-              label="Reviewer"
-              value={reviewerId}
-              onChange={setReviewerId}
-              options={[{ value: '', label: 'No Reviewer' }, ...team]}
-            />
-          </div>
-
-          {/* 7 & 8. Assigned By & Assignees (MultiSelect) */}
-          <div className="grid grid-cols-2 gap-4">
-            <FieldSelect
-              label="Assigned By"
-              value={assignedById}
-              onChange={setAssignedById}
-              options={[{ value: '', label: 'Self (Default)' }, ...team]}
-            />
-            <FieldSelect
-              label="Priority"
-              value={priority}
-              onChange={setPriority}
-              options={PRIORITY_OPTIONS}
-            />
-          </div>
-
-          {/* Multiple Assignees */}
-          <div>
-            <label className="block text-sm font-medium text-body mb-1.5">Assigned To (Assignees)</label>
-            <MultiSelect
-              options={team}
-              value={selectedAssigneeIds}
-              onChange={setSelectedAssigneeIds}
-              placeholder="Select assignees..."
-              compact={false}
-            />
-          </div>
-
-          {/* 9 & 10. Assigned Date & Initial Status */}
-          <div className="grid grid-cols-2 gap-4">
-            <Field type="date" label="Assigned Date" value={assignedDate} onChange={setAssignedDate} />
-            <FieldSelect
-              label="Initial Status"
-              value={status}
-              onChange={setStatus}
-              options={CREATE_STATUS_OPTIONS}
-            />
-          </div>
-
-          {/* 11. Repeated Date (Daily Recurrence Toggle) */}
-          <div className="flex items-center justify-between rounded-xl border border-border bg-surface p-4">
-            <div>
-              <p className="text-sm font-semibold text-primary">Repeat Task Daily</p>
-              <p className="text-xs text-secondary">Automatically recreate this task every day upon completion</p>
-            </div>
-            <Toggle
-              checked={isRecurring}
-              onChange={setIsRecurring}
-            />
-          </div>
-
-          {/* Context Fields */}
-          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-border">
-            <FieldSelect
-              label="Project"
-              value={projectId}
-              onChange={(v) => { setProjectId(v); if (v) setDepartmentId(''); }}
-              options={[NONE, ...projects]}
-            />
-            <FieldSelect
-              label="Department"
-              value={departmentId}
-              onChange={(v) => { setDepartmentId(v); if (v) setProjectId(''); }}
-              options={[NONE, ...departments]}
-            />
-          </div>
-
-          <FieldSelect
-            label="Company / Client (Optional)"
-            value={companyId}
-            onChange={setCompanyId}
-            options={[NONE, ...companies]}
-          />
         </div>
 
-        {/* Action Footer */}
         <div className="border-t border-border bg-surface px-6 py-4">
           <div className="flex justify-end gap-3">
-            <Button
-              type="button"
-              onClick={onClose}
-              disabled={loading}
-              variant="ghost"
-              className="bg-white text-secondary border border-border hover:bg-subtle"
-            >
+            <Button type="button" onClick={onClose} disabled={saving} variant="ghost">
               Cancel
             </Button>
-            <Button type="submit" variant="primary" disabled={loading || !title || !hasParent}>
-              {loading ? 'Creating...' : 'Create Task'}
+            <Button type="submit" variant="primary" loading={saving} disabled={!canSave}>
+              Add task
             </Button>
           </div>
         </div>

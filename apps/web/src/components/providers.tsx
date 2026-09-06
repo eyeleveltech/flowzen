@@ -10,6 +10,7 @@ import { useIsMobile } from '@/hooks/use-breakpoint';
 
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { GlobalEvents } from '@/components/global-events';
+import { NumberWheelGuard } from '@/components/number-wheel-guard';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,6 +36,7 @@ export function Providers({ children }: { children: ReactNode }) {
         <SocketProvider>
           {children}
           <GlobalEvents />
+          <NumberWheelGuard />
           <ConfirmDialog />
           <Toaster
             position={isMobile ? 'bottom-center' : 'top-right'}
@@ -46,7 +48,7 @@ export function Providers({ children }: { children: ReactNode }) {
             toastOptions={{
               duration: 3500,
               error: { duration: 8000 },
-              className: 'rounded-2xl border border-border bg-white text-sm text-primary shadow-xl shadow-black/5',
+              className: 'rounded-2xl border border-border bg-white text-sm text-primary shadow-overlay',
             }}
           />
         </SocketProvider>

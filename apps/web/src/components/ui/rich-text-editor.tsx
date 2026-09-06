@@ -100,7 +100,7 @@ export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorP
   }, [value, editor]);
 
   return (
-    <div className="w-full rounded-xl border border-border bg-white overflow-hidden focus-within:border-primary transition-all">
+    <div className="w-full rounded-xl border border-border bg-white overflow-hidden focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25 focus-within:ring-offset-1 transition-all">
       <MenuBar editor={editor} />
       <EditorContent editor={editor} />
       
@@ -108,7 +108,7 @@ export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorP
         .ProseMirror p.is-editor-empty:first-child::before {
           content: attr(data-placeholder);
           float: left;
-          color: #9CA3AF;
+          color: var(--color-muted);
           pointer-events: none;
           height: 0;
         }
@@ -133,7 +133,7 @@ export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorP
           font-weight: 600;
           margin-top: 1em;
           margin-bottom: 0.5em;
-          color: #111827;
+          color: var(--color-primary);
         }
       `}} />
     </div>

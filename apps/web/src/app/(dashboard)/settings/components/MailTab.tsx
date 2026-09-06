@@ -152,7 +152,7 @@ export function MailTab({
     <form onSubmit={save} className="space-y-5">
       {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
       {detail && (
-        <p className="rounded-xl border border-border bg-subtle px-3 py-2 font-mono text-[11px] text-secondary">
+        <p className="rounded-xl border border-border bg-subtle px-3 py-2 font-mono text-micro text-secondary">
           {detail}
         </p>
       )}
@@ -290,7 +290,7 @@ export function MailTab({
             Send a test to me
           </Button>
           {saved && (
-            <span className="flex items-center gap-1 text-sm text-emerald-600">
+            <span className="flex items-center gap-1 text-sm text-success">
               <Check className="h-4 w-4" /> Saved
             </span>
           )}

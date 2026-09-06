@@ -2,6 +2,12 @@ import { cn } from '@/lib/utils';
 
 export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   padding?: 'none' | 'sm' | 'md' | 'lg';
+  /**
+   * So a caller can scroll a card into view — a notification that names a thing
+   * should land on that thing. React 19 passes `ref` as an ordinary prop, but
+   * `HTMLAttributes` does not include it, so it has to be declared.
+   */
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 export function Card({ padding = 'md', className, children, ...props }: CardProps) {
@@ -34,7 +40,7 @@ export function CardHeader({ className, children, ...props }: React.HTMLAttribut
 
 export function CardTitle({ className, children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
   return (
-    <h3 className={cn('text-base font-semibold text-primary tracking-tight', className)} {...props}>
+    <h3 className={cn('text-sm font-[650] text-primary', className)} {...props}>
       {children}
     </h3>
   );

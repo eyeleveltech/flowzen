@@ -1,696 +1,880 @@
-/**
- * Projects and tasks.
- *
- * A project belongs to the CLIENT and only to the client. What the client is on —
- * retainer or project, and at what price — is DISPLAYED on the project, read from
- * the company. Context, not a connection, so nothing needs re-pointing when an
- * engagement renews or ends (master plan §3.12).
- */
-
-import { Router, type Response, type NextFunction } from 'express';
+import { Router, type Response } from 'express';
 import { z } from 'zod';
-import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { authenticate, atLeast, param, requireRole, requireModule, type AuthRequest } from '../middleware/auth.js';
-import { getOrgConfig } from '../lib/orgConfig.js';
-import { isBeforeToday, daysBetween } from '../utils/orgDay.js';
-import { notifyTaskAssigned, notifyTaskInReview } from '../services/scanner.js';
+import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
+import { CompanyStatus, ProjectStatus, MilestoneStatus, Priority } from '@prisma/client';
+import { parsePagination } from '../utils/query.js';
+import { jobProfit, percentComplete, costRisk } from '../utils/jobProfit.js';
+import { toCsv } from '../utils/csv.js';
+import { sendCsv } from '../utils/csvResponse.js';
 
 export const projectsRouter = Router();
 
-projectsRouter.use(authenticate, requireModule('PM'));
+projectsRouter.use(authenticate);
 
-export type Health = 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK';
+// actualCost = Cost rows + PeopleAllocation% x monthlyCost (brief §8, "Derived,
+// never stored") — costs alone was the whole of it before, which meant every
+// margin figure on this screen quietly excluded salary, the largest cost.
+const allocationCost = (allocations: { percent: number; user: { monthlyCost: unknown } }[]) =>
+  allocations.reduce((acc, a) => acc + (a.percent / 100) * Number(a.user.monthlyCost), 0);
 
-/**
- * Project health, computed.
- *
- * Never stored. A health flag someone sets by hand is green everywhere forever —
- * nobody remembers to go back and turn their own project amber (§4.8).
- */
-export const computeHealth = (
-  project: { status: string; dueDate: Date | null },
-  openTasks: number,
-  overdueTasks: number,
-  timezone: string,
-  now: Date = new Date(),
-): Health => {
-  if (project.status === 'COMPLETED' || project.status === 'CANCELLED') return 'ON_TRACK';
-  if (project.dueDate && isBeforeToday(project.dueDate, timezone, now)) return 'OFF_TRACK';
-  if (overdueTasks > 0) return 'AT_RISK';
-  if (project.dueDate && openTasks > 0 && daysBetween(project.dueDate, now, timezone) <= 7) {
-    return 'AT_RISK';
-  }
-  return 'ON_TRACK';
-};
+// ── 1. List Projects ────────────────────────────────────────────────────────
 
-projectsRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
+projectsRouter.get('/', requirePermission('work.all'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const org = await getOrgConfig(orgId);
-    // Sales and above see every project; a Member sees the ones they are on.
-    // Written as a rank comparison, not `role === 'MEMBER'` — an exact match on
-    // a ladder catches one rung and silently admits every rung above it.
-    const onlyTheirs = !atLeast(req.user!.role, 'SALES');
+    const canSeeFigures = hasPermission(req.user!, 'money.figures');
+    const { status, companyId } = req.query;
+    const wantsCsv = req.query.format === 'csv';
+    const { page, limit, skip, take } = parsePagination(
+      req.query,
+      wantsCsv ? { defaultLimit: 10000, maxLimit: 10000 } : { defaultLimit: 200, maxLimit: 500 },
+    );
 
-    const projects = await prisma.project.findMany({
-      where: {
-        organizationId: orgId,
-        ...(req.query.companyId ? { companyId: String(req.query.companyId) } : {}),
-        // A Member sees the projects they are on, not every project in the agency.
-        // Row-level filtering rather than a 403: people should see their own world
-        // rather than hit walls (§3.10).
-        ...(onlyTheirs
-          ? {
-              OR: [
-                { members: { some: { userId: req.user!.userId } } },
-                { ownerId: req.user!.userId },
-                // Nobody is added to ProjectMember yet — that endpoint does not
-                // exist (backlog item 8) — so an assigned task is the only
-                // evidence most people have of being on a project. Without this
-                // a Member's project list is empty while their task list is not.
-                { tasks: { some: { assigneeId: req.user!.userId } } },
-              ],
-            }
-          : {}),
-      },
-      include: {
-        company: {
-          select: {
-            id: true,
-            name: true,
-            status: true,
-            // The amount is not selected, not merely withheld. Fetching a figure
-            // you must not send is how it ends up in a response six months later,
-            // when somebody spreads the object to add a field.
-            engagements: {
-              where: { status: 'ACTIVE' },
-              select: { id: true, type: true, billingFrequency: true },
-            },
-          },
+    const where: any = { organizationId: orgId, deletedAt: null };
+    if (status && typeof status === 'string' && ['LIVE', 'DELIVERED', 'CANCELLED'].includes(status.toUpperCase())) {
+      where.status = status.toUpperCase() as ProjectStatus;
+    }
+    if (companyId && typeof companyId === 'string') {
+      where.companyId = companyId;
+    }
+
+    const [projects, total] = await Promise.all([
+      prisma.project.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+        include: {
+          company: { select: { id: true, name: true, vertical: true, city: true } },
+          owner: { select: { id: true, name: true, email: true } },
+          milestones: { orderBy: { order: 'asc' } },
+          tasks: { where: { deletedAt: null }, select: { id: true, status: true } },
+          costs: { where: { deletedAt: null }, select: { amount: true } },
+          allocations: { select: { percent: true, user: { select: { monthlyCost: true } } } },
         },
-        owner: { select: { id: true, name: true, avatar: true } },
-        members: { include: { user: { select: { id: true, name: true, avatar: true } } } },
-        tasks: { select: { id: true, status: true, dueDate: true } },
-      },
-      orderBy: { updatedAt: 'desc' },
+      }),
+      prisma.project.count({ where }),
+    ]);
+
+    // Live-work's risk flags (brief §12: PROJECT_OVER_ESTIMATE, PROJECT_BEHIND_SCHEDULE)
+    // read the real Alert rows the hourly scanner already raises, rather than
+    // the frontend re-deriving a simplified approximation of the same rules.
+    const openAlerts = await prisma.alert.findMany({
+      where: { organizationId: orgId, entityType: 'Project', entityId: { in: projects.map((p) => p.id) }, resolvedAt: null },
+      select: { entityId: true, rule: true, severity: true, message: true },
+    });
+    const alertsByProject = new Map<string, typeof openAlerts>();
+    for (const a of openAlerts) {
+      alertsByProject.set(a.entityId, [...(alertsByProject.get(a.entityId) ?? []), a]);
+    }
+
+    const formatted = projects.map((p) => {
+      const directCost = p.costs.reduce((acc, c) => acc + Number(c.amount), 0);
+      const peopleCost = allocationCost(p.allocations);
+      const actualCostTotal = directCost + peopleCost;
+      const profit = jobProfit({
+        quotedValue: Number(p.quotedValue),
+        estimatedCost: p.estimatedCost === null ? null : Number(p.estimatedCost),
+        directCost,
+        peopleCost,
+      });
+      const progress = percentComplete({
+        milestones: p.milestones,
+        startDate: p.startDate,
+        endDate: p.endDate,
+      });
+      const risk = costRisk({ profit, percentComplete: progress.percent });
+      const totalMilestones = p.milestones.length;
+      const paidMilestones = p.milestones.filter((m) => m.status === 'PAID').length;
+      const openTasks = p.tasks.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED').length;
+
+      // Same rule as retainers: work.all is operational visibility, not a
+      // right to see a rupee figure. Only money.figures is. A HEAD carries
+      // work.all without money.figures.
+      const maskedMilestones = p.milestones.map((m) => ({
+        ...m,
+        amount: canSeeFigures ? m.amount : null,
+      }));
+
+      return {
+        id: p.id,
+        name: p.name,
+        companyId: p.companyId,
+        company: p.company,
+        quotedValue: canSeeFigures ? p.quotedValue : null,
+        estimatedCost: canSeeFigures ? p.estimatedCost : null,
+        actualCostTotal: canSeeFigures ? actualCostTotal : null,
+        ...(canSeeFigures ? { profit, costRisk: risk } : {}),
+        percentComplete: progress.percent,
+        percentCompleteBasis: progress.basis,
+        startDate: p.startDate,
+        endDate: p.endDate,
+        status: p.status,
+        priority: p.priority,
+        owner: p.owner,
+        milestones: maskedMilestones,
+        milestoneProgress: totalMilestones > 0 ? Math.round((paidMilestones / totalMilestones) * 100) : 0,
+        openTasksCount: openTasks,
+        totalTasksCount: p.tasks.length,
+        alerts: alertsByProject.get(p.id) ?? [],
+      };
     });
 
-    const now = new Date();
+    if (wantsCsv) {
+      const csv = toCsv(formatted, [
+        { label: 'Name', value: (p) => p.name },
+        { label: 'Company', value: (p) => p.company.name },
+        { label: 'Quoted value', value: (p) => (p.quotedValue != null ? Number(p.quotedValue) : '') },
+        { label: 'Estimated cost', value: (p) => (p.estimatedCost != null ? Number(p.estimatedCost) : '') },
+        { label: 'Actual cost', value: (p) => (p.actualCostTotal != null ? Number(p.actualCostTotal) : '') },
+        { label: 'External cost', value: (p) => p.profit?.directCost ?? '' },
+        { label: 'People cost', value: (p) => p.profit?.peopleCost ?? '' },
+        { label: 'Profit', value: (p) => p.profit?.profit ?? '' },
+        { label: 'Margin %', value: (p) => p.profit?.marginPercent ?? '' },
+        { label: 'Status', value: (p) => p.status },
+        { label: 'Owner', value: (p) => p.owner.name },
+        { label: 'Milestone progress %', value: (p) => p.milestoneProgress },
+        { label: 'Open tasks', value: (p) => p.openTasksCount },
+      ]);
+      sendCsv(res, `projects-${new Date().toISOString().slice(0, 10)}`, csv);
+      return;
+    }
 
     res.json({
       success: true,
-      data: projects.map((p) => {
-        const open = p.tasks.filter((t) => t.status !== 'DONE');
-        const overdue = open.filter((t) => t.dueDate && isBeforeToday(t.dueDate, org.timezone, now));
-
-        return {
-          ...p,
-          tasks: undefined,
-          taskCount: p.tasks.length,
-          openTaskCount: open.length,
-          overdueTaskCount: overdue.length,
-          health: computeHealth(p, open.length, overdue.length, org.timezone, now),
-          // What the client is ON, which is context for delivery: retainer work
-          // keeps arriving, project work ends (§3.12). The AMOUNT is deliberately
-          // absent for every role — these are the project screens, and a price is
-          // not something delivery is deciding. Whoever needs the number opens
-          // the client in CRM or Revenue, where the question belongs.
-          engagementContext: p.company.engagements.map((e) => ({
-            type: e.type,
-            billingFrequency: e.billingFrequency,
-          })),
-          company: { id: p.company.id, name: p.company.name, status: p.company.status },
-        };
-      }),
+      projects: formatted,
+      meta: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
     });
-  } catch (e) {
-    next(e);
+  } catch (error) {
+    next(error);
   }
 });
 
-const projectSchema = z.object({
-  companyId: z.string().min(1, 'A project belongs to a client.'),
-  name: z.string().min(1),
-  description: z.string().optional().nullable(),
-  type: z.string().optional().nullable(),
-  scope: z.string().optional().nullable(),
-  platform: z.string().optional().nullable(),
-  status: z.enum(['PLANNING', 'ACTIVE', 'ON_HOLD', 'COMPLETED', 'CANCELLED']).optional(),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
-  startDate: z.coerce.date().optional().nullable(),
-  dueDate: z.coerce.date().optional().nullable(),
-  ownerId: z.string().optional().nullable(),
-  memberIds: z.array(z.string()).optional(),
-});
+// ── 1c. Did we make money on these jobs? ────────────────────────────────────
+//
+// The projects half of the Money screen's profit table. Retainers have had
+// `/retainers/profitability` since Phase 5 and projects have had nothing, so
+// "did we make money on that job" (brief §1) was answerable for the recurring
+// work and not for the one-off work — and one-off work is where it matters
+// most, because a project ENDS. A retainer's bad month is next month's
+// problem; a project's bad margin is found once it is already delivered.
+//
+// Deliberately NOT merged into the retainer table, and not summed with it.
+// Brief §8 is explicit that retainer and one-time money are "reported split by
+// Retainer and One time, never summed into a single figure" — a month of
+// retainer revenue and a project's whole contract value are different kinds of
+// number, and adding them produces something that answers no question.
 
-projectsRouter.post('/', requireRole('MANAGER'), async (req: AuthRequest, res: Response, next: NextFunction) => {
+projectsRouter.get(
+  '/profitability',
+  requirePermission('money.figures'),
+  async (req: AuthRequest, res: Response, next) => {
+    try {
+      const orgId = req.user!.organizationId;
+      const status = typeof req.query.status === 'string' ? req.query.status.toUpperCase() : null;
+
+      const projects = await prisma.project.findMany({
+        where: {
+          organizationId: orgId,
+          deletedAt: null,
+          ...(status && ['LIVE', 'DELIVERED', 'CANCELLED'].includes(status)
+            ? { status: status as ProjectStatus }
+            : {}),
+        },
+        include: {
+          company: { select: { id: true, name: true } },
+          owner: { select: { id: true, name: true } },
+          milestones: { select: { status: true } },
+          costs: { where: { deletedAt: null }, select: { amount: true } },
+          allocations: { include: { user: { select: { monthlyCost: true } } } },
+        },
+      });
+
+      const rows = projects.map((p) => {
+        const directCost = p.costs.reduce((acc, c) => acc + Number(c.amount), 0);
+        const peopleCost = allocationCost(p.allocations);
+        const profit = jobProfit({
+          quotedValue: Number(p.quotedValue),
+          estimatedCost: p.estimatedCost === null ? null : Number(p.estimatedCost),
+          directCost,
+          peopleCost,
+        });
+        const progress = percentComplete({
+          milestones: p.milestones,
+          startDate: p.startDate,
+          endDate: p.endDate,
+        });
+        return {
+          id: p.id,
+          name: p.name,
+          status: p.status,
+          company: p.company,
+          owner: p.owner,
+          endDate: p.endDate,
+          percentComplete: progress.percent,
+          percentCompleteBasis: progress.basis,
+          ...profit,
+          costRisk: costRisk({ profit, percentComplete: progress.percent }),
+        };
+      });
+
+      // Delivered jobs are the only ones whose profit is FINAL. A live job's
+      // figure is a running total that will still move, and averaging the two
+      // together would produce a company margin that quietly improves every
+      // time somebody starts a new project and has not spent anything on it
+      // yet. So the totals are split, and the delivered set is the one worth
+      // quoting from (brief §11.3 step 6: the closing figure "feeds the next
+      // quote for similar work").
+      const sum = (set: typeof rows) =>
+        set.reduce(
+          (acc, r) => ({
+            count: acc.count + 1,
+            revenue: acc.revenue + r.revenue,
+            directCost: acc.directCost + r.directCost,
+            peopleCost: acc.peopleCost + r.peopleCost,
+            profit: acc.profit + r.profit,
+          }),
+          { count: 0, revenue: 0, directCost: 0, peopleCost: 0, profit: 0 },
+        );
+      const withMargin = (t: ReturnType<typeof sum>) => ({
+        ...t,
+        marginPercent: t.revenue > 0 ? Math.round((t.profit / t.revenue) * 1000) / 10 : null,
+      });
+
+      const delivered = rows.filter((r) => r.status === 'DELIVERED');
+      const live = rows.filter((r) => r.status === 'LIVE');
+
+      res.json({
+        success: true,
+        rows: rows.sort((a, b) => (a.marginPercent ?? 0) - (b.marginPercent ?? 0)),
+        totals: {
+          delivered: withMargin(sum(delivered)),
+          live: withMargin(sum(live)),
+        },
+        atRisk: rows.filter((r) => r.costRisk.level === 'OVER' || r.costRisk.level === 'LOSS').length,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// ── 1b. Trash — soft-deleted projects ───────────────────────────────────────
+//
+// §16 mandates soft delete but never a way back to it — without this, a
+// soft delete is functionally a hard delete from a user's side. setup.admin
+// only: recovery is an administrative action, same tier as the delete itself.
+// Registered ahead of GET /:id — otherwise "trash" would match as an id.
+
+projectsRouter.get('/trash', requirePermission('setup.admin'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const parsed = projectSchema.safeParse(req.body);
+    const projects = await prisma.project.findMany({
+      where: { organizationId: orgId, deletedAt: { not: null } },
+      orderBy: { deletedAt: 'desc' },
+      include: { company: { select: { id: true, name: true } } },
+    });
+    res.json({ success: true, projects });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── 2. Get Project Detail Cockpit ───────────────────────────────────────────
+
+projectsRouter.get('/:id', requirePermission('work.all'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const canSeeFigures = hasPermission(req.user!, 'money.figures');
+    const id = String(req.params.id);
+
+    const project = await prisma.project.findFirst({
+      where: { id, organizationId: orgId, deletedAt: null },
+      include: {
+        company: true,
+        owner: { select: { id: true, name: true, email: true, dept: true } },
+        milestones: {
+          orderBy: { order: 'asc' },
+          include: { proformas: { select: { id: true, number: true, status: true }, orderBy: { createdAt: 'desc' }, take: 1 } },
+        },
+        tasks: {
+          where: { deletedAt: null },
+          include: { assignee: { select: { id: true, name: true, designation: true, dept: true } } },
+          orderBy: { dueDate: 'asc' },
+        },
+        costs: {
+          where: { deletedAt: null },
+          include: { enteredBy: { select: { id: true, name: true } } },
+          orderBy: { incurredAt: 'desc' },
+        },
+        allocations: {
+          include: {
+            user: { select: { id: true, name: true, designation: true, dept: true, monthlyCost: true } },
+            confirmedBy: { select: { id: true, name: true } },
+          },
+        },
+        invoices: {
+          include: { payments: true },
+          orderBy: { raisedAt: 'desc' },
+        },
+      },
+    });
+
+    if (!project) {
+      res.status(404).json({ success: false, error: 'Project not found' });
+      return;
+    }
+
+    const directCost = project.costs.reduce((acc, c) => acc + Number(c.amount), 0);
+    const peopleCost = allocationCost(project.allocations);
+    const actualCostTotal = directCost + peopleCost;
+
+    // "Did we make money on that job" (brief §1) — answerable for retainers
+    // since Phase 5 and, until now, not for projects. `actualCostTotal` alone
+    // could not say whether an overspend was vendors or people, which is the
+    // part that changes what the next quote looks like.
+    const profit = jobProfit({
+      quotedValue: Number(project.quotedValue),
+      estimatedCost: project.estimatedCost === null ? null : Number(project.estimatedCost),
+      directCost,
+      peopleCost,
+    });
+    const progress = percentComplete({
+      milestones: project.milestones,
+      startDate: project.startDate,
+      endDate: project.endDate,
+    });
+    const risk = costRisk({ profit, percentComplete: progress.percent });
+
+    // work.all alone must never surface a figure — quoted value, estimated
+    // cost, every cost line, every milestone amount, and every invoice/
+    // payment amount all require money.figures.
+    const maskedCosts = project.costs.map((c) => ({ ...c, amount: canSeeFigures ? c.amount : null }));
+    // monthlyCost is gated tighter than money.figures — setup.admin only,
+    // same rule team.ts already applies. Allocation percentages themselves
+    // stay visible; the salary they multiply against does not.
+    const canSeeSalaries = hasPermission(req.user!, 'setup.admin');
+    const maskedAllocations = project.allocations.map((a) => ({
+      ...a,
+      user: { ...a.user, monthlyCost: canSeeSalaries ? a.user.monthlyCost : undefined },
+    }));
+    const maskedMilestones = project.milestones.map((m) => ({
+      ...m,
+      amount: canSeeFigures ? m.amount : null,
+    }));
+    const maskedInvoices = project.invoices.map((inv) => ({
+      ...inv,
+      amount: canSeeFigures ? inv.amount : null,
+      payments: inv.payments.map((p) => ({ ...p, amount: canSeeFigures ? p.amount : null })),
+    }));
+
+    res.json({
+      success: true,
+      project: {
+        ...project,
+        quotedValue: canSeeFigures ? project.quotedValue : null,
+        estimatedCost: canSeeFigures ? project.estimatedCost : null,
+        actualCostTotal: canSeeFigures ? actualCostTotal : null,
+        // Absent, not nulled, without money.figures — the same rule the asset
+        // register follows. How far through the work is stays visible to
+        // everybody: that is a fact about the job, not a figure.
+        ...(canSeeFigures ? { profit, costRisk: risk } : {}),
+        percentComplete: progress.percent,
+        percentCompleteBasis: progress.basis,
+        costs: maskedCosts,
+        milestones: maskedMilestones,
+        invoices: maskedInvoices,
+        allocations: maskedAllocations,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── 3. Create Project with Milestones ────────────────────────────────────────
+
+const milestoneInputSchema = z.object({
+  label: z.string().min(1),
+  percent: z.number().positive(),
+  amount: z.number().positive(),
+});
+
+const projectCreateSchema = z.object({
+  companyId: z.string().min(1, 'Company is required'),
+  name: z.string().min(1, 'Project name is required'),
+  quotedValue: z.number().positive('Quoted value must be positive'),
+  estimatedCost: z.number().optional().nullable(),
+  startDate: z.string().min(1, 'Start date is required'),
+  endDate: z.string().min(1, 'End date is required'),
+  ownerId: z.string().optional(),
+  priority: z.nativeEnum(Priority).optional(),
+  description: z.string().optional().nullable(),
+  milestones: z.array(milestoneInputSchema).optional(),
+  /** Set when this project is being created from a won proposal (§11.1 step 11) — see below. */
+  sourceProposalId: z.string().optional(),
+});
+
+projectsRouter.post('/', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const parsed = projectCreateSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ success: false, error: parsed.error.issues[0].message });
       return;
     }
 
+    const orgId = req.user!.organizationId;
+    const { companyId, name, quotedValue, estimatedCost, startDate, endDate, ownerId, priority, description, milestones, sourceProposalId } = parsed.data;
+
+    /*
+     * The company has to have bought something first.
+     *
+     * The won-proposal check below lives inside `if (sourceProposalId)`, which
+     * made every rule it enforces optional — leave the field out of the request
+     * and a live project could be opened against a company nobody had sold
+     * anything to. The gate belongs on the company, where it holds whatever
+     * shape the request takes: a company becomes a CLIENT when a proposal is
+     * won, so "not a prospect" is the same sentence as "somebody bought
+     * something", and this read is also what confines `companyId` to the
+     * caller's own organization.
+     */
     const company = await prisma.company.findFirst({
-      where: { id: parsed.data.companyId, organizationId: orgId },
-      select: { id: true },
+      where: { id: companyId, organizationId: orgId },
+      select: { id: true, name: true, status: true },
     });
     if (!company) {
-      res.status(404).json({ success: false, error: 'Client not found' });
+      res.status(404).json({ success: false, error: 'Company not found' });
+      return;
+    }
+    if (company.status === CompanyStatus.PROSPECT) {
+      res.status(400).json({
+        success: false,
+        error: `${company.name} is still a prospect. Win a proposal for them first — that is what turns a prospect into a client.`,
+      });
       return;
     }
 
-    const { memberIds, ...data } = parsed.data;
-    const project = await prisma.project.create({
-      data: {
-        ...data,
-        organizationId: orgId,
-        ownerId: data.ownerId ?? req.user!.userId,
-        ...(memberIds?.length
-          ? { members: { create: memberIds.map((userId) => ({ userId })) } }
-          : {}),
-      },
-    });
-
-    res.status(201).json({ success: true, data: project });
-  } catch (e) {
-    next(e);
-  }
-});
-
-projectsRouter.get('/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const org = await getOrgConfig(req.user!.organizationId);
-    const project = await prisma.project.findFirst({
-      where: { id: param(req, 'id'), organizationId: req.user!.organizationId },
-      include: {
-        company: {
-          select: {
-            id: true,
-            name: true,
-            status: true,
-            // The same rule as the list, and it was NOT the same here: this
-            // included the whole engagement, so a project page handed every role
-            // the retainer amount while the list carefully withheld it. One
-            // endpoint enforcing a rule and its neighbour assembling around it
-            // is the shape of nearly every leak found so far.
-            engagements: {
-              where: { status: 'ACTIVE' },
-              select: { id: true, type: true, billingFrequency: true, startDate: true, endDate: true },
-            },
-          },
-        },
-        owner: { select: { id: true, name: true, avatar: true } },
-        members: { include: { user: { select: { id: true, name: true, avatar: true } } } },
-        tasks: {
-          include: {
-            assignee: { select: { id: true, name: true, avatar: true } },
-            reviewer: { select: { id: true, name: true, avatar: true } },
-          },
-          orderBy: [{ status: 'asc' }, { position: 'asc' }],
-        },
-        activities: { orderBy: { occurredAt: 'desc' }, take: 50 },
-      },
-    });
-
-    if (!project) {
-      res.status(404).json({ success: false, error: 'Project not found' });
-      return;
+    // A proposal can seed at most one project, and only its own company's,
+    // and only once it's actually won — otherwise sourceProposalId would let
+    // a live/lost proposal masquerade as the reason a project exists.
+    if (sourceProposalId) {
+      const proposal = await prisma.proposal.findFirst({
+        where: { id: sourceProposalId, organizationId: orgId, companyId },
+      });
+      if (!proposal) {
+        res.status(404).json({ success: false, error: 'Source proposal not found for this company' });
+        return;
+      }
+      if (proposal.outcome !== 'WON') {
+        res.status(400).json({ success: false, error: 'Only a won proposal can seed a project' });
+        return;
+      }
+      const already = await prisma.project.findFirst({ where: { sourceProposalId, organizationId: orgId, deletedAt: null } });
+      if (already) {
+        res.status(400).json({ success: false, error: `A project was already created from this proposal: ${already.name}` });
+        return;
+      }
     }
 
-    const now = new Date();
-    const open = project.tasks.filter((t) => t.status !== 'DONE');
-    const overdue = open.filter((t) => t.dueDate && isBeforeToday(t.dueDate, org.timezone, now));
+    const defaultMilestones = milestones || [
+      { label: 'Advance Payment', percent: 40, amount: quotedValue * 0.4 },
+      { label: 'Phase 1 Sign-off', percent: 30, amount: quotedValue * 0.3 },
+      { label: 'Final Delivery & Handover', percent: 30, amount: quotedValue * 0.3 },
+    ];
 
-    res.json({
-      success: true,
-      data: { ...project, health: computeHealth(project, open.length, overdue.length, org.timezone, now) },
+    const project = await prisma.$transaction(async (tx) => {
+      const created = await tx.project.create({
+        data: {
+          organizationId: orgId,
+          companyId,
+          name: name.trim(),
+          quotedValue,
+          estimatedCost: estimatedCost || null,
+          startDate: new Date(startDate),
+          endDate: new Date(endDate),
+          ownerId: ownerId || req.user!.userId,
+          status: ProjectStatus.LIVE,
+          priority: priority ?? Priority.MEDIUM,
+          description: description || null,
+          sourceProposalId: sourceProposalId || null,
+        },
+      });
+
+      for (let i = 0; i < defaultMilestones.length; i++) {
+        const m = defaultMilestones[i];
+        await tx.milestone.create({
+          data: {
+            projectId: created.id,
+            label: m.label,
+            percent: m.percent,
+            amount: m.amount,
+            order: i + 1,
+            status: MilestoneStatus.PENDING,
+          },
+        });
+      }
+
+      await tx.activity.create({
+        data: {
+          organizationId: orgId,
+          entityType: 'Project',
+          entityId: created.id,
+          actorId: req.user!.userId,
+          verb: 'project_created',
+          payload: { name: created.name, quotedValue },
+        },
+      });
+
+      return created;
     });
-  } catch (e) {
-    next(e);
+
+    res.status(201).json({ success: true, project });
+  } catch (error) {
+    next(error);
   }
 });
 
-// ── Members ──────────────────────────────────────────────────────────────────
+// ── 3b. Edit Project ─────────────────────────────────────────────────────────
 
-const updateProjectSchema = z.object({
-  companyId: z.string().optional(),
+const projectEditSchema = z.object({
   name: z.string().min(1).optional(),
+  quotedValue: z.number().positive().optional(),
+  estimatedCost: z.number().positive().optional().nullable(),
+  startDate: z.string().min(1).optional(),
+  endDate: z.string().min(1).optional(),
+  ownerId: z.string().min(1).optional(),
+  status: z.nativeEnum(ProjectStatus).optional(),
+  priority: z.nativeEnum(Priority).optional(),
   description: z.string().optional().nullable(),
-  type: z.string().optional().nullable(),
-  scope: z.string().optional().nullable(),
-  platform: z.string().optional().nullable(),
-  status: z.enum(['PLANNING', 'ACTIVE', 'ON_HOLD', 'COMPLETED', 'CANCELLED']).optional(),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
-  startDate: z.coerce.date().optional().nullable(),
-  dueDate: z.coerce.date().optional().nullable(),
-  ownerId: z.string().optional().nullable(),
-  memberIds: z.array(z.string()).optional(),
 });
 
-projectsRouter.patch('/:id', requireRole('MANAGER'), async (req: AuthRequest, res: Response, next: NextFunction) => {
+projectsRouter.patch('/:id', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
   try {
-    const id = param(req, 'id');
-    const parsed = updateProjectSchema.safeParse(req.body);
+    const parsed = projectEditSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ success: false, error: parsed.error.issues[0].message });
       return;
     }
 
-    const project = await prisma.project.findFirst({
-      where: { id, organizationId: req.user!.organizationId },
-      select: { id: true },
-    });
-    if (!project) {
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+    const existing = await prisma.project.findFirst({ where: { id, organizationId: orgId } });
+    if (!existing) {
       res.status(404).json({ success: false, error: 'Project not found' });
       return;
     }
 
-    const { memberIds, ...data } = parsed.data;
-
-    const updated = await prisma.project.update({
+    const { name, quotedValue, estimatedCost, startDate, endDate, ownerId, status, priority, description } = parsed.data;
+    const project = await prisma.project.update({
       where: { id },
       data: {
-        ...data,
-        ...(memberIds !== undefined
-          ? {
-              members: {
-                deleteMany: {},
-                ...(memberIds.length ? { create: memberIds.map((userId) => ({ userId })) } : {}),
-              },
-            }
-          : {}),
+        ...(name !== undefined ? { name: name.trim() } : {}),
+        ...(quotedValue !== undefined ? { quotedValue } : {}),
+        ...(estimatedCost !== undefined ? { estimatedCost } : {}),
+        ...(startDate !== undefined ? { startDate: new Date(startDate) } : {}),
+        ...(endDate !== undefined ? { endDate: new Date(endDate) } : {}),
+        ...(ownerId !== undefined ? { ownerId } : {}),
+        ...(status !== undefined ? { status } : {}),
+        ...(priority !== undefined ? { priority } : {}),
+        ...(description !== undefined ? { description: description || null } : {}),
       },
     });
 
-    res.json({ success: true, data: updated });
-  } catch (e) {
-    next(e);
-  }
-});
-
-
-projectsRouter.get('/:id/members', async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const members = await prisma.projectMember.findMany({
-      where: { projectId: param(req, 'id'), project: { organizationId: req.user!.organizationId } },
-      include: { user: { select: { id: true, name: true, avatar: true } } },
-      orderBy: { addedAt: 'asc' },
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'Project',
+        entityId: id,
+        actorId: req.user!.userId,
+        verb: 'project_edited',
+        payload: { fields: Object.keys(parsed.data) },
+      },
     });
-    res.json({ success: true, data: members });
-  } catch (e) {
-    next(e);
-  }
-});
 
-/**
- * Add a member to a project.
- *
- * Like assigning a task, staffing a project is Manager and above.
- */
-projectsRouter.post('/:id/members', requireRole('MANAGER'), async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const { userId } = req.body ?? {};
-    if (!userId) {
-      res.status(400).json({ success: false, error: 'A user is required.' });
-      return;
+    /*
+     * Brief §11.3 step 6: "On delivery, the project closes with a final profit
+     * figure that feeds the next quote for similar work."
+     *
+     * Stamped once, at the moment the status becomes DELIVERED, as its own
+     * activity row. The living figure is computed on read like everything else
+     * — but the CLOSING one has to be captured, because it is the only version
+     * that stays true. Costs entered late against a finished job would keep
+     * moving a number somebody has already quoted from, and a "final" figure
+     * that changes six months later is not a record of anything.
+     */
+    const nowDelivered = status === 'DELIVERED' && existing.status !== 'DELIVERED';
+    if (nowDelivered) {
+      const closing = await prisma.project.findFirst({
+        where: { id, organizationId: orgId },
+        include: {
+          costs: { where: { deletedAt: null }, select: { amount: true } },
+          allocations: { include: { user: { select: { monthlyCost: true } } } },
+        },
+      });
+      if (closing) {
+        const finalProfit = jobProfit({
+          quotedValue: Number(closing.quotedValue),
+          estimatedCost: closing.estimatedCost === null ? null : Number(closing.estimatedCost),
+          directCost: closing.costs.reduce((acc, c) => acc + Number(c.amount), 0),
+          peopleCost: allocationCost(closing.allocations),
+        });
+        await prisma.activity.create({
+          data: {
+            organizationId: orgId,
+            entityType: 'Project',
+            entityId: id,
+            actorId: req.user!.userId,
+            verb: 'project_delivered',
+            payload: { ...finalProfit },
+          },
+        });
+      }
     }
 
-    const projectId = param(req, 'id');
+    res.json({ success: true, project });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── 3c. Delete Project ──────────────────────────────────────────────────────
+//
+// A project entered by mistake should be removable outright; one that has
+// real work or spend against it should not disappear — that history is what
+// makes profit-per-job trustworthy. Cancel it instead (PATCH status=CANCELLED).
+//
+// Soft delete — §16: nothing is ever hard deleted by a user. The guard below
+// also now blocks deleting a project with a milestone past PENDING — a
+// proforma or invoice can exist against one with zero Cost rows recorded,
+// since a proforma is about what the client owes, not what was spent.
+
+projectsRouter.delete('/:id', requirePermission('setup.admin'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+
     const project = await prisma.project.findFirst({
-      where: { id: projectId, organizationId: req.user!.organizationId },
+      where: { id, organizationId: orgId, deletedAt: null },
+      include: {
+        _count: { select: { tasks: true, costs: { where: { deletedAt: null } } } },
+        milestones: { select: { status: true } },
+      },
     });
     if (!project) {
       res.status(404).json({ success: false, error: 'Project not found' });
       return;
     }
-
-    const member = await prisma.projectMember.upsert({
-      where: { projectId_userId: { projectId, userId } },
-      update: {}, // if already a member, do nothing
-      create: { projectId, userId },
-      include: { user: { select: { id: true, name: true, avatar: true } } },
-    });
-
-    res.status(201).json({ success: true, data: member });
-  } catch (e) {
-    next(e);
-  }
-});
-
-projectsRouter.delete('/:id/members/:userId', requireRole('MANAGER'), async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const projectId = param(req, 'id');
-    const userId = param(req, 'userId');
-    
-    // Ensure project exists and belongs to org
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, organizationId: req.user!.organizationId },
-    });
-    if (!project) {
-      res.status(404).json({ success: false, error: 'Project not found' });
+    const hasBillingHistory = project.milestones.some((m) => m.status !== 'PENDING');
+    if (project._count.tasks > 0 || project._count.costs > 0 || hasBillingHistory) {
+      res.status(400).json({
+        success: false,
+        error: 'This project has tasks, costs, or billing recorded against it. Set it to Cancelled instead of deleting it.',
+      });
       return;
     }
 
-    await prisma.projectMember.deleteMany({
-      where: { projectId, userId },
+    await prisma.project.update({ where: { id }, data: { deletedAt: new Date() } });
+
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        actorId: req.user!.userId,
+        entityType: 'Project',
+        entityId: id,
+        verb: 'deleted',
+        payload: { name: project.name },
+      },
     });
 
     res.json({ success: true });
-  } catch (e) {
-    next(e);
+  } catch (error) {
+    next(error);
   }
 });
 
-// ── Tasks ────────────────────────────────────────────────────────────────────
-
-const taskSchema = z
-  .object({
-    projectId: z.string().optional().nullable(),
-    dealId: z.string().optional().nullable(),
-    title: z.string().min(1),
-    description: z.string().optional().nullable(),
-    taskType: z.string().optional().nullable(),
-    status: z.enum(['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'APPROVED', 'DONE', 'BLOCKED', 'ON_HOLD']).optional(),
-    priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
-    assigneeId: z.string().optional().nullable(),
-    /** Separate from the assignee: agency work is checked before a client sees it. */
-    reviewerId: z.string().optional().nullable(),
-    dueDate: z.coerce.date().optional().nullable(),
-    parentTaskId: z.string().optional().nullable(),
-    recurrence: z.object({
-      frequency: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY']),
-      interval: z.number().optional(),
-    }).optional().nullable(),
-  })
-  .refine((v) => Boolean(v.projectId) !== Boolean(v.dealId), {
-    message: 'A task belongs to exactly one of a project or a deal — never both, never neither.',
-  });
-
-/**
- * Create a task.
- *
- * Anybody may write down their own work. **Giving work to somebody else is
- * staffing**, and staffing is Manager and above (§3.10, "assign people to work").
- * Below that, the task is forced onto the person creating it rather than
- * refused — writing your own to-do is not the thing being restricted, and a 403
- * for leaving a field blank would be a confusing way to say so.
- */
-projectsRouter.post('/tasks', requireRole('MEMBER'), async (req: AuthRequest, res: Response, next: NextFunction) => {
+projectsRouter.post('/:id/restore', requirePermission('setup.admin'), async (req: AuthRequest, res: Response, next) => {
   try {
-    const parsed = taskSchema.safeParse(req.body);
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+
+    const existing = await prisma.project.findFirst({ where: { id, organizationId: orgId, deletedAt: { not: null } } });
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'Deleted project not found' });
+      return;
+    }
+
+    await prisma.project.update({ where: { id }, data: { deletedAt: null } });
+
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        actorId: req.user!.userId,
+        entityType: 'Project',
+        entityId: id,
+        verb: 'restored',
+        payload: { name: existing.name },
+      },
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── 4. Add a Milestone ───────────────────────────────────────────────────────
+//
+// Post-creation milestone editing didn't exist at all — the billing pattern
+// picked at creation (Standard/Single/Custom) was permanent. Same shape as
+// the creation-time milestoneInputSchema; no server-side "must sum to 100"
+// check here either, matching creation's own field-level-only validation.
+
+projectsRouter.post('/:id/milestones', requirePermission('work.all'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const parsed = milestoneInputSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ success: false, error: parsed.error.issues[0].message });
       return;
     }
 
-    const canStaff = atLeast(req.user!.role, 'MANAGER');
-    if (!canStaff && parsed.data.assigneeId && parsed.data.assigneeId !== req.user!.userId) {
-      res.status(403).json({
-        success: false,
-        error: 'You can only create work for yourself. Ask a manager to assign it to somebody else.',
-      });
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+
+    const project = await prisma.project.findFirst({
+      where: { id, organizationId: orgId, deletedAt: null },
+      include: { milestones: { select: { order: true } } },
+    });
+    if (!project) {
+      res.status(404).json({ success: false, error: 'Project not found' });
       return;
     }
 
-    const task = await prisma.task.create({
-      data: {
-        ...parsed.data,
-        assigneeId: canStaff ? parsed.data.assigneeId : req.user!.userId,
-        // A reviewer is also a person being given work.
-        reviewerId: canStaff ? parsed.data.reviewerId : null,
-        organizationId: req.user!.organizationId,
-        ...(parsed.data.recurrence !== undefined ? { recurrence: parsed.data.recurrence as any } : {}),
-      },
-      include: { project: { select: { id: true, name: true } } },
+    const nextOrder = project.milestones.reduce((max, m) => Math.max(max, m.order), -1) + 1;
+    const milestone = await prisma.milestone.create({
+      data: { projectId: id, label: parsed.data.label, percent: parsed.data.percent, amount: parsed.data.amount, order: nextOrder },
     });
 
-    // Notify immediately — a task notification that waits until tomorrow arrives
-    // after the standup where it mattered.
-    if (task.assigneeId && task.assigneeId !== req.user!.userId) {
-      notifyTaskAssigned({
-        id: task.id,
-        title: task.title,
-        assigneeId: task.assigneeId,
-        projectId: task.project?.id,
-        projectName: task.project?.name,
-      }).catch(() => {}); // fire-and-forget: a failed notification must not fail the create
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'Project',
+        entityId: id,
+        actorId: req.user!.userId,
+        verb: 'milestone_added',
+        payload: { milestoneId: milestone.id, label: milestone.label, percent: milestone.percent, amount: Number(milestone.amount) },
+      },
+    });
+
+    res.json({ success: true, milestone });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── 5. Update Milestone (status, or label/percent/amount while still Pending) ──
+
+const milestoneEditSchema = z.object({
+  status: z.nativeEnum(MilestoneStatus).optional(),
+  label: z.string().min(1).optional(),
+  percent: z.number().positive().optional(),
+  amount: z.number().positive().optional(),
+});
+
+projectsRouter.patch('/:id/milestones/:milestoneId', requirePermission('work.all'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const parsed = milestoneEditSchema.safeParse(req.body);
+    if (!parsed.success || Object.keys(parsed.data).length === 0) {
+      res.status(400).json({ success: false, error: parsed.success ? 'Nothing to update' : parsed.error.issues[0].message });
+      return;
     }
 
-    res.status(201).json({ success: true, data: task });
-  } catch (e) {
-    next(e);
-  }
-});
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+    const milestoneId = String(req.params.milestoneId);
+    const { status, label, percent, amount } = parsed.data;
 
-projectsRouter.get('/tasks/all', requireRole('MANAGER'), async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const org = await getOrgConfig(req.user!.organizationId);
-    
-    const { companyId, projectId, status, departmentId, assigneeId, priority, taskType } = req.query;
-
-    const parseMultiFilter = (val: unknown) => {
-      if (!val) return undefined;
-      const list = String(val).split(',').map((s) => s.trim()).filter(Boolean);
-      if (list.length === 0) return undefined;
-      if (list.length === 1) return list[0];
-      return { in: list };
-    };
-
-    const statusFilter = parseMultiFilter(status);
-    const taskTypeFilter = parseMultiFilter(taskType);
-    const companyFilter = parseMultiFilter(companyId);
-    const projectFilter = parseMultiFilter(projectId);
-    const departmentFilter = parseMultiFilter(departmentId);
-    const assigneeFilter = parseMultiFilter(assigneeId);
-    const priorityFilter = parseMultiFilter(priority);
-
-    const whereClause: any = {
-      organizationId: req.user!.organizationId,
-      ...(statusFilter ? { status: statusFilter } : {}),
-      ...(taskTypeFilter ? { taskType: taskTypeFilter } : {}),
-      ...(companyFilter ? { project: { companyId: companyFilter } } : {}),
-      ...(projectFilter ? { projectId: projectFilter } : {}),
-      ...(departmentFilter ? { departmentId: departmentFilter } : {}),
-      ...(assigneeFilter ? { assigneeId: assigneeFilter } : {}),
-      ...(priorityFilter ? { priority: priorityFilter } : {}),
-    };
-
-    const tasks = await prisma.task.findMany({
-      where: whereClause,
-      include: {
-        project: { select: { id: true, name: true, company: { select: { id: true, name: true } } } },
-        deal: { select: { id: true, title: true } },
-        assignee: { select: { id: true, name: true, avatar: true, designation: true } },
-        reviewer: { select: { id: true, name: true, avatar: true, designation: true } },
-        department: { select: { id: true, name: true } }
-      },
-      orderBy: [{ dueDate: 'asc' }],
-    });
-
-    const now = new Date();
-    res.json({
-      success: true,
-      data: tasks.map((t) => ({
-        ...t,
-        isOverdue: Boolean(
-          t.dueDate &&
-          isBeforeToday(t.dueDate, org.timezone, now) &&
-          t.status !== 'DONE' &&
-          t.status !== 'ON_HOLD' &&
-          t.status !== 'BLOCKED'
-        ),
-        awaitingMyReview: t.reviewerId === req.user!.userId && t.status === 'IN_REVIEW',
-      })),
-    });
-  } catch (e) {
-    next(e);
-  }
-});
-
-projectsRouter.get('/tasks/mine', async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const org = await getOrgConfig(req.user!.organizationId);
-    const tasks = await prisma.task.findMany({
-      where: {
-        organizationId: req.user!.organizationId,
-        status: { not: 'DONE' },
-        OR: [{ assigneeId: req.user!.userId }, { reviewerId: req.user!.userId }],
-      },
-      include: {
-        project: { select: { id: true, name: true, company: { select: { id: true, name: true } } } },
-        deal: { select: { id: true, title: true } },
-        assignee: { select: { id: true, name: true, avatar: true, designation: true } },
-        reviewer: { select: { id: true, name: true, avatar: true, designation: true } },
-        department: { select: { id: true, name: true } },
-      },
-      orderBy: [{ dueDate: 'asc' }],
-    });
-
-    const now = new Date();
-    res.json({
-      success: true,
-      data: tasks.map((t) => ({
-        ...t,
-        isOverdue: Boolean(
-          t.dueDate &&
-          isBeforeToday(t.dueDate, org.timezone, now) &&
-          t.status !== 'DONE' &&
-          t.status !== 'ON_HOLD' &&
-          t.status !== 'BLOCKED'
-        ),
-        // Work sitting with a reviewer is neither done nor in progress.
-        awaitingMyReview: t.reviewerId === req.user!.userId && t.status === 'IN_REVIEW',
-      })),
-    });
-  } catch (e) {
-    next(e);
-  }
-});
-
-projectsRouter.patch('/tasks/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const id = param(req, 'id');
-    const existing = await prisma.task.findFirst({
-      where: { id, organizationId: req.user!.organizationId },
-      select: { id: true, assigneeId: true, status: true, reviewerId: true },
+    // Scoped through the project, not by bare milestone id — otherwise a
+    // milestone id from another organisation would update just as happily.
+    const existing = await prisma.milestone.findFirst({
+      where: { id: milestoneId, projectId: id, project: { organizationId: orgId } },
     });
     if (!existing) {
-      res.status(404).json({ success: false, error: 'Task not found' });
+      res.status(404).json({ success: false, error: 'Milestone not found' });
       return;
     }
 
-    // Changing somebody else's work is STAFFING, which is Manager and above
-    // (§3.10). Sales and Member both get "own" on tasks.
-    //
-    // This compared `role === 'MEMBER'` — an exact match on a ladder, so it
-    // caught the bottom rung and let every rung above it through. A salesperson
-    // could rename and close delivery work assigned to anyone. Comparing rank is
-    // the rule everywhere else in this codebase, and it is the rule here.
-    const canStaff = atLeast(req.user!.role, 'MANAGER');
-    const isOwn = existing.assigneeId === req.user!.userId;
-    if (!canStaff && !isOwn) {
-      res.status(403).json({ success: false, error: 'You can only edit your own tasks.' });
+    // The billing structure (label/percent/amount) is locked the moment a
+    // proforma has been raised against it — same "immutable once it enters
+    // the real billing flow" rule ProposalVersion follows once sent.
+    if ((label !== undefined || percent !== undefined || amount !== undefined) && existing.status !== MilestoneStatus.PENDING) {
+      res.status(400).json({ success: false, error: 'This milestone already has billing against it — only Pending milestones can be edited.' });
       return;
     }
 
-    const parsed = taskSchema.innerType().partial().safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
-      return;
-    }
-
-    // A non-manager editing their own task cannot change who it belongs to.
-    if (!canStaff && parsed.data.assigneeId && parsed.data.assigneeId !== existing.assigneeId) {
-      res.status(403).json({ success: false, error: 'Only a manager can reassign work.' });
-      return;
-    }
-
-    // A non-manager editing their own task cannot change its reviewer.
-    if (
-      !canStaff &&
-      parsed.data.reviewerId !== undefined &&
-      parsed.data.reviewerId !== existing.reviewerId
-    ) {
-      res.status(403).json({ success: false, error: 'Only a manager can assign a reviewer.' });
-      return;
-    }
-
-    // Enforcement: Only the assigned reviewer (or a manager) can approve a task in review (or transition from IN_REVIEW to APPROVED/DONE).
-    const isApproving =
-      (parsed.data.status === 'APPROVED' || parsed.data.status === 'DONE') &&
-      existing.status === 'IN_REVIEW';
-    const isReviewer = existing.reviewerId === req.user!.userId;
-
-    if (isApproving && !canStaff && !isReviewer) {
-      res.status(403).json({
-        success: false,
-        error: 'Only the assigned reviewer can approve tasks that are under review.',
-      });
-      return;
-    }
-
-    const { recurrence, ...restData } = parsed.data;
-
-    const task = await prisma.task.update({
-      where: { id },
+    const milestone = await prisma.milestone.update({
+      where: { id: milestoneId },
       data: {
-        ...restData,
-        ...(parsed.data.status === 'DONE' && existing.status !== 'DONE'
-          ? { completedAt: new Date() }
-          : {}),
-        ...(parsed.data.status && parsed.data.status !== 'DONE' && existing.status === 'DONE'
-          ? { completedAt: null }
-          : {}),
-        ...(recurrence !== undefined ? { recurrence: recurrence ? (recurrence as any) : Prisma.DbNull } : {}),
-      },
-      include: {
-        project: { select: { id: true, name: true, company: { select: { name: true } } } },
-        deal: { select: { id: true, title: true } },
-        assignee: { select: { id: true, name: true, avatar: true, designation: true } },
-        reviewer: { select: { id: true, name: true, avatar: true, designation: true } },
-        department: { select: { id: true, name: true } },
+        ...(status !== undefined ? { status } : {}),
+        ...(label !== undefined ? { label } : {}),
+        ...(percent !== undefined ? { percent } : {}),
+        ...(amount !== undefined ? { amount } : {}),
       },
     });
 
-    if (task.status === 'DONE' && existing.status !== 'DONE' && task.recurrence && task.dueDate) {
-      // Lazy import to avoid circular dependency since they are in different places? No, just standard import.
-      const { spawnNextTask } = await import('../services/taskRecurrence.js');
-      await spawnNextTask(task, req.user!.userId);
-    }
-    // Event-driven notifications — same reasoning as the create route.
-    const assigneeChanged = parsed.data.assigneeId && parsed.data.assigneeId !== existing.assigneeId;
-    if (assigneeChanged && task.assigneeId && task.assigneeId !== req.user!.userId) {
-      notifyTaskAssigned({
-        id: task.id,
-        title: task.title,
-        assigneeId: task.assigneeId,
-        projectId: task.project?.id,
-        projectName: task.project?.name,
-      }).catch(() => {});
-    }
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'Project',
+        entityId: id,
+        actorId: req.user!.userId,
+        verb: status !== undefined ? 'milestone_status_changed' : 'milestone_edited',
+        payload: { milestoneId, label: existing.label, from: existing.status, to: status ?? existing.status },
+      },
+    });
 
-    const movedToReview = parsed.data.status === 'IN_REVIEW' && existing.status !== 'IN_REVIEW';
-    if (movedToReview && task.reviewerId && task.reviewerId !== req.user!.userId) {
-      notifyTaskInReview({
-        id: task.id,
-        title: task.title,
-        reviewerId: task.reviewerId,
-        projectId: task.project?.id,
-        projectName: task.project?.name,
-      }).catch(() => {});
-    }
-
-    res.json({ success: true, data: task });
-  } catch (e) {
-    next(e);
+    res.json({ success: true, milestone });
+  } catch (error) {
+    next(error);
   }
 });
 
-projectsRouter.delete('/tasks/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
+// ── 6. Delete a Milestone ────────────────────────────────────────────────────
+
+projectsRouter.delete('/:id/milestones/:milestoneId', requirePermission('work.all'), async (req: AuthRequest, res: Response, next) => {
   try {
-    const id = param(req, 'id');
-    const existing = await prisma.task.findFirst({
-      where: { id, organizationId: req.user!.organizationId },
-      select: { id: true, assigneeId: true },
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+    const milestoneId = String(req.params.milestoneId);
+
+    const existing = await prisma.milestone.findFirst({
+      where: { id: milestoneId, projectId: id, project: { organizationId: orgId } },
+      include: { _count: { select: { proformas: true } } },
     });
     if (!existing) {
-      res.status(404).json({ success: false, error: 'Task not found' });
+      res.status(404).json({ success: false, error: 'Milestone not found' });
+      return;
+    }
+    if (existing.status !== MilestoneStatus.PENDING || existing._count.proformas > 0) {
+      res.status(400).json({ success: false, error: 'This milestone already has billing against it and cannot be deleted.' });
       return;
     }
 
-    const canStaff = atLeast(req.user!.role, 'MANAGER');
-    const isOwn = existing.assigneeId === req.user!.userId;
-    if (!canStaff && !isOwn) {
-      res.status(403).json({ success: false, error: 'You can only delete your own tasks.' });
-      return;
-    }
+    await prisma.milestone.delete({ where: { id: milestoneId } });
 
-    await prisma.task.delete({ where: { id } });
-    res.json({ success: true, message: 'Task deleted' });
-  } catch (e) {
-    next(e);
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'Project',
+        entityId: id,
+        actorId: req.user!.userId,
+        verb: 'milestone_deleted',
+        payload: { milestoneId, label: existing.label },
+      },
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
   }
 });

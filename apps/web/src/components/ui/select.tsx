@@ -158,12 +158,12 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
             setIsOpen(false);
           }
         }}
-        className={cn(`flex w-full items-center justify-between ${rounded} border border-border bg-white px-4 py-2.5 text-sm text-body outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none text-left`, buttonClassName)}
+        className={cn(`flex w-full items-center justify-between ${rounded} border border-border bg-white px-4 py-2.5 text-sm text-body outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 disabled:opacity-50 transition-colors duration-150 motion-reduce:transition-none text-left`, buttonClassName)}
       >
         <span className="flex items-center gap-2 min-w-0">
           {leadingIcon && <span className="shrink-0 flex items-center">{leadingIcon}</span>}
           {selectedOption?.avatar && (
-            <span className="h-5 w-5 shrink-0 rounded-full bg-[#F3F4F6] border border-border text-primary text-[9px] font-semibold flex items-center justify-center">{selectedOption.avatar}</span>
+            <span className="h-5 w-5 shrink-0 rounded-full bg-subtle border border-border text-primary text-micro font-semibold flex items-center justify-center">{selectedOption.avatar}</span>
           )}
           <span className={`min-w-0 truncate ${selectedOption && selectedOption.value !== '' ? 'text-primary' : 'text-body'}`}>
             {selectedOption ? selectedOption.label : placeholder}
@@ -172,12 +172,18 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
         <ChevronDown className={`h-4 w-4 shrink-0 text-secondary transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
       </button>
 
+      {/*
+        Exists only so the browser's own "please fill this in" validation fires
+        on a custom listbox. Nobody operates it, so it is hidden from assistive
+        technology rather than announced as a nameless text box.
+      */}
       {required && (
         <input
           tabIndex={-1}
           required
           value={value}
           readOnly
+          aria-hidden="true"
           className="absolute inset-0 w-full h-full opacity-0 pointer-events-none -z-10"
         />
       )}
@@ -192,8 +198,9 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search..."
+                  aria-label="Search options"
                   autoComplete="off"
-                  className="w-full rounded-xl border border-border bg-white py-2.5 pl-10 pr-3 text-sm text-primary outline-none focus:border-primary"
+                  className="w-full rounded-xl border border-border bg-white py-2.5 pl-10 pr-3 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25"
                 />
               </div>
             )}
@@ -209,13 +216,13 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                   setIsOpen(false);
                 }}
                 className={`w-full text-left px-4 py-2 rounded-xl text-sm transition-colors ${value === option.value
-                  ? 'bg-[#F3F4F6] text-primary font-semibold'
-                  : 'text-[#374151] active:bg-[#F9FAFB]'
+                  ? 'bg-subtle text-primary font-semibold'
+                  : 'text-body active:bg-surface'
                   }`}
               >
                 <span className="flex items-center gap-3">
                   {option.avatar && (
-                    <span className="h-8 w-8 shrink-0 rounded-full bg-[#F3F4F6] border border-border text-primary text-xs font-semibold flex items-center justify-center">{option.avatar}</span>
+                    <span className="h-8 w-8 shrink-0 rounded-full bg-subtle border border-border text-primary text-xs font-semibold flex items-center justify-center">{option.avatar}</span>
                   )}
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">{option.label}</span>
@@ -223,7 +230,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                   </span>
                   {option.capacity !== undefined && (
                     <span className="flex items-center gap-1.5 shrink-0 ml-2" title={`Capacity: ${option.capacity}%`}>
-                      <span className={`w-2 h-2 rounded-full ${option.isOverloaded || option.capacity > 80 ? 'bg-red-500' : option.capacity > 50 ? 'bg-amber-500' : 'bg-green-500'}`} />
+                      <span className={`w-2 h-2 rounded-full ${option.isOverloaded || option.capacity > 80 ? 'bg-danger' : option.capacity > 50 ? 'bg-warning' : 'bg-success'}`} />
                       <span className="text-xs font-medium text-secondary">{option.capacity}%</span>
                     </span>
                   )}
@@ -255,7 +262,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                   }}
                 >
                   {showSearch && (
-                    <div className="sticky top-0 z-10 -mx-1.5 -mt-1.5 mb-1 border-b border-[#F3F4F6] bg-white px-1.5 pt-1.5 pb-1.5">
+                    <div className="sticky top-0 z-10 -mx-1.5 -mt-1.5 mb-1 border-b border-subtle bg-white px-1.5 pt-1.5 pb-1.5">
                       <div className="relative">
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-secondary" aria-hidden="true" />
                         <input
@@ -263,8 +270,9 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
                           placeholder="Search..."
+                          aria-label="Search options"
                           autoComplete="off"
-                          className="w-full rounded-lg border border-border bg-white py-1.5 pl-8 pr-2 text-sm text-primary outline-none focus:border-primary"
+                          className="w-full rounded-lg border border-border bg-white py-1.5 pl-8 pr-2 text-sm text-primary outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25"
                           onKeyDown={(e) => {
                             if (e.key === 'ArrowDown') {
                               e.preventDefault();
@@ -332,14 +340,14 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                           containerRef.current?.querySelector('button')?.focus();
                         }
                       }}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/10 focus:bg-[#F9FAFB] ${value === option.value
-                        ? 'bg-[#F3F4F6] text-primary font-medium'
-                        : 'text-[#374151] hover:bg-[#F9FAFB]'
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:bg-surface ${value === option.value
+                        ? 'bg-subtle text-primary font-medium'
+                        : 'text-body hover:bg-surface'
                         }`}
                     >
                       <span className="flex items-center gap-2.5">
                         {option.avatar && (
-                          <span className="h-7 w-7 shrink-0 rounded-full bg-[#F3F4F6] border border-border text-primary text-[10px] font-semibold flex items-center justify-center">{option.avatar}</span>
+                          <span className="h-7 w-7 shrink-0 rounded-full bg-subtle border border-border text-primary text-micro font-semibold flex items-center justify-center">{option.avatar}</span>
                         )}
                         <span className="min-w-0 flex-1">
                           <span className="block truncate">{option.label}</span>
@@ -347,7 +355,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                         </span>
                         {option.capacity !== undefined && (
                           <span className="flex items-center gap-1.5 shrink-0 ml-2" title={`Capacity: ${option.capacity}%`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${option.isOverloaded || option.capacity > 80 ? 'bg-red-500' : option.capacity > 50 ? 'bg-amber-500' : 'bg-green-500'}`} />
+                            <span className={`w-1.5 h-1.5 rounded-full ${option.isOverloaded || option.capacity > 80 ? 'bg-danger' : option.capacity > 50 ? 'bg-warning' : 'bg-success'}`} />
                             <span className="text-xs font-medium text-secondary">{option.capacity}%</span>
                           </span>
                         )}

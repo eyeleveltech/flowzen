@@ -14,7 +14,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../src/lib/prisma.js';
 import { moveDealToStage, winDeal, DealRuleError, holdDeal, unholdDeal } from '../src/services/deal.service.js';
 import { calculateMrr, changeTerms, endEngagement, monthlyValue } from '../src/services/engagement.service.js';
-import { raiseInvoiceForEngagement, recordPayment, revenueSummary, isOverdue } from '../src/services/invoice.service.js';
+import { raiseInvoiceForEngagement, raiseDueInvoices, recordPayment, revenueSummary, isOverdue } from '../src/services/invoice.service.js';
 import { syncCompanyStatus } from '../src/services/companyStatus.js';
 import { createQuote, markSent, acceptQuote } from '../src/services/quote.service.js';
 
@@ -357,6 +357,67 @@ async function main() {
     () => prisma.company.delete({ where: { id: company.id } }),
     /RESTRICT|foreign key/i,
   );
+
+  // ── Billing that raises itself ─────────────────────────────────────────────
+  heading('10 · Billing that raises itself');
+
+  // A retainer whose billing date is three months in the past, which is what a
+  // forgotten cycle actually looks like. This ran against the real database with
+  // one retainer thirty-six days behind and never invoiced (backlog B2).
+  const behind = await prisma.engagement.create({
+    data: {
+      organizationId: org.id,
+      companyId: company.id,
+      type: 'RETAINER',
+      status: 'ACTIVE',
+      amount: new Prisma.Decimal(30000),
+      currency: 'INR',
+      billingFrequency: 'MONTHLY',
+      startDate: new Date('2026-01-01'),
+      nextBillingDate: new Date('2026-01-01'),
+    },
+  });
+
+  const asOf = new Date('2026-03-15');
+  const run = await raiseDueInvoices(org.id, asOf);
+  const mine = run.raised.filter((r) => r.companyId === company.id);
+
+  // January, February and March are all due by the 15th of March. One per run
+  // would take three days to catch up on three missed months.
+  check('catches up on every missed period', mine.length, 3);
+  check('nothing failed', run.failed.length, 0);
+
+  const drafts = await prisma.invoice.findMany({
+    where: { engagementId: behind.id },
+    orderBy: { periodStart: 'asc' },
+  });
+  check('all of them are DRAFTS, not sent', drafts.every((d) => d.status === 'DRAFT'), true);
+  check('one per month', drafts.map((d) => d.periodStart?.toISOString().slice(0, 7)).join(','), '2026-01,2026-02,2026-03');
+
+  // Issued TODAY, covering an older period. Back-dating would put a new document
+  // number before one already issued, and a fiscal-year sequence has to run in
+  // issue order.
+  check('issued today, not back-dated into January', drafts[0].issueDate.toISOString().slice(0, 10), new Date().toISOString().slice(0, 10));
+  check('but says which period it covers', drafts[0].periodStart?.toISOString().slice(0, 10), '2026-01-01');
+
+  const caughtUp = await prisma.engagement.findUniqueOrThrow({ where: { id: behind.id } });
+  check('billing date is now in the future', caughtUp.nextBillingDate?.toISOString().slice(0, 10), '2026-04-01');
+
+  // The rule that makes a daily job safe: running it twice raises nothing the
+  // second time, because the date advances inside the same transaction that
+  // creates the invoice.
+  const secondRun = await raiseDueInvoices(org.id, asOf);
+  check('running it again raises nothing', secondRun.raised.filter((r) => r.companyId === company.id).length, 0);
+
+  // A paused engagement is not billed. Pausing a customer stops real money
+  // (§4.11), and a job that ignored that would bill somebody who had asked you
+  // to stop.
+  await prisma.engagement.update({
+    where: { id: behind.id },
+    data: { status: 'PAUSED', nextBillingDate: new Date('2026-04-01') },
+  });
+  const paused = await raiseDueInvoices(org.id, new Date('2026-05-01'));
+  check('a paused engagement is not billed', paused.raised.filter((r) => r.companyId === company.id).length, 0);
 
   // ── Cleanup ────────────────────────────────────────────────────────────────
   for (const id of created.companies) {

@@ -22,7 +22,7 @@ const VARIANT: Record<Variant, string> = {
   primary: 'bg-primary text-white hover:bg-primary-hover border border-transparent',
   secondary: 'bg-white text-primary border border-border hover:bg-subtle',
   ghost: 'bg-transparent text-secondary border border-transparent hover:bg-subtle hover:text-primary',
-  danger: 'bg-white text-secondary border border-border hover:border-red-200 hover:bg-red-50 hover:text-danger',
+  danger: 'bg-white text-secondary border border-border hover:border-danger/30 hover:bg-danger-tint hover:text-danger',
 };
 
 const SIZE: Record<Size, string> = {
@@ -58,7 +58,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {...props}
     >
       {loading ? (
-        <Loader2 className={cn('animate-spin', size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4')} />
+        <Loader2 className={cn('animate-spin motion-reduce:animate-none', size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4')} />
       ) : (
         Icon && <Icon className={size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4'} strokeWidth={1.75} />
       )}

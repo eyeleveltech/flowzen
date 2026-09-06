@@ -59,14 +59,14 @@ export function OnboardingTab({ config, onSaved }: { config: any; onSaved: () =>
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Deal Won Checklist</CardTitle>
+        <CardTitle>Won checklist</CardTitle>
       </CardHeader>
       <CardBody className="space-y-4">
         <p className="text-sm text-secondary">
-          When a deal is won, these tasks are automatically created and assigned to the deal owner.
+          When something is won, these tasks are created automatically and assigned to its owner.
         </p>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
 
         <div className="space-y-3">
           {tasks.map((task, i) => (
@@ -90,7 +90,7 @@ export function OnboardingTab({ config, onSaved }: { config: any; onSaved: () =>
               </div>
               <button
                 onClick={() => removeTask(i)}
-                className="mt-8 rounded p-1.5 text-secondary hover:bg-white hover:text-red-600"
+                className="mt-8 rounded p-1.5 text-secondary hover:bg-white hover:text-danger"
                 title="Remove task"
               >
                 <Trash2 className="h-4 w-4" />

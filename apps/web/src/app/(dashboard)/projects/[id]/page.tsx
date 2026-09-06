@@ -3,146 +3,199 @@
 /**
  * One project.
  *
- * A project belongs to the CLIENT and only to the client. What the client is on —
- * retainer or project, at what price — is SHOWN here, read from the company, so
- * this survives the engagement renewing or ending (master plan §3.12).
+ * Rewritten against the real v2 API (routes/projects.ts). The previous
+ * version of this page destructured `project.type`, `.platform`, `.scope`,
+ * `.health`, `.company.engagements`, `.members`, and rendered a task board
+ * with statuses (TODO/IN_PROGRESS/IN_REVIEW/DONE/BLOCKED) and a `reviewer`
+ * field — none of which the backend has returned since the CRM rebuild.
+ * Every field here is one the API actually sends.
  *
- * Health is computed by the server from dates and overdue tasks. A flag somebody
- * sets by hand is green everywhere, forever (§4.8).
- *
- * Every task carries an assignee AND a separate reviewer, because agency work is
- * checked before a client sees it — and the checker is frequently not on the
- * project otherwise (§4.8).
+ * Milestone billing (advance/mid/final…) has no owner concept — v2's Project
+ * has one ownerId, not a member roster — so there is no "Team" tab; who did
+ * what shows up through task assignees and the activity feed instead.
  */
 
-import { use, useCallback, useEffect, useRef, useState } from 'react';
+import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Plus, List, LayoutDashboard, CheckCircle2, Circle, Settings2, UserPlus, UserMinus, Globe, Smartphone, ShoppingBag, FileCode, Share2, Search, Zap, Package } from 'lucide-react';
-import {
-  api,
-  ApiError,
-  atLeast,
-  formatDate,
-  formatMoney,
-  type Company,
-  type Member,
-  type OrgConfig,
-  type Role,
-} from '@/lib/api-v2';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft, Plus, Settings2, Trash2 } from 'lucide-react';
+import { api, ApiError, formatMoney, formatDate, type OrgConfig, type Company } from '@/lib/api-v2';
+import toast from 'react-hot-toast';
+import { useConfirmStore } from '@/stores/confirm';
 import { Button } from '@/components/ui/button';
 import { Badge, type Tone } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
+import { Select } from '@/components/ui/select';
+import { Card, CardHeader, CardTitle, CardBody } from '@/components/ui/card';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Field, FieldSelect } from '@/components/ui/field';
-import { Select } from '@/components/ui/select';
 import { EmptyState, ErrorNote } from '@/components/ui/empty-state';
-import { ProjectDetailSkeleton } from '@/components/ui/skeleton-loaders';
-import { NewTaskPanel } from '@/components/tasks/NewTaskPanel';
-import { MultiSelect, type Option } from '@/components/ui/multi-select';
-import { RichTextEditor } from '@/components/ui/rich-text-editor';
-import { TaskDetailPanel } from '@/components/tasks/TaskDetailPanel';
-import { ActivityFeed } from '@/components/activities/ActivityFeed';
-import { LogActivityDialog } from '@/components/activities/LogActivityDialog';
+import { ActivityFeed, type FeedItem } from '@/components/activities/ActivityFeed';
+import { PageSkeleton } from '@/components/ui/skeleton-loaders';
+import { StatTile } from '@/components/ui/stat-tile';
+import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
+import { NewProformaModal } from '@/components/clients/NewProformaModal';
+import { NewWorkTaskModal } from '@/components/work/NewWorkTaskModal';
+import { NewWorkCostModal } from '@/components/work/NewWorkCostModal';
+import { PRIORITY_CONFIG, getPriorityDot, getPriorityBadge, getPriorityLabel } from '@/lib/priority';
+import { personOptions } from '@/lib/people';
 
-type Health = 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK';
-type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE' | 'BLOCKED';
+const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label }));
 
+type Status = 'LIVE' | 'DELIVERED' | 'CANCELLED';
+type MStatus = 'PENDING' | 'PROFORMA_RAISED' | 'INVOICED' | 'PAID';
+type TStatus = 'TODO' | 'IN_PROGRESS' | 'ON_HOLD' | 'DONE' | 'CANCELLED';
+
+const TASK_STATUS_OPTIONS = [
+  { value: 'TODO', label: 'To do' },
+  { value: 'IN_PROGRESS', label: 'In progress' },
+  { value: 'ON_HOLD', label: 'On hold' },
+  { value: 'DONE', label: 'Done' },
+  { value: 'CANCELLED', label: 'Cancelled' },
+];
+
+type Milestone = {
+  id: string;
+  label: string;
+  percent: number;
+  amount: string | number | null;
+  status: MStatus;
+  order: number;
+  proformas?: { id: string; number: string; status: string }[];
+};
 type Task = {
   id: string;
   title: string;
-  description: string | null;
-  status: TaskStatus;
+  status: TStatus;
   priority: string;
-  dueDate: string | null;
-  assignee: { id: string; name: string } | null;
-  reviewer: { id: string; name: string } | null;
+  dueDate: string;
+  assignedAt: string;
+  completedAt: string | null;
+  waitingOn: 'CLIENT' | 'ANOTHER_PERSON' | null;
+  waitingSince: string | null;
+  reopenCount: number;
+  assignee: { id: string; name: string; dept: string } | null;
+};
+type Cost = { id: string; category: string; vendor: string; amount: string | number | null; incurredAt: string; enteredBy: { id: string; name: string } | null };
+type Invoice = { id: string; number: string; amount: string | number | null; status: string; dueAt: string };
+type Allocation = {
+  id: string;
+  month: string;
+  percent: number;
+  user: { id: string; name: string; dept: string; monthlyCost?: string | number | null };
 };
 
-type Project = {
+type ProjectDetail = {
   id: string;
   name: string;
-  description: string | null;
-  type: string | null;
-  scope: string | null;
-  platform: string | null;
-  status: string;
-  priority: string;
-  startDate: string | null;
-  dueDate: string | null;
-  health: Health;
-  company: {
-    id: string;
-    name: string;
-    status: string;
-    /**
-     * No `amount`, on purpose. These are the project screens — the price is not
-     * something delivery decides, and the server no longer sends it here for any
-     * role. Whoever needs the number opens the client in CRM or Revenue.
-     */
-    engagements: {
-      id: string;
-      type: string;
-      billingFrequency: string;
-      endDate: string | null;
-    }[];
+  companyId: string;
+  company: { id: string; name: string; vertical: string; city: string };
+  quotedValue: string | number | null;
+  estimatedCost: string | number | null;
+  actualCostTotal: string | number | null;
+  /** Absent without money.figures — the server does not send it. */
+  profit?: {
+    revenue: number;
+    directCost: number;
+    peopleCost: number;
+    actualCost: number;
+    profit: number;
+    marginPercent: number | null;
+    estimatedCost: number | null;
+    costVariance: number | null;
+    costVariancePercent: number | null;
   };
-  owner: { id: string; name: string } | null;
-  members: { user: { id: string; name: string } }[];
-  tasks: Task[];
-  activities: { id: string; type: string; message: string; body: string | null; occurredAt: string; user?: { name: string } }[];
+  costRisk?: {
+    projectedCost: number | null;
+    projectedProfit: number | null;
+    level: 'OK' | 'WATCH' | 'OVER' | 'LOSS';
+    reason: string | null;
+  };
+  /** How far through the work is. Not a figure, so everybody sees it. */
+  percentComplete: number;
+  percentCompleteBasis: 'milestones' | 'calendar';
+  startDate: string;
+  endDate: string;
+  status: Status;
+  priority: string;
+  description: string | null;
+  ownerId: string;
+  owner: { id: string; name: string; email: string; dept: string } | null;
+  milestones: Milestone[];
+  costs: Cost[];
+  invoices: Invoice[];
+  allocations: Allocation[];
 };
 
-const HEALTH: Record<Health, { label: string; tone: Tone }> = {
-  ON_TRACK: { label: 'On track', tone: 'good' },
-  AT_RISK: { label: 'At risk', tone: 'warn' },
-  OFF_TRACK: { label: 'Off track', tone: 'bad' },
+const STATUS: Record<Status, { label: string; tone: Tone }> = {
+  LIVE: { label: 'Live', tone: 'good' },
+  DELIVERED: { label: 'Delivered', tone: 'info' },
+  CANCELLED: { label: 'Cancelled', tone: 'bad' },
 };
 
-/** In-review is its own column: work sitting with a checker is neither done nor moving. */
-const COLUMNS: { status: TaskStatus; label: string }[] = [
-  { status: 'TODO', label: 'To do' },
-  { status: 'IN_PROGRESS', label: 'In progress' },
-  { status: 'IN_REVIEW', label: 'In review' },
-  { status: 'DONE', label: 'Done' },
-];
-
-const STATUS_OPTIONS = [
-  ...COLUMNS.map((c) => ({ value: c.status, label: c.label })),
-  { value: 'BLOCKED', label: 'Blocked' },
-];
+const MSTATUS: Record<MStatus, { label: string; tone: Tone }> = {
+  PENDING: { label: 'Pending', tone: 'neutral' },
+  PROFORMA_RAISED: { label: 'Proforma raised', tone: 'info' },
+  INVOICED: { label: 'Invoiced', tone: 'warn' },
+  PAID: { label: 'Paid', tone: 'good' },
+};
+const MSTATUS_NEXT: Record<MStatus, MStatus | null> = {
+  PENDING: 'PROFORMA_RAISED',
+  PROFORMA_RAISED: 'INVOICED',
+  INVOICED: 'PAID',
+  PAID: null,
+};
 
 export default function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
+  const confirm = useConfirmStore((st) => st.confirm);
 
-  const [project, setProject] = useState<Project | null>(null);
+  const [project, setProject] = useState<ProjectDetail | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [config, setConfig] = useState<OrgConfig | null>(null);
-  const [team, setTeam] = useState<Member[]>([]);
+  const [team, setTeam] = useState<{ id: string; name: string; dept: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
+  /*
+   * One list, read by both the row that draws the tabs and the hook that
+   * decides which is open, so a tab cannot be shown without being selectable.
+   * `people` counts distinct people across the allocation rows — the same
+   * thing peopleBreakdown groups by further down.
+   */
+  const tabs: TabDef<'milestones' | 'tasks' | 'costs' | 'people' | 'activity'>[] = [
+    { key: 'milestones', label: 'Milestones', count: project?.milestones.length ?? 0 },
+    { key: 'tasks', label: 'Tasks', count: tasks.length },
+    {
+      key: 'costs',
+      label: 'Costs',
+      count: project?.costs.length ?? 0,
+      visible: (config?.me.permissions ?? []).some((p) => p === 'cost.enter' || p === 'money.figures'),
+    },
+    { key: 'people', label: 'People', count: new Set((project?.allocations ?? []).map((a) => a.user.id)).size },
+    { key: 'activity', label: 'Activity' },
+  ];
+  const [tab, setTab] = useTabState(tabs);
+  const [activity, setActivity] = useState<FeedItem[] | null>(null);
   const [editing, setEditing] = useState(false);
-  const [view, setView] = useState<'BOARD' | 'LIST'>('LIST');
-  const [currentTab, setCurrentTab] = useState<'tasks' | 'team' | 'comments' | 'activity'>('tasks');
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [logging, setLogging] = useState(false);
-  const [dragging, setDragging] = useState<Task | null>(null);
-  const [newComment, setNewComment] = useState('');
-  const [addingMemberId, setAddingMemberId] = useState('');
-  const [teamBusy, setTeamBusy] = useState<string | null>(null);
+  const [addingTask, setAddingTask] = useState(false);
+  const [addingCost, setAddingCost] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [raisingProformaForMilestone, setRaisingProformaForMilestone] = useState<Milestone | null>(null);
+  const [addingMilestone, setAddingMilestone] = useState(false);
+  const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [p, cfg] = await Promise.all([
-        api.projects.get(id) as Promise<unknown> as Promise<Project>,
+      const [pRes, tRes, cfg] = await Promise.all([
+        api.projects.get(id),
+        api.tasks.list({ projectId: id }),
         api.config.get(),
       ]);
-      setProject(p);
+      setProject(pRes.project as ProjectDetail);
+      setTasks((tRes.tasks ?? []) as Task[]);
       setConfig(cfg);
       setError(null);
-      void api.users
-        .list()
-        .then((list) => setTeam(list.filter((m) => m.status === 'ACTIVE')))
-        .catch(() => {});
+      void api.team.members().then((r) => setTeam(r.members)).catch(() => {});
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load this project');
     } finally {
@@ -154,20 +207,28 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     void load();
   }, [load]);
 
-  const move = async (task: Task, status: TaskStatus) => {
-    // Optimistic, then reconciled. The server decides; this only makes the
-    // change feel immediate.
-    setProject((p) =>
-      p ? { ...p, tasks: p.tasks.map((t) => (t.id === task.id ? { ...t, status } : t)) } : p,
-    );
+  const loadActivity = useCallback(async () => {
     try {
-      await api.projects.updateTask(task.id, { status });
-    } finally {
-      void load();
+      const res = await api.activities.list({ entityType: 'Project', entityId: id });
+      setActivity(
+        (res ?? []).map((a: any) => ({
+          key: a.id,
+          at: a.at,
+          text: humanizeVerb(a.verb, a.payload),
+          body: null,
+          userName: a.actor?.name,
+        })),
+      );
+    } catch {
+      setActivity([]);
     }
-  };
+  }, [id]);
 
-  if (loading) return <ProjectDetailSkeleton />;
+  useEffect(() => {
+    if (tab === 'activity' && activity === null) void loadActivity();
+  }, [tab, activity, loadActivity]);
+
+  if (loading) return <PageSkeleton />;
 
   if (!project) {
     return (
@@ -175,7 +236,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         title="That project does not exist"
         hint={error ?? undefined}
         action={
-          <Link href="/projects">
+          <Link href="/live-work?tab=PROJECTS">
             <Button>Back to projects</Button>
           </Link>
         }
@@ -183,39 +244,140 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     );
   }
 
+  const perms = config?.me.permissions ?? [];
+  const canManage = perms.includes('company.write');
+  const canDelete = perms.includes('setup.admin');
+  const canEnterCost = perms.includes('cost.enter');
+  const canSeeFigures = perms.includes('money.figures');
   const currency = config?.organization.currency ?? 'INR';
   const locale = config?.organization.locale ?? 'en-IN';
   const tz = config?.organization.timezone ?? 'Asia/Kolkata';
   const date = (v: string | null | undefined) => formatDate(v, tz, locale);
-  const canManage = atLeast(config?.me.role as Role | undefined, 'MANAGER');
-  const blocked = project.tasks.filter((t) => t.status === 'BLOCKED');
+  const money = (v: string | number | null) => formatMoney(v, currency, locale);
 
-  const addMember = async (userId: string) => {
-    if (!userId) return;
-    setTeamBusy(userId);
+  const actual = project.actualCostTotal != null ? Number(project.actualCostTotal) : null;
+  const estimated = project.estimatedCost != null ? Number(project.estimatedCost) : null;
+  const overEstimate = actual != null && estimated != null && actual > estimated;
+  const openTasks = tasks.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED');
+
+  // Cost breakdown by person (brief §10: Project screen requires this).
+  // Grouped across every month the project ran, since a person's allocation
+  // is stored per-month — the same rows allocationCost() sums server-side
+  // for actualCostTotal. monthlyCost arrives undefined for anyone without
+  // setup.admin (server-masked), so a viewer without it still sees who
+  // worked on the job and their percent, just not the rupee figure.
+  const peopleBreakdown = Object.values(
+    project.allocations.reduce<Record<string, { user: Allocation['user']; months: number; totalPercent: number; cost: number | null }>>((acc, a) => {
+      const entry = acc[a.user.id] ?? { user: a.user, months: 0, totalPercent: 0, cost: a.user.monthlyCost != null ? 0 : null };
+      entry.months += 1;
+      entry.totalPercent += a.percent;
+      if (entry.cost != null && a.user.monthlyCost != null) {
+        entry.cost += (a.percent / 100) * Number(a.user.monthlyCost);
+      }
+      acc[a.user.id] = entry;
+      return acc;
+    }, {}),
+  ).sort((a, b) => (b.cost ?? b.totalPercent) - (a.cost ?? a.totalPercent));
+
+  const advanceMilestone = async (m: Milestone) => {
+    const next = MSTATUS_NEXT[m.status];
+    if (!next) return;
+    setBusyId(m.id);
     try {
-      await api.projects.addMember(id, userId);
+      await api.projects.updateMilestone(project.id, m.id, next);
       await load();
-      setAddingMemberId('');
-    } catch {}
-    finally { setTeamBusy(null); }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not update that milestone');
+    } finally {
+      setBusyId(null);
+    }
   };
 
-  const removeMember = async (userId: string) => {
-    setTeamBusy(userId);
+  const removeMilestone = async (m: Milestone) => {
+    const ok = await confirm({
+      title: 'Delete this milestone?',
+      message: `${m.label} — ${m.percent}%, ${money(m.amount)}. Only possible because nothing has been billed against it yet.`,
+      confirmText: 'Delete milestone',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    setBusyId(m.id);
     try {
-      await api.projects.removeMember(id, userId);
+      await api.projects.deleteMilestone(project.id, m.id);
+      toast.success('Milestone deleted.');
       await load();
-    } catch {}
-    finally { setTeamBusy(null); }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not delete that milestone');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const changeTaskStatus = async (t: Task, next: TStatus) => {
+    if (next === t.status) return;
+    setBusyId(t.id);
+    try {
+      if (next === 'ON_HOLD') {
+        await api.tasks.wait(t.id, 'CLIENT');
+      } else if (t.status === 'ON_HOLD') {
+        // /resume is the only route that closes out waitingSince — always go
+        // through it first, then layer the real target status on top.
+        await api.tasks.resume(t.id);
+        if (next !== 'IN_PROGRESS') await api.tasks.updateStatus(t.id, next);
+      } else {
+        await api.tasks.updateStatus(t.id, next);
+      }
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not update that task');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const removeCost = async (c: Cost) => {
+    const ok = await confirm({
+      title: 'Delete this cost?',
+      message: `${c.category} — ${c.vendor}, ${money(c.amount)}. It will be removed from the project's actuals immediately.`,
+      confirmText: 'Delete cost',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    setBusyId(c.id);
+    try {
+      await api.costs.delete(c.id);
+      toast.success('Cost deleted.');
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not delete that cost');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const removeProject = async () => {
+    const ok = await confirm({
+      title: 'Delete this project?',
+      message:
+        'It will be removed from every list immediately. If any tasks, costs, or billing are attached the server will refuse — set it to Cancelled instead, which stops it counting as live work and keeps the record.',
+      confirmText: 'Delete project',
+      variant: 'danger',
+      requireText: project.name,
+      requireTextLabel: 'Type the project name to confirm',
+    });
+    if (!ok) return;
+    try {
+      await api.projects.delete(id);
+      toast.success('Project deleted.');
+      router.push('/live-work?tab=PROJECTS');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not delete this project.');
+    }
   };
 
   return (
     <>
-      <Link
-        href="/projects"
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-secondary transition-colors hover:text-primary"
-      >
+      <Link href="/live-work?tab=PROJECTS" className="mb-4 inline-flex items-center gap-1.5 text-sm text-secondary transition-colors hover:text-primary">
         <ArrowLeft className="h-4 w-4" strokeWidth={1.75} /> Projects
       </Link>
 
@@ -223,573 +385,536 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight text-primary">{project.name}</h1>
-            <Badge tone={HEALTH[project.health].tone}>{HEALTH[project.health].label}</Badge>
+            <Badge tone={STATUS[project.status].tone}>{STATUS[project.status].label}</Badge>
+            <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium ${getPriorityBadge(project.priority)}`}>
+              <span className={`inline-block h-1.5 w-1.5 rounded-full ${getPriorityDot(project.priority)}`} />
+              {getPriorityLabel(project.priority)}
+            </span>
           </div>
-          <Link
-            href={`/clients/${project.company.id}`}
-            className="mt-1 inline-block text-sm text-secondary hover:underline"
-          >
-            {project.company.name}
-          </Link>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-secondary">
+            <Link href={`/companies/${project.company.id}`} className="hover:underline">
+              {project.company.name}
+            </Link>
+            {project.owner && <span>· owner {project.owner.name}</span>}
+            {/* The dates moved here when Profit took the fourth figure slot. A
+                timeline is context for the work, not one of the four numbers
+                the screen exists to produce. */}
+            <span>
+              · {date(project.startDate)} – {date(project.endDate)}
+            </span>
+          </div>
+          {project.description && <p className="mt-2 max-w-2xl text-sm text-secondary">{project.description}</p>}
         </div>
 
         <div className="flex items-center gap-2">
           {canManage && (
             <Button variant="ghost" icon={Settings2} onClick={() => setEditing(true)}>
-              Edit project
+              Edit
             </Button>
           )}
-          <Button variant="primary" icon={Plus} onClick={() => setAdding(true)}>
+          {canDelete && (
+            <Button variant="ghost" icon={Trash2} onClick={() => void removeProject()}>
+              Delete
+            </Button>
+          )}
+          <Button variant="primary" icon={Plus} onClick={() => setAddingTask(true)}>
             Task
           </Button>
         </div>
       </div>
 
-      <div className="space-y-5">
-        {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
+      {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Figure label="Due" value={date(project.dueDate)} />
-          <Figure label="Started" value={date(project.startDate)} />
-          <Figure label="Lead" value={project.owner?.name ?? 'Nobody'} />
-          <Figure
-            label="Open tasks"
-            value={String(project.tasks.filter((t) => t.status !== 'DONE').length)}
+      {/*
+        The four figures a project exists to produce, in the same treatment the
+        retainer month card uses — and Profit as the single dark card, because
+        every other number here is an input to it.
+
+        This used to be Quoted / Estimated / Actual / Timeline: three costs and
+        a date, with no profit anywhere. A retainer could answer "did we make
+        money on that job" per month card and a project could not answer it at
+        all, which is the half of the business where it matters most, because a
+        project ENDS.
+      */}
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatTile label="Quoted" value={money(project.quotedValue)} note={`${project.percentComplete}% done`} />
+        <StatTile
+          label="Cost estimate"
+          value={estimated != null ? money(estimated) : 'Not set'}
+          note={estimated == null ? 'nothing to compare against' : 'what we thought it would take'}
+        />
+        <StatTile
+          label="Cost so far"
+          value={actual != null ? money(actual) : '—'}
+          note={
+            project.profit
+              ? `${money(project.profit.directCost)} external · ${money(project.profit.peopleCost)} people`
+              : 'external and people'
+          }
+          tone={overEstimate ? 'danger' : undefined}
+        />
+        {project.profit ? (
+          <StatTile
+            label={project.status === 'DELIVERED' ? 'Final profit' : 'Profit so far'}
+            value={money(project.profit.profit)}
+            note={
+              project.profit.marginPercent === null
+                ? 'no quoted value to measure against'
+                : `${project.profit.marginPercent}% margin`
+            }
+            dark
           />
-        </div>
-
-        {/*
-          Context, not a link. The project is attached to the client, so this
-          survives the engagement renewing or ending (§3.12). Money is only sent
-          to Admin and above — the server decides that, not this component.
-        */}
-        {project.company.engagements.length > 0 && (
-          <Card padding="sm">
-            <h2 className="text-sm font-semibold text-primary">What this client is on</h2>
-            <p className="mt-1 text-sm text-secondary">
-              {project.company.engagements
-                .map((e) =>
-                  e.type === 'RETAINER'
-                    ? e.endDate
-                      ? 'Retainer, with an end date'
-                      : 'Rolling retainer — the work keeps arriving'
-                    : 'Fixed-scope project — it ends',
-                )
-                .join(' · ')}
-            </p>
-          </Card>
-        )}
-
-        {/* ── Tabs ──────────────────────────────────────────── */}
-        <div className="flex rounded-md bg-muted/50 p-1 w-fit mt-8">
-          {[
-            { id: 'tasks', label: `Tasks (${project.tasks.length})` },
-            { id: 'team', label: `Team (${project.members.length})` },
-            { id: 'comments', label: 'Comments' },
-            { id: 'activity', label: 'Activity' }
-          ].map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setCurrentTab(t.id as any)}
-              className={`rounded px-4 py-1.5 text-sm font-medium transition-colors ${
-                currentTab === t.id ? 'bg-white text-primary border border-border font-semibold' : 'text-muted-foreground hover:text-primary'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {currentTab === 'tasks' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-primary">Tasks</h2>
-              <div className="flex items-center gap-1 rounded-md border border-border bg-surface p-1">
-                <button
-                  onClick={() => setView('BOARD')}
-                  className={`rounded px-2 py-1 text-xs ${view === 'BOARD' ? 'bg-white border border-border text-primary font-medium' : 'text-secondary hover:text-primary'}`}
-                >
-                  <LayoutDashboard className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => setView('LIST')}
-                  className={`rounded px-2 py-1 text-xs ${view === 'LIST' ? 'bg-white border border-border text-primary font-medium' : 'text-secondary hover:text-primary'}`}
-                >
-                  <List className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-
-        {view === 'BOARD' ? (
-          <div className="grid gap-3 lg:grid-cols-4">
-            {COLUMNS.map((column) => {
-              const tasks = project.tasks.filter((t) => t.status === column.status);
-              return (
-                <section
-                  key={column.status}
-                  className="rounded-card border border-border bg-surface p-3"
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => {
-                    if (dragging && dragging.status !== column.status) {
-                      move(dragging, column.status);
-                      setDragging(null);
-                    }
-                  }}
-                >
-                  <h2 className="mb-2 flex items-center justify-between text-xs font-semibold text-primary">
-                    {column.label}
-                    <span className="font-normal text-secondary">{tasks.length}</span>
-                  </h2>
-
-                  <ul className="space-y-2 min-h-16">
-                    {tasks.map((task) => (
-                      <li
-                        key={task.id}
-                        draggable
-                        onDragStart={() => setDragging(task)}
-                        onDragEnd={() => setDragging(null)}
-                        onClick={() => setSelectedTask(task)}
-                        className={`cursor-grab rounded-xl border border-border bg-white p-3 hover:border-primary transition-colors active:cursor-grabbing ${
-                          dragging?.id === task.id ? 'opacity-50' : ''
-                        }`}
-                      >
-                        <p className="text-sm font-medium text-body">{task.title}</p>
-
-                        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-secondary">
-                          {task.assignee && <span>{task.assignee.name}</span>}
-                          {task.reviewer && <span>· checks: {task.reviewer.name}</span>}
-                          {task.dueDate && <span>· {date(task.dueDate)}</span>}
-                        </div>
-                      </li>
-                    ))}
-                    {tasks.length === 0 && (
-                      <li className="py-4 text-center text-xs text-secondary">—</li>
-                    )}
-                  </ul>
-                </section>
-              );
-            })}
-          </div>
         ) : (
-          <div className="rounded-card border border-border bg-white overflow-hidden">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-surface text-xs font-medium text-secondary">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Task</th>
-                  <th className="px-4 py-3 font-medium">Assignee</th>
-                  <th className="px-4 py-3 font-medium">Reviewer</th>
-                  <th className="px-4 py-3 font-medium">Due Date</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {project.tasks.filter((t) => t.status !== 'BLOCKED').map((task) => (
-                  <tr 
-                    key={task.id} 
-                    className="hover:bg-subtle transition-colors cursor-pointer group"
-                    onClick={() => setSelectedTask(task)}
-                  >
-                    <td className="px-4 py-3 font-medium text-primary">
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            move(task, 'DONE');
-                          }}
-                          className="shrink-0 text-secondary hover:text-green-600 transition-colors"
-                        >
-                          {task.status === 'DONE' ? (
-                            <CheckCircle2 className="h-5 w-5 text-green-600" />
-                          ) : (
-                            <Circle className="h-5 w-5" />
-                          )}
-                        </button>
-                        <span className="truncate">{task.title}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-secondary">{task.assignee?.name ?? '—'}</td>
-                    <td className="px-4 py-3 text-secondary">{task.reviewer?.name ?? '—'}</td>
-                    <td className="px-4 py-3 text-secondary">{date(task.dueDate) ?? '—'}</td>
-                    <td className="px-4 py-2" onClick={e => e.stopPropagation()}>
-                      <Select
-                        value={task.status}
-                        onChange={(v) => move(task, v as TaskStatus)}
-                        options={STATUS_OPTIONS}
-                        ariaLabel={`Status for ${task.title}`}
-                        buttonClassName="px-2 py-1.5 text-xs w-32"
-                      />
-                    </td>
-                  </tr>
-                ))}
-                {project.tasks.filter((t) => t.status !== 'BLOCKED').length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-secondary text-sm">No tasks here yet.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {blocked.length > 0 && (
-          <Card className="border-red-200 bg-red-50/40">
-            <h2 className="mb-2 text-sm font-semibold text-primary">Blocked</h2>
-            <ul className="space-y-1 text-sm">
-              {blocked.map((t) => (
-                <li key={t.id} className="text-body cursor-pointer hover:underline" onClick={() => setSelectedTask(t)}>
-                  {t.title}
-                  {t.assignee && <span className="text-secondary"> · {t.assignee.name}</span>}
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
-        </div>
-        )}
-
-        {currentTab === 'team' && (
-          <Card>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-primary">On this project</h2>
-            </div>
-            {project.members.length === 0 && (
-              <p className="text-sm text-secondary mb-3">No members added yet.</p>
-            )}
-            <ul className="space-y-2 mb-4">
-              {project.members.map((m) => (
-                <li key={m.user.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary">
-                      {m.user.name.charAt(0)}
-                    </div>
-                    <span className="text-sm text-primary">{m.user.name}</span>
-                  </div>
-                  {canManage && (
-                    <button
-                      onClick={() => removeMember(m.user.id)}
-                      disabled={teamBusy === m.user.id}
-                      className="rounded p-1 text-secondary hover:text-red-600 hover:bg-red-50 transition-colors"
-                      title="Remove from project"
-                    >
-                      <UserMinus className="h-4 w-4" />
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-            {canManage && (
-              <div className="flex items-center gap-2">
-                <select
-                  value={addingMemberId}
-                  onChange={(e) => setAddingMemberId(e.target.value)}
-                  className="flex-1 rounded-md border border-border bg-surface px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  <option value="">Add a team member…</option>
-                  {team
-                    .filter((u) => !project.members.some((m) => m.user.id === u.id))
-                    .map((u) => (
-                      <option key={u.id} value={u.id}>{u.name}</option>
-                    ))}
-                </select>
-                <Button
-                  size="sm"
-                  icon={UserPlus}
-                  onClick={() => addMember(addingMemberId)}
-                  disabled={!addingMemberId || !!teamBusy}
-                >
-                  Add
-                </Button>
-              </div>
-            )}
-          </Card>
-        )}
-        {currentTab === 'comments' && (
-          <div className="space-y-4">
-            <ActivityFeed
-              items={project.activities
-                .filter((a) => a.type === 'NOTE' || a.type === 'COMMENT' || a.type === 'CALL' || a.type === 'EMAIL' || a.type === 'MEETING')
-                .map((a) => ({
-                  key: a.id,
-                  at: a.occurredAt,
-                  text: a.message,
-                  body: a.body,
-                  userName: a.user?.name,
-                }))}
-            />
-            <div className="flex gap-2">
-              <textarea
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Add a comment or note…"
-                rows={3}
-                className="flex-1 rounded-md border border-border bg-background p-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none"
-              />
-            </div>
-            <div className="flex justify-end">
-              <Button
-                size="sm"
-                disabled={!newComment.trim()}
-                onClick={async () => {
-                  if (!newComment.trim()) return;
-                  try {
-                    await api.activities.log({ projectId: id, companyId: project.company.id, type: 'NOTE', message: newComment.trim() });
-                    setNewComment('');
-                    void load();
-                  } catch {}
-                }}
-              >
-                Post comment
-              </Button>
-            </div>
-          </div>
-        )}
-        {currentTab === 'activity' && (
-          <div className="space-y-4">
-            <div className="flex justify-end">
-              <Button size="sm" icon={Plus} onClick={() => setLogging(true)}>
-                Log activity
-              </Button>
-            </div>
-            <ActivityFeed 
-              items={project.activities.map(a => ({
-                key: a.id,
-                at: a.occurredAt,
-                text: a.message,
-                body: a.body,
-                userName: a.user?.name,
-              }))} 
-            />
+          <div className="rounded-xl border border-dashed border-border bg-surface p-5">
+            <p className="eyebrow">Profit</p>
+            <p className="mt-2 text-sm text-secondary">
+              What this job costs and makes is hidden. The work on it is yours to see.
+            </p>
           </div>
         )}
       </div>
 
-      <LogActivityDialog
-        open={logging}
-        projectId={project.id}
-        companyId={project.company.id}
-        onClose={() => setLogging(false)}
-        onLogged={() => {
-          setLogging(false);
+      {/*
+        The early warning the brief asks for (§11.3 step 4) — "while there is
+        still time to act". Comparing spend to estimate only says something on
+        the last day; comparing it to how much is actually FINISHED says it in
+        week two.
+      */}
+      {project.costRisk && project.costRisk.reason && (
+        <div
+          className={`mb-6 rounded-xl border px-4 py-3 ${
+            project.costRisk.level === 'LOSS'
+              ? 'border-danger/30 bg-danger-tint'
+              : 'border-warning/30 bg-warning-tint'
+          }`}
+        >
+          <p
+            className={`text-sm font-semibold ${
+              project.costRisk.level === 'LOSS' ? 'text-danger' : 'text-warning-ink'
+            }`}
+          >
+            {project.costRisk.level === 'LOSS' ? 'On course to lose money' : 'Running above the estimate'}
+          </p>
+          <p
+            className={`mt-0.5 text-sm ${
+              project.costRisk.level === 'LOSS' ? 'text-danger' : 'text-warning-ink'
+            }`}
+          >
+            {project.costRisk.reason}
+            {project.costRisk.projectedCost != null && (
+              <> At this rate it finishes at {money(project.costRisk.projectedCost)}.</>
+            )}
+          </p>
+        </div>
+      )}
+
+      <Tabs className="mb-5" tabs={tabs} active={tab} onChange={setTab} />
+
+      {tab === 'milestones' && (
+        <div className="space-y-5">
+          <Card padding="none">
+            <CardHeader>
+              <CardTitle>Billing milestones</CardTitle>
+              {canManage && (
+                <Button size="sm" variant="ghost" icon={Plus} className="ml-auto" onClick={() => setAddingMilestone(true)}>
+                  Milestone
+                </Button>
+              )}
+            </CardHeader>
+            <CardBody className="p-0!">
+              {project.milestones.length === 0 ? (
+                <div className="p-6">
+                  <EmptyState title="No milestones set" hint="This project has no billing stages." />
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                <table className="w-full text-sm data-table">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="eyebrow text-left">Stage</th>
+                      <th className="eyebrow text-right">%</th>
+                      <th className="eyebrow text-right">Amount</th>
+                      <th className="eyebrow text-left">Status</th>
+                      <th className="eyebrow text-left">Document</th>
+                      <th className="" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {project.milestones.map((m) => (
+                      <tr key={m.id}>
+                        <td className="font-medium text-primary">{m.label}</td>
+                        <td className="text-right text-secondary">{m.percent}%</td>
+                        <td className="text-right">{money(m.amount)}</td>
+                        <td className="">
+                          <Badge tone={MSTATUS[m.status].tone}>{MSTATUS[m.status].label}</Badge>
+                        </td>
+                        <td className="text-secondary font-mono text-xs">
+                          {m.proformas?.[0]?.number ?? '—'}
+                        </td>
+                        <td className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {canManage && m.status === 'PENDING' && (
+                              <>
+                                <Button size="sm" variant="ghost" onClick={() => setRaisingProformaForMilestone(m)}>
+                                  Raise proforma
+                                </Button>
+                                <button
+                                  onClick={() => setEditingMilestone(m)}
+                                  disabled={busyId === m.id}
+                                  title="Edit milestone"
+                                  className="rounded-lg p-1.5 text-secondary hover:bg-subtle hover:text-primary transition-colors"
+                                >
+                                  <Settings2 className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => void removeMilestone(m)}
+                                  disabled={busyId === m.id}
+                                  title="Delete milestone"
+                                  className="rounded-lg p-1.5 text-secondary hover:bg-danger-tint hover:text-danger transition-colors"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </>
+                            )}
+                            {canManage && m.status !== 'PENDING' && MSTATUS_NEXT[m.status] && (
+                              <Button size="sm" variant="ghost" loading={busyId === m.id} onClick={() => void advanceMilestone(m)}>
+                                Mark {MSTATUS[MSTATUS_NEXT[m.status]!].label.toLowerCase()}
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                </div>
+              )}
+            </CardBody>
+          </Card>
+
+          {project.invoices.length > 0 && (
+            <Card padding="none">
+              <CardHeader>
+                <CardTitle>Invoices raised against this project</CardTitle>
+              </CardHeader>
+              <CardBody className="p-0!">
+                <div className="overflow-x-auto">
+                <table className="w-full text-sm data-table">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="eyebrow text-left">Number</th>
+                      <th className="eyebrow text-right">Amount</th>
+                      <th className="eyebrow text-left">Due</th>
+                      <th className="eyebrow text-left">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {project.invoices.map((inv) => (
+                      <tr key={inv.id}>
+                        <td className="font-medium text-primary">{inv.number}</td>
+                        <td className="text-right">{money(inv.amount)}</td>
+                        <td className="text-secondary">{date(inv.dueAt)}</td>
+                        <td className="text-secondary">{inv.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                </div>
+              </CardBody>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {tab === 'tasks' && (
+        <Card padding="none">
+          <CardHeader>
+            <CardTitle>Tasks</CardTitle>
+            <span className="ml-auto text-micro text-secondary">{openTasks.length} open</span>
+          </CardHeader>
+          <CardBody className="p-0!">
+            {tasks.length === 0 ? (
+              <div className="p-6">
+                <EmptyState title="No tasks yet" hint="Add the first one." action={<Button icon={Plus} onClick={() => setAddingTask(true)}>Task</Button>} />
+              </div>
+            ) : (
+              <ul className="divide-y divide-border">
+                {tasks.map((t) => (
+                  <li key={t.id} className="flex items-center gap-3 px-4 py-3">
+                    <div className="min-w-0 flex-1">
+                      <p className={`flex items-center gap-1.5 text-sm font-medium ${t.status === 'DONE' || t.status === 'CANCELLED' ? 'text-secondary line-through' : 'text-primary'}`}>
+                        {(t.priority === 'HIGH' || t.priority === 'URGENT') && (
+                          <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${getPriorityDot(t.priority)}`} title={getPriorityLabel(t.priority)} />
+                        )}
+                        {t.title}
+                      </p>
+                      <p className="text-xs text-secondary mt-0.5">
+                        {t.assignee?.name ?? 'Unassigned'} · due {date(t.dueDate)}
+                        {t.status === 'ON_HOLD' && t.waitingOn && ' · waiting on ' + (t.waitingOn === 'CLIENT' ? 'client' : 'someone else')}
+                      </p>
+                    </div>
+                    <div className="shrink-0">
+                      <Select
+                        value={t.status}
+                        onChange={(v) => void changeTaskStatus(t, v as TStatus)}
+                        options={TASK_STATUS_OPTIONS}
+                        ariaLabel={`Status for ${t.title}`}
+                        buttonClassName="px-2.5 py-1.5 text-xs w-32"
+                        disabled={busyId === t.id}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardBody>
+        </Card>
+      )}
+
+      {tab === 'costs' && (
+        <Card padding="none">
+          <CardHeader>
+            <CardTitle>Costs</CardTitle>
+            {canEnterCost && (
+              <Button size="sm" variant="ghost" icon={Plus} className="ml-auto" onClick={() => setAddingCost(true)}>
+                Cost
+              </Button>
+            )}
+          </CardHeader>
+          <CardBody className="p-0!">
+            {project.costs.length === 0 ? (
+              <div className="p-6">
+                <EmptyState title="Nothing spent yet" hint="Vendor bills and expenses entered against this project show up here." />
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm data-table">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="eyebrow text-left">Category</th>
+                    <th className="eyebrow text-left">Vendor</th>
+                    <th className="eyebrow text-left">Entered by</th>
+                    <th className="eyebrow text-left">Date</th>
+                    <th className="eyebrow text-right">Amount</th>
+                    {canEnterCost && <th className="w-10"></th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {project.costs.map((c) => (
+                    <tr key={c.id}>
+                      <td className="font-medium text-primary">{c.category}</td>
+                      <td className="text-secondary">{c.vendor}</td>
+                      <td className="text-secondary">{c.enteredBy?.name ?? '—'}</td>
+                      <td className="text-secondary">{date(c.incurredAt)}</td>
+                      <td className="text-right">{money(c.amount)}</td>
+                      {canEnterCost && (
+                        <td className="text-right">
+                          <button
+                            onClick={() => void removeCost(c)}
+                            disabled={busyId === c.id}
+                            title="Delete cost"
+                            className="rounded-lg p-1.5 text-secondary hover:bg-danger-tint hover:text-danger transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              </div>
+            )}
+          </CardBody>
+        </Card>
+      )}
+
+      {tab === 'people' && (
+        <Card padding="none">
+          <CardHeader>
+            <CardTitle>Cost breakdown by person</CardTitle>
+          </CardHeader>
+          <CardBody className="p-0!">
+            {peopleBreakdown.length === 0 ? (
+              <div className="p-6">
+                <EmptyState title="Nobody allocated yet" hint="Heads confirm each person's split for the month on the monthly time split screen." />
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm data-table">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="eyebrow text-left">Person</th>
+                    <th className="eyebrow text-right">Months</th>
+                    <th className="eyebrow text-right">Total split</th>
+                    <th className="eyebrow text-right">Cost</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {peopleBreakdown.map((p) => (
+                    <tr key={p.user.id}>
+                      <td className="font-medium text-primary">{p.user.name} <span className="text-secondary font-normal">· {p.user.dept}</span></td>
+                      <td className="text-right text-secondary">{p.months}</td>
+                      <td className="text-right text-secondary">{p.totalPercent}%</td>
+                      <td className="text-right font-medium text-primary">{p.cost != null ? money(p.cost) : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              </div>
+            )}
+          </CardBody>
+        </Card>
+      )}
+
+      {tab === 'activity' && (
+        <Card>
+          {activity === null ? (
+            <p className="text-sm text-secondary">Loading…</p>
+          ) : (
+            <ActivityFeed items={activity} />
+          )}
+        </Card>
+      )}
+
+      <NewWorkTaskModal
+        open={addingTask}
+        team={team}
+        companyId={project.companyId}
+        defaultTarget={{ kind: 'PROJECT', projectId: id }}
+        onClose={() => setAddingTask(false)}
+        onCreated={() => {
+          setAddingTask(false);
           void load();
         }}
       />
 
-      <NewTaskPanel
-        isOpen={adding}
-        defaultProjectId={project.id}
-        onClose={() => setAdding(false)}
-        onSuccess={load}
+      <NewWorkCostModal
+        open={addingCost}
+        target={{ kind: 'PROJECT', projectId: id }}
+        onClose={() => setAddingCost(false)}
+        onCreated={() => {
+          setAddingCost(false);
+          void load();
+        }}
       />
 
-      <TaskDetailPanel
-        task={selectedTask}
-        isOpen={selectedTask !== null}
-        onClose={() => setSelectedTask(null)}
-        onUpdate={load}
-        timezone={tz}
-        locale={locale}
-      />
-      <EditProjectPanel
+      <EditProjectModal
         project={editing ? project : null}
-        isOpen={editing}
         team={team}
         onClose={() => setEditing(false)}
-        onSaved={() => { setEditing(false); void load(); }}
+        onSaved={() => {
+          setEditing(false);
+          void load();
+        }}
+      />
+
+      {raisingProformaForMilestone && (
+        <NewProformaModal
+          companyId={project.companyId}
+          companyName={project.company.name}
+          source={{ type: 'MILESTONE', projectId: project.id, milestoneId: raisingProformaForMilestone.id }}
+          defaultAmount={Number(raisingProformaForMilestone.amount ?? 0)}
+          defaultDescription={`${raisingProformaForMilestone.label} — ${project.name}`}
+          onCancel={() => setRaisingProformaForMilestone(null)}
+          onConfirm={() => {
+            setRaisingProformaForMilestone(null);
+            void load();
+          }}
+        />
+      )}
+
+      <MilestoneFormModal
+        open={addingMilestone || Boolean(editingMilestone)}
+        milestone={editingMilestone}
+        quotedValue={project.quotedValue != null ? Number(project.quotedValue) : null}
+        onClose={() => {
+          setAddingMilestone(false);
+          setEditingMilestone(null);
+        }}
+        onSave={async (body) => {
+          if (editingMilestone) {
+            await api.projects.editMilestone(project.id, editingMilestone.id, body);
+            toast.success('Milestone updated.');
+          } else {
+            await api.projects.addMilestone(project.id, body);
+            toast.success('Milestone added.');
+          }
+          setAddingMilestone(false);
+          setEditingMilestone(null);
+          await load();
+        }}
       />
     </>
   );
 }
 
-function Figure({ label, value }: { label: string; value: string }) {
-  return (
-    <Card padding="sm">
-      <p className="text-xs text-secondary">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-primary">{value}</p>
-    </Card>
-  );
+function humanizeVerb(verb: string, payload: Record<string, unknown> | null | undefined): string {
+  const p = payload ?? {};
+  switch (verb) {
+    case 'project_created':
+      return `Project created${p.quotedValue ? ` at ₹${Number(p.quotedValue).toLocaleString('en-IN')}` : ''}.`;
+    case 'project_edited':
+      return `Project details updated (${Array.isArray(p.fields) ? p.fields.join(', ') : 'fields changed'}).`;
+    case 'milestone_status_changed':
+      return `Milestone "${p.label ?? ''}" moved from ${p.from ?? '?'} to ${p.to ?? '?'}.`;
+    case 'milestone_added':
+      return `Milestone "${p.label ?? ''}" added${p.percent ? ` (${p.percent}%)` : ''}.`;
+    case 'milestone_edited':
+      return `Milestone "${p.label ?? ''}" edited.`;
+    case 'milestone_deleted':
+      return `Milestone "${p.label ?? ''}" deleted.`;
+    case 'task_created':
+      return `Task "${p.title ?? ''}" created.`;
+    case 'task_completed':
+      return `Task marked done.`;
+    case 'task_reopened':
+      return `Task reopened.`;
+    case 'task_waiting':
+      return `Task put on hold, waiting on ${p.waitingOn === 'CLIENT' ? 'the client' : 'another person'}.`;
+    case 'task_resumed':
+      return `Task resumed.`;
+    case 'created':
+      return `Cost recorded — ${p.category ?? ''}, ${p.vendor ?? ''}${p.amount ? ` (₹${Number(p.amount).toLocaleString('en-IN')})` : ''}.`;
+    default:
+      return verb.replace(/_/g, ' ');
+  }
 }
 
-function NewTaskDialog({
-  open,
-  projectId,
-  team,
-  canAssign,
-  onClose,
-  onCreated,
-}: {
-  open: boolean;
-  projectId: string;
-  team: Member[];
-  canAssign: boolean;
-  onClose: () => void;
-  onCreated: () => void;
-}) {
-  const [title, setTitle] = useState('');
-  const [assigneeId, setAssigneeId] = useState('');
-  const [reviewerId, setReviewerId] = useState('');
-  const [dueDate, setDueDate] = useState('');
-  const [priority, setPriority] = useState('MEDIUM');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (open) {
-      setTitle('');
-      setAssigneeId('');
-      setReviewerId('');
-      setDueDate('');
-      setPriority('MEDIUM');
-      setError(null);
-    }
-  }, [open]);
-
-  const people = [
-    { value: '', label: 'Nobody' },
-    ...team.map((m) => ({ value: m.id, label: m.name, sublabel: m.designation ?? undefined })),
-  ];
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    setError(null);
-    try {
-      await api.projects.createTask({
-        // Exactly one parent — a database CHECK enforces it, so sending both
-        // would be refused rather than quietly stored.
-        projectId,
-        dealId: null,
-        title,
-        assigneeId: assigneeId || null,
-        reviewerId: reviewerId || null,
-        dueDate: dueDate || null,
-        priority,
-      });
-      onCreated();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not create the task');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Modal open={open} onClose={onClose} title="New task">
-      <form onSubmit={submit}>
-        <ModalBody>
-          <Field label="What needs doing?" value={title} onChange={setTitle} required />
-
-          {canAssign && team.length > 0 && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <FieldSelect
-                label="Who does it"
-                value={assigneeId}
-                onChange={setAssigneeId}
-                options={people}
-              />
-              <div>
-                <FieldSelect
-                  label="Who checks it"
-                  value={reviewerId}
-                  onChange={setReviewerId}
-                  options={people}
-                />
-                {/* Separate from the assignee on purpose — the checker is often
-                    not otherwise on the project (§4.8). */}
-                <p className="mt-1 text-xs text-secondary">Often not the same person.</p>
-              </div>
-            </div>
-          )}
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Due" type="date" value={dueDate} onChange={setDueDate} />
-            <FieldSelect
-              label="Priority"
-              value={priority}
-              onChange={setPriority}
-              options={[
-                { value: 'LOW', label: 'Low' },
-                { value: 'MEDIUM', label: 'Medium' },
-                { value: 'HIGH', label: 'High' },
-                { value: 'URGENT', label: 'Urgent' },
-              ]}
-            />
-          </div>
-
-          {error && <ErrorNote>{error}</ErrorNote>}
-        </ModalBody>
-        <ModalFooter>
-          <Button type="button" variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" loading={saving} disabled={!title}>
-            Add Task
-          </Button>
-        </ModalFooter>
-      </form>
-    </Modal>
-  );
-}
-
-const PLATFORM_OPTIONS: Option[] = [
-  { value: 'WEB', label: 'Web Application', icon: <Globe className="h-4 w-4 text-sky-500" /> },
-  { value: 'MOBILE_APP', label: 'Mobile App (iOS / Android)', icon: <Smartphone className="h-4 w-4 text-emerald-500" /> },
-  { value: 'SHOPIFY', label: 'Shopify / E-Commerce', icon: <ShoppingBag className="h-4 w-4 text-indigo-500" /> },
-  { value: 'WORDPRESS', label: 'WordPress / CMS', icon: <FileCode className="h-4 w-4 text-blue-500" /> },
-  { value: 'SOCIAL_MEDIA', label: 'Social Media Marketing', icon: <Share2 className="h-4 w-4 text-pink-500" /> },
-  { value: 'SEO_MARKETING', label: 'SEO & Digital Marketing', icon: <Search className="h-4 w-4 text-amber-500" /> },
-  { value: 'CUSTOM_PLATFORM', label: 'Custom Platform', icon: <Zap className="h-4 w-4 text-violet-500" /> },
-  { value: 'OTHER', label: 'Other', icon: <Package className="h-4 w-4 text-gray-500" /> },
-];
-
-function EditProjectPanel({
+function EditProjectModal({
   project,
-  isOpen,
-  team = [],
+  team,
   onClose,
   onSaved,
 }: {
-  project: Project | null;
-  isOpen: boolean;
-  team?: Member[];
+  project: ProjectDetail | null;
+  team: { id: string; name: string; dept: string }[];
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [companies, setCompanies] = useState<Company[]>([]);
-
-  // 10 Project Fields
   const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [platforms, setPlatforms] = useState<string[]>(['WEB']);
-  const [type, setType] = useState('ONE_TIME');
-  const [status, setStatus] = useState('');
-  const [companyId, setCompanyId] = useState('');
-  const [ownerId, setOwnerId] = useState('');
-  const [memberIds, setMemberIds] = useState<string[]>([]);
+  const [quotedValue, setQuotedValue] = useState('');
+  const [estimatedCost, setEstimatedCost] = useState('');
   const [startDate, setStartDate] = useState('');
-  const [dueDate, setDueDate] = useState('');
-  const [scope, setScope] = useState('');
-
+  const [endDate, setEndDate] = useState('');
+  const [ownerId, setOwnerId] = useState('');
+  const [status, setStatus] = useState<Status>('LIVE');
+  const [priority, setPriority] = useState('MEDIUM');
+  const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isOpen) return;
-    void api.companies.list().then((list) => setCompanies(list as any)).catch(() => {});
-  }, [isOpen]);
-
-  useEffect(() => {
     if (!project) return;
-    setName(project.name ?? '');
+    setName(project.name);
+    setQuotedValue(project.quotedValue != null ? String(Number(project.quotedValue)) : '');
+    setEstimatedCost(project.estimatedCost != null ? String(Number(project.estimatedCost)) : '');
+    setStartDate(project.startDate.slice(0, 10));
+    setEndDate(project.endDate.slice(0, 10));
+    setOwnerId(project.ownerId);
+    setStatus(project.status);
+    setPriority(project.priority);
     setDescription(project.description ?? '');
-    setPlatforms(project.platform ? project.platform.split(',') : ['WEB']);
-    setType(project.type ?? 'ONE_TIME');
-    setStatus(project.status ?? 'PLANNING');
-    setCompanyId(project.company?.id ?? '');
-    setOwnerId(project.owner?.id ?? '');
-    setMemberIds(project.members ? project.members.map((m) => m.user.id) : []);
-    setStartDate(project.startDate ? project.startDate.slice(0, 10) : '');
-    setDueDate(project.dueDate ? project.dueDate.slice(0, 10) : '');
-    setScope(project.scope ?? '');
     setError(null);
   }, [project]);
 
@@ -801,144 +926,136 @@ function EditProjectPanel({
     setError(null);
     try {
       await api.projects.update(project.id, {
-        name,
-        description: description || null,
-        platform: platforms.length > 0 ? platforms.join(',') : null,
-        type,
-        status: status as any,
-        companyId: companyId || undefined,
-        ownerId: ownerId || null,
-        memberIds,
-        startDate: startDate ? new Date(startDate).toISOString() : null,
-        dueDate: dueDate ? new Date(dueDate).toISOString() : null,
-        scope: scope || null,
+        name: name.trim(),
+        quotedValue: quotedValue ? Number(quotedValue) : undefined,
+        estimatedCost: estimatedCost ? Number(estimatedCost) : null,
+        startDate,
+        endDate,
+        ownerId: ownerId || undefined,
+        status,
+        priority,
+        description: description.trim() || null,
       });
       onSaved();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save project');
+      setError(err instanceof ApiError ? err.message : 'Could not save this project');
     } finally {
       setSaving(false);
     }
   };
 
-  const teamOptions = team
-    .filter((u) => u.status === 'ACTIVE')
-    .map((u) => ({ value: u.id, label: u.name }));
-
-  const ownerOptions = [
-    { value: '', label: '— Choose Project Owner —' },
-    ...teamOptions,
-  ];
-
   return (
-    <Modal open={isOpen} onClose={onClose} title="Edit Project" size="lg">
+    <Modal open={Boolean(project)} onClose={onClose} title="Edit project" size="lg">
       <form onSubmit={submit}>
-        <ModalBody className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
-          {/* 1. Project Name */}
-          <Field label="Project Name *" value={name} onChange={setName} required />
-
-          {/* 5. Client */}
-          {companies.length > 0 && (
-            <FieldSelect
-              label="Client / Company"
-              value={companyId}
-              onChange={setCompanyId}
-              placeholder="Choose a client…"
-              options={companies.map((c) => ({ value: c.id, label: c.name }))}
-            />
-          )}
-
-          {/* MultiSelect Platforms with Icons */}
-          <div className="space-y-1">
-            <label className="block text-xs font-semibold text-secondary">Platforms / Technologies</label>
-            <MultiSelect
-              compact={false}
-              placeholder="Select platforms (Web, Mobile, Social Media...)"
-              options={PLATFORM_OPTIONS}
-              value={platforms}
-              onChange={setPlatforms}
-            />
+        <ModalBody className="space-y-4">
+          <Field label="Project name" value={name} onChange={setName} required />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Quoted value (₹)" value={quotedValue} onChange={setQuotedValue} type="number" required />
+            <Field label="Your cost estimate (₹)" value={estimatedCost} onChange={setEstimatedCost} type="number" />
           </div>
-
-          {/* Project Type */}
-          <div className="grid grid-cols-2 gap-3">
-            <FieldSelect
-              label="Project Type"
-              value={type}
-              onChange={setType}
-              options={[
-                { value: 'ONE_TIME', label: 'One-Time Project' },
-                { value: 'RETAINER', label: 'Retainer' },
-              ]}
-            />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Start date" value={startDate} onChange={setStartDate} type="date" required />
+            <Field label="Expected end" value={endDate} onChange={setEndDate} type="date" required />
           </div>
-
-          {/* Status & Project Owner */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FieldSelect label="Owner" value={ownerId} onChange={setOwnerId} options={personOptions(team)} />
             <FieldSelect
               label="Status"
               value={status}
-              onChange={setStatus}
+              onChange={(v) => setStatus(v as Status)}
               options={[
-                { value: 'PLANNING', label: 'Planning' },
-                { value: 'ACTIVE', label: 'Active' },
-                { value: 'ON_HOLD', label: 'On Hold' },
-                { value: 'COMPLETED', label: 'Completed' },
+                { value: 'LIVE', label: 'Live' },
+                { value: 'DELIVERED', label: 'Delivered' },
                 { value: 'CANCELLED', label: 'Cancelled' },
               ]}
             />
-            <FieldSelect label="Project Owner" value={ownerId} onChange={setOwnerId} options={ownerOptions} />
           </div>
-
-          {/* 7. Team Members (MultiSelect Dropdown) */}
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-secondary">Team Members</label>
-            <MultiSelect
-              compact={false}
-              placeholder="Click to add team members…"
-              options={teamOptions}
-              value={memberIds}
-              onChange={setMemberIds}
-            />
-          </div>
-
-          {/* 8 & 9. Start Date & End Date */}
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Start Date" type="date" value={startDate} onChange={setStartDate} />
-            <Field label="End Date (Due Date)" type="date" value={dueDate} onChange={setDueDate} />
-          </div>
-
-          {/* 2. Description */}
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-secondary">Description</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Project description…"
-              rows={2}
-              className="w-full rounded-xl border border-border bg-white p-3 text-sm text-body placeholder:text-muted focus:border-primary focus:outline-none"
-            />
-          </div>
-
-          {/* 10. Scope (Rich Text Editor) */}
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-secondary mb-1 block">Scope of Work (Rich Text)</label>
-            <RichTextEditor
-              value={scope}
-              onChange={setScope}
-              placeholder="Detailed scope of work and deliverables…"
-            />
-          </div>
-
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          <FieldSelect label="Priority" value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} />
+          <Field label="Description" value={description} onChange={setDescription} textarea rows={3} />
+          {error && <ErrorNote>{error}</ErrorNote>}
         </ModalBody>
-
         <ModalFooter>
           <Button type="button" variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" variant="primary" loading={saving} disabled={!name}>
+          <Button type="submit" variant="primary" loading={saving} disabled={!name.trim()}>
             Save changes
+          </Button>
+        </ModalFooter>
+      </form>
+    </Modal>
+  );
+}
+
+function MilestoneFormModal({
+  open,
+  milestone,
+  quotedValue,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  milestone: Milestone | null;
+  quotedValue: number | null;
+  onClose: () => void;
+  onSave: (body: { label: string; percent: number; amount: number }) => Promise<void>;
+}) {
+  const [label, setLabel] = useState('');
+  const [percent, setPercent] = useState('');
+  const [amount, setAmount] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setLabel(milestone?.label ?? '');
+    setPercent(milestone ? String(milestone.percent) : '');
+    setAmount(milestone?.amount != null ? String(Number(milestone.amount)) : '');
+    setError(null);
+  }, [open, milestone]);
+
+  const suggestedAmount = quotedValue != null && Number(percent) > 0 ? Math.round((quotedValue * Number(percent)) / 100) : null;
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const percentNum = Number(percent);
+    const amountNum = Number(amount);
+    if (!label.trim() || !(percentNum > 0) || !(amountNum > 0)) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave({ label: label.trim(), percent: percentNum, amount: amountNum });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save that milestone');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={milestone ? 'Edit milestone' : 'Add milestone'}>
+      <form onSubmit={submit}>
+        <ModalBody className="space-y-4">
+          <Field label="Stage" value={label} onChange={setLabel} placeholder="e.g. Design sign-off" required />
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Percent" type="number" value={percent} onChange={setPercent} required />
+            <Field
+              label="Amount"
+              type="number"
+              value={amount}
+              onChange={setAmount}
+              hint={suggestedAmount != null ? `${suggestedAmount.toLocaleString('en-IN')} at ${percent}% of quoted value` : undefined}
+              required
+            />
+          </div>
+          {error && <ErrorNote>{error}</ErrorNote>}
+        </ModalBody>
+        <ModalFooter>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" loading={saving} disabled={!label.trim() || !(Number(percent) > 0) || !(Number(amount) > 0)}>
+            {milestone ? 'Save changes' : 'Add milestone'}
           </Button>
         </ModalFooter>
       </form>

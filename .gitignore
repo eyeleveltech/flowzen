@@ -55,3 +55,20 @@ apps/api/schema_errors.txt
 
 # Local state from the dummy-data seeder — machine-specific, not shared
 apps/api/test/e2e/.seed-manifest.json
+
+# Generated documents — invoice and quotation PDFs.
+# They are customer data, they are regenerated on demand from the invoice record,
+# and `git add -A` was picking them up. Object storage is the real answer
+# (BUILD-STATUS "not started" #3); until then, at least keep them out of git.
+apps/api/storage/
+
+# Minted session tokens from local API probing. These are real, working
+# credentials — the admin one included — and they were sitting untracked and
+# un-ignored, one `git add -A` away from being in the history for good.
+apps/api/.tokens
+apps/api/.admin.token
+apps/*/.tokens
+apps/*/*.token
+
+# Scratch response dumps from curl-ing the API by hand.
+apps/api/r.json

@@ -181,3 +181,31 @@ export function ProjectDetailSkeleton() {
     </div>
   );
 }
+
+/**
+ * Loading, INSIDE a table that already has its head and chrome.
+ *
+ * The app had two loading languages: detail screens used `PageSkeleton`, and
+ * every list put the bare word "Loading..." in a centred table cell. Walking
+ * from a list to a record changed what waiting looked like, and the text
+ * version also collapsed the table to one row, so the layout jumped when the
+ * data arrived.
+ *
+ * These are rows of the same shape as the real ones, so the table keeps its
+ * height and its columns while it waits.
+ */
+export function TableRowsSkeleton({ cols, rows = 5 }: { cols: number; rows?: number }) {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, r) => (
+        <tr key={r}>
+          {Array.from({ length: cols }).map((_, c) => (
+            <td key={c} className={c === 0 ? 'px-5 py-3.5' : 'px-4 py-3.5'}>
+              <Skeleton className={`h-4 rounded ${c === 0 ? 'w-40' : c === cols - 1 ? 'w-14' : 'w-20'}`} />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  );
+}

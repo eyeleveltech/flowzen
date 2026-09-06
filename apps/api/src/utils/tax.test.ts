@@ -1,98 +1,74 @@
+/**
+ * GST, and the one property a tax document must have: it adds up.
+ *
+ * Worth testing at the paisa because that is exactly where it went wrong — the
+ * common round numbers an agency quotes (₹1,00,000 at 18%) split evenly and hid
+ * the bug, while anything with an odd number of paise in its tax printed two
+ * halves that summed to more than the whole.
+ */
+
 import { describe, it, expect } from 'vitest';
-import { computeTaxSplit, sameState, TaxConfigurationError } from './tax.js';
+import { calculateGst } from './tax.js';
 
-const str = (d: { toString(): string }) => d.toString();
+/** Money compared as paisa integers — 0.1 + 0.2 is not 0.3 in binary floats. */
+const paise = (n: number) => Math.round(n * 100);
 
-describe('tax', () => {
-  describe('sameState', () => {
-    it('matches identical names', () => {
-      expect(sameState('Tamil Nadu', 'Tamil Nadu')).toBe(true);
-    });
-
-    it('ignores case, spacing and punctuation — these are typed by hand twice', () => {
-      expect(sameState('Tamil Nadu', 'TAMILNADU')).toBe(true);
-      expect(sameState('Tamil  Nadu', 'tamil nadu')).toBe(true);
-      expect(sameState('Jammu & Kashmir', 'Jammu and Kashmir')).toBe(false); // genuinely different text
-    });
-
-    it('is false when either side is missing', () => {
-      expect(sameState('Tamil Nadu', null)).toBe(false);
-      expect(sameState(null, 'Tamil Nadu')).toBe(false);
-      expect(sameState('', 'Tamil Nadu')).toBe(false);
-    });
-
-    it('distinguishes different states', () => {
-      expect(sameState('Tamil Nadu', 'Karnataka')).toBe(false);
-    });
+describe('calculateGst', () => {
+  it('splits a round amount evenly, as it always did', () => {
+    const r = calculateGst(100000, false, 18);
+    expect(r.cgstAmount).toBe(9000);
+    expect(r.sgstAmount).toBe(9000);
+    expect(r.igstAmount).toBe(0);
+    expect(r.totalTaxAmount).toBe(18000);
+    expect(r.totalAmountWithTax).toBe(118000);
   });
 
-  describe('computeTaxSplit', () => {
-    it('splits within one state into CGST and SGST', () => {
-      const t = computeTaxSplit(100000, 18, 'Tamil Nadu', 'Tamil Nadu');
-      expect(t.kind).toBe('INTRA_STATE');
-      expect(str(t.cgst)).toBe('9000');
-      expect(str(t.sgst)).toBe('9000');
-      expect(str(t.igst)).toBe('0');
-      expect(str(t.total)).toBe('118000');
-    });
+  it('puts the whole tax on IGST for an inter-state sale', () => {
+    const r = calculateGst(100000, true, 18);
+    expect(r.igstAmount).toBe(18000);
+    expect(r.cgstAmount).toBe(0);
+    expect(r.sgstAmount).toBe(0);
+    expect(r.isInterState).toBe(true);
+  });
 
-    it('charges IGST across states', () => {
-      const t = computeTaxSplit(100000, 18, 'Tamil Nadu', 'Karnataka');
-      expect(t.kind).toBe('INTER_STATE');
-      expect(str(t.cgst)).toBe('0');
-      expect(str(t.sgst)).toBe('0');
-      expect(str(t.igst)).toBe('18000');
-      expect(str(t.total)).toBe('118000');
-    });
+  it('never lets the two halves out-total the tax they are halves of', () => {
+    // The regression. ₹555.61 at 18% is ₹100.01 of tax; rounding each half
+    // independently made both 50.01, summing to 100.02.
+    const r = calculateGst(555.61, false, 18);
+    expect(paise(r.cgstAmount) + paise(r.sgstAmount)).toBe(paise(r.totalTaxAmount));
+  });
 
-    it('charges the same total either way — only the split differs', () => {
-      const intra = computeTaxSplit(87654.32, 18, 'Tamil Nadu', 'Tamil Nadu');
-      const inter = computeTaxSplit(87654.32, 18, 'Tamil Nadu', 'Karnataka');
-      expect(str(intra.total)).toBe(str(inter.total));
-    });
+  it('adds up at every paisa across a wide range of amounts', () => {
+    for (let base = 1; base <= 20000; base += 7) {
+      const amount = base + 0.37; // drag the tax onto odd paise
+      for (const rate of [5, 12, 18, 28]) {
+        const r = calculateGst(amount, false, rate);
+        expect(paise(r.cgstAmount) + paise(r.sgstAmount)).toBe(paise(r.totalTaxAmount));
+        expect(paise(r.baseAmount) + paise(r.totalTaxAmount)).toBe(paise(r.totalAmountWithTax));
+      }
+    }
+  });
 
-    it('halves without losing a paisa', () => {
-      // 18% of 1000.05 is 180.009 -> 180.01. Halved that is 90.005 each, which
-      // rounds to 90.01 twice and sums to 180.02 if each half is rounded alone.
-      const t = computeTaxSplit('1000.05', 18, 'Tamil Nadu', 'Tamil Nadu');
-      expect(str(t.cgst.add(t.sgst))).toBe('180.01');
-      expect(str(t.total)).toBe('1180.06');
-    });
+  it('keeps the halves within a paisa of each other', () => {
+    // The remainder lands on one side; it must never be more than that.
+    const r = calculateGst(555.61, false, 18);
+    expect(Math.abs(paise(r.cgstAmount) - paise(r.sgstAmount))).toBeLessThanOrEqual(1);
+  });
 
-    it('treats an unknown buyer state as inter-state', () => {
-      const t = computeTaxSplit(100000, 18, 'Tamil Nadu', null);
-      expect(t.kind).toBe('INTER_STATE');
-      expect(str(t.igst)).toBe('18000');
-    });
+  it('treats a negative or unusable amount as nothing to tax', () => {
+    for (const bad of [-500, NaN, undefined as unknown as number]) {
+      const r = calculateGst(bad, false, 18);
+      expect(r.baseAmount).toBe(0);
+      expect(r.totalTaxAmount).toBe(0);
+      expect(r.totalAmountWithTax).toBe(0);
+    }
+  });
 
-    it('applies no tax at a zero rate', () => {
-      const t = computeTaxSplit(100000, 0, 'Tamil Nadu', 'Karnataka');
-      expect(str(t.cgst)).toBe('0');
-      expect(str(t.igst)).toBe('0');
-      expect(str(t.total)).toBe('100000');
-    });
-
-    it('handles a zero amount', () => {
-      const t = computeTaxSplit(0, 18, 'Tamil Nadu', 'Tamil Nadu');
-      expect(str(t.total)).toBe('0');
-    });
-
-    // The reason Organization.state was added at all.
-    it('refuses rather than guessing when the seller state is unset', () => {
-      expect(() => computeTaxSplit(100000, 18, null, 'Karnataka')).toThrow(TaxConfigurationError);
-      expect(() => computeTaxSplit(100000, 18, '  ', 'Karnataka')).toThrow(/state is not set/i);
-    });
-
-    it('rejects negative money outright', () => {
-      expect(() => computeTaxSplit(-1, 18, 'Tamil Nadu', 'Tamil Nadu')).toThrow(TaxConfigurationError);
-      expect(() => computeTaxSplit(100, -5, 'Tamil Nadu', 'Tamil Nadu')).toThrow(TaxConfigurationError);
-    });
-
-    it('keeps precision on awkward amounts', () => {
-      // A repeating decimal — the case that goes wrong with floating point.
-      const t = computeTaxSplit('33333.33', 18, 'Tamil Nadu', 'Karnataka');
-      expect(str(t.igst)).toBe('6000');
-      expect(str(t.total)).toBe('39333.33');
-    });
+  it('charges nothing at a zero rate, without inventing a tax row', () => {
+    const r = calculateGst(50000, false, 0);
+    expect(r.totalTaxAmount).toBe(0);
+    expect(r.cgstAmount).toBe(0);
+    expect(r.sgstAmount).toBe(0);
+    expect(r.totalAmountWithTax).toBe(50000);
   });
 });

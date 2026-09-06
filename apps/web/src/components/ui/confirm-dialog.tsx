@@ -50,7 +50,7 @@ export function ConfirmDialog() {
     switch (variant) {
       case 'danger':
         return (
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-600">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-danger-tint text-danger">
             <AlertTriangle className="h-6 w-6" />
           </div>
         );
@@ -75,7 +75,7 @@ export function ConfirmDialog() {
   // read as a third kind of severity sitting between neutral and destructive that nothing else
   // in the product uses.
   const getConfirmButtonClass = () => {
-    const baseClass = "px-4 py-2 text-sm font-semibold rounded-xl transition-[transform,background-color,border-color,color] duration-200 shadow-sm active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1";
+    const baseClass = "px-4 py-2 text-sm font-semibold rounded-xl transition-[transform,background-color,border-color,color] duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1";
     switch (variant) {
       case 'danger':
         return `${baseClass} bg-danger text-white hover:bg-danger-hover`;
@@ -131,12 +131,12 @@ export function ConfirmDialog() {
 
                 {requireText && (
                   <div className="mt-4">
-                    <label className="block text-xs font-medium text-secondary mb-1.5">
+                    <label className="block text-xs font-medium text-secondary mb-1.5" htmlFor="requiretextlabel-type-to-confirm">
                       {requireTextLabel || (
                         <>Type <span className="font-semibold text-primary break-all">{requireText}</span> to confirm</>
                       )}
                     </label>
-                    <input
+                    <input id="requiretextlabel-type-to-confirm"
                       type="text"
                       autoFocus
                       value={typed}

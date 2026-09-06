@@ -52,10 +52,10 @@ export function ErrorNote({
   onDismiss?: () => void;
 }) {
   return (
-    <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5">
-      <p className="flex-1 text-sm text-red-700">{children}</p>
+    <div className="flex items-start gap-2 rounded-xl border border-danger/30 bg-danger-tint px-3 py-2.5">
+      <p className="flex-1 text-sm text-danger">{children}</p>
       {onDismiss && (
-        <button onClick={onDismiss} className="shrink-0 text-xs font-medium text-red-700 underline">
+        <button onClick={onDismiss} className="shrink-0 text-xs font-medium text-danger underline">
           Dismiss
         </button>
       )}
@@ -77,8 +77,8 @@ export function Note({
 }) {
   const tones = {
     neutral: 'border-border bg-subtle/60 text-secondary',
-    warn: 'border-amber-200 bg-amber-50 text-amber-800',
-    info: 'border-blue-200 bg-blue-50 text-blue-800',
+    warn: 'border-warning/30 bg-warning-tint text-warning-ink',
+    info: 'border-info/30 bg-info-tint text-info',
   };
   return (
     <div className={cn('flex items-start gap-2 rounded-xl border px-3 py-2.5', tones[tone])}>

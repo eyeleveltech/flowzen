@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import { usePageHeader } from '@/hooks/usePageHeader';
 
 interface PageHeaderProps {
   title: string;
@@ -6,14 +7,10 @@ interface PageHeaderProps {
   action?: ReactNode;
 }
 
+// The title/subtitle now live in TopNav's sticky bar (usePageHeader), not the
+// scrolling body — this component's only remaining job is the action slot.
 export function PageHeader({ title, subtitle, action }: PageHeaderProps) {
-  return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-primary tracking-tight">{title}</h1>
-        {subtitle && <p className="text-sm text-secondary mt-1">{subtitle}</p>}
-      </div>
-      {action && <div>{action}</div>}
-    </div>
-  );
+  usePageHeader(title, subtitle);
+  if (!action) return null;
+  return <div className="flex justify-end mb-6">{action}</div>;
 }

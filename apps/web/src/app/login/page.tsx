@@ -9,7 +9,17 @@ import { useAuthStore } from '@/stores';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { Zap, Eye, EyeOff } from 'lucide-react';
 import { Icon } from '@/components/ui/icon';
-import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
+
+/**
+ * Password sign-in only.
+ *
+ * There was a Google button here for a long time. It rendered against a
+ * placeholder client id when none was configured, and the route it posted to —
+ * POST /auth/google — was never written, so every press failed with nothing to
+ * explain why. Bringing it back is three pieces, not one: an OAuth client and
+ * NEXT_PUBLIC_GOOGLE_CLIENT_ID, a server route that verifies the id token
+ * against Google and issues a session, and the button itself.
+ */
 
 export default function LoginPage() {
   usePageTitle('Login');
@@ -29,9 +39,10 @@ export default function LoginPage() {
     try {
       const data = await api.auth.login(email, password);
       setAuth(data.user as never);
-      // The picker, because the sidebar lists one section at a time — landing
-      // straight on a dashboard would silently choose one.
-      router.push('/modules');
+      // Today. There is no picker any more, because there is nothing to pick —
+      // the sidebar lists everything at once (§3.1) — and Today is the one
+      // screen every role and every organisation has.
+      router.push('/my-work');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not sign you in');
     } finally {
@@ -50,10 +61,10 @@ export default function LoginPage() {
           className="w-full max-w-sm"
         >
           <div className="flex items-center mb-10">
-            <img src="/logo_flowzen.png" alt="Flowzen" className="h-12 w-auto object-contain" />
+            <img src="/logo_flowzen.png" alt="Flowzen" width={180} height={48} className="h-12 w-auto object-contain" />
           </div>
 
-          <h1 className="text-2xl font-bold text-primary mb-1">Welcome back</h1>
+          <h1 className="text-2xl font-semibold text-primary mb-1">Welcome back</h1>
           <p className="text-sm text-secondary mb-8">Sign in to your workspace</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -61,51 +72,15 @@ export default function LoginPage() {
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
-                className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-danger"
+                className="rounded-xl bg-danger-tint border border-danger/20 px-4 py-3 text-sm text-danger"
               >
                 {error}
               </motion.div>
             )}
 
-            <GoogleOAuthProvider clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || 'dummy-client-id'}>
-              <div className="flex justify-center w-full">
-                <GoogleLogin
-                  onSuccess={async (credentialResponse) => {
-                    setError('');
-                    setLoading(true);
-                    try {
-                      const data = await api.auth.loginWithGoogle(credentialResponse.credential!);
-                      setAuth(data.user as never);
-                      router.push('/modules');
-                    } catch (err) {
-                      setError(err instanceof ApiError ? err.message : 'Could not sign you in with Google');
-                      setLoading(false);
-                    }
-                  }}
-                  onError={() => {
-                    setError('Google sign-in failed');
-                  }}
-                  useOneTap
-                  theme="outline"
-                  size="large"
-                  text="continue_with"
-                  width="100%"
-                />
-              </div>
-            </GoogleOAuthProvider>
-
-            <div className="relative my-4">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="bg-white px-2 text-secondary">or continue with email</span>
-              </div>
-            </div>
-
             <div>
-              <label className="block text-sm font-medium text-body mb-1.5">Email</label>
-              <input
+              <label className="block text-sm font-medium text-body mb-1.5" htmlFor="email">Email</label>
+              <input id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -120,8 +95,10 @@ export default function LoginPage() {
                 <label className="block text-sm font-medium text-body">Password</label>
                 {/*
                   No self-service reset: the link has to reach the person, and
-                  Flowzen has no mail account connected. An admin issues one
-                  from the Team screen instead (§3.12).
+                  the deployment cannot assume its mail server will. An admin
+                  issues one from the Team screen — "Password link" beside each
+                  person — and it is emailed AND shown to them to hand over
+                  (§3.12).
                 */}
                 <span className="text-xs text-secondary" title="An admin can issue a reset link from the Team screen">
                   Locked out? Ask an admin
@@ -129,6 +106,8 @@ export default function LoginPage() {
               </div>
               <div className="relative">
                 <input
+                  id="password"
+                  aria-label="Password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -184,9 +163,9 @@ export default function LoginPage() {
             transition={{ duration: 0.6, delay: 0.2 }}
           >
             <div className="flex items-center justify-center mx-auto mb-8">
-              <img src="/logo_flowzen.png" alt="Flowzen" className="h-20 w-auto object-contain brightness-0 invert opacity-90" />
+              <img src="/logo_flowzen.png" alt="Flowzen" width={300} height={80} className="h-20 w-auto object-contain brightness-0 invert opacity-90" />
             </div>
-            <h2 className="text-3xl font-bold text-white mb-3">Manage with precision</h2>
+            <h2 className="text-3xl font-semibold text-white mb-3">Manage with precision</h2>
             <p className="text-base text-white/60 max-w-sm mx-auto leading-relaxed">
               The premium project management platform built for agencies that demand excellence.
             </p>

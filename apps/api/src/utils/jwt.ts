@@ -1,40 +1,37 @@
 import jwt from 'jsonwebtoken';
+import { requireSecret } from '../lib/env.js';
 
-const PLACEHOLDERS = [
-  'generate_a_very_long_secure_random_string',
-  'flowzen-dev-jwt-secret',
-];
-
-const JWT_SECRET = process.env.JWT_SECRET || (
-  process.env.NODE_ENV === 'production'
-    ? (() => { throw new Error('JWT_SECRET must be set in production'); })()
-    : 'flowzen-dev-jwt-secret'
-);
-
-if (PLACEHOLDERS.includes(JWT_SECRET)) {
-  throw new Error(
-    `JWT_SECRET is set to a well-known placeholder ("${JWT_SECRET}"). ` +
-    'Generate a real secret (openssl rand -base64 32) and update .env'
-  );
-}
-
+// Importing env.js is also what guarantees dotenv has run: this module reads its
+// secret at module scope, and ES imports evaluate in declaration order.
+const JWT_SECRET = requireSecret('JWT_SECRET');
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 export interface JwtPayload {
   userId: string;
   email: string;
-  role: string;
+  preset: string;
   organizationId: string;
-  // The user's tokenVersion at issue time. Optional so tokens minted before this existed still
-  // type-check; the auth middleware treats a missing value as 0 (the default) to avoid logging
-  // everyone out on deploy.
-  tokenVersion?: number;
+  role?: string;
+  permissions?: string[];
+  /** Registered claims jwt.verify returns. `iat` is what retires a session
+   *  after a password change — see middleware/auth.ts. */
+  iat?: number;
+  exp?: number;
 }
 
 export function generateToken(payload: JwtPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN as any });
+  return jwt.sign(payload, JWT_SECRET, {
+    expiresIn: JWT_EXPIRES_IN as any,
+    algorithm: 'HS256',
+  });
 }
 
 export function verifyToken(token: string): JwtPayload {
-  return jwt.verify(token, JWT_SECRET) as JwtPayload;
+  // Pinned, not inferred. Letting the token nominate its own algorithm is the
+  // shape of every JWT confusion attack; this library defends against the worst
+  // of them by default, and naming the one algorithm we sign with costs nothing.
+  return jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as JwtPayload;
 }
+
+export const verifyJwt = verifyToken;
+export const signJwt = generateToken;

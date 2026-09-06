@@ -7,6 +7,8 @@
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:journey": "tsx test/journey.ts",
+    "test:journey:pm": "node test/pm-journey.mjs",
     "test:e2e:crm": "node test/e2e/crm-conversion.e2e.mjs",
     "test:e2e:time": "node test/e2e/time-entries.e2e.mjs",
     "start": "node dist/index.js",
@@ -15,7 +17,14 @@
     "migrate:prod": "prisma migrate deploy",
     "studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
-    "seed:demo": "tsx prisma/seed-demo.ts"
+    "seed:demo": "tsx prisma/seed-demo.ts",
+    "check:win-handoff": "tsx test/win-handoff.check.ts",
+    "check:new-company": "tsx test/new-company.check.ts",
+    "check:drill-through": "tsx test/drill-through.check.ts",
+    "check:row-actions": "node test/row-actions.check.mjs",
+    "check:command-bar": "node test/command-bar.check.mjs",
+    "check:one-page": "tsx test/one-page.check.ts",
+    "check:one-sidebar": "node test/one-sidebar.check.mjs"
   },
   "dependencies": {
     "@flowzen/shared": "*",

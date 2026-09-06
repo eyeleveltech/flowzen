@@ -26,36 +26,61 @@ import {
   Clock,
   AlertCircle,
   Menu,
-  Target,
+  Building2,
   RefreshCw,
+  Package,
+  IndianRupee,
 } from 'lucide-react';
 import { Drawer } from '@/components/ui/drawer';
 import toast from 'react-hot-toast';
+import { canSee } from '@/config/navigation';
 
+// Keyed by the actual rule names the scanner (workers/scanner.cron.ts) emits —
+// these used to be a different, fictional set of notification types that no
+// real alert ever carried, so every notification fell through to the AlertCircle
+// default regardless of what it actually was.
 const notificationIcons: Record<string, typeof CheckSquare> = {
-  TASK_ASSIGNED: CheckSquare,
-  TASK_COMPLETED: Check,
-  DEADLINE_APPROACHING: Clock,
-  COMMENT_ADDED: MessageSquare,
-  PROJECT_STATUS_CHANGED: FolderKanban,
-  CLIENT_ADDED: Users,
-  FOLLOW_UP_DUE: Clock,
-  FOLLOW_UP_OVERDUE: Clock,
-  STALE_LEAD: AlertCircle,
-  PAYMENT_DUE: Clock,
-  PAYMENT_OVERDUE: AlertCircle,
-  RENEWAL_DUE: Clock,
-  REACTIVATION_DUE: RefreshCw,
-  DAILY_DIGEST: Bell,
+  PROPOSAL_STALLED: Clock,
+  VERBAL_NO_ADVANCE: AlertCircle,
+  PROFORMA_EXPIRED: AlertCircle,
+  PROFORMA_UNPAID: Clock,
+  RETAINER_EXPIRING: RefreshCw,
+  RETAINER_NO_CONTRACT: AlertCircle,
+  TASK_OVERDUE: CheckSquare,
+  TASK_WAITING_HOLD: Clock,
+  TASK_AGING: Clock,
+  INVOICE_OVERDUE: AlertCircle,
+  INVOICE_AGING_60: AlertCircle,
+  MEMBER_OVERALLOCATED: Users,
+  ALLOCATIONS_UNCONFIRMED: Users,
+  PERSON_OVERLOADED: Users,
+  PERSON_UNDERLOADED: Users,
+  PROJECT_OVER_ESTIMATE: FolderKanban,
+  PROJECT_BEHIND_SCHEDULE: FolderKanban,
+  CLIENT_QUIET: Building2,
+  MONTH_CARD_NOT_INVOICED: IndianRupee,
+  // The register's four. These were missing, and asset alerts are the only
+  // ones open to an Employee — so every notification a designer could see
+  // fell through to the generic circle.
+  ASSET_OVERDUE: Package,
+  ASSET_HELD_BY_INACTIVE_USER: Package,
+  ASSET_REPAIR_STALE: Package,
+  ASSET_WARRANTY_EXPIRING: Package,
+};
+
+const severityDot: Record<string, string> = {
+  HIGH: 'bg-danger',
+  MED: 'bg-warning',
+  LOW: 'bg-line',
 };
 
 export function TopNav({ isMobile }: { isMobile?: boolean }) {
   const shouldReduceMotion = useReducedMotion();
   const router = useRouter();
   const pathname = usePathname();
-  const { setCommandPaletteOpen, setMobileSidebarOpen } = useUIStore();
+  const { setCommandPaletteOpen, setMobileSidebarOpen, pageTitle, pageSubtitle } = useUIStore();
   const { user, logout } = useAuthStore();
-  const showBack = isMobile && pathname !== '/dashboard';
+  const showBack = isMobile && pathname !== '/my-work';
 
   const queryClient = useQueryClient();
   const { data: notifData } = useNotifications();
@@ -121,18 +146,31 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
     };
   }, []);
 
-  // No "New Client" quick-create: clients are pipeline-driven (born from a won deal) or bulk
-  // CSV-imported for onboarding — there's no manual "add one client" path. Start a new deal
-  // via "New Lead" instead.
-  const quickCreateItems = [
-    { label: 'New Project', href: '/projects?create=true', icon: FolderKanban },
-    { label: 'New Task', href: '/tasks?create=true', icon: CheckSquare },
-    { label: 'New Lead', href: '/pipeline?create=true', icon: Target },
-  ];
+// No " New Client" quick-create, because there are three fuller ways in and all
+// of them ask for things this menu cannot: winning a deal, " New Company" on the
+// clients screen, or a CSV import. (This comment used to give the import as the
+// reason there is no button here, while the import itself did not exist —
+// a missing path justifying another missing path. It exists now.)
+/**
+ * Quick create, gated the same way the navigation is.
+ *
+ * Each item names the permission its own POST requires on the server, so the
+ * menu cannot offer a door that is locked. This used to name a minimum rung on
+ * the old role ladder, which is a different question from what the API asks —
+ * and before that it had no filter at all, offering an Employee three creates
+ * they could not perform, none of them saying so until you walked into them.
+ */
+  const quickCreateItems = ([
+    { label: 'New project', href: '/live-work?tab=PROJECTS&create=true', icon: FolderKanban, needs: 'company.write' as const },
+    { label: 'New task', href: '/my-work?create=true', icon: CheckSquare, needs: 'work.own' as const },
+    // "New Lead" opened a deal form. There is no deal to create — a card exists
+    // because a company exists (§8.7) — so this is what it always meant.
+    { label: 'New company', href: '/companies?create=true', icon: Building2, needs: 'company.write' as const },
+  ]).filter((item) => canSee(item, user?.permissions));
 
   return (
     <header className="sticky top-0 z-30 flex h-14 md:h-16 items-center justify-between border-b border-border bg-white/80 backdrop-blur-xl px-3 sm:px-6">
-      <div className="flex items-center flex-1 min-w-0 pr-2 gap-2">
+      <div className="flex items-center flex-1 min-w-0 pr-2 gap-3">
         {showBack ? (
           <button
             type="button"
@@ -144,13 +182,27 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
           </button>
         ) : isMobile ? (
           <div className="flex items-center gap-1.5 shrink-0 sm:hidden">
-            <div className="h-7 w-7 rounded-lg bg-primary text-white font-bold flex items-center justify-center text-xs shadow-xs">
+          <div className="h-7 w-7 rounded-lg bg-primary text-white font-bold flex items-center justify-center text-xs">
               F
             </div>
             <span className="font-semibold text-primary text-sm tracking-tight">Flowzen</span>
           </div>
         ) : null}
 
+        {/* Page title/subtitle — the sticky-bar equivalent of the prototype's
+            `.top h1`/`.sub`, set per-page via usePageHeader() instead of each
+            screen drawing its own <h1> in the scrolling body. Desktop only;
+            the compact "Flowzen" wordmark above still covers mobile. */}
+        <div className="hidden sm:flex min-w-0 items-center gap-3">
+          <h1 className="truncate text-lg font-semibold tracking-[-0.3px] text-primary">{pageTitle}</h1>
+          {pageSubtitle && (
+            <span className="truncate border-l border-border pl-3.5 text-xs text-secondary">{pageSubtitle}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Right side */}
+      <div className="flex items-center gap-1.5 sm:gap-2 dropdown-container shrink-0">
         {/* Search button on Mobile (compact icon button) */}
         <button
           onClick={() => setCommandPaletteOpen(true)}
@@ -163,23 +215,21 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
         {/* Search bar on Desktop */}
         <button
           onClick={() => setCommandPaletteOpen(true)}
-          className="hidden sm:flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm text-secondary hover:bg-white hover:border-line transition-colors duration-150 motion-reduce:transition-none sm:w-80"
+          className="hidden sm:flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm text-secondary hover:bg-white hover:border-line transition-colors duration-150 motion-reduce:transition-none w-64"
         >
           <Search className="h-4 w-4 shrink-0" />
-          <span className="truncate">Search clients, deals, projects, tasks…</span>
-          <kbd className="ml-auto inline-flex items-center gap-0.5 rounded-md border border-border bg-white px-1.5 py-0.5 text-[10px] font-medium text-secondary">
+          <span className="truncate">Search…</span>
+          <kbd className="ml-auto inline-flex items-center gap-0.5 rounded-md border border-border bg-white px-1.5 py-0.5 text-micro font-medium text-secondary">
             ⌘K
           </kbd>
         </button>
-      </div>
 
-      {/* Right side */}
-      <div className="flex items-center gap-1.5 sm:gap-2 dropdown-container shrink-0">
         {/* Quick Create */}
         <div className="relative">
           <button
+            aria-label="Quick Create"
             onClick={() => { setShowQuickCreate(!showQuickCreate); setShowNotifications(false); setShowUserMenu(false); }}
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-border text-secondary hover:bg-surface hover:text-primary transition-colors duration-150 motion-reduce:transition-none"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-border text-secondary hover:bg-surface hover:text-primary transition-colors duration-150 motion-reduce:transition-none outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
           >
             <Plus className="h-4 w-4" />
           </button>
@@ -230,15 +280,17 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
         {/* Notifications */}
         <div className="relative">
           <button
+            aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+            aria-expanded={showNotifications}
             onClick={() => { setShowNotifications(!showNotifications); setShowQuickCreate(false); setShowUserMenu(false); }}
-            className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-border text-secondary hover:bg-surface hover:text-primary transition-colors duration-150 motion-reduce:transition-none"
+            className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-border text-secondary hover:bg-surface hover:text-primary transition-colors duration-150 motion-reduce:transition-none outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
           >
             <Bell className="h-4 w-4" />
             {unreadCount > 0 && (
               <motion.span
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                className="absolute -right-1 -top-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-white"
+                className="absolute -right-1 -top-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-danger px-1 text-micro font-semibold text-white"
               >
                 {unreadCount > 9 ? '9+' : unreadCount}
               </motion.span>
@@ -246,7 +298,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
           </button>
 
           {isMobile ? (
-            <Drawer isOpen={showNotifications} onClose={() => setShowNotifications(false)} title="In-App Notifications">
+            <Drawer isOpen={showNotifications} onClose={() => setShowNotifications(false)} title="Needs attention">
               {unreadCount > 0 && (
                 <div className="flex justify-end mb-2">
                   <button onClick={markAllAsRead} className="text-xs font-medium text-secondary hover:text-primary transition-colors bg-surface px-3 py-1.5 rounded-lg">
@@ -256,7 +308,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
               )}
               <div className="max-h-[60vh] overflow-y-auto divide-y divide-subtle -mx-6 border-t border-subtle">
                 {notifications.length === 0 ? (
-                  <div className="py-8 text-center text-sm text-secondary">No notifications yet</div>
+                  <div className="py-8 text-center text-sm text-secondary">Nothing needs attention.</div>
                 ) : (
                   notifications.map((n) => {
                     const Icon = notificationIcons[n.type] || AlertCircle;
@@ -271,20 +323,27 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                     };
 
                     return (
-                      <div
+                      <button
                         key={n.id}
+                        type="button"
                         onClick={handleNotificationClick}
-                        className={`flex gap-3 px-6 py-4 cursor-pointer hover:bg-surface transition-colors ${!n.read ? 'bg-subtle/50' : ''}`}
+                        className={`flex w-full gap-3 px-6 py-4 text-left hover:bg-surface transition-colors outline-none focus-visible:bg-surface focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 ${!n.read ? 'bg-subtle/50' : ''}`}
                       >
-                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-subtle">
-                          <Icon className="h-4 w-4 text-secondary" />
+                        <div className="relative mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-subtle">
+                          <Icon className="h-4 w-4 text-secondary" aria-hidden="true" />
+                          <span className={`absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full ${severityDot[n.severity] ?? severityDot.LOW}`} />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-[15px] text-body leading-snug">{n.message}</p>
-                          <p className="text-xs text-secondary mt-1">{formatRelativeDate(n.createdAt)}</p>
+                          <p className="text-base text-body leading-snug">{n.message}</p>
+                          <p className="mt-1 flex items-center gap-1.5 text-micro text-secondary">
+                            <span className="font-bold uppercase tracking-[0.13em]">{n.source}</span>
+                            <span aria-hidden="true">·</span>
+                            <span>{formatRelativeDate(n.createdAt)}</span>
+                            {!n.read && <span className="sr-only">· unread</span>}
+                          </p>
                         </div>
-                        {!n.read && <div className="mt-2 h-2.5 w-2.5 shrink-0 rounded-full bg-[#3B82F6]" />}
-                      </div>
+                        {!n.read && <div className="mt-2 h-2.5 w-2.5 shrink-0 rounded-full bg-info" aria-hidden="true" />}
+                      </button>
                     );
                   })
                 )}
@@ -302,8 +361,14 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                 >
                   <div className="flex items-center justify-between px-4 py-3 border-b border-subtle">
                     <div>
-                      <h3 className="text-sm font-semibold text-primary">In-App Notifications</h3>
-                      <p className="text-xs text-secondary mt-0.5">Real-time activity logs</p>
+                      {/*
+                        It said "Real-time activity logs" and was neither: the
+                        scanner runs hourly and the bell refetches once a
+                        minute, and these are rule-raised alerts, not a log of
+                        what people did — that is the activity feed, elsewhere.
+                      */}
+                      <h3 className="text-sm font-semibold text-primary">Needs attention</h3>
+                      <p className="text-xs text-secondary mt-0.5">Raised by rule, checked hourly</p>
                     </div>
                     {unreadCount > 0 && (
                       <button onClick={markAllAsRead} className="text-xs text-secondary hover:text-primary transition-colors">
@@ -313,7 +378,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                   </div>
                   <div className="max-h-80 overflow-y-auto divide-y divide-subtle">
                     {notifications.length === 0 ? (
-                      <div className="py-8 text-center text-sm text-secondary">No notifications yet</div>
+                      <div className="py-8 text-center text-sm text-secondary">Nothing needs attention.</div>
                     ) : (
                       notifications.map((n) => {
                         const Icon = notificationIcons[n.type] || AlertCircle;
@@ -327,20 +392,38 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                         };
 
                         return (
-                          <div
+                          <button
                             key={n.id}
+                            type="button"
                             onClick={handleNotificationClick}
-                            className={`flex gap-3 px-4 py-3 cursor-pointer hover:bg-surface transition-colors ${!n.read ? 'bg-subtle/50' : ''}`}
+                            className={`flex w-full gap-3 px-4 py-3 text-left hover:bg-surface transition-colors outline-none focus-visible:bg-surface focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 ${!n.read ? 'bg-subtle/50' : ''}`}
                           >
-                            <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-subtle">
-                              <Icon className="h-3.5 w-3.5 text-secondary" />
+                            <div className="relative mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-subtle">
+                              <Icon className="h-3.5 w-3.5 text-secondary" aria-hidden="true" />
+                              <span className={`absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full ${severityDot[n.severity] ?? severityDot.LOW}`} />
                             </div>
                             <div className="min-w-0 flex-1">
                               <p className="text-sm text-body leading-snug">{n.message}</p>
-                              <p className="text-xs text-secondary mt-0.5">{formatRelativeDate(n.createdAt)}</p>
+                              {/*
+                                Where it came from, then when. The rows used to
+                                carry only the sentence, so a bell holding
+                                forty-four of them read as one undifferentiated
+                                column — an overdue invoice, a lens that has not
+                                come back and somebody's workload all looked
+                                alike until you had read each one.
+
+                                Set in the house label style, the same as every
+                                figure label on every screen.
+                              */}
+                              <p className="mt-1 flex items-center gap-1.5 text-micro text-secondary">
+                                <span className="font-bold uppercase tracking-[0.13em]">{n.source}</span>
+                                <span aria-hidden="true">·</span>
+                                <span>{formatRelativeDate(n.createdAt)}</span>
+                                {!n.read && <span className="sr-only">· unread</span>}
+                              </p>
                             </div>
-                            {!n.read && <div className="mt-2 h-2 w-2 shrink-0 rounded-full bg-[#3B82F6]" />}
-                          </div>
+                            {!n.read && <div className="mt-2 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden="true" />}
+                          </button>
                         );
                       })
                     )}
@@ -352,10 +435,11 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
         </div>
 
         {/* User menu */}
-        <div className="relative ml-1">
+        <div className="relative ml-1 shrink-0">
           <button
+            aria-label="User Menu"
             onClick={() => { setShowUserMenu(!showUserMenu); setShowNotifications(false); setShowQuickCreate(false); }}
-            className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-surface transition-colors duration-150 motion-reduce:transition-none"
+            className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-surface transition-colors duration-150 motion-reduce:transition-none outline-none focus-visible:ring-2 focus-visible:ring-primary/25 shrink-0"
           >
             <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${user?.name ? getAvatarColor(user.name) : 'bg-subtle text-secondary'}`}>
               {user?.name ? getInitials(user.name) : <UserIcon className="h-4 w-4 text-secondary" />}
@@ -384,7 +468,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                   </div>
                   My Profile
                 </button>
-                {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
+                {user?.permissions?.includes('setup.admin') && (
                   <button
                     onClick={() => { router.push('/settings'); setShowUserMenu(false); }}
                     className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-body hover:bg-surface active:bg-subtle transition-colors"
@@ -397,9 +481,9 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                 )}
                 <button
                   onClick={() => { logout(); window.location.href = '/login'; }}
-                  className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-danger hover:bg-red-50 active:bg-red-100 transition-colors"
+                  className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-danger hover:bg-danger-tint active:bg-danger-tint transition-colors"
                 >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-50 text-danger">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-danger-tint text-danger">
                     <LogOut className="h-5 w-5" />
                   </div>
                   Sign out
@@ -428,7 +512,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                       <UserIcon className="h-4 w-4 text-secondary" />
                       My Profile
                     </button>
-                    {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
+                    {user?.permissions?.includes('setup.admin') && (
                       <button
                         onClick={() => { router.push('/settings'); setShowUserMenu(false); }}
                         className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-body hover:bg-surface transition-colors"
@@ -439,7 +523,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                     )}
                     <button
                       onClick={() => { logout(); window.location.href = '/login'; }}
-                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-danger hover:bg-red-50 transition-colors"
+                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-danger hover:bg-danger-tint transition-colors"
                     >
                       <LogOut className="h-4 w-4" />
                       Sign out

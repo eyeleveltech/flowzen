@@ -24,37 +24,164 @@
    is not visible to anyone, so it now maps onto `surface`.
    ───────────────────────────────────────────────────────────────────────── */
 @theme {
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --color-surface: #FAFAFA;
-  --color-subtle: #F3F4F6;
-  --color-border: #E5E7EB;
-  --color-line: #D1D5DB;
-  --color-primary: #111827;
+  /* The prototype's own stack (01_APPLICATION_UI.html), not a webfont — the
+     native OS face is what made it read as "the same app" instead of a
+     redesign. Inter looked considered but was never actually applying: it was
+     spelled as a bare string, not var(--font-inter), so the self-hosted face
+     it loaded went unused and every browser was already falling through to
+     this same system chain by accident. */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  /* EyeLevel brand palette — the same dark green used on the proforma PDF
+     letterhead (see BRAND_DARK_GREEN in apps/api/src/services/proformaPdf.ts),
+     carried into the app chrome so both read as one brand. */
+  --color-surface: #fafbfa;
+  --color-subtle: #f5f8f6;
+  --color-border: #eef2ef;
+  --color-line: #e2e8e4;
+  --color-primary: #163027;
   /* Hover for anything sitting on --color-primary (buttons, dark chips). */
-  --color-primary-hover: #1F2937;
-  --color-body: #374151;
-  --color-body-soft: #4B5563;
-  --color-secondary: #6B7280;
+  --color-primary-hover: #1e4034;
+  --color-body: #1e4034;
+  --color-body-soft: #3d5b4e;
+  --color-secondary: #6f8279;
   /* Placeholder / hint / de-emphasised icon text. Must stay >= 4.5:1 on white
-     (WCAG AA for normal text). The previous inline #9CA3AF measured 2.54:1 and
-     failed; #6B7280 measures 4.84:1. Change it here, not per-usage. */
-  --color-muted: #6B7280;
-  --color-accent: #000000;
-  --color-success: #22C55E;
-  --color-warning: #F59E0B;
-  --color-warning-hover: #D97706;
-  --color-danger: #EF4444;
-  --color-danger-hover: #DC2626;
+     (WCAG AA for normal text). #6f8279 measures comfortably above that floor. */
+  --color-muted: #6f8279;
+  /* The one warm note against all that green — matches the prototype's gold
+     (EYELEVEL_OS_HANDOFF/prototype/01_APPLICATION_UI.html --gold). Reserved
+     for "you are here": the active underline-tab border. Not a status color —
+     success/warning/danger below still own that. */
+  --color-accent: #b0821f;
+  --color-success: #2f7a56;
+  --color-warning: #c08a1e;
+  --color-warning-hover: #a97418;
+  --color-danger: #a8402e;
+  --color-danger-hover: #8a3325;
+
+  /* ── The fourth status: settled, and nothing to do about it ─────────────
+     "Project completed" is a GOOD ending and must not be styled as a loss;
+     an asset ASSIGNED to somebody is resolved, unlike one BOOKED_OUT with a
+     clock running on it. Neither is success, neither is warning, and both
+     were reaching for Tailwind's blue-50/blue-700 — a colour family that
+     appears nowhere else in a green-and-gold identity.
+
+     This is that cool note rendered in the palette's own terms: a slate-teal
+     at the same weight as --color-success, so the two read as siblings.
+     6.0:1 on white, 5.4:1 on its own tint. */
+  --color-info: #2f6b7a;
+  --color-info-tint: #eef4f6;
+
+  /* ── Warning, dark enough to read ───────────────────────────────────────
+     --color-warning is the brand gold and belongs on dots, borders and
+     fills. As TEXT it measures 3.05:1 on white and 2.78:1 on its own tint,
+     both under the 4.5:1 WCAG AA needs — so every amber sentence in the app
+     was failing, quietly, in the same way the placeholder grey once did.
+
+     This is the same hue taken down to 5.5:1 on white and 5.0:1 on the tint.
+     Use it wherever warning is a WORD; keep --color-warning for the shapes. */
+  --color-warning-ink: #8a6117;
+
+  /* ── The quiet end of each status ───────────────────────────────────────
+     A status pill needs a fill as well as a foreground, and there was no
+     token for one — so twelve of them reached for Tailwind's own green-50 /
+     amber-50 / red-50 instead. Those are cool, bluish tints that sit visibly
+     apart from this palette's warm greens, and a "won" chip ended up in a
+     different colour family from the `text-success` sitting inside it.
+
+     Each of these is its own status colour lifted towards --color-surface, so
+     the pill and its text are the same hue at two weights. Every one clears
+     4.5:1 for its matching foreground. */
+  --color-success-tint: #edf5f1;
+  --color-warning-tint: #faf4e7;
+  --color-danger-tint: #f8eeec;
+  /* --color-info-tint is declared with --color-info above, beside the note
+     explaining why a fourth status exists at all. */
+
+  /* ── One step below xs ──────────────────────────────────────────────────
+     Counted before adding: 78 arbitrary sizes under 12px were in use —
+     text-[11px] × 48, text-[10px] × 26, text-[9px] × 3, text-[8px] × 1 — so
+     the type scale was really eleven sizes pretending to be six, and four of
+     them were below any legibility floor worth defending.
+
+     One named step replaces all four, and 11px is the floor. Anything that
+     genuinely will not fit at 11px is too dense, not too large: that is a
+     layout to fix, not a size to shrink. `design.test.ts` keeps it that way.
+     ───────────────────────────────────────────────────────────────────── */
+  --text-micro: 0.6875rem;          /* 11px */
+  --text-micro--line-height: 1rem;  /* 16px */
 
   /* Radius and --ease-out were removed on this branch as dead (0 uses against 560 rounded-xl).
      That was true when measured and is not any more: rounded-card and ease-out are now used on
-     main, so they are restored rather than breaking those call sites. */
-  --radius-card: 16px;
-  --radius-button: 12px;
-  --radius-input: 12px;
+     main, so they are restored rather than breaking those call sites.
+
+     --radius-card was 16px while `rounded-xl` (12px) was used 178 times to build
+     cards by hand — so a <Card> and the panel beside it were visibly different
+     shapes on the same screen. Matching the token to what the app overwhelmingly
+     does fixes both, and changes one line instead of 178. */
+  --radius-card: 8px;
+  --radius-button: 8px;
+  --radius-input: 8px;
+
+  /* ── Table density, in one place ────────────────────────────────────────
+     A row was 54px tall against the prototype's 33px — not because the type
+     was much bigger (14px against 13px) but because every cell carried 14px
+     of vertical padding, and every cell said so itself. Two hundred and
+     seventy-seven cells across fifteen tables each spelled out its own
+     padding, and they had already drifted apart: py-2, py-2.5, py-3, py-3.5
+     and py-4 all in use, so no two tables in the product were quite the same
+     height.
+
+     These four values are the whole density of every table in the app. The
+     `.data-table` rules below are what apply them; a cell no longer says
+     anything about its own spacing, so changing a row's height is changing a
+     number here rather than editing fifteen files and hoping. */
+  /* ── The small-caps label, and the width of a page ──────────────────────
+     One device, spelled nineteen ways. A column header, a form label and a
+     section eyebrow are the same thing — 11px, uppercase, letter-spaced,
+     muted — and the app had FOUR letter-spacings for it (0.09em, 0.13em,
+     0.19em and tracking-wider's 0.05em), three weights and two sizes. The
+     prototype is no help: it has sixteen letter-spacings of its own.
+
+     0.13em because it already carries 137 of the uses, and because at 11px
+     uppercase the tighter values stop reading as a label at all.
+
+     `--page-max` is the other half: ten pages said max-w-[1400px], the client
+     record said max-w-7xl (1280px) and the asset record max-w-[1100px], so
+     three screens in the same app had three different measures. */
+  --tracking-label: 0.13em;
+  --page-max: 1400px;
+
+  --table-py: 0.625rem;      /* 10px */
+  --table-px: 0.8125rem;     /* 13px */
+  --table-edge: 1.25rem;     /* 20px — first and last cell, so the content clears the card edge */
+  --table-text: 0.8125rem;   /* 13px */
+  --table-line: 1.15rem;
+
+  /* ── Elevation: flat in the flow, lifted only when floating ─────────────
+     These three said `none` — a deliberate flat, hairline-bordered language —
+     while 26 raw Tailwind shadows (shadow-lg, shadow-xl, shadow-sm, shadow-xs,
+     shadow-black/10) said otherwise across the app. A rule defined in one place
+     and ignored in its neighbour is the defect this whole rebuild keeps finding.
+
+     So the rule is written down instead:
+
+       raised   anything IN the page flow — cards, rows, panels, segmented
+                controls, inputs. Hairline only: a border already separates it,
+                and a shadow on top of a border adds noise and no information.
+       control  the ONE physical exception — the knob of a switch, which has to
+                read as sitting on its track rather than painted onto it.
+       overlay  menus, popovers and a card being dragged: things that float near
+                the thing that produced them.
+       modal    dialogs, drawers and ⌘K, which float above everything.
+
+     Tinted with the neutral ramp's darkest (#111827) rather than pure black, so
+     a shadow sits in the same colour family as the borders it appears beside.
+     ───────────────────────────────────────────────────────────────────── */
   --shadow-raised: none;
-  --shadow-overlay: none;
-  --shadow-modal: none;
+  --shadow-control: 0 1px 2px 0 rgb(17 24 39 / 0.10);
+  --shadow-overlay: 0 4px 12px -2px rgb(17 24 39 / 0.08), 0 2px 4px -2px rgb(17 24 39 / 0.06);
+  --shadow-modal: 0 16px 40px -8px rgb(17 24 39 / 0.16), 0 4px 12px -4px rgb(17 24 39 / 0.08);
+
   --z-100: 100;
   --z-101: 101;
   --ease-out: cubic-bezier(0.25, 0.1, 0.25, 1);
@@ -84,23 +211,110 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #D1D5DB;
+    background: #e2e8e4;
     border-radius: 3px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #9CA3AF;
+    background: #6f8279;
   }
 
   /* Custom Select Arrow */
   select {
     appearance: none;
     -webkit-appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20' stroke='%236B7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20' stroke='%236f8279'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
     background-position: right 0.75rem center;
     background-repeat: no-repeat;
     background-size: 1.25em 1.25em;
     padding-right: 2.5rem;
+  }
+
+  /*
+   * Number fields, without the stepper.
+   *
+   * The little up/down arrows are a control nobody in this product uses. Every
+   * number field here is a rupee amount, a percentage or a count that gets
+   * typed — nobody reaches an invoice of 47,500 by pressing an arrow — and the
+   * stepper costs real width in a field that has to fit a figure, sits under
+   * the cursor exactly where you want to click into the text, and appears on
+   * hover so the field changes shape as you move across the form.
+   *
+   * `appearance: textfield` is what Firefox reads; the two pseudo-elements are
+   * what Chrome and Safari read. Both are needed.
+   */
+  input[type='number'] {
+    appearance: textfield;
+    -moz-appearance: textfield;
+  }
+
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    appearance: none;
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}
+
+@layer components {
+  /*
+   * Every data table in the product, spaced from the tokens above.
+   *
+   * A component layer rather than base, because these have to beat nothing:
+   * the padding utilities that used to sit on each cell have been removed, so
+   * there is no utility left to compete with. Anything a cell still needs to
+   * say for itself — alignment, colour, weight, a max-width — it still says.
+   *
+   * `:first-child` / `:last-child` get the wider edge inset so the first
+   * column does not start hard against the card's border, which is what the
+   * old px-5-on-the-first-cell convention was doing by hand on some tables
+   * and forgetting on others.
+   */
+  /*
+   * The small-caps label. Works on a <th>, a <label>, a <p> or a <span>,
+   * which is why it is a class and not a component — a table header cannot
+   * wrap its text in one.
+   *
+   * Colour is set here and beaten by a utility where a label needs to be
+   * anything but muted: `class="eyebrow text-danger"` wins, because utilities
+   * outrank the components layer.
+   */
+  .eyebrow {
+    font-size: var(--text-micro);
+    line-height: var(--text-micro--line-height);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
+    color: var(--color-secondary);
+  }
+
+  /* Every screen the same measure. */
+  .page-shell {
+    max-inline-size: var(--page-max);
+    margin-inline: auto;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding-block: var(--table-py);
+    padding-inline: var(--table-px);
+  }
+
+  .data-table th:first-child,
+  .data-table td:first-child {
+    padding-inline-start: var(--table-edge);
+  }
+
+  .data-table th:last-child,
+  .data-table td:last-child {
+    padding-inline-end: var(--table-edge);
+  }
+
+  /* The row's own size. A cell may still choose text-micro or text-xs for
+     something deliberately smaller; this is the default it starts from. */
+  .data-table td {
+    font-size: var(--table-text);
+    line-height: var(--table-line);
   }
 }
 

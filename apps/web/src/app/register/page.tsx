@@ -34,7 +34,7 @@ export default function RegisterPage() {
       // else, which left the board answering "No pipeline configured".
       const data = await api.auth.register({ name, email, password, organizationName });
       setAuth(data.user as never);
-      router.push('/dashboard');
+      router.push('/my-work');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not create the workspace');
     } finally {
@@ -52,10 +52,10 @@ export default function RegisterPage() {
           className="w-full max-w-sm"
         >
           <div className="flex items-center mb-10">
-            <img src="/logo_flowzen.png" alt="Flowzen" className="h-12 w-auto object-contain" />
+            <img src="/logo_flowzen.png" alt="Flowzen" width={180} height={48} className="h-12 w-auto object-contain" />
           </div>
 
-          <h1 className="text-2xl font-bold text-primary mb-1">Create your workspace</h1>
+          <h1 className="text-2xl font-semibold text-primary mb-1">Create your workspace</h1>
           <p className="text-sm text-secondary mb-8">Start managing projects like a pro</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -63,15 +63,15 @@ export default function RegisterPage() {
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-danger"
+                className="rounded-xl bg-danger-tint border border-danger/20 px-4 py-3 text-sm text-danger"
               >
                 {error}
               </motion.div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-body mb-1.5">Organization name</label>
-              <input
+              <label className="block text-sm font-medium text-body mb-1.5" htmlFor="organization-name">Organization name</label>
+              <input id="organization-name"
                 value={organizationName}
                 onChange={(e) => setOrganizationName(e.target.value)}
                 placeholder="Your company name"
@@ -81,8 +81,8 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-body mb-1.5">Full name</label>
-              <input
+              <label className="block text-sm font-medium text-body mb-1.5" htmlFor="full-name">Full name</label>
+              <input id="full-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="John Doe"
@@ -92,8 +92,8 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-body mb-1.5">Email</label>
-              <input
+              <label className="block text-sm font-medium text-body mb-1.5" htmlFor="email">Email</label>
+              <input id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -104,9 +104,10 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-body mb-1.5">Password</label>
+              <label htmlFor="password" className="block text-sm font-medium text-body mb-1.5">Password</label>
               <div className="relative">
                 <input
+                  id="password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -151,9 +152,9 @@ export default function RegisterPage() {
         <div className="relative text-center px-12">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2 }}>
             <div className="flex items-center justify-center mx-auto mb-8">
-              <img src="/logo_flowzen.png" alt="Flowzen" className="h-20 w-auto object-contain brightness-0 invert opacity-90" />
+              <img src="/logo_flowzen.png" alt="Flowzen" width={300} height={80} className="h-20 w-auto object-contain brightness-0 invert opacity-90" />
             </div>
-            <h2 className="text-3xl font-bold text-white mb-3">Built for agencies</h2>
+            <h2 className="text-3xl font-semibold text-white mb-3">Built for agencies</h2>
             <p className="text-base text-white/60 max-w-sm mx-auto leading-relaxed">
               Everything your team needs to deliver exceptional projects, on time and on budget.
             </p>

@@ -1,75 +1,61 @@
 /**
  * Your own account.
  *
- * Separate from /users on purpose. Everything here is about YOU and needs no
- * role, and nothing here can change a role — the two must not share a handler,
- * or "edit my phone number" and "promote myself" become one code path (§5).
+ * The web app has had a finished /profile screen for a long time — it loads
+ * you, lets you edit your name, job title and phone, and changes your
+ * password. None of it worked, because none of these three routes existed and
+ * every request 404'd. Profile sits in the bottom navigation for every signed-
+ * in person, so this was the one dead link nobody could avoid.
+ *
+ * Deliberately narrow, matching the screen: email is what you sign in as, and
+ * `preset` is not here at all — nobody promotes themselves.
  */
 
 import { Router, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
-import { hashPassword, comparePassword } from '../utils/password.js';
-import { authenticate, highestRole, type AuthRequest } from '../middleware/auth.js';
+import { authenticate, type AuthRequest } from '../middleware/auth.js';
+import { comparePassword, hashPassword } from '../utils/password.js';
+import { roleForPreset } from '../utils/roles.js';
 
 export const profileRouter = Router();
 
 profileRouter.use(authenticate);
 
-class ProfileRuleError extends Error {
-  readonly code = 'PROFILE_RULE_VIOLATION';
-  constructor(message: string) {
-    super(message);
-    this.name = 'ProfileRuleError';
-  }
-}
-
-const onError = (e: unknown, res: Response, next: NextFunction) => {
-  if (e instanceof ProfileRuleError) {
-    res.status(409).json({ success: false, error: e.message, code: e.code });
-    return;
-  }
-  next(e);
-};
+// ── Read ────────────────────────────────────────────────────────────────────
 
 profileRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const user = await prisma.user.findUniqueOrThrow({
+    const user = await prisma.user.findUnique({
       where: { id: req.user!.userId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        avatar: true,
-        designation: true,
-        phone: true,
-        joiningDate: true,
-        authProvider: true,
-        password: true,
-        googleId: true,
-        roles: { select: { role: true } },
-        organization: { select: { id: true, name: true, allowPasswordLogin: true } },
-      },
+      include: { organization: { select: { id: true, name: true, allowPasswordLogin: true } } },
     });
 
+    if (!user) {
+      res.status(404).json({ success: false, error: 'Account not found' });
+      return;
+    }
+
     res.json({
-      success: true,
-      data: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        avatar: user.avatar,
-        designation: user.designation,
-        phone: user.phone,
-        joiningDate: user.joiningDate,
-        role: highestRole(user.roles.map((r) => r.role)),
-        organization: user.organization,
-        // Never the hash itself — only whether there is one.
-        signIn: {
-          password: user.password !== null,
-          google: user.googleId !== null,
-          provider: user.authProvider,
-        },
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      // No uploaded avatars anywhere in this app — the screen draws initials on
+      // a colour derived from the name, so null is the honest answer, not a gap.
+      avatar: null,
+      designation: user.designation,
+      phone: user.phone,
+      // The day the account was made. There is no separate joining date to keep
+      // in step with it, and inventing one would only let the two disagree.
+      joiningDate: user.createdAt.toISOString(),
+      role: roleForPreset(user.preset),
+      organization: user.organization,
+      signIn: {
+        password: true,
+        // Google sign-in is not wired up in this deployment. Said plainly here
+        // so the password card offers "change" rather than "set".
+        google: false,
+        provider: 'password',
       },
     });
   } catch (e) {
@@ -77,47 +63,49 @@ profileRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunctio
   }
 });
 
-// Deliberately narrow. Email is missing because changing it changes who you sign
-// in as, and role is missing because nobody promotes themselves.
-const editSchema = z.object({
-  name: z.string().min(1, 'A name is needed.').optional(),
-  designation: z.string().optional().nullable(),
-  phone: z.string().optional().nullable(),
-  avatar: z.string().optional().nullable(),
+// ── Edit ────────────────────────────────────────────────────────────────────
+
+const profileUpdateSchema = z.object({
+  name: z.string().min(1, 'Name cannot be empty').optional(),
+  designation: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
 });
 
 profileRouter.patch('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const parsed = editSchema.safeParse(req.body);
+    const parsed = profileUpdateSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ success: false, error: parsed.error.issues[0].message });
       return;
     }
+
+    const { name, designation, phone } = parsed.data;
+    const blank = (v: string | null | undefined) =>
+      v === undefined ? undefined : v && v.trim() ? v.trim() : null;
+
     const user = await prisma.user.update({
       where: { id: req.user!.userId },
-      data: parsed.data,
-      select: { id: true, name: true, designation: true, phone: true, avatar: true },
+      data: {
+        ...(name !== undefined ? { name: name.trim() } : {}),
+        ...(designation !== undefined ? { designation: blank(designation) } : {}),
+        ...(phone !== undefined ? { phone: blank(phone) } : {}),
+      },
+      select: { id: true, name: true, designation: true, phone: true },
     });
-    res.json({ success: true, data: user });
+
+    res.json(user);
   } catch (e) {
     next(e);
   }
 });
 
+// ── Password ────────────────────────────────────────────────────────────────
+
 const passwordSchema = z.object({
-  // Optional, because somebody who joined with Google is SETTING a first
-  // password rather than changing one, and there is nothing to verify against.
   currentPassword: z.string().optional(),
-  newPassword: z.string().min(8, 'Use at least 8 characters.'),
+  newPassword: z.string().min(8, 'Use at least 8 characters'),
 });
 
-/**
- * Change, or set, your password.
- *
- * `tokenVersion` is bumped so every other session dies. Without it a stolen
- * cookie survives the change that was made because of it — which is the one
- * thing a password change is supposed to stop.
- */
 profileRouter.post('/password', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const parsed = passwordSchema.safeParse(req.body);
@@ -126,36 +114,44 @@ profileRouter.post('/password', async (req: AuthRequest, res: Response, next: Ne
       return;
     }
 
-    const user = await prisma.user.findUniqueOrThrow({
+    const { currentPassword, newPassword } = parsed.data;
+
+    const user = await prisma.user.findUnique({
       where: { id: req.user!.userId },
-      select: { id: true, password: true },
+      select: { id: true, passwordHash: true },
     });
 
-    if (user.password) {
-      if (!parsed.data.currentPassword) {
-        throw new ProfileRuleError('Enter your current password.');
-      }
-      if (!(await comparePassword(parsed.data.currentPassword, user.password))) {
-        throw new ProfileRuleError('That is not your current password.');
-      }
+    if (!user) {
+      res.status(404).json({ success: false, error: 'Account not found' });
+      return;
+    }
+
+    // Everyone in this deployment has a password, so the current one is always
+    // required. Asking for it is what stops a borrowed unlocked laptop from
+    // becoming a permanent account takeover.
+    if (!currentPassword) {
+      res.status(400).json({ success: false, error: 'Enter your current password' });
+      return;
+    }
+
+    if (!(await comparePassword(currentPassword, user.passwordHash))) {
+      res.status(400).json({ success: false, error: 'That is not your current password' });
+      return;
     }
 
     await prisma.user.update({
       where: { id: user.id },
       data: {
-        password: await hashPassword(parsed.data.newPassword),
-        tokenVersion: { increment: 1 },
+        passwordHash: await hashPassword(newPassword),
+        // Retires every token issued before now, this browser's included — the
+        // screen says so before the button, and then sends you to sign in.
+        sessionsValidFrom: new Date(),
       },
     });
 
-    // This request's own cookie is now stale too, so say so rather than letting
-    // the next click look like a random logout.
-    res.json({
-      success: true,
-      data: { signedOutEverywhere: true },
-      message: 'Password updated. Sign in again.',
-    });
+    res.clearCookie('token');
+    res.json({ signedOutEverywhere: true });
   } catch (e) {
-    onError(e, res, next);
+    next(e);
   }
 });

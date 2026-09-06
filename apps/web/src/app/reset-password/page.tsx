@@ -38,7 +38,7 @@ function ResetPassword() {
     try {
       const data = await api.auth.resetPassword(token, password);
       setAuth(data.user as never);
-      router.push('/dashboard');
+      router.push('/my-work');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not set the password');
       setSaving(false);
@@ -48,33 +48,34 @@ function ResetPassword() {
   return (
     <div className="flex min-h-screen items-center justify-center px-8">
       <div className="w-full max-w-sm">
-        <img src="/logo_flowzen.png" alt="Flowzen" className="mb-10 h-12 w-auto object-contain" />
+        <img src="/logo_flowzen.png" alt="Flowzen" width={180} height={48} className="mb-10 h-12 w-auto object-contain" />
 
         {!token ? (
           <>
-            <h1 className="text-2xl font-bold text-primary">This link is incomplete</h1>
+            <h1 className="text-2xl font-semibold text-primary">This link is incomplete</h1>
             <p className="mt-2 text-sm text-secondary">
               It is missing its token. Ask an admin for a fresh one — they expire after an hour.
             </p>
           </>
         ) : (
           <>
-            <h1 className="text-2xl font-bold text-primary">Choose a new password</h1>
+            <h1 className="text-2xl font-semibold text-primary">Choose a new password</h1>
             <p className="mb-8 mt-1 text-sm text-secondary">
               Every device you are signed in on will be signed out.
             </p>
 
             <form onSubmit={submit} className="space-y-4">
               {error && (
-                <p className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-danger">
+                <p className="rounded-xl border border-danger/20 bg-danger-tint px-4 py-3 text-sm text-danger">
                   {error}
                 </p>
               )}
 
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-body">New password</label>
+                <label className="mb-1.5 block text-sm font-medium text-body" htmlFor="new-password-setpassword-e-target-">New password</label>
                 <div className="relative">
                   <input
+                    aria-label="New password"
                     type={show ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -96,7 +97,7 @@ function ResetPassword() {
 
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-body">Again</label>
-                <input
+                <input id="new-password-setpassword-e-target-"
                   type={show ? 'text' : 'password'}
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}

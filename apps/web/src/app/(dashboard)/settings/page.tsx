@@ -19,12 +19,12 @@ import { Check } from 'lucide-react';
 import {
   api,
   ApiError,
-  atLeast,
   formatDate,
   type AuditEntry,
   type Member,
   type OrgConfig,
   type Role,
+  type TaskTemplate,
 } from '@/lib/api-v2';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -35,17 +35,22 @@ import { Toggle } from '@/components/ui/toggle';
 import { ErrorNote, Note } from '@/components/ui/empty-state';
 import { PageSkeleton } from '@/components/ui/skeleton-loaders';
 import { MailTab } from './components/MailTab';
-import { ConfigList } from './components/ConfigList';
+import { DocumentSettingsTab } from './components/DocumentSettingsTab';
 import { OnboardingTab } from './components/OnboardingTab';
+import { TaskTemplatesTab } from './components/TaskTemplatesTab';
+import { TrashTab } from './components/TrashTab';
+import { AssetsTab } from './components/AssetsTab';
 
 const TABS = [
   { key: 'organisation', label: 'Organisation' },
   { key: 'documents', label: 'Tax & numbering' },
+  { key: 'proforma', label: 'Proforma & billing' },
   { key: 'email', label: 'Email' },
   { key: 'team', label: 'Team' },
-  { key: 'modules', label: 'Modules' },
-  { key: 'lists', label: 'Lists' },
+  { key: 'templates', label: 'Task templates' },
+  { key: 'assets', label: 'Assets' },
   { key: 'onboarding', label: 'Onboarding' },
+  { key: 'trash', label: 'Trash' },
   { key: 'activity', label: 'Activity' },
 ] as const;
 
@@ -73,12 +78,6 @@ const STATES = [
   'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
 ].map((s) => ({ value: s, label: s }));
 
-const MODULE_META: Record<string, { label: string; what: string }> = {
-  CRM: { label: 'CRM', what: 'The pipeline, quotations and everything before a client is won.' },
-  PM: { label: 'Project Management', what: 'Projects, tasks and who is doing what.' },
-  REVENUE: { label: 'Revenue', what: 'What clients agreed to pay, invoices and payments.' },
-};
-
 type Form = {
   name: string;
   website: string;
@@ -102,10 +101,10 @@ export default function SettingsPage() {
   const [form, setForm] = useState<Form | null>(null);
   const [team, setTeam] = useState<Member[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [templates, setTemplates] = useState<TaskTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -123,17 +122,21 @@ export default function SettingsPage() {
         currency: o.currency,
         timezone: o.timezone,
         locale: o.locale,
-        documentPrefix: o.documentPrefix,
+        // These arrive only for setup.admin — the same people who can reach
+        // this form at all. The fallbacks are for the type, not for a case
+        // anybody sees.
+        documentPrefix: o.documentPrefix ?? '',
         fiscalYearStart: String(o.fiscalYearStart),
         mailFromName: o.mailFromName ?? '',
         mailFromEmail: o.mailFromEmail ?? '',
-        allowPasswordLogin: o.allowPasswordLogin,
+        allowPasswordLogin: o.allowPasswordLogin ?? true,
       });
       setError(null);
       // Both are admin-only, so a refusal is expected for anyone below and is
       // not worth showing as an error.
       void api.users.list().then(setTeam).catch(() => {});
       void api.config.auditLog().then(setAudit).catch(() => {});
+      void api.taskTemplates.list().then((r) => r.success && setTemplates(r.templates)).catch(() => {});
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load settings');
     } finally {
@@ -145,7 +148,10 @@ export default function SettingsPage() {
     void load();
   }, [load]);
 
-  const canEdit = atLeast(config?.me.role as Role | undefined, 'ADMIN');
+  // The switch the API enforces on every one of these saves, not a rung on the
+  // old role ladder — ACCOUNTS maps to ADMIN there while holding no
+  // setup.admin, which offered them fields that every save would refuse.
+  const canEdit = Boolean(config?.me.permissions?.includes('setup.admin'));
 
   const set = <K extends keyof Form>(key: K, value: Form[K]) =>
     setForm((f) => (f ? { ...f, [key]: value } : f));
@@ -183,26 +189,13 @@ export default function SettingsPage() {
     }
   };
 
-  const toggleModule = async (key: string, enabled: boolean) => {
-    setBusy(key);
-    setError(null);
-    try {
-      await api.config.setModule(key, enabled);
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not change that');
-    } finally {
-      setBusy(null);
-    }
-  };
-
   if (loading || !form || !config) return <PageSkeleton />;
 
   const tz = config.organization.timezone;
   const locale = config.organization.locale;
 
   return (
-    <div className="max-w-3xl">
+    <div className="page-shell">
       <PageHeader title="Settings" subtitle={config.organization.name} />
 
       <div className="space-y-5">
@@ -409,6 +402,8 @@ export default function SettingsPage() {
           </form>
         )}
 
+        {tab === 'proforma' && <DocumentSettingsTab canEdit={canEdit} />}
+
         {tab === 'email' && (
           <MailTab
             canEdit={canEdit}
@@ -435,7 +430,7 @@ export default function SettingsPage() {
                       <p className="truncate text-sm text-primary">{m.name}</p>
                       <p className="truncate text-xs text-secondary">{m.email}</p>
                     </div>
-                    <Badge>{m.role.replace('_', ' ').toLowerCase()}</Badge>
+                    <Badge>{(m.role ?? '').replace('_', ' ').toLowerCase()}</Badge>
                     <Badge
                       tone={m.status === 'ACTIVE' ? 'good' : m.status === 'PENDING' ? 'warn' : 'neutral'}
                     >
@@ -454,88 +449,24 @@ export default function SettingsPage() {
           </Card>
         )}
 
-        {tab === 'modules' && (
-          <Card padding="none">
-            <CardHeader>
-              <CardTitle>What this organisation uses</CardTitle>
-            </CardHeader>
-            <CardBody className="space-y-3">
-              <p className="text-xs text-secondary">
-                Turning one off hides its screens and refuses its endpoints — it is not only
-                cosmetic.
-              </p>
-              {Object.entries(config.modules).map(([key, on]) => (
-                <div key={key} className="flex items-start gap-3 rounded-xl border border-border p-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-primary">
-                      {MODULE_META[key]?.label ?? key}
-                    </p>
-                    <p className="text-xs text-secondary">{MODULE_META[key]?.what ?? ''}</p>
-                  </div>
-                  <Toggle
-                    checked={on}
-                    onChange={(v) => toggleModule(key, v)}
-                    className={!canEdit || busy === key ? 'pointer-events-none opacity-50' : ''}
-                  />
-                </div>
-              ))}
-              <Note>
-                At least one has to stay on. Which one you are working in is chosen from the
-                sidebar.
-              </Note>
-            </CardBody>
-          </Card>
-        )}
-
-        {tab === 'lists' && (
-          <Card padding="none">
-            <CardHeader>
-              <CardTitle>Your lists</CardTitle>
-            </CardHeader>
-            <CardBody className="space-y-4">
-              <p className="text-xs text-secondary">
-                Rows in the database rather than values baked into the code — renaming one is an
-                edit, not a migration (§3.4).
-              </p>
-              <div className="grid gap-5 sm:grid-cols-2">
-                <ConfigList
-                  label="Pipeline stages"
-                  items={config.stages}
-                  endpoint="stages"
-                  onChanged={() => void load()}
-                  canEdit={canEdit}
-                  canReorder={true}
-                  renderExtra={(s) => s.requiresForecast ? <p className="text-xs text-secondary mt-1">Needs a forecast</p> : null}
-                />
-                <ConfigList 
-                  label="Services" 
-                  items={config.services} 
-                  endpoint="services"
-                  onChanged={() => void load()}
-                  canEdit={canEdit}
-                />
-                <ConfigList 
-                  label="Lost reasons" 
-                  items={config.lostReasons} 
-                  endpoint="lost-reasons"
-                  onChanged={() => void load()}
-                  canEdit={canEdit}
-                />
-                <ConfigList 
-                  label="Lead sources" 
-                  items={config.sources} 
-                  endpoint="sources"
-                  onChanged={() => void load()}
-                  canEdit={canEdit}
-                />
-              </div>
-            </CardBody>
-          </Card>
+        {tab === 'templates' && (
+          <TaskTemplatesTab templates={templates} canEdit={canEdit} onChanged={() => void load()} />
         )}
 
         {tab === 'onboarding' && (
           <OnboardingTab config={config} onSaved={() => void load()} />
         )}
+
+        {tab === 'assets' && (
+          <AssetsTab
+            canEdit={canEdit}
+            tagPrefix={config.organization.assetTagPrefix ?? 'EL'}
+            financialYearStart={config.organization.fiscalYearStart ?? 4}
+            onSaved={() => void load()}
+          />
+        )}
+
+        {tab === 'trash' && <TrashTab />}
 
         {tab === 'activity' && (
           <Card padding="none">
@@ -581,7 +512,7 @@ function SaveBar({ saving, saved }: { saving: boolean; saved: boolean }) {
   return (
     <div className="flex items-center justify-end gap-3">
       {saved && (
-        <span className="inline-flex items-center gap-1 text-xs text-green-700">
+        <span className="inline-flex items-center gap-1 text-xs text-success">
           <Check className="h-3.5 w-3.5" /> Saved
         </span>
       )}

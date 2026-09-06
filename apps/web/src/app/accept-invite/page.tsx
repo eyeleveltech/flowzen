@@ -38,7 +38,7 @@ function AcceptInvite() {
     try {
       const data = await api.auth.acceptInvite({ token, password });
       setAuth(data.user as never);
-      router.push('/dashboard');
+      router.push('/my-work');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not accept the invitation');
       setSaving(false);
@@ -48,7 +48,7 @@ function AcceptInvite() {
   if (!token) {
     return (
       <Shell>
-        <h1 className="text-2xl font-bold text-primary">This link is incomplete</h1>
+        <h1 className="text-2xl font-semibold text-primary">This link is incomplete</h1>
         <p className="mt-2 text-sm text-secondary">
           It is missing its token. Ask whoever invited you for a fresh link.
         </p>
@@ -61,22 +61,23 @@ function AcceptInvite() {
 
   return (
     <Shell>
-      <h1 className="text-2xl font-bold text-primary">Set your password</h1>
+      <h1 className="text-2xl font-semibold text-primary">Set your password</h1>
       <p className="mb-8 mt-1 text-sm text-secondary">
         Your account is already set up. Choose a password and you are in.
       </p>
 
       <form onSubmit={submit} className="space-y-4">
         {error && (
-          <p className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-danger">
+          <p className="rounded-xl border border-danger/20 bg-danger-tint px-4 py-3 text-sm text-danger">
             {error}
           </p>
         )}
 
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-body">Password</label>
+          <label className="mb-1.5 block text-sm font-medium text-body" htmlFor="password-setpassword-e-target-valu">Password</label>
           <div className="relative">
             <input
+              id="password"
               type={show ? 'text' : 'password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -98,7 +99,7 @@ function AcceptInvite() {
 
         <div>
           <label className="mb-1.5 block text-sm font-medium text-body">Again</label>
-          <input
+          <input id="password-setpassword-e-target-valu"
             type={show ? 'text' : 'password'}
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
@@ -133,7 +134,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen items-center justify-center px-8">
       <div className="w-full max-w-sm">
-        <img src="/logo_flowzen.png" alt="Flowzen" className="mb-10 h-12 w-auto object-contain" />
+        <img src="/logo_flowzen.png" alt="Flowzen" width={180} height={48} className="mb-10 h-12 w-auto object-contain" />
         {children}
       </div>
     </div>

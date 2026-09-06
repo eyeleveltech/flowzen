@@ -39,12 +39,12 @@ export function Toggle({
         className={cn(
           'relative inline-flex shrink-0 items-center rounded-full transition-colors duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
           switchSizeClass,
-          checked ? 'bg-primary' : 'bg-gray-200'
+          checked ? 'bg-primary' : 'bg-border'
         )}
       >
         <span
           className={cn(
-            'inline-block rounded-full bg-white shadow-sm transition-transform duration-150 motion-reduce:transition-none',
+            'inline-block rounded-full bg-white shadow-control transition-transform duration-150 motion-reduce:transition-none',
             knobSizeClass,
             knobTranslateClass
           )}

@@ -45,8 +45,8 @@ export function Field({
 
   return (
     <div className={className}>
-      <label htmlFor={fieldId} className="block text-sm font-medium text-body mb-1.5">
-        {label} {required && <span className="text-red-500">*</span>}
+      <label htmlFor={fieldId} className="eyebrow block mb-1.25">
+        {label} {required && <span className="text-danger">*</span>}
       </label>
       {textarea ? (
         <textarea
@@ -62,7 +62,7 @@ export function Field({
           aria-describedby={error ? `${fieldId}-error` : hint ? `${fieldId}-hint` : undefined}
           className={`w-full rounded-xl border bg-white px-4 py-2.5 text-sm text-body outline-none transition-colors duration-150 motion-reduce:transition-none resize-none ${
             error
-              ? 'border-red-400 focus:border-red-400 focus:ring-red-100'
+              ? 'border-danger focus:border-danger focus:ring-danger/20'
               : 'border-border focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1'
           }`}
         />
@@ -89,19 +89,19 @@ export function Field({
               icon ? 'pl-9' : 'px-4'
             } pr-4 py-2.5 text-sm text-body outline-none transition-colors duration-150 motion-reduce:transition-none ${
               error
-                ? 'border-red-400 focus:border-red-400 focus:ring-red-100'
+                ? 'border-danger focus:border-danger focus:ring-danger/20'
                 : 'border-border focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1'
             }`}
           />
         </div>
       )}
       {error && (
-        <p id={`${fieldId}-error`} aria-live="polite" className="mt-1 text-xs text-red-500">
+        <p id={`${fieldId}-error`} aria-live="polite" className="mt-1 text-micro text-danger">
           {error}
         </p>
       )}
       {!error && hint && (
-        <p id={`${fieldId}-hint`} className="mt-1 text-xs text-secondary">
+        <p id={`${fieldId}-hint`} className="mt-1 text-micro text-secondary">
           {hint}
         </p>
       )}
@@ -136,8 +136,8 @@ export function FieldSelect({
 
   return (
     <div className={className}>
-      <label htmlFor={fieldId} className="block text-sm font-medium text-body mb-1.5">
-        {label} {required && <span className="text-red-500">*</span>}
+      <label htmlFor={fieldId} className="eyebrow block mb-1.25">
+        {label} {required && <span className="text-danger">*</span>}
       </label>
       <Select
         id={fieldId}
@@ -153,7 +153,7 @@ export function FieldSelect({
         leadingIcon={leadingIcon}
       />
       {error && (
-        <p id={`${fieldId}-error`} aria-live="polite" className="mt-1 text-xs text-red-500">
+        <p id={`${fieldId}-error`} aria-live="polite" className="mt-1 text-micro text-danger">
           {error}
         </p>
       )}
@@ -184,20 +184,20 @@ export function FieldCheckbox({
   const fieldId = id || generatedId;
 
   return (
-    <div className={`flex items-start gap-3 p-3 bg-gray-50 border border-border rounded-xl ${className}`}>
+    <div className={`flex items-start gap-3 p-3 bg-subtle border border-border rounded-xl ${className}`}>
       <input
         id={fieldId}
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
         disabled={disabled}
-        className="h-4 w-4 mt-0.5 text-primary rounded border-gray-300 focus:ring-primary cursor-pointer"
+        className="h-4 w-4 mt-0.5 text-primary rounded border-line focus:ring-primary cursor-pointer"
       />
       <div>
-        <label htmlFor={fieldId} className="text-sm font-medium text-body cursor-pointer">
+        <label htmlFor={fieldId} className="text-xs font-medium text-body cursor-pointer">
           {label}
         </label>
-        {hint && <p className="text-xs text-secondary mt-0.5">{hint}</p>}
+        {hint && <p className="text-micro text-secondary mt-0.5">{hint}</p>}
       </div>
     </div>
   );

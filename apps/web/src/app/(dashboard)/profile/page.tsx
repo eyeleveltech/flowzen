@@ -19,6 +19,7 @@ import { Field } from '@/components/ui/field';
 import { ErrorNote, Note } from '@/components/ui/empty-state';
 import { PageSkeleton } from '@/components/ui/skeleton-loaders';
 import { getInitials, getAvatarColor } from '@/lib/utils';
+import { HeldAssets } from '@/components/assets/HeldAssets';
 
 const ROLE_LABEL: Record<Role, string> = {
   SUPER_ADMIN: 'Super Admin',
@@ -86,7 +87,7 @@ export default function ProfilePage() {
   const locale = config?.organization.locale ?? 'en-IN';
 
   return (
-    <div className="max-w-2xl">
+    <div className="page-shell">
       <PageHeader title="Your profile" subtitle={profile?.organization.name} />
 
       <div className="space-y-5">
@@ -117,7 +118,7 @@ export default function ProfilePage() {
 
             <CardFooter>
               {saved && (
-                <span className="mr-auto inline-flex items-center gap-1 text-xs text-green-700">
+                <span className="mr-auto inline-flex items-center gap-1 text-xs text-success">
                   <Check className="h-3.5 w-3.5" /> Saved
                 </span>
               )}
@@ -127,6 +128,10 @@ export default function ProfilePage() {
             </CardFooter>
           </form>
         </Card>
+
+        {/* The company kit logged out to you. Absent entirely when you hold
+            nothing, rather than an empty card everybody learns to scroll past. */}
+        {profile && <HeldAssets userId={profile.id} />}
 
         {/* ── What cannot be changed here, and why ────────────────────────── */}
         <Card padding="none">

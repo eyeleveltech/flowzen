@@ -15,10 +15,10 @@ export type Tone = 'neutral' | 'good' | 'warn' | 'bad' | 'info';
 
 const TONE: Record<Tone, string> = {
   neutral: 'bg-subtle text-secondary border-border',
-  good: 'bg-green-50 text-green-700 border-green-200',
-  warn: 'bg-amber-50 text-amber-700 border-amber-200',
-  bad: 'bg-red-50 text-red-700 border-red-200',
-  info: 'bg-blue-50 text-blue-700 border-blue-200',
+  good: 'bg-success-tint text-success border-success/30',
+  warn: 'bg-warning-tint text-warning-ink border-warning/30',
+  bad: 'bg-danger-tint text-danger border-danger/30',
+  info: 'bg-info-tint text-info border-info/30',
 };
 
 export function Badge({
@@ -33,7 +33,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 items-center gap-1 rounded-lg border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap',
+        'inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-micro font-semibold tracking-[0.03em] whitespace-nowrap',
         TONE[tone],
         className,
       )}

@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 export function Table({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <div className={cn('overflow-x-auto rounded-card border border-border bg-white', className)}>
-      <table className="w-full min-w-[36rem] text-left">{children}</table>
+      <table className="w-full min-w-xl text-left data-table">{children}</table>
     </div>
   );
 }
@@ -48,13 +48,21 @@ export function TR({
   children,
   className,
   onClick,
+  ref,
 }: {
   children: React.ReactNode;
   className?: string;
   onClick?: () => void;
+  /**
+   * So a caller can scroll one row into view — a notification that names a
+   * record should land on that record, not on a list containing it. React 19
+   * passes `ref` as an ordinary prop, so no `forwardRef` is needed.
+   */
+  ref?: React.Ref<HTMLTableRowElement>;
 }) {
   return (
     <tr
+      ref={ref}
       onClick={onClick}
       className={cn('transition-colors hover:bg-surface', onClick && 'cursor-pointer', className)}
     >

@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api-v2';
-import { useAuthStore, useUIStore, useModuleStore } from '@/stores';
-import { moduleForPath, canAccessModule } from '@/lib/modules';
+import { useAuthStore, useUIStore } from '@/stores';
+import { permissionForPath, canSee } from '@/config/navigation';
 import { Sidebar } from '@/components/layout/sidebar';
 import { TopNav } from '@/components/layout/top-nav';
 import { BottomTabs } from '@/components/layout/bottom-tabs';
@@ -20,12 +20,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { user, isAuthenticated, loadFromStorage, setAuth } = useAuthStore();
   const { sidebarCollapsed, mobileSidebarOpen, setMobileSidebarOpen } = useUIStore();
   const { activeToast, clearToast } = useNotificationStore();
-  const hydrateModule = useModuleStore((s) => s.hydrate);
   const isMobile = useIsMobile();
 
   useEffect(() => {
     loadFromStorage();
-    hydrateModule();
     // Refresh the session (incl. role and enabledModules) so gating reflects the
     // server. /auth/me answers { user: … } — storing the envelope instead of the
     // user left role and name undefined, which silently hid every nav item that
@@ -43,15 +41,51 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [isAuthenticated, router]);
 
-  // If the route belongs to a module this person cannot reach — the
-  // organisation switched it off, or their role does not admit it — send them
-  // to the picker rather than to a screen that will fail on its first request.
+  /*
+   * The one guard on a typed or bookmarked URL.
+   *
+   * The sidebar leaves out what this person cannot open, so this only fires on
+   * a URL they typed or kept. They land on Today, which everybody has.
+   *
+   * It used to ask whether the ORGANISATION had a "module", and returned early
+   * unless `user.enabledModules` was set — a field the API stopped sending, so
+   * the guard never ran. Now it asks the same permission the screen's own
+   * request will ask, which is the question that was always meant.
+   */
   const pathname = usePathname();
+
+  /*
+   * Decided during RENDER, not inside the effect.
+   *
+   * The redirect used to live in an effect, which runs AFTER the child has
+   * already mounted — so a blocked screen still fired its own first request
+   * and collected a 403 in the console before the redirect landed. Every
+   * refused navigation logged one to four of them, which is noise that trains
+   * people to ignore the console.
+   *
+   * Working it out here means the page never mounts at all.
+   */
+  const needs = permissionForPath(pathname);
+
+  /*
+   * Three answers, not two: allowed, refused, and DON'T KNOW YET.
+   *
+   * The session arrives from localStorage in an effect, so the very first
+   * render has no `user` — and treating that as "allowed" is what let a
+   * blocked page mount and fire its own request before the redirect landed.
+   * Every refused navigation logged a 403 in the console that way, which is
+   * noise that teaches people to stop reading the console.
+   *
+   * A screen that names no permission renders immediately; only the gated ones
+   * wait, and only for the frame it takes to read localStorage.
+   */
+  const known = Boolean(user?.permissions);
+  const refused = known && Boolean(needs) && !canSee({ needs }, user!.permissions);
+  const waiting = Boolean(needs) && !known;
+
   useEffect(() => {
-    if (!user || user.enabledModules == null) return; // wait for the session
-    const mod = moduleForPath(pathname);
-    if (mod && !canAccessModule(user, mod)) router.replace('/modules');
-  }, [pathname, user, router]);
+    if (refused) router.replace('/my-work');
+  }, [refused, router]);
 
   // Close mobile sidebar when route changes
   useEffect(() => {
@@ -70,7 +104,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       >
         <TopNav isMobile={isMobile} />
         <div className={`px-4 sm:px-6 lg:px-8 py-8 w-full max-w-400 mx-auto ${isMobile ? 'pb-24' : ''}`}>
-          {children}
+          {refused || waiting ? null : children}
         </div>
       </motion.main>
 
@@ -95,8 +129,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <p className="mt-1 text-xs text-secondary leading-snug">{activeToast.message}</p>
           </div>
           <button
+            aria-label="Close notification"
             onClick={clearToast}
-            className="flex shrink-0 items-center justify-center rounded-lg p-1 text-secondary hover:bg-subtle hover:text-primary transition-colors"
+            className="flex shrink-0 items-center justify-center rounded-lg p-1 text-secondary hover:bg-subtle hover:text-primary transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
           >
             <Icon as={X} size="md" />
           </button>

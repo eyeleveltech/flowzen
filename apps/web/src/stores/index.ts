@@ -1,12 +1,16 @@
 'use client';
-import { ModuleKey } from '@/lib/modules';
 import { create } from 'zustand';
 
 interface User {
   id: string;
   name: string;
   email: string;
+  /** The generic ladder (MEMBER…SUPER_ADMIN) most gating still reads. */
   role: string;
+  /** The agency's own vocabulary (EMPLOYEE…MANAGEMENT). Both arrive; see api/utils/roles.ts. */
+  preset?: string;
+  /** The switches the server actually enforces. The ladder is only for what to SHOW. */
+  permissions?: string[];
   avatar?: string | null;
   team?: { id: string; name: string } | null;
   designation?: string | null;
@@ -69,10 +73,17 @@ interface UIStore {
   sidebarCollapsed: boolean;
   mobileSidebarOpen: boolean;
   commandPaletteOpen: boolean;
+  // The current screen's title/subtitle, read by TopNav — set once per page via
+  // the usePageHeader hook rather than each page drawing its own <h1>, so the
+  // heading lives in the sticky bar (matching the prototype's `.top h1`/`.sub`)
+  // instead of scrolling away with the body.
+  pageTitle: string;
+  pageSubtitle: string | null;
   toggleSidebar: () => void;
   toggleCollapse: () => void;
   setMobileSidebarOpen: (open: boolean) => void;
   setCommandPaletteOpen: (open: boolean) => void;
+  setPageHeader: (title: string, subtitle?: string | null) => void;
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -80,33 +91,13 @@ export const useUIStore = create<UIStore>((set) => ({
   sidebarCollapsed: false,
   mobileSidebarOpen: false,
   commandPaletteOpen: false,
+  pageTitle: 'Flowzen',
+  pageSubtitle: null,
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   toggleCollapse: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
   setMobileSidebarOpen: (open) => set({ mobileSidebarOpen: open }),
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
-}));
-
-// ─── Active Module Store ──────────────────────
-// Which module the user is currently working in (drives the sidebar). The route
-// is the primary signal; this persists the last module for shared/core pages.
-
-interface ModuleStore {
-  activeModule: ModuleKey;
-  setActiveModule: (m: ModuleKey) => void;
-  hydrate: () => void;
-}
-
-export const useModuleStore = create<ModuleStore>((set) => ({
-  activeModule: 'PM',
-  setActiveModule: (m) => {
-    if (typeof window !== 'undefined') localStorage.setItem('flowzen-active-module', m);
-    set({ activeModule: m });
-  },
-  hydrate: () => {
-    if (typeof window === 'undefined') return;
-    const saved = localStorage.getItem('flowzen-active-module');
-    if (saved === 'CRM' || saved === 'PM' || saved === 'REVENUE') set({ activeModule: saved as ModuleKey });
-  },
+  setPageHeader: (title, subtitle = null) => set({ pageTitle: title, pageSubtitle: subtitle }),
 }));
 
 export * from './confirm';

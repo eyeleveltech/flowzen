@@ -1,13 +1,6 @@
 // ══════════════════════════════════════════════════════════════════════════════
-// FLOWZEN v2 — the target schema
-//
-// Built from docs/FLOWZEN-MASTER-PLAN.md §3. Section references below point there.
-//
-// This is a FRESH schema, not a migration of the old one (§6.4). It sits beside
-// schema.prisma so the running app is untouched; the cutover is a rename.
-//
-// Prisma cannot express CHECK constraints. Every one noted `-- CHECK:` below must
-// be added by hand in the migration SQL, or the rule is only a convention.
+// FLOWZEN — TARGET PRISMA SCHEMA
+// Reference: docs/MASTER_ARCHITECTURE_PLAN.md & docs/SCHEMA_PLAN.md
 // ══════════════════════════════════════════════════════════════════════════════
 
 generator client {
@@ -20,451 +13,523 @@ datasource db {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// ORGANISATION — §3.11
+// 1. TENANCY & USERS
 // ──────────────────────────────────────────────────────────────────────────────
 
+enum RolePreset {
+  EMPLOYEE
+  HEAD
+  BD
+  ACCOUNTS
+  MANAGEMENT
+}
+
 model Organization {
-  id          String  @id @default(cuid())
-  name        String
-  logo        String?
-  website     String?
-  industry    String?
-  companySize String?
-  phone       String?
-  address     String?
-  description String?
+  id                 String @id @default(cuid())
+  name               String
+  proformaPrefix     String @default("EL/PI")
+  financialYearStart Int    @default(4) // April = 4
+  timezone           String @default("Asia/Kolkata")
+  currency           String @default("INR")
+  workingHoursStart  String @default("10:00")
+  workingHoursEnd    String @default("19:00")
+  workingDays        Int[]  @default([1, 2, 3, 4, 5, 6]) // Mon-Sat (0=Sun)
 
-  // Nothing is hardcoded to one country (§3.11). Every day-boundary calculation,
-  // money format and document number reads from here rather than a constant.
-  currency        String @default("INR")
-  timezone        String @default("Asia/Kolkata") // IANA name
-  locale          String @default("en-IN")
-  dateFormat      String @default("dd MMM yyyy")
-  fiscalYearStart Int    @default(4) // month, 1-12
-  documentPrefix  String @default("FZ")
+  // Organisation identity — Settings' own "Organisation" tab has always
+  // collected these; there was nowhere real for them to land.
+  website            String?
+  phone              String?
+  address            String? @db.Text
+  state              String?
+  gstNumber          String?
+  allowPasswordLogin Boolean @default(true)
 
-  // The seller's own tax identity. An invoice has two parties and the tax depends
-  // on both: same state means CGST+SGST, different means IGST. Company already
-  // carried these; without them here nothing could work out which rule applies —
-  // and a GST invoice is invalid without the seller's GSTIN printed on it.
-  state     String?
-  gstNumber String?
+  // Outbound mail — org-level override of the deployment's own SMTP account
+  // (see utils/mailer.ts). Null host means "use the environment's", not
+  // "sending is off"; MailSettings.via tells the UI which one is live.
+  smtpHost              String?
+  smtpPort              Int?
+  smtpUser              String?
+  // At rest via utils/crypto.ts, keyed off JWT_SECRET — never the plain
+  // value, and never sent back to the client once saved.
+  smtpPasswordEncrypted String?
+  mailFromName          String?
+  mailFromEmail         String?
+  mailReplyTo           String?
 
-  // Quotations arrive from the agency's own address, not a system one. Changing
-  // only the From header puts mail in spam — the domain has to vouch for the
-  // sender — so mail is sent THROUGH this account, which also lands the client's
-  // reply in the right inbox. Stage 1 is one org, one account (§3.12).
-  mailFromName  String?
-  mailFromEmail String?
-  mailReplyTo   String?
-  smtpHost      String?
-  smtpPort      Int?
-  smtpUser      String?
-  smtpPassword  String? // ENCRYPTED AT REST. Never returned by any API.
+  // Document letterhead — what a proforma/invoice PDF puts on itself for the
+  // business raising it. Kept here, not hardcoded in the PDF template, so it
+  // is one place to fix if the bank changes rather than a code change.
+  contactEmail                String?
+  gstStateCode                String?  @default("33") // first 2 digits of GSTIN; decides CGST+SGST vs IGST. 33 = Tamil Nadu.
+  bankAccountHolderName       String?
+  bankName                    String?
+  bankBranch                  String?
+  bankAccountNumber           String?
+  bankIfscCode                String?
+  defaultPaymentTerms         String   @default("Immediate")
+  defaultProformaValidityDays Int      @default(30)
+  defaultTermsAndConditions   String[] @default(["Monthly retainer fee applicable", "Ad spend to be borne separately by the client", "Work execution begins upon confirmation and payment"])
 
-  // Google Workspace sign-in (§3.12). Per organisation, never hardcoded: the next
-  // customer has a different domain, or none and needs password login.
-  googleWorkspaceDomain String?
-  allowPasswordLogin    Boolean @default(true)
-  autoProvisionUsers    Boolean @default(false)
-
-  settings  Json     @default("{}")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  modules      OrganizationModule[]
-  users        User[]
-  userRoles    UserRole[]
-  companies    Company[]
-  pipelines    Pipeline[]
-  deals        Deal[]
-  quotes       Quote[]
-  services     Service[]
-  engagements  Engagement[]
-  projects     Project[]
-  tasks        Task[]
-  invoices     Invoice[]
-  payments     Payment[]
-  expenses     Expense[]
-  activities   Activity[]
-  customFields CustomField[]
-  lostReasons  LostReason[]
-  leadSources  LeadSource[]
-  auditLogs    AuditLog[]
-  docCounters  DocCounter[]
-  departments  Department[]
+  users           User[]
+  companies       Company[]
+  outreachEntries OutreachEntry[]
+  proposals       Proposal[]
+  proformas       Proforma[]
+  retainers       Retainer[]
+  projects        Project[]
+  tasks           Task[]
+  taskTemplates   TaskTemplate[]
+  costs           Cost[]
+  invoices        Invoice[]
+  alerts          Alert[]
+  activities      Activity[]
+  assets          Asset[]
+
+  /// "EL" -> EL/CAM/001. The stickers get printed once, so this is a setting
+  /// rather than a constant, but changing it does not renumber what exists.
+  assetTagPrefix String @default("EL")
 
   @@map("organizations")
 }
 
-// Plain string key so a new module needs no enum change and no migration (§7.5).
-model OrganizationModule {
-  id             String   @id @default(cuid())
-  organizationId String
-  key            String // 'CRM' | 'PM' | 'REVENUE' | ...
-  enabled        Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@unique([organizationId, key])
-  @@index([organizationId])
-  @@map("organization_modules")
-}
-
-/// Sequential document numbers, per organisation, per scope, per period.
-///
-/// The counter lives in the database rather than in application code because two
-/// people raising an invoice at the same instant must not receive the same number.
-/// It is incremented by a single atomic `INSERT … ON CONFLICT DO UPDATE …
-/// RETURNING`, so the number is allocated and returned in one statement with no
-/// read-then-write gap. This part of the old system was already right (§3.13); what
-/// was wrong was the `EL/` prefix being hardcoded, which now comes from the
-/// organisation, and the period being the server's calendar year rather than the
-/// organisation's fiscal year.
-model DocCounter {
-  id             String @id @default(cuid())
-  organizationId String
-  scope          String /// 'QT' | 'PI' | 'INV' | 'CN'
-  period         String /// fiscal year label, e.g. '2026-27'
-  counter        Int    @default(0)
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@unique([organizationId, scope, period])
-  @@map("doc_counters")
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// PEOPLE AND ACCESS — §3.10, §3.12
-// ──────────────────────────────────────────────────────────────────────────────
-
-// A ladder: each rung contains everything below it, so a person holds one and you
-// read their access by reading their title. Money is the boundary that matters —
-// in an agency almost nothing else is worth hiding.
-enum Role {
-  SUPER_ADMIN // + billing, ownership transfer, deleting the org, granting Admin
-  ADMIN //       + invoices, payments, revenue, settings
-  MANAGER //     + projects, tasks, staffing
-  SALES //       + pipeline, quotes, companies
-  MEMBER //      their own tasks
-}
-
-enum UserStatus {
-  PENDING // invited, not yet activated
-  ACTIVE
-  INACTIVE
-}
-
-enum AuthProvider {
-  PASSWORD
-  GOOGLE
-}
-
 model User {
-  id     String  @id @default(cuid())
-  email  String  @unique
-  name   String
-  avatar String?
+  id                   String     @id @default(cuid())
+  organizationId       String
+  name                 String
+  email                String     @unique
+  passwordHash         String
+  dept                 String // Design, Video, Marketing, Dev, BD, Art, Accounts
+  /// Own-account detail, editable only from /profile. Nobody promotes
+  /// themselves, so `preset` is deliberately absent from that screen — these
+  /// two are the whole of what a person may change about their own record.
+  designation          String?
+  phone                String?
+  monthlyCost          Decimal    @db.Decimal(12, 2) // CTC/month · setup.admin access only
+  preset               RolePreset @default(EMPLOYEE)
+  permissions          String[] // Array of permission keys overriding preset
+  active               Boolean    @default(true)
+  /// Set on invite, cleared once accepted. `active: false` between the two
+  /// is what keeps an invited-not-yet-accepted person out of assignee
+  /// pickers and off the team roster without a third status enum.
+  inviteToken          String?    @unique
+  inviteTokenExpiresAt DateTime?
+  /// A one-hour link an admin hands over when somebody is locked out. Separate
+  /// from inviteToken so issuing one cannot cancel a pending invitation.
+  resetToken           String?    @unique
+  resetTokenExpiresAt  DateTime?
+  /// Tokens issued before this instant are refused (middleware/auth.ts).
+  /// Sessions are stateless JWTs, so this is the only way a password change
+  /// can do what /profile promises it does — end every OTHER session too.
+  /// Null means "nothing has ever invalidated this account's sessions".
+  sessionsValidFrom    DateTime?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
 
-  // Nullable because a Google user has none. The service enforces the rule Prisma
-  // cannot: an ACTIVE account must always have at least ONE way in, so removing
-  // the last sign-in method is blocked rather than silently locking someone out.
-  password     String?
-  googleId     String?      @unique
-  authProvider AuthProvider @default(PASSWORD)
+  organization         Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ownedCompanies       Company[]          @relation("CompanyOwner")
+  ownedProposals       Proposal[]         @relation("ProposalOwner")
+  ownedOutreach        OutreachEntry[]    @relation("OutreachOwner")
+  ownedRetainers       Retainer[]         @relation("RetainerOwner")
+  ownedProjects        Project[]          @relation("ProjectOwner")
+  assignedTasks        Task[]             @relation("TaskAssignee")
+  createdTasks         Task[]             @relation("TaskCreator")
+  handedOutTasks       Task[]             @relation("TaskAssignedBy")
+  reviewingTasks       Task[]             @relation("TaskReviewer")
+  taskAssignments      TaskAssignee[]     @relation("TaskAssignments")
+  enteredCosts         Cost[]             @relation("CostEnteredBy")
+  allocations          PeopleAllocation[] @relation("UserAllocations")
+  confirmedAllocations PeopleAllocation[] @relation("AllocationConfirmedBy")
+  acknowledgedAlerts   Alert[]            @relation("AlertAcknowledgedBy")
+  alertReads           AlertRead[]
+  activities           Activity[]         @relation("ActorActivity")
+  heldAssets           Asset[]            @relation("AssetHolder")
+  assetMovements       AssetMovement[]    @relation("AssetMovementHolder")
+  issuedMovements      AssetMovement[]    @relation("AssetMovementIssuer")
+  receivedMovements    AssetMovement[]    @relation("AssetMovementReceiver")
+  createdMaintenance   AssetMaintenance[] @relation("MaintenanceCreator")
 
-  designation String?
-  phone       String?
-  joiningDate DateTime   @default(now())
-  status      UserStatus @default(PENDING)
-
-  // Bumped on password change / reset / forced logout to revoke every previously
-  // issued JWT. Without it a stolen token survived a reset.
-  tokenVersion Int @default(0)
-
-  resetToken       String?   @unique
-  resetTokenExpiry DateTime?
-
-  // An invitation CREATES the account; accepting only activates it. That is why a
-  // role can be assigned before the person has ever logged in.
-  inviteToken        String?   @unique
-  inviteExpiry       DateTime?
-  invitedById        String?
-  lastActivityReadAt DateTime?
-
-  organizationId String
-  departmentId   String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  department          Department?     @relation("DepartmentMembers", fields: [departmentId], references: [id], onDelete: SetNull)
-  headedDepartments   Department[]    @relation("DepartmentHead")
-  roles          UserRole[]
-  ownedCompanies Company[]       @relation("CompanyOwner")
-  ownedDeals     Deal[]          @relation("DealOwner")
-  ledProjects    Project[]       @relation("ProjectLead")
-  projectMembers ProjectMember[]
-  assignedTasks  Task[]          @relation("TaskAssignee")
-  reviewingTasks Task[]          @relation("TaskReviewer")
-  activities     Activity[]
-  notifications  Notification[]
-  auditLogs      AuditLog[]
-
-  @@index([organizationId, status])
+  @@index([organizationId, active])
   @@map("users")
 }
 
-// One row per person today, and the UI shows a single dropdown. Stored as a set
-// because the table costs nothing extra now and makes any future move to
-// checkboxes a UI change rather than a migration (§3.10).
-model UserRole {
-  id             String   @id @default(cuid())
-  userId         String
-  organizationId String
-  role           Role
-  grantedById    String?
-  grantedAt      DateTime @default(now())
+// ──────────────────────────────────────────────────────────────────────────────
+// 2. CRM & CLIENT SPINE
+// ──────────────────────────────────────────────────────────────────────────────
 
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, role])
-  @@index([organizationId, role])
-  @@map("user_roles")
+enum CompanyVertical {
+  HEALTHCARE
+  REAL_ESTATE
+  D2C
+  SPORTS
+  IT_AND_SAAS
+  RETAIL
+  B2B
+  HOSPITALITY
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// COMPANY — §3.2
-// ONE record whether or not they have ever bought. Winning copies nothing.
-// ──────────────────────────────────────────────────────────────────────────────
+enum CompanySource {
+  OUTREACH
+  REFERRAL
+  INBOUND
+  PARTNER_AGENCY
+  NETWORK
+}
 
 enum CompanyStatus {
-  PROSPECT //          never bought anything
-  ACTIVE //            something is running right now
-  ONHOLD //            everything paused, deliberately
-  PROJECT_COMPLETED // delivered, nothing running — a GOOD ending, not churn
-  CHURNED //           a retainer stopped — a bad ending
+  PROSPECT
+  CLIENT
+  PAST
 }
 
 model Company {
-  id             String  @id @default(cuid())
+  id             String          @id @default(cuid())
   organizationId String
   name           String
-  industry       String?
+  vertical       CompanyVertical
+  source         CompanySource   @default(OUTREACH)
+  ownerId        String?
+  city           String
   website        String?
-  email          String?
-  phone          String?
-  linkedinUrl    String?
-  twitterUrl     String?
-  instagramUrl   String?
-  address        String?
-  city           String?
-  state          String? // with Organization.state, decides CGST+SGST vs IGST
-  zip            String?
-  country        String?
-  billingAddress String? @db.Text
-  gstNumber      String?
-  companySize    String?
+  gstin          String?
+  billingAddress String?         @db.Text
+  lostReason     String?
+  status         CompanyStatus   @default(PROSPECT)
+  archivedAt     DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
-  // STORED, but with exactly ONE writer. Every path that could change it —
-  // winning a deal, an engagement ending, a pause, an import — calls the same
-  // function, which reads the engagements and returns the answer. "Dashboard says
-  // 1, list says 5" was never caused by storing a value; it was caused by several
-  // places each deciding it independently.
-  status  CompanyStatus @default(PROSPECT)
-  ownerId String? //      account manager — decides who is NOTIFIED, not who is allowed
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner         User?          @relation("CompanyOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  people        Person[]
+  proposals     Proposal[]
+  proformas     Proforma[]
+  retainers     Retainer[]
+  projects      Project[]
+  invoices      Invoice[]
+  outreachEntry OutreachEntry? @relation("PromotedCompany")
 
-  sourceId String?
-
-  archivedAt DateTime? // retired, never deleted
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-
-  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  owner        User?              @relation("CompanyOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  source       LeadSource?        @relation(fields: [sourceId], references: [id], onDelete: SetNull)
-  contacts     Contact[]
-  deals        Deal[]
-  engagements  Engagement[]
-  projects     Project[]
-  quotes       Quote[]
-  invoices     Invoice[]
-  payments     Payment[]
-  expenses     Expense[]
-  activities   Activity[]
-  fieldValues  CustomFieldValue[]
-
+  @@unique([organizationId, name])
   @@index([organizationId, status])
-  @@index([organizationId, name])
   @@index([ownerId])
   @@map("companies")
 }
 
-model Department {
-  id             String  @id @default(cuid())
-  organizationId String
-  name           String
-  headId         String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  head         User?        @relation("DepartmentHead", fields: [headId], references: [id], onDelete: SetNull)
-  users        User[]       @relation("DepartmentMembers")
-  tasks        Task[]
-
-  @@unique([organizationId, name])
-  @@map("departments")
+enum PersonRole {
+  APPROVER
+  PAYER
+  CONTACT
 }
 
-enum ContactRole {
-  DECISION_MAKER
-  CHAMPION
-  INFLUENCER
-  GATEKEEPER
+model Person {
+  id        String     @id @default(cuid())
+  companyId String
+  name      String
+  role      PersonRole @default(CONTACT)
+  email     String?
+  phone     String?
+  linkedin  String?
+  active    Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, active])
+  @@map("people")
 }
 
-model Contact {
-  id          String       @id @default(cuid())
-  companyId   String
-  name        String
-  designation String?
-  email       String?
-  phone       String?
-  linkedinUrl String?
-  role        ContactRole?
+enum OutreachStatus {
+  NOT_CONTACTED
+  CONTACTED
+  REPLIED
+  DEAD
+}
 
-  // The main person on this company. Exactly one per company should carry it;
-  // enforced in the service because Postgres needs a partial unique index for it
-  // and Prisma cannot express one.
-  isPrimary Boolean @default(false)
+model OutreachEntry {
+  id                String          @id @default(cuid())
+  organizationId    String
+  name              String
+  vertical          CompanyVertical
+  source            CompanySource   @default(OUTREACH)
+  ownerId           String?
+  status            OutreachStatus  @default(NOT_CONTACTED)
+  promotedCompanyId String?         @unique
+  importedAt        DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
-  notes     String?  @db.Text
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // `ownerId` has been written since the first version — POST defaults it to
+  // whoever added the name, and the CSV import to whoever imported — but there
+  // was no relation here, so Prisma had nothing to include and the Owner
+  // column on /outreach rendered "—" for all seven rows while every one of
+  // them actually belonged to Varsha, Tanuja or Harish.
+  owner           User?        @relation("OutreachOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  promotedCompany Company?     @relation("PromotedCompany", fields: [promotedCompanyId], references: [id], onDelete: SetNull)
 
-  company     Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  fieldValues CustomFieldValue[]
+  @@index([organizationId, status])
+  @@map("outreach_entries")
+}
 
+// ──────────────────────────────────────────────────────────────────────────────
+// 3. SALES, PROPOSALS & PROFORMAS
+// ──────────────────────────────────────────────────────────────────────────────
+
+enum ProposalKind {
+  RETAINER
+  PROJECT
+}
+
+enum ProposalStage {
+  TALKING
+  PROPOSAL_SENT
+  IN_NEGOTIATION
+  PROFORMA_ISSUED
+  VERBAL_YES
+  WON
+  LOST
+  EXPIRED
+}
+
+enum ProposalOutcome {
+  WON
+  LOST
+  EXPIRED
+}
+
+model Proposal {
+  id                  String           @id @default(cuid())
+  organizationId      String
+  companyId           String
+  kind                ProposalKind
+  ownerId             String
+  stage               ProposalStage    @default(TALKING)
+  outcome             ProposalOutcome?
+  wonVersionId        String?          @unique
+  wonAt               DateTime?
+  lostReason          String?
+  probabilityOverride Int?
+  verbalYesAt         DateTime?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company      Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  owner        User              @relation("ProposalOwner", fields: [ownerId], references: [id])
+  wonVersion   ProposalVersion?  @relation("WonVersion", fields: [wonVersionId], references: [id])
+  versions     ProposalVersion[] @relation("ProposalVersions")
+
+  @@index([organizationId, stage])
   @@index([companyId])
-  @@map("contacts")
+  @@index([ownerId])
+  @@map("proposals")
+}
+
+model ProposalVersion {
+  id           String   @id @default(cuid())
+  proposalId   String
+  n            Int // 1, 2, 3...
+  value        Decimal  @db.Decimal(12, 2)
+  scopeSummary String
+  sentAt       DateTime @default(now())
+  fileUrl      String?
+  createdAt    DateTime @default(now())
+
+  proposal   Proposal  @relation("ProposalVersions", fields: [proposalId], references: [id], onDelete: Cascade)
+  winningFor Proposal? @relation("WonVersion")
+
+  @@unique([proposalId, n])
+  @@map("proposal_versions")
+}
+
+enum ProformaStatus {
+  UNPAID
+  PAID
+  EXPIRED
+  CANCELLED
+}
+
+enum ProformaSourceType {
+  PROPOSAL
+  MONTH_CARD
+  PROJECT
+}
+
+model Proforma {
+  id                 String             @id @default(cuid())
+  organizationId     String
+  number             String
+  companyId          String
+  sourceType         ProformaSourceType
+  sourceId           String
+  /// Set when this proforma is raised against a specific project milestone
+  /// (§11.3 step 5) rather than the project or proposal in general — a real
+  /// foreign key, unlike sourceId, because "which milestone" is a genuine
+  /// relationship the milestone billing UI needs to query, not just a label.
+  milestoneId        String?
+  amount             Decimal            @db.Decimal(12, 2)
+  raisedAt           DateTime           @db.Date
+  validTill          DateTime           @db.Date
+  status             ProformaStatus     @default(UNPAID)
+  invoiceId          String?            @unique
+  billingName        String
+  /// The person the document is addressed to, e.g. "Ganesh" — printed under
+  /// billingName, snapshotted the same way and for the same reason: who was
+  /// the contact on the day this was raised shouldn't drift with the org's
+  /// current People records.
+  billingContactName String?
+  billingAddress     String?            @db.Text
+  gstin              String?
+  /// Whether tax applies to this document at all — off for e.g. an export
+  /// invoice or a client explicitly billed GST-exempt. When false the PDF
+  /// drops the tax rows entirely rather than printing a 0% line.
+  gstApplicable      Boolean            @default(true)
+  /// The rate applied when gstApplicable is true. Defaults to 18% (the
+  /// standard rate for agency services) but overridable per document —
+  /// India's other GST slabs (5/12/28, or a client-negotiated rate) are
+  /// real cases this needs to cover, not just the common one.
+  gstRatePercent     Int                @default(18)
+  /// The single line-item description printed on the document, e.g.
+  /// "Social Media Management for the Month of August". Nullable because
+  /// existing rows predate this field; the PDF falls back to a generic line
+  /// when it's unset rather than failing to render.
+  description        String?
+  /// The client's own purchase-order reference, when one exists (e.g. a Work
+  /// Order raised through a large client's procurement system) — printed
+  /// alongside Payment Terms so the two documents can be reconciled at a
+  /// glance. Optional: most proformas (a month card, a proposal advance)
+  /// have no PO on the other end at all.
+  poNumber           String?
+  poDate             DateTime?          @db.Date
+  /// SAC/HSN code for the single line item this document bills — the GST
+  /// goods/services classification code, e.g. "998382" for photography
+  /// services. One code because there's one line item; a real multi-line
+  /// proforma would need this per-row instead.
+  sacCode            String?
+  terms              String             @db.Text
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoice      Invoice?     @relation(fields: [invoiceId], references: [id])
+  milestone    Milestone?   @relation(fields: [milestoneId], references: [id])
+
+  // sourceId is a polymorphic pointer, not a foreign key — the same pattern
+  // Alert and Activity already use elsewhere in this schema. It used to carry
+  // a hard FK to Proposal.id regardless of what sourceType said, which meant
+  // MONTH_CARD and PROJECT sources — retainer and project advances, the
+  // ordinary case once a proposal has already been won — could never be
+  // raised at all; the insert failed with a foreign key violation.
+
+  @@unique([organizationId, number])
+  @@index([organizationId, status])
+  @@index([companyId])
+  @@index([sourceType, sourceId])
+  @@map("proformas")
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// PIPELINE — §3.4
-// Rows rather than an enum, but SEEDED FROM CODE. There is no settings screen:
-// a stage list is the likeliest thing here to change, and changing a Postgres
-// enum is the create-new / swap / drop-old dance. As rows it is an INSERT.
+// 4. RETAINERS, MONTH CARDS & TEMPLATES
 // ──────────────────────────────────────────────────────────────────────────────
 
-enum StageKind {
-  OPEN // still in play
-  WON //  exactly one per pipeline — creates the engagement
-  LOST // requires a reason
+enum RetainerStatus {
+  ACTIVE
+  STOPPED
 }
 
-model Pipeline {
+model Retainer {
+  id               String         @id @default(cuid())
+  organizationId   String
+  companyId        String
+  monthlyValue     Decimal        @db.Decimal(12, 2)
+  startDate        DateTime       @db.Date
+  termMonths       Int?
+  renewalDate      DateTime?      @db.Date
+  ownerId          String
+  status           RetainerStatus @default(ACTIVE)
+  stoppedAt        DateTime?
+  stopReason       String?
+  templateId       String?
+  /// Set when this retainer is created from a won proposal (§11.1 step 11) —
+  /// same handoff pattern as Project.sourceProposalId.
+  sourceProposalId String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  owner        User          @relation("RetainerOwner", fields: [ownerId], references: [id])
+  template     TaskTemplate? @relation(fields: [templateId], references: [id])
+  monthCards   MonthCard[]
+
+  @@index([organizationId, status])
+  @@index([companyId])
+  @@map("retainers")
+}
+
+enum MonthCardStatus {
+  OPEN
+  CLOSED
+}
+
+model MonthCard {
+  id         String          @id @default(cuid())
+  retainerId String
+  month      String // "YYYY-MM"
+  revenue    Decimal         @db.Decimal(12, 2)
+  status     MonthCardStatus @default(OPEN)
+  invoiceId  String?         @unique
+  closedAt   DateTime?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  retainer       Retainer           @relation(fields: [retainerId], references: [id], onDelete: Cascade)
+  invoice        Invoice?           @relation(fields: [invoiceId], references: [id])
+  tasks          Task[]
+  costs          Cost[]
+  allocations    PeopleAllocation[]
+  assetMovements AssetMovement[]
+
+  @@unique([retainerId, month])
+  @@index([month, status])
+  @@map("month_cards")
+}
+
+model TaskTemplate {
   id             String    @id @default(cuid())
   organizationId String
   name           String
-  isDefault      Boolean   @default(false)
-  position       Int       @default(0)
-  archivedAt     DateTime?
+  items          Json // Array<{ title: string, dept: string, dayOfMonth: number, count?: number }>
+  // §16: "soft delete only... nothing is ever hard deleted by a user." Set
+  // instead of a real prisma delete; every read filters it out.
+  deletedAt      DateTime?
   createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  stages       Stage[]
+  retainers    Retainer[]
 
-  @@index([organizationId])
-  @@map("pipelines")
-}
-
-model Stage {
-  id         String @id @default(cuid())
-  pipelineId String
-  name       String
-  position   Int
-
-  // The load-bearing part. Rename "Won & Closed" to "Signed" and every rule still
-  // fires, because no rule ever reads a name.
-  kind StageKind @default(OPEN)
-
-  probability Decimal @default(0) @db.Decimal(4, 3)
-  rottingDays Int? //    per-stage patience
-
-  /// A deal may not enter this stage without a value and an expected close date.
-  ///
-  /// The rule is "a value and close date to reach Negotiation" (§4.5), but stages
-  /// are rows now, so no rule may identify a stage by its NAME — rename it and the
-  /// rule would silently stop firing. This flag carries the intent instead: seeded
-  /// true from Negotiation onward, and it keeps working when the stage is renamed
-  /// or a new one is inserted before it.
-  ///
-  /// The reason for the rule: a forecast without an amount and a date cannot be
-  /// planned against, so the deal is invisible to planning while feeling like
-  /// progress.
-  requiresForecast Boolean @default(false)
-
-  archivedAt DateTime?
-
-  pipeline    Pipeline       @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
-  deals       Deal[]
-  fields      StageField[]
-  fromHistory StageHistory[] @relation("FromStage")
-  toHistory   StageHistory[] @relation("ToStage")
-  // -- CHECK: exactly one WON and one LOST stage per pipeline, and neither may have
-  // -- an OPEN stage after it. Left free-form, somebody adds "Onboarding" after Won
-  // -- and won deals never leave the board. Enforced in the seed AND the service.
-
-  @@unique([pipelineId, position])
-  @@index([pipelineId])
-  @@map("stages")
+  @@map("task_templates")
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// CONFIGURABLE LISTS — §3.4
-// Configurable when the values describe the agency's way of working; a fixed enum
-// when they drive logic. Archived rather than deleted so history stays readable.
+// 5. PROJECTS & MILESTONES
 // ──────────────────────────────────────────────────────────────────────────────
 
-model LostReason {
-  id             String    @id @default(cuid())
-  organizationId String
-  name           String
-  position       Int       @default(0)
-  archivedAt     DateTime?
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  deals        Deal[]
-
-  @@unique([organizationId, name])
-  @@map("lost_reasons")
+enum ProjectStatus {
+  LIVE
+  DELIVERED
+  CANCELLED
 }
 
-model LeadSource {
-  id             String    @id @default(cuid())
-  organizationId String
-  name           String
-  position       Int       @default(0)
-  archivedAt     DateTime?
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  companies    Company[]
-  deals        Deal[]
-
-  @@unique([organizationId, name])
-  @@map("lead_sources")
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// DEAL — §3.3
-// One company, many deals. Customers come back and buy more than one thing.
-// ──────────────────────────────────────────────────────────────────────────────
-
+// Shared across Project and Task so both can be compared/sorted on one
+// "what needs attention" scale. Not in the prototype — it derives urgency
+// from due-date bucketing and elapsed-vs-median instead — but real usage
+// wants a settable signal too, so both live side by side.
 enum Priority {
   LOW
   MEDIUM
@@ -472,775 +537,628 @@ enum Priority {
   URGENT
 }
 
-enum ContractType {
-  RETAINER
-  PROJECT
-}
-
-model Deal {
-  id             String  @id @default(cuid())
-  organizationId String
-  companyId      String
-  dealNumber     String?
-  title          String?
-
-  stageId           String
-  value             Decimal?  @db.Decimal(12, 2)
-  expectedCloseDate DateTime?
-  ownerId           String?
-  sourceId          String?
-  priority          Priority  @default(MEDIUM)
-
-  // Asked at the win, pre-filled from the accepted quote. The stage duplicating
-  // this is what allowed them to disagree and bill a one-off monthly forever.
-  contractType ContractType?
-
-  // A FLAG, not a stage. Being a stage destroyed the deal's position: unhold had
-  // to dig through history to guess where it came from, and a deal parked at
-  // Negotiation could return as a New Lead.
-  isOnHold   Boolean   @default(false)
-  heldSince  DateTime?
-  holdReason String?
-
-  blockedOn    String? // what it is waiting on — one of two stall signals on the card
-  nextStepDate DateTime?
-
-  lostReasonId    String?
-  lostAt          DateTime?
-  wonAt           DateTime?
-  followUpDate    DateTime?
-  lastContactedAt DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  stage        Stage              @relation(fields: [stageId], references: [id])
-  owner        User?              @relation("DealOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  source       LeadSource?        @relation(fields: [sourceId], references: [id], onDelete: SetNull)
-  lostReason   LostReason?        @relation(fields: [lostReasonId], references: [id], onDelete: SetNull)
-  stageHistory StageHistory[]
-  quotes       Quote[]
-  tasks        Task[]
-  activities   Activity[]
-  engagement   Engagement?
-  fieldValues  CustomFieldValue[]
-
-  @@unique([organizationId, dealNumber])
-  @@index([organizationId, stageId])
-  @@index([companyId])
-  @@index([ownerId])
-  @@map("deals")
-}
-
-// Append-only. The ONLY source of cycle time, win rate and stage conversion, and
-// what makes "12 days in this stage" answerable. Points at stage IDs, not names,
-// so renaming a column never rewrites history.
-model StageHistory {
-  id          String   @id @default(cuid())
-  dealId      String
-  fromStageId String?
-  toStageId   String
-  movedById   String?
-  enteredAt   DateTime @default(now())
-
-  deal      Deal   @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  fromStage Stage? @relation("FromStage", fields: [fromStageId], references: [id])
-  toStage   Stage  @relation("ToStage", fields: [toStageId], references: [id])
-
-  @@index([dealId, enteredAt])
-  @@map("stage_history")
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// STAGE FORMS — §3.5
-// Each stage prompts for a few fields when a deal arrives. SEEDED, not built in a
-// browser. Some prompts are hard rules of the stage KIND — Won always asks for
-// engagement type and start date — and live in code, not in StageField, so no
-// seed edit can remove them.
-// ──────────────────────────────────────────────────────────────────────────────
-
-enum CustomEntity {
-  DEAL
-  COMPANY
-  CONTACT
-}
-
-enum CustomFieldType {
-  TEXT
-  TEXTAREA
-  NUMBER
-  DATE
-  SELECT
-  MULTI_SELECT
-  CHECKBOX
-  LINK
-}
-
-model CustomField {
-  id             String          @id @default(cuid())
-  organizationId String
-  entity         CustomEntity    @default(DEAL)
-  key            String //         stable — never changes, so renaming keeps the answers
-  label          String //         renameable
-  type           CustomFieldType
-  options        Json? //          for SELECT / MULTI_SELECT
-  helpText       String?
-  position       Int             @default(0)
-  archivedAt     DateTime? //      archived, never deleted: old answers stay readable
-
-  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  stagePrompts StageField[]
-  values       CustomFieldValue[]
-
-  @@unique([organizationId, entity, key])
-  @@map("custom_fields")
-}
-
-model StageField {
-  id       String  @id @default(cuid())
-  stageId  String
-  fieldId  String
-  required Boolean @default(false) // required to ENTER this stage. Optional by default —
-  //                                  a form full of mandatory fields teaches people to
-  //                                  type rubbish to get past it.
-  position Int     @default(0)
-
-  stage Stage       @relation(fields: [stageId], references: [id], onDelete: Cascade)
-  field CustomField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
-
-  @@unique([stageId, fieldId])
-  @@map("stage_fields")
-}
-
-// Typed columns rather than one JSON blob, because "every deal where Services in
-// Scope includes SEO" has to be a query against a real column. The field belongs
-// to the RECORD, not the stage, so the answer survives the deal moving on.
-model CustomFieldValue {
-  id        String  @id @default(cuid())
-  fieldId   String
-  dealId    String?
-  companyId String?
-  contactId String?
-
-  valueText    String?   @db.Text
-  valueNumber  Decimal?  @db.Decimal(14, 4)
-  valueDate    DateTime?
-  valueBool    Boolean?
-  valueOptions String[]
-
-  updatedAt DateTime @updatedAt
-
-  field   CustomField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
-  deal    Deal?       @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  company Company?    @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  contact Contact?    @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  // -- CHECK: exactly one of dealId / companyId / contactId is set.
-
-  @@unique([fieldId, dealId])
-  @@unique([fieldId, companyId])
-  @@unique([fieldId, contactId])
-  @@index([fieldId])
-  @@map("custom_field_values")
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// QUOTING — §3.12
-// ──────────────────────────────────────────────────────────────────────────────
-
-enum QuoteStatus {
-  DRAFT
-  SENT
-  ACCEPTED
-  DECLINED
-  EXPIRED
-}
-
-enum SentVia {
-  FLOWZEN_EMAIL
-  MANUAL_EMAIL
-  WHATSAPP
-  IN_PERSON
-  OTHER
-}
-
-enum AcceptedVia {
-  EMAIL
-  CALL
-  WHATSAPP
-  IN_PERSON
-  SIGNED_DOCUMENT
-  OTHER
-}
-
-enum BillingFrequency {
-  MONTHLY
-  QUARTERLY
-  YEARLY
-  ONE_TIME
-}
-
-enum PaymentTerms {
-  ADVANCE_100
-  SPLIT_50_50
-  MONTHLY
-  MILESTONE
-}
-
-model Quote {
-  id             String @id @default(cuid())
-  organizationId String
-  companyId      String
-  dealId         String // REQUIRED — one parent removes the re-pointing dance
-  number         String
-
-  // A total of 4,80,000 could be 40,000 a month for a year or a one-off build.
-  // The document cannot say which without these — and since the deal's value
-  // follows the quote total, an unstated type inflates the forecast twelvefold.
-  engagementType   ContractType
-  billingFrequency BillingFrequency @default(MONTHLY)
-  paymentTerms     PaymentTerms?
-
-  // Frozen snapshot. Every total is computed by the SERVER — a document must
-  // never bill an amount that arrived from a form.
-  lineItems Json
-  subtotal  Decimal @db.Decimal(12, 2)
-  cgst      Decimal @default(0) @db.Decimal(12, 2)
-  sgst      Decimal @default(0) @db.Decimal(12, 2)
-  igst      Decimal @default(0) @db.Decimal(12, 2)
-  total     Decimal @db.Decimal(12, 2)
-  currency  String
-
-  status     QuoteStatus @default(DRAFT)
-  validUntil DateTime?
-  pdfKey     String? //   object storage, compressed. Never the server's own disk.
-
-  // Sent from Flowzen, or by hand and marked afterwards. The status only moves to
-  // SENT if the mail actually left — a quote marked sent that never arrived is
-  // worse than one still marked draft.
-  sentAt   DateTime?
-  sentVia  SentVia?
-  sentById String?
-
-  // The client's answer arrives OUTSIDE Flowzen, so it is recorded by hand.
-  // acceptedAt and recordedAt are separate on purpose: someone who agreed on
-  // Tuesday and was entered on Friday accepted on TUESDAY, or every sales-cycle
-  // figure is wrong by however long people take to write things up.
-  acceptedAt    DateTime?
-  acceptedVia   AcceptedVia?
-  acceptedNote  String?
-  declinedAt    DateTime?
-  declineReason String?
-  recordedById  String?
-  recordedAt    DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  deal         Deal         @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  invoices     Invoice[]
-  // -- CHECK: at most ONE ACCEPTED quote per deal. Accepting v3 declines v1 and v2,
-  // -- or a deal has two live prices and the engagement is built from the wrong one.
-
-  @@unique([organizationId, number])
-  @@index([dealId])
-  @@index([companyId])
-  @@map("quotes")
-}
-
-// The catalogue of what you sell. A quote line MAY name one or be typed from
-// scratch — a catalogue that blocks the unusual sale is one people work around by
-// mispricing something. The LINE keeps its own text and rate, so raising your
-// standard rate never rewrites a quote you sent last month.
-model Service {
-  id             String    @id @default(cuid())
-  organizationId String
-  name           String
-  description    String?
-  defaultRate    Decimal?  @db.Decimal(12, 2)
-  unit           String? //  "month" | "page" | "video"
-  position       Int       @default(0)
-  archivedAt     DateTime?
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@unique([organizationId, name])
-  @@map("services")
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// ENGAGEMENT — §3.6
-// Subscription and Contract merged. They differ in how OFTEN they bill, which is
-// a field, not a table — and two tables gave two different answers for MRR.
-// ──────────────────────────────────────────────────────────────────────────────
-
-enum EngagementStatus {
-  ACTIVE
-  PAUSED
-  ENDED
-}
-
-model Engagement {
-  id             String  @id @default(cuid())
-  organizationId String
-  companyId      String
-  dealId         String? // null for imported / manually created
-
-  type   ContractType
-  status EngagementStatus @default(ACTIVE)
-
-  amount           Decimal          @db.Decimal(12, 2)
-  currency         String
-  billingFrequency BillingFrequency @default(MONTHLY)
-  paymentTerms     PaymentTerms?
-  taxIncluded      Boolean          @default(false)
-  cgst             Decimal          @default(0) @db.Decimal(12, 2)
-  sgst             Decimal          @default(0) @db.Decimal(12, 2)
-  igst             Decimal          @default(0) @db.Decimal(12, 2)
-  advanceAmount    Decimal?         @db.Decimal(12, 2)
-  advanceReceived  Boolean          @default(false)
-
-  startDate DateTime
-  endDate   DateTime? // NULL MEANS ROLLING — not missing data. 0 of 5 real
-  //                      retainers had one; inventing a date invents a deadline.
-
-  // Moves ONLY when an invoice is actually raised — never on a timer. A cycle
-  // that rolls forward by itself silently hides the month nobody billed.
-  nextBillingDate DateTime?
-
-  // Rolling engagements are REVIEWED, not renewed. Nothing expires, so the risk
-  // is not expiry — it is a price that never moved while the work grew.
-  reviewIntervalMonths Int?      @default(6)
-  nextReviewDate       DateTime?
-  lastReviewedAt       DateTime?
-
-  endedAt   DateTime?
-  notes     String?   @db.Text
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-
-  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  company      Company              @relation(fields: [companyId], references: [id])
-  deal         Deal?                @relation(fields: [dealId], references: [id], onDelete: SetNull)
-  revisions    EngagementRevision[]
-  invoices     Invoice[]
-
-  // DB-enforced idempotency, carried forward from @@unique([sourceLeadId]).
-  // Two clicks at the same instant cannot bill the client twice.
-  @@unique([dealId])
-  @@index([organizationId, status])
-  @@index([companyId])
-  @@map("engagements")
-}
-
-// Every commercial change, kept. Raising a client from 40,000 to 55,000 overwrites
-// the old figure — and "what was our MRR last March?" becomes permanently
-// unanswerable, which you discover on the day you ask. A snapshot is a guess on a
-// schedule; revisions give the exact value on any date and double as the audit
-// trail for every price change.
-model EngagementRevision {
-  id               String           @id @default(cuid())
-  engagementId     String
-  amount           Decimal          @db.Decimal(12, 2)
-  billingFrequency BillingFrequency
-  status           EngagementStatus
-  effectiveFrom    DateTime
-  reason           String? //         "6-month review" | "paused" | "scope increase"
-  changedById      String
-  createdAt        DateTime         @default(now())
-
-  engagement Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
-
-  @@index([engagementId, effectiveFrom])
-  @@map("engagement_revisions")
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// DELIVERY — §3.12
-// ──────────────────────────────────────────────────────────────────────────────
-
-enum ProjectStatus {
-  PLANNING
-  ACTIVE
-  ON_HOLD
-  COMPLETED
-  CANCELLED
-}
-
 model Project {
-  id             String @id @default(cuid())
-  organizationId String
+  id               String        @id @default(cuid())
+  organizationId   String
+  companyId        String
+  name             String
+  quotedValue      Decimal       @db.Decimal(12, 2)
+  estimatedCost    Decimal?      @db.Decimal(12, 2)
+  startDate        DateTime      @db.Date
+  endDate          DateTime      @db.Date
+  ownerId          String
+  status           ProjectStatus @default(LIVE)
+  priority         Priority      @default(MEDIUM)
+  description      String?       @db.Text
+  sourceProposalId String?
+  deletedAt        DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
-  // REQUIRED, and the ONLY parent. There is deliberately no engagementId:
-  // requiring one blocks work that starts before the paperwork, and every renewal
-  // creates a new engagement, so every running project would need re-pointing —
-  // miss one and its work counts against revenue that already ended. What the
-  // client is on is DISPLAYED on the project, read from the company.
-  companyId String
-
-  name        String
-  description String?       @db.Text
-  type        String?       @default("ONE_TIME") // RETAINER or ONE_TIME
-  scope       String?       @db.Text
-  platform    String?
-  status      ProjectStatus @default(PLANNING)
-  priority    Priority      @default(MEDIUM)
-  startDate   DateTime?
-  dueDate     DateTime?
-  completedAt DateTime?
-  ownerId     String? //      the lead
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  company      Company         @relation(fields: [companyId], references: [id])
-  owner        User?           @relation("ProjectLead", fields: [ownerId], references: [id], onDelete: SetNull)
-  tasks        Task[]
-  members      ProjectMember[]
-  expenses     Expense[]
-  activities   Activity[]
-  // NOTE: health (ON_TRACK / AT_RISK / OFF_TRACK) is COMPUTED from dates and
-  // overdue tasks, never stored. A health flag someone sets by hand is green
-  // everywhere, forever.
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company        Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  owner          User               @relation("ProjectOwner", fields: [ownerId], references: [id])
+  milestones     Milestone[]
+  tasks          Task[]
+  costs          Cost[]
+  allocations    PeopleAllocation[]
+  invoices       Invoice[]
+  assetMovements AssetMovement[]
 
   @@index([organizationId, status])
   @@index([companyId])
   @@map("projects")
 }
 
-model ProjectMember {
-  id        String   @id @default(cuid())
+enum MilestoneStatus {
+  PENDING
+  PROFORMA_RAISED
+  INVOICED
+  PAID
+}
+
+model Milestone {
+  id        String          @id @default(cuid())
   projectId String
-  userId    String
-  addedAt   DateTime @default(now())
+  label     String
+  percent   Int
+  amount    Decimal         @db.Decimal(12, 2)
+  status    MilestoneStatus @default(PENDING)
+  order     Int             @default(0)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  proformas Proforma[]
 
-  @@unique([projectId, userId])
-  @@map("project_members")
+  @@index([projectId, order])
+  @@map("milestones")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 6. TASKS & TIME CLOCK ENGINE
+// ──────────────────────────────────────────────────────────────────────────────
+
+enum TaskWorkType {
+  MONTH_CARD
+  PROJECT
+  INTERNAL
+}
+
+// TODO/IN_PROGRESS both mean "open, clock running from assignedAt" — the
+// split is a triage label, not a second clock state; nothing about §11.4's
+// "nobody starts a timer" changes. ON_HOLD is the old WAITING, renamed —
+// same waitingOn/waitingSince/waitingTotalMinutes pause underneath it.
+// CANCELLED is new: a real terminal state distinct from DONE, excluded
+// from open-task and turnaround-average counts the same way DONE tasks
+// that were actually finished are not — see tasks.ts/team.ts for where
+// that exclusion is applied.
+/// Which kind of work a task is, using the same names the team is split into
+/// (User.dept and the task templates' per-item `dept`). Deliberately the
+/// department vocabulary rather than a new one: a studio that already says
+/// "that's a Design job" does not need to learn a second word for it.
+enum TaskType {
+  DESIGN
+  VIDEO
+  DIGITAL_MARKETING
+  DEVELOPMENT
+  BUSINESS_DEVELOPMENT
+  ACCOUNTS
+  MANAGEMENT
 }
 
 enum TaskStatus {
   TODO
   IN_PROGRESS
-  IN_REVIEW // work sitting with a reviewer is neither done nor in progress
-  APPROVED
-  DONE
-  BLOCKED
   ON_HOLD
+  DONE
+  CANCELLED
+}
+
+/// Everybody working on a task, the lead included.
+///
+/// A join table rather than a second id column, because "who is on this" has
+/// no natural limit and a `assignee2Id`, `assignee3Id` schema answers the
+/// question wrong the first time somebody needs a fourth person.
+///
+/// Load is counted from HERE, not from `Task.assigneeId`: three people sharing
+/// a task are three busy people, and counting it against the lead alone is how
+/// the two helping look idle. Organisation-wide totals still count the task
+/// once — the same figure means a different thing per person and per company,
+/// and this is the seam where that distinction lives.
+model TaskAssignee {
+  id       String   @id @default(cuid())
+  taskId   String
+  userId   String
+  assignedAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation("TaskAssignments", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, userId])
+  @@index([userId])
+  @@map("task_assignees")
+}
+
+enum WaitingOn {
+  CLIENT
+  ANOTHER_PERSON
 }
 
 model Task {
-  id             String  @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  projectId      String? // delivery
-  dealId         String? // pre-sales
-  departmentId   String?
+  title          String
+  workType       TaskWorkType
+  workId         String?
+  monthCardId    String?
+  projectId      String?
+  /// The lead. Kept alongside `assignees` rather than replaced by it: forty
+  /// reads across nine files ask "whose task is this", a task always has
+  /// somebody answerable for it, and a nullable set is a worse answer to that
+  /// question than a column. Always also present in `assignees`.
+  assigneeId     String
+  /// Who typed it in. Always the caller, never chosen — `canRemove` grants
+  /// deleting a task to whoever created it, so a picker here would be a
+  /// permission anybody could hand to anybody. For who ASKED for the work,
+  /// see `assignedById`.
+  createdById    String
+  /// Who handed the work over.
+  ///
+  /// This used to be `createdById`, which is only the same person when the
+  /// person who wants the work done is also the person who types it up. A
+  /// manager writing out what a Head asked for in a meeting could not say so,
+  /// and the task arrived on somebody's screen attributed to the wrong person.
+  ///
+  /// Nullable only because 83 rows existed before the column did; they were
+  /// backfilled from `createdById` and every write since sets it, defaulting
+  /// to whoever is typing.
+  assignedById   String?
+  /// Who checks it before it counts as done. Optional: most tasks are not
+  /// reviewed, and pretending otherwise would put a required picker on every
+  /// creation form.
+  reviewerId     String?
+  taskType       TaskType?
+  dueDate        DateTime     @db.Date
 
-  title       String
-  description String?    @db.Text
-  taskType    String?    @default("OTHER")
-  status      TaskStatus @default(TODO)
-  priority    Priority   @default(MEDIUM)
-
-  assigneeId String?
-  // Separate from the assignee because agency work is checked before it reaches a
-  // client, and the checker is frequently not on the project otherwise.
-  reviewerId String?
-
-  dueDate      DateTime?
-  completedAt  DateTime?
-  parentTaskId String?
-  recurrence   Json? //   retainer work that repeats monthly
-  position     Int       @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  assignedAt          DateTime   @default(now())
+  completedAt         DateTime?
+  status              TaskStatus @default(TODO)
+  priority            Priority   @default(MEDIUM)
+  waitingOn           WaitingOn?
+  waitingSince        DateTime?
+  waitingTotalMinutes Int        @default(0)
+  reopenCount         Int        @default(0)
+  templateItemId      String?
+  notes               String?    @db.Text
+  // §16: soft delete only, nothing hard deleted by a user. A task entered by
+  // mistake leaves; a task somebody worked stays and gets Cancelled instead,
+  // because the aging medians, the allocation cron and "done this week" all
+  // read history that a hard delete would silently rewrite.
+  deletedAt           DateTime?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  project      Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  deal         Deal?        @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  department   Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  assignee     User?        @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  assignee     User         @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  creator      User         @relation("TaskCreator", fields: [createdById], references: [id])
+  assignedBy   User?        @relation("TaskAssignedBy", fields: [assignedById], references: [id])
   reviewer     User?        @relation("TaskReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
-  parentTask   Task?        @relation("SubTasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
-  subTasks     Task[]       @relation("SubTasks")
-  activities   Activity[]
-  // -- CHECK: exactly one of projectId / dealId is set. Never both.
+  assignees    TaskAssignee[]
+  monthCard    MonthCard?   @relation(fields: [monthCardId], references: [id], onDelete: Cascade)
+  project      Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@index([projectId, status])
-  @@index([assigneeId, dueDate])
-  @@index([dealId])
+  @@index([organizationId, assigneeId, status])
+  @@index([dueDate, status])
+  @@index([monthCardId])
+  @@index([projectId])
   @@map("tasks")
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// MONEY — §3.8
+// 7. FINANCIALS, COSTS & ALLOCATIONS
 // ──────────────────────────────────────────────────────────────────────────────
 
-enum InvoiceType {
-  INVOICE
-  CREDIT_NOTE
-  PROFORMA
+enum CostType {
+  DIRECT
+  COMPANY
+  CAPITAL
 }
 
-// OVERDUE is deliberately NOT here. It means sent, unpaid and past due — worked
-// out on the spot. Storing it needs a nightly job, and the night that job fails
-// receivables are silently wrong.
+enum CostPaidBy {
+  COMPANY
+  AKMAL
+  JAMEEL_N_J_MACSON
+}
+
+enum CostTreatment {
+  COMPANY_EXPENSE
+  AKMAL_LOAN
+  N_J_MACSON_LOAN
+}
+
+model Cost {
+  id                String        @id @default(cuid())
+  organizationId    String
+  type              CostType
+  workType          TaskWorkType?
+  workId            String?
+  monthCardId       String?
+  projectId         String?
+  category          String
+  vendor            String
+  amount            Decimal       @db.Decimal(12, 2)
+  incurredAt        DateTime      @db.Date
+  committedNotPaid  Boolean       @default(false)
+  paidBy            CostPaidBy    @default(COMPANY)
+  treatment         CostTreatment @default(COMPANY_EXPENSE)
+  enteredById       String
+  recurring         Boolean       @default(false)
+  // Set on the clone the 00:15-on-the-1st job creates from a recurring row,
+  // pointing back at the row it was cloned from — how the job tells "already
+  // rolled this month" from "needs a new draft" without a separate table.
+  recurringSourceId String?
+  confirmed         Boolean       @default(true)
+  notes             String?       @db.Text
+  deletedAt         DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  enteredBy        User               @relation("CostEnteredBy", fields: [enteredById], references: [id])
+  monthCard        MonthCard?         @relation(fields: [monthCardId], references: [id], onDelete: SetNull)
+  project          Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  recurringSource  Cost?              @relation("RecurringCostClones", fields: [recurringSourceId], references: [id], onDelete: SetNull)
+  recurringClones  Cost[]             @relation("RecurringCostClones")
+  assets           Asset[]
+  assetMaintenance AssetMaintenance[]
+
+  @@index([organizationId, type])
+  @@index([monthCardId])
+  @@index([projectId])
+  @@index([incurredAt])
+  @@map("costs")
+}
+
+model PeopleAllocation {
+  id              String       @id @default(cuid())
+  userId          String
+  month           String // "YYYY-MM"
+  workType        TaskWorkType
+  workId          String
+  monthCardId     String?
+  projectId       String?
+  proposedPercent Int
+  percent         Int // Percentages only, never stores INR
+  confirmedById   String?
+  confirmedAt     DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  user        User       @relation("UserAllocations", fields: [userId], references: [id], onDelete: Cascade)
+  confirmedBy User?      @relation("AllocationConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
+  monthCard   MonthCard? @relation(fields: [monthCardId], references: [id], onDelete: Cascade)
+  project     Project?   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, month, workId])
+  @@index([month, workId])
+  @@map("people_allocations")
+}
+
 enum InvoiceStatus {
-  DRAFT
-  SENT
-  PARTIALLY_PAID
+  RAISED
   PAID
-  VOID
+  OVERDUE
+  CANCELLED
 }
 
 model Invoice {
-  id             String  @id @default(cuid())
+  id             String        @id @default(cuid())
   organizationId String
+  number         String // Entered from Tally
   companyId      String
-  engagementId   String? // where it came from: one period of that engagement
-  quoteId        String?
-
-  number    String
-  type      InvoiceType @default(INVOICE)
-  issueDate DateTime
-  dueDate   DateTime
-
-  // Follows its payments, decided in ONE place:
-  //   paid = 0 -> SENT | paid < total -> PARTIALLY_PAID | paid >= total -> PAID
-  status InvoiceStatus @default(DRAFT)
-
-  // Frozen snapshot — an ISSUED invoice never changes. If it is wrong you void it
-  // and issue a credit note; that is what an audit needs to see.
-  lineItems Json
-  subtotal  Decimal @db.Decimal(12, 2)
-  cgst      Decimal @default(0) @db.Decimal(12, 2)
-  sgst      Decimal @default(0) @db.Decimal(12, 2)
-  igst      Decimal @default(0) @db.Decimal(12, 2)
-  total     Decimal @db.Decimal(12, 2)
-  currency  String
-
-  // Which period of the engagement this invoice covers.
-  periodStart DateTime?
-  periodEnd   DateTime?
-
-  sentAt    DateTime?
-  voidedAt  DateTime?
-  pdfKey    String?
-  notes     String?   @db.Text
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  workType       TaskWorkType?
+  workId         String?
+  amount         Decimal       @db.Decimal(12, 2)
+  raisedAt       DateTime      @db.Date
+  dueAt          DateTime      @db.Date
+  status         InvoiceStatus @default(RAISED)
+  paidAt         DateTime?     @db.Date
+  proformaId     String?       @unique
+  projectId      String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  company      Company      @relation(fields: [companyId], references: [id])
-  engagement   Engagement?  @relation(fields: [engagementId], references: [id], onDelete: SetNull)
-  quote        Quote?       @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  proforma     Proforma?    @relation
+  monthCard    MonthCard?   @relation
   payments     Payment[]
 
   @@unique([organizationId, number])
   @@index([organizationId, status])
   @@index([companyId])
-  @@index([engagementId])
   @@map("invoices")
 }
 
-enum PaymentMethod {
-  BANK_TRANSFER
-  UPI
-  CHEQUE
-  CASH
-  CARD
-  OTHER
-}
-
 model Payment {
-  id             String @id @default(cuid())
-  organizationId String
-  companyId      String
+  id         String   @id @default(cuid())
+  invoiceId  String
+  amount     Decimal  @db.Decimal(12, 2)
+  receivedAt DateTime @db.Date
+  mode       String
+  reference  String?
+  createdAt  DateTime @default(now())
 
-  // Nullable so an ADVANCE can be recorded before any invoice exists — a client
-  // paying 50% up front is normal. Attached to the invoice wherever there is one,
-  // or "which invoice did this 50,000 settle?" has no answer.
-  invoiceId String?
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
-  amount       Decimal       @db.Decimal(12, 2)
-  currency     String
-  paidOn       DateTime
-  method       PaymentMethod @default(BANK_TRANSFER)
-  reference    String?
-  notes        String?
-  recordedById String? //     payments created or deleted are audited
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  company      Company      @relation(fields: [companyId], references: [id])
-  invoice      Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-
-  @@index([organizationId, paidOn])
   @@index([invoiceId])
   @@map("payments")
 }
 
-enum ExpenseCategory {
-  VENDOR
-  TRAVEL
-  EQUIPMENT
-  MARKETING
-  MISC
+// ──────────────────────────────────────────────────────────────────────────────
+// 8. ALERTS & AUDIT TRAIL
+// ──────────────────────────────────────────────────────────────────────────────
+
+enum AlertSeverity {
+  HIGH
+  MED
+  LOW
 }
 
-model Expense {
-  id             String  @id @default(cuid())
+model Alert {
+  id               String        @id @default(cuid())
+  organizationId   String
+  rule             String
+  severity         AlertSeverity
+  entityType       String
+  entityId         String
+  message          String
+  raisedAt         DateTime      @default(now())
+  resolvedAt       DateTime?
+  acknowledgedById String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  acknowledgedBy User?        @relation("AlertAcknowledgedBy", fields: [acknowledgedById], references: [id], onDelete: SetNull)
+  reads          AlertRead[]
+
+  @@index([organizationId, resolvedAt, severity])
+  @@index([entityType, entityId])
+  @@map("alerts")
+}
+
+/// Who has DISMISSED an alert from their own bell.
+///
+/// `Alert.acknowledgedById` already existed and looks like it does this job.
+/// It does not: it is a single column on a row shared by the whole
+/// organisation, so the first person to press "Mark all read" cleared the
+/// badge for all fourteen people at once. On the live database 41 of 44 open
+/// alerts were already stamped with one manager's id, which is why every role
+/// — founder, head, BD, designer — saw an identical unread count of 3.
+///
+/// Acknowledgement and reading are genuinely different facts, so both stay:
+/// acknowledging is the organisation saying somebody has taken this on, and a
+/// read is one person saying they have seen it.
+model AlertRead {
+  id      String   @id @default(cuid())
+  alertId String
+  userId  String
+  readAt  DateTime @default(now())
+
+  alert Alert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([alertId, userId])
+  @@index([userId])
+  @@map("alert_reads")
+}
+
+model Activity {
+  id             String   @id @default(cuid())
   organizationId String
-  companyId      String?
-  projectId      String?
+  entityType     String
+  entityId       String
+  actorId        String?
+  verb           String
+  payload        Json     @default("{}")
+  at             DateTime @default(now())
 
-  amount   Decimal         @db.Decimal(12, 2)
-  currency String
-  date     DateTime
-  category ExpenseCategory @default(MISC)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor        User?        @relation("ActorActivity", fields: [actorId], references: [id], onDelete: SetNull)
 
-  description String?
-  vendor      String?
+  @@index([organizationId, entityType, entityId, at])
+  @@map("activities")
+}
 
-  // Pass-through media spend rebilled to a client is not the same as your own
-  // software subscription. Without the distinction, margin is wrong for every
-  // client you buy media for.
-  isBillable Boolean @default(false)
+// ──────────────────────────────────────────────────────────────────────────────
+// 10. COMPANY ASSETS — the register, and who is holding what
+//
+// Reference: docs/ASSET_MANAGEMENT_PLAN.md
+//
+// Two problems, one table. CUSTODY answers "who is responsible for this?" — a
+// laptop with a designer, open-ended, changing about once a year. BOOKING
+// answers "is the 24-70 free on Friday, and did it come back?" — a due date,
+// and therefore an overdue. Tools that merge them become useless at both, and
+// tools that split them into two tables lose the one thing you actually want
+// when a lens goes missing: a single chronological chain of custody.
+//
+// There are no file uploads here. Attachments were built and withdrawn on
+// 2026-08-05 (PRODUCT_GAPS.md) because they had no per-org quota and a full
+// disk on a single VPS also stops Postgres writing. Bills, warranty cards and
+// photos are therefore URL strings pointing at Drive, following the existing
+// driveLink / receiptUrl convention. That is a schema decision, not a phase 2.
+// ──────────────────────────────────────────────────────────────────────────────
 
-  receiptKey   String? // object storage
-  recordedById String?
+enum AssetCategory {
+  LAPTOP
+  DESKTOP
+  MONITOR
+  PHONE
+  STORAGE // SSDs, HDDs, card readers
+  NETWORK // routers, switches, dongles
+  CAMERA_BODY
+  LENS
+  LIGHTING
+  AUDIO // mics, recorders, boom poles
+  GIMBAL_DRONE
+  SUPPORT // tripods, sliders, monopods
+  ACCESSORY // batteries, cards, bags
+  OTHER
+}
+
+enum AssetStatus {
+  IN_STOCK // in the office, free to take
+  ASSIGNED // with a person, long-term custody
+  BOOKED_OUT // out on a shoot, expected back
+  IN_REPAIR
+  RETIRED // written off, still on the books at salvage
+  SOLD
+  LOST
+}
+
+enum AssetCondition {
+  NEW
+  GOOD
+  FAIR
+  DAMAGED
+}
+
+enum AssetMovementKind {
+  CUSTODY // long-term assignment, no due date
+  BOOKING // short-term checkout, has dueAt
+}
+
+enum AssetMaintenanceKind {
+  SERVICE
+  REPAIR
+  AMC
+}
+
+model Asset {
+  id             String @id @default(cuid())
+  organizationId String
+
+  // Identity
+  tag          String // "EL/CAM/001" — printed on the sticker
+  name         String // "Sony A7 IV"
+  category     AssetCategory
+  make         String?
+  model        String?
+  /// Deliberately NOT unique-constrained. Plenty of genuine kit ships without
+  /// one, and a partial unique index on a nullable column is a foot-gun.
+  /// Duplicates are surfaced as a warning at create time instead.
+  serialNumber String?
+
+  status    AssetStatus    @default(IN_STOCK)
+  condition AssetCondition @default(GOOD)
+
+  /// Does this item go out on shoots? Drives whether the booking actions and
+  /// the "Out now" board offer it at all. A monitor is never bookable; a lens
+  /// always is. Kept as a flag rather than inferred from category so an
+  /// office-bound spare laptop can be excluded by hand.
+  bookable Boolean @default(false)
+
+  // ─── Money ───────────────────────────────────────────────────────────────
+  /// The CAPITAL Cost row that bought this. The asset does NOT own the spend —
+  /// it points at the single place the money was already recorded, so the
+  /// register and the P&L can never disagree about what was paid.
+  costId           String?
+  purchasePrice    Decimal   @db.Decimal(12, 2)
+  purchasedAt      DateTime  @db.Date
+  vendor           String?
+  invoiceNumber    String?
+  /// Straight-line inputs. Defaulted per category from ASSET_USEFUL_LIFE in
+  /// @flowzen/shared, overridable per asset because the CA occasionally
+  /// disagrees with the default for one specific purchase.
+  usefulLifeMonths Int
+  salvageValue     Decimal   @default(0) @db.Decimal(12, 2)
+  /// Set only when status becomes SOLD — what it actually fetched, which is
+  /// rarely the book value and is what a gain/loss line needs.
+  disposedAt       DateTime? @db.Date
+  disposalValue    Decimal?  @db.Decimal(12, 2)
+  disposalNote     String?
+
+  warrantyUntil DateTime? @db.Date
+  insuredUntil  DateTime? @db.Date
+
+  // ─── Links, not uploads ──────────────────────────────────────────────────
+  billUrl  String?
+  photoUrl String?
+  notes    String? @db.Text
+
+  /// Denormalised pointer to whoever holds it, so the register list can render
+  /// 200 rows without an N+1 over movement history. The open AssetMovement row
+  /// remains the source of truth; one writer keeps the two in step.
+  currentHolderId String?
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  organization  Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cost          Cost?              @relation(fields: [costId], references: [id], onDelete: SetNull)
+  currentHolder User?              @relation("AssetHolder", fields: [currentHolderId], references: [id], onDelete: SetNull)
+  movements     AssetMovement[]
+  maintenance   AssetMaintenance[]
+
+  @@unique([organizationId, tag])
+  @@index([organizationId, status])
+  @@index([organizationId, category])
+  @@index([currentHolderId])
+  @@map("assets")
+}
+
+/// The chain of custody.
+///
+/// INVARIANT: an asset has at most ONE movement with `returnedAt: null`.
+/// Enforced in the service layer inside a transaction, not by a constraint —
+/// Postgres cannot express "at most one null per group" without a partial
+/// unique index, and the transaction is the honest place for it anyway since
+/// Asset.status and Asset.currentHolderId must move in the same commit.
+model AssetMovement {
+  id      String            @id @default(cuid())
+  assetId String
+  kind    AssetMovementKind
+  userId  String // who is holding it
+
+  /// BOOKING only — what the gear went out for. Both nullable: plenty of
+  /// shoots are internal or pre-sales and belong to no billable work item.
+  projectId   String?
+  monthCardId String?
+  purpose     String?
+
+  outAt      DateTime  @default(now())
+  /// Null for CUSTODY (open-ended). Required for BOOKING — it is what makes
+  /// an overdue alert possible at all.
+  dueAt      DateTime?
+  returnedAt DateTime?
+
+  issuedById   String
+  receivedById String?
+  conditionOut AssetCondition
+  conditionIn  AssetCondition?
+  notes        String?         @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  company      Company?     @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  asset      Asset      @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  user       User       @relation("AssetMovementHolder", fields: [userId], references: [id])
+  issuedBy   User       @relation("AssetMovementIssuer", fields: [issuedById], references: [id])
+  receivedBy User?      @relation("AssetMovementReceiver", fields: [receivedById], references: [id], onDelete: SetNull)
+  project    Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  monthCard  MonthCard? @relation(fields: [monthCardId], references: [id], onDelete: SetNull)
 
-  @@index([organizationId, date])
-  @@index([companyId])
-  @@map("expenses")
+  @@index([assetId, outAt])
+  @@index([userId, returnedAt])
+  @@index([returnedAt, dueAt]) // the overdue scan
+  @@map("asset_movements")
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// TIMELINE, NOTIFICATIONS, AUDIT — §3.9, §3.12
-// ──────────────────────────────────────────────────────────────────────────────
+model AssetMaintenance {
+  id          String               @id @default(cuid())
+  assetId     String
+  kind        AssetMaintenanceKind
+  vendor      String?
+  /// Repair spend. Optionally mirrored into a COMPANY Cost row — off by
+  /// default, because small repairs are noise in the P&L and the maintenance
+  /// log holds the number either way.
+  amount      Decimal?             @db.Decimal(12, 2)
+  costId      String?
+  sentAt      DateTime             @db.Date
+  returnedAt  DateTime?            @db.Date
+  notes       String?              @db.Text
+  createdById String
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
 
-enum ActivityType {
-  NOTE
-  CALL
-  MEETING
-  EMAIL
-  WHATSAPP
-  STAGE_CHANGE
-  STATUS_CHANGE
-  QUOTE_SENT
-  QUOTE_ACCEPTED
-  QUOTE_DECLINED
-  INVOICE_SENT
-  PAYMENT_RECEIVED
-  TASK
-  SYSTEM
-}
+  asset     Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  cost      Cost? @relation(fields: [costId], references: [id], onDelete: SetNull)
+  createdBy User  @relation("MaintenanceCreator", fields: [createdById], references: [id])
 
-// Replaces both the old Activity AND Note — adding a note used to write two
-// records that could disagree. The polymorphic entityType/entityId pair is gone
-// too: it recorded the same relationship a second time in a way the database
-// could not enforce.
-model Activity {
-  id             String       @id @default(cuid())
-  organizationId String
-  type           ActivityType
-  message        String
-  body           String?      @db.Text
-  direction      String? //     'IN' | 'OUT'
-  metadata       Json?
-
-  // When it HAPPENED, versus when it was RECORDED. A call logged on Friday about
-  // a Tuesday conversation belongs on Tuesday, or every "last contacted" figure
-  // is wrong by however long people take to write things up.
-  occurredAt DateTime @default(now())
-  createdAt  DateTime @default(now())
-
-  userId       String?
-  companyId    String?
-  dealId       String?
-  projectId    String?
-  taskId       String?
-  engagementId String?
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
-  company      Company?     @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  deal         Deal?        @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  project      Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  task         Task?        @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  // APPEND-ONLY. A history you can edit is not a history.
-
-  @@index([dealId, occurredAt])
-  @@index([companyId, occurredAt])
-  @@index([projectId, occurredAt])
-  @@map("activities")
-}
-
-model Notification {
-  id      String  @id @default(cuid())
-  userId  String
-  type    String //  plain string so a new kind needs no migration
-  title   String
-  message String? @db.Text
-  link    String? // where clicking it goes
-
-  // Deduplication key. A scanner that inserts a row every morning gives you 30
-  // identical "invoice #123 overdue" notifications in a month — and the day that
-  // starts is the day people stop looking at the bell. One row per (user, key),
-  // UPDATED rather than re-created.
-  dedupeKey String
-
-  readAt    DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, dedupeKey])
-  @@index([userId, readAt])
-  @@map("notifications")
-}
-
-// NOT the same as Activity. Activity is the business timeline — calls, meetings,
-// notes, things people WANT to read. This is the security record: who changed a
-// price, who granted Admin. Merge them and the timeline fills with noise until
-// nobody reads either.
-//
-// Four things are audited, because they involve money or access (§3.12):
-// engagement terms changing, payments created or deleted, roles granted or
-// revoked, and company status changing.
-model AuditLog {
-  id             String   @id @default(cuid())
-  organizationId String
-  userId         String?
-  action         String //  'ENGAGEMENT_TERMS_CHANGED' | 'PAYMENT_DELETED' | ...
-  entityType     String
-  entityId       String
-  before         Json?
-  after          Json?
-  ipAddress      String?
-  createdAt      DateTime @default(now())
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([organizationId, createdAt])
-  @@index([entityType, entityId])
-  @@map("audit_logs")
+  @@index([assetId, sentAt])
+  @@map("asset_maintenance")
 }

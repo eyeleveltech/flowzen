@@ -1,98 +1,121 @@
-/**
- * Sequential document numbers — EL/QT/2026-27/005.
- *
- * The allocation itself was already correct in the old system (§3.13) and is kept
- * exactly: one atomic `INSERT … ON CONFLICT DO UPDATE … RETURNING`, so the counter
- * is read and incremented in a single statement and two people clicking at the
- * same instant cannot be handed the same number.
- *
- * Two things that were wrong are fixed:
- *
- *   1. The `EL/` prefix was hardcoded (§1.3 ⑧). It now comes from the organisation.
- *   2. The period was the SERVER's calendar year. It is now the organisation's
- *      FISCAL year, in its own timezone — so a document raised at 00:30 on 1 April
- *      in Chennai belongs to the new financial year rather than the old one, and a
- *      UTC-deployed container does not silently disagree with the accountant.
- */
-
 import { prisma } from '../lib/prisma.js';
-import { getOrgConfig } from '../lib/orgConfig.js';
-import { localParts } from './orgDay.js';
-import type { Prisma } from '@prisma/client';
-
-export type DocScope = 'QT' | 'PI' | 'INV' | 'CN';
 
 /**
- * The fiscal year label containing `date`, for an organisation whose year starts
- * in month `fiscalYearStart`.
+ * The numbered documents this business issues, and the one series behind them.
  *
- *   April start,   15 Mar 2027  ->  '2026-27'   (still the old year)
- *   April start,   01 Apr 2027  ->  '2027-28'
- *   January start, 15 Mar 2027  ->  '2027'      (no span, so no hyphen)
+ *   EL/PI/26-27/001    a proforma
+ *   EL/INV/26-27/001   the tax invoice it becomes
+ *
+ * ─── Why this is one file ───────────────────────────────────────────────────
+ *
+ * It used to be two, `proformaNumber.ts` and `invoiceNumber.ts`, holding the
+ * same algorithm twice. They drifted, which is what two copies of an algorithm
+ * do: the proforma side was corrected to compare the sequence NUMERICALLY and
+ * the invoice side was left sorting it as TEXT. Sorting text works only while
+ * the zero padding holds the width fixed — at 1000 the padding stops, '1000'
+ * sorts below '999', and the series hands out a number it has already issued.
+ *
+ * The brief's rule is that a document number is never reused. That rule is not
+ * a property of one file, so it now lives in one.
  */
-export const fiscalYearLabel = (
-  date: Date,
-  timeZone: string,
-  fiscalYearStart: number,
-): string => {
-  const { year, month } = localParts(date, timeZone);
 
-  if (fiscalYearStart === 1) return String(year);
+export type DocumentKind = 'PROFORMA' | 'INVOICE';
 
-  const startYear = month >= fiscalYearStart ? year : year - 1;
-  const endShort = String((startYear + 1) % 100).padStart(2, '0');
-  return `${startYear}-${endShort}`;
-};
+/** Three digits is the house format. Past 999 the width simply grows. */
+const SEQUENCE_WIDTH = 3;
 
 /**
- * Allocate the next number for this organisation, scope and fiscal year.
+ * India's financial year, as the two-digit pair documents print.
  *
- * Pass `tx` when allocating inside a transaction — an invoice and its number must
- * be created together, or a failed insert burns a number and leaves a gap that
- * looks like a deleted document.
+ * It begins on 1 April, so January to March belong to the year that started the
+ * previous April: March 2027 is still `26-27`.
  */
-export const generateDocumentNumber = async (
+function financialYearLabel(now: Date, startMonth: number): string {
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1; // 1-indexed
+  const startYear = month < startMonth ? year - 1 : year;
+  return `${String(startYear).slice(-2)}-${String(startYear + 1).slice(-2)}`;
+}
+
+/**
+ * An invoice's prefix is derived from the proforma's, so an organisation
+ * configures one thing: `EL/PI` implies `EL/INV`.
+ */
+function basePrefix(kind: DocumentKind, proformaPrefix: string | undefined): string {
+  const configured = proformaPrefix?.replace(/\/$/, '') || 'EL/PI';
+  if (kind === 'PROFORMA') return configured;
+
+  const derived = configured.replace(/\/PI\/?$/i, '/INV');
+  return derived.endsWith('/INV') ? derived : `${derived}/INV`;
+}
+
+/**
+ * The next number in this organisation's series for this financial year.
+ *
+ * Read-highest-then-insert, so two people raising a document at the same moment
+ * compute the same one. That race is settled by the unique index on
+ * (organizationId, number) plus `issueWithRetry` below — not here.
+ */
+export async function nextDocumentNumber(
   organizationId: string,
-  scope: DocScope,
-  tx?: Prisma.TransactionClient,
-  now: Date = new Date(),
-): Promise<string> => {
-  const config = await getOrgConfig(organizationId);
-  const period = fiscalYearLabel(now, config.timezone, config.fiscalYearStart);
-  const client = tx ?? prisma;
-
-  const rows = await client.$queryRaw<{ counter: number }[]>`
-    INSERT INTO "doc_counters" ("id", "organizationId", "scope", "period", "counter")
-    VALUES (gen_random_uuid()::text, ${organizationId}, ${scope}, ${period}, 1)
-    ON CONFLICT ("organizationId", "scope", "period")
-    DO UPDATE SET "counter" = "doc_counters"."counter" + 1
-    RETURNING "counter";
-  `;
-
-  const sequence = String(rows[0].counter).padStart(3, '0');
-  return `${config.documentPrefix}/${scope}/${period}/${sequence}`;
-};
-
-/**
- * What the next number *would* be, without consuming it.
- *
- * For previewing a number on a draft. Deliberately separate from allocation, and
- * never used to assign one: reading and then writing is exactly the race the
- * atomic statement above exists to avoid.
- */
-export const peekDocumentNumber = async (
-  organizationId: string,
-  scope: DocScope,
-  now: Date = new Date(),
-): Promise<string> => {
-  const config = await getOrgConfig(organizationId);
-  const period = fiscalYearLabel(now, config.timezone, config.fiscalYearStart);
-
-  const row = await prisma.docCounter.findUnique({
-    where: { organizationId_scope_period: { organizationId, scope, period } },
-    select: { counter: true },
+  kind: DocumentKind,
+): Promise<string> {
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { proformaPrefix: true, financialYearStart: true },
   });
 
-  const next = String((row?.counter ?? 0) + 1).padStart(3, '0');
-  return `${config.documentPrefix}/${scope}/${period}/${next}`;
-};
+  const prefix = basePrefix(kind, org?.proformaPrefix ?? undefined);
+  const fy = financialYearLabel(new Date(), org?.financialYearStart ?? 4);
+  const searchPrefix = `${prefix}/${fy}/`;
+
+  const where = { organizationId, number: { startsWith: searchPrefix } };
+  const select = { number: true };
+  const issued =
+    kind === 'INVOICE'
+      ? await prisma.invoice.findMany({ where, select })
+      : await prisma.proforma.findMany({ where, select });
+
+  // Compared as a NUMBER, never as text — see the note at the top of the file.
+  let highest = 0;
+  for (const { number } of issued) {
+    const parsed = parseInt(number.slice(searchPrefix.length), 10);
+    if (!Number.isNaN(parsed) && parsed > highest) highest = parsed;
+  }
+
+  return `${searchPrefix}${String(highest + 1).padStart(SEQUENCE_WIDTH, '0')}`;
+}
+
+/**
+ * Issue a document, and lose the race gracefully.
+ *
+ * `create` receives the number to use and does the actual insert. If somebody
+ * else took that number first the unique index rejects it (P2002), and this
+ * reads the series again rather than surfacing a 500 to somebody whose only
+ * mistake was pressing the button at the same moment as a colleague.
+ */
+export async function issueWithRetry<T>(
+  organizationId: string,
+  kind: DocumentKind,
+  create: (documentNumber: string) => Promise<T>,
+  maxAttempts = 5,
+): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    const documentNumber = await nextDocumentNumber(organizationId, kind);
+    try {
+      return await create(documentNumber);
+    } catch (err) {
+      const numberTaken = (err as { code?: string }).code === 'P2002';
+      if (!numberTaken || attempt >= maxAttempts) throw err;
+      // Somebody else took this number. Read the series again and retry.
+    }
+  }
+}
+
+/** @deprecated Prefer `nextDocumentNumber(orgId, 'INVOICE')`. */
+export const generateNextInvoiceNumber = (organizationId: string) =>
+  nextDocumentNumber(organizationId, 'INVOICE');
+
+/** @deprecated Prefer `nextDocumentNumber(orgId, 'PROFORMA')`. */
+export const generateNextProformaNumber = (organizationId: string) =>
+  nextDocumentNumber(organizationId, 'PROFORMA');

@@ -1,52 +1,42 @@
 'use client';
 
+/**
+ * The mobile tab bar.
+ *
+ * Same navigation as the sidebar, same two gates — role and what the
+ * organisation has — but only four fit across a phone, so the rest live behind
+ * "More". Nothing to switch between any more: the module switcher that used to
+ * sit at the top of that sheet is gone with the mode itself.
+ */
+
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { useAuthStore, useModuleStore } from '@/stores';
-import { moduleForPath, accessibleModules, type ModuleKey } from '@/lib/modules';
+import { useAuthStore } from '@/stores';
 import { NAV_ITEMS, BOTTOM_NAV_ITEMS, NavItem, canSee } from '@/config/navigation';
-import {
-  MoreHorizontal,
-  ArrowLeftRight,
-  LogOut,
-  X,
-} from 'lucide-react';
+import { MoreHorizontal, LogOut, X } from 'lucide-react';
 
 export function BottomTabs() {
   const shouldReduceMotion = useReducedMotion();
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
-  const { activeModule: storeModule, setActiveModule } = useModuleStore();
   const [showMore, setShowMore] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
-  const routeModule = moduleForPath(pathname);
-  useEffect(() => { if (routeModule) setActiveModule(routeModule); }, [routeModule, setActiveModule]);
-  const activeModule: ModuleKey = routeModule ?? storeModule;
-  const canSwitch = accessibleModules(user).length > 1;
+  // The same permission switches the API enforces — so a tab is offered only
+  // when the screen behind it will actually open.
+  const allowed = (item: NavItem) => mounted && canSee(item, user?.permissions);
 
-  // Matches the sidebar: the section you are in decides what is listed.
-  const inModule = (item: NavItem) => {
-    if (!item.module) return true; // core (Settings, Profile)
-    const mods = Array.isArray(item.module) ? item.module : [item.module];
-    return mods.includes(activeModule);
-  };
-  // Roles are a LADDER. `roles.includes(user.role)` was exact matching, so an
-  // item marked SALES was invisible to the Admin above it (§3.10).
-  const allowed = (item: NavItem) => canSee(item, user?.role || '') && inModule(item);
-
-  const primaryNavItems = NAV_ITEMS.filter((item) => item.isPrimaryMobile);
-  const moreNavItems = [
-    ...NAV_ITEMS.filter((item) => !item.isPrimaryMobile),
+  const visiblePrimary = NAV_ITEMS.filter((i) => i.isPrimaryMobile).filter(allowed).slice(0, 4);
+  const filteredMoreItems = [
+    ...NAV_ITEMS.filter((i) => !visiblePrimary.includes(i)),
     ...BOTTOM_NAV_ITEMS,
-  ];
-
-  const visiblePrimary = primaryNavItems.filter(allowed).slice(0, 4);
-  const filteredMoreItems = moreNavItems.filter(allowed);
+  ].filter(allowed);
 
   const isMoreActive = filteredMoreItems.some(
-    (item) => pathname === item.href || pathname.startsWith(item.href + '/')
+    (item) => pathname === item.href || pathname.startsWith(item.href + '/'),
   );
 
   return (
@@ -88,32 +78,16 @@ export function BottomTabs() {
 
               {/* Menu Items */}
               <nav className="px-3 pb-2">
-                {canSwitch && (
-                  <Link href="/modules" onClick={() => setShowMore(false)}>
-                    <div className="flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-medium text-body hover:bg-surface transition-colors duration-150 motion-reduce:transition-none border border-border mb-1">
-                      <ArrowLeftRight className="h-5 w-5 text-secondary" />
-                      Switch module
-                    </div>
-                  </Link>
-                )}
                 {filteredMoreItems.map((item) => {
                   const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
                   return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={() => setShowMore(false)}
-                    >
+                    <Link key={item.href} href={item.href} onClick={() => setShowMore(false)}>
                       <div
-                        className={`flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-medium transition-colors duration-150 motion-reduce:transition-none ${isActive
-                          ? 'bg-primary text-white'
-                          : 'text-body hover:bg-surface'
-                          }`}
+                        className={`flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-base font-medium transition-colors duration-150 motion-reduce:transition-none ${
+                          isActive ? 'bg-primary text-white' : 'text-body hover:bg-surface'
+                        }`}
                       >
-                        <item.icon
-                          className={`h-5 w-5 ${isActive ? 'text-white' : 'text-secondary'
-                            }`}
-                        />
+                        <item.icon className={`h-5 w-5 ${isActive ? 'text-white' : 'text-secondary'}`} />
                         {item.label}
                       </div>
                     </Link>
@@ -128,7 +102,7 @@ export function BottomTabs() {
                     logout();
                     window.location.href = '/login';
                   }}
-                  className="flex w-full items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-medium text-danger hover:bg-red-50 transition-colors"
+                  className="flex w-full items-center gap-3.5 rounded-2xl px-4 py-3.5 text-base font-medium text-danger hover:bg-danger-tint transition-colors"
                 >
                   <LogOut className="h-5 w-5" />
                   Sign out
@@ -161,12 +135,10 @@ export function BottomTabs() {
                   />
                 )}
                 <tab.icon
-                  className={`h-5 w-5 transition-colors duration-150 ${isActive ? 'text-primary' : 'text-secondary'
-                    }`}
+                  className={`h-5 w-5 transition-colors duration-150 ${isActive ? 'text-primary' : 'text-secondary'}`}
                 />
                 <span
-                  className={`text-xs font-medium transition-colors duration-150 ${isActive ? 'text-primary' : 'text-secondary'
-                    }`}
+                  className={`text-xs font-medium transition-colors duration-150 ${isActive ? 'text-primary' : 'text-secondary'}`}
                 >
                   {tab.label}
                 </span>
@@ -187,12 +159,10 @@ export function BottomTabs() {
               />
             )}
             <MoreHorizontal
-              className={`h-5 w-5 transition-colors duration-150 ${isMoreActive ? 'text-primary' : 'text-secondary'
-                }`}
+              className={`h-5 w-5 transition-colors duration-150 ${isMoreActive ? 'text-primary' : 'text-secondary'}`}
             />
             <span
-              className={`text-xs font-medium transition-colors duration-150 ${isMoreActive ? 'text-primary' : 'text-secondary'
-                }`}
+              className={`text-xs font-medium transition-colors duration-150 ${isMoreActive ? 'text-primary' : 'text-secondary'}`}
             >
               More
             </span>
