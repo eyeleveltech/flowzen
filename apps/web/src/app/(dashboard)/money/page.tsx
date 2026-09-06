@@ -17,6 +17,8 @@ import { useConfirmStore } from '@/stores/confirm';
 import { usePageHeader } from '@/hooks/usePageHeader';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { Tabs, type TabDef } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { isAwaiting, isCollectible, isOverdue, sumOutstanding } from '@/lib/invoice-state';
 
 interface Invoice {
@@ -48,7 +50,25 @@ interface CostRow {
   project?: { company: { name: string }; name: string } | null;
 }
 
-type MoneyTab = 'INVOICES' | 'COSTS' | 'PROFIT';
+/** "2026-09" is a key. This is the label. */
+const monthName = (m: string) => {
+  const [y, mm] = m.split('-').map(Number);
+  return new Date(y, mm - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+};
+
+type MoneyTab = 'INVOICES' | 'TO_INVOICE' | 'COSTS' | 'PROFIT';
+
+type AwaitingRow = {
+  id: string;
+  month: string;
+  companyId: string;
+  companyName: string;
+  revenue: number;
+  status: string;
+  closedAt: string | null;
+  due: boolean;
+  retainerStopped: boolean;
+};
 
 interface ProfitRow {
   companyId: string;
@@ -71,6 +91,7 @@ const STATUS_STYLE: Record<string, string> = {
 export default function MoneyPage() {
   const confirmDialog = useConfirmStore((st) => st.confirm);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [toInvoice, setToInvoice] = useState<AwaitingRow[]>([]);
   /** A failed load, said out loud instead of only in the console. */
   const [loadError, setLoadError] = useState<string | null>(null);
   const [costs, setCosts] = useState<CostRow[]>([]);
@@ -106,6 +127,11 @@ export default function MoneyPage() {
       // already IS the invoice list.
       const res = await apiGet<Invoice[]>('/invoices');
       setInvoices(Array.isArray(res) ? res : []);
+      // The step before an invoice exists: retainer months carrying none.
+      // Loaded with the list rather than on tab click, because the count sits
+      // on the tab and a count that appears only after you look is no use.
+      const waiting = await api.invoices.awaiting().catch(() => null);
+      setToInvoice(waiting?.rows ?? []);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Could not load the money screen');
     }
@@ -268,9 +294,10 @@ export default function MoneyPage() {
       <Tabs
         tabs={[
           { key: 'INVOICES', label: 'Invoices', count: invoices.length },
+          { key: 'TO_INVOICE', label: 'To invoice', count: toInvoice.filter((r) => r.due).length },
           { key: 'COSTS', label: 'Costs' },
           { key: 'PROFIT', label: 'Profit & Costs' },
-        ] as TabDef<'INVOICES' | 'COSTS' | 'PROFIT'>[]}
+        ] as TabDef<MoneyTab>[]}
         active={tab}
         onChange={setTab}
       />
@@ -353,6 +380,73 @@ export default function MoneyPage() {
               })}
             </tbody>
           </table>
+          </div>
+        </div>
+      )}
+
+      {/*
+        The billing work list.
+
+        Raising the invoices is one person's job, and that person holds
+        `money.figures` and not `work.all` — so /live-work, /retainers/:id and
+        /projects/:id all bounce her to My Work, and she had no way to see which
+        months were waiting for one. The alert that would have told her,
+        MONTH_CARD_NOT_INVOICED, lands on one of those same screens. So the list
+        lives here, where the invoice is actually raised.
+
+        Both halves are shown. What is owed now is the job; what is still
+        running is the forward view, and leaving it out would make this a
+        rebuke rather than a work list.
+      */}
+      {tab === 'TO_INVOICE' && (
+        <div className="overflow-hidden rounded-xl border border-border">
+          <div className="overflow-x-auto">
+            <table className="w-full data-table">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="eyebrow text-left">Client</th>
+                  <th className="eyebrow text-left">Month</th>
+                  <th className="eyebrow text-right">Fee</th>
+                  <th className="eyebrow text-left">State</th>
+                  <th className="eyebrow"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {loading ? (
+                  <TableRowsSkeleton cols={5} />
+                ) : toInvoice.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-5 py-16 text-center text-sm text-secondary">
+                      Every retainer month has an invoice against it.
+                    </td>
+                  </tr>
+                ) : (
+                  toInvoice.map((r) => (
+                    <tr key={r.id} className="transition-colors hover:bg-subtle">
+                      <td className="font-medium text-primary">{r.companyName}</td>
+                      <td className="whitespace-nowrap text-secondary">{monthName(r.month)}</td>
+                      <td className="text-right tabular-nums text-primary">{formatMoney(r.revenue)}</td>
+                      <td>
+                        {r.due ? (
+                          <Badge tone="warn">
+                            {r.retainerStopped ? 'Retainer ended — still owed' : 'Ready to invoice'}
+                          </Badge>
+                        ) : (
+                          <Badge tone="neutral">Month still running</Badge>
+                        )}
+                      </td>
+                      <td className="text-right">
+                        {r.due && (
+                          <Button size="sm" variant="secondary" onClick={() => setCreatingInvoice(true)}>
+                            Raise invoice
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

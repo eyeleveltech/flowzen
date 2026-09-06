@@ -231,7 +231,20 @@ describe('the out-now board', () => {
 describe('handing gear over needs asset.manage', () => {
   const CHECKOUT = { userId: 'usr-emp', dueAt: '2026-09-10' };
 
-  it.each<PersonKey>(['employee', 'head', 'bd', 'accounts'])(
+  /*
+   * HEAD used to be in this list, and that was the bug rather than the rule.
+   *
+   * `asset.manage` gates thirteen endpoints and sat in no preset at all, so
+   * 0 of 14 real people held it: the only people who could move a piece of kit
+   * were the two with `setup.admin` and its master bypass. Everybody else got
+   * the ASSET_OVERDUE alert — deliberately ungated, because a designer needs to
+   * know the lens is late back — and no way to act on it.
+   *
+   * A Head runs a department and hands out its gear, so the preset now carries
+   * it. Nobody else does: selling and bookkeeping are not reasons to sign a
+   * camera out.
+   */
+  it.each<PersonKey>(['employee', 'bd', 'accounts'])(
     'refuses %s a checkout',
     async (who) => {
       const res = await request(app).post('/api/assets/ast-1/checkout').set(...auth(who)).send(CHECKOUT);
@@ -239,7 +252,7 @@ describe('handing gear over needs asset.manage', () => {
     },
   );
 
-  it.each<PersonKey>(['employee', 'head', 'bd', 'accounts'])('refuses %s an assign', async (who) => {
+  it.each<PersonKey>(['employee', 'bd', 'accounts'])('refuses %s an assign', async (who) => {
     const res = await request(app)
       .post('/api/assets/ast-1/assign')
       .set(...auth(who))
@@ -247,12 +260,18 @@ describe('handing gear over needs asset.manage', () => {
     expect(res.status).toBe(403);
   });
 
-  it.each<PersonKey>(['employee', 'head', 'bd', 'accounts'])('refuses %s a retire', async (who) => {
+  it.each<PersonKey>(['employee', 'bd', 'accounts'])('refuses %s a retire', async (who) => {
     const res = await request(app)
       .post('/api/assets/ast-1/retire')
       .set(...auth(who))
       .send({ outcome: 'RETIRED' });
     expect(res.status).toBe(403);
+  });
+
+  it('lets a Head hand kit over, because that is their department’s gear', async () => {
+    mockOpenMovement(null);
+    const res = await request(app).post('/api/assets/ast-1/checkout').set(...auth('head')).send(CHECKOUT);
+    expect(res.status).toBe(201);
   });
 
   it('lets management through', async () => {
@@ -261,7 +280,9 @@ describe('handing gear over needs asset.manage', () => {
     expect(res.status).toBe(201);
   });
 
-  it('lets a HEAD granted asset.manage per-user through, with no preset change', async () => {
+  it('still lets somebody granted asset.manage per-user through', async () => {
+    // Effective permissions are the union of the preset and the stored ones,
+    // so granting it to one person outside HEAD keeps working.
     mockOpenMovement(null);
     const res = await request(app)
       .post('/api/assets/ast-1/checkout')

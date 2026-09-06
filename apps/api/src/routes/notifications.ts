@@ -45,8 +45,9 @@ notificationsRouter.use(authenticate);
  * for, which is the safe direction to fail.
  */
 const RULE_PERMISSION: Record<string, PermissionKey | undefined> = {
-  // Somebody else's workload and somebody else's overdue task are both facts
-  // about the team, not about you.
+  // Somebody else's overdue task is a fact about the team. Your own is a fact
+  // about you — see MINE_REGARDLESS below, which lets these three through to
+  // the person the task belongs to whatever their permissions say.
   TASK_OVERDUE: 'work.team',
   TASK_AGING: 'work.team',
   TASK_WAITING_HOLD: 'work.team',
@@ -84,6 +85,26 @@ const RULE_PERMISSION: Record<string, PermissionKey | undefined> = {
   ASSET_REPAIR_STALE: undefined,
   ASSET_WARRANTY_EXPIRING: undefined,
 };
+
+/**
+ * The rules that reach you about your OWN work, whatever you may see.
+ *
+ * Six of fourteen people are EMPLOYEE, holding `work.own` and nothing else, so
+ * every task rule above was closed to them and their bell was structurally
+ * empty — permanently, by construction. Meanwhile the scanner was raising
+ * nineteen TASK_OVERDUE alerts, one of which read "Task ... assigned to Sneha
+ * (Designer) is overdue", and showing it to everyone except Sneha.
+ *
+ * The permission is not wrong: somebody else's overdue task IS a fact about
+ * the team. It just never asked the other question — whether the task is
+ * yours. These three rules all hang off a Task, so that question has an
+ * answer.
+ *
+ * Deliberately only the task rules. PERSON_OVERLOADED and PERSON_UNDERLOADED
+ * are about how work has been shared out, which is a decision somebody else
+ * makes and should hear about first.
+ */
+const MINE_REGARDLESS = ['TASK_OVERDUE', 'TASK_AGING', 'TASK_WAITING_HOLD'] as const;
 
 /**
  * What corner of the business a notification is about.
@@ -124,7 +145,26 @@ const SOURCE: Record<string, string> = {
  * the screen where you can actually deal with it. `null` means the row is not
  * a link, which is honest and better than a dead one.
  */
-const linkFor = (entityType: string, entityId: string): string | null => {
+/**
+ * What each landing screen asks for, so a row is only a link when it opens.
+ *
+ * Mirrors config/navigation.ts on the web and the route guards behind it.
+ * `null` means the screen is open to anybody signed in.
+ */
+const SCREEN_PERMISSION: Record<string, PermissionKey | null> = {
+  '/my-work': null,
+  '/assets': null,
+  '/members': 'work.team',
+  '/companies': 'company.read',
+  '/quotations': 'pipeline.read',
+  '/live-work': 'work.all',
+  '/projects': 'work.all',
+  '/retainers': 'work.all',
+  '/money': 'money.figures',
+  '/allocations': 'cost.enter',
+};
+
+const rawLinkFor = (entityType: string, entityId: string): string | null => {
   switch (entityType) {
     case 'Project':
       return `/projects/${entityId}`;
@@ -153,6 +193,31 @@ const linkFor = (entityType: string, entityId: string): string | null => {
   }
 };
 
+/**
+ * The link, but only if this person can follow it.
+ *
+ * Three rules told somebody about something and then sent them nowhere: a Head
+ * and a BD both receive INVOICE_OVERDUE, which lands on /money and needs
+ * `money.figures` neither of them has; Accounts receives PROJECT_OVER_ESTIMATE,
+ * which lands on a project page behind `work.all`. From October, when the month
+ * roll starts closing cards, MONTH_CARD_NOT_INVOICED joins them — pointing the
+ * one person whose job is invoicing at /live-work, which she cannot open.
+ *
+ * The rule map above decides what a person is TOLD. It never asked whether
+ * they could reach where it was sending them. When they cannot, the row keeps
+ * its sentence and loses its link, which the switch's own comment already
+ * argues for: "`null` means the row is not a link, which is honest and better
+ * than a dead one."
+ */
+const linkFor = (entityType: string, entityId: string, user: AuthRequest['user']): string | null => {
+  const href = rawLinkFor(entityType, entityId);
+  if (!href || !user) return href;
+  const base = '/' + href.split('/')[1];
+  const needed = SCREEN_PERMISSION[base];
+  if (needed && !hasPermission(user, needed)) return null;
+  return href;
+};
+
 /** How many alerts the bell carries. More than a glance, less than a report. */
 const FEED_LIMIT = 50;
 
@@ -169,7 +234,30 @@ notificationsRouter.get('/', async (req: AuthRequest, res: Response, next: NextF
       return needed === undefined || hasPermission(req.user!, needed);
     });
 
-    if (allowedRules.length === 0) {
+    /*
+     * Everything about a task this person is actually on, so the rules above
+     * reach the one person who can do something about them even when the team
+     * view is closed to them. Only asked for when the permission has not
+     * already let those rules through, so nobody pays for a query they do not
+     * need.
+     */
+    const missingTaskRules = MINE_REGARDLESS.filter((r) => !allowedRules.includes(r));
+    const myTaskIds =
+      missingTaskRules.length > 0
+        ? (
+            await prisma.task.findMany({
+              where: { organizationId: orgId, deletedAt: null, assignees: { some: { userId } } },
+              select: { id: true },
+            })
+          ).map((t) => t.id)
+        : [];
+
+    const mine =
+      myTaskIds.length > 0
+        ? [{ rule: { in: [...missingTaskRules] }, entityType: 'Task', entityId: { in: myTaskIds } }]
+        : [];
+
+    if (allowedRules.length === 0 && mine.length === 0) {
       res.json({ success: true, notifications: [], unreadCount: 0, total: 0 });
       return;
     }
@@ -177,7 +265,7 @@ notificationsRouter.get('/', async (req: AuthRequest, res: Response, next: NextF
     const where = {
       organizationId: orgId,
       resolvedAt: null,
-      rule: { in: allowedRules },
+      OR: [{ rule: { in: allowedRules } }, ...mine],
     };
 
     const [alerts, total, myReads] = await Promise.all([
@@ -202,7 +290,7 @@ notificationsRouter.get('/', async (req: AuthRequest, res: Response, next: NextF
       severity: a.severity,
       /** "Money", "Tasks", "Pipeline" — what this is about, at a glance. */
       source: SOURCE[a.entityType] ?? 'Other',
-      link: linkFor(a.entityType, a.entityId),
+      link: linkFor(a.entityType, a.entityId, req.user),
       read: readIds.has(a.id),
       createdAt: a.createdAt,
     }));

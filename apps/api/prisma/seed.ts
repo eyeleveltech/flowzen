@@ -80,13 +80,13 @@ async function main() {
   /*
    * Three separate facts about a person, in three columns.
    *
-   * These names used to read "Vikram (Developer)" — the job title folded into
+   * These names used to read "Naif (Developer)" — the job title folded into
    * the name column while `designation`, which exists for exactly this and is
    * editable from /profile, sat empty. Anywhere the app showed a name it was
    * also showing a title it could not remove, and anywhere it wanted the title
    * on its own it had nothing to read.
    *
-   *   name        who they are          "Vikram"
+   *   name        who they are          "Naif"
    *   designation what they are called  "Developer"
    *   dept        which team            "Development"
    *   preset      what the app allows   EMPLOYEE
@@ -115,13 +115,11 @@ async function main() {
   const charles = await mk({ name: 'Charles', designation: 'Head, Video', email: 'charles@eyelevelstudio.in', dept: 'Video & Production', cost: 62000, preset: RolePreset.HEAD, perms: HEAD_PERMS });
   const tanuja = await mk({ name: 'Tanuja', designation: 'Business Development', email: 'tanuja@eyelevelstudio.in', dept: 'Business Development', cost: 45000, preset: RolePreset.BD, perms: BD_PERMS });
   const varsha = await mk({ name: 'Varsha', designation: 'Business Development', email: 'varsha@eyelevelstudio.in', dept: 'Business Development', cost: 32000, preset: RolePreset.BD, perms: BD_PERMS });
-  const priya = await mk({ name: 'Priya', designation: 'Accounts Desk', email: 'priya@eyelevelstudio.in', dept: 'Accounts', cost: 50000, preset: RolePreset.ACCOUNTS, perms: ACCOUNTS_PERMS });
   const sneha = await mk({ name: 'Sneha', designation: 'Designer', email: 'sneha@eyelevelstudio.in', dept: 'Design', cost: 32000, preset: RolePreset.EMPLOYEE, perms: EMPLOYEE_PERMS });
   const ramya = await mk({ name: 'Ramya', designation: 'Designer', email: 'ramya@eyelevelstudio.in', dept: 'Design', cost: 28000, preset: RolePreset.EMPLOYEE, perms: EMPLOYEE_PERMS });
   const shyam = await mk({ name: 'Shyam', designation: 'Digital Marketing', email: 'shyam@eyelevelstudio.in', dept: 'Digital Marketing', cost: 38000, preset: RolePreset.EMPLOYEE, perms: EMPLOYEE_PERMS });
   const shakila = await mk({ name: 'Shakila', designation: 'Digital Marketing', email: 'shakila@eyelevelstudio.in', dept: 'Digital Marketing', cost: 30000, preset: RolePreset.EMPLOYEE, perms: EMPLOYEE_PERMS });
   const naif = await mk({ name: 'Naif', designation: 'Developer', email: 'naif@eyelevelstudio.in', dept: 'Development', cost: 35000, preset: RolePreset.EMPLOYEE, perms: EMPLOYEE_PERMS });
-  const vikram = await mk({ name: 'Vikram', designation: 'Developer', email: 'vikram@eyelevelstudio.in', dept: 'Development', cost: 45000, preset: RolePreset.EMPLOYEE, perms: EMPLOYEE_PERMS });
 
   // ──────────────────────────────────────────────────────────────────────────
   // 3. TASK TEMPLATES
@@ -192,7 +190,7 @@ async function main() {
   await prisma.person.createMany({
     data: [
       { companyId: carlton.id, name: 'Dr. Bidya', role: PersonRole.APPROVER, email: 'bidya@carltonwellness.in', phone: '+91 98401 22334' },
-      { companyId: carlton.id, name: 'Suresh', designation: 'Accounts Desk', role: PersonRole.PAYER, email: 'accounts@carltonwellness.in', phone: '+91 98401 55667' },
+      { companyId: carlton.id, name: 'Suresh', role: PersonRole.PAYER, email: 'accounts@carltonwellness.in', phone: '+91 98401 55667' },
       { companyId: voso.id, name: 'Meera Krishnan', role: PersonRole.APPROVER, email: 'meera@vososports.in', phone: '+91 98402 44556' },
       { companyId: rightHospitals.id, name: 'Dr. Kavya Somesh', role: PersonRole.APPROVER, email: 'kavya@righthospitals.in', phone: '+91 94001 22110' },
       { companyId: heavensElix.id, name: 'Farhan Ali', role: PersonRole.PAYER, email: 'farhan@heavenselix.in' },
@@ -201,7 +199,7 @@ async function main() {
       { companyId: blinkit.id, name: 'Rajesh Nair', role: PersonRole.APPROVER, email: 'rajesh.nair@blinkit.com', phone: '+91 98410 99887' },
       { companyId: stylori.id, name: 'Purchase Lead', role: PersonRole.CONTACT, email: 'purchase@stylori.com' },
       { companyId: ramrajCotton.id, name: 'Sanjeev Kumar', role: PersonRole.APPROVER, email: 'sanjeev@ramrajcotton.in' },
-      { companyId: zenith.id, name: 'Karthik Rao', designation: 'CTO', role: PersonRole.CONTACT, email: 'karthik@zenithfintech.io', phone: '+91 98840 11223' },
+      { companyId: zenith.id, name: 'Karthik Rao', role: PersonRole.CONTACT, email: 'karthik@zenithfintech.io', phone: '+91 98840 11223' },
     ],
   });
 
@@ -425,7 +423,7 @@ async function main() {
     },
   });
 
-  const carltonWebsite = await project({ companyId: carlton.id, name: 'Website Build', quotedValue: 150000, estimatedCost: 55000, startDate: days(-40), endDate: days(30), ownerId: vikram.id, status: ProjectStatus.LIVE, priority: Priority.MEDIUM, description: 'Full rebuild on Next.js with a booking widget.' });
+  const carltonWebsite = await project({ companyId: carlton.id, name: 'Website Build', quotedValue: 150000, estimatedCost: 55000, startDate: days(-40), endDate: days(30), ownerId: naif.id, status: ProjectStatus.LIVE, priority: Priority.MEDIUM, description: 'Full rebuild on Next.js with a booking widget.' });
   const tnpaSeason2 = await project({ companyId: tnpa.id, name: 'Season 2 Website', quotedValue: 150000, estimatedCost: 60000, startDate: days(-70), endDate: days(-5), ownerId: naif.id, status: ProjectStatus.LIVE, priority: Priority.HIGH, description: 'Behind schedule — client sign-off slipped twice.' });
   const vosoDroneFilms = await project({ companyId: voso.id, name: 'Drone Show Films', quotedValue: 420000, estimatedCost: 190000, startDate: days(-55), endDate: days(75), ownerId: charles.id, status: ProjectStatus.LIVE, priority: Priority.URGENT, description: 'Over budget on drone crew day-rate — running cost review.' });
   const daOneApartment = await project({ companyId: daOne.id, name: 'Model Apartment Shoot', quotedValue: 95000, estimatedCost: 38000, startDate: days(-90), endDate: days(-40), ownerId: charles.id, status: ProjectStatus.DELIVERED, priority: Priority.LOW });
@@ -550,10 +548,10 @@ async function main() {
   });
 
   // Project work
-  const projectTaskPlan: { project: { id: string }; rows: [string, typeof vikram, TaskStatus, number][] }[] = [
+  const projectTaskPlan: { project: { id: string }; rows: [string, typeof naif, TaskStatus, number][] }[] = [
     { project: carltonWebsite, rows: [
       ['Homepage Hero Section Design', sneha, TaskStatus.DONE, -25],
-      ['Booking Widget Integration', vikram, TaskStatus.IN_PROGRESS, 8],
+      ['Booking Widget Integration', naif, TaskStatus.IN_PROGRESS, 8],
       ['Content Migration & QA', naif, TaskStatus.TODO, 15],
     ] },
     { project: tnpaSeason2, rows: [
@@ -602,14 +600,14 @@ async function main() {
 
   // Internal / company work — no month card or project attached.
   const internalRows: [string, typeof harish, TaskStatus, number][] = [
-    ['Clock Audit — September Payroll Prep', priya, TaskStatus.TODO, 13],
+    ['Clock Audit — September Payroll Prep', akmal, TaskStatus.TODO, 13],
     ['Quarterly Team Review Prep', harish, TaskStatus.IN_PROGRESS, 5],
     ['New Hire Onboarding — Design Intern', janani, TaskStatus.TODO, 9],
-    ['Office Wi-Fi Vendor Renewal', priya, TaskStatus.DONE, -10],
+    ['Office Wi-Fi Vendor Renewal', akmal, TaskStatus.DONE, -10],
     ['Studio Portfolio Site Refresh', naif, TaskStatus.ON_HOLD, 30],
-    ['Annual GST Filing Prep', priya, TaskStatus.TODO, 20],
+    ['Annual GST Filing Prep', akmal, TaskStatus.TODO, 20],
     ['New Business Deck Refresh', tanuja, TaskStatus.IN_PROGRESS, 7],
-    ['Server Backup Policy Review', vikram, TaskStatus.DONE, -18],
+    ['Server Backup Policy Review', naif, TaskStatus.DONE, -18],
   ];
   for (const [title, assignee, status, dueOffset] of internalRows) {
     const assignedAt = days(dueOffset - 8);
@@ -625,9 +623,34 @@ async function main() {
     data: taskRows.map((t) => ({
       organizationId: org.id, title: t.title, workType: t.workType, workId: t.workId, monthCardId: t.monthCardId,
       projectId: t.projectId, assigneeId: t.assigneeId, createdById: t.createdById, dueDate: t.dueDate,
+      // Who asked for the work. The seed has no separate notion of it, so it is
+      // whoever raised the task — the same fallback the create route uses.
+      assignedById: t.createdById,
       assignedAt: t.assignedAt, completedAt: t.completedAt, status: t.status, priority: t.priority ?? Priority.MEDIUM,
       waitingOn: t.waitingOn, waitingSince: t.waitingSince, waitingTotalMinutes: t.waitingTotalMinutes ?? 0,
     })),
+  });
+
+  /*
+   * Every task also needs its row in `task_assignees`.
+   *
+   * `assigneeId` is the lead and the join is everybody on it, the lead
+   * included. My Work asks `assignees: { some: { userId } }` and a person's
+   * load reads `taskAssignments` — neither of them looks at `assigneeId` — so
+   * a task with no row here belongs to nobody as far as the product is
+   * concerned. `createMany` cannot write a nested relation, which is why this
+   * is a second pass rather than part of the call above: without it the seed
+   * produced seventy-seven tasks and an empty My Work screen for all twelve
+   * people, which is the one screen the whole product is built around.
+   *
+   * The same pairing exists in `workers/monthCard.cron.ts`, with the same note.
+   */
+  const seededTasks = await prisma.task.findMany({
+    where: { organizationId: org.id },
+    select: { id: true, assigneeId: true },
+  });
+  await prisma.taskAssignee.createMany({
+    data: seededTasks.map((t) => ({ taskId: t.id, userId: t.assigneeId })),
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -644,7 +667,7 @@ async function main() {
   ];
   const projectCosts = [
     { projectId: carltonWebsite.id, category: 'Hosting', vendor: 'Hostinger', amount: 8000, incurredAt: days(-14), by: naif },
-    { projectId: carltonWebsite.id, category: 'Stock', vendor: 'Freepik', amount: 2000, incurredAt: days(-16), by: vikram },
+    { projectId: carltonWebsite.id, category: 'Stock', vendor: 'Freepik', amount: 2000, incurredAt: days(-16), by: naif },
     { projectId: tnpaSeason2.id, category: 'Third-Party API', vendor: 'Razorpay', amount: 5000, incurredAt: days(-20), by: naif },
     // Pushes actualCostTotal well past estimatedCost (190000) to trip PROJECT_OVER_ESTIMATE.
     { projectId: vosoDroneFilms.id, category: 'Drone Crew Day-Rate', vendor: 'SkyCam Aerials', amount: 110000, incurredAt: days(-18), by: charles },
@@ -664,19 +687,19 @@ async function main() {
 
   await prisma.cost.createMany({
     data: [
-      { organizationId: org.id, type: CostType.COMPANY, category: 'Salaries', vendor: 'Payroll', amount: 662000, incurredAt: days(-1), enteredById: priya.id, recurring: true },
-      { organizationId: org.id, type: CostType.COMPANY, category: 'Office Rent', vendor: 'Nungambakkam Commercial Properties', amount: 65000, incurredAt: days(-1), enteredById: priya.id, recurring: true },
-      { organizationId: org.id, type: CostType.COMPANY, category: 'Software & Tools', vendor: 'Adobe / Figma / Vercel', amount: 18000, incurredAt: days(-1), enteredById: priya.id, recurring: true },
-      { organizationId: org.id, type: CostType.COMPANY, category: 'Internet & Utilities', vendor: 'Airtel Broadband / TNEB', amount: 9500, incurredAt: days(-1), enteredById: priya.id, recurring: true, treatment: CostTreatment.AKMAL_LOAN, paidBy: CostPaidBy.AKMAL },
-      { organizationId: org.id, type: CostType.COMPANY, category: 'Pantry & Tea', vendor: 'Local Vendor', amount: 4800, incurredAt: days(-2), enteredById: priya.id },
+      { organizationId: org.id, type: CostType.COMPANY, category: 'Salaries', vendor: 'Payroll', amount: 662000, incurredAt: days(-1), enteredById: akmal.id, recurring: true },
+      { organizationId: org.id, type: CostType.COMPANY, category: 'Office Rent', vendor: 'Nungambakkam Commercial Properties', amount: 65000, incurredAt: days(-1), enteredById: akmal.id, recurring: true },
+      { organizationId: org.id, type: CostType.COMPANY, category: 'Software & Tools', vendor: 'Adobe / Figma / Vercel', amount: 18000, incurredAt: days(-1), enteredById: akmal.id, recurring: true },
+      { organizationId: org.id, type: CostType.COMPANY, category: 'Internet & Utilities', vendor: 'Airtel Broadband / TNEB', amount: 9500, incurredAt: days(-1), enteredById: akmal.id, recurring: true, treatment: CostTreatment.AKMAL_LOAN, paidBy: CostPaidBy.AKMAL },
+      { organizationId: org.id, type: CostType.COMPANY, category: 'Pantry & Tea', vendor: 'Local Vendor', amount: 4800, incurredAt: days(-2), enteredById: akmal.id },
     ],
   });
 
   // A couple of soft-deleted costs, to exercise Setup → Trash restore.
   await prisma.cost.createMany({
     data: [
-      { organizationId: org.id, type: CostType.COMPANY, category: 'Duplicate Software Charge', vendor: 'Adobe', amount: 4500, incurredAt: days(-6), enteredById: priya.id, deletedAt: days(-1) },
-      { organizationId: org.id, type: CostType.DIRECT, workType: TaskWorkType.PROJECT, workId: carltonWebsite.id, projectId: carltonWebsite.id, category: 'Duplicate Stock Purchase', vendor: 'Freepik', amount: 1200, incurredAt: days(-9), enteredById: vikram.id, deletedAt: days(-2) },
+      { organizationId: org.id, type: CostType.COMPANY, category: 'Duplicate Software Charge', vendor: 'Adobe', amount: 4500, incurredAt: days(-6), enteredById: akmal.id, deletedAt: days(-1) },
+      { organizationId: org.id, type: CostType.DIRECT, workType: TaskWorkType.PROJECT, workId: carltonWebsite.id, projectId: carltonWebsite.id, category: 'Duplicate Stock Purchase', vendor: 'Freepik', amount: 1200, incurredAt: days(-9), enteredById: naif.id, deletedAt: days(-2) },
     ],
   });
 
@@ -704,7 +727,7 @@ async function main() {
       { userId: janani.id, month: '2026-09', workType: TaskWorkType.MONTH_CARD, workId: vosoSep.id, monthCardId: vosoSep.id, proposedPercent: 50, percent: 50, confirmedById: harish.id, confirmedAt: days(0) },
       { userId: ramya.id, month: '2026-09', workType: TaskWorkType.MONTH_CARD, workId: vosoSep.id, monthCardId: vosoSep.id, proposedPercent: 50, percent: 50 },
       { userId: charles.id, month: '2026-09', workType: TaskWorkType.PROJECT, workId: vosoDroneFilms.id, projectId: vosoDroneFilms.id, proposedPercent: 65, percent: 65, confirmedById: harish.id, confirmedAt: days(0) },
-      { userId: vikram.id, month: '2026-09', workType: TaskWorkType.PROJECT, workId: carltonWebsite.id, projectId: carltonWebsite.id, proposedPercent: 40, percent: 40 },
+      { userId: naif.id, month: '2026-09', workType: TaskWorkType.PROJECT, workId: carltonWebsite.id, projectId: carltonWebsite.id, proposedPercent: 40, percent: 40 },
       { userId: naif.id, month: '2026-09', workType: TaskWorkType.PROJECT, workId: tnpaSeason2.id, projectId: tnpaSeason2.id, proposedPercent: 35, percent: 35 },
     ],
   });
@@ -761,7 +784,7 @@ async function main() {
       { organizationId: org.id, rule: 'RULE_TASK_AGING', severity: AlertSeverity.LOW, entityType: 'Company', entityId: carlton.id, message: 'Two Carlton tasks are open longer than their usual turnaround.' },
       // Resolved history, so the notification bell and audit trail have some closed alerts too.
       { organizationId: org.id, rule: 'RULE_PROPOSAL_FOLLOWUP', severity: AlertSeverity.LOW, entityType: 'Proposal', entityId: carltonProposal.id, message: 'Carlton proposal had gone quiet before it was won.', resolvedAt: days(-33), acknowledgedById: tanuja.id },
-      { organizationId: org.id, rule: 'RULE_INVOICE_OVERDUE', severity: AlertSeverity.MED, entityType: 'Invoice', entityId: heavensAugInvoice.id, message: "Heaven's ELIX invoice was overdue before payment came in.", resolvedAt: days(-25), acknowledgedById: priya.id },
+      { organizationId: org.id, rule: 'RULE_INVOICE_OVERDUE', severity: AlertSeverity.MED, entityType: 'Invoice', entityId: heavensAugInvoice.id, message: "Heaven's ELIX invoice was overdue before payment came in.", resolvedAt: days(-25), acknowledgedById: akmal.id },
     ],
   });
 
@@ -775,12 +798,12 @@ async function main() {
       { organizationId: org.id, entityType: 'Retainer', entityId: carltonRetainer.id, actorId: harish.id, verb: 'retainer_started', payload: { monthlyValue: 220000, termMonths: 12 } },
       { organizationId: org.id, entityType: 'Company', entityId: voso.id, actorId: akmal.id, verb: 'company_created', payload: { name: 'VOSO Sports' } },
       { organizationId: org.id, entityType: 'Proposal', entityId: vosoProposal.id, actorId: akmal.id, verb: 'proposal_won', payload: { version: 'v1', value: 140000 } },
-      { organizationId: org.id, entityType: 'Project', entityId: carltonWebsite.id, actorId: vikram.id, verb: 'project_created', payload: { name: 'Website Build' } },
+      { organizationId: org.id, entityType: 'Project', entityId: carltonWebsite.id, actorId: naif.id, verb: 'project_created', payload: { name: 'Website Build' } },
       { organizationId: org.id, entityType: 'Project', entityId: vosoDroneFilms.id, actorId: charles.id, verb: 'milestone_added', payload: { label: 'Final Cut Delivery' } },
       { organizationId: org.id, entityType: 'Project', entityId: tnpaSeason2.id, actorId: naif.id, verb: 'project_created', payload: { name: 'Season 2 Website' } },
-      { organizationId: org.id, entityType: 'Cost', entityId: 'seed', actorId: priya.id, verb: 'cost_entered', payload: { category: 'Salaries', amount: 662000 } },
-      { organizationId: org.id, entityType: 'Invoice', entityId: carltonAugInvoice.id, actorId: priya.id, verb: 'payment_recorded', payload: { amount: 220000, mode: 'NEFT' } },
-      { organizationId: org.id, entityType: 'Invoice', entityId: vosoAugInvoice.id, actorId: priya.id, verb: 'payment_recorded', payload: { amount: 140000, mode: 'UPI' } },
+      { organizationId: org.id, entityType: 'Cost', entityId: 'seed', actorId: akmal.id, verb: 'cost_entered', payload: { category: 'Salaries', amount: 662000 } },
+      { organizationId: org.id, entityType: 'Invoice', entityId: carltonAugInvoice.id, actorId: akmal.id, verb: 'payment_recorded', payload: { amount: 220000, mode: 'NEFT' } },
+      { organizationId: org.id, entityType: 'Invoice', entityId: vosoAugInvoice.id, actorId: akmal.id, verb: 'payment_recorded', payload: { amount: 140000, mode: 'UPI' } },
       { organizationId: org.id, entityType: 'Company', entityId: indusAlliance.id, actorId: tanuja.id, verb: 'proposal_lost', payload: { reason: 'Budget pulled after Q1 review' } },
       { organizationId: org.id, entityType: 'Company', entityId: sastry.id, actorId: tanuja.id, verb: 'proposal_lost', payload: { reason: 'Took production in-house' } },
       { organizationId: org.id, entityType: 'OutreachEntry', entityId: 'seed', actorId: varsha.id, verb: 'outreach_imported', payload: { count: 6 } },
@@ -789,7 +812,14 @@ async function main() {
     ],
   });
 
-  console.log('Done — organization, 13 users, 16 companies, 9 proposals, 6 retainers, 8 projects, ~90 tasks, costs, invoices, alerts and activity all seeded.');
+  // Counted, not asserted — the line used to claim 13 users and printed it
+  // unchanged after two were removed from the roster above.
+  const [userCount, taskCount, assigneeCount] = await Promise.all([
+    prisma.user.count(),
+    prisma.task.count(),
+    prisma.taskAssignee.count(),
+  ]);
+  console.log(`Done — organization, ${userCount} users, 16 companies, 9 proposals, 6 retainers, 8 projects, ${taskCount} tasks (${assigneeCount} assignments), costs, invoices, alerts and activity all seeded.`);
   console.log(`Log in as harish.s@eyelevelstudio.in / Harish143@`);
 }
 

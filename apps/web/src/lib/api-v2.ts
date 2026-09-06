@@ -1323,6 +1323,31 @@ export const api = {
     }>(`/search?q=${encodeURIComponent(q)}`),
 
   invoices: {
+    /**
+     * Retainer months carrying no invoice — the billing work list.
+     *
+     * Distinct from `isAwaiting` in lib/invoice-state, which is about an
+     * invoice awaiting PAYMENT. This is the step before: work finished and
+     * never billed at all.
+     */
+    awaiting: () =>
+      get<{
+        success: boolean;
+        rows: {
+          id: string;
+          month: string;
+          companyId: string;
+          companyName: string;
+          revenue: number;
+          status: string;
+          closedAt: string | null;
+          due: boolean;
+          retainerStopped: boolean;
+        }[];
+        dueCount: number;
+        dueTotal: number;
+        upcomingCount: number;
+      }>('/invoices/awaiting'),
     create: (body: Record<string, unknown>) =>
       post<{ success: boolean; invoice: any }>('/invoices', body),
     recordPayment: (id: string, body: Record<string, unknown>) =>

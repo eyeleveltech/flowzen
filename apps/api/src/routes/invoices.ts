@@ -131,6 +131,72 @@ invoicesRouter.get('/', requirePermission('money.status'), async (req: AuthReque
 });
 
 /**
+ * GET /api/invoices/awaiting — retainer months with no invoice against them.
+ *
+ * ─── Why this screen needed a list it did not have ──────────────────────────
+ *
+ * Raising the invoices is one person's job, and that person is ACCOUNTS, who
+ * holds `money.figures` and not `work.all`. So she could raise an invoice —
+ * the form works, it asks for a company and what to bill against — and she had
+ * no way to see WHICH months were waiting for one: /live-work, /retainers/:id
+ * and /projects/:id are all behind `work.all` and bounce her to My Work.
+ *
+ * The alert that would have told her, MONTH_CARD_NOT_INVOICED, reaches her
+ * correctly on `money.status` and then links to /live-work, which she cannot
+ * open. From the next month roll that alert starts firing in earnest: five of
+ * the six cards for the current month carry no invoice.
+ *
+ * So the list belongs on the screen where the billing is actually done.
+ *
+ * ─── What counts as waiting ─────────────────────────────────────────────────
+ *
+ * Every month card with no invoice, not only the ones already overdue, split
+ * by whether it can be billed yet. A month that has ended — or a card closed
+ * early because the retainer was stopped part way through — is owed for now.
+ * One still running is the forward view, and showing it is what makes this a
+ * work list rather than a rebuke.
+ */
+invoicesRouter.get('/awaiting', requirePermission('money.figures'), async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.user!.organizationId;
+
+    const cards = await prisma.monthCard.findMany({
+      where: { retainer: { organizationId: orgId }, invoiceId: null },
+      include: { retainer: { include: { company: { select: { id: true, name: true } } } } },
+      orderBy: { month: 'desc' },
+      take: 100,
+    });
+
+    const now = new Date();
+    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    const rows = cards.map((c) => ({
+      id: c.id,
+      month: c.month,
+      companyId: c.retainer.company.id,
+      companyName: c.retainer.company.name,
+      revenue: Number(c.revenue),
+      status: c.status,
+      closedAt: c.closedAt,
+      // The month is over, or somebody closed the card early by ending the
+      // retainer. Either way the work is done and the money is owed.
+      due: c.status === 'CLOSED' || c.month < thisMonth,
+      retainerStopped: c.retainer.status === 'STOPPED',
+    }));
+
+    res.json({
+      success: true,
+      rows,
+      dueCount: rows.filter((r) => r.due).length,
+      dueTotal: rows.filter((r) => r.due).reduce((a, r) => a + r.revenue, 0),
+      upcomingCount: rows.filter((r) => !r.due).length,
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
  * GET /api/invoices/:id — Single invoice detail
  */
 invoicesRouter.get('/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {

@@ -59,8 +59,11 @@ export const ROLE_PRESET_PERMISSIONS: Record<RolePreset, PermissionKey[]> = {
     // Belt-and-braces: `setup.admin` already answers yes to everything through
     // the master bypass in hasPermission(). Listing it keeps the preset table
     // honest about what the role can do, and it survives any future narrowing
-    // of that bypass. Nobody else gets it by preset — a studio manager who
-    // needs to issue gear is granted it per-user from the team screen.
+    // of that bypass.
+    //
+    // `asset.manage` is not listed because the bypass already covers it, and
+    // because it now belongs to HEAD — see the note there. Anybody else who
+    // needs to issue gear is still granted it per-user from the team screen.
   ],
 };
 

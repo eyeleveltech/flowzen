@@ -7,6 +7,7 @@ import { api, fileUrl } from '@/lib/api-v2';
 import { getInitials, getAvatarColor } from '@/lib/utils';
 import { AssignTaskModal } from '@/components/work/AssignTaskModal';
 import { InviteMemberModal } from '@/components/work/InviteMemberModal';
+import { useAuthStore } from '@/stores';
 import { AccessModal } from '@/components/work/AccessModal';
 import { ResetLinkModal } from '@/components/work/ResetLinkModal';
 import { HeldAssets } from '@/components/assets/HeldAssets';
@@ -42,6 +43,13 @@ interface TeamMember {
 }
 
 export default function MembersPage() {
+  /*
+   * Inviting somebody needs `setup.admin`, and this button asked for nothing.
+   * The screen itself only needs `work.team`, so every Head could see the
+   * button, fill in the form and be refused by the server — the one control in
+   * the product that promised something it could not do.
+   */
+  const canInvite = useAuthStore((s) => s.user?.permissions?.includes('setup.admin') ?? false);
   const [members, setMembers] = useState<TeamMember[]>([]);
   /** A failed load, said out loud instead of only in the console. */
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -141,12 +149,14 @@ export default function MembersPage() {
             </select>
           )}
           <ExportCsvButton href={fileUrl(`/team/capacity?format=csv${deptFilter !== 'ALL' ? `&dept=${deptFilter}` : ''}`)} />
-          <button
-            className="flex items-center gap-1.5 bg-primary text-white text-sm font-semibold px-4 h-8 rounded-lg hover:bg-primary/90 transition-colors"
-            onClick={() => setInviting(true)}
-          >
-            <span className="text-base leading-none">+</span> Invite
-          </button>
+          {canInvite && (
+            <button
+              className="flex items-center gap-1.5 bg-primary text-white text-sm font-semibold px-4 h-8 rounded-lg hover:bg-primary/90 transition-colors"
+              onClick={() => setInviting(true)}
+            >
+              <span className="text-base leading-none">+</span> Invite
+            </button>
+          )}
       </div>
 
       <StatRow className="mb-6">
