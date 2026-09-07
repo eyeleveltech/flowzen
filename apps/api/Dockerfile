@@ -18,10 +18,20 @@ COPY packages/shared/package*.json ./packages/shared/
 # Install dependencies (workspaces need root install)
 RUN npm ci
 
-# Copy the API source and the shared package source. @flowzen/shared's "main"/"types" point
-# at raw TS (src/index.ts), so tsc reads it directly — the source must be here to build.
+# Copy the API source and the shared package source.
 COPY apps/api ./apps/api
 COPY packages/shared ./packages/shared
+
+# Build @flowzen/shared FIRST — the API needs it twice over.
+#
+# `tsc` needs its types to compile, and the compiled API needs it at RUNTIME: the
+# emitted dist keeps a plain `require("@flowzen/shared")`, which resolves through
+# the workspace symlink to the package's "main". That main now points at
+# ./dist/index.js, so this build has to have happened before either the API's own
+# build or the container boots. It did not, and the container died on start with
+# "Cannot find module '@flowzen/shared'" — but only on a --no-cache build, because
+# a stale layer had been carrying an older node_modules for months.
+RUN npm run build --workspace=@flowzen/shared
 
 # Generate Prisma Client and build TypeScript
 WORKDIR /app/apps/api
@@ -52,6 +62,12 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 # Copy node_modules from builder
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules
+
+# And the package the symlink in node_modules points AT. Without this the link
+# dangles: /app/node_modules/@flowzen/shared -> /app/packages/shared, a path that
+# did not exist in this stage, so every boot failed at the first require.
+COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
+COPY --from=builder /app/packages/shared/package.json ./packages/shared/package.json
 
 # Copy built app and required files
 COPY --from=builder /app/apps/api/dist ./apps/api/dist

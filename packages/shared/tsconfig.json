@@ -1,8 +1,14 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
+    // CommonJS, because the API consumes this at RUNTIME. apps/api compiles to
+    // CJS (module: NodeNext, no "type": "module"), so its dist does a plain
+    // `require("@flowzen/shared")`. An ESNext build emits extensionless
+    // relative imports — `./types/index` — which Node's ESM resolver rejects,
+    // and the package has no "type": "module" to make it ESM in the first
+    // place. Next bundles either format, so the web app is unaffected.
+    "module": "CommonJS",
+    "moduleResolution": "node",
     "lib": ["ES2022"],
     "outDir": "./dist",
     "rootDir": "./src",

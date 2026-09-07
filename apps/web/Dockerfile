@@ -26,6 +26,10 @@ COPY . .
 # Uncomment the following line in case you want to disable telemetry during the build.
 ENV NEXT_TELEMETRY_DISABLED 1
 
+# Build @flowzen/shared before Next reads it. Its "main" points at ./dist/index.js
+# now — Next resolves the import through that, so the build has to exist first.
+RUN npm run build --workspace=@flowzen/shared
+
 WORKDIR /app/apps/web
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_APP_URL
