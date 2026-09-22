@@ -7,3 +7,34 @@ coverage
 .git
 .github
 *.log
+
+# ── Tests ────────────────────────────────────────────────────────────────────
+#
+# The web image builds with `COPY . .`, and `next build` typechecks every .ts
+# under the project — so a Playwright spec importing something only the API
+# has (`@prisma/client`, in purge.teardown.ts) failed the production image
+# build with a type error in a file that never runs in production:
+#
+#   ./tests/purge.teardown.ts:2:30
+#   Type error: Cannot find module '@prisma/client'
+#
+# It passes locally because a full workspace install hoists Prisma to the root;
+# the web image installs only the web and shared manifests, so it is genuinely
+# absent there. Keeping tests out of the build context fixes the error at its
+# cause and makes the image smaller, while `tsc --noEmit` still checks them on
+# a developer's machine, where they are actually run.
+tests
+playwright.config.ts
+playwright-report
+test-results
+
+# `playwright/.auth/` holds signed-in session cookies for five real accounts.
+# They are gitignored but were NOT dockerignored, so `COPY . .` baked live
+# credentials into a build layer. They never reached the final standalone
+# image, which is luck rather than design.
+playwright
+
+# Local scratch and editor state — nothing the build needs.
+.vscode
+.idea
+*.local
