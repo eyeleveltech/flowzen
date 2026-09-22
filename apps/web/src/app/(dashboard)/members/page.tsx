@@ -355,7 +355,14 @@ export default function MembersPage() {
       {inviting && (
         <InviteMemberModal
           onClose={() => setInviting(false)}
-          onInvited={() => setInviting(false)}
+          onInvited={() => {
+            setInviting(false);
+            // `load()` is documented two hundred lines up as what "the invite /
+            // access / deactivate flows call after they change something".
+            // Invite was the one that did not call it, so a new member sat
+            // invisible until you navigated away and back.
+            load();
+          }}
         />
       )}
 

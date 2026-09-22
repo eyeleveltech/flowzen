@@ -159,7 +159,6 @@ export interface OutreachEntry {
 
 export type ProposalKind = 'RETAINER' | 'PROJECT';
 export type ProposalStage =
-  | 'TALKING'
   | 'PROPOSAL_SENT'
   | 'IN_NEGOTIATION'
   | 'PROFORMA_ISSUED'

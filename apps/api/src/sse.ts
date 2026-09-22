@@ -106,7 +106,23 @@ sseRouter.get('/', authenticate, (req: AuthRequest, res: Response) => {
   res.on('finish', cleanup);
 });
 
-export function emitToUser(io: any, userId: string, event: string, data: unknown) {
+/**
+ * Push an event to one person's open tabs.
+ *
+ * ─── Why these existed but did nothing ──────────────────────────────────────
+ *
+ * Both of these were defined here and called from NOWHERE in the API. Every
+ * signed-in browser held an open EventSource that received the `connected`
+ * handshake, then keep-alive comments, and never a single event for the rest
+ * of the session. The bell only ever changed because React Query's 60s
+ * staleTime re-asked on a remount.
+ *
+ * The dead `io: any` first parameter is the tell: it is a leftover from a
+ * socket.io API that was migrated away from. socket.io is not a dependency
+ * and both bodies ignored the argument. Dropping it is what makes the call
+ * sites honest.
+ */
+export function emitToUser(userId: string, event: string, data: unknown) {
   const userSet = clients.get(userId);
   if (!userSet || userSet.size === 0) return;
 
@@ -121,7 +137,17 @@ export function emitToUser(io: any, userId: string, event: string, data: unknown
   }
 }
 
-export function emitToOrganization(io: any, orgId: string, event: string, data: unknown) {
+/**
+ * Push an event to everybody signed in to one organisation.
+ *
+ * Carry a SIGNAL, not a payload, for anything the reader is filtered on.
+ * `/notifications` withholds an alert whose rule the caller has no permission
+ * for -- a designer must not learn a project is over its cost estimate -- and
+ * this function knows the connected user's id, not their permissions. So the
+ * notification event says only "something changed"; the client re-asks, and
+ * the route applies the same filter it always has.
+ */
+export function emitToOrganization(orgId: string, event: string, data: unknown) {
   if (clients.size === 0) return;
 
   const payload = JSON.stringify({ event, data });

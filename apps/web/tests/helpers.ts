@@ -174,7 +174,6 @@ export async function readOrgSettings(api: APIRequestContext): Promise<Record<st
   const body = await (await api.get('/api/config')).json();
   const o = body.organization;
   return {
-    stageProbTalking: o.stageProbabilities?.TALKING,
     stageProbProposalSent: o.stageProbabilities?.PROPOSAL_SENT,
     stageProbInNegotiation: o.stageProbabilities?.IN_NEGOTIATION,
     stageProbProformaIssued: o.stageProbabilities?.PROFORMA_ISSUED,

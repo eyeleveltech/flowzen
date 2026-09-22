@@ -16,6 +16,7 @@
  */
 
 import { use, useCallback, useEffect, useState } from 'react';
+import { useWorkCacheNudge } from '@/hooks/useWorkCacheNudge';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, Settings2, Trash2 } from 'lucide-react';
@@ -153,6 +154,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const { id } = use(params);
   const router = useRouter();
   const confirm = useConfirmStore((st) => st.confirm);
+  const nudgeWorkCaches = useWorkCacheNudge();
 
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -199,12 +201,13 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       setTasks((tRes.tasks ?? []) as Task[]);
       setConfig(cfg);
       setError(null);
+      nudgeWorkCaches();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load this project');
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, nudgeWorkCaches]);
 
   useEffect(() => {
     void load();

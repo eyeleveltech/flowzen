@@ -1,6 +1,7 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { emitToOrganization } from '../sse.js';
 import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
 import { CompanyStatus, CompanyVertical, CompanySource, PersonRole, TaskWorkType, TaskStatus } from '@prisma/client';
 import { checkForDuplicates, checkForImport } from '../services/duplicateCheck.js';
@@ -777,16 +778,21 @@ companiesRouter.post('/', requirePermission('company.write'), async (req: AuthRe
         });
       }
 
-      // Always create a Proposal (Deal) in TALKING stage to put them on the board
-      const deal = await tx.proposal.create({
-        data: {
-          organizationId: orgId,
-          companyId: company.id,
-          kind: 'PROJECT',
-          ownerId: ownerUserId,
-          stage: 'TALKING',
-        }
-      });
+      /*
+       * Adding a company no longer opens a proposal.
+       *
+       * It used to open one unconditionally, in a TALKING stage, so that the
+       * company "went on the board". What went on the board was a proposal
+       * with no version -- no value, no scope, nothing quoted -- carrying the
+       * client's name. It could not be advanced either: the stage route
+       * refuses a manual change and the board rejects any card dropped on
+       * Proposal sent, so the one move it needed was the one it could not
+       * make. Quoting the client called POST /proposals, which writes a
+       * SECOND row, and the first stayed behind as a permanent empty card.
+       *
+       * The pipeline is a list of proposals. A company is not a proposal, and
+       * it appears there when somebody actually sends a number.
+       */
 
       /**
        * "Follow up on" — the reason the lead ever gets called again.
@@ -818,7 +824,7 @@ companiesRouter.post('/', requirePermission('company.write'), async (req: AuthRe
         followUpTaskId = followUp.id;
       }
 
-      return { company, dealId: deal.id, followUpTaskId };
+      return { company, followUpTaskId };
     });
 
     // Record audit activity
@@ -840,9 +846,11 @@ companiesRouter.post('/', requirePermission('company.write'), async (req: AuthRe
       },
     });
 
+    emitToOrganization(orgId, 'lead:updated', { companyId: result.company.id });
+
     res.status(201).json({
       success: true,
-      data: { ...result.company, dealId: result.dealId, followUpTaskId: result.followUpTaskId },
+      data: { ...result.company, followUpTaskId: result.followUpTaskId },
     });
   } catch (error) {
     next(error);
@@ -940,6 +948,8 @@ companiesRouter.patch('/:id', requirePermission('company.write'), async (req: Au
         payload: parsed.data as any,
       },
     });
+
+    emitToOrganization(req.user!.organizationId, 'lead:updated', { companyId: updated.id });
 
     res.json({ success: true, company: updated });
   } catch (error) {

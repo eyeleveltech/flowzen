@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js';
+import { emitToOrganization } from '../sse.js';
 import { AlertSeverity, TaskWorkType, TaskStatus } from '@prisma/client';
 import { logger } from '../utils/logger.js';
 import { jobProfit, percentComplete, costRisk } from '../utils/jobProfit.js';
@@ -699,6 +700,7 @@ export async function runAgencyHealthScanner(): Promise<number> {
     try {
       await applyCompanyStatusDerivation(org.id);
 
+      let createdForOrg = 0;
       const evaluated = await evaluateAgencyHealthRules(org.id);
       const stillOpenKeys = new Set(evaluated.map((item) => `${item.rule}:${item.entityType}:${item.entityId}`));
 
@@ -725,6 +727,7 @@ export async function runAgencyHealthScanner(): Promise<number> {
             },
           });
           totalAlertsProcessed++;
+          createdForOrg++;
         }
       }
 
@@ -738,6 +741,17 @@ export async function runAgencyHealthScanner(): Promise<number> {
       if (toResolve.length > 0) {
         await prisma.alert.updateMany({ where: { id: { in: toResolve } }, data: { resolvedAt: new Date() } });
       }
+      /*
+       * Tell the open tabs, without saying what happened.
+       *
+       * `/notifications` withholds an alert whose rule the reader has no
+       * permission for -- a designer is refused the one that names a project's
+       * cost estimate. This is a bare signal for that reason: the client
+       * re-asks, and the route applies the filter it always has. Putting the
+       * alert itself on the wire would hand every connected browser rows the
+       * route exists to withhold.
+       */
+      if (createdForOrg > 0) emitToOrganization(org.id, 'notification:new', null);
     } catch (err) {
       logger.error(`Agency health scanner error for org ${org.id}: ${err}`);
     }

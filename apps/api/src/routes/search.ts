@@ -22,7 +22,6 @@ searchRouter.use(authenticate);
 
 /** How each stage reads on screen. Mirrors the list config sends. */
 const STAGE_NAME: Record<string, string> = {
-  TALKING: 'Talking',
   PROPOSAL_SENT: 'Proposal Sent',
   IN_NEGOTIATION: 'In Negotiation',
   PROFORMA_ISSUED: 'Proforma Issued',

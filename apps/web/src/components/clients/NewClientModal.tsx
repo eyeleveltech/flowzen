@@ -29,16 +29,21 @@
  * every reminder Flowzen sends is addressed to an owner and a company without
  * one is invisible to all of them — but that is a default, not a question.
  *
- * ─── And it lands on the board ──────────────────────────────────────────────
+ * ─── It does NOT land on the pipeline ───────────────────────────────────────
  *
- * Saving creates the company AND its first card, in New Lead, with no title, no
- * value and no close date. Before this, a company with no deal appeared nowhere
- * on the pipeline — the board renders cards — so a lead you were given on Tuesday
- * was invisible to it and to every morning signal that reads it.
+ * Saving used to create the company AND a card on the board, in a TALKING
+ * stage, with no value and nothing quoted. That was the wrong shape: the
+ * pipeline renders PROPOSALS, so the card stood for a proposal nobody had
+ * sent, it could not be dragged forward, and quoting the client wrote a second
+ * row and left the first behind for good.
  *
- * All of it is ONE request now. The contact and the deal used to be two more
- * calls made after this one returned, each wrapped in a try/catch that logged to
- * the console and carried on — so a company could save with its contact quietly
+ * A company is a company. It reaches the board when somebody sends it a
+ * number, and until then the follow-up date below is what keeps the lead
+ * alive — that is what Today and the morning signals actually read.
+ *
+ * The company and its contact are still ONE request. They used to be two calls
+ * made after this one returned, each wrapped in a try/catch that logged to the
+ * console and carried on — so a company could save with its contact quietly
  * missing.
  */
 
@@ -53,7 +58,7 @@ import { Field, FieldSelect } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
 
 type Props = {
-  onConfirm: (client: { id: string; name: string; dealId?: string | null }) => void;
+  onConfirm: (client: { id: string; name: string }) => void;
   onCancel: () => void;
 };
 
@@ -163,8 +168,17 @@ export function NewClientModal({ onConfirm, onCancel }: Props) {
         ...(force ? { force: true } : {}),
       });
 
+      /*
+       * Nobody is "on the board" any more.
+       *
+       * This used to say so for a new lead, because adding a company opened a
+       * proposal in a TALKING stage. It opened an EMPTY one -- no number sent,
+       * nothing quoted -- and the board is a list of proposals, so the message
+       * was announcing a card that stood for nothing. They go on the board
+       * when you send them a proposal.
+       */
       toast.success(
-        created.dealId ? `${created.name} added — they are on the board` : `${created.name} added`,
+        existing ? `${created.name} added as a client` : `${created.name} added as a prospect`,
       );
       onConfirm(created);
     } catch (e) {
@@ -255,7 +269,7 @@ export function NewClientModal({ onConfirm, onCancel }: Props) {
             between a deal you are chasing and a client you already bill. */}
         <p className="-mt-2 text-xs text-secondary">
           {existing
-            ? 'Added as a client straight away, so you can put their retainer or project on today. It will not count as a won deal.'
+            ? 'Added as a client straight away, so you can put their retainer or project on today. They do not go on the pipeline board, and you can still send them a proposal for new work.'
             : 'They start as a prospect and become a client when a proposal is won.'}
         </p>
 

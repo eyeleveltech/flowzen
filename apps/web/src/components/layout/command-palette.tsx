@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+import { qk } from '@/hooks/queries';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useUIStore } from '@/stores';
 import { api } from '@/lib/api-v2';
@@ -82,6 +84,23 @@ interface FlatItem {
 export function CommandPalette() {
   const shouldReduceMotion = useReducedMotion();
   const router = useRouter();
+  const queryClient = useQueryClient();
+
+  /**
+   * What the palette changed is on some OTHER screen.
+   *
+   * Every action here used to end at a toast. You could set a follow-up date
+   * from anywhere in the app, read "Saved", and watch the row behind the
+   * dialog go on showing the old one -- because the palette closed its dialog
+   * and told the cache nothing. It is the one surface that writes to data it
+   * is not itself displaying, so it has to invalidate broadly.
+   */
+  const refreshAfterWrite = useCallback(
+    (keys: readonly (readonly string[])[]) => {
+      for (const key of keys) void queryClient.invalidateQueries({ queryKey: key });
+    },
+    [queryClient],
+  );
   const { commandPaletteOpen, setCommandPaletteOpen } = useUIStore();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResults | null>(null);
@@ -419,6 +438,7 @@ export function CommandPalette() {
         onLogged={() => {
           setLogging(null);
           toast.success('Logged');
+          refreshAfterWrite([['activities'], ['companies'], ['outreach']]);
         }}
       />
 
@@ -428,7 +448,10 @@ export function CommandPalette() {
           projectId={addingTaskTo.id}
           projectName={addingTaskTo.name}
           onClose={() => setAddingTaskTo(null)}
-          onSuccess={() => setAddingTaskTo(null)}
+          onSuccess={() => {
+            setAddingTaskTo(null);
+            refreshAfterWrite([['tasks'], qk.liveWork]);
+          }}
         />
       )}
 
@@ -438,6 +461,7 @@ export function CommandPalette() {
         onSaved={() => {
           setEditing(null);
           toast.success('Saved');
+          refreshAfterWrite([['companies'], ['outreach'], ['pipeline'], qk.liveWork]);
         }}
       />
 

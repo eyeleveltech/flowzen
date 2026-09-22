@@ -51,7 +51,6 @@ interface DeletedProposal {
 }
 
 const STAGE_LABEL: Record<string, string> = {
-  TALKING: 'Talking',
   PROPOSAL_SENT: 'Proposal sent',
   IN_NEGOTIATION: 'In negotiation',
   PROFORMA_ISSUED: 'Proforma issued',
@@ -62,7 +61,6 @@ const STAGE_LABEL: Record<string, string> = {
 };
 
 const STAGE_COLOR: Record<string, string> = {
-  TALKING: 'text-secondary',
   PROPOSAL_SENT: 'text-body',
   IN_NEGOTIATION: 'text-body',
   PROFORMA_ISSUED: 'text-body',

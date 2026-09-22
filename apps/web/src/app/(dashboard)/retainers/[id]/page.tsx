@@ -34,6 +34,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { useWorkCacheNudge } from '@/hooks/useWorkCacheNudge';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, ChevronLeft, ChevronRight, CircleSlash, LockOpen, Pencil, Plus, ReceiptText, Trash2 } from 'lucide-react';
@@ -200,6 +201,7 @@ export default function RetainerMonthCardPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const month = searchParams.get('month') || currentMonth();
+  const nudgeWorkCaches = useWorkCacheNudge();
 
   const [retainer, setRetainer] = useState<Retainer | null>(null);
   const [monthCard, setMonthCard] = useState<MonthCard | null>(null);
@@ -364,12 +366,16 @@ export default function RetainerMonthCardPage() {
     try {
       const res = await api.retainers.getMonthCard(id, month);
       setMonthCard(res.monthCard as MonthCard);
+      // Every write on this page ends here. A task closed or a month reopened
+      // moves a figure on /live-work and /money too, and this page holds none
+      // of their caches -- see useWorkCacheNudge for why this is free.
+      nudgeWorkCaches();
     } catch {
       setMonthCard(null);
     } finally {
       setLoadingMonth(false);
     }
-  }, [id, month]);
+  }, [id, month, nudgeWorkCaches]);
 
   useEffect(() => {
     void loadRetainer();

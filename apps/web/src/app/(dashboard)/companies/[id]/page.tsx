@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, use } from 'react';
+import { useWorkCacheNudge } from '@/hooks/useWorkCacheNudge';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, type TabDef } from '@/components/ui/tabs';
 import { plural } from '@/lib/utils';
@@ -59,6 +60,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialTab = (searchParams.get('tab') || 'OVERVIEW').toUpperCase();
+  const nudgeWorkCaches = useWorkCacheNudge();
 
   const [company, setCompany] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -105,12 +107,13 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
       } else {
         setCompany(res);
       }
+      nudgeWorkCaches();
     } catch (err) {
       console.error('Failed to load company detail:', err);
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, nudgeWorkCaches]);
 
   useEffect(() => {
     fetchDetail();

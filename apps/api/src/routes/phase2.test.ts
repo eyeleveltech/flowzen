@@ -38,9 +38,12 @@ describe('Phase 2: Sales & CRM Engine Core Logic Tests', () => {
     expect(hasPermission(mockBd, 'money.figures')).toBe(false);
   });
 
-  it('3. Verifies 6-Stage Pipeline lifecycle progression rules', () => {
+  it('3. Verifies 5-Stage Pipeline lifecycle progression rules', () => {
+    // Six, until TALKING was removed. It held a proposal that adding a company
+    // created by itself -- no version, nothing quoted -- which could not be
+    // advanced and had to be deleted by hand. The board starts where §14 always
+    // said it did: at Proposal sent.
     const validStages = [
-      ProposalStage.TALKING,
       ProposalStage.PROPOSAL_SENT,
       ProposalStage.IN_NEGOTIATION,
       ProposalStage.PROFORMA_ISSUED,
@@ -48,9 +51,10 @@ describe('Phase 2: Sales & CRM Engine Core Logic Tests', () => {
       ProposalStage.WON,
     ];
 
-    expect(validStages.length).toBe(6);
-    expect(validStages[0]).toBe('TALKING');
+    expect(validStages.length).toBe(5);
+    expect(validStages[0]).toBe('PROPOSAL_SENT');
     expect(validStages[validStages.length - 1]).toBe('WON');
+    expect(Object.keys(ProposalStage)).not.toContain('TALKING');
   });
 
   it('4. Verifies derived Company status rules (Prospect -> Client -> Past)', () => {

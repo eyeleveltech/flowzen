@@ -4,6 +4,14 @@ import { app } from '../index.js';
 import { prisma } from '../lib/prisma.js';
 import { signJwt } from '../utils/jwt.js';
 import { RolePreset } from '@prisma/client';
+import { emitToOrganization } from '../sse.js';
+
+// Only the two emitters are replaced. A whole-module mock would take
+// `sseRouter` with it, and index.ts mounts that at /api/stream.
+vi.mock('../sse.js', async () => {
+  const actual = await vi.importActual<typeof import('../sse.js')>('../sse.js');
+  return { ...actual, emitToOrganization: vi.fn(), emitToUser: vi.fn() };
+});
 
 /**
  * Adding a company, and the four things the form asks for.
@@ -207,5 +215,97 @@ describe('the duplicate override', () => {
     expect(res.status).toBe(409);
     expect(res.body.data.action).toBe('BLOCK');
     expect(res.body.data.matches[0].id).toBe('co-3');
+  });
+});
+
+/**
+ * Adding a company does not put anything on the pipeline.
+ *
+ * It used to open a Proposal in a TALKING stage for EVERY company it made.
+ * That proposal had no version -- no value, no scope, nothing sent -- so the
+ * board, which renders proposals, carried a card that stood for nothing. It
+ * could not be advanced either: the stage route refuses a manual change and
+ * the board rejects any card dropped on Proposal sent. Quoting the client
+ * called POST /proposals, which writes a second row, leaving the first behind
+ * as a permanent empty card that had to be deleted by hand.
+ *
+ * TALKING is gone with it. A company reaches the board when somebody sends it
+ * a number.
+ */
+describe('adding a company', () => {
+  it('writes no proposal for a new lead', async () => {
+    const res = await create({});
+    expect(res.status).toBe(201);
+    expect(written.proposal).toBeUndefined();
+  });
+
+  it('writes no proposal for an existing client either', async () => {
+    const res = await create({ existingClient: true, status: 'CLIENT' });
+    expect(res.status).toBe(201);
+    expect(written.proposal).toBeUndefined();
+  });
+
+  it('does not hand back a deal id any more', async () => {
+    const res = await create({});
+    expect(res.body.data).not.toHaveProperty('dealId');
+  });
+
+  it('makes an existing client a CLIENT, not a prospect', async () => {
+    const res = await create({ existingClient: true, status: 'CLIENT' });
+    expect(res.status).toBe(201);
+    expect(written.company.status).toBe('CLIENT');
+  });
+
+  it('records that they were migrated, not newly won', async () => {
+    await create({ existingClient: true, status: 'CLIENT' });
+    const activity = (prisma.activity.create as any).mock.calls.at(-1)[0].data;
+    expect(activity.verb).toBe('company_migrated');
+    expect(activity.payload.existingClient).toBe(true);
+  });
+
+  it('and records an ordinary lead as a normal creation', async () => {
+    await create({});
+    const activity = (prisma.activity.create as any).mock.calls.at(-1)[0].data;
+    expect(activity.verb).toBe('company_created');
+    expect(activity.payload.existingClient).toBeUndefined();
+  });
+});
+
+/**
+ * The company list on everybody else's screen.
+ *
+ * `emitToUser` and `emitToOrganization` were defined in sse.ts and called from
+ * NOWHERE in the API -- every signed-in browser held an open EventSource that
+ * received the handshake and then nothing, for the life of the session. These
+ * pin the call sites so a future edit cannot quietly go back to silence.
+ */
+describe('what the rest of the office is told', () => {
+  // The prisma mock is reset globally; this one is ours to clear.
+  beforeEach(() => vi.mocked(emitToOrganization).mockClear());
+
+  it('announces a new company on the organisation stream', async () => {
+    const res = await create({});
+    expect(res.status).toBe(201);
+    expect(emitToOrganization).toHaveBeenCalledWith(
+      'org-1',
+      'lead:updated',
+      expect.objectContaining({ companyId: 'co-new' }),
+    );
+  });
+
+  it('announces a migrated client the same way', async () => {
+    await create({ existingClient: true, status: 'CLIENT' });
+    expect(emitToOrganization).toHaveBeenCalledWith(
+      'org-1',
+      'lead:updated',
+      expect.anything(),
+    );
+  });
+
+  it('says nothing when the create is refused', async () => {
+    (prisma.company.findUnique as any).mockResolvedValue({ id: 'co-old', name: 'Acme Foods' });
+    const res = await create({});
+    expect(res.status).toBe(409);
+    expect(emitToOrganization).not.toHaveBeenCalled();
   });
 });

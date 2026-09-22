@@ -399,13 +399,22 @@ async function main() {
     versions: [{ n: 1, value: 30000, scope: 'Multi-city launch story frames + reels', sentAt: days(-122) }],
   });
 
+  /*
+   * Both of these sat in a TALKING stage at zero, standing for "we are talking
+   * to them but have not quoted". That stage is gone: a card reaches the board
+   * when a number goes out, so they carry the number that went out.
+   *
+   * A company being courted with nothing sent yet is still in the seed -- it is
+   * a PROSPECT on /companies with a follow-up date, which is where the chase
+   * lives now.
+   */
   await proposal({
-    companyId: elephantine.id, kind: ProposalKind.PROJECT, ownerId: akmal.id, stage: ProposalStage.TALKING,
-    versions: [{ n: 1, value: 0, scope: 'Resort rebrand — scope not yet quoted', sentAt: days(-11) }],
+    companyId: elephantine.id, kind: ProposalKind.PROJECT, ownerId: akmal.id, stage: ProposalStage.PROPOSAL_SENT,
+    versions: [{ n: 1, value: 185000, scope: 'Resort rebrand — identity, collateral and launch film', sentAt: days(-11) }],
   });
   await proposal({
-    companyId: sparkAligners.id, kind: ProposalKind.RETAINER, ownerId: varsha.id, stage: ProposalStage.TALKING,
-    versions: [{ n: 1, value: 0, scope: 'Clear-aligner D2C launch — scope not yet quoted', sentAt: days(-19) }],
+    companyId: sparkAligners.id, kind: ProposalKind.RETAINER, ownerId: varsha.id, stage: ProposalStage.PROPOSAL_SENT,
+    versions: [{ n: 1, value: 65000, scope: 'Clear-aligner D2C launch — social, performance and creator seeding', sentAt: days(-19) }],
   });
   await proposal({
     companyId: stylori.id, kind: ProposalKind.RETAINER, ownerId: tanuja.id, stage: ProposalStage.PROPOSAL_SENT,

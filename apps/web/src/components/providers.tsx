@@ -17,7 +17,19 @@ const queryClient = new QueryClient({
     queries: {
       staleTime: 30 * 1000,
       retry: 1,
-      refetchOnWindowFocus: false,
+      /*
+       * On, and it matters more than it looks.
+       *
+       * Every refresh in this app is hand-wired: there is not a single
+       * `useMutation`, so a write updates the screen only where somebody
+       * remembered to invalidate. With this off and the SSE layer emitting
+       * nothing, a missed invalidation was not "late" -- it was stale for the
+       * rest of the session, because nothing else would ever re-ask.
+       *
+       * Coming back to the tab is the moment a person is most likely to be
+       * looking at something another person changed while they were away.
+       */
+      refetchOnWindowFocus: true,
     },
   },
 });

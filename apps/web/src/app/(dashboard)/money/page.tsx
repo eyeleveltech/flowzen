@@ -153,11 +153,15 @@ export default function MoneyPage() {
   /** Refresh after an invoice or payment changes. */
   const load = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: ['invoices'] });
+    // Profit is computed from invoices and costs, under its own key. Without
+    // this it kept showing the figures from before the payment landed.
+    await queryClient.invalidateQueries({ queryKey: ['money'] });
   }, [queryClient]);
 
   /** Refresh after a cost is added, confirmed or deleted. */
   const loadCosts = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: ['costs'] });
+    await queryClient.invalidateQueries({ queryKey: ['money'] });
   }, [queryClient]);
 
   const confirmCost = async (id: string) => {

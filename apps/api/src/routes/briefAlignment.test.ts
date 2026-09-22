@@ -80,7 +80,6 @@ describe('the stage probabilities', () => {
 
   it('reads the organisation’s own figures when it has them', () => {
     const p = stageProbabilities({
-      stageProbTalking: 5,
       stageProbProposalSent: 35,
       stageProbInNegotiation: 55,
       stageProbProformaIssued: 80,
@@ -99,17 +98,18 @@ describe('the stage probabilities', () => {
 
   it('lets an explicit override beat the stage default', () => {
     // §8: `probabilityOverride ?? stageDefault`.
-    expect(proposalProbability({ stage: 'TALKING', probabilityOverride: 75 } as any, null)).toBe(75);
-    expect(proposalProbability({ stage: 'TALKING', probabilityOverride: null } as any, null)).toBe(
-      BRIEF_STAGE_PROBABILITIES.stageProbTalking,
+    expect(proposalProbability({ stage: 'PROPOSAL_SENT', probabilityOverride: 75 } as any, null)).toBe(75);
+    expect(proposalProbability({ stage: 'PROPOSAL_SENT', probabilityOverride: null } as any, null)).toBe(
+      BRIEF_STAGE_PROBABILITIES.stageProbProposalSent,
     );
   });
 
-  it('keeps talking below the lowest stage the brief prices', () => {
-    // The brief does not price TALKING — a proposal only reaches the board at
-    // Proposal sent — so whatever it is, it must not exceed it.
+  it('starts the board at the first stage the brief prices', () => {
+    // There is no stage in front of Proposal sent any more, and nothing may
+    // reintroduce one silently: §14 prices the board from here.
     const p = stageProbabilities(null);
-    expect(p.TALKING).toBeLessThan(p.PROPOSAL_SENT);
+    expect(Object.keys(p)).not.toContain('TALKING');
+    expect(p.PROPOSAL_SENT).toBe(BRIEF_STAGE_PROBABILITIES.stageProbProposalSent);
   });
 });
 
@@ -233,7 +233,6 @@ describe('the settings endpoint', () => {
       currency: 'INR',
       timezone: 'Asia/Kolkata',
       financialYearStart: 4,
-      stageProbTalking: 10,
       stageProbProposalSent: 30,
       stageProbInNegotiation: 60,
       stageProbProformaIssued: 85,

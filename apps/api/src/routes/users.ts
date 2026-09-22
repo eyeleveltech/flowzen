@@ -2,6 +2,7 @@ import { Router, type Response } from 'express';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { prisma } from '../lib/prisma.js';
+import { emitToOrganization } from '../sse.js';
 import { authenticate, requirePermission, hasPermission, type AuthRequest } from '../middleware/auth.js';
 import { roleForPreset } from '../utils/roles.js';
 import { hashPassword } from '../utils/password.js';
@@ -252,6 +253,9 @@ usersRouter.post('/invite', requirePermission('setup.admin'), async (req: AuthRe
       logger.error(`Invite email to ${user.email} failed: ${mailErr}`);
     }
 
+    // The team list on every other open tab is now wrong. Say so.
+    emitToOrganization(orgId, 'member:changed', { userId: user.id });
+
     res.status(201).json({
       success: true,
       data: {
@@ -380,6 +384,10 @@ usersRouter.patch('/:id', requirePermission('setup.admin'), async (req: AuthRequ
         payload: { fields: Object.keys(parsed.data) },
       },
     });
+
+    // Permissions, department or cost changed -- and somebody's own sidebar
+    // may now show more or less than it did a moment ago.
+    emitToOrganization(orgId, 'member:changed', { userId: id });
 
     res.json({
       success: true,

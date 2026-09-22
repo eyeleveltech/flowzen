@@ -82,12 +82,13 @@ model Organization {
   /// was built on numbers nothing authorised.
   ///
   /// Columns rather than a JSON blob so a bad value cannot be written, and so
-  /// the API and the web read the same typed shape. TALKING has no brief
-  /// default — a proposal only reaches the board at Proposal sent. Of the two
-  /// values the app already held for it (the board said 20, the forecast said
-  /// 10) it takes the lower: this number feeds a solvency verdict, and the
-  /// forecast must never report a surplus that exists only if deals land.
-  stageProbTalking          Int      @default(10)
+  /// the API and the web read the same typed shape.
+  ///
+  /// There is no figure for Talking because there is no Talking: §14 prices a
+  /// proposal from Proposal sent, and the stage that sat in front of it was
+  /// removed once it turned out not to work. It held an empty proposal that
+  /// adding a company created by itself, which no quote lay behind, which
+  /// could not be advanced, and which had to be deleted by hand.
   stageProbProposalSent     Int      @default(30)
   stageProbInNegotiation    Int      @default(60)
   stageProbProformaIssued   Int      @default(85)
@@ -369,7 +370,6 @@ enum ProposalKind {
 }
 
 enum ProposalStage {
-  TALKING
   PROPOSAL_SENT
   IN_NEGOTIATION
   PROFORMA_ISSUED
@@ -391,7 +391,7 @@ model Proposal {
   companyId           String
   kind                ProposalKind
   ownerId             String
-  stage               ProposalStage    @default(TALKING)
+  stage               ProposalStage    @default(PROPOSAL_SENT)
   outcome             ProposalOutcome?
   wonVersionId        String?          @unique
   wonAt               DateTime?

@@ -40,9 +40,13 @@ const auth = (who: typeof MANAGEMENT | typeof EMPLOYEE) =>
     })}`,
   ] as const;
 
-/** ₹50,00,000 of "talking", the softest stage there is. */
+/**
+ * ₹50,00,000 sent and not yet answered -- the softest stage there is, now that
+ * the softer one in front of it is gone. Proposal sent is where §14 starts
+ * pricing a proposal, and where the board starts.
+ */
 const DEAL_VALUE = 5_000_000;
-const DEAL_ID = 'prop-talking';
+const DEAL_ID = 'prop-sent';
 
 beforeEach(() => {
   (prisma.user.findUnique as any).mockImplementation(async ({ where }: any) => {
@@ -71,7 +75,7 @@ beforeEach(() => {
   (prisma.proposal.findMany as any).mockResolvedValue([
     {
       id: DEAL_ID,
-      stage: 'TALKING',
+      stage: 'PROPOSAL_SENT',
       probabilityOverride: null,
       company: { id: 'co-2', name: 'Maybe One Day' },
       versions: [{ value: DEAL_VALUE, n: 1 }],
@@ -123,9 +127,14 @@ describe('the verdict', () => {
     expect(m.netCashFlow).toBe(-160_000);
     expect(m.status).toBe('DEFICIT');
 
-    // The old sum reached +90,000 on this exact data and said SURPLUS. That
+    // The old sum reaches a surplus on this exact data and says so. That
     // figure still exists — it is just no longer the verdict.
-    expect(m.netCashFlowWithPipeline).toBe(90_000);
+    //
+    // It grew when TALKING was removed and this deal moved to Proposal sent:
+    // §14 prices that at 30% against the 10% behind it, so the same ₹50,00,000
+    // now weighs three times what it did. The point of the test is unchanged —
+    // committed cash is short, and only hope covers it.
+    expect(m.netCashFlowWithPipeline).toBe(590_000);
   });
 
   it('measures what is kept against committed cash, not against hope', async () => {

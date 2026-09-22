@@ -96,7 +96,6 @@ type Form = {
   workingHoursEnd: string;
   workingDays: number[];
   holidays: string;
-  stageProbTalking: string;
   stageProbProposalSent: string;
   stageProbInNegotiation: string;
   stageProbProformaIssued: string;
@@ -143,7 +142,6 @@ export default function SettingsPage() {
         workingDays: o.workingDays ?? [1, 2, 3, 4, 5, 6],
         // One per line is how somebody actually types a year of holidays.
         holidays: (o.holidays ?? []).join('\n'),
-        stageProbTalking: String(o.stageProbabilities?.TALKING ?? 10),
         stageProbProposalSent: String(o.stageProbabilities?.PROPOSAL_SENT ?? 30),
         stageProbInNegotiation: String(o.stageProbabilities?.IN_NEGOTIATION ?? 60),
         stageProbProformaIssued: String(o.stageProbabilities?.PROFORMA_ISSUED ?? 85),
@@ -203,7 +201,6 @@ export default function SettingsPage() {
           .split(/[\n,]/)
           .map((d) => d.trim())
           .filter(Boolean),
-        stageProbTalking: Number(form.stageProbTalking),
         stageProbProposalSent: Number(form.stageProbProposalSent),
         stageProbInNegotiation: Number(form.stageProbInNegotiation),
         stageProbProformaIssued: Number(form.stageProbProformaIssued),
@@ -413,7 +410,6 @@ export default function SettingsPage() {
                   overridden on its own card.
                 </p>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Talking (%)" value={form.stageProbTalking} onChange={(v) => set('stageProbTalking', v)} type="number" disabled={!canEdit} />
                   <Field label="Proposal sent (%)" value={form.stageProbProposalSent} onChange={(v) => set('stageProbProposalSent', v)} type="number" disabled={!canEdit} />
                   <Field label="In negotiation (%)" value={form.stageProbInNegotiation} onChange={(v) => set('stageProbInNegotiation', v)} type="number" disabled={!canEdit} />
                   <Field label="Proforma issued (%)" value={form.stageProbProformaIssued} onChange={(v) => set('stageProbProformaIssued', v)} type="number" disabled={!canEdit} />

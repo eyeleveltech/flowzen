@@ -21,9 +21,17 @@ import { usePageHeader } from '@/hooks/usePageHeader';
 import { useConfig } from '@/hooks/queries';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 
-const STAGE_ORDER = ['TALKING', 'PROPOSAL_SENT', 'IN_NEGOTIATION', 'PROFORMA_ISSUED', 'VERBAL_YES', 'WON'];
+/*
+ * The board starts where a number does.
+ *
+ * There was a TALKING column in front of this, holding an empty proposal that
+ * adding a company created by itself -- no version, no value, nothing quoted --
+ * which could not be dragged forward and had to be deleted by hand. A company
+ * reaches the pipeline now by being sent a proposal, which is what §14 always
+ * said: "a proposal only reaches the board at Proposal sent".
+ */
+const STAGE_ORDER = ['PROPOSAL_SENT', 'IN_NEGOTIATION', 'PROFORMA_ISSUED', 'VERBAL_YES', 'WON'];
 const STAGE_LABEL: Record<string, string> = {
-  TALKING: 'Talking',
   PROPOSAL_SENT: 'Proposal sent',
   IN_NEGOTIATION: 'In negotiation',
   PROFORMA_ISSUED: 'Proforma issued',
@@ -39,7 +47,6 @@ const STAGE_LABEL: Record<string, string> = {
  * and it holds §14's own defaults so a flash of the wrong number is impossible.
  */
 const STAGE_PROBABILITY_FALLBACK: Record<string, number> = {
-  TALKING: 10,
   PROPOSAL_SENT: 30,
   IN_NEGOTIATION: 60,
   PROFORMA_ISSUED: 85,
@@ -83,7 +90,7 @@ function getDropAction(fromStage: string, toStage: string): DropAction {
   if (toIdx < fromIdx) {
     return { type: 'INVALID', reason: 'Stage only moves forward, from a real record — dragging it back is not one.' };
   }
-  if (toStage === 'TALKING' || toStage === 'PROPOSAL_SENT') {
+  if (toStage === 'PROPOSAL_SENT') {
     return { type: 'INVALID', reason: 'Nothing sends a proposal back to this stage — it only happens when the proposal is first created.' };
   }
   if (toStage === 'IN_NEGOTIATION') return { type: 'ADD_VERSION' };
@@ -170,7 +177,6 @@ export default function PipelinePage() {
     const live = allCards.filter((c) => c.stage !== 'WON');
     return {
       liveDeals: live.length,
-      notYetQuoted: live.filter((c) => c.stage === 'TALKING').length,
       fullPipeline: live.reduce((s, c) => s + (c.quotedValue || 0), 0),
       weighted: columns.filter((c) => c.stage !== 'WON').reduce((s, c) => s + c.weightedValue, 0),
       goingStale: live.filter((c) => c.daysInStage > 25).length,
@@ -278,7 +284,7 @@ export default function PipelinePage() {
       </div>
 
       <StatRow className="mb-8">
-        <StatTile label="Live Deals" value={stats.liveDeals} note={`${stats.notYetQuoted} not yet quoted`} />
+        <StatTile label="Live Deals" value={stats.liveDeals} note="each one a real quote" />
         <StatTile label="Full Pipeline" value={formatMoney(stats.fullPipeline)} note="if every one lands" />
         <StatTile
           label="Weighted"
@@ -324,7 +330,6 @@ export default function PipelinePage() {
                   </div>
                   <p className="text-xs font-semibold text-primary">{formatMoney(col.totalValue)}</p>
                   <p className="text-micro text-secondary">{stageProbability[col.stage]}% likely · {
-                    col.stage === 'TALKING' ? 'No proposal yet' :
                     col.stage === 'PROPOSAL_SENT' ? 'Number is with them' :
                     col.stage === 'IN_NEGOTIATION' ? 'They came back' :
                     col.stage === 'PROFORMA_ISSUED' ? 'Accounts asked to pay' :

@@ -58,7 +58,6 @@ configRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
          * Sent so the web stops keeping a fourth copy of the table.
          */
         stageProbabilities: {
-          TALKING: org.stageProbTalking,
           PROPOSAL_SENT: org.stageProbProposalSent,
           IN_NEGOTIATION: org.stageProbInNegotiation,
           PROFORMA_ISSUED: org.stageProbProformaIssued,
@@ -130,12 +129,11 @@ configRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
         : {}),
       // Reference lists every screen needs to label a stage or a vertical.
       stages: [
-        { id: 'TALKING', name: 'Talking', order: 1, kind: 'OPEN' },
-        { id: 'PROPOSAL_SENT', name: 'Proposal Sent', order: 2, kind: 'OPEN' },
-        { id: 'IN_NEGOTIATION', name: 'In Negotiation', order: 3, kind: 'OPEN' },
-        { id: 'PROFORMA_ISSUED', name: 'Proforma Issued', order: 4, kind: 'OPEN' },
-        { id: 'VERBAL_YES', name: 'Verbal Yes', order: 5, kind: 'OPEN' },
-        { id: 'WON', name: 'Won', order: 6, kind: 'WON' },
+        { id: 'PROPOSAL_SENT', name: 'Proposal Sent', order: 1, kind: 'OPEN' },
+        { id: 'IN_NEGOTIATION', name: 'In Negotiation', order: 2, kind: 'OPEN' },
+        { id: 'PROFORMA_ISSUED', name: 'Proforma Issued', order: 3, kind: 'OPEN' },
+        { id: 'VERBAL_YES', name: 'Verbal Yes', order: 4, kind: 'OPEN' },
+        { id: 'WON', name: 'Won', order: 5, kind: 'WON' },
       ],
       lostReasons: [],
       sources: [
@@ -198,7 +196,6 @@ const orgUpdateSchema = z.object({
   workingDays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
   /** §14 "Sundays and public holidays excluded". ISO days the office is shut. */
   holidays: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')).max(60).optional(),
-  stageProbTalking: z.number().int().min(0).max(100).optional(),
   stageProbProposalSent: z.number().int().min(0).max(100).optional(),
   stageProbInNegotiation: z.number().int().min(0).max(100).optional(),
   stageProbProformaIssued: z.number().int().min(0).max(100).optional(),
@@ -254,7 +251,6 @@ configRouter.patch('/', requirePermission('setup.admin'), async (req: AuthReques
         ...(data.workingHoursEnd !== undefined ? { workingHoursEnd: data.workingHoursEnd } : {}),
         ...(data.workingDays !== undefined ? { workingDays: data.workingDays } : {}),
         ...(data.holidays !== undefined ? { holidays: Array.from(new Set(data.holidays)).sort() } : {}),
-        ...(data.stageProbTalking !== undefined ? { stageProbTalking: data.stageProbTalking } : {}),
         ...(data.stageProbProposalSent !== undefined ? { stageProbProposalSent: data.stageProbProposalSent } : {}),
         ...(data.stageProbInNegotiation !== undefined ? { stageProbInNegotiation: data.stageProbInNegotiation } : {}),
         ...(data.stageProbProformaIssued !== undefined ? { stageProbProformaIssued: data.stageProbProformaIssued } : {}),

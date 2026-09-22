@@ -15,7 +15,6 @@ proposalsRouter.use(authenticate);
 // ── 1. Pipeline 6-Stage Kanban Board ────────────────────────────────────────
 
 const PIPELINE_STAGES: ProposalStage[] = [
-  ProposalStage.TALKING,
   ProposalStage.PROPOSAL_SENT,
   ProposalStage.IN_NEGOTIATION,
   ProposalStage.PROFORMA_ISSUED,
@@ -142,10 +141,17 @@ proposalsRouter.get('/pipeline', requirePermission('pipeline.read'), async (req:
         updatedAt: p.updatedAt,
       };
 
+      /*
+       * A card with no column is a card nobody sees, so say so rather than
+       * quietly filing it.
+       *
+       * This used to fall back to TALKING, which is how a stage that is not on
+       * the board -- LOST, EXPIRED -- would have landed in the first column
+       * looking like live work. TALKING is gone, and a silent default in its
+       * place would be the same bug with a different column.
+       */
       if (columns[p.stage]) {
         columns[p.stage].push(card);
-      } else {
-        columns[ProposalStage.TALKING].push(card);
       }
     }
 

@@ -1035,7 +1035,7 @@ export const api = {
      * its contact silently missing.
      */
     create: (body: Record<string, unknown>) =>
-      post<Company & { dealId: string | null }>('/companies', body),
+      post<Company>('/companies', body),
     /**
      * A spreadsheet of companies (§4.4).
      *

@@ -21,17 +21,19 @@ import { ProposalStage } from '@prisma/client';
  * proposal reads them through here: the board, the forecast, and the web, which
  * gets them over /config rather than keeping a fourth copy.
  *
- * ─── The two stages the brief does not price ────────────────────────────────
+ * ─── The stages the brief does not price ────────────────────────────────────
  *
- * TALKING has no figure in §14 — a proposal only reaches the board at Proposal
- * sent — so it is a setting with a conservative default rather than a guess
- * baked in here. WON and LOST/EXPIRED are not predictions at all: a won deal is
- * money and a lost one is nothing, so they are fixed, not configurable.
+ * WON and LOST/EXPIRED are not predictions at all: a won deal is money and a
+ * lost one is nothing, so they are fixed, not configurable.
+ *
+ * There was a fifth setting here, for a TALKING stage in front of Proposal
+ * sent. §14 never priced it — "a proposal only reaches the board at Proposal
+ * sent" — and the stage itself is gone, because the only thing that ever
+ * reached it was an empty proposal that adding a company created by itself.
  */
 
 /** The columns this reads. Anything with them will do — a full org row, or a select. */
 export interface StageProbabilitySource {
-  stageProbTalking: number;
   stageProbProposalSent: number;
   stageProbInNegotiation: number;
   stageProbProformaIssued: number;
@@ -40,7 +42,6 @@ export interface StageProbabilitySource {
 
 /** The org columns every weighting read needs, for a Prisma `select`. */
 export const STAGE_PROBABILITY_SELECT = {
-  stageProbTalking: true,
   stageProbProposalSent: true,
   stageProbInNegotiation: true,
   stageProbProformaIssued: true,
@@ -49,7 +50,6 @@ export const STAGE_PROBABILITY_SELECT = {
 
 /** §14's own defaults, for a caller that has no org row to hand. */
 export const BRIEF_STAGE_PROBABILITIES: StageProbabilitySource = {
-  stageProbTalking: 10,
   stageProbProposalSent: 30,
   stageProbInNegotiation: 60,
   stageProbProformaIssued: 85,
@@ -60,7 +60,6 @@ export const BRIEF_STAGE_PROBABILITIES: StageProbabilitySource = {
 export function stageProbabilities(org: StageProbabilitySource | null | undefined): Record<ProposalStage, number> {
   const o = org ?? BRIEF_STAGE_PROBABILITIES;
   return {
-    [ProposalStage.TALKING]: o.stageProbTalking,
     [ProposalStage.PROPOSAL_SENT]: o.stageProbProposalSent,
     [ProposalStage.IN_NEGOTIATION]: o.stageProbInNegotiation,
     [ProposalStage.PROFORMA_ISSUED]: o.stageProbProformaIssued,
