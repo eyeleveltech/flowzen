@@ -16,10 +16,10 @@ import type { PermissionKey } from '@flowzen/shared';
  *
  *   PROJECT_OVER_ESTIMATE  "…has spent past its estimate of 190000."
  *   INVOICE_OVERDUE        client, invoice number, days past due
- *   PERSON_UNDERLOADED     "Akmal (Founder) is at 20% of a normal load."
+ *   MEMBER_OVERALLOCATED   who is committed past 100% of their month
  *
  * A designer is refused /money, /forecast and every `money.figures` gate, and
- * could read a project's cost estimate and the founder's utilisation out of
+ * could read a project's cost estimate and another person's commitments out of
  * the bell. Every alert rule now names the permission its own SCREEN needs.
  *
  * ─── And read state was shared by the whole company ─────────────────────────
@@ -44,15 +44,13 @@ notificationsRouter.use(authenticate);
  * than shown: a new rule should stay quiet until somebody decides who it is
  * for, which is the safe direction to fail.
  */
-const RULE_PERMISSION: Record<string, PermissionKey | undefined> = {
+export const RULE_PERMISSION: Record<string, PermissionKey | undefined> = {
   // Somebody else's overdue task is a fact about the team. Your own is a fact
   // about you — see MINE_REGARDLESS below, which lets these three through to
   // the person the task belongs to whatever their permissions say.
   TASK_OVERDUE: 'work.team',
   TASK_AGING: 'work.team',
   TASK_WAITING_HOLD: 'work.team',
-  PERSON_OVERLOADED: 'work.team',
-  PERSON_UNDERLOADED: 'work.team',
   MEMBER_OVERALLOCATED: 'work.team',
 
   // The work itself.
@@ -100,18 +98,18 @@ const RULE_PERMISSION: Record<string, PermissionKey | undefined> = {
  * yours. These three rules all hang off a Task, so that question has an
  * answer.
  *
- * Deliberately only the task rules. PERSON_OVERLOADED and PERSON_UNDERLOADED
- * are about how work has been shared out, which is a decision somebody else
- * makes and should hear about first.
+ * Deliberately only the task rules. MEMBER_OVERALLOCATED is about how work has
+ * been shared out, which is a decision somebody else makes and should hear
+ * about first.
  */
-const MINE_REGARDLESS = ['TASK_OVERDUE', 'TASK_AGING', 'TASK_WAITING_HOLD'] as const;
+export const MINE_REGARDLESS = ['TASK_OVERDUE', 'TASK_AGING', 'TASK_WAITING_HOLD'] as const;
 
 /**
  * What corner of the business a notification is about.
  *
  * The rows said what had happened and never what KIND of thing it was, so a
  * bell holding forty-four of them read as one undifferentiated column: an
- * overdue invoice, a lens that has not come back and somebody's workload all
+ * overdue invoice, a lens that has not come back and an over-committed month all
  * looked alike until you had read the sentence.
  *
  * Taken from the entity type rather than the rule, because that is the same

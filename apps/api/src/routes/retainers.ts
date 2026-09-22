@@ -3,8 +3,9 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
 import { rollActiveRetainers } from '../workers/monthCard.cron.js';
-import { CompanyStatus, RetainerStatus } from '@prisma/client';
+import { CompanyStatus, RetainerStatus, RetainerProjectStatus } from '@prisma/client';
 import { monthKey } from '../utils/retainerMonths.js';
+import { TASK_PEOPLE, withPeople } from './tasks.js';
 import { parsePagination } from '../utils/query.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
@@ -102,7 +103,6 @@ retainersRouter.get('/', requirePermission('work.all'), async (req: AuthRequest,
         include: {
           company: { select: { id: true, name: true, vertical: true, city: true } },
           owner: { select: { id: true, name: true, email: true } },
-          template: { select: { id: true, name: true } },
           monthCards: {
             orderBy: { month: 'desc' },
             take: 3,
@@ -110,6 +110,22 @@ retainersRouter.get('/', requirePermission('work.all'), async (req: AuthRequest,
               invoice: { select: { id: true, number: true, status: true } },
               tasks: { where: { deletedAt: null }, select: { status: true } },
             },
+          },
+          /*
+           * What the client is actually buying, by name.
+           *
+           * The list's only column about the work was "1 of 5 tasks done" for
+           * the current month — a number that says nothing about what the
+           * retainer IS. A retainer is a Diwali campaign and an always-on
+           * stream, and that is the thing to show next to the fee.
+           *
+           * Names and statuses only; the per-task counts belong on the
+           * retainer's own screen, and pulling them here would be a task read
+           * across every retainer on the page.
+           */
+          projects: {
+            orderBy: [{ status: 'asc' }, { startDate: 'asc' }, { name: 'asc' }],
+            select: { id: true, name: true, status: true, endDate: true },
           },
         },
       }),
@@ -158,7 +174,6 @@ retainersRouter.get('/', requirePermission('work.all'), async (req: AuthRequest,
         renewalDate: r.renewalDate,
         status: r.status,
         owner: r.owner,
-        template: r.template,
         activeMonthCard: maskedActiveMonthCard,
         recentMonthCards: maskedMonthCards,
         renewalDaysLeft,
@@ -166,6 +181,15 @@ retainersRouter.get('/', requirePermission('work.all'), async (req: AuthRequest,
         noFixedTermRisk: !r.termMonths && !r.renewalDate,
         monthTasksDone,
         monthTasksTotal,
+        /*
+         * The named pieces of work inside it, and how many are still running.
+         *
+         * `active` rather than the raw length, because a finished campaign is
+         * not something the list should keep advertising — but the full set
+         * goes out too, so the row can say "3 · 1 done" without a second call.
+         */
+        projects: r.projects,
+        activeProjectCount: r.projects.filter((p) => p.status === 'ACTIVE').length,
       };
     });
 
@@ -179,6 +203,8 @@ retainersRouter.get('/', requirePermission('work.all'), async (req: AuthRequest,
         { label: 'Status', value: (r) => r.status },
         { label: 'Owner', value: (r) => r.owner.name },
         { label: 'No fixed term risk', value: (r) => (r.noFixedTermRisk ? 'Yes' : 'No') },
+        { label: 'Projects running', value: (r) => r.activeProjectCount },
+        { label: 'Projects', value: (r) => r.projects.map((p) => p.name).join('; ') },
       ]);
       sendCsv(res, `retainers-${new Date().toISOString().slice(0, 10)}`, csv);
       return;
@@ -202,7 +228,6 @@ const retainerCreateSchema = z.object({
   startDate: z.string().min(1, 'Start date is required'),
   termMonths: z.number().optional().nullable(),
   ownerId: z.string().optional(),
-  templateId: z.string().optional().nullable(),
   /** Set when this retainer is created from a won proposal (§11.1 step 11). */
   sourceProposalId: z.string().optional(),
 });
@@ -216,7 +241,7 @@ retainersRouter.post('/', requirePermission('company.write'), async (req: AuthRe
     }
 
     const orgId = req.user!.organizationId;
-    const { companyId, monthlyValue, startDate, termMonths, ownerId, templateId, sourceProposalId } = parsed.data;
+    const { companyId, monthlyValue, startDate, termMonths, ownerId, sourceProposalId } = parsed.data;
 
     /*
      * ─── The gate, and why it could not be the proposal alone ──────────────
@@ -269,7 +294,7 @@ retainersRouter.post('/', requirePermission('company.write'), async (req: AuthRe
     // company can seed a retainer, and only once.
     if (sourceProposalId) {
       const proposal = await prisma.proposal.findFirst({
-        where: { id: sourceProposalId, organizationId: orgId, companyId },
+        where: { id: sourceProposalId, organizationId: orgId, companyId, deletedAt: null },
       });
       if (!proposal) {
         res.status(404).json({ success: false, error: 'Source proposal not found for this company' });
@@ -301,9 +326,28 @@ retainersRouter.post('/', requirePermission('company.write'), async (req: AuthRe
         termMonths: termMonths || null,
         renewalDate,
         ownerId: ownerId || req.user!.userId,
-        templateId: templateId || null,
         status: RetainerStatus.ACTIVE,
         sourceProposalId: sourceProposalId || null,
+      },
+    });
+
+    /*
+     * Every retainer starts with somewhere to put its work.
+     *
+     * A retainer task must name a project, so a retainer with none could not
+     * hold a task at all — the month roll would fail on the 1st and the create
+     * form would have an empty picker. This is the one that catches the
+     * monthly baseline; campaigns are added beside it.
+     *
+     * Named for what it is rather than for work nobody has scoped yet.
+     */
+    await prisma.retainerProject.create({
+      data: {
+        retainerId: retainer.id,
+        name: 'Monthly Retainer Work',
+        ownerId: ownerId || req.user!.userId,
+        isDefault: true,
+        description: 'The monthly work this retainer is for. Campaigns and one-off pieces sit beside it.',
       },
     });
 
@@ -328,6 +372,7 @@ retainersRouter.post('/', requirePermission('company.write'), async (req: AuthRe
           status: 'OPEN',
         },
       });
+
     }
 
     await prisma.activity.create({
@@ -365,8 +410,21 @@ retainersRouter.get('/:id', requirePermission('work.all'), async (req: AuthReque
       include: {
         company: { select: { id: true, name: true, vertical: true, city: true, gstin: true } },
         owner: { select: { id: true, name: true, email: true, dept: true } },
-        template: { select: { id: true, name: true } },
         monthCards: { orderBy: { month: 'desc' }, select: { id: true, month: true, status: true } },
+        projects: {
+          orderBy: [{ status: 'asc' }, { startDate: 'asc' }, { name: 'asc' }],
+          include: {
+            owner: { select: { id: true, name: true, designation: true } },
+            _count: { select: { tasks: true } },
+            // Same summary the list route builds, because this is the response
+            // the retainer screen draws its project cards from — and a card
+            // that cannot say how its work is going is a card nobody opens.
+            tasks: {
+              where: { deletedAt: null },
+              select: { status: true, dueDate: true, monthCard: { select: { month: true } } },
+            },
+          },
+        },
       },
     });
 
@@ -375,13 +433,417 @@ retainersRouter.get('/:id', requirePermission('work.all'), async (req: AuthReque
       return;
     }
 
+    /*
+     * And the work that belongs to no project.
+     *
+     * Not a leftover bucket — it is where every month-card task on this
+     * retainer currently sits, so the screen needs to be able to draw it as a
+     * card beside the real projects with the same figures on it. Computed here
+     * rather than counted on the client, which only ever sees one month and
+     * would put a month's number on a card that opens onto all of them.
+     */
+    const unfiledTasks = await prisma.task.findMany({
+      where: {
+        deletedAt: null,
+        retainerProjectId: null,
+        monthCard: { retainerId: retainer.id },
+      },
+      select: { status: true, dueDate: true, monthCard: { select: { month: true } } },
+    });
+    const unfiled = summariseProject({ tasks: unfiledTasks });
+
     res.json({
       success: true,
       retainer: {
         ...retainer,
+        projects: retainer.projects.map(summariseProject),
+        unfiled,
         monthlyValue: canSeeFigures ? retainer.monthlyValue : null,
       },
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── 2b. Projects inside a retainer ──────────────────────────────────────────
+//
+// A named piece of work — a campaign, a film, an always-on stream — that the
+// team's tasks hang under. It holds no money: the retainer is already billed
+// monthly through its month cards, and a second value here would be the same
+// work counted twice.
+//
+// Gated on `work.all` rather than `company.write`: naming a campaign is work
+// organisation, not a commercial change to the contract. Stopping a retainer
+// or changing its monthly value is the thing that needs the heavier switch.
+
+const retainerProjectSchema = z.object({
+  name: z.string().trim().min(1, 'Give the project a name').max(120),
+  startDate: z.string().min(1).optional().nullable(),
+  /** Null is not 'unknown' — it is what ongoing means. */
+  endDate: z.string().min(1).optional().nullable(),
+  ownerId: z.string().min(1).optional().nullable(),
+  status: z.nativeEnum(RetainerProjectStatus).optional(),
+  description: z.string().trim().max(2000).optional().nullable(),
+});
+
+/** The retainer, confirmed to be this caller's. Every route below starts here. */
+async function findRetainer(id: string, organizationId: string) {
+  return prisma.retainer.findFirst({ where: { id, organizationId }, select: { id: true } });
+}
+
+/** Cancelled work is not outstanding work, and not finished work either. */
+const COUNTED = (s: string) => s !== 'CANCELLED';
+
+/**
+ * A project row, with how its work is going.
+ *
+ * The same shape wherever a project is listed, so the card on the retainer and
+ * the header inside it cannot disagree about how many tasks are open. `months`
+ * is what makes a campaign legible: a Diwali push that runs October into
+ * November says so, rather than looking like two unrelated piles.
+ */
+function summariseProject<
+  T extends { tasks: { status: string; dueDate: Date; monthCard: { month: string } | null }[] },
+>(p: T) {
+  const today = new Date().toISOString().slice(0, 10);
+  const counted = p.tasks.filter((t) => COUNTED(t.status));
+  const done = counted.filter((t) => t.status === 'DONE').length;
+  const late = counted.filter(
+    (t) => t.status !== 'DONE' && new Date(t.dueDate).toISOString().slice(0, 10) < today,
+  ).length;
+  const months = [...new Set(p.tasks.map((t) => t.monthCard?.month).filter(Boolean))].sort() as string[];
+  const { tasks: _dropped, ...rest } = p;
+  return {
+    ...rest,
+    taskCounts: {
+      total: counted.length,
+      done,
+      open: counted.length - done,
+      late,
+      cancelled: p.tasks.length - counted.length,
+      // Nought of nought is not 0% done, it is nothing to be a share of.
+      donePercent: counted.length > 0 ? Math.round((done / counted.length) * 100) : null,
+    },
+    months,
+  };
+}
+
+retainersRouter.get('/:id/projects', requirePermission('work.all'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const retainer = await findRetainer(String(req.params.id), orgId);
+    if (!retainer) {
+      res.status(404).json({ success: false, error: 'Retainer not found' });
+      return;
+    }
+    const projects = await prisma.retainerProject.findMany({
+      where: { retainerId: retainer.id },
+      orderBy: [{ status: 'asc' }, { startDate: 'asc' }, { name: 'asc' }],
+      include: {
+        owner: { select: { id: true, name: true, designation: true } },
+        _count: { select: { tasks: true } },
+        /*
+         * Enough of each task to say how the project is going.
+         *
+         * The list is now the way into a retainer's work rather than a caption
+         * above it, so a row has to carry more than a name: how much is done,
+         * how much is late, and which months it actually touches. Statuses and
+         * due dates only — the rows themselves are fetched when you open one.
+         */
+        tasks: {
+          where: { deletedAt: null },
+          select: { status: true, dueDate: true, monthCard: { select: { month: true } } },
+        },
+      },
+    });
+
+    res.json({ success: true, projects: projects.map(summariseProject) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/retainers/:id/projects/:projectId/tasks — one project, opened.
+ *
+ * Across every month it touches, not just the one on screen. That is the whole
+ * reason a retainer project exists: a campaign running October into November
+ * was some tasks in one month card and some more in the next, with nothing
+ * joining them. Filtering this to the selected month would put the work back
+ * in the two piles the feature was built to join.
+ *
+ * `:projectId` may be the literal `none`, which answers with the month's work
+ * that belongs to no project. Every task in this database is currently one of
+ * those, so a screen that could only reach work through a project would be a
+ * screen with nothing on it.
+ */
+retainersRouter.get(
+  '/:id/projects/:projectId/tasks',
+  requirePermission('work.all'),
+  async (req: AuthRequest, res: Response, next) => {
+    try {
+      const orgId = req.user!.organizationId;
+      const retainer = await findRetainer(String(req.params.id), orgId);
+      if (!retainer) {
+        res.status(404).json({ success: false, error: 'Retainer not found' });
+        return;
+      }
+      const projectId = String(req.params.projectId);
+      const unfiled = projectId === 'none';
+
+      let project = null;
+      if (!unfiled) {
+        project = await prisma.retainerProject.findFirst({
+          where: { id: projectId, retainerId: retainer.id },
+          include: {
+            owner: { select: { id: true, name: true, designation: true } },
+            _count: { select: { tasks: true } },
+            tasks: {
+              where: { deletedAt: null },
+              select: { status: true, dueDate: true, monthCard: { select: { month: true } } },
+            },
+          },
+        });
+        if (!project) {
+          res.status(404).json({ success: false, error: 'Project not found on this retainer' });
+          return;
+        }
+      }
+
+      const tasks = await prisma.task.findMany({
+        where: {
+          deletedAt: null,
+          // Scoped through the month card's retainer, so "none" cannot reach
+          // another client's unfiled work.
+          monthCard: { retainerId: retainer.id },
+          ...(unfiled ? { retainerProjectId: null } : { retainerProjectId: projectId }),
+        },
+        include: {
+          ...TASK_PEOPLE,
+          monthCard: { select: { id: true, month: true, status: true } },
+          retainerProject: { select: { id: true, name: true, status: true } },
+        },
+        orderBy: [{ dueDate: 'asc' }],
+      });
+
+      /*
+       * Grouped by the month that bills them, newest first.
+       *
+       * The month is not decoration here — it is which card the task's cost and
+       * profit land on, and a closed month is one the screen must not offer to
+       * edit. Carrying the status through means the drill-in knows that without
+       * a second request per group.
+       */
+      const byMonth = new Map<string, { month: string; status: string; tasks: unknown[] }>();
+      for (const t of tasks) {
+        const key = t.monthCard?.month ?? 'unfiled';
+        const group = byMonth.get(key) ?? {
+          month: key,
+          status: t.monthCard?.status ?? 'OPEN',
+          tasks: [],
+        };
+        group.tasks.push(withPeople(t));
+        byMonth.set(key, group);
+      }
+
+      res.json({
+        success: true,
+        project: project ? summariseProject(project) : null,
+        months: [...byMonth.values()].sort((a, b) => b.month.localeCompare(a.month)),
+        total: tasks.length,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+retainersRouter.post('/:id/projects', requirePermission('work.all'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const parsed = retainerProjectSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
+    const orgId = req.user!.organizationId;
+    const retainer = await findRetainer(String(req.params.id), orgId);
+    if (!retainer) {
+      res.status(404).json({ success: false, error: 'Retainer not found' });
+      return;
+    }
+
+    const { name, startDate, endDate, ownerId, description } = parsed.data;
+    if (startDate && endDate && new Date(endDate) < new Date(startDate)) {
+      res.status(400).json({ success: false, error: 'The end date is before the start date' });
+      return;
+    }
+    if (ownerId && !(await prisma.user.findFirst({ where: { id: ownerId, organizationId: orgId, active: true } }))) {
+      res.status(404).json({ success: false, error: 'That owner is not on this team' });
+      return;
+    }
+
+    const project = await prisma.retainerProject.create({
+      data: {
+        retainerId: retainer.id,
+        name,
+        startDate: startDate ? new Date(startDate) : null,
+        endDate: endDate ? new Date(endDate) : null,
+        ownerId: ownerId || null,
+        description: description || null,
+      },
+      include: { owner: { select: { id: true, name: true, designation: true } }, _count: { select: { tasks: true } } },
+    });
+
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'Retainer',
+        entityId: retainer.id,
+        actorId: req.user!.userId,
+        verb: 'retainer_project_created',
+        payload: { projectId: project.id, name: project.name },
+      },
+    });
+
+    res.status(201).json({ success: true, project });
+  } catch (error) {
+    next(error);
+  }
+});
+
+retainersRouter.patch('/:id/projects/:projectId', requirePermission('work.all'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const parsed = retainerProjectSchema.partial().safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
+    const orgId = req.user!.organizationId;
+    // Scoped through the retainer, not matched on the id in the URL alone.
+    const existing = await prisma.retainerProject.findFirst({
+      where: {
+        id: String(req.params.projectId),
+        retainerId: String(req.params.id),
+        retainer: { organizationId: orgId },
+      },
+    });
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'Project not found on this retainer' });
+      return;
+    }
+
+    const d = parsed.data;
+    const start = d.startDate !== undefined ? (d.startDate ? new Date(d.startDate) : null) : existing.startDate;
+    const end = d.endDate !== undefined ? (d.endDate ? new Date(d.endDate) : null) : existing.endDate;
+    if (start && end && end < start) {
+      res.status(400).json({ success: false, error: 'The end date is before the start date' });
+      return;
+    }
+    if (d.ownerId && !(await prisma.user.findFirst({ where: { id: d.ownerId, organizationId: orgId, active: true } }))) {
+      res.status(404).json({ success: false, error: 'That owner is not on this team' });
+      return;
+    }
+
+    const project = await prisma.retainerProject.update({
+      where: { id: existing.id },
+      data: {
+        ...(d.name !== undefined ? { name: d.name } : {}),
+        ...(d.startDate !== undefined ? { startDate: start } : {}),
+        ...(d.endDate !== undefined ? { endDate: end } : {}),
+        ...(d.ownerId !== undefined ? { ownerId: d.ownerId || null } : {}),
+        ...(d.status !== undefined ? { status: d.status } : {}),
+        ...(d.description !== undefined ? { description: d.description || null } : {}),
+      },
+      include: { owner: { select: { id: true, name: true, designation: true } }, _count: { select: { tasks: true } } },
+    });
+
+    res.json({ success: true, project });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Removing a project does not remove the work done under it.
+ *
+ * Its tasks stay on their month card — which is where the month's cost and
+ * profit are counted from — and simply stop being grouped. Deleting the tasks
+ * with it would silently change a closed month's figures.
+ */
+retainersRouter.delete('/:id/projects/:projectId', requirePermission('work.all'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const existing = await prisma.retainerProject.findFirst({
+      where: {
+        id: String(req.params.projectId),
+        retainerId: String(req.params.id),
+        retainer: { organizationId: orgId },
+      },
+      include: { _count: { select: { tasks: true } } },
+    });
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'Project not found on this retainer' });
+      return;
+    }
+
+    /*
+     * The default is the floor, and a floor cannot be removed.
+     *
+     * Every retainer task names a project, so deleting the one that catches
+     * the monthly baseline would leave the next roll with nowhere to put its
+     * work. The database refuses it too.
+     */
+    if (existing.isDefault) {
+      res.status(400).json({
+        success: false,
+        error: 'This is where the retainer’s monthly work goes, so it cannot be removed. Rename it instead.',
+      });
+      return;
+    }
+
+    /*
+     * Its tasks move rather than losing their project.
+     *
+     * The foreign key is ON DELETE SET NULL, which now breaks the CHECK saying
+     * a month-card task names a project — the delete would fail with a
+     * constraint error nobody could read. They go to the default, which is
+     * what "the campaign is over, the work still happened" actually means.
+     */
+    const fallback = await prisma.retainerProject.findFirst({
+      where: { retainerId: existing.retainerId, isDefault: true },
+      select: { id: true, name: true },
+    });
+    if (!fallback) {
+      res.status(409).json({
+        success: false,
+        error: 'That retainer has no default project to move the work into',
+      });
+      return;
+    }
+    await prisma.task.updateMany({
+      where: { retainerProjectId: existing.id },
+      data: { retainerProjectId: fallback.id },
+    });
+
+    await prisma.retainerProject.delete({ where: { id: existing.id } });
+
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'Retainer',
+        entityId: String(req.params.id),
+        actorId: req.user!.userId,
+        verb: 'retainer_project_deleted',
+        payload: {
+          name: existing.name,
+          tasksMoved: existing._count.tasks,
+          movedTo: fallback.name,
+        },
+      },
+    });
+
+    res.json({ success: true, tasksMoved: existing._count.tasks, movedTo: fallback.name });
   } catch (error) {
     next(error);
   }
@@ -397,7 +859,11 @@ retainersRouter.get('/:id/month-cards/:month', requirePermission('work.all'), as
     const month = String(req.params.month);
 
     const monthCard = await prisma.monthCard.findFirst({
-      where: { retainerId: id, month },
+      // Scoped through the retainer, not just matched on the id in the URL.
+      // Without the organisation here this route answered for ANY retainer id
+      // — the whole cockpit (company, tasks, costs, allocations, invoice and
+      // its payments) for a month belonging to somebody else's organisation.
+      where: { retainerId: id, month, retainer: { organizationId: orgId } },
       include: {
         retainer: {
           include: {
@@ -415,6 +881,9 @@ retainersRouter.get('/:id/month-cards/:month', requirePermission('work.all'), as
               orderBy: { assignedAt: 'asc' },
               select: { user: { select: { id: true, name: true, designation: true } } },
             },
+            // What this task is FOR, as opposed to which month it is
+            // billed in. The month's list groups by it.
+            retainerProject: { select: { id: true, name: true, status: true } },
           },
           orderBy: { dueDate: 'asc' },
         },
@@ -443,6 +912,18 @@ retainersRouter.get('/:id/month-cards/:month', requirePermission('work.all'), as
     // Direct (Cost rows) plus people cost (allocations) — brief §8.
     const directCostsTotal =
       monthCard.costs.reduce((acc, c) => acc + Number(c.amount), 0) + allocationCost(monthCard.allocations);
+
+    /*
+     * Whether anybody has said what the month cost.
+     *
+     * With no cost rows and no allocations the arithmetic gives profit = the
+     * whole fee and a 100% margin, and the card showed exactly that — a month
+     * nobody had costed read as the best month the studio had ever had. The
+     * figure is not wrong so much as not a figure yet, so the screen is told
+     * which it is rather than being left to guess from a zero.
+     */
+    const costBasis: 'recorded' | 'none' =
+      monthCard.costs.length + monthCard.allocations.length === 0 ? 'none' : 'recorded';
 
     // Same server-side mask as the list endpoint: revenue, every cost line,
     // and every invoice/payment amount need money.figures, not just work.all.
@@ -474,6 +955,7 @@ retainersRouter.get('/:id/month-cards/:month', requirePermission('work.all'), as
         tasks: monthCard.tasks.map((t) => ({ ...t, assignees: t.assignees.map((a) => a.user) })),
         revenue: canSeeFigures ? monthCard.revenue : null,
         directCostsTotal: canSeeFigures ? directCostsTotal : null,
+        costBasis,
         costs: maskedCosts,
         invoice: maskedInvoice,
         allocations: maskedAllocations,
@@ -487,6 +969,71 @@ retainersRouter.get('/:id/month-cards/:month', requirePermission('work.all'), as
     next(error);
   }
 });
+
+/**
+ * POST /api/retainers/:id/month-cards/:month/reopen — put a closed month back
+ * into play.
+ *
+ * The other half of making a closed month actually closed. Refusing every
+ * write without offering a way through would only mean the real correction —
+ * a cost that genuinely belongs to August — never gets recorded at all, and
+ * the number stays wrong for a better-sounding reason.
+ *
+ * So: deliberate, gated on setup.admin rather than cost.enter, and it leaves a
+ * row saying who did it and why. Reopening is the exception; the refusal is
+ * the rule.
+ */
+retainersRouter.post(
+  '/:id/month-cards/:month/reopen',
+  requirePermission('setup.admin'),
+  async (req: AuthRequest, res: Response, next) => {
+    try {
+      const orgId = req.user!.organizationId;
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+      if (reason.length < 3) {
+        res.status(400).json({ success: false, error: 'Say why the month is being reopened' });
+        return;
+      }
+
+      const card = await prisma.monthCard.findFirst({
+        where: {
+          retainerId: String(req.params.id),
+          month: String(req.params.month),
+          retainer: { organizationId: orgId },
+        },
+        select: { id: true, status: true, month: true },
+      });
+      if (!card) {
+        res.status(404).json({ success: false, error: 'MonthCard not found' });
+        return;
+      }
+      if (card.status !== 'CLOSED') {
+        res.status(400).json({ success: false, error: 'That month is already open' });
+        return;
+      }
+
+      await prisma.monthCard.update({
+        where: { id: card.id },
+        data: { status: 'OPEN', closedAt: null },
+      });
+
+      await prisma.activity.create({
+        data: {
+          organizationId: orgId,
+          entityType: 'MonthCard',
+          entityId: card.id,
+          actorId: req.user!.userId,
+          verb: 'month_card_reopened',
+          payload: { month: card.month, reason },
+        },
+      });
+
+      res.json({ success: true, month: card.month });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 // ── 4. Trigger Month Roll ───────────────────────────────────────────────────
 
@@ -506,9 +1053,8 @@ retainersRouter.post('/roll-month', requirePermission('setup.admin'), async (req
 // schema since the first version and nothing has ever written them, so a
 // retainer, once started, ran for ever. That is not a cosmetic gap:
 //
-//   · the 1st-of-month roll opens a new month card and spawns that template's
-//     tasks for every ACTIVE retainer, so a departed client kept generating
-//     real work on real people's screens;
+//   · the 1st-of-month roll opens a new month card for every ACTIVE retainer,
+//     so a departed client kept billing;
 //   · MRR sums `monthlyValue` over every ACTIVE retainer, so the figure never
 //     came down when somebody left;
 //   · the forecast drops a retainer after its `renewalDate`, but three of six
@@ -613,6 +1159,190 @@ retainersRouter.post('/:id/stop', requirePermission('company.write'), async (req
       closedMonths: worked.map((c) => c.month),
       removedMonths: empty.map((c) => c.month),
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── 6. Edit a Retainer ──────────────────────────────────────────────────────
+//
+// A retainer could be started and stopped but never corrected, so a rate
+// agreed at ₹50,000 and typed as ₹5,000 was permanent — and it is the number
+// MRR, the forecast and every month card are built from.
+//
+// Two things are deliberately not editable here:
+//
+//   · `companyId`, for the same reason a proposal cannot be moved — the
+//     one-live-retainer-per-client rule and every figure already recorded
+//     against this client are built on it. Stop it and start the right one.
+//   · `renewalDate`, because it is derived (§8): startDate + termMonths, the
+//     same formula the create route uses. Accepting it here would make two
+//     writers for one value, and the one that skipped the formula would win.
+//
+// `status` is not here either — POST /:id/stop is how a retainer ends, and it
+// has real work to do (closing or removing the open month card) that a status
+// write would skip.
+
+const retainerEditSchema = z
+  .object({
+    monthlyValue: z.number().positive('Monthly value must be positive').optional(),
+    startDate: z.string().min(1).optional(),
+    termMonths: z.number().int().positive().nullable().optional(),
+    ownerId: z.string().min(1).optional(),
+    /*
+     * What a new rate does to the month you are part way through.
+     *
+     * A month card snapshots `revenue` when it is opened, so a rate change is
+     * otherwise invisible until the next roll — and the current month would be
+     * invoiced at the old rate with nothing saying so. Defaulting to true
+     * treats a re-rate as effective now, which is the usual case; send false
+     * when it starts next month. Either way the response says how many cards
+     * moved, and a card that is closed or already invoiced is never touched.
+     */
+    repriceOpenMonth: z.boolean().optional().default(true),
+  })
+  .refine(
+    (v) =>
+      v.monthlyValue !== undefined ||
+      v.startDate !== undefined ||
+      v.termMonths !== undefined ||
+      v.ownerId !== undefined,
+    { message: 'Nothing to change' },
+  );
+
+retainersRouter.patch('/:id', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const parsed = retainerEditSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
+
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+    const { monthlyValue, startDate, termMonths, ownerId, repriceOpenMonth } = parsed.data;
+
+    const existing = await prisma.retainer.findFirst({
+      where: { id, organizationId: orgId },
+      include: { company: { select: { name: true } } },
+    });
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'Retainer not found' });
+      return;
+    }
+
+    // A stopped retainer's months are closed and its figures have settled into
+    // MRR history and the forecast. Editing it would move numbers for months
+    // that are already reported.
+    if (existing.status !== RetainerStatus.ACTIVE) {
+      res.status(400).json({
+        success: false,
+        error: 'This retainer has been stopped. Start a new one rather than editing a closed arrangement.',
+      });
+      return;
+    }
+
+    if (ownerId !== undefined && ownerId !== existing.ownerId) {
+      const owner = await prisma.user.findFirst({
+        where: { id: ownerId, organizationId: orgId, active: true },
+        select: { id: true },
+      });
+      if (!owner) {
+        res.status(404).json({ success: false, error: 'That person is not on the team' });
+        return;
+      }
+    }
+
+    const nextStart = startDate !== undefined ? new Date(startDate) : existing.startDate;
+    if (startDate !== undefined && Number.isNaN(nextStart.getTime())) {
+      res.status(400).json({ success: false, error: 'Start date is not a real date' });
+      return;
+    }
+
+    // Moving the start forward past a month that has already been opened would
+    // leave a card for a month the retainer now says had not begun.
+    if (startDate !== undefined) {
+      const earliest = await prisma.monthCard.findFirst({
+        where: { retainerId: id },
+        orderBy: { month: 'asc' },
+        select: { month: true },
+      });
+      if (earliest && monthKey(nextStart) > earliest.month) {
+        res.status(400).json({
+          success: false,
+          error: `This retainer already has a month card for ${earliest.month}. The start date cannot be later than the first month worked.`,
+        });
+        return;
+      }
+    }
+
+    // Derived, never accepted: same formula as the create route.
+    const nextTerm = termMonths !== undefined ? termMonths : existing.termMonths;
+    const nextRenewal =
+      nextTerm && nextTerm > 0
+        ? new Date(nextStart.getFullYear(), nextStart.getMonth() + nextTerm, nextStart.getDate())
+        : null;
+
+    const rateChanged = monthlyValue !== undefined && Number(existing.monthlyValue) !== monthlyValue;
+    const startChanged = startDate !== undefined && nextStart.getTime() !== existing.startDate.getTime();
+    const termChanged = termMonths !== undefined && (termMonths ?? null) !== (existing.termMonths ?? null);
+    const ownerChanged = ownerId !== undefined && ownerId !== existing.ownerId;
+
+    // Resending what is already there writes nothing — no row, no month-card
+    // reprice, and no "edited" line in the client's activity feed for a save
+    // that changed no figure.
+    if (!rateChanged && !startChanged && !termChanged && !ownerChanged) {
+      const { company: _company, ...unchanged } = existing;
+      res.json({ success: true, retainer: unchanged, repricedCards: 0 });
+      return;
+    }
+
+    const { retainer, repricedCards } = await prisma.$transaction(async (tx) => {
+      const updated = await tx.retainer.update({
+        where: { id },
+        data: {
+          ...(rateChanged ? { monthlyValue } : {}),
+          ...(startChanged ? { startDate: nextStart } : {}),
+          ...(termChanged ? { termMonths } : {}),
+          ...(startChanged || termChanged ? { renewalDate: nextRenewal } : {}),
+          ...(ownerChanged ? { ownerId } : {}),
+        },
+      });
+
+      let count = 0;
+      if (rateChanged && repriceOpenMonth) {
+        // Open and not yet invoiced only. A closed month has been worked and a
+        // billed one has gone to the client; both are records, not intentions.
+        const result = await tx.monthCard.updateMany({
+          where: { retainerId: id, status: 'OPEN', invoiceId: null },
+          data: { revenue: monthlyValue },
+        });
+        count = result.count;
+      }
+
+      await tx.activity.create({
+        data: {
+          organizationId: orgId,
+          entityType: 'Retainer',
+          entityId: id,
+          actorId: req.user!.userId,
+          verb: 'retainer_edited',
+          payload: {
+            companyName: existing.company.name,
+            ...(rateChanged
+              ? { monthlyValueFrom: Number(existing.monthlyValue), monthlyValueTo: monthlyValue, repricedCards: count }
+              : {}),
+            ...(startChanged ? { startDateTo: nextStart.toISOString().slice(0, 10) } : {}),
+            ...(termChanged ? { termMonthsFrom: existing.termMonths, termMonthsTo: termMonths } : {}),
+            ...(ownerChanged ? { ownerFrom: existing.ownerId, ownerTo: ownerId } : {}),
+          },
+        },
+      });
+
+      return { retainer: updated, repricedCards: count };
+    });
+
+    res.json({ success: true, retainer, repricedCards });
   } catch (error) {
     next(error);
   }

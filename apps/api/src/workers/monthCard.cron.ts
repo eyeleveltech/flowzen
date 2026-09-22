@@ -1,7 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../utils/logger.js';
-import { TaskWorkType, TaskStatus } from '@prisma/client';
 import { hasStartedBy } from '../utils/retainerMonths.js';
+import { defaultProjectId } from '../services/retainerProjects.js';
 
 /**
  * 1st-of-the-month Retainer MonthCard creation and task schedule engine.
@@ -42,14 +42,12 @@ export async function rollActiveRetainers(specifiedMonth?: string): Promise<{ cr
   const activeRetainers = await prisma.retainer.findMany({
     where: { status: 'ACTIVE' },
     include: {
-      template: true,
       owner: true,
       company: true,
     },
   });
 
   let createdCards = 0;
-  let createdTasks = 0;
 
   for (const retainer of activeRetainers) {
     /*
@@ -80,10 +78,6 @@ export async function rollActiveRetainers(specifiedMonth?: string): Promise<{ cr
     }
 
     // Create MonthCard
-    const [targetYear, targetMonthStr] = targetMonth.split('-');
-    const y = parseInt(targetYear, 10);
-    const m = parseInt(targetMonthStr, 10) - 1; // 0-indexed month
-
     const monthCard = await prisma.monthCard.create({
       data: {
         retainerId: retainer.id,
@@ -109,47 +103,26 @@ export async function rollActiveRetainers(specifiedMonth?: string): Promise<{ cr
       },
     });
 
-    // Spawn template tasks if retainer has linked template
-    if (retainer.template && Array.isArray(retainer.template.items)) {
-      const items = retainer.template.items as Array<{
-        title: string;
-        dept?: string;
-        dayOfMonth?: number;
-      }>;
-
-      for (const [index, item] of items.entries()) {
-        const day = item.dayOfMonth || 5;
-        const dueDate = new Date(y, m, Math.min(day, 28));
-
-        await prisma.task.create({
-          data: {
-            organizationId: retainer.organizationId,
-            title: `${item.title} (${retainer.company.name})`,
-            workType: TaskWorkType.MONTH_CARD,
-            workId: monthCard.id,
-            monthCardId: monthCard.id,
-            assigneeId: retainer.ownerId,
-            createdById: retainer.ownerId,
-            // My Work and a person's load read the join, so a template-spawned
-            // task without a row here would appear on nobody's screen.
-            assignees: { create: { userId: retainer.ownerId } },
-            dueDate,
-            status: TaskStatus.TODO,
-            // §8 "Task type average": median for tasks sharing the same
-            // templateItemId — this is what lets the aging rule group
-            // template-spawned tasks by what they actually are, not just
-            // who they're assigned to. `index` into the template's own
-            // items array is the stable-enough identity of "this line".
-            templateItemId: `${retainer.templateId}:${index}`,
-          },
-        });
-        createdTasks++;
-      }
-    }
+    /*
+     * The card opens empty, and the team fills it.
+     *
+     * Task templates used to put a month's work on it automatically — a
+     * blueprint per retainer, each line spawning its tasks on a fixed day.
+     * They were removed: nobody was going to maintain a second place where
+     * work is defined, and a template nobody edits drifts from what the
+     * client actually buys until it is worse than nothing.
+     *
+     * What the roll still guarantees is the part that mattered: the card
+     * itself appears, with its revenue, on the 1st, for every active retainer
+     * — so nobody has to remember to open the month.
+     */
+    await defaultProjectId(retainer);
   }
 
-  logger.info(`✅ 1st-of-month roll complete: Created ${createdCards} MonthCards and ${createdTasks} tasks.`);
-  return { createdCards, createdTasks };
+  logger.info(`✅ 1st-of-month roll complete: opened ${createdCards} month card(s).`);
+  // `createdTasks` is kept in the shape for the admin roll endpoint that
+  // reports it, and is always nought now that nothing is spawned.
+  return { createdCards, createdTasks: 0 };
 }
 
 /**

@@ -16,6 +16,7 @@
 import { useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { ApiError, api, formatMoney, type Company } from '@/lib/api-v2';
+import { useTeamMembers } from '@/hooks/queries';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
@@ -53,7 +54,7 @@ const blankRow = (): CustomRow => ({ label: '', percent: '' });
 
 export function NewProjectModal({ open, onClose, onCreated, prefill }: Props) {
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [team, setTeam] = useState<{ id: string; name: string; dept: string }[]>([]);
+  const team = useTeamMembers();
   const [companyId, setCompanyId] = useState('');
   const [name, setName] = useState('');
   const [quotedValue, setQuotedValue] = useState('');
@@ -85,7 +86,6 @@ export function NewProjectModal({ open, onClose, onCreated, prefill }: Props) {
     if (!prefill) {
       void api.companies.list().then((res) => setCompanies(res.companies)).catch(() => {});
     }
-    void api.team.members().then((res) => setTeam(res.members)).catch(() => {});
   }, [open, prefill]);
 
   const quoted = Number(quotedValue) || 0;

@@ -21,7 +21,6 @@ import { projectsRouter } from './routes/projects.js';
 import { teamRouter } from './routes/team.js';
 import { sseRouter } from './sse.js';
 import { notificationsRouter } from './routes/notifications.js';
-import { dashboardRouter } from './routes/dashboard.js';
 import { configRouter } from './routes/config.js';
 import { activitiesRouter } from './routes/activities.js';
 import { invoicesRouter } from './routes/invoices.js';
@@ -32,13 +31,13 @@ import { allocationsRouter } from './routes/allocations.js';
 import { usersRouter } from './routes/users.js';
 import { profileRouter } from './routes/profile.js';
 import { searchRouter } from './routes/search.js';
-import { taskTemplatesRouter } from './routes/taskTemplates.js';
 import { assetsRouter } from './routes/assets.js';
 import { startAgencyHealthScanner } from './workers/scanner.cron.js';
 import { startMonthCardScheduler } from './workers/monthCard.cron.js';
 import { startAllocationScheduler } from './workers/allocation.cron.js';
 import { startRecurringCostScheduler } from './workers/recurringCost.cron.js';
 import { startMondayBriefScheduler } from './workers/brief.cron.js';
+import { startAlertDigestScheduler } from './workers/alertDigest.cron.js';
 
 const app = express();
 
@@ -98,7 +97,6 @@ app.use('/api/profile', profileRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/stream', sseRouter);
 app.use('/api/notifications', notificationsRouter);
-app.use('/api/dashboard', dashboardRouter);
 app.use('/api/config', configRouter);
 app.use('/api/activities', activitiesRouter);
 app.use('/api/invoices', invoicesRouter);
@@ -106,7 +104,6 @@ app.use('/api/forecast', forecastRouter);
 app.use('/api/brief', briefRouter);
 app.use('/api/costs', costsRouter);
 app.use('/api/allocations', allocationsRouter);
-app.use('/api/task-templates', taskTemplatesRouter);
 app.use('/api/assets', assetsRouter);
 
 // Start background health rules scanner
@@ -127,6 +124,10 @@ startRecurringCostScheduler();
 // Mail the Monday brief to everyone with reports.read — the brief itself
 // was already real, just never scheduled or sent anywhere.
 startMondayBriefScheduler();
+
+// §16: "In app first. Email digest for alerts." The in-app half existed; an
+// alert only reached somebody who happened to open the app.
+startAlertDigestScheduler();
 
 app.use((_req, res) => {
   res.status(404).json({ success: false, error: 'Not found' });

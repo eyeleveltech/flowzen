@@ -236,7 +236,6 @@ export interface Retainer {
   status: RetainerStatus;
   stoppedAt?: string | null;
   stopReason?: string | null;
-  templateId?: string | null;
   company?: { id: string; name: string };
   owner?: { id: string; name: string };
   monthCards?: MonthCard[];
@@ -335,7 +334,6 @@ export interface Task {
   waitingSince?: string | null;
   waitingTotalMinutes: number;
   reopenCount: number;
-  templateItemId?: string | null;
   notes?: string | null;
   /** Shared with Project, so both compare on one "needs attention" scale. */
   priority: Priority;

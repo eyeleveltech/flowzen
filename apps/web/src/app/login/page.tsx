@@ -94,15 +94,17 @@ export default function LoginPage() {
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-sm font-medium text-body">Password</label>
                 {/*
-                  No self-service reset: the link has to reach the person, and
-                  the deployment cannot assume its mail server will. An admin
-                  issues one from the Team screen — "Password link" beside each
-                  person — and it is emailed AND shown to them to hand over
-                  (§3.12).
+                  §16: "Password reset by email." This used to read "Ask an
+                  admin", because there was no self-service route — which out
+                  of hours meant waiting until morning. An admin can still
+                  issue a link from Team; this is the person asking themselves.
                 */}
-                <span className="text-xs text-secondary" title="An admin can issue a reset link from the Team screen">
-                  Locked out? Ask an admin
-                </span>
+                <Link
+                  href="/forgot-password"
+                  className="text-xs text-secondary underline-offset-2 hover:text-primary hover:underline"
+                >
+                  Forgot your password?
+                </Link>
               </div>
               <div className="relative">
                 <input

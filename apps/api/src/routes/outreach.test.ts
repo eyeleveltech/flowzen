@@ -53,7 +53,7 @@ beforeEach(() => {
   (prisma.outreachEntry.count as any).mockResolvedValue(0);
   (prisma.outreachEntry.groupBy as any).mockResolvedValue([
     { status: 'NOT_CONTACTED', _count: 1 },
-    { status: 'CONTACTED', _count: 2 },
+    { status: 'FOLLOW_UP', _count: 2 },
     { status: 'DEAD', _count: 1 },
   ]);
 });
@@ -85,10 +85,10 @@ describe('which rows the list carries', () => {
   });
 
   it('still narrows by status on top of that', async () => {
-    await request(app).get('/api/outreach?status=REPLIED').set(...auth());
+    await request(app).get('/api/outreach?status=INTERESTED').set(...auth());
 
     const where = (prisma.outreachEntry.findMany as any).mock.calls.at(-1)[0].where;
-    expect(where.status).toBe('REPLIED');
+    expect(where.status).toBe('INTERESTED');
     expect(where.promotedCompanyId).toBeNull();
   });
 });
@@ -133,10 +133,10 @@ describe('the numbers on the status chips', () => {
      * many would I get if I pressed this", which is the only question a
      * number on a filter chip is ever asked.
      */
-    const res = await request(app).get('/api/outreach?status=CONTACTED').set(...auth());
+    const res = await request(app).get('/api/outreach?status=FOLLOW_UP').set(...auth());
 
     expect(res.status).toBe(200);
-    expect(res.body.counts).toEqual({ ALL: 4, NOT_CONTACTED: 1, CONTACTED: 2, REPLIED: 0, DEAD: 1 });
+    expect(res.body.counts).toEqual({ ALL: 4, NOT_CONTACTED: 1, FOLLOW_UP: 2, MEETING: 0, INTERESTED: 0, DEAD: 1 });
 
     const facetWhere = (prisma.outreachEntry.groupBy as any).mock.calls.at(-1)[0].where;
     expect(facetWhere.status, 'the facet must not filter by the thing it is counting').toBeUndefined();

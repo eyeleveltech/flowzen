@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { ShowMore } from '@/components/ui/show-more';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { plural } from '@/lib/utils';
@@ -82,12 +83,6 @@ export default function CompaniesPage() {
   const { user } = useAuthStore();
   const [filter, setFilter] = useState<CompanyFilter>('ALL');
   /** A failed load, said out loud instead of only in the console. */
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [companies, setCompanies] = useState<CompanyItem[]>([]);
-  const [summary, setSummary] = useState<Summary>({ clients: 0, prospects: 0, past: 0, total: 0, outreachCount: 0, contractedMonthly: null, retainerCount: 0 });
-  const [counts, setCounts] = useState<Counts>({ ALL: 0, CLIENT: 0, PROSPECT: 0, PAST: 0 });
-  const [loading, setLoading] = useState(true);
-  const [total, setTotal] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const router = useRouter();
@@ -101,50 +96,75 @@ export default function CompaniesPage() {
    * flip through, and losing your place to see the next 200 is worse than a
    * long page.
    */
+  const queryClient = useQueryClient();
   const [pages, setPages] = useState(1);
-  const [loadingMore, setLoadingMore] = useState(false);
 
   // A new tab starts again at the first page.
   useEffect(() => { setPages(1); }, [filter]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
+  /**
+   * The list, its tab counts and the summary strip — one cached query.
+   *
+   * This was a `useCallback` writing into six pieces of `useState` from a
+   * `useEffect`, so every arrival on this screen refetched from scratch and
+   * rendered through an empty state first. The query key carries the tab and
+   * how many pages have been pulled in, so going back to a tab you already
+   * opened is served from cache while it revalidates.
+   *
+   * `keepPreviousData` is what stops "Load more" blanking the list: the rows
+   * already on screen stay put while the longer page is fetched.
+   */
+  const { data, isPending, isFetching, error } = useQuery({
+    queryKey: ['companies', filter, pages],
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
       const rows: CompanyItem[] = [];
-      let data: any = null;
+      let last: any = null;
       for (let p = 1; p <= pages; p++) {
         const params: Record<string, string> = { page: String(p) };
         if (filter !== 'ALL') params.status = filter;
         const res = await api.companies.list(params);
-        // api.companies.list returns Company[] directly, but our list endpoint returns { success, companies }
-        // Use type assertion
-        data = res as any;
-        rows.push(...(data.companies ?? (Array.isArray(data) ? data : [])));
+        // The list endpoint returns { success, companies, meta, summary, counts }
+        // rather than a bare array, so this does not auto-unwrap.
+        last = res as any;
+        rows.push(...(last.companies ?? (Array.isArray(last) ? last : [])));
       }
-      const list = rows;
-      setCompanies(list);
-      setTotal(data?.meta?.total ?? list.length);
+      return {
+        companies: rows,
+        total: last?.meta?.total ?? rows.length,
+        // Both of these come from the server precisely BECAUSE the rows above
+        // are filtered. Deriving them from the rows is the bug this page had:
+        // open a tab and every other tab reported itself empty, the tiles
+        // collapsed, and the outreach figure was a hardcoded 380 against 7.
+        summary: last?.summary as Summary | undefined,
+        counts: last?.counts as Counts | undefined,
+      };
+    },
+  });
 
-      // Both of these come from the server precisely BECAUSE the rows above
-      // are filtered. Deriving them from `list` is the bug this page had: open
-      // a tab and every other tab reported itself empty, the tiles collapsed,
-      // and the outreach figure was a hardcoded 380 against a real 7.
-      if (data.summary) setSummary(data.summary);
-      if (data.counts) setCounts(data.counts);
+  const companies = data?.companies ?? [];
+  const total = data?.total ?? 0;
+  const summary: Summary =
+    data?.summary ?? { clients: 0, prospects: 0, past: 0, total: 0, outreachCount: 0, contractedMonthly: null, retainerCount: 0 };
+  const counts: Counts = data?.counts ?? { ALL: 0, CLIENT: 0, PROSPECT: 0, PAST: 0 };
+  const loadError = error instanceof Error ? error.message : error ? 'Could not load the client list' : null;
+  const loading = isPending;
+  // Only the "Load more" button spins; the first load has its own empty state.
+  const loadingMore = isFetching && !isPending;
 
-      if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('create') === 'true') {
-        setCreateOpen(true);
-        router.replace('/companies');
-      }
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : 'Could not load the client list');
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
+  /** What the create/import flows call once they have changed something. */
+  const load = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['companies'] });
+  }, [queryClient]);
+
+  // Deep link from Quick Create. This used to sit inside the loader, so it
+  // re-ran on every refetch rather than once on arrival.
+  useEffect(() => {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('create') === 'true') {
+      setCreateOpen(true);
+      router.replace('/companies');
     }
-  }, [filter, pages, router]);
-
-  useEffect(() => { load(); }, [load]);
+  }, [router]);
 
   // The server already applied the tab. Filtering again here was harmless,
   // but it is the tell: this page believed `companies` was the whole list,
@@ -167,7 +187,7 @@ export default function CompaniesPage() {
             rendered its empty state and "the server is down" looked exactly
             like "you have nothing yet".
           */}
-          <ErrorNote onDismiss={() => setLoadError(null)}>{loadError}</ErrorNote>
+          <ErrorNote onDismiss={() => queryClient.resetQueries({ queryKey: ['companies', filter, pages] })}>{loadError}</ErrorNote>
         </div>
       )}
       {/* Page header */}
@@ -303,7 +323,7 @@ export default function CompaniesPage() {
             total={total}
             loading={loadingMore}
             noun="record"
-            onMore={() => { setLoadingMore(true); setPages((p) => p + 1); }}
+            onMore={() => setPages((p) => p + 1)}
           />
         )}
       </Card>

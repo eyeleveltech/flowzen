@@ -73,7 +73,20 @@ beforeEach(() => {
   });
   (prisma.task.findFirst as any).mockResolvedValue(OPEN_TASK);
   (prisma.task.update as any).mockImplementation(async ({ data }: any) => ({ ...OPEN_TASK, ...data }));
-  (prisma.task.create as any).mockImplementation(async ({ data }: any) => ({ ...OPEN_TASK, ...data, id: 'task-new' }));
+  /*
+   * The created row as Prisma returns it, join included.
+   *
+   * The route asks for TASK_PEOPLE and flattens the result, so a mock that
+   * answers with  — the WRITE shape, echoed back
+   * from  — is not what the real client hands back. Spreading data and
+   * stopping there made every create 500 in the tests and nowhere else.
+   */
+  (prisma.task.create as any).mockImplementation(async ({ data }: any) => ({
+    ...OPEN_TASK,
+    ...data,
+    id: 'task-new',
+    assignees: (data.assignees?.create ?? []).map((a: any) => ({ user: { id: a.userId, name: a.userId, designation: null } })),
+  }));
   (prisma.activity.create as any).mockResolvedValue({ id: 'act-1' });
   (prisma.user.findFirst as any).mockResolvedValue({ id: 'usr-head' });
   // Everybody asked for is on the team, unless a test says otherwise. One
@@ -230,7 +243,7 @@ describe('several people on one task', () => {
      */
     const res = await request(app)
       .post('/api/tasks')
-      .set(...auth('designer'))
+      .set(...auth('head'))
       .send({ title: 'Reel cutdowns', dueDate: '2026-09-09', assigneeIds: ['usr-des', 'usr-head'] });
 
     expect(res.status).toBe(201);
@@ -244,7 +257,7 @@ describe('several people on one task', () => {
     // same id twice is a form, not an attack.
     await request(app)
       .post('/api/tasks')
-      .set(...auth('designer'))
+      .set(...auth('head'))
       .send({ title: 'Statics', dueDate: '2026-09-09', assigneeIds: ['usr-des', 'usr-des', 'usr-head'] });
 
     const { data } = (prisma.task.create as any).mock.calls.at(-1)[0];
@@ -254,7 +267,7 @@ describe('several people on one task', () => {
   it('still accepts a single assigneeId, which is what every old caller sends', async () => {
     await request(app)
       .post('/api/tasks')
-      .set(...auth('designer'))
+      .set(...auth('head'))
       .send({ title: 'One person', dueDate: '2026-09-09', assigneeId: 'usr-head' });
 
     const { data } = (prisma.task.create as any).mock.calls.at(-1)[0];
@@ -267,7 +280,7 @@ describe('several people on one task', () => {
     // whole set every time.
     await request(app)
       .patch('/api/tasks/task-1')
-      .set(...auth('designer'))
+      .set(...auth('head'))
       .send({ assigneeIds: ['usr-head'] });
 
     const { data } = (prisma.task.update as any).mock.calls.at(-1)[0];
@@ -305,9 +318,12 @@ describe('who assigned it, who reviews it, and what kind of work it is', () => {
   });
 
   it('records who asked for the work, when it is somebody else', async () => {
+    // A Head, because naming somebody else as the person who asked is itself
+    // a work.team act — an employee recording their manager as the requester
+    // would be writing a fact about a conversation nobody can check.
     const res = await request(app)
       .post('/api/tasks')
-      .set(...auth('designer'))
+      .set(...auth('head'))
       .send({ title: 'Key visual', dueDate: '2026-09-09', assignedById: 'usr-head' });
 
     expect(res.status).toBe(201);
@@ -319,7 +335,7 @@ describe('who assigned it, who reviews it, and what kind of work it is', () => {
      * it would be handing out a permission — a person could name somebody
      * else and lose their own right to undo the task they just typed.
      */
-    expect(data.createdById).toBe('usr-des');
+    expect(data.createdById).toBe('usr-head');
   });
 
   it('falls back to whoever is typing', async () => {
@@ -362,5 +378,93 @@ describe('who assigned it, who reviews it, and what kind of work it is', () => {
       .send({ title: 'Key visual', dueDate: '2026-09-09', taskType: 'SOMETHING_ELSE' });
 
     expect(res.status).toBe(400);
+  });
+});
+
+// ── Who may put work on somebody else's plate ───────────────────────────────
+
+describe('assigning work to other people', () => {
+  /*
+   * §9 separates the two switches: `work.own` is "create my own tasks",
+   * `work.team` is "see and ASSIGN work for my people". Nothing enforced the
+   * difference — POST /tasks asked only for work.own and took `assigneeIds` at
+   * face value, so anybody signed in could drop a task onto anybody else's My
+   * Work and stamp a third person as the one who asked for it.
+   *
+   * That is not a leak. It is worse in its way: the person it lands on has no
+   * reason to doubt it.
+   */
+
+  it('lets an employee give themselves a task', async () => {
+    const res = await request(app)
+      .post('/api/tasks')
+      .set(...auth('designer'))
+      .send({ title: 'My own thing', dueDate: '2026-09-09', assigneeIds: ['usr-des'] });
+
+    expect(res.status).toBe(201);
+  });
+
+  it('refuses an employee putting one on somebody else', async () => {
+    const res = await request(app)
+      .post('/api/tasks')
+      .set(...auth('designer'))
+      .send({ title: 'For you', dueDate: '2026-09-09', assigneeIds: ['usr-head'] });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/only assign work to yourself/i);
+  });
+
+  it('refuses an employee adding somebody alongside themselves', async () => {
+    // The half-way case: naming yourself first does not make it your own work.
+    const res = await request(app)
+      .post('/api/tasks')
+      .set(...auth('designer'))
+      .send({ title: 'Both of us', dueDate: '2026-09-09', assigneeIds: ['usr-des', 'usr-other'] });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('refuses an employee naming somebody else as the one who asked', async () => {
+    const res = await request(app)
+      .post('/api/tasks')
+      .set(...auth('designer'))
+      .send({ title: 'They asked for it', dueDate: '2026-09-09', assignedById: 'usr-head' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/only record yourself/i);
+  });
+
+  it('lets a head assign to anybody', async () => {
+    const res = await request(app)
+      .post('/api/tasks')
+      .set(...auth('head'))
+      .send({ title: 'Please do this', dueDate: '2026-09-09', assigneeIds: ['usr-des', 'usr-other'] });
+
+    expect(res.status).toBe(201);
+  });
+
+  it('refuses an employee moving a task onto somebody else', async () => {
+    (prisma.taskAssignee.findMany as any).mockResolvedValue([{ userId: 'usr-des' }]);
+    const res = await request(app)
+      .patch('/api/tasks/task-1')
+      .set(...auth('designer'))
+      .send({ assigneeIds: ['usr-head'] });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('still lets them edit a shared task a manager put them on', async () => {
+    /*
+     * The case that makes the rule liveable. A manager puts two people on a
+     * task; one of them fixes the title. The form sends the assignees back
+     * untouched, and refusing that would lock somebody out of their own work.
+     */
+    (prisma.taskAssignee.findMany as any).mockResolvedValue([{ userId: 'usr-des' }, { userId: 'usr-head' }]);
+    const res = await request(app)
+      .patch('/api/tasks/task-1')
+      .set(...auth('designer'))
+      .send({ title: 'A better title', assigneeIds: ['usr-des', 'usr-head'] });
+
+    expect(res.status).toBe(200);
   });
 });

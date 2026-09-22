@@ -28,3 +28,31 @@ describe('amountInWords', () => {
     expect(amountInWords(100005)).toBe('Rupees One Lakh Five Only.');
   });
 });
+
+// CR-02 §7 — paise. A finished document is rounded to the rupee, so these
+// cases are the un-rounded figures a caller may legitimately pass.
+describe('amountInWords with paise', () => {
+  it('says the paise when there are any', () => {
+    expect(amountInWords(220000.5)).toBe('Rupees Two Lakh Twenty Thousand and Fifty Paise Only.');
+    expect(amountInWords(1234.75)).toBe('Rupees One Thousand Two Hundred Thirty Four and Seventy Five Paise Only.');
+    expect(amountInWords(99.01)).toBe('Rupees Ninety Nine and One Paise Only.');
+  });
+
+  it('stays exactly as before when the paise are zero', () => {
+    expect(amountInWords(35400.0)).toBe('Rupees Thirty Five Thousand Four Hundred Only.');
+  });
+
+  it('rounds binary float slop to paise before splitting the figure', () => {
+    // Three line items of 1573.33 sum to 4719.9899999999998 in a double, not
+    // 4719.99. Splitting that with a bare floor and remainder reads the paise
+    // off the slop; rounding to paise first is what makes the words agree with
+    // the figure printed above them.
+    let subtotal = 0;
+    for (let i = 0; i < 3; i += 1) subtotal += 1573.33;
+    expect(amountInWords(subtotal)).toBe('Rupees Four Thousand Seven Hundred Nineteen and Ninety Nine Paise Only.');
+  });
+
+  it('still reads as rupees when the whole part is zero', () => {
+    expect(amountInWords(0.5)).toBe('Rupees Zero and Fifty Paise Only.');
+  });
+});

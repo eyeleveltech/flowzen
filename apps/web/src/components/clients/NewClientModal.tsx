@@ -45,6 +45,7 @@
 import toast from 'react-hot-toast';
 import { useState, useEffect } from 'react';
 import { api, ApiError, type OrgConfig, type DuplicateVerdict } from '@/lib/api-v2';
+import { useConfig } from '@/hooks/queries';
 import { DuplicateNotice } from './DuplicateNotice';
 import { Modal, ScrollingModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
@@ -66,11 +67,9 @@ const inTwoDays = () => {
 export function NewClientModal({ onConfirm, onCancel }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [config, setConfig] = useState<OrgConfig | null>(null);
-
-  useEffect(() => {
-    api.config.get().then(setConfig).catch(console.error);
-  }, []);
+  // Shared, hour-cached. This modal refetched the whole org config every time
+  // it was opened, for a list of five sources that changes about never.
+  const { data: config } = useConfig();
 
   const [name, setName] = useState('');
   const [contactName, setContactName] = useState('');

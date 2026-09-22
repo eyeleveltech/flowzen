@@ -1,7 +1,6 @@
-import { describe, it, expect, beforeAll } from 'vitest';
-import { generateNextProformaNumber } from '../utils/documentNumber.js';
+import { describe, it, expect } from 'vitest';
 import { resolvePermissions, hasPermission, type UserSession } from '../middleware/auth.js';
-import { RolePreset, ProposalStage, CompanyStatus, CompanyVertical, CompanySource } from '@prisma/client';
+import { RolePreset, ProposalStage, CompanyStatus } from '@prisma/client';
 
 describe('Phase 2: Sales & CRM Engine Core Logic Tests', () => {
   const mockOrgId = 'org-test-eyelevel';

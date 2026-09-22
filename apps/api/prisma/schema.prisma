@@ -25,15 +25,20 @@ enum RolePreset {
 }
 
 model Organization {
-  id                 String @id @default(cuid())
+  id                 String   @id @default(cuid())
   name               String
-  proformaPrefix     String @default("EL/PI")
-  financialYearStart Int    @default(4) // April = 4
-  timezone           String @default("Asia/Kolkata")
-  currency           String @default("INR")
-  workingHoursStart  String @default("10:00")
-  workingHoursEnd    String @default("19:00")
-  workingDays        Int[]  @default([1, 2, 3, 4, 5, 6]) // Mon-Sat (0=Sun)
+  proformaPrefix     String   @default("EL/PI")
+  financialYearStart Int      @default(4) // April = 4
+  timezone           String   @default("Asia/Kolkata")
+  currency           String   @default("INR")
+  workingHoursStart  String   @default("10:00")
+  workingHoursEnd    String   @default("19:00")
+  workingDays        Int[]    @default([1, 2, 3, 4, 5, 6]) // Mon-Sat (0=Sun)
+  /// §14 — "Sundays and public holidays excluded". `workingDays` handled the
+  /// Sundays; nothing handled the holidays, so Pongal and Diwali counted as
+  /// working time and every elapsed figure was overstated. ISO "YYYY-MM-DD"
+  /// dates, because a public holiday is a specific day, not a weekday rule.
+  holidays           String[] @default([])
 
   // Organisation identity — Settings' own "Organisation" tab has always
   // collected these; there was nowhere real for them to land.
@@ -61,15 +66,61 @@ model Organization {
   // business raising it. Kept here, not hardcoded in the PDF template, so it
   // is one place to fix if the bank changes rather than a code change.
   contactEmail                String?
-  gstStateCode                String?  @default("33") // first 2 digits of GSTIN; decides CGST+SGST vs IGST. 33 = Tamil Nadu.
+  gstStateCode                String? @default("33") // first 2 digits of GSTIN; decides CGST+SGST vs IGST. 33 = Tamil Nadu.
   bankAccountHolderName       String?
   bankName                    String?
   bankBranch                  String?
   bankAccountNumber           String?
   bankIfscCode                String?
-  defaultPaymentTerms         String   @default("Immediate")
-  defaultProformaValidityDays Int      @default(30)
-  defaultTermsAndConditions   String[] @default(["Monthly retainer fee applicable", "Ad spend to be borne separately by the client", "Work execution begins upon confirmation and payment"])
+  defaultPaymentTerms         String  @default("Immediate")
+  defaultProformaValidityDays Int     @default(30)
+
+  /// §14 — "Stage probabilities ... All configurable in Setup." They were
+  /// hardcoded in two places and both disagreed with the brief's defaults
+  /// (30/60/85/90), which mattered because §8 computes weighted pipeline as
+  /// value × probability: every weighted figure on the board and the forecast
+  /// was built on numbers nothing authorised.
+  ///
+  /// Columns rather than a JSON blob so a bad value cannot be written, and so
+  /// the API and the web read the same typed shape. TALKING has no brief
+  /// default — a proposal only reaches the board at Proposal sent. Of the two
+  /// values the app already held for it (the board said 20, the forecast said
+  /// 10) it takes the lower: this number feeds a solvency verdict, and the
+  /// forecast must never report a surplus that exists only if deals land.
+  stageProbTalking          Int      @default(10)
+  stageProbProposalSent     Int      @default(30)
+  stageProbInNegotiation    Int      @default(60)
+  stageProbProformaIssued   Int      @default(85)
+  stageProbVerbalYes        Int      @default(90)
+  defaultTermsAndConditions String[] @default(["Monthly retainer fee applicable", "Ad spend to be borne separately by the client", "Work execution begins upon confirmation and payment"])
+
+  /// CR-02 §2 — the seller block. Entered once here, printed on every proforma
+  /// and invoice, and snapshotted onto each document as it is raised so that
+  /// editing this later never rewrites a document already sent to a client.
+  ///
+  /// The trading name in the header is `name` above; this is the registered
+  /// entity on the tax document, which is often not the same string.
+  legalName          String?
+  pan                String?
+  /// A scanned signature, held as a data URI rather than a file path: there is
+  /// no object storage in this deployment, the image is a few KB, and a PDF
+  /// renderer that reads it out of the same row it reads the address from
+  /// cannot go looking for a file that is not on the box it is running on.
+  signatureImage     String?  @db.Text
+  /// The declaration printed above the signature on a TAX INVOICE. A proforma
+  /// prints the fixed statutory line instead (services/documentModel.ts) —
+  /// "This is not a tax invoice." is not something anyone should edit away.
+  declarationText    String?  @db.Text
+  /// The HSN/SAC codes this business actually bills under, so a line item
+  /// offers them rather than asking someone to remember six digits (CR-02 §5).
+  sacCodes           String[] @default([])
+  /// Whether to print the "For <legal name> / Authorised Signatory" box at the
+  /// foot of a document. Nothing in GST law requires it — Rule 46 asks for a
+  /// signature or digital signature, which a document sent by email over a
+  /// signed covering mail already satisfies in practice — so it is a choice,
+  /// not a field. Defaults true because that is how every document raised
+  /// before this setting existed was printed.
+  showSignatureBlock Boolean  @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -82,7 +133,6 @@ model Organization {
   retainers       Retainer[]
   projects        Project[]
   tasks           Task[]
-  taskTemplates   TaskTemplate[]
   costs           Cost[]
   invoices        Invoice[]
   alerts          Alert[]
@@ -131,6 +181,7 @@ model User {
 
   organization         Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   ownedCompanies       Company[]          @relation("CompanyOwner")
+  retainerProjects     RetainerProject[]  @relation("RetainerProjectOwner")
   ownedProposals       Proposal[]         @relation("ProposalOwner")
   ownedOutreach        OutreachEntry[]    @relation("OutreachOwner")
   ownedRetainers       Retainer[]         @relation("RetainerOwner")
@@ -196,6 +247,12 @@ model Company {
   website        String?
   gstin          String?
   billingAddress String?         @db.Text
+  /// CR-02 §3. A code plus a name rather than either alone: the code is what
+  /// decides CGST+SGST vs IGST, and the name is what prints. Both, because
+  /// deriving the code from the GSTIN is exactly the bug this fixes — a client
+  /// with no GSTIN then reads as same-state and is charged the wrong tax.
+  stateName      String?
+  stateCode      String?
   lostReason     String?
   status         CompanyStatus   @default(PROSPECT)
   archivedAt     DateTime?
@@ -242,10 +299,21 @@ model Person {
   @@map("people")
 }
 
+/// Where a cold lead's conversation has actually got to.
+///
+/// The old set (NOT_CONTACTED / CONTACTED / REPLIED / DEAD) recorded EVENTS —
+/// it could tell you a call happened and never what to do next, which is why
+/// CONTACTED was a dead end. These five describe a conversation with a next
+/// action attached, so the list can answer "who do I call today".
+///
+/// FOLLOW_UP and MEETING both carry `nextActionDate`; see OutreachEntry.
+/// INTERESTED is the only status that unlocks promotion to a Company, and it
+/// means more than the REPLIED it replaces: met, happy, and asking for a quote.
 enum OutreachStatus {
   NOT_CONTACTED
-  CONTACTED
-  REPLIED
+  FOLLOW_UP
+  MEETING
+  INTERESTED
   DEAD
 }
 
@@ -257,6 +325,23 @@ model OutreachEntry {
   source            CompanySource   @default(OUTREACH)
   ownerId           String?
   status            OutreachStatus  @default(NOT_CONTACTED)
+  /// Who to ask for. Carried into the Person row on promotion.
+  contactPersonName String?
+  /// At least one of `phone` and `email` must be present — a name you cannot
+  /// reach is a note, not a lead. Enforced by the Zod schema on both write
+  /// paths and by a CHECK constraint (added NOT VALID, so the rows that
+  /// predate the rule are left alone).
+  phone             String?
+  email             String?
+  /// The latest call note. The full trail is in Activity — status changes
+  /// write one row each, so a lead followed up four times keeps four notes.
+  /// This column is what the row shows; it is not the history.
+  remarks           String?         @db.Text
+  /// One column, two meanings, set by the status: the day we agreed to call
+  /// back (FOLLOW_UP) or the day of the meeting (MEETING). Deliberately NOT
+  /// called `followUpDate` — it holds meeting dates too, and that name already
+  /// means something different on the company form.
+  nextActionDate    DateTime?       @db.Date
   promotedCompanyId String?         @unique
   importedAt        DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
@@ -313,6 +398,11 @@ model Proposal {
   lostReason          String?
   probabilityOverride Int?
   verbalYesAt         DateTime?
+  /// §16: soft delete only. A proposal logged by mistake leaves; one that
+  /// was won or lost stays, because the funnel, the win rate and the
+  /// handoff to a project or retainer all read outcomes that a delete
+  /// would silently rewrite.
+  deletedAt           DateTime?
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
@@ -410,13 +500,59 @@ model Proforma {
   /// proforma would need this per-row instead.
   sacCode            String?
   terms              String             @db.Text
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  invoice      Invoice?     @relation(fields: [invoiceId], references: [id])
-  milestone    Milestone?   @relation(fields: [milestoneId], references: [id])
+  /// -- CR-02 - printed document ------------------------------------------
+  ///
+  /// Everything below is a SNAPSHOT, written when the document is raised and
+  /// rewritten only while it is still editable. Once a document is paid or
+  /// cancelled these values are what it said on the day it was sent, whatever
+  /// has happened to the company or the org settings since.
+  ///
+  /// All nullable because rows predating CR-02 have none. A document with a
+  /// null subtotal is rendered from its legacy fields instead, so an old
+  /// proforma still prints exactly as it always did.
+
+  /// The buyer state, snapshotted alongside the name and address above.
+  billingStateName   String?
+  billingStateCode   String?
+  /// CR-02 section 4. Captured separately from the buyer state, because it is
+  /// the place of supply -- not the billing address -- that decides CGST+SGST
+  /// vs IGST, and the two genuinely differ (a Chennai-registered client taking
+  /// delivery of an event in Bengaluru). Defaulted from the buyer, never
+  /// silently: the form fills it in and lets it be changed.
+  placeOfSupplyState String?
+  placeOfSupplyCode  String?
+  /// Derived from placeOfSupplyCode against the seller state code at raise
+  /// time, and stored, so a change to the org GSTIN cannot retroactively turn
+  /// an issued CGST+SGST document into an IGST one.
+  supplyType         SupplyType?
+  /// CR-02 section 4 -- [{ label, value }]. An open list (PO number,
+  /// reference, project name) rather than fixed columns, because the next one
+  /// nobody has thought of yet should not be a migration.
+  customFields       Json?
+  /// CR-02 section 9 -- the seller block exactly as printed. Org settings are
+  /// read live everywhere else; here they are frozen, or editing the bank
+  /// details would silently change what an already-issued invoice claims.
+  sellerSnapshot     Json?
+  subtotal           Decimal?    @db.Decimal(12, 2)
+  cgstAmount         Decimal?    @db.Decimal(12, 2)
+  sgstAmount         Decimal?    @db.Decimal(12, 2)
+  igstAmount         Decimal?    @db.Decimal(12, 2)
+  /// The difference to the nearest whole rupee. Signed: it is as often -0.40
+  /// as +0.40, and a document that only ever rounds up does not balance.
+  roundOff           Decimal?    @db.Decimal(12, 2)
+  total              Decimal?    @db.Decimal(12, 2)
+  amountInWords      String?
+  notes              String?     @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoice      Invoice?           @relation(fields: [invoiceId], references: [id])
+  milestone    Milestone?         @relation(fields: [milestoneId], references: [id])
+  lineItems    DocumentLineItem[]
 
   // sourceId is a polymorphic pointer, not a foreign key — the same pattern
   // Alert and Activity already use elsewhere in this schema. It used to carry
@@ -453,22 +589,74 @@ model Retainer {
   status           RetainerStatus @default(ACTIVE)
   stoppedAt        DateTime?
   stopReason       String?
-  templateId       String?
   /// Set when this retainer is created from a won proposal (§11.1 step 11) —
   /// same handoff pattern as Project.sourceProposalId.
   sourceProposalId String?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  owner        User          @relation("RetainerOwner", fields: [ownerId], references: [id])
-  template     TaskTemplate? @relation(fields: [templateId], references: [id])
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company      Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  owner        User              @relation("RetainerOwner", fields: [ownerId], references: [id])
   monthCards   MonthCard[]
+  projects     RetainerProject[]
 
   @@index([organizationId, status])
   @@index([companyId])
   @@map("retainers")
+}
+
+enum RetainerProjectStatus {
+  ACTIVE
+  DONE
+}
+
+/// A named piece of work inside a retainer.
+///
+/// A retainer client does not buy "six tasks in September" — they buy a
+/// Diwali campaign, an always-on content stream, a brand film. Those run
+/// across month boundaries, and until now there was nowhere to say so: tasks
+/// hung directly off a MonthCard, so a campaign spanning October and November
+/// was some tasks in one month and some more in the next with nothing joining
+/// them.
+///
+/// It carries NO money, deliberately. The retainer is already paid monthly
+/// through its month cards; giving this a value would bill the same work
+/// twice and put a second revenue figure into every report. That is also why
+/// this is its own table rather than a nullable-money variant of Project —
+/// Project means one-off work sold for a quoted value, with milestones and
+/// its own invoices, and none of that is true here. Two tables that cannot
+/// be confused beat one table with a column that decides which thing it is.
+model RetainerProject {
+  id          String                @id @default(cuid())
+  retainerId  String
+  name        String
+  /// Both nullable: a campaign has dates, an always-on stream does not, and
+  /// a null end date is what "ongoing" means rather than a date far away.
+  startDate   DateTime?             @db.Date
+  endDate     DateTime?             @db.Date
+  /// Who is answerable for it. Nullable because the retainer already has an
+  /// owner, and naming one per piece of work is useful, not required.
+  ownerId     String?
+  status      RetainerProjectStatus @default(ACTIVE)
+  description String?               @db.Text
+  /// The one every retainer has, and the one its work falls into when nothing
+  /// else is chosen.
+  ///
+  /// A retainer task must belong to a project — there is no such thing as
+  /// ungrouped retainer work any more — so something has to catch the monthly
+  /// baseline: anything created without a project named. Exactly one per retainer, created with
+  /// the retainer itself, and it cannot be deleted while it is the default.
+  isDefault   Boolean               @default(false)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  retainer Retainer @relation(fields: [retainerId], references: [id], onDelete: Cascade)
+  owner    User?    @relation("RetainerProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  tasks    Task[]
+
+  @@index([retainerId, status])
+  @@map("retainer_projects")
 }
 
 enum MonthCardStatus {
@@ -499,22 +687,6 @@ model MonthCard {
   @@map("month_cards")
 }
 
-model TaskTemplate {
-  id             String    @id @default(cuid())
-  organizationId String
-  name           String
-  items          Json // Array<{ title: string, dept: string, dayOfMonth: number, count?: number }>
-  // §16: "soft delete only... nothing is ever hard deleted by a user." Set
-  // instead of a real prisma delete; every read filters it out.
-  deletedAt      DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  retainers    Retainer[]
-
-  @@map("task_templates")
-}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // 5. PROJECTS & MILESTONES
@@ -614,7 +786,7 @@ enum TaskWorkType {
 // that were actually finished are not — see tasks.ts/team.ts for where
 // that exclusion is applied.
 /// Which kind of work a task is, using the same names the team is split into
-/// (User.dept and the task templates' per-item `dept`). Deliberately the
+/// (User.dept). Deliberately the
 /// department vocabulary rather than a new one: a studio that already says
 /// "that's a Design job" does not need to learn a second word for it.
 enum TaskType {
@@ -647,9 +819,9 @@ enum TaskStatus {
 /// once — the same figure means a different thing per person and per company,
 /// and this is the seam where that distinction lives.
 model TaskAssignee {
-  id       String   @id @default(cuid())
-  taskId   String
-  userId   String
+  id         String   @id @default(cuid())
+  taskId     String
+  userId     String
   assignedAt DateTime @default(now())
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
@@ -666,23 +838,30 @@ enum WaitingOn {
 }
 
 model Task {
-  id             String       @id @default(cuid())
-  organizationId String
-  title          String
-  workType       TaskWorkType
-  workId         String?
-  monthCardId    String?
-  projectId      String?
+  id                String       @id @default(cuid())
+  organizationId    String
+  title             String
+  workType          TaskWorkType
+  workId            String?
+  monthCardId       String?
+  projectId         String?
+  /// Which piece of retainer work this task is part of.
+  ///
+  /// Set ALONGSIDE monthCardId, never instead of it. The month card is which
+  /// month the task is billed and costed in; this is what the task is FOR.
+  /// A campaign running October into November is one project whose tasks sit
+  /// in two different month cards, and both facts have to survive.
+  retainerProjectId String?
   /// The lead. Kept alongside `assignees` rather than replaced by it: forty
   /// reads across nine files ask "whose task is this", a task always has
   /// somebody answerable for it, and a nullable set is a worse answer to that
   /// question than a column. Always also present in `assignees`.
-  assigneeId     String
+  assigneeId        String
   /// Who typed it in. Always the caller, never chosen — `canRemove` grants
   /// deleting a task to whoever created it, so a picker here would be a
   /// permission anybody could hand to anybody. For who ASKED for the work,
   /// see `assignedById`.
-  createdById    String
+  createdById       String
   /// Who handed the work over.
   ///
   /// This used to be `createdById`, which is only the same person when the
@@ -693,13 +872,13 @@ model Task {
   /// Nullable only because 83 rows existed before the column did; they were
   /// backfilled from `createdById` and every write since sets it, defaulting
   /// to whoever is typing.
-  assignedById   String?
+  assignedById      String?
   /// Who checks it before it counts as done. Optional: most tasks are not
   /// reviewed, and pretending otherwise would put a required picker on every
   /// creation form.
-  reviewerId     String?
-  taskType       TaskType?
-  dueDate        DateTime     @db.Date
+  reviewerId        String?
+  taskType          TaskType?
+  dueDate           DateTime     @db.Date
 
   assignedAt          DateTime   @default(now())
   completedAt         DateTime?
@@ -709,7 +888,6 @@ model Task {
   waitingSince        DateTime?
   waitingTotalMinutes Int        @default(0)
   reopenCount         Int        @default(0)
-  templateItemId      String?
   notes               String?    @db.Text
   // §16: soft delete only, nothing hard deleted by a user. A task entered by
   // mistake leaves; a task somebody worked stays and gets Cancelled instead,
@@ -719,19 +897,24 @@ model Task {
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  assignee     User         @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  creator      User         @relation("TaskCreator", fields: [createdById], references: [id])
-  assignedBy   User?        @relation("TaskAssignedBy", fields: [assignedById], references: [id])
-  reviewer     User?        @relation("TaskReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
-  assignees    TaskAssignee[]
-  monthCard    MonthCard?   @relation(fields: [monthCardId], references: [id], onDelete: Cascade)
-  project      Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignee        User             @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  creator         User             @relation("TaskCreator", fields: [createdById], references: [id])
+  assignedBy      User?            @relation("TaskAssignedBy", fields: [assignedById], references: [id])
+  reviewer        User?            @relation("TaskReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  assignees       TaskAssignee[]
+  monthCard       MonthCard?       @relation(fields: [monthCardId], references: [id], onDelete: Cascade)
+  project         Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// SetNull, not Cascade: deleting a piece of retainer work must not delete
+  /// the tasks that were done under it. They stay on their month card, which
+  /// is where the month's cost and profit are counted from.
+  retainerProject RetainerProject? @relation(fields: [retainerProjectId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, assigneeId, status])
   @@index([dueDate, status])
   @@index([monthCardId])
   @@index([projectId])
+  @@index([retainerProjectId])
   @@map("tasks")
 }
 
@@ -846,20 +1029,125 @@ model Invoice {
   paidAt         DateTime?     @db.Date
   proformaId     String?       @unique
   projectId      String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  proforma     Proforma?    @relation
-  monthCard    MonthCard?   @relation
+  /// The buyer block, snapshotted at entry -- the same four fields, under the
+  /// same names, as Proforma carries, so one renderer serves both.
+  billingName        String?
+  billingContactName String?
+  billingAddress     String?   @db.Text
+  gstin              String?
+  gstApplicable      Boolean   @default(true)
+  gstRatePercent     Int       @default(18)
+  poNumber           String?
+  poDate             DateTime? @db.Date
+  /// This document's own terms. Nullable, unlike Proforma.terms, because an
+  /// invoice recorded before CR-02 has none and falls back to the org list.
+  terms              String?   @db.Text
+
+  /// -- CR-02 - printed document ------------------------------------------
+  ///
+  /// Everything below is a SNAPSHOT, written when the document is raised and
+  /// rewritten only while it is still editable. Once a document is paid or
+  /// cancelled these values are what it said on the day it was sent, whatever
+  /// has happened to the company or the org settings since.
+  ///
+  /// All nullable because rows predating CR-02 have none. A document with a
+  /// null subtotal is rendered from its legacy fields instead, so an old
+  /// proforma still prints exactly as it always did.
+
+  /// The buyer state, snapshotted alongside the name and address above.
+  billingStateName   String?
+  billingStateCode   String?
+  /// CR-02 section 4. Captured separately from the buyer state, because it is
+  /// the place of supply -- not the billing address -- that decides CGST+SGST
+  /// vs IGST, and the two genuinely differ (a Chennai-registered client taking
+  /// delivery of an event in Bengaluru). Defaulted from the buyer, never
+  /// silently: the form fills it in and lets it be changed.
+  placeOfSupplyState String?
+  placeOfSupplyCode  String?
+  /// Derived from placeOfSupplyCode against the seller state code at raise
+  /// time, and stored, so a change to the org GSTIN cannot retroactively turn
+  /// an issued CGST+SGST document into an IGST one.
+  supplyType         SupplyType?
+  /// CR-02 section 4 -- [{ label, value }]. An open list (PO number,
+  /// reference, project name) rather than fixed columns, because the next one
+  /// nobody has thought of yet should not be a migration.
+  customFields       Json?
+  /// CR-02 section 9 -- the seller block exactly as printed. Org settings are
+  /// read live everywhere else; here they are frozen, or editing the bank
+  /// details would silently change what an already-issued invoice claims.
+  sellerSnapshot     Json?
+  subtotal           Decimal?    @db.Decimal(12, 2)
+  cgstAmount         Decimal?    @db.Decimal(12, 2)
+  sgstAmount         Decimal?    @db.Decimal(12, 2)
+  igstAmount         Decimal?    @db.Decimal(12, 2)
+  /// The difference to the nearest whole rupee. Signed: it is as often -0.40
+  /// as +0.40, and a document that only ever rounds up does not balance.
+  roundOff           Decimal?    @db.Decimal(12, 2)
+  total              Decimal?    @db.Decimal(12, 2)
+  amountInWords      String?
+  notes              String?     @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project      Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  proforma     Proforma?          @relation
+  monthCard    MonthCard?         @relation
   payments     Payment[]
+  lineItems    DocumentLineItem[]
 
   @@unique([organizationId, number])
   @@index([organizationId, status])
   @@index([companyId])
   @@map("invoices")
+}
+
+/// Whether a supply is within the seller's own state or across a border. The
+/// whole of CR-02 section 6 turns on this one distinction.
+enum SupplyType {
+  INTRA
+  INTER
+}
+
+/// CR-02 section 5 -- one row of a document's items table.
+///
+/// The spec asked for a polymorphic (documentType, documentId) pair. This uses
+/// two nullable foreign keys instead, with a constraint that exactly one is
+/// set: a real key gets cascade delete and referential integrity for free,
+/// where a loose uuid gets orphan rows the day a document is deleted. Which
+/// kind of document a row belongs to is then a fact about which column is
+/// filled, rather than a second copy of that fact that can disagree with it.
+model DocumentLineItem {
+  id          String   @id @default(cuid())
+  proformaId  String?
+  invoiceId   String?
+  /// 1, 2, 3 ... in print order. Assigned by the server from array position on
+  /// every write, never sent by the client, so deleting row 2 renumbers the
+  /// rest instead of leaving a gap.
+  serialNo    Int
+  particulars String   @db.Text
+  /// Three decimal places: agency work is billed in halves and quarters of a
+  /// day often enough that two is not always enough.
+  units       Decimal  @db.Decimal(12, 3)
+  unitCost    Decimal  @db.Decimal(12, 2)
+  hsnSac      String?
+  /// units x unitCost, computed server-side and stored. Stored rather than
+  /// derived on read because it is part of the frozen document: a rounding
+  /// rule that changes later must not change what an issued invoice says.
+  amount      Decimal  @db.Decimal(12, 2)
+  gstRate     Int      @default(18)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  proforma Proforma? @relation(fields: [proformaId], references: [id], onDelete: Cascade)
+  invoice  Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([proformaId, serialNo])
+  @@index([invoiceId, serialNo])
+  @@map("document_line_items")
 }
 
 model Payment {

@@ -6,6 +6,7 @@ import { CostType, CostPaidBy, CostTreatment, TaskWorkType } from '@prisma/clien
 import { parsePagination } from '../utils/query.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
+import { monthCardRefusal } from '../utils/monthCardOpen.js';
 
 export const costsRouter = Router();
 
@@ -241,6 +242,9 @@ async function checkWorkLinks(
       select: { id: true },
     });
     if (!card) return 'That month card is not one of yours';
+    // And a closed month has already had its profit reported.
+    const closed = await monthCardRefusal(links.monthCardId, 'Entering a cost against it');
+    if (closed) return closed;
   }
   return null;
 }
@@ -346,6 +350,98 @@ costsRouter.patch(
 );
 
 /**
+ * PATCH /api/costs/:id — Correct a cost record
+ *
+ * There was no way to fix one. A cost could be entered and confirmed and
+ * soft-deleted, but a mistyped amount could only be deleted and re-entered,
+ * which loses who entered it and when — so in practice the wrong figure stayed
+ * and skewed that month's margin for good.
+ *
+ * Deliberately narrow: what the entry form collects, and nothing that would
+ * move the cost to a different month or a different piece of work. Re-filing a
+ * cost somewhere else is deleting it and entering it there, which is what the
+ * activity trail should show.
+ */
+const editCostSchema = z.object({
+  category: z.string().min(1).optional(),
+  vendor: z.string().min(1).optional(),
+  amount: z.number().positive().optional(),
+  incurredAt: z.string().optional(),
+  committedNotPaid: z.boolean().optional(),
+  paidBy: z.nativeEnum(CostPaidBy).optional(),
+  treatment: z.nativeEnum(CostTreatment).optional(),
+  recurring: z.boolean().optional(),
+  notes: z.string().optional().nullable(),
+});
+
+costsRouter.patch(
+  '/:id',
+  requirePermission('cost.enter'),
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const parsed = editCostSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+        return;
+      }
+      const orgId = req.user!.organizationId;
+      const costId = String(req.params.id);
+
+      const existing = await prisma.cost.findFirst({
+        where: { id: costId, organizationId: orgId, deletedAt: null },
+      });
+      if (!existing) {
+        res.status(404).json({ success: false, error: 'Cost record not found' });
+        return;
+      }
+
+      const closed = await monthCardRefusal(existing.monthCardId, 'Changing a cost on it');
+      if (closed) {
+        res.status(400).json({ success: false, error: closed });
+        return;
+      }
+
+      const d = parsed.data;
+      const cost = await prisma.cost.update({
+        where: { id: costId },
+        data: {
+          ...(d.category !== undefined ? { category: d.category } : {}),
+          ...(d.vendor !== undefined ? { vendor: d.vendor } : {}),
+          ...(d.amount !== undefined ? { amount: d.amount } : {}),
+          ...(d.incurredAt !== undefined ? { incurredAt: new Date(d.incurredAt) } : {}),
+          ...(d.committedNotPaid !== undefined ? { committedNotPaid: d.committedNotPaid } : {}),
+          ...(d.paidBy !== undefined ? { paidBy: d.paidBy } : {}),
+          ...(d.treatment !== undefined ? { treatment: d.treatment } : {}),
+          ...(d.recurring !== undefined ? { recurring: d.recurring } : {}),
+          ...(d.notes !== undefined ? { notes: d.notes } : {}),
+        },
+        include: { enteredBy: { select: { id: true, name: true } } },
+      });
+
+      // §16: every change to a figure leaves a row. The old amount is the part
+      // worth keeping — it is what makes a later "why did August move?" answerable.
+      await prisma.activity.create({
+        data: {
+          organizationId: orgId,
+          actorId: req.user!.userId,
+          entityType: 'Cost',
+          entityId: costId,
+          verb: 'cost_updated',
+          payload: {
+            was: { amount: Number(existing.amount), vendor: existing.vendor, category: existing.category },
+            now: { amount: Number(cost.amount), vendor: cost.vendor, category: cost.category },
+          },
+        },
+      });
+
+      res.json({ success: true, cost });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
  * DELETE /api/costs/:id — Remove a cost record
  *
  * Soft delete — §16: "Soft delete only... nothing is ever hard deleted by a
@@ -368,6 +464,12 @@ costsRouter.delete(
 
       if (!existing) {
         res.status(404).json({ success: false, error: 'Cost record not found' });
+        return;
+      }
+
+      const closed = await monthCardRefusal(existing.monthCardId, 'Removing a cost from it');
+      if (closed) {
+        res.status(400).json({ success: false, error: closed });
         return;
       }
 

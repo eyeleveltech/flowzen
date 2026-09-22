@@ -1,0 +1,211 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import request from 'supertest';
+import { app } from '../index.js';
+import { prisma } from '../lib/prisma.js';
+import { signJwt } from '../utils/jwt.js';
+import { RolePreset } from '@prisma/client';
+
+/**
+ * Adding a company, and the four things the form asks for.
+ *
+ * ─── What this used to do with them ─────────────────────────────────────────
+ *
+ * The form's own header calls its fields "either free or load-bearing":
+ * contact and phone, city, source, and a follow-up date it describes as "the
+ * reason the lead ever gets called again". Three of the four were accepted by
+ * the validator, destructured by the handler, and then never written.
+ *
+ *   phone          only survived if a contact NAME was typed too, because
+ *                  contact details live on Person and no Person was created
+ *   sourceId       nothing read it, so every company was stored as OUTREACH
+ *                  whatever was picked
+ *   followUpDate   there is no such column anywhere in the schema
+ *
+ * The field that exists to stop a lead being forgotten guaranteed it.
+ *
+ * ─── And the duplicate override ─────────────────────────────────────────────
+ *
+ * `force` was destructured and never read, and the refusal came back as a bare
+ * sentence rather than the `{ action, matches, canForce }` the client reads —
+ * so a near-name warning could not be got past, and the modal could not say
+ * what it had clashed with.
+ */
+
+const BD = {
+  id: 'usr-bd',
+  preset: RolePreset.BD,
+  permissions: ['work.own', 'company.read', 'company.write', 'pipeline.read'],
+};
+
+const auth = () =>
+  [
+    'Authorization',
+    `Bearer ${signJwt({
+      userId: BD.id,
+      organizationId: 'org-1',
+      email: 'bd@eyelevel.local',
+      preset: BD.preset,
+      permissions: [...BD.permissions],
+    })}`,
+  ] as const;
+
+/** Captures what the transaction wrote, without a database. */
+let written: { company?: any; person?: any; proposal?: any; task?: any };
+
+beforeEach(() => {
+  written = {};
+  (prisma.user.findUnique as any).mockResolvedValue({
+    id: BD.id,
+    organizationId: 'org-1',
+    name: 'Naif',
+    email: 'bd@eyelevel.local',
+    preset: BD.preset,
+    permissions: [...BD.permissions],
+    active: true,
+    sessionsValidFrom: null,
+  });
+
+  // No existing companies, and no exact-name clash, unless a test says so.
+  (prisma.company.findMany as any).mockResolvedValue([]);
+  (prisma.company.findUnique as any).mockResolvedValue(null);
+  (prisma.activity.create as any).mockResolvedValue({});
+
+  (prisma.$transaction as any).mockImplementation(async (fn: any) =>
+    fn({
+      company: {
+        create: vi.fn(async ({ data }: any) => {
+          written.company = data;
+          return { id: 'co-new', ...data };
+        }),
+      },
+      person: {
+        create: vi.fn(async ({ data }: any) => {
+          written.person = data;
+          return { id: 'per-new', ...data };
+        }),
+      },
+      proposal: {
+        create: vi.fn(async ({ data }: any) => {
+          written.proposal = data;
+          return { id: 'prop-new', ...data };
+        }),
+      },
+      task: {
+        create: vi.fn(async ({ data }: any) => {
+          written.task = data;
+          return { id: 'task-new', ...data };
+        }),
+      },
+    }),
+  );
+});
+
+const create = (body: Record<string, unknown>) =>
+  request(app)
+    .post('/api/companies')
+    .set(...auth())
+    .send({ name: 'Acme Foods', vertical: 'D2C', ...body });
+
+describe('the fields the form actually asks for', () => {
+  it('stores the source that was picked, not OUTREACH', async () => {
+    const res = await create({ sourceId: 'REFERRAL' });
+    expect(res.status).toBe(201);
+    expect(written.company.source).toBe('REFERRAL');
+  });
+
+  it('still accepts the enum directly, for a caller that is not the form', async () => {
+    const res = await create({ source: 'NETWORK' });
+    expect(res.status).toBe(201);
+    expect(written.company.source).toBe('NETWORK');
+  });
+
+  it('ignores a source id that is not a real one instead of crashing', async () => {
+    const res = await create({ sourceId: 'nonsense' });
+    expect(res.status).toBe(201);
+    expect(written.company.source).toBe('OUTREACH');
+  });
+
+  it('keeps a phone given without a contact name', async () => {
+    // The common case: somebody reads you a number. This used to vanish.
+    const res = await create({ phone: '98765 43210' });
+    expect(res.status).toBe(201);
+    expect(written.person).toBeDefined();
+    expect(written.person.phone).toBe('98765 43210');
+    // Named after the company, since no person's name was given.
+    expect(written.person.name).toBe('Acme Foods');
+  });
+
+  it('prefers the contact block when both are filled', async () => {
+    const res = await create({ phone: '11111', contact: { name: 'Priya', phone: '22222' } });
+    expect(res.status).toBe(201);
+    expect(written.person.name).toBe('Priya');
+    expect(written.person.phone).toBe('22222');
+  });
+
+  it('writes no person at all when neither was given', async () => {
+    const res = await create({});
+    expect(res.status).toBe(201);
+    expect(written.person).toBeUndefined();
+  });
+
+  it('raises the follow-up as a real task for the owner', async () => {
+    const res = await create({ followUpDate: '2026-10-01' });
+    expect(res.status).toBe(201);
+    expect(written.task).toBeDefined();
+    expect(written.task.title).toBe('Follow up — Acme Foods');
+    expect(written.task.assigneeId).toBe(BD.id);
+    expect(new Date(written.task.dueDate).toISOString().slice(0, 10)).toBe('2026-10-01');
+    // Without the join row the task belongs to nobody and never reaches My Work.
+    expect(written.task.assignees).toEqual({ create: { userId: BD.id } });
+    expect(res.body.data.followUpTaskId).toBe('task-new');
+  });
+
+  it('raises no task when no date was given', async () => {
+    const res = await create({});
+    expect(res.status).toBe(201);
+    expect(written.task).toBeUndefined();
+  });
+});
+
+describe('the duplicate override', () => {
+  const SIMILAR = [{ id: 'co-1', name: 'Acme Foods Pvt Ltd', people: [] }];
+
+  it('refuses a similar name with the verdict the client reads', async () => {
+    (prisma.company.findMany as any).mockResolvedValue(SIMILAR);
+    const res = await create({});
+    expect(res.status).toBe(409);
+    // Under `data` — the client's ApiError reads a structured body from there,
+    // and spread at the top level it arrived as undefined.
+    expect(res.body.data.action).toBe('WARN');
+    expect(res.body.data.canForce).toBe(true);
+    expect(res.body.data.matches[0].name).toBe('Acme Foods Pvt Ltd');
+    expect(written.company).toBeUndefined();
+  });
+
+  it('lets that same name through once it is forced', async () => {
+    (prisma.company.findMany as any).mockResolvedValue(SIMILAR);
+    const res = await create({ force: true });
+    expect(res.status).toBe(201);
+    expect(written.company.name).toBe('Acme Foods');
+  });
+
+  it('will not let a matching phone through, forced or not', async () => {
+    // Same phone is the same company. There is no arguing with it.
+    (prisma.company.findMany as any).mockResolvedValue([
+      { id: 'co-2', name: 'Something Else', people: [{ email: null, phone: '+91 98765 43210' }] },
+    ]);
+    const res = await create({ phone: '9876543210', force: true });
+    expect(res.status).toBe(409);
+    expect(res.body.data.action).toBe('BLOCK');
+    expect(res.body.data.canForce).toBe(false);
+    expect(written.company).toBeUndefined();
+  });
+
+  it('still refuses an exact repeat, and says what it clashed with', async () => {
+    (prisma.company.findUnique as any).mockResolvedValue({ id: 'co-3', name: 'Acme Foods' });
+    const res = await create({ force: true });
+    expect(res.status).toBe(409);
+    expect(res.body.data.action).toBe('BLOCK');
+    expect(res.body.data.matches[0].id).toBe('co-3');
+  });
+});

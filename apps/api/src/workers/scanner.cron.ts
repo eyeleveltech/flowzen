@@ -2,8 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import { AlertSeverity, TaskWorkType, TaskStatus } from '@prisma/client';
 import { logger } from '../utils/logger.js';
 import { jobProfit, percentComplete, costRisk } from '../utils/jobProfit.js';
-import { calculateWorkingMinutes } from '../utils/workingHours.js';
-import { loadPercentage } from '../utils/workload.js';
+import { loadWorkCalendar, workingMinutesOn } from '../utils/workCalendar.js';
 import { computeTaskTypeMedians, taskTypeGroupKey } from '../utils/taskTypeMedian.js';
 import { rupees } from '../utils/money.js';
 
@@ -43,7 +42,7 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
   // and the actual follow-up task were all missing before; only a flat
   // 7-day/PROPOSAL_SENT-only/no-task alert existed.
   const activeProposals = await prisma.proposal.findMany({
-    where: { organizationId, stage: { in: ['PROPOSAL_SENT', 'IN_NEGOTIATION'] }, outcome: null },
+    where: { organizationId, deletedAt: null, stage: { in: ['PROPOSAL_SENT', 'IN_NEGOTIATION'] }, outcome: null },
     include: { company: true, versions: { orderBy: { sentAt: 'desc' }, take: 1 } },
   });
   for (const p of activeProposals) {
@@ -87,6 +86,7 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
   const verbalPending = await prisma.proposal.findMany({
     where: {
       organizationId,
+      deletedAt: null,
       stage: 'VERBAL_YES',
       outcome: null,
       verbalYesAt: { lt: threeDaysAgo },
@@ -404,64 +404,37 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
     }
   }
 
-  // 13 & 14. RULE: PERSON_OVERLOADED / PERSON_UNDERLOADED — same trailing
-  // 8 week median the Team screen already shows (team.ts's loadPercentage),
-  // not a separate metric, so this never disagrees with what a head is
-  // looking at. Distinct from MEMBER_OVERALLOCATED above, which reads
-  // confirmed PeopleAllocation percentages rather than raw task counts.
-  const activeUsers = await prisma.user.findMany({
-    where: { organizationId, active: true },
-    include: {
-      // Through the join, so this and the Team screen cannot disagree about
-      // who is carrying what — a task shared by three people is on all three
-      // desks in both places or in neither.
-      taskAssignments: {
-        where: { task: { deletedAt: null } },
-        select: { task: { select: { status: true, assignedAt: true, completedAt: true } } },
-      },
-    },
-  });
-  for (const u of activeUsers) {
-    const mine = u.taskAssignments.map((a) => a.task);
-    if (mine.length === 0) continue; // nobody ever assigned — nothing to compare against
-    const openCount = mine.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED').length;
-    const loadPercent = loadPercentage(mine, openCount);
-    if (loadPercent > 130) {
-      alerts.push({
-        rule: 'PERSON_OVERLOADED',
-        severity: AlertSeverity.HIGH,
-        entityType: 'User',
-        entityId: u.id,
-        message: `${u.name} is carrying ${openCount} open tasks, ${Math.round(loadPercent)}% of a normal load.`,
-      });
-    } else if (loadPercent < 60) {
-      alerts.push({
-        rule: 'PERSON_UNDERLOADED',
-        severity: AlertSeverity.LOW,
-        entityType: 'User',
-        entityId: u.id,
-        message: `${u.name} is at ${Math.round(loadPercent)}% of a normal load.`,
-      });
-    }
-  }
+  /*
+   * 13 & 14 were PERSON_OVERLOADED / PERSON_UNDERLOADED, and they are gone.
+   *
+   * Both compared a person's open task count against their own trailing 8-week
+   * median. The arithmetic worked; what it measured did not. A task is a task
+   * whether it is a two-minute rename or a three-day shoot, so the ratio moved
+   * on how many rows somebody had rather than on how much work — and a quiet
+   * fortnight dragged the median down far enough that a normal week came back
+   * as 600%, or 1000%. It named people to management on that basis.
+   *
+   * Nothing replaces it. Whether somebody has too much on is a question their
+   * head answers by looking at the work, which the Team screen still shows —
+   * open, overdue and waiting counts, per person, with the tasks behind them.
+   */
 
   // 15. RULE: TASK_AGING — brief §8: "median elapsed for tasks sharing the
-  // same templateItemId, or the same title pattern when ad hoc." Retainer
-  // template tasks carry a real templateItemId now (monthCard.cron.ts sets
-  // it on every spawned task); anything else groups by a normalized title,
-  // the brief's own stated fallback — not a per-assignee average, which
-  // was standing in for a taxonomy that didn't exist yet. Shared with
-  // tasks.ts's elapsed-vs-median figure so both mean the same "median".
+  // same templateItemId, or the same title pattern when ad hoc." Templates are
+  // gone, so the title pattern is the whole rule — and still not a per-assignee
+  // average, which was standing in for a taxonomy that didn't exist yet.
+  // Shared with tasks.ts's elapsed-vs-median figure so both mean one "median".
   const medianByGroup = await computeTaskTypeMedians(organizationId);
   if (medianByGroup.size > 0) {
     const openTasks = await prisma.task.findMany({
       where: { organizationId, deletedAt: null, status: { in: ['TODO', 'IN_PROGRESS', 'ON_HOLD'] } },
       take: 200,
     });
+    const calendar = await loadWorkCalendar(organizationId);
     for (const t of openTasks) {
       const taskTypeMedian = medianByGroup.get(taskTypeGroupKey(t));
       if (!taskTypeMedian) continue;
-      const elapsed = calculateWorkingMinutes(t.assignedAt, now, t.waitingTotalMinutes).totalMinutes;
+      const elapsed = workingMinutesOn(calendar, t.assignedAt, now, t.waitingTotalMinutes).totalMinutes;
       if (elapsed > taskTypeMedian * 2) {
         alerts.push({
           rule: 'TASK_AGING',

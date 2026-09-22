@@ -44,7 +44,7 @@ export async function composeMondayBrief(orgId: string) {
 
   // ── Quadrant 2: Pipeline Momentum ───────────────────────────────────────
   const activeProposals = await prisma.proposal.findMany({
-    where: { organizationId: orgId, outcome: null },
+    where: { organizationId: orgId, deletedAt: null, outcome: null },
     include: {
       company: { select: { id: true, name: true } },
       owner: { select: { id: true, name: true } },

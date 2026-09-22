@@ -25,7 +25,19 @@ export function calculateWorkingMinutes(
   startHour: number = 10,
   endHour: number = 19,
   workingDays: number[] = [1, 2, 3, 4, 5, 6], // Mon-Sat
+  /**
+   * §14: "Sundays and public holidays excluded." `workingDays` above covered
+   * the Sundays; nothing covered the holidays, so Pongal, Diwali and every
+   * other closed day counted as working time and inflated every elapsed
+   * figure on the app — and with it the medians the task-aging rule compares
+   * against. ISO "YYYY-MM-DD" in IST, because a holiday is a specific day.
+   *
+   * Empty by default and empty in the seed: an invented holiday list would be
+   * wrong in a different way, so the org enters its own in Setup.
+   */
+  holidays: string[] = [],
 ): WorkingTimeResult {
+  const holidaySet = new Set(holidays);
   const startDate = new Date(from);
   const endDate = new Date(to);
 
@@ -54,6 +66,9 @@ export function calculateWorkingMinutes(
   for (let day = firstDay; day <= lastDay; day += DAY_MS) {
     const dayOfWeek = new Date(day).getUTCDay(); // 0 = Sun, 1 = Mon, ...
     if (!workingDays.includes(dayOfWeek)) continue;
+    // The cursor is already shifted so an IST midnight lands on a UTC day
+    // boundary, so slicing the ISO date here gives the IST calendar day.
+    if (holidaySet.size > 0 && holidaySet.has(new Date(day).toISOString().slice(0, 10))) continue;
 
     const dayStart = day + startHour * 60 * 60 * 1000;
     const dayEnd = day + endHour * 60 * 60 * 1000;

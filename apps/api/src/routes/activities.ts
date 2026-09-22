@@ -50,6 +50,11 @@ activitiesRouter.use(authenticate);
  */
 const READ_PERMISSION: Record<string, PermissionKey | undefined> = {
   Company: 'company.read',
+  // A cold lead's history is readable by whoever can read the outreach list
+  // itself. Without an entry here the status trail would be written on every
+  // change and then filtered out of the feed for everybody, because anything
+  // absent from this map is refused rather than allowed.
+  OutreachEntry: 'company.read',
   Proposal: 'pipeline.read',
   Proforma: 'pipeline.read',
   Project: 'work.all',
@@ -61,7 +66,6 @@ const READ_PERMISSION: Record<string, PermissionKey | undefined> = {
   Cost: 'cost.enter',
   User: 'setup.admin',
   Organization: 'setup.admin',
-  TaskTemplate: 'setup.admin',
 };
 
 const readable = (req: AuthRequest, entityType: string): boolean => {
@@ -108,7 +112,14 @@ const MONEY_KEYS = new Set([
 ]);
 
 const stripMoney = (payload: unknown): unknown => {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
+  // Walk INTO arrays rather than handing them back whole. The early return used
+  // to cover `Array.isArray` too, so a figure one level inside a list — the
+  // milestones on a project, the lines on an invoice — went out untouched while
+  // the same key sitting directly on the object was removed. The promise this
+  // function makes is that a new money key is covered the day it is written,
+  // and that was only true for keys that never appeared inside a list.
+  if (Array.isArray(payload)) return payload.map(stripMoney);
+  if (!payload || typeof payload !== 'object') return payload;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(payload as Record<string, unknown>)) {
     if (MONEY_KEYS.has(k)) continue;
@@ -221,7 +232,7 @@ const ENTITY_EXISTS: Record<string, (id: string, orgId: string) => Promise<boole
   Company: (id, orgId) =>
     prisma.company.findFirst({ where: { id, organizationId: orgId }, select: { id: true } }).then(Boolean),
   Proposal: (id, orgId) =>
-    prisma.proposal.findFirst({ where: { id, organizationId: orgId }, select: { id: true } }).then(Boolean),
+    prisma.proposal.findFirst({ where: { id, organizationId: orgId, deletedAt: null }, select: { id: true } }).then(Boolean),
   Project: (id, orgId) =>
     prisma.project.findFirst({ where: { id, organizationId: orgId }, select: { id: true } }).then(Boolean),
   Task: (id, orgId) =>

@@ -93,6 +93,21 @@ profileRouter.patch('/', async (req: AuthRequest, res: Response, next: NextFunct
       select: { id: true, name: true, designation: true, phone: true },
     });
 
+    // §16: "Every create, update and status change writes an Activity row. No
+    // exceptions." This route was the only writer in the API with none.
+    await prisma.activity.create({
+      data: {
+        organizationId: req.user!.organizationId,
+        entityType: 'User',
+        entityId: req.user!.userId,
+        actorId: req.user!.userId,
+        verb: 'profile_updated',
+        payload: {
+          fields: Object.keys(parsed.data).filter((k) => (parsed.data as Record<string, unknown>)[k] !== undefined),
+        },
+      },
+    });
+
     res.json(user);
   } catch (e) {
     next(e);
@@ -146,6 +161,25 @@ profileRouter.post('/password', async (req: AuthRequest, res: Response, next: Ne
         // Retires every token issued before now, this browser's included — the
         // screen says so before the button, and then sends you to sign in.
         sessionsValidFrom: new Date(),
+      },
+    });
+
+    /*
+     * The audit row that mattered most and was missing.
+     *
+     * This changes a credential and retires every session the account has. If
+     * an account is ever misused, "when was the password last changed, and by
+     * whom" is the first question asked — and nothing recorded it. The payload
+     * carries no secret: the fact and the time are the whole point.
+     */
+    await prisma.activity.create({
+      data: {
+        organizationId: req.user!.organizationId,
+        entityType: 'User',
+        entityId: user.id,
+        actorId: req.user!.userId,
+        verb: 'password_changed',
+        payload: { signedOutEverywhere: true },
       },
     });
 

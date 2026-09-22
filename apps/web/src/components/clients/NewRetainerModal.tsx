@@ -13,7 +13,8 @@
  */
 
 import { useEffect, useState } from 'react';
-import { api, ApiError, type Company, type TaskTemplate } from '@/lib/api-v2';
+import { api, ApiError, type Company } from '@/lib/api-v2';
+import { useTeamMembers } from '@/hooks/queries';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
@@ -36,14 +37,12 @@ type Props = {
 
 export function NewRetainerModal({ open, onClose, onCreated, prefill }: Props) {
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [team, setTeam] = useState<{ id: string; name: string; dept: string }[]>([]);
-  const [templates, setTemplates] = useState<TaskTemplate[]>([]);
+  const team = useTeamMembers();
   const [companyId, setCompanyId] = useState('');
   const [monthlyValue, setMonthlyValue] = useState('');
   const [startDate, setStartDate] = useState('');
   const [termMonths, setTermMonths] = useState('');
   const [ownerId, setOwnerId] = useState('');
-  const [templateId, setTemplateId] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,13 +53,10 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill }: Props) {
     setStartDate(new Date().toISOString().slice(0, 10));
     setTermMonths('');
     setOwnerId('');
-    setTemplateId('');
     setError(null);
     if (!prefill) {
       void api.companies.list().then((res) => setCompanies(res.companies)).catch(() => {});
     }
-    void api.team.members().then((res) => setTeam(res.members)).catch(() => {});
-    void api.taskTemplates.list().then((res) => res.success && setTemplates(res.templates)).catch(() => {});
   }, [open, prefill]);
 
   const canSave = Boolean(companyId) && Number(monthlyValue) > 0 && Boolean(startDate);
@@ -77,7 +73,6 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill }: Props) {
         startDate,
         termMonths: termMonths ? Number(termMonths) : undefined,
         ownerId: ownerId || undefined,
-        templateId: templateId || undefined,
         sourceProposalId: prefill?.sourceProposalId,
       });
       const created = (res as { retainer?: { id: string } }).retainer;
@@ -133,16 +128,6 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill }: Props) {
             placeholder="Defaults to you"
             options={personOptions(team)}
           />
-          <div>
-            <FieldSelect
-              label="Monthly task template"
-              value={templateId}
-              onChange={setTemplateId}
-              placeholder="No recurring tasks"
-              options={templates.map((t) => ({ value: t.id, label: `${t.name} (${t.items.length} task${t.items.length === 1 ? '' : 's'})` }))}
-            />
-            <p className="mt-1 text-xs text-secondary">Spawns these tasks on the month card automatically, every month.</p>
-          </div>
           {error && <ErrorNote>{error}</ErrorNote>}
         </ModalBody>
         <ModalFooter>

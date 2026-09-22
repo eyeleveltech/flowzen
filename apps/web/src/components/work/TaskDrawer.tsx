@@ -36,7 +36,7 @@ import { Drawer } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { Field, FieldSelect } from '@/components/ui/field';
-import { MultiSelect } from '@/components/ui/multi-select';
+import { AssigneeField, AssignedByField } from '@/components/work/AssigneeField';
 import { TASK_TYPE_OPTIONS, taskTypeLabel } from '@/lib/task-type';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -238,46 +238,23 @@ export function TaskDrawer({
           <>
             <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
               <Field label="Title" value={title} onChange={setTitle} required />
-              {team && (
-                <div>
-                  <label className="eyebrow mb-1.25 block">
-                    Assigned to <span className="text-danger">*</span>
-                  </label>
-                  {/*
-                    Several people, because several people do the work. The
-                    first is the lead — the one a person's load, the overload
-                    alerts and "whose task is this" all resolve to — so the
-                    order in this list is not decoration.
+              {/*
+                The shared control, so the rule about who may assign to whom is
+                the same on the edit form as on the four creation forms.
 
-                    Names only: `User.name` used to read "Janani (Head,
-                    Design)", and now that the title lives in its own column
-                    appending it back would put it there twice.
-                  */}
-                  <MultiSelect
-                    compact={false}
-                    showSelectAll={false}
-                    value={assigneeIds}
-                    onChange={setAssigneeIds}
-                    ariaLabel="Assigned to"
-                    placeholder="Nobody yet"
-                    options={personOptions(team)}
-                  />
-                  {assigneeIds.length > 1 && (
-                    <p className="mt-1 text-micro text-secondary">
-                      The first is the lead. It counts on all of their desks.
-                    </p>
-                  )}
-                </div>
-              )}
-              {team && (
-                <FieldSelect
-                  label="Assigned by"
-                  value={assignedById}
-                  onChange={setAssignedById}
-                  placeholder="Nobody in particular"
-                  options={personOptions(team)}
-                />
-              )}
+                Two gates, doing different jobs. `team` decides whether this
+                SCREEN offers assignment at all — My Work passes none, so its
+                drawer has never shown these — and the field itself decides what
+                the viewer may do with it. Before, the offer was the only gate:
+                any caller that passed `team` handed an employee the whole
+                roster and a 403 on save.
+
+                Several people, because several people do the work, and the
+                first is the lead — the one a person's load, the overload alerts
+                and "whose task is this" all resolve to.
+              */}
+              {team && <AssigneeField label="Assigned to" value={assigneeIds} onChange={setAssigneeIds} />}
+              {team && <AssignedByField value={assignedById} onChange={setAssignedById} />}
               {team && (
                 <FieldSelect
                   label="Reviewer"

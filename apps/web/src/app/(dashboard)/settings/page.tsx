@@ -14,6 +14,8 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { qk } from '@/hooks/queries';
 import Link from 'next/link';
 import { Check } from 'lucide-react';
 import {
@@ -24,7 +26,6 @@ import {
   type Member,
   type OrgConfig,
   type Role,
-  type TaskTemplate,
 } from '@/lib/api-v2';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -37,17 +38,15 @@ import { PageSkeleton } from '@/components/ui/skeleton-loaders';
 import { MailTab } from './components/MailTab';
 import { DocumentSettingsTab } from './components/DocumentSettingsTab';
 import { OnboardingTab } from './components/OnboardingTab';
-import { TaskTemplatesTab } from './components/TaskTemplatesTab';
 import { TrashTab } from './components/TrashTab';
 import { AssetsTab } from './components/AssetsTab';
 
 const TABS = [
   { key: 'organisation', label: 'Organisation' },
   { key: 'documents', label: 'Tax & numbering' },
-  { key: 'proforma', label: 'Proforma & billing' },
+  { key: 'proforma', label: 'Documents & billing' },
   { key: 'email', label: 'Email' },
   { key: 'team', label: 'Team' },
-  { key: 'templates', label: 'Task templates' },
   { key: 'assets', label: 'Assets' },
   { key: 'onboarding', label: 'Onboarding' },
   { key: 'trash', label: 'Trash' },
@@ -93,15 +92,24 @@ type Form = {
   mailFromName: string;
   mailFromEmail: string;
   allowPasswordLogin: boolean;
+  workingHoursStart: string;
+  workingHoursEnd: string;
+  workingDays: number[];
+  holidays: string;
+  stageProbTalking: string;
+  stageProbProposalSent: string;
+  stageProbInNegotiation: string;
+  stageProbProformaIssued: string;
+  stageProbVerbalYes: string;
 };
 
 export default function SettingsPage() {
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState<TabKey>('organisation');
   const [config, setConfig] = useState<OrgConfig | null>(null);
   const [form, setForm] = useState<Form | null>(null);
   const [team, setTeam] = useState<Member[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
-  const [templates, setTemplates] = useState<TaskTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -130,13 +138,22 @@ export default function SettingsPage() {
         mailFromName: o.mailFromName ?? '',
         mailFromEmail: o.mailFromEmail ?? '',
         allowPasswordLogin: o.allowPasswordLogin ?? true,
+        workingHoursStart: o.workingHoursStart ?? '10:00',
+        workingHoursEnd: o.workingHoursEnd ?? '19:00',
+        workingDays: o.workingDays ?? [1, 2, 3, 4, 5, 6],
+        // One per line is how somebody actually types a year of holidays.
+        holidays: (o.holidays ?? []).join('\n'),
+        stageProbTalking: String(o.stageProbabilities?.TALKING ?? 10),
+        stageProbProposalSent: String(o.stageProbabilities?.PROPOSAL_SENT ?? 30),
+        stageProbInNegotiation: String(o.stageProbabilities?.IN_NEGOTIATION ?? 60),
+        stageProbProformaIssued: String(o.stageProbabilities?.PROFORMA_ISSUED ?? 85),
+        stageProbVerbalYes: String(o.stageProbabilities?.VERBAL_YES ?? 90),
       });
       setError(null);
       // Both are admin-only, so a refusal is expected for anyone below and is
       // not worth showing as an error.
       void api.users.list().then(setTeam).catch(() => {});
       void api.config.auditLog().then(setAudit).catch(() => {});
-      void api.taskTemplates.list().then((r) => r.success && setTemplates(r.templates)).catch(() => {});
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load settings');
     } finally {
@@ -178,7 +195,24 @@ export default function SettingsPage() {
         mailFromName: form.mailFromName || null,
         mailFromEmail: form.mailFromEmail || null,
         allowPasswordLogin: form.allowPasswordLogin,
+        workingHoursStart: form.workingHoursStart,
+        workingHoursEnd: form.workingHoursEnd,
+        workingDays: form.workingDays,
+        // Typed one per line, but a pasted comma-separated list should work too.
+        holidays: form.holidays
+          .split(/[\n,]/)
+          .map((d) => d.trim())
+          .filter(Boolean),
+        stageProbTalking: Number(form.stageProbTalking),
+        stageProbProposalSent: Number(form.stageProbProposalSent),
+        stageProbInNegotiation: Number(form.stageProbInNegotiation),
+        stageProbProformaIssued: Number(form.stageProbProformaIssued),
+        stageProbVerbalYes: Number(form.stageProbVerbalYes),
       });
+      // The org config is cached for an hour and read across the app. Without
+      // this the other screens would show the old settings for the rest of the
+      // session — the one place a long staleTime needs an explicit nudge.
+      await queryClient.invalidateQueries({ queryKey: qk.config });
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
       await load();
@@ -291,6 +325,106 @@ export default function SettingsPage() {
               </CardBody>
             </Card>
 
+            {/*
+              §14 makes both of these settings — "All configurable in Setup" —
+              and until now neither had anywhere to be set. The working calendar
+              columns existed and nothing read them; the stage probabilities
+              were compiled into three different files that disagreed.
+            */}
+            <Card padding="none">
+              <CardHeader>
+                <CardTitle>Working calendar</CardTitle>
+              </CardHeader>
+              <CardBody className="space-y-4">
+                <p className="text-xs text-secondary">
+                  What counts as working time. Every elapsed figure in the app — how long a task took, your average
+                  close, the medians the aging alert compares against — is measured against this.
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field
+                    label="Day starts"
+                    value={form.workingHoursStart}
+                    onChange={(v) => set('workingHoursStart', v)}
+                    type="time"
+                    disabled={!canEdit}
+                  />
+                  <Field
+                    label="Day ends"
+                    value={form.workingHoursEnd}
+                    onChange={(v) => set('workingHoursEnd', v)}
+                    type="time"
+                    disabled={!canEdit}
+                  />
+                </div>
+                <div>
+                  <span className="eyebrow mb-1.25 block">Days worked</span>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      [1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [0, 'Sun'],
+                    ].map(([day, label]) => {
+                      const on = form.workingDays.includes(day as number);
+                      return (
+                        <button
+                          key={String(day)}
+                          type="button"
+                          disabled={!canEdit}
+                          aria-pressed={on}
+                          onClick={() =>
+                            set(
+                              'workingDays',
+                              on
+                                ? form.workingDays.filter((d) => d !== day)
+                                : [...form.workingDays, day as number].sort(),
+                            )
+                          }
+                          className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+                            on
+                              ? 'border-primary/30 bg-primary/5 text-primary'
+                              : 'border-border text-secondary hover:bg-subtle'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <Field
+                  label="Public holidays"
+                  value={form.holidays}
+                  onChange={(v) => set('holidays', v)}
+                  textarea
+                  rows={4}
+                  disabled={!canEdit}
+                  placeholder={'2026-01-14\n2026-11-08'}
+                  hint="One date per line, as YYYY-MM-DD. A day here is not counted as working time, the same way a Sunday is not."
+                />
+              </CardBody>
+            </Card>
+
+            <Card padding="none">
+              <CardHeader>
+                <CardTitle>Stage probabilities</CardTitle>
+              </CardHeader>
+              <CardBody className="space-y-4">
+                <p className="text-xs text-secondary">
+                  How likely a deal at each stage is to land. Weighted pipeline is the deal&apos;s value multiplied by
+                  this, so it decides what the Pipeline board and the Forecast both report. A single deal can still be
+                  overridden on its own card.
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Talking (%)" value={form.stageProbTalking} onChange={(v) => set('stageProbTalking', v)} type="number" disabled={!canEdit} />
+                  <Field label="Proposal sent (%)" value={form.stageProbProposalSent} onChange={(v) => set('stageProbProposalSent', v)} type="number" disabled={!canEdit} />
+                  <Field label="In negotiation (%)" value={form.stageProbInNegotiation} onChange={(v) => set('stageProbInNegotiation', v)} type="number" disabled={!canEdit} />
+                  <Field label="Proforma issued (%)" value={form.stageProbProformaIssued} onChange={(v) => set('stageProbProformaIssued', v)} type="number" disabled={!canEdit} />
+                  <Field label="Verbal yes (%)" value={form.stageProbVerbalYes} onChange={(v) => set('stageProbVerbalYes', v)} type="number" disabled={!canEdit} />
+                </div>
+                <p className="text-micro text-secondary">
+                  Won is always 100% and lost is always nothing — neither is a prediction.
+                </p>
+              </CardBody>
+            </Card>
+
             {canEdit && <SaveBar saving={saving} saved={saved} />}
           </form>
         )}
@@ -323,7 +457,9 @@ export default function SettingsPage() {
                   />
                 </div>
                 <p className="text-xs text-secondary">
-                  Compared with the client&apos;s state: same means CGST+SGST, different means IGST.
+                  Compared with each document&apos;s place of supply: same state means CGST+SGST,
+                  anywhere else means IGST. The place of supply is set per document and defaults
+                  to the client&apos;s state.
                 </p>
               </CardBody>
             </Card>
@@ -449,9 +585,6 @@ export default function SettingsPage() {
           </Card>
         )}
 
-        {tab === 'templates' && (
-          <TaskTemplatesTab templates={templates} canEdit={canEdit} onChanged={() => void load()} />
-        )}
 
         {tab === 'onboarding' && (
           <OnboardingTab config={config} onSaved={() => void load()} />

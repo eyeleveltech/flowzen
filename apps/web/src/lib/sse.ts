@@ -6,7 +6,13 @@ class SSEClient {
   private listeners: Record<string, Function[]> = {};
 
   connect() {
-    if (this.eventSource) return;
+    // A CLOSED EventSource is still an object. The guard used to be `if
+    // (this.eventSource) return`, so once a stream had failed — an expired
+    // cookie, a restarted API — this returned early forever and real-time
+    // updates stayed dead for the rest of the session, however many times
+    // anything asked to reconnect. Only a live or connecting one should block.
+    if (this.eventSource && this.eventSource.readyState !== EventSource.CLOSED) return;
+    if (this.eventSource) this.eventSource.close();
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
     this.eventSource = new EventSource(`${apiUrl}/stream`, { withCredentials: true });
@@ -26,8 +32,16 @@ class SSEClient {
       // EventSource fires onerror on every transient hiccup (network blips, server
       // restarts, dev HMR) and reconnects automatically — those are expected and noisy,
       // so we stay quiet. Only warn if the connection is permanently CLOSED (won't retry).
+      //
+      // CLOSED is also what a 401 looks like from here: the spec fails the
+      // connection on any non-200 and does NOT retry. There is no status on the
+      // error event to tell the two apart, so drop the dead handle and let
+      // whoever owns the lifecycle decide whether to try again — an authenticated
+      // caller reconnects, a signed-out one is on its way to /login anyway.
       if (this.eventSource?.readyState === EventSource.CLOSED) {
         console.warn('SSE connection closed; real-time updates paused until reconnect.');
+        this.eventSource.close();
+        this.eventSource = null;
       }
     };
   }

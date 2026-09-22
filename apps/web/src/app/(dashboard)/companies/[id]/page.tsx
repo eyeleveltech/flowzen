@@ -25,6 +25,7 @@ import {
   Sparkles,
   Download,
   Pencil,
+  Trash2,
   Trophy,
   XCircle,
   MessageSquareQuote,
@@ -41,8 +42,11 @@ import { useAuthStore } from '@/stores';
 import { useConfirmStore } from '@/stores/confirm';
 import { EditCompanyModal } from '@/components/clients/EditCompanyModal';
 import { EditProformaModal } from '@/components/clients/EditProformaModal';
+import { SendDocumentModal } from '@/components/documents/SendDocumentModal';
 import { NewProposalModal } from '@/components/clients/NewProposalModal';
+import { EditProposalModal } from '@/components/clients/EditProposalModal';
 import { AddVersionModal } from '@/components/clients/AddVersionModal';
+import { RowMenu } from '@/components/ui/row-menu';
 import { LoseProposalModal } from '@/components/clients/LoseProposalModal';
 import { NewProformaModal } from '@/components/clients/NewProformaModal';
 import { NewProjectModal } from '@/components/clients/NewProjectModal';
@@ -64,8 +68,10 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
 
   const [isEditCompanyOpen, setIsEditCompanyOpen] = useState(false);
   const [editingProforma, setEditingProforma] = useState<any>(null);
+  const [emailingProforma, setEmailingProforma] = useState<string | null>(null);
   const [isNewProposalOpen, setIsNewProposalOpen] = useState(false);
   const [addingVersionFor, setAddingVersionFor] = useState<any>(null);
+  const [editingProposal, setEditingProposal] = useState<any>(null);
   const [losingProposal, setLosingProposal] = useState<any>(null);
   const [raisingProformaFor, setRaisingProformaFor] = useState<any>(null);
   const [creatingProjectFor, setCreatingProjectFor] = useState<{
@@ -171,6 +177,32 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
       await fetchDetail();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not flag verbal yes');
+    }
+  };
+
+  /**
+   * Removing one raised by mistake.
+   *
+   * The confirm says where it goes rather than asking "are you sure": it is a
+   * soft delete (§16), so the honest warning is not "this cannot be undone" —
+   * it is that the deal leaves the board and the register. A won or lost
+   * proposal is refused by the server, which is why the action is not even
+   * offered on one.
+   */
+  const handleDeleteProposal = async (prop: any) => {
+    const ok = await confirm({
+      title: 'Delete this proposal?',
+      message: `It comes off the pipeline board and out of ${company.name}'s record. Its versions are kept, so it can be restored.`,
+      confirmText: 'Delete it',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await api.proposals.remove(prop.id);
+      toast.success('Proposal deleted');
+      await fetchDetail();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not delete this proposal');
     }
   };
 
@@ -589,11 +621,34 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                         </span>
                       )}
                     </div>
-                    {prop.wonVersion && (
-                      <span className="text-xs font-semibold text-success bg-success-tint border border-success/30 px-2.5 py-1 rounded-lg">
-                        Won on v{prop.wonVersion.n} ({formatMoney(prop.wonVersion.value)})
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {prop.wonVersion && (
+                        <span className="text-xs font-semibold text-success bg-success-tint border border-success/30 px-2.5 py-1 rounded-lg">
+                          Won on v{prop.wonVersion.n} ({formatMoney(prop.wonVersion.value)})
+                        </span>
+                      )}
+                      <RowMenu
+                        label={`Actions for this ${prop.kind === 'RETAINER' ? 'retainer' : 'project'} proposal`}
+                        actions={[
+                          {
+                            label: 'Edit proposal',
+                            icon: Pencil,
+                            onSelect: () => setEditingProposal(prop),
+                          },
+                          {
+                            label: 'Delete proposal',
+                            icon: Trash2,
+                            tone: 'danger',
+                            // Won and lost are refused by the server — the funnel
+                            // and the win rate count them, and a won one has a
+                            // client and real work built on it. Not offering the
+                            // action beats offering it and turning it down.
+                            visible: live,
+                            onSelect: () => void handleDeleteProposal(prop),
+                          },
+                        ]}
+                      />
+                    </div>
                   </div>
 
                   {/* Versions Tree */}
@@ -804,6 +859,15 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                         <Download className="w-3.5 h-3.5" />
                         Download
                       </a>
+                      <button
+                        type="button"
+                        onClick={() => setEmailingProforma(pi.id)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-secondary hover:text-primary border border-border rounded-lg hover:bg-subtle transition-colors"
+                        title="Email this proforma to the client"
+                      >
+                        <Mail className="w-3.5 h-3.5" />
+                        Email
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -966,6 +1030,10 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         </div>
       )}
 
+      {emailingProforma && (
+        <SendDocumentModal kind="PROFORMA" id={emailingProforma} onClose={() => setEmailingProforma(null)} />
+      )}
+
       {isEditCompanyOpen && (
         <EditCompanyModal
           company={company}
@@ -996,6 +1064,18 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
           onConfirm={() => {
             setIsNewProposalOpen(false);
             fetchDetail();
+          }}
+        />
+      )}
+
+      {editingProposal && (
+        <EditProposalModal
+          proposal={editingProposal}
+          companyName={company.name}
+          onClose={() => setEditingProposal(null)}
+          onSaved={() => {
+            setEditingProposal(null);
+            void fetchDetail();
           }}
         />
       )}

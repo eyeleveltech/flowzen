@@ -19,7 +19,10 @@ import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { ErrorNote, Note } from '@/components/ui/empty-state';
 
-const RECOGNISED = 'name, vertical, source';
+// phone and email are new, and one of them is now REQUIRED — a lead nobody can
+// reach is a note, not a lead. A file carrying only names will report every row
+// as invalid in the dry run, which is the readable version of that rule.
+const RECOGNISED = 'name, vertical, source, contact person, phone, email';
 
 export function ImportOutreachModal({
   onClose,

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { TableRowsSkeleton } from '@/components/ui/skeleton-loaders';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { api, fileUrl } from '@/lib/api-v2';
@@ -39,7 +40,6 @@ interface TeamMember {
   completedTasksCount: number;
   /** Null when this person has never finished a task — there is nothing to average. */
   avgTurnaround: string | null;
-  loadPercentage: number;
 }
 
 export default function MembersPage() {
@@ -50,12 +50,9 @@ export default function MembersPage() {
    * the product that promised something it could not do.
    */
   const canInvite = useAuthStore((s) => s.user?.permissions?.includes('setup.admin') ?? false);
-  const [members, setMembers] = useState<TeamMember[]>([]);
   /** A failed load, said out loud instead of only in the console. */
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [depts, setDepts] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
   const [deptFilter, setDeptFilter] = useState('ALL');
+  const queryClient = useQueryClient();
   const [assigningTo, setAssigningTo] = useState<TeamMember | null>(null);
   const [inviting, setInviting] = useState(false);
   const [editingAccessFor, setEditingAccessFor] = useState<TeamMember | null>(null);
@@ -67,23 +64,27 @@ export default function MembersPage() {
   // task list.
   const [openMemberId, setOpenMemberId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = deptFilter !== 'ALL' ? `?dept=${deptFilter}` : '';
-      const res = await api.team.capacity(deptFilter !== 'ALL' ? { dept: deptFilter } : {});
-      if (res.success) {
-        setMembers(res.members);
-        setDepts(res.departments);
-      }
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : 'Could not load the team');
-    } finally {
-      setLoading(false);
-    }
-  }, [deptFilter]);
+  /**
+   * Team capacity, cached per department filter.
+   *
+   * Switching back to a department you already looked at is served from cache
+   * instead of re-running the capacity query, which counts tasks per person.
+   */
+  const { data, isPending, error } = useQuery({
+    queryKey: ['team', 'capacity', deptFilter],
+    placeholderData: keepPreviousData,
+    queryFn: () => api.team.capacity(deptFilter !== 'ALL' ? { dept: deptFilter } : {}),
+  });
 
-  useEffect(() => { load(); }, [load]);
+  const members: TeamMember[] = data?.success ? data.members : [];
+  const depts: string[] = data?.success ? data.departments : [];
+  const loading = isPending;
+  const loadError = error instanceof Error ? error.message : error ? 'Could not load the team' : null;
+
+  /** What the invite / access / deactivate flows call after they change something. */
+  const load = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['team'] });
+  }, [queryClient]);
 
   // Derive team stats
   const totalOpen = members.reduce((s, m) => s + m.openTasksCount, 0);
@@ -91,28 +92,19 @@ export default function MembersPage() {
   const totalWaiting = members.reduce((s, m) => s + m.waitingTasksCount, 0);
 
   /*
-   * Over a normal load, and how many of those are also behind.
+   * `loadPercentage` used to live here: a person's open task count against
+   * their own trailing 8-week median, with a banner naming whoever sat over
+   * 100%. It was removed. The arithmetic worked and what it measured did not —
+   * a task is a task whether it is a two-minute rename or a three-day shoot,
+   * so the ratio moved on row count rather than on work, and a quiet fortnight
+   * pulled somebody's median low enough that an ordinary week came back as
+   * 600%. Naming people to management on that basis is worse than saying
+   * nothing.
    *
-   * This used to require BOTH — over 100% and something overdue — and then
-   * announce the result as "N people are over a normal load". Charles sits at
-   * 200% with nothing late, so the sentence said three when four people were
-   * over a normal load and the one furthest over with no excuse was the one it
-   * left out.
-   *
-   * The threshold here is 100% — "more than this person's own normal". The
-   * notification rule fires at 130%, deliberately: a banner summarises, an
-   * alert interrupts, and they should not interrupt at the same point.
+   * What is left is what the rows actually carry: open, overdue and waiting,
+   * per person, each one a number you can click into and see the tasks behind.
    */
-  const overloaded = members.filter((m) => m.loadPercentage > 100).sort((a, b) => b.loadPercentage - a.loadPercentage);
-  const alsoLate = overloaded.filter((m) => m.overdueTasksCount > 0);
-  const lateOnOverloaded = alsoLate.reduce((n, m) => n + m.overdueTasksCount, 0);
-
-
-  const getLoadColor = (pct: number) => {
-    if (pct >= 100) return 'bg-danger';
-    if (pct >= 70) return 'bg-success';
-    return 'bg-success';
-  };
+  const overdueOnPeople = members.filter((m) => m.overdueTasksCount > 0).length;
 
   /*
    * What is on screen, not whoever happens to sort first.
@@ -132,7 +124,7 @@ export default function MembersPage() {
             rendered its empty state and "the server is down" looked exactly
             like "you have nothing yet".
           */}
-          <ErrorNote onDismiss={() => setLoadError(null)}>{loadError}</ErrorNote>
+          <ErrorNote onDismiss={() => queryClient.resetQueries({ queryKey: ['team'] })}>{loadError}</ErrorNote>
         </div>
       )}
       {/* Header */}
@@ -169,15 +161,12 @@ export default function MembersPage() {
         <StatTile
           label="Overdue"
           value={totalOverdue}
-          /*
-           * Overdue TASKS carried by people who are already over a normal
-           * load. This read `flagged.length` — a count of PEOPLE — under the
-           * words "sit with one person", so three overloaded people were
-           * reported as three late tasks sitting with somebody.
-           */
+          // How many people are carrying them, which is the thing a head does
+          // something about — one person with nine late tasks and nine people
+          // with one each are the same number and different problems.
           note={
             totalOverdue > 0
-              ? `${lateOnOverloaded} with someone already over a normal load`
+              ? `across ${overdueOnPeople} ${overdueOnPeople === 1 ? 'person' : 'people'}`
               : 'none'
           }
           tone={totalOverdue > 0 ? 'danger' : 'default'}
@@ -190,39 +179,10 @@ export default function MembersPage() {
         />
       </StatRow>
 
-      {/*
-        One line, and the table below carries the detail — every flagged person
-        is already a red row in it, so repeating each one's load and overdue
-        count here said the same thing twice.
-
-        It also could not count. The sentence ended "Neither was reported by
-        anyone, both come from task counts" however many people were flagged,
-        and today there are three.
-      */}
-      {overloaded.length > 0 && (
-        <div className="mb-6 flex flex-wrap items-baseline gap-x-1.5 gap-y-1 rounded-xl border border-danger/30 bg-danger-tint px-4 py-3 text-sm">
-          <span className="font-semibold text-primary">
-            {overloaded.length === 1 ? '1 person is' : `${overloaded.length} people are`} over a normal load:
-          </span>
-          <span className="text-body">
-            {overloaded.map((m) => `${m.name} (${m.loadPercentage}%)`).join(', ')}.
-          </span>
-          {alsoLate.length > 0 && (
-            <span className="text-body">
-              {alsoLate.length === overloaded.length
-                ? 'All of them have'
-                : `${alsoLate.length} of them ${alsoLate.length === 1 ? 'has' : 'have'}`}{' '}
-              work already late.
-            </span>
-          )}
-          <span className="text-secondary">Counted from tasks, against each person’s own normal — not reported by anyone.</span>
-        </div>
-      )}
-
-      {/* Load and delivery table */}
+      {/* Delivery table */}
       <div className="border border-border rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h2 className="text-sm font-semibold text-primary">Load and delivery</h2>
+          <h2 className="text-sm font-semibold text-primary">Delivery</h2>
           <span className="text-micro text-secondary">
             {new Date().toLocaleString('en-IN', { month: 'long' })}
           </span>
@@ -241,15 +201,14 @@ export default function MembersPage() {
               >
                 Avg close
               </th>
-              <th className="eyebrow text-left">Load vs normal</th>
               <th className=""></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {loading ? (
-              <TableRowsSkeleton cols={7} />
+              <TableRowsSkeleton cols={6} />
             ) : members.length === 0 ? (
-              <tr><td colSpan={7} className="px-5 py-16 text-center text-sm text-secondary">No team members found.</td></tr>
+              <tr><td colSpan={6} className="px-5 py-16 text-center text-sm text-secondary">No team members found.</td></tr>
             ) : members.map(m => (
               <tr
                 key={m.id}
@@ -323,21 +282,6 @@ export default function MembersPage() {
                     turnaround on the screen. */}
                 <td className="text-center text-body">
                   {m.avgTurnaround ?? <span className="text-secondary">—</span>}
-                </td>
-                <td className="">
-                  <div className="flex items-center gap-3 min-w-40">
-                    <div className="flex-1 bg-subtle rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${getLoadColor(m.loadPercentage)}`}
-                        style={{ width: `${Math.min(m.loadPercentage, 100)}%` }}
-                      />
-                    </div>
-                    {/* "of normal" moved to the column header — it was the
-                        same two words on all fourteen rows. */}
-                    <span className={`w-11 shrink-0 text-right text-micro font-medium tabular-nums ${m.loadPercentage >= 100 ? 'text-danger' : 'text-secondary'}`}>
-                      {m.loadPercentage}%
-                    </span>
-                  </div>
                 </td>
                 <td className="">
                   {/*

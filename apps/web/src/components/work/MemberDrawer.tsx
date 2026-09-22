@@ -5,11 +5,11 @@
  *
  * ─── Why ────────────────────────────────────────────────────────────────────
  *
- * The team table answers "who is overloaded". It could not answer the question
- * anybody asks straight afterwards — overloaded with *what*. It counts a
- * person's tasks and never names one, so a Head could read that Sneha sits at
- * 333% of a normal load and had nowhere to go from there except to guess, or
- * to open every project in turn looking for her name.
+ * The team table says how many tasks somebody is carrying. It could not answer
+ * the question anybody asks straight afterwards — carrying *what*. It counted
+ * a person's tasks and never named one, so a Head could read that Sneha has
+ * nine open and had nowhere to go from there except to guess, or to open every
+ * project in turn looking for her name.
  *
  * ─── Doing, then To do, then Waiting ────────────────────────────────────────
  *
@@ -67,7 +67,6 @@ type MemberDetail = {
   waitingTasksCount: number;
   completedTasksCount: number;
   avgTurnaround: string | null;
-  loadPercentage: number;
 };
 
 const GROUPS: { key: string; title: string; hint: string }[] = [
@@ -145,14 +144,6 @@ export function MemberDrawer({ memberId, onClose }: { memberId: string | null; o
                 <dl className="divide-y divide-border text-sm">
                   <Row label="Designation" value={member.designation ?? '—'} />
                   <Row label="Department" value={member.dept ?? '—'} />
-                  <Row
-                    label="Load"
-                    value={
-                      <span className={member.loadPercentage >= 100 ? 'text-danger' : undefined}>
-                        {member.loadPercentage}% of normal
-                      </span>
-                    }
-                  />
                   <Row
                     label="Open"
                     value={

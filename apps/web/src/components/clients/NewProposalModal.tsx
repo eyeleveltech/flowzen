@@ -14,6 +14,7 @@
 import toast from 'react-hot-toast';
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api-v2';
+import { useTeamMembers } from '@/hooks/queries';
 import { Modal, ScrollingModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
@@ -33,7 +34,7 @@ export function NewProposalModal({ companyId, companyName, onConfirm, onCancel }
 
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState(companyId ?? '');
-  const [team, setTeam] = useState<{ id: string; name: string; dept: string }[]>([]);
+  const team = useTeamMembers();
 
   const [kind, setKind] = useState<'RETAINER' | 'PROJECT'>('RETAINER');
   const [initialValue, setInitialValue] = useState('');
@@ -45,7 +46,6 @@ export function NewProposalModal({ companyId, companyName, onConfirm, onCancel }
     if (!companyId) {
       void api.companies.list().then((res) => setCompanies(res.companies)).catch(() => {});
     }
-    void api.team.members().then((res) => setTeam(res.members)).catch(() => {});
   }, [companyId]);
 
   const parsedValue = Number(initialValue);

@@ -12,22 +12,25 @@
  * drawer, which is the same drawer a retainer opens.
  */
 
-import { Fragment, useState, useEffect, useCallback } from 'react';
+import { Fragment, useState, useEffect, useCallback, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { plural } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { api, formatDate, ApiError, type Company } from '@/lib/api-v2';
+import { useTeamMembers } from '@/hooks/queries';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Field, FieldSelect } from '@/components/ui/field';
+import { AssigneeField, AssignedByField, useMayAssignOthers } from '@/components/work/AssigneeField';
 import { EmptyState, ErrorNote } from '@/components/ui/empty-state';
 import { usePageHeader } from '@/hooks/usePageHeader';
 import { PRIORITY_CONFIG, getPriorityDot, getPriorityLabel } from '@/lib/priority';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
 import toast from 'react-hot-toast';
-import { CheckSquare, Plus } from 'lucide-react';
+import { CheckSquare, Plus, RotateCcw } from 'lucide-react';
 import { personOptions } from '@/lib/people';
 import { useAuthStore } from '@/stores';
 import { TASK_TYPE_OPTIONS } from '@/lib/task-type';
@@ -118,49 +121,74 @@ const STATUS_OPTIONS = [
 
 export default function MyWorkPage() {
   const router = useRouter();
-  const [buckets, setBuckets] = useState<Buckets>(EMPTY_BUCKETS);
-  const [counts, setCounts] = useState({ today: 0, overdue: 0, thisWeek: 0, later: 0, completed: 0 });
-  const [loading, setLoading] = useState(true);
+  /**
+   * Server data lives in the query cache, not in component state.
+   *
+   * This screen used to hold the tasks in `useState` and fill them from a
+   * `useEffect` on mount, which meant every visit — including coming straight
+   * back from a task you just opened — refetched and re-rendered from empty.
+   * React Query was already installed and mounted app-wide and used by nothing.
+   * With a 30s `staleTime` a return trip inside that window paints from cache
+   * immediately and revalidates behind the paint.
+   */
+  const { data, isPending, refetch } = useQuery({
+    queryKey: ['tasks', 'my'],
+    queryFn: () => api.tasks.my(),
+  });
+
+  /*
+   * What you have deleted, and the way back.
+   *
+   * Restore has existed since soft delete did, but the only thing that offered
+   * it was the drawer of a task you were already looking at — and you cannot
+   * look at a deleted one. The org-wide list lives in Settings → Trash, which
+   * redirects anyone without setup.admin, so for the people who delete most of
+   * these tasks that screen does not exist. This is their copy: their own
+   * deleted tasks, scoped by the server to what they could actually put back.
+   */
+  const { data: trashData, refetch: refetchTrash } = useQuery({
+    queryKey: ['tasks', 'trash'],
+    queryFn: () => api.tasks.trash(),
+  });
+  const deletedTasks: { id: string; title: string; dueDate: string; deletedAt: string }[] =
+    trashData?.success ? trashData.tasks : [];
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+
+  const buckets = (data?.success ? (data.tasks as Buckets) : EMPTY_BUCKETS);
+  const counts = data?.counts ?? { today: 0, overdue: 0, thisWeek: 0, later: 0, completed: 0 };
   const [busyId, setBusyId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<TaskItem | null>(null);
 
-  const [onHoldCount, setOnHoldCount] = useState(0);
-  const [oldestOpen, setOldestOpen] = useState<string>('nothing open');
-  const [avgClose, setAvgClose] = useState<string>('0h');
+  // Derived from the tasks above rather than stored beside them — three more
+  // pieces of state that could go stale against the list they describe.
+  const onHoldCount = useMemo(
+    () => buckets.today.filter((t) => t.status === 'ON_HOLD').length,
+    [buckets],
+  );
 
+  const oldestOpen = useMemo(() => {
+    if (buckets.overdue.length === 0) return 'nothing open';
+    const oldest = buckets.overdue.reduce(
+      (old, current) => (new Date(current.assignedAt) < new Date(old.assignedAt) ? current : old),
+      buckets.overdue[0],
+    );
+    return oldest.workingHoursText;
+  }, [buckets]);
+
+  const avgClose = useMemo(() => {
+    if (buckets.completed.length === 0) return '0h';
+    const totalMins = buckets.completed.reduce((acc, t) => acc + t.workingMinutes, 0);
+    const avgMins = Math.floor(totalMins / buckets.completed.length);
+    const days = Math.floor(avgMins / 540);
+    const hours = Math.floor((avgMins % 540) / 60);
+    return days > 0 && hours > 0 ? `${days}d ${hours}h` : days > 0 ? `${days}d` : hours > 0 ? `${hours}h` : '<1h';
+  }, [buckets]);
+
+  /** What the mutation handlers call after they change something. */
   const load = useCallback(async () => {
-    try {
-      const res = await api.tasks.my();
-      if (res.success) {
-        setBuckets(res.tasks as Buckets);
-        setCounts(res.counts);
-
-        const waiting = res.tasks.today.filter((t: TaskItem) => t.status === 'ON_HOLD').length;
-        setOnHoldCount(waiting);
-
-        if (res.tasks.overdue.length > 0) {
-          const oldest = res.tasks.overdue.reduce((old: TaskItem, current: TaskItem) =>
-            new Date(current.assignedAt) < new Date(old.assignedAt) ? current : old, res.tasks.overdue[0]);
-          setOldestOpen(oldest.workingHoursText);
-        }
-
-        if (res.tasks.completed.length > 0) {
-          const totalMins = res.tasks.completed.reduce((acc: number, t: TaskItem) => acc + t.workingMinutes, 0);
-          const avgMins = Math.floor(totalMins / res.tasks.completed.length);
-          const days = Math.floor(avgMins / 540);
-          const hours = Math.floor((avgMins % 540) / 60);
-          setAvgClose(days > 0 && hours > 0 ? `${days}d ${hours}h` : days > 0 ? `${days}d` : hours > 0 ? `${hours}h` : '<1h');
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { void load(); }, [load]);
+    await refetch();
+  }, [refetch]);
 
   // Quick Create's "New task" has nowhere else to land — there is no
   // freestanding /tasks screen, a task always opens from wherever it lives.
@@ -204,7 +232,7 @@ export default function MyWorkPage() {
   usePageHeader('My Work', todayStr);
   const total = counts.today + counts.overdue + counts.thisWeek + counts.later + counts.completed;
 
-  if (loading) return null;
+  if (isPending) return null;
 
   /*
    * A row, at the density every other list in the product runs at.
@@ -382,6 +410,44 @@ export default function MyWorkPage() {
         )}
       </Card>
 
+      {deletedTasks.length > 0 && (
+        <Card padding="none" className="mt-6">
+          <CardHeader>
+            <CardTitle>Recently deleted ({deletedTasks.length})</CardTitle>
+          </CardHeader>
+          <div className="divide-y divide-border">
+            {deletedTasks.map((t) => (
+              <div key={t.id} className="flex items-center justify-between p-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-primary truncate">{t.title}</p>
+                  <p className="text-xs text-secondary truncate">
+                    was due {formatDate(t.dueDate)} · deleted {formatDate(t.deletedAt)}
+                  </p>
+                </div>
+                <button
+                  onClick={async () => {
+                    setRestoringId(t.id);
+                    try {
+                      await api.tasks.restore(t.id);
+                      toast.success('Task restored');
+                      await Promise.all([load(), refetchTrash()]);
+                    } catch (e) {
+                      toast.error(e instanceof ApiError ? e.message : 'Could not restore that task');
+                    } finally {
+                      setRestoringId(null);
+                    }
+                  }}
+                  disabled={restoringId === t.id}
+                  className="shrink-0 flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-secondary hover:bg-subtle hover:text-primary transition-colors disabled:opacity-50"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" /> Restore
+                </button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       <NewTaskModal open={creating} onClose={() => setCreating(false)} onCreated={() => { setCreating(false); void load(); }} />
       <TaskDrawer
         task={toDrawerTask(selected)}
@@ -414,13 +480,16 @@ function NewTaskModal({ open, onClose, onCreated }: { open: boolean; onClose: ()
    * when you write the task down, whoever is doing it.
    */
   const [reviewerId, setReviewerId] = useState('');
+  /** Empty means "me" — the server's own default, so this stays a self-task until somebody says otherwise. */
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [assignedById, setAssignedById] = useState('');
   const [taskType, setTaskType] = useState('');
-  const [team, setTeam] = useState<{ id: string; name: string; designation: string | null; dept: string }[]>([]);
+  const team = useTeamMembers();
+  /** Decides the dialog's own name: a head opening it is not writing a task for themselves. */
+  const { may: mayAssignOthers } = useMayAssignOthers();
 
   useEffect(() => {
     if (!open) return;
-    api.team.members().then((r) => setTeam(r.members ?? [])).catch(() => setTeam([]));
   }, [open]);
   const [scope, setScope] = useState<'INTERNAL' | 'CLIENT'>('INTERNAL');
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -486,6 +555,8 @@ function NewTaskModal({ open, onClose, onCreated }: { open: boolean; onClose: ()
         dueDate,
         priority,
         reviewerId: reviewerId || undefined,
+        // Empty means "me", which is what the server already defaults to.
+        assigneeIds: assigneeIds.length > 0 ? assigneeIds : undefined,
         assignedById: assignedById || undefined,
         taskType: taskType || undefined,
         notes: description.trim() || undefined,
@@ -499,7 +570,7 @@ function NewTaskModal({ open, onClose, onCreated }: { open: boolean; onClose: ()
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Task for myself">
+    <Modal open={open} onClose={onClose} title={mayAssignOthers ? 'New task' : 'Task for myself'}>
       <form onSubmit={submit}>
         <ModalBody className="space-y-4">
           <Field label="What needs doing?" value={title} onChange={setTitle} required />
@@ -537,18 +608,28 @@ function NewTaskModal({ open, onClose, onCreated }: { open: boolean; onClose: ()
             </>
           )}
 
+          {/*
+            Who it is for.
+
+            This dialog had no assignee control at all, on the reasoning that
+            it is called "Task for myself" and the server defaults to the
+            caller. That was fine when nobody could assign to anybody from
+            anywhere, and wrong once they could: a head opening it saw a
+            picker for who ASKED for the work and none for who DOES it, which
+            reads backwards — and left them navigating to a project page to do
+            the obvious thing.
+
+            The shared field settles it per person. Somebody who may only
+            manage their own work still sees their own name and no picker, so
+            the dialog keeps its original behaviour for them.
+          */}
+          <AssigneeField value={assigneeIds} onChange={setAssigneeIds} />
           <div className="grid grid-cols-2 gap-4">
             <Field label="Due date" type="date" value={dueDate} onChange={setDueDate} required />
             <FieldSelect label="Priority" value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <FieldSelect
-              label="Assigned by"
-              value={assignedById}
-              onChange={setAssignedById}
-              placeholder="Nobody in particular"
-              options={personOptions(team)}
-            />
+            <AssignedByField value={assignedById} onChange={setAssignedById} />
             <FieldSelect
               label="Reviewer"
               value={reviewerId}

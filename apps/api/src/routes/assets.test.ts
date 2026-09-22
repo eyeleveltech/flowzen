@@ -161,6 +161,30 @@ describe('reading the catalogue', () => {
     expect(facetWhere.status).toBeUndefined();
   });
 
+  it('does not count a laptop on permanent custody as "out now"', async () => {
+    /*
+     * The tab said "Out now (6)" over a board showing three cards.
+     *
+     * It counted ASSIGNED alongside BOOKED_OUT, so the three laptops nobody is
+     * waiting on were folded into a label that means "out on a shoot and
+     * expected back". The board and the summary tile both read open BOOKINGs;
+     * this was the third count of the same words and the one that disagreed.
+     */
+    (prisma.asset.groupBy as any).mockResolvedValue([
+      { status: 'IN_STOCK', _count: 8 },
+      { status: 'ASSIGNED', _count: 3 },
+      { status: 'BOOKED_OUT', _count: 3 },
+      { status: 'IN_REPAIR', _count: 1 },
+      { status: 'RETIRED', _count: 1 },
+    ]);
+
+    const res = await request(app).get('/api/assets').set(...auth('boss'));
+
+    expect(res.body.counts.out).toBe(3);
+    // Still on the register, though — "All" is everything not written off.
+    expect(res.body.counts.all).toBe(15);
+  });
+
   it('lets a category narrow the tab counts, because that is a filter and not a tab', async () => {
     await request(app).get('/api/assets?category=CAMERA_BODY&status=IN_REPAIR').set(...auth('boss'));
     const facetWhere = (prisma.asset.groupBy as any).mock.calls.at(-1)[0].where;

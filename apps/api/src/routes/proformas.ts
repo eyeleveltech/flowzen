@@ -7,7 +7,18 @@ import { ProformaStatus, ProformaSourceType } from '@prisma/client';
 import { parsePagination } from '../utils/query.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
-import { generateProformaPdf } from '../services/proformaPdf.js';
+import { generateDocumentPdf } from '../services/documentPdf.js';
+import { buildDocumentSnapshot } from '../services/documentModel.js';
+import {
+  documentEmailDefaults,
+  documentEmailSchema,
+  sendDocumentEmail,
+} from '../services/documentEmail.js';
+import {
+  documentFieldsSchema,
+  cleanCustomFields,
+  ORG_DOCUMENT_SELECT,
+} from '../utils/documentSchemas.js';
 
 export const proformasRouter = Router();
 
@@ -79,7 +90,12 @@ const proformaCreateSchema = z.object({
   sourceId: z.string().min(1, 'Source ID is required'),
   /** Set when this proforma is raised against one specific project milestone rather than the project in general. */
   milestoneId: z.string().optional(),
-  amount: z.number().positive('Proforma amount must be positive'),
+  /**
+   * The pre-tax subtotal. Optional only because a caller sending line items
+   * has already said what it is; the refine below rejects a request that
+   * sends neither, rather than quietly raising a proforma for nothing.
+   */
+  amount: z.number().positive('Proforma amount must be positive').optional(),
   /** Falls back to the org's own defaultProformaValidityDays when omitted — not a fixed number in code. */
   validDays: z.number().min(1).optional(),
   billingName: z.string().min(1, 'Billing name is required'),
@@ -98,7 +114,12 @@ const proformaCreateSchema = z.object({
   /** SAC/HSN code for the single line item, e.g. "998382". */
   sacCode: z.string().optional().or(z.literal('')),
   terms: z.string().default('Advance payment request. Payment due within validity period. GST applicable as per statutory rates.'),
-});
+  ...documentFieldsSchema,
+})
+  .refine((v) => v.lineItems !== undefined || v.amount !== undefined, {
+    message: 'A proforma needs either line items or an amount',
+    path: ['lineItems'],
+  });
 
 // ── 1b. Download Proforma PDF ───────────────────────────────────────────────
 //
@@ -117,12 +138,77 @@ proformasRouter.get('/:id/pdf', requirePermission('pipeline.read'), async (req: 
       return;
     }
 
-    const pdf = await generateProformaPdf(id, orgId);
+    const pdf = await generateDocumentPdf('PROFORMA', id, orgId);
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${proforma.number.replace(/\//g, '-')}.pdf"`);
     res.send(pdf);
   } catch (error) {
+    next(error);
+  }
+});
+
+// ── 1c. One Proforma, In Full ───────────────────────────────────────────────
+//
+// The register carries enough to list a proforma; the edit form needs the
+// whole document, line items included. Those are deliberately NOT folded into
+// the list response: every row would then carry every line of every document
+// to render a table that shows none of them.
+
+proformasRouter.get('/:id', requirePermission('pipeline.read'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const proforma = await prisma.proforma.findFirst({
+      where: { id: String(req.params.id), organizationId: orgId },
+      include: {
+        company: { select: { id: true, name: true, gstin: true, city: true, stateName: true, stateCode: true } },
+        invoice: { select: { id: true, number: true, status: true } },
+        lineItems: { orderBy: { serialNo: 'asc' } },
+      },
+    });
+    if (!proforma) {
+      res.status(404).json({ success: false, error: 'Proforma not found' });
+      return;
+    }
+    res.json({ success: true, proforma });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── 1d. Send it to the client (CR-02 §10) ───────────────────────────────────
+
+proformasRouter.get('/:id/email', requirePermission('pipeline.read'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const defaults = await documentEmailDefaults('PROFORMA', String(req.params.id), req.user!.organizationId);
+    res.json({ success: true, ...defaults });
+  } catch (error) {
+    next(error);
+  }
+});
+
+proformasRouter.post('/:id/email', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const parsed = documentEmailSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
+    const sent = await sendDocumentEmail(
+      'PROFORMA',
+      String(req.params.id),
+      req.user!.organizationId,
+      req.user!.userId,
+      parsed.data,
+    );
+    res.json({ success: true, ...sent });
+  } catch (error) {
+    // "No mail server is configured" is a setup problem with a fix the sender
+    // can act on, not a 500 that reads as the app being broken.
+    if (error instanceof Error && /mail server/i.test(error.message)) {
+      res.status(400).json({ success: false, error: `${error.message} Set one up in Settings > Email.` });
+      return;
+    }
     next(error);
   }
 });
@@ -136,7 +222,7 @@ proformasRouter.post('/', requirePermission('pipeline.write'), async (req: AuthR
     }
 
     const orgId = req.user!.organizationId;
-    const { companyId, sourceType, sourceId, milestoneId, amount, billingName, billingContactName, billingAddress, gstin, gstApplicable, gstRatePercent, description, poNumber, poDate, sacCode, terms } = parsed.data;
+    const { companyId, sourceType, sourceId, milestoneId, amount, billingName, billingContactName, billingAddress, gstin, gstApplicable, gstRatePercent, description, poNumber, poDate, sacCode, terms, lineItems, customFields, placeOfSupply, billingStateName, billingStateCode, notes } = parsed.data;
 
     // A milestone can be billed once — the same guard `MSTATUS_NEXT` already
     // enforces client-side (only a PENDING milestone offers "raise proforma"),
@@ -155,8 +241,55 @@ proformasRouter.post('/', requirePermission('pipeline.write'), async (req: AuthR
       }
     }
 
-    const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { defaultProformaValidityDays: true } });
-    const validDays = parsed.data.validDays ?? org?.defaultProformaValidityDays ?? 30;
+    // Fetched for the seller snapshot the document freezes onto itself,
+    // rather than just the validity default it used to read.
+    const org = await prisma.organization.findUnique({ where: { id: orgId }, select: ORG_DOCUMENT_SELECT });
+    if (!org) {
+      res.status(404).json({ success: false, error: 'Organisation not found' });
+      return;
+    }
+    const validDays = parsed.data.validDays ?? org.defaultProformaValidityDays ?? 30;
+
+    // The company was never checked against the caller's org here — a
+    // proforma in this organisation could be raised against another one's
+    // company. It is fetched anyway now, for the buyer state to default from.
+    const company = await prisma.company.findFirst({
+      where: { id: companyId, organizationId: orgId },
+      select: { billingAddress: true, gstin: true, stateName: true, stateCode: true },
+    });
+    if (!company) {
+      res.status(404).json({ success: false, error: 'Company not found' });
+      return;
+    }
+
+    // A proforma raised without line items is still a one-line document —
+    // exactly the one the old single-description form produced — so the same
+    // request that worked yesterday produces the same page today.
+    const lines = lineItems ?? [
+      {
+        particulars: description?.trim() || 'Retainer fee for the billing period.',
+        units: 1,
+        unitCost: amount!,
+        hsnSac: sacCode?.trim() || null,
+      },
+    ];
+
+    const snapshot = buildDocumentSnapshot({
+      org,
+      lineItems: lines,
+      gstApplicable,
+      gstRatePercent,
+      buyer: {
+        name: billingName,
+        contactName: billingContactName,
+        address: billingAddress || company.billingAddress,
+        gstin: gstin || company.gstin,
+        stateName: billingStateName ?? company.stateName,
+        stateCode: billingStateCode ?? company.stateCode,
+      },
+      placeOfSupply,
+      customFields: cleanCustomFields(customFields),
+    });
 
     const raisedAt = new Date();
     const validTill = new Date(Date.now() + validDays * 24 * 3600 * 1000);
@@ -176,21 +309,42 @@ proformasRouter.post('/', requirePermission('pipeline.write'), async (req: AuthR
             sourceType,
             sourceId,
             milestoneId: milestoneId || null,
-            amount,
+            // Still the PRE-TAX subtotal, unchanged in meaning: the register,
+            // the forecast and the money screens all read this column, and
+            // `total` is added beside it rather than in place of it.
+            amount: snapshot.subtotal,
             raisedAt,
             validTill,
             status: ProformaStatus.UNPAID,
-            billingName: billingName.trim(),
-            billingContactName: billingContactName ? billingContactName.trim() : null,
-            billingAddress: billingAddress ? billingAddress.trim() : null,
-            gstin: gstin ? gstin.trim() : null,
             gstApplicable,
             gstRatePercent,
-            description: description ? description.trim() : null,
+            // Kept in step with line one so anything still reading the single
+            // description (the register CSV, the proposal trail) keeps working.
+            description: (lines[0]?.particulars ?? description)?.trim() || null,
+            sacCode: lines[0]?.hsnSac ?? (sacCode ? sacCode.trim() : null),
             poNumber: poNumber ? poNumber.trim() : null,
             poDate: poDate ?? null,
-            sacCode: sacCode ? sacCode.trim() : null,
             terms,
+            notes: notes || null,
+            billingName: snapshot.billingName,
+            billingContactName: snapshot.billingContactName,
+            billingAddress: snapshot.billingAddress,
+            gstin: snapshot.gstin,
+            billingStateName: snapshot.billingStateName,
+            billingStateCode: snapshot.billingStateCode,
+            placeOfSupplyState: snapshot.placeOfSupplyState,
+            placeOfSupplyCode: snapshot.placeOfSupplyCode,
+            supplyType: snapshot.supplyType,
+            sellerSnapshot: snapshot.sellerSnapshot,
+            customFields: snapshot.customFields,
+            subtotal: snapshot.subtotal,
+            cgstAmount: snapshot.cgstAmount,
+            sgstAmount: snapshot.sgstAmount,
+            igstAmount: snapshot.igstAmount,
+            roundOff: snapshot.roundOff,
+            total: snapshot.total,
+            amountInWords: snapshot.amountInWords,
+            lineItems: { create: snapshot.lines },
           },
         });
 
@@ -219,7 +373,7 @@ proformasRouter.post('/', requirePermission('pipeline.write'), async (req: AuthR
             entityId: created.id,
             actorId: req.user!.userId,
             verb: 'proforma_generated',
-            payload: { number: nextNumber, amount, billingName },
+            payload: { number: nextNumber, amount: snapshot.subtotal, total: snapshot.total, billingName },
           },
         });
 
@@ -288,6 +442,7 @@ const proformaEditSchema = z.object({
   poDate: z.coerce.date().optional().nullable(),
   sacCode: z.string().optional().nullable(),
   terms: z.string().optional(),
+  ...documentFieldsSchema,
 });
 
 proformasRouter.patch('/:id', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
@@ -314,7 +469,7 @@ proformasRouter.patch('/:id', requirePermission('pipeline.write'), async (req: A
       return;
     }
 
-    const { amount, raisedAt, validDays, billingName, billingContactName, billingAddress, gstin, gstApplicable, gstRatePercent, description, poNumber, poDate, sacCode, terms } = parsed.data;
+    const { raisedAt, validDays, poNumber, poDate, terms, notes } = parsed.data;
 
     // validTill is stored as an absolute date, not a day-count, so moving the
     // issue date has to recompute it. If validDays wasn't sent alongside a new
@@ -324,26 +479,133 @@ proformasRouter.patch('/:id', requirePermission('pipeline.write'), async (req: A
     const existingValidDays = Math.round((existing.validTill.getTime() - existing.raisedAt.getTime()) / 86400000);
     const effectiveValidDays = validDays ?? (raisedAt !== undefined ? existingValidDays : undefined);
 
-    const proforma = await prisma.proforma.update({
-      where: { id },
-      data: {
-        ...(amount !== undefined ? { amount } : {}),
-        ...(raisedAt !== undefined ? { raisedAt } : {}),
-        ...(effectiveValidDays !== undefined
-          ? { validTill: new Date(effectiveRaisedAt.getTime() + effectiveValidDays * 24 * 3600 * 1000) }
-          : {}),
-        ...(billingName !== undefined ? { billingName: billingName.trim() } : {}),
-        ...(billingContactName !== undefined ? { billingContactName: billingContactName ? billingContactName.trim() : null } : {}),
-        ...(billingAddress !== undefined ? { billingAddress: billingAddress ? billingAddress.trim() : null } : {}),
-        ...(gstin !== undefined ? { gstin: gstin ? gstin.trim() : null } : {}),
-        ...(gstApplicable !== undefined ? { gstApplicable } : {}),
-        ...(gstRatePercent !== undefined ? { gstRatePercent } : {}),
-        ...(description !== undefined ? { description: description ? description.trim() : null } : {}),
-        ...(poNumber !== undefined ? { poNumber: poNumber ? poNumber.trim() : null } : {}),
-        ...(poDate !== undefined ? { poDate } : {}),
-        ...(sacCode !== undefined ? { sacCode: sacCode ? sacCode.trim() : null } : {}),
-        ...(terms !== undefined ? { terms } : {}),
+    // An edit rebuilds the whole document rather than patching the columns
+    // that changed. Patching is what lets a total drift away from the lines
+    // it is supposed to be the sum of: change the rate and leave the tax, or
+    // change the place of supply and leave CGST where IGST now belongs. The
+    // merged values below are the document as it will stand after this edit,
+    // and every figure is recomputed from them in one place.
+    const merged = {
+      gstApplicable: parsed.data.gstApplicable ?? existing.gstApplicable,
+      gstRatePercent: parsed.data.gstRatePercent ?? existing.gstRatePercent,
+      billingName: parsed.data.billingName ?? existing.billingName,
+      billingContactName:
+        parsed.data.billingContactName !== undefined ? parsed.data.billingContactName : existing.billingContactName,
+      billingAddress:
+        parsed.data.billingAddress !== undefined ? parsed.data.billingAddress : existing.billingAddress,
+      gstin: parsed.data.gstin !== undefined ? parsed.data.gstin : existing.gstin,
+      billingStateName:
+        parsed.data.billingStateName !== undefined ? parsed.data.billingStateName : existing.billingStateName,
+      billingStateCode:
+        parsed.data.billingStateCode !== undefined ? parsed.data.billingStateCode : existing.billingStateCode,
+    };
+
+    // Line items sent, or the ones already on the row, or — for a proforma
+    // raised before CR-02 that has neither — the single line its description
+    // and amount always implied.
+    const existingLines = await prisma.documentLineItem.findMany({
+      where: { proformaId: id },
+      orderBy: { serialNo: 'asc' },
+    });
+    const nextLines =
+      parsed.data.lineItems ??
+      (existingLines.length > 0
+        ? existingLines.map((li) => ({
+            particulars: li.particulars,
+            units: Number(li.units),
+            unitCost: Number(li.unitCost),
+            hsnSac: li.hsnSac,
+            gstRate: li.gstRate,
+          }))
+        : [
+            {
+              particulars:
+                (parsed.data.description ?? existing.description)?.trim() ||
+                'Retainer fee for the billing period.',
+              units: 1,
+              unitCost: parsed.data.amount ?? Number(existing.amount),
+              hsnSac: parsed.data.sacCode ?? existing.sacCode,
+            },
+          ]);
+
+    // An amount sent WITHOUT line items is still the whole document — the old
+    // single-figure edit — so it replaces the one line's unit cost rather
+    // than sitting beside a subtotal that disagrees with it.
+    if (parsed.data.lineItems === undefined && parsed.data.amount !== undefined && nextLines.length === 1) {
+      nextLines[0] = { ...nextLines[0], units: 1, unitCost: parsed.data.amount };
+    }
+
+    const org = await prisma.organization.findUnique({ where: { id: orgId }, select: ORG_DOCUMENT_SELECT });
+    if (!org) {
+      res.status(404).json({ success: false, error: 'Organisation not found' });
+      return;
+    }
+
+    const snapshot = buildDocumentSnapshot({
+      org,
+      lineItems: nextLines,
+      gstApplicable: merged.gstApplicable,
+      gstRatePercent: merged.gstRatePercent,
+      buyer: {
+        name: merged.billingName,
+        contactName: merged.billingContactName,
+        address: merged.billingAddress,
+        gstin: merged.gstin,
+        stateName: merged.billingStateName,
+        stateCode: merged.billingStateCode,
       },
+      placeOfSupply:
+        parsed.data.placeOfSupply ??
+        { state: existing.placeOfSupplyState, code: existing.placeOfSupplyCode },
+      customFields: cleanCustomFields(
+        parsed.data.customFields ??
+          (Array.isArray(existing.customFields)
+            ? (existing.customFields as unknown as { label: string; value: string }[])
+            : []),
+      ),
+    });
+
+    const proforma = await prisma.$transaction(async (tx) => {
+      // Replaced rather than diffed: serial numbers are array position, so a
+      // deleted middle row renumbers everything after it anyway.
+      await tx.documentLineItem.deleteMany({ where: { proformaId: id } });
+      return tx.proforma.update({
+        where: { id },
+        data: {
+          amount: snapshot.subtotal,
+          ...(raisedAt !== undefined ? { raisedAt } : {}),
+          ...(effectiveValidDays !== undefined
+            ? { validTill: new Date(effectiveRaisedAt.getTime() + effectiveValidDays * 24 * 3600 * 1000) }
+            : {}),
+          gstApplicable: merged.gstApplicable,
+          gstRatePercent: merged.gstRatePercent,
+          description: snapshot.lines[0]?.particulars ?? null,
+          sacCode: snapshot.lines[0]?.hsnSac ?? null,
+          ...(poNumber !== undefined ? { poNumber: poNumber ? poNumber.trim() : null } : {}),
+          ...(poDate !== undefined ? { poDate } : {}),
+          ...(terms !== undefined ? { terms } : {}),
+          ...(notes !== undefined ? { notes: notes || null } : {}),
+          billingName: snapshot.billingName,
+          billingContactName: snapshot.billingContactName,
+          billingAddress: snapshot.billingAddress,
+          gstin: snapshot.gstin,
+          billingStateName: snapshot.billingStateName,
+          billingStateCode: snapshot.billingStateCode,
+          placeOfSupplyState: snapshot.placeOfSupplyState,
+          placeOfSupplyCode: snapshot.placeOfSupplyCode,
+          supplyType: snapshot.supplyType,
+          sellerSnapshot: snapshot.sellerSnapshot,
+          customFields: snapshot.customFields,
+          subtotal: snapshot.subtotal,
+          cgstAmount: snapshot.cgstAmount,
+          sgstAmount: snapshot.sgstAmount,
+          igstAmount: snapshot.igstAmount,
+          roundOff: snapshot.roundOff,
+          total: snapshot.total,
+          amountInWords: snapshot.amountInWords,
+          lineItems: { create: snapshot.lines },
+        },
+      });
     });
 
     await prisma.activity.create({
@@ -353,7 +615,7 @@ proformasRouter.patch('/:id', requirePermission('pipeline.write'), async (req: A
         entityId: id,
         actorId: req.user!.userId,
         verb: 'proforma_edited',
-        payload: { fields: Object.keys(parsed.data) },
+        payload: { fields: Object.keys(parsed.data), amount: snapshot.subtotal, total: snapshot.total },
       },
     });
 

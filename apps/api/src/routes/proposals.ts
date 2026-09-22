@@ -6,6 +6,7 @@ import { ProposalKind, ProposalStage, ProposalOutcome, CompanyStatus } from '@pr
 import { parsePagination } from '../utils/query.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
+import { proposalProbability, STAGE_PROBABILITY_SELECT } from '../utils/stageProbability.js';
 
 export const proposalsRouter = Router();
 
@@ -26,9 +27,17 @@ proposalsRouter.get('/pipeline', requirePermission('pipeline.read'), async (req:
   try {
     const orgId = req.user!.organizationId;
 
+    // §14: the stage probabilities are a setting, not a constant. Read once
+    // here so the board, the forecast and the web all weight a deal the same.
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: STAGE_PROBABILITY_SELECT,
+    });
+
     const proposals = await prisma.proposal.findMany({
       where: {
         organizationId: orgId,
+        deletedAt: null,
         // §10's board has six columns, the last one Won — so a won deal has to
         // stay on the board, in that column, not vanish the moment it's won.
         // Only Lost/Expired are the real "off the board" outcomes. Written as
@@ -49,15 +58,19 @@ proposalsRouter.get('/pipeline', requirePermission('pipeline.read'), async (req:
     // can no longer be `include`d off Proposal, so its own proformas are
     // fetched in one batch query and grouped by sourceId here instead.
     const proformasByProposal = new Map<string, { id: string; number: string; status: string; amount: unknown }[]>();
+    /** When this proposal first reached Proforma issued — see stageEnteredAt. */
+    const proformaRaisedAt = new Map<string, Date>();
     if (proposals.length > 0) {
       const proformas = await prisma.proforma.findMany({
         where: { sourceType: 'PROPOSAL', sourceId: { in: proposals.map((p) => p.id) } },
-        select: { id: true, number: true, status: true, amount: true, sourceId: true },
+        select: { id: true, number: true, status: true, amount: true, sourceId: true, raisedAt: true },
       });
       for (const pf of proformas) {
         const list = proformasByProposal.get(pf.sourceId) ?? [];
         list.push(pf);
         proformasByProposal.set(pf.sourceId, list);
+        const seen = proformaRaisedAt.get(pf.sourceId);
+        if (!seen || pf.raisedAt < seen) proformaRaisedAt.set(pf.sourceId, pf.raisedAt);
       }
     }
 
@@ -67,9 +80,44 @@ proposalsRouter.get('/pipeline', requirePermission('pipeline.read'), async (req:
       columns[stage] = [];
     }
 
+    /*
+     * §8: "Days in stage — now − timestamp of the last stage change."
+     *
+     * This read `updatedAt`, which is not that. Any write to the row reset it —
+     * a probability override, an owner change, a new version — so a deal parked
+     * in Proposal sent for thirty days showed as one day old if somebody nudged
+     * it yesterday, and the board's "Going stale, over 25 days" counted fewer
+     * than were actually stale. That is the one number on this screen whose
+     * whole job is to notice neglect.
+     *
+     * §8 says to take it from Activity. It is taken from the records the stage
+     * itself follows instead — the same ones §8 uses to derive `stage` — because
+     * they are exact and cannot go missing: a stage change with no activity row
+     * (losing a deal wrote none until today) would otherwise read as "never
+     * moved". Same answer, one less thing that can be absent.
+     */
+    const stageEnteredAt = (p: (typeof proposals)[number]): Date => {
+      if (p.stage === ProposalStage.WON && p.wonAt) return p.wonAt;
+      if (p.stage === ProposalStage.VERBAL_YES && p.verbalYesAt) return p.verbalYesAt;
+      if (p.stage === ProposalStage.PROFORMA_ISSUED) {
+        const raised = proformaRaisedAt.get(p.id);
+        if (raised) return raised;
+      }
+      // In negotiation is "more than one version", so it began at the latest
+      // one; Proposal sent began at the first. Both come off the versions,
+      // which are immutable, so neither can drift.
+      const sorted = [...p.versions].sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
+      if (p.stage === ProposalStage.IN_NEGOTIATION && sorted.length > 1) return sorted[sorted.length - 1].sentAt;
+      if (sorted.length > 0) return sorted[0].sentAt;
+      return p.createdAt;
+    };
+
     for (const p of proposals) {
       const currentVersion = p.versions[0] || null;
-      const daysInStage = Math.max(1, Math.ceil((Date.now() - new Date(p.updatedAt).getTime()) / (1000 * 3600 * 24)));
+      const daysInStage = Math.max(
+        1,
+        Math.ceil((Date.now() - stageEnteredAt(p).getTime()) / (1000 * 3600 * 24)),
+      );
 
       const card = {
         id: p.id,
@@ -88,7 +136,7 @@ proposalsRouter.get('/pipeline', requirePermission('pipeline.read'), async (req:
         // string serialization with `+` concatenates instead of adding.
         quotedValue: currentVersion ? Number(currentVersion.value) : 0,
         scopeSummary: currentVersion?.scopeSummary || '',
-        probability: p.probabilityOverride ?? (p.stage === 'TALKING' ? 20 : p.stage === 'PROPOSAL_SENT' ? 40 : p.stage === 'IN_NEGOTIATION' ? 60 : p.stage === 'PROFORMA_ISSUED' ? 80 : 95),
+        probability: proposalProbability(p, org),
         daysInStage,
         proforma: proformasByProposal.get(p.id)?.[0] || null,
         updatedAt: p.updatedAt,
@@ -125,7 +173,7 @@ proposalsRouter.get('/funnel', requirePermission('pipeline.read'), async (req: A
     since.setMonth(since.getMonth() - months);
 
     const proposals = await prisma.proposal.findMany({
-      where: { organizationId: orgId, createdAt: { gte: since } },
+      where: { organizationId: orgId, deletedAt: null, createdAt: { gte: since } },
       select: { id: true, outcome: true, versions: { select: { id: true } } },
     });
 
@@ -177,7 +225,7 @@ proposalsRouter.get('/', requirePermission('pipeline.read'), async (req: AuthReq
       wantsCsv ? { defaultLimit: 10000, maxLimit: 10000 } : { defaultLimit: 200, maxLimit: 500 },
     );
 
-    const where: any = { organizationId: orgId };
+    const where: any = { organizationId: orgId, deletedAt: null };
     if (companyId && typeof companyId === 'string') where.companyId = companyId;
     if (stage && typeof stage === 'string') where.stage = stage as ProposalStage;
     if (kind && typeof kind === 'string') where.kind = kind as ProposalKind;
@@ -337,7 +385,7 @@ proposalsRouter.post('/:id/versions', requirePermission('pipeline.write'), async
     const id = String(req.params.id);
 
     const proposal = await prisma.proposal.findFirst({
-      where: { id, organizationId: orgId },
+      where: { id, organizationId: orgId, deletedAt: null },
       include: { versions: { orderBy: { n: 'desc' } } },
     });
 
@@ -413,7 +461,7 @@ proposalsRouter.patch('/:id/stage', requirePermission('pipeline.write'), async (
     const orgId = req.user!.organizationId;
     const id = String(req.params.id);
 
-    const existing = await prisma.proposal.findFirst({ where: { id, organizationId: orgId } });
+    const existing = await prisma.proposal.findFirst({ where: { id, organizationId: orgId, deletedAt: null } });
     if (!existing) {
       res.status(404).json({ success: false, error: 'Proposal not found' });
       return;
@@ -473,7 +521,7 @@ proposalsRouter.patch('/:id/probability', requirePermission('pipeline.write'), a
     const orgId = req.user!.organizationId;
     const id = String(req.params.id);
 
-    const existing = await prisma.proposal.findFirst({ where: { id, organizationId: orgId } });
+    const existing = await prisma.proposal.findFirst({ where: { id, organizationId: orgId, deletedAt: null } });
     if (!existing) {
       res.status(404).json({ success: false, error: 'Proposal not found' });
       return;
@@ -524,7 +572,7 @@ proposalsRouter.post('/:id/win', requirePermission('pipeline.write'), async (req
     const { versionId } = parsed.data;
 
     const proposal = await prisma.proposal.findFirst({
-      where: { id, organizationId: orgId },
+      where: { id, organizationId: orgId, deletedAt: null },
       include: { company: true },
     });
 
@@ -602,8 +650,8 @@ proposalsRouter.post('/:id/lose', requirePermission('pipeline.write'), async (re
     // it just moves a stranger's proposal to LOST with a reason they never
     // wrote. POST /:id/win, sixty lines above, has always checked this.
     const existing = await prisma.proposal.findFirst({
-      where: { id, organizationId: orgId },
-      select: { id: true },
+      where: { id, organizationId: orgId, deletedAt: null },
+      select: { id: true, stage: true, company: { select: { name: true } } },
     });
 
     if (!existing) {
@@ -620,7 +668,265 @@ proposalsRouter.post('/:id/lose', requirePermission('pipeline.write'), async (re
       },
     });
 
+    // §16: "Every create, update and status change writes an Activity row. No
+    // exceptions." Winning wrote one and losing did not — so the half of the
+    // win rate that hurts was the half with no trail, and the stage a deal
+    // died at was lost with it, because LOST overwrites `stage`.
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'Proposal',
+        entityId: id,
+        actorId: req.user!.userId,
+        verb: 'proposal_lost',
+        payload: {
+          companyName: existing.company.name,
+          lostFromStage: existing.stage,
+          lostReason: parsed.data.lostReason.trim(),
+        },
+      },
+    });
+
     res.json({ success: true, proposal: updated });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── 8. Edit a Proposal ──────────────────────────────────────────────────────
+//
+// Only the two things that are a property of the deal rather than a record of
+// what happened to it.
+//
+// `companyId` is deliberately not editable. Moving a proposal to another
+// company moves its value between two clients' pipelines, and if it has been
+// won it already graduated the first company to CLIENT — an edit here would
+// leave that behind with no proposal explaining it. Raise it against the right
+// company instead; that is what delete below is for.
+//
+// The numbers are not editable either, by design: a version is immutable and a
+// re-price is v(N+1) (§11.1). POST /:id/versions is the edit for money.
+
+const proposalEditSchema = z
+  .object({
+    ownerId: z.string().min(1).optional(),
+    kind: z.nativeEnum(ProposalKind).optional(),
+  })
+  .refine((v) => v.ownerId !== undefined || v.kind !== undefined, {
+    message: 'Nothing to change',
+  });
+
+proposalsRouter.patch('/:id', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const parsed = proposalEditSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
+
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+    const { ownerId, kind } = parsed.data;
+
+    const existing = await prisma.proposal.findFirst({
+      where: { id, organizationId: orgId, deletedAt: null },
+      include: { company: { select: { name: true } } },
+    });
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'Proposal not found' });
+      return;
+    }
+
+    const ownerChanged = ownerId !== undefined && ownerId !== existing.ownerId;
+    const kindChanged = kind !== undefined && kind !== existing.kind;
+
+    /*
+     * Resending the values a proposal already has must not write the row.
+     *
+     * `updatedAt` is what the pipeline board reads as "days in this stage" and
+     * what the daily brief reads as "no activity in N days" (routes/brief.ts).
+     * A save that changed nothing would reset that clock, and a deal nobody
+     * has touched in three weeks would come back looking freshly worked —
+     * which is the one thing those two numbers exist to prevent.
+     */
+    if (!ownerChanged && !kindChanged) {
+      const { company: _company, ...unchanged } = existing;
+      res.json({ success: true, proposal: unchanged });
+      return;
+    }
+
+    // Which kind it is decides what winning builds — a retainer or a project
+    // (§11.1 step 11). Once that has happened the answer is on the ground, and
+    // changing the label here would describe work that was never done.
+    if (kindChanged && existing.outcome !== null) {
+      res.status(400).json({
+        success: false,
+        error: 'This proposal is already closed — retainer or project was settled when it was won or lost.',
+      });
+      return;
+    }
+
+    if (ownerChanged) {
+      const owner = await prisma.user.findFirst({
+        where: { id: ownerId, organizationId: orgId, active: true },
+        select: { id: true },
+      });
+      if (!owner) {
+        res.status(404).json({ success: false, error: 'That person is not on the team' });
+        return;
+      }
+    }
+
+    const updated = await prisma.proposal.update({
+      where: { id },
+      data: {
+        ...(ownerChanged ? { ownerId } : {}),
+        ...(kindChanged ? { kind } : {}),
+      },
+    });
+
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'Proposal',
+        entityId: id,
+        actorId: req.user!.userId,
+        verb: 'proposal_edited',
+        payload: {
+          companyName: existing.company.name,
+          ...(ownerChanged ? { ownerFrom: existing.ownerId, ownerTo: ownerId } : {}),
+          ...(kindChanged ? { kindFrom: existing.kind, kindTo: kind } : {}),
+        },
+      },
+    });
+
+    res.json({ success: true, proposal: updated });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── 9. Delete a Proposal ────────────────────────────────────────────────────
+//
+// The case this exists for is the only one it allows: a proposal logged by
+// mistake, against the wrong company or twice over, that nothing has happened
+// to yet. Everything past that point is refused, because a proposal is read by
+// more than the pipeline board:
+//
+//   · the funnel and the win rate count won and lost proposals, so removing
+//     one silently improves or worsens a number nobody edited;
+//   · a won proposal graduated its company to CLIENT and seeded the project or
+//     retainer through sourceProposalId, which would then point at nothing;
+//   · a proforma raised against it is a document that went to a client.
+//
+// Soft delete, per §16 — the row stays, GET /trash lists it and
+// POST /:id/restore puts it back.
+
+proposalsRouter.get('/trash', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    // Same key the register and projects' own /trash use, so a caller reads
+    // deleted proposals exactly the way it reads live ones.
+    const proposals = await prisma.proposal.findMany({
+      where: { organizationId: orgId, deletedAt: { not: null } },
+      orderBy: { deletedAt: 'desc' },
+      take: 100,
+      include: {
+        company: { select: { id: true, name: true } },
+        owner: { select: { id: true, name: true } },
+        versions: { orderBy: { n: 'desc' }, take: 1 },
+      },
+    });
+    res.json({ success: true, proposals });
+  } catch (error) {
+    next(error);
+  }
+});
+
+proposalsRouter.delete('/:id', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+
+    const proposal = await prisma.proposal.findFirst({
+      where: { id, organizationId: orgId, deletedAt: null },
+      include: { company: { select: { name: true } } },
+    });
+    if (!proposal) {
+      res.status(404).json({ success: false, error: 'Proposal not found' });
+      return;
+    }
+
+    if (proposal.outcome !== null) {
+      res.status(400).json({
+        success: false,
+        error:
+          proposal.outcome === ProposalOutcome.WON
+            ? 'This proposal was won — the client and the work that came from it are built on it. It cannot be deleted.'
+            : 'This proposal was lost. It stays, because the win rate counts it — hiding it would not make the number truer.',
+      });
+      return;
+    }
+
+    const proforma = await prisma.proforma.findFirst({
+      where: { organizationId: orgId, sourceType: 'PROPOSAL', sourceId: id },
+      select: { number: true },
+    });
+    if (proforma) {
+      res.status(400).json({
+        success: false,
+        error: `Proforma ${proforma.number} was raised against this proposal. Cancel that first — it is a document the client has.`,
+      });
+      return;
+    }
+
+    await prisma.proposal.update({ where: { id }, data: { deletedAt: new Date() } });
+
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'Proposal',
+        entityId: id,
+        actorId: req.user!.userId,
+        verb: 'proposal_deleted',
+        payload: { companyName: proposal.company.name, stage: proposal.stage },
+      },
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+proposalsRouter.post('/:id/restore', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+
+    const existing = await prisma.proposal.findFirst({
+      where: { id, organizationId: orgId, deletedAt: { not: null } },
+      include: { company: { select: { name: true } } },
+    });
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'Deleted proposal not found' });
+      return;
+    }
+
+    await prisma.proposal.update({ where: { id }, data: { deletedAt: null } });
+
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'Proposal',
+        entityId: id,
+        actorId: req.user!.userId,
+        verb: 'proposal_restored',
+        payload: { companyName: existing.company.name },
+      },
+    });
+
+    res.json({ success: true });
   } catch (error) {
     next(error);
   }

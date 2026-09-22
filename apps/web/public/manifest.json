@@ -2,7 +2,7 @@
   "name": "Flowzen",
   "short_name": "Flowzen",
   "description": "Premium agency project management platform for digital teams",
-  "start_url": "/dashboard",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#111827",

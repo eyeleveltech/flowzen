@@ -53,8 +53,6 @@ const notificationIcons: Record<string, typeof CheckSquare> = {
   INVOICE_AGING_60: AlertCircle,
   MEMBER_OVERALLOCATED: Users,
   ALLOCATIONS_UNCONFIRMED: Users,
-  PERSON_OVERLOADED: Users,
-  PERSON_UNDERLOADED: Users,
   PROJECT_OVER_ESTIMATE: FolderKanban,
   PROJECT_BEHIND_SCHEDULE: FolderKanban,
   CLIENT_QUIET: Building2,

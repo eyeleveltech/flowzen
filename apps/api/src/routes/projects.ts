@@ -78,6 +78,7 @@ projectsRouter.get('/', requirePermission('work.all'), async (req: AuthRequest, 
         estimatedCost: p.estimatedCost === null ? null : Number(p.estimatedCost),
         directCost,
         peopleCost,
+        costEntries: p.costs.length + p.allocations.length,
       });
       const progress = percentComplete({
         milestones: p.milestones,
@@ -130,8 +131,12 @@ projectsRouter.get('/', requirePermission('work.all'), async (req: AuthRequest, 
         { label: 'Actual cost', value: (p) => (p.actualCostTotal != null ? Number(p.actualCostTotal) : '') },
         { label: 'External cost', value: (p) => p.profit?.directCost ?? '' },
         { label: 'People cost', value: (p) => p.profit?.peopleCost ?? '' },
-        { label: 'Profit', value: (p) => p.profit?.profit ?? '' },
-        { label: 'Margin %', value: (p) => p.profit?.marginPercent ?? '' },
+        // Blank, not a number, when nobody has recorded what the job cost —
+        // a spreadsheet full of 100% margins is exactly how the unrecorded
+        // ones get quoted from.
+        { label: 'Profit', value: (p) => (p.profit?.costBasis === 'none' ? '' : p.profit?.profit ?? '') },
+        { label: 'Margin %', value: (p) => (p.profit?.costBasis === 'none' ? '' : p.profit?.marginPercent ?? '') },
+        { label: 'Costs recorded', value: (p) => (p.profit?.costBasis === 'none' ? 'no' : 'yes') },
         { label: 'Status', value: (p) => p.status },
         { label: 'Owner', value: (p) => p.owner.name },
         { label: 'Milestone progress %', value: (p) => p.milestoneProgress },
@@ -199,6 +204,7 @@ projectsRouter.get(
           estimatedCost: p.estimatedCost === null ? null : Number(p.estimatedCost),
           directCost,
           peopleCost,
+          costEntries: p.costs.length + p.allocations.length,
         });
         const progress = percentComplete({
           milestones: p.milestones,
@@ -339,6 +345,7 @@ projectsRouter.get('/:id', requirePermission('work.all'), async (req: AuthReques
       estimatedCost: project.estimatedCost === null ? null : Number(project.estimatedCost),
       directCost,
       peopleCost,
+      costEntries: project.costs.length + project.allocations.length,
     });
     const progress = percentComplete({
       milestones: project.milestones,
@@ -460,7 +467,7 @@ projectsRouter.post('/', requirePermission('company.write'), async (req: AuthReq
     // a live/lost proposal masquerade as the reason a project exists.
     if (sourceProposalId) {
       const proposal = await prisma.proposal.findFirst({
-        where: { id: sourceProposalId, organizationId: orgId, companyId },
+        where: { id: sourceProposalId, organizationId: orgId, companyId, deletedAt: null },
       });
       if (!proposal) {
         res.status(404).json({ success: false, error: 'Source proposal not found for this company' });

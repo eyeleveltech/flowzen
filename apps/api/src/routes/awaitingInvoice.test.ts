@@ -72,6 +72,10 @@ beforeEach(() => {
     sessionsValidFrom: null,
   });
   (prisma.monthCard.findMany as any).mockResolvedValue([]);
+  // The totals come from the database now, not from the rows. Default them to
+  // "nothing owed" so each test states only the numbers it cares about.
+  (prisma.monthCard.aggregate as any).mockResolvedValue({ _count: 0, _sum: { revenue: null } });
+  (prisma.monthCard.count as any).mockResolvedValue(0);
 });
 
 const get = (who = ACCOUNTS) => request(app).get('/api/invoices/awaiting').set(...who);
@@ -83,14 +87,42 @@ describe('the months waiting for an invoice', () => {
     const { where } = (prisma.monthCard.findMany as any).mock.calls.at(-1)[0];
     expect(where.invoiceId).toBeNull();
     expect(where.retainer).toEqual({ organizationId: 'org-1' });
+    // The money aggregate is scoped the same way, or the total would count
+    // another organisation's unbilled months into this one's.
+    const agg = (prisma.monthCard.aggregate as any).mock.calls.at(-1)[0];
+    expect(agg.where.invoiceId).toBeNull();
+    expect(agg.where.retainer).toEqual({ organizationId: 'org-1' });
   });
 
   it('counts a month that has ended as owed', async () => {
     (prisma.monthCard.findMany as any).mockResolvedValue([card('mc-1', lastMonth, 'OPEN')]);
+    (prisma.monthCard.aggregate as any).mockResolvedValue({ _count: 1, _sum: { revenue: 30000 } });
     const res = await get();
     expect(res.body.rows[0].due).toBe(true);
     expect(res.body.dueCount).toBe(1);
     expect(res.body.dueTotal).toBe(30000);
+  });
+
+  it('totals every uninvoiced month, not just the page of rows it returns', async () => {
+    // The regression this guards. `rows` is capped at 100 for display; summing
+    // the money from those rows can only ever UNDERSTATE what is owed, and it
+    // understates by the oldest months — the ones most overdue.
+    const page = Array.from({ length: 100 }, (_, i) => card(`mc-${i}`, lastMonth, 'CLOSED'));
+    (prisma.monthCard.findMany as any).mockResolvedValue(page);
+    (prisma.monthCard.aggregate as any).mockResolvedValue({ _count: 137, _sum: { revenue: 4110000 } });
+
+    const res = await get();
+    expect(res.body.rows).toHaveLength(100);
+    expect(res.body.truncated).toBe(true);
+    // 137 and 4,110,000 — the database's answer, not 100 x 30,000.
+    expect(res.body.dueCount).toBe(137);
+    expect(res.body.dueTotal).toBe(4110000);
+  });
+
+  it('asks for the oldest months first, so a capped page keeps the overdue ones', async () => {
+    await get();
+    const { orderBy } = (prisma.monthCard.findMany as any).mock.calls.at(-1)[0];
+    expect(orderBy).toEqual({ month: 'asc' });
   });
 
   it('counts a closed card as owed even inside its own month', async () => {
@@ -108,6 +140,7 @@ describe('the months waiting for an invoice', () => {
     // The forward view. Dropping it would leave the screen empty for most of
     // the month and make the list read as a rebuke rather than a work list.
     (prisma.monthCard.findMany as any).mockResolvedValue([card('mc-1', thisMonth, 'OPEN')]);
+    (prisma.monthCard.count as any).mockResolvedValue(1);
     const res = await get();
     expect(res.body.rows).toHaveLength(1);
     expect(res.body.rows[0].due).toBe(false);

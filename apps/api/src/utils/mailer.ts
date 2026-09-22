@@ -47,9 +47,20 @@ export async function resolveMailConfig(organizationId: string): Promise<MailCon
   return null;
 }
 
+/** A file to send with the message — CR-02 §10's "emailable" document. */
+export type MailAttachment = { filename: string; content: Buffer; contentType?: string };
+
 export async function sendMail(
   organizationId: string,
-  message: { to: string; subject: string; html: string; text?: string; replyTo?: string | null },
+  message: {
+    to: string;
+    subject: string;
+    html: string;
+    text?: string;
+    replyTo?: string | null;
+    cc?: string[];
+    attachments?: MailAttachment[];
+  },
 ): Promise<{ sent: true }> {
   const config = await resolveMailConfig(organizationId);
   if (!config) {
@@ -70,6 +81,8 @@ export async function sendMail(
     html: message.html,
     text: message.text,
     replyTo: message.replyTo || undefined,
+    cc: message.cc?.length ? message.cc : undefined,
+    attachments: message.attachments?.length ? message.attachments : undefined,
   });
 
   return { sent: true };

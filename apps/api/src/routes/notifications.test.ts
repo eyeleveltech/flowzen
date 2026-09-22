@@ -53,7 +53,7 @@ const auth = (w: Who) =>
 const ALERTS = [
   { id: 'a-money', rule: 'PROJECT_OVER_ESTIMATE', severity: 'HIGH', entityType: 'Project', entityId: 'p1', message: 'Drone Show Films has spent past its estimate of 190000.', createdAt: new Date(), resolvedAt: null },
   { id: 'a-inv', rule: 'INVOICE_OVERDUE', severity: 'HIGH', entityType: 'Invoice', entityId: 'i1', message: 'Invoice INV/26-27/0144 is overdue.', createdAt: new Date(), resolvedAt: null },
-  { id: 'a-load', rule: 'PERSON_UNDERLOADED', severity: 'LOW', entityType: 'User', entityId: 'u1', message: 'Akmal (Founder) is at 20% of a normal load.', createdAt: new Date(), resolvedAt: null },
+  { id: 'a-load', rule: 'MEMBER_OVERALLOCATED', severity: 'MED', entityType: 'User', entityId: 'u1', message: 'Akmal is committed to 140% of September.', createdAt: new Date(), resolvedAt: null },
   { id: 'a-deal', rule: 'PROPOSAL_STALLED', severity: 'MED', entityType: 'Proposal', entityId: 'pr1', message: 'Proposal for Stylori has had no new version for 38 days.', createdAt: new Date(), resolvedAt: null },
   { id: 'a-kit', rule: 'ASSET_OVERDUE', severity: 'MED', entityType: 'Asset', entityId: 'as1', message: 'EL/CAM/001 is 3 days late back.', createdAt: new Date(), resolvedAt: null },
   { id: 'a-co', rule: 'CLIENT_QUIET', severity: 'MED', entityType: 'Company', entityId: 'co1', message: 'Brigade has had no activity in 21 days.', createdAt: new Date(), resolvedAt: null },
@@ -118,15 +118,18 @@ describe('who is told what', () => {
 
   it('gives an employee the kit alerts and their own work, and nothing else', async () => {
     // The register is open to everybody, so an overdue lens is too. Invoices,
-    // deals and other people's workload are not — but their own overdue task
-    // is, which is the whole of the fix below.
+    // deals and how other people's month is committed are not — but their own
+    // overdue task is, which is the whole of the fix below.
     const seen = await rulesFor('employee');
     expect([...new Set(seen)].sort()).toEqual(['ASSET_OVERDUE', 'TASK_OVERDUE']);
   });
 
-  it('does not tell a designer how loaded the founder is', async () => {
-    expect(await rulesFor('employee')).not.toContain('PERSON_UNDERLOADED');
-    expect(await rulesFor('head')).toContain('PERSON_UNDERLOADED');
+  it('does not tell a designer how the founder’s month is committed', async () => {
+    // Was PERSON_UNDERLOADED, which measured somebody's open task count
+    // against their own trailing median and is gone. MEMBER_OVERALLOCATED is
+    // the surviving Team-scoped rule, and the gate it tests is the same one.
+    expect(await rulesFor('employee')).not.toContain('MEMBER_OVERALLOCATED');
+    expect(await rulesFor('head')).toContain('MEMBER_OVERALLOCATED');
   });
 
   it('keeps the pipeline for the people who sell', async () => {
@@ -204,7 +207,7 @@ describe('where a notification goes', () => {
     );
     expect(bySource.PROJECT_OVER_ESTIMATE).toBe('Projects');
     expect(bySource.INVOICE_OVERDUE).toBe('Money');
-    expect(bySource.PERSON_UNDERLOADED).toBe('Team');
+    expect(bySource.MEMBER_OVERALLOCATED).toBe('Team');
     expect(bySource.PROPOSAL_STALLED).toBe('Pipeline');
     expect(bySource.ASSET_OVERDUE).toBe('Assets');
     expect(bySource.CLIENT_QUIET).toBe('Clients');

@@ -33,6 +33,18 @@ export type ProjectFinancials = {
   directCost: number;
   /** Allocated salary: the people, at the share of their month this had. */
   peopleCost: number;
+  /**
+   * How many cost records exist at all — cost rows plus allocation rows.
+   *
+   * Nought is not the same as nought rupees. A project nobody has entered a
+   * single cost against computes to profit = the whole quote and a 100%
+   * margin, and that is what the screen showed: a job with no tasks, no costs
+   * and no people read as the best-performing work in the studio. The
+   * difference between "we spent nothing" and "nobody has said what we spent"
+   * is the difference between a result and an absence, and §8's rule about
+   * masked money — null, never zero — is the same rule.
+   */
+  costEntries?: number;
 };
 
 export type JobProfit = {
@@ -47,6 +59,15 @@ export type JobProfit = {
   /** Actual against estimate. Positive means over. `null` with no estimate. */
   costVariance: number | null;
   costVariancePercent: number | null;
+  /**
+   * Whether anybody has recorded what this job cost.
+   *
+   * `'none'` means `profit` is arithmetic on an empty set, not a finding. The
+   * figure is still returned — the company rollups need something to add, and
+   * they already separate delivered from live for this very reason — but no
+   * screen should present it as an answer. Callers show "not known yet".
+   */
+  costBasis: 'recorded' | 'none';
 };
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -72,6 +93,10 @@ export function jobProfit(f: ProjectFinancials): JobProfit {
       f.estimatedCost === null || f.estimatedCost === 0
         ? null
         : Math.round(((actualCost - f.estimatedCost) / f.estimatedCost) * 1000) / 10,
+    // Older callers that do not pass a count are taken at their word rather
+    // than accused of having no data; only an explicit nought means nothing
+    // has been recorded.
+    costBasis: f.costEntries === 0 ? 'none' : 'recorded',
   };
 }
 

@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { personOptions } from '@/lib/people';
+import { STATE_OPTIONS } from '@/components/documents/DocumentFields';
 
 const VERTICALS = [
   'HEALTHCARE', 'REAL_ESTATE', 'D2C', 'SPORTS', 'IT_AND_SAAS', 'RETAIL', 'B2B', 'HOSPITALITY',
@@ -36,6 +37,7 @@ type Company = {
   website: string | null;
   gstin: string | null;
   billingAddress: string | null;
+  stateCode?: string | null;
   ownerId?: string | null;
   owner?: { id: string; name: string } | null;
 };
@@ -58,6 +60,7 @@ export function EditCompanyModal({ company, onConfirm, onCancel }: Props) {
   const [website, setWebsite] = useState(company.website ?? '');
   const [gstin, setGstin] = useState(company.gstin ?? '');
   const [billingAddress, setBillingAddress] = useState(company.billingAddress ?? '');
+  const [stateCode, setStateCode] = useState(company.stateCode ?? '');
   const [ownerId, setOwnerId] = useState(company.ownerId ?? company.owner?.id ?? '');
 
   useEffect(() => {
@@ -82,6 +85,7 @@ export function EditCompanyModal({ company, onConfirm, onCancel }: Props) {
         website: website.trim() || null,
         gstin: gstin.trim() || null,
         billingAddress: billingAddress.trim() || null,
+        stateCode: stateCode || null,
         ...(ownerId ? { ownerId } : {}),
       } as never);
       toast.success('Company updated');
@@ -160,6 +164,23 @@ export function EditCompanyModal({ company, onConfirm, onCancel }: Props) {
             rows={2}
             placeholder="What appears on their proformas and invoices."
           />
+
+          {/*
+            CR-02 §3. Its own field rather than something read off the GSTIN,
+            because a client with no GSTIN then reads as being in our own state
+            and gets charged CGST and SGST on a supply that owes IGST.
+          */}
+          <FieldSelect
+            label="State"
+            value={stateCode}
+            onChange={setStateCode}
+            options={STATE_OPTIONS}
+            placeholder="Choose a state…"
+            disabled={busy}
+          />
+          <p className="-mt-2 text-micro text-secondary">
+            Fills in the place of supply on their documents, which is what decides the tax.
+          </p>
         </ScrollingModalBody>
 
         <ModalFooter>

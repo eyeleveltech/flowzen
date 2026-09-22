@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { plural } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Package, Plus } from 'lucide-react';
@@ -50,23 +51,26 @@ const TABS: { key: Tab; label: string }[] = [
 
 export default function AssetsPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>('ALL');
-  const [assets, setAssets] = useState<AssetListItem[]>([]);
-  const [outNow, setOutNow] = useState<AssetMovementRow[]>([]);
   /** Tab counts, from the register rather than from the filtered rows. */
-  const [counts, setCounts] = useState({ all: 0, out: 0, repair: 0, retired: 0 });
-  const [summary, setSummary] = useState<AssetSummary | null>(null);
-  const [access, setAccess] = useState<AssetAccess>({ canManage: false, canSeeFigures: false });
   const [category, setCategory] = useState('');
   const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
+  /**
+   * The register, its tab counts, the summary tiles and what is signed out —
+   * one cached query keyed on the filters that actually change the answer.
+   *
+   * `keepPreviousData` keeps the current rows on screen while a new category
+   * or search term is fetched, instead of flashing the empty state between
+   * every keystroke.
+   */
+  const { data, isPending, error: queryError } = useQuery({
+    queryKey: ['assets', tab, category, search.trim()],
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
       const params: Record<string, string> = {};
       if (category) params.category = category;
       if (search.trim()) params.q = search.trim();
@@ -77,22 +81,22 @@ export default function AssetsPage() {
         api.assets.summary(),
         api.assets.outNow(),
       ]);
-      setAssets(list.data);
-      setCounts(list.counts);
-      setAccess(list.access);
-      setSummary(sum.data);
-      setOutNow(out);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load the register');
-    } finally {
-      setLoading(false);
-    }
-  }, [category, search, tab]);
+      return { assets: list.data, counts: list.counts, access: list.access, summary: sum.data, outNow: out };
+    },
+  });
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const assets: AssetListItem[] = data?.assets ?? [];
+  const outNow: AssetMovementRow[] = data?.outNow ?? [];
+  const counts = data?.counts ?? { all: 0, out: 0, repair: 0, retired: 0 };
+  const summary: AssetSummary | null = data?.summary ?? null;
+  const access: AssetAccess = data?.access ?? { canManage: false, canSeeFigures: false };
+  const loading = isPending;
+  const error = queryError instanceof Error ? queryError.message : queryError ? 'Could not load the register' : null;
+
+  /** What the create / import flows call once the register has changed. */
+  const load = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['assets'] });
+  }, [queryClient]);
 
   // RETIRED covers all three ways an asset leaves — written off, sold, lost.
   // Three separate tabs for three endings nobody looks at daily would be three

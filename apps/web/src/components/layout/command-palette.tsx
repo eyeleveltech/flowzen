@@ -367,11 +367,9 @@ export function CommandPalette() {
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setCommandPaletteOpen(!commandPaletteOpen);
-        return;
-      }
+      // ⌘K is handled by CommandPaletteMount, which is always loaded — this
+      // component only exists once the palette has been opened at least once,
+      // and two listeners on the same key would toggle it twice per press.
       if (!commandPaletteOpen) return;
       if (e.key === 'Escape') {
         setCommandPaletteOpen(false);

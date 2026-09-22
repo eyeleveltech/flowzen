@@ -1,8 +1,7 @@
 import { Router, type Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
-import { calculateWorkingMinutes } from '../utils/workingHours.js';
-import { loadPercentage } from '../utils/workload.js';
+import { loadWorkCalendar, workingMinutesOn } from '../utils/workCalendar.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
 
@@ -13,7 +12,7 @@ teamRouter.use(authenticate);
 // ── Member picker (name + id only) ──────────────────────────────────────────
 //
 // Who works here isn't sensitive — only monthlyCost is (per §9, gated behind
-// setup.admin everywhere else). /capacity needs work.team for workload data,
+// setup.admin everywhere else). /capacity needs work.team for task counts,
 // but a BD user with only company.write still needs to pick a company's
 // owner from *somewhere*, so this is gated on nothing but being logged in.
 
@@ -80,6 +79,7 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
     });
 
     const now = new Date();
+    const calendar = await loadWorkCalendar(orgId);
     const todayStr = now.toISOString().slice(0, 10);
 
     const formatted = members.map((m) => {
@@ -94,7 +94,7 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
       // Calculate average turnaround in working hours for completed tasks
       let totalWorkingMinutes = 0;
       for (const t of completedTasks) {
-        const time = calculateWorkingMinutes(t.assignedAt, t.completedAt || now, t.waitingTotalMinutes);
+        const time = workingMinutesOn(calendar, t.assignedAt, t.completedAt || now, t.waitingTotalMinutes);
         totalWorkingMinutes += time.totalMinutes;
       }
       /*
@@ -108,11 +108,6 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
       const avgMinutes = completedTasks.length > 0 ? Math.round(totalWorkingMinutes / completedTasks.length) : null;
       const avgTurnaround =
         avgMinutes === null ? null : `${Math.floor(avgMinutes / 60)}h ${avgMinutes % 60}m`;
-
-      // Against this person's own trailing 8 week median, not a flat number
-      // everyone is held to (brief §9). Uncapped — 100% isn't a ceiling here,
-      // it's the point past which the load-and-delivery table turns red.
-      const load = loadPercentage(mine, openTasks.length, now);
 
       return {
         id: m.id,
@@ -128,7 +123,6 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
         waitingTasksCount: waitingTasks.length,
         completedTasksCount: completedTasks.length,
         avgTurnaround,
-        loadPercentage: load,
       };
     });
 
@@ -159,7 +153,6 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
         { label: 'Waiting', value: (m) => m.waitingTasksCount },
         { label: 'Completed', value: (m) => m.completedTasksCount },
         { label: 'Avg turnaround', value: (m) => m.avgTurnaround ?? '' },
-        { label: 'Load %', value: (m) => m.loadPercentage },
       ]);
       sendCsv(res, `team-${new Date().toISOString().slice(0, 10)}`, csv);
       return;
@@ -177,8 +170,8 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
 
 // ── One person, and the work that is actually on them ───────────────────────
 //
-// The capacity list answers "who is overloaded". It cannot answer the next
-// question anybody asks, which is "overloaded with WHAT" — it counts a
+// The capacity list answers "who is carrying what". It could not answer the
+// next question anybody asks, which is "carrying WHAT" — it counts a
 // person's tasks and never carries their titles, let alone the job each one
 // belongs to. So a Head could see that Sneha is at 333% of a normal load and
 // had nowhere to go from there.
@@ -254,6 +247,7 @@ teamRouter.get('/:id', requirePermission('work.team'), async (req: AuthRequest, 
     }
 
     const now = new Date();
+    const calendar = await loadWorkCalendar(orgId);
     const todayStr = now.toISOString().slice(0, 10);
     const tasks = member.taskAssignments.map((a) => a.task);
 
@@ -264,7 +258,7 @@ teamRouter.get('/:id', requirePermission('work.team'), async (req: AuthRequest, 
 
     let totalMinutes = 0;
     for (const t of done) {
-      totalMinutes += calculateWorkingMinutes(t.assignedAt, t.completedAt || now, t.waitingTotalMinutes).totalMinutes;
+      totalMinutes += workingMinutesOn(calendar, t.assignedAt, t.completedAt || now, t.waitingTotalMinutes).totalMinutes;
     }
     // Null, not zero — see the capacity route: no finished work is not a
     // turnaround of nothing.
@@ -291,7 +285,6 @@ teamRouter.get('/:id', requirePermission('work.team'), async (req: AuthRequest, 
         waitingTasksCount: waiting.length,
         completedTasksCount: done.length,
         avgTurnaround: avg === null ? null : `${Math.floor(avg / 60)}h ${avg % 60}m`,
-        loadPercentage: loadPercentage(tasks, open.length, now),
       },
       tasks: tasks.map((t) => ({
         id: t.id,

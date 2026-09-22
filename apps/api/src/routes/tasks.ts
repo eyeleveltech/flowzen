@@ -1,9 +1,11 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
-import { authenticate, requirePermission, type AuthRequest } from '../middleware/auth.js';
-import { calculateWorkingMinutes } from '../utils/workingHours.js';
+import { authenticate, requirePermission, hasPermission, type AuthRequest } from '../middleware/auth.js';
+import { loadWorkCalendar, workingMinutesOn } from '../utils/workCalendar.js';
 import { computeTaskTypeMedians, taskTypeGroupKey } from '../utils/taskTypeMedian.js';
+import { monthCardRefusal } from '../utils/monthCardOpen.js';
+import { defaultProjectId } from '../services/retainerProjects.js';
 import { TaskStatus, TaskWorkType, WaitingOn, Priority, TaskType } from '@prisma/client';
 
 // Same 540-min-per-working-day math as calculateWorkingMinutes, just applied
@@ -104,10 +106,11 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
     // type" — same grouping the TASK_AGING alert rule uses, computed once
     // for every task type these buckets touch.
     const medianByGroup = await computeTaskTypeMedians(orgId);
+    const calendar = await loadWorkCalendar(orgId);
 
     const formattedTasks = allMyTasks.map((t) => {
       const clientName = t.monthCard?.retainer.company.name || t.project?.company.name || 'Internal';
-      const workingHours = calculateWorkingMinutes(t.assignedAt, t.completedAt || now, t.waitingTotalMinutes);
+      const workingHours = workingMinutesOn(calendar, t.assignedAt, t.completedAt || now, t.waitingTotalMinutes);
       const typeMedianMinutes = medianByGroup.get(taskTypeGroupKey(t)) ?? null;
 
       const dueStr = new Date(t.dueDate).toISOString().slice(0, 10);
@@ -201,6 +204,41 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
   }
 });
 
+
+// ── Deleted tasks, and the way back ─────────────────────────────────────────
+//
+// `POST /:id/restore` has existed since soft delete did, but nothing listed
+// what had been deleted — so the only way to reach it was to still have the
+// task's own drawer open from before you deleted it. Close the tab and the row
+// was gone for good, which is the hard delete §16 says must not happen.
+//
+// Scoped to what the caller could actually restore, using the same rule the
+// delete and restore routes already enforce: the person who created it, the
+// person it is assigned to, or a Head. Listing rows that would 403 on the
+// Restore button would be worse than not listing them.
+
+tasksRouter.get('/trash', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const userId = req.user!.userId;
+    const seesEverything = (req.user!.permissions ?? []).includes('work.all');
+
+    const tasks = await prisma.task.findMany({
+      where: {
+        organizationId: orgId,
+        deletedAt: { not: null },
+        ...(seesEverything ? {} : { OR: [{ createdById: userId }, { assigneeId: userId }] }),
+      },
+      orderBy: { deletedAt: 'desc' },
+      take: 100,
+      include: TASK_PEOPLE,
+    });
+
+    res.json({ success: true, tasks: tasks.map(withPeople) });
+  } catch (error) {
+    next(error);
+  }
+});
 // ── 2. List Tasks with Filters ──────────────────────────────────────────────
 
 tasksRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
@@ -233,8 +271,10 @@ tasksRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, res
       prisma.task.count({ where }),
     ]);
 
+    const calendar = await loadWorkCalendar(orgId);
+
     const formatted = tasks.map((t) => {
-      const workingHours = calculateWorkingMinutes(t.assignedAt, t.completedAt || new Date(), t.waitingTotalMinutes);
+      const workingHours = workingMinutesOn(calendar, t.assignedAt, t.completedAt || new Date(), t.waitingTotalMinutes);
       return {
         ...withPeople(t),
         workingHoursText: workingHours.formatted,
@@ -279,6 +319,8 @@ const taskCreateSchema = z.object({
   workId: z.string().optional().nullable(),
   monthCardId: z.string().optional().nullable(),
   projectId: z.string().optional().nullable(),
+  /** Which piece of retainer work this is part of. Set alongside the month card, never instead of it. */
+  retainerProjectId: z.string().optional().nullable(),
   assigneeId: z.string().optional(),
   /** Everybody on it. The first is the lead; `assigneeId` still works on its own. */
   assigneeIds: z.array(z.string().min(1)).min(1).max(20).optional(),
@@ -310,6 +352,60 @@ async function resolvePeople(orgId: string, ids: string[]): Promise<string[] | n
   return wanted;
 }
 
+/**
+ * Whether this caller may put work on somebody else's plate.
+ *
+ * §9 spells the two switches out: `work.own` is "see and complete work assigned
+ * to me, create my own tasks", and `work.team` is "see and **assign** work for
+ * my people". So handing a task to another person is a work.team act, and
+ * doing it across the company is a work.all one.
+ *
+ * Nothing checked this. POST /tasks asks only for work.own, and `assigneeIds`
+ * was taken at face value — so anybody signed in could put a task on anybody
+ * else's My Work, and stamp a third person as the one who asked for it. That
+ * is not a data leak; it is worse in its way, because the person it lands on
+ * has no reason to doubt it.
+ */
+const mayAssignOthers = (req: AuthRequest): boolean =>
+  hasPermission(req.user!, 'work.team') || hasPermission(req.user!, 'work.all');
+
+/**
+ * The rule, as one sentence: someone who can only manage their own work may
+ * name only themselves — as the person doing it, and as the person who asked.
+ *
+ * Returns the refusal to send, or null when the request is allowed.
+ */
+function assignmentRefusal(
+  req: AuthRequest,
+  people: string[] | null,
+  assignedById: string | undefined,
+  /** For an edit: what the task already says, which they are allowed to leave alone. */
+  existingPeople?: string[],
+): string | null {
+  if (mayAssignOthers(req)) return null;
+  const me = req.user!.userId;
+
+  if (people) {
+    const others = people.filter((id) => id !== me);
+    // Leaving an existing set untouched is not assigning. Without this, a
+    // person could not edit the title of a task a manager put them on with a
+    // colleague, because the form sends the assignees back as they are.
+    const unchanged =
+      existingPeople !== undefined &&
+      people.length === existingPeople.length &&
+      people.every((id) => existingPeople.includes(id));
+    if (others.length > 0 && !unchanged) {
+      return 'You can only assign work to yourself. Ask a head or management to put it on somebody else.';
+    }
+  }
+
+  if (assignedById && assignedById !== me) {
+    return 'You can only record yourself as the person who asked for this.';
+  }
+
+  return null;
+}
+
 tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
   try {
     const parsed = taskCreateSchema.safeParse(req.body);
@@ -319,7 +415,7 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
     }
 
     const orgId = req.user!.organizationId;
-    const { title, workType, workId, monthCardId, projectId, assigneeId, assigneeIds, assignedById, reviewerId, taskType, dueDate, priority, notes } =
+    const { title, workType, workId, monthCardId, projectId, retainerProjectId, assigneeId, assigneeIds, assignedById, reviewerId, taskType, dueDate, priority, notes } =
       parsed.data;
 
     // `assigneeIds` wins when both arrive; `assigneeId` alone still means a
@@ -327,6 +423,13 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
     const people = await resolvePeople(orgId, assigneeIds ?? [assigneeId || req.user!.userId]);
     if (!people) {
       res.status(400).json({ success: false, error: 'One of those people is not on the team' });
+      return;
+    }
+
+    // §9: putting work on somebody else's plate is a work.team act.
+    const refusal = assignmentRefusal(req, people, assignedById);
+    if (refusal) {
+      res.status(403).json({ success: false, error: refusal });
       return;
     }
     if (reviewerId) {
@@ -344,14 +447,84 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
       }
     }
 
+    const resolvedMonthCardId = monthCardId || (workType === 'MONTH_CARD' ? workId : null);
+
+    // A closed month has had its profit reported; adding work to it now moves
+    // a figure somebody has already acted on.
+    const monthClosed = await monthCardRefusal(resolvedMonthCardId, 'Adding a task to it');
+    if (monthClosed) {
+      res.status(400).json({ success: false, error: monthClosed });
+      return;
+    }
+
+    /*
+     * A task's project and its month card have to belong to the same retainer.
+     *
+     * Without this a Carlton task could be filed under a VOSO campaign — which
+     * reads as nonsense on the board and, worse, moves work between two
+     * clients' month lists. The database enforces it too (a trigger added with
+     * the retainer_projects migration); this is the check that produces a
+     * sentence somebody can act on rather than a 500.
+     */
+    /*
+     * A task on a month card names a project. Always.
+     *
+     * Optional grouping that most work skipped was not grouping — it was a
+     * second list called "Not in a project" holding two thirds of the work.
+     * A caller that does not choose gets the retainer's default rather than a
+     * refusal: the rule is about where the task ENDS UP, and making every
+     * existing caller pick would break four forms to enforce a filing decision
+     * the app can make correctly on its own.
+     *
+     * The database agrees — `tasks_month_card_needs_project` is a CHECK, so
+     * this is a friendly path to the same guarantee, not the guarantee itself.
+     */
+    let resolvedProjectId = retainerProjectId ?? null;
+    if (resolvedMonthCardId && !resolvedProjectId) {
+      const card = await prisma.monthCard.findFirst({
+        where: { id: resolvedMonthCardId, retainer: { organizationId: orgId } },
+        select: { retainer: { select: { id: true, ownerId: true } } },
+      });
+      if (!card) {
+        res.status(400).json({ success: false, error: 'That month card is not one of yours' });
+        return;
+      }
+      resolvedProjectId = await defaultProjectId(card.retainer);
+    }
+
+    if (retainerProjectId) {
+      if (!resolvedMonthCardId) {
+        res.status(400).json({
+          success: false,
+          error: 'A task on a retainer project has to sit on one of that retainer\u2019s months.',
+        });
+        return;
+      }
+      const pairing = await prisma.retainerProject.findFirst({
+        where: {
+          id: retainerProjectId,
+          retainer: { organizationId: orgId, monthCards: { some: { id: resolvedMonthCardId } } },
+        },
+        select: { id: true },
+      });
+      if (!pairing) {
+        res.status(400).json({
+          success: false,
+          error: 'That project and that month belong to different retainers.',
+        });
+        return;
+      }
+    }
+
     const task = await prisma.task.create({
       data: {
         organizationId: orgId,
         title: title.trim(),
         workType,
         workId: workId || null,
-        monthCardId: monthCardId || (workType === 'MONTH_CARD' ? workId : null),
+        monthCardId: resolvedMonthCardId,
         projectId: projectId || (workType === 'PROJECT' ? workId : null),
+        retainerProjectId: resolvedProjectId,
         assigneeId: people[0],
         // Who typed it, and who asked for it. The first is never chosen — it
         // is what `canRemove` reads — and the second falls back to it, so a
@@ -367,6 +540,16 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
         notes: notes || null,
         assignees: { create: people.map((userId) => ({ userId })) },
       },
+      /*
+       * The people, on the way back out.
+       *
+       * This returned the bare row, so a caller that had just assigned a task
+       * to three people got back a task that could not say who it was for or
+       * who asked — and had to fetch it again to show either. Same shape as
+       * every other task endpoint, so a form can render the reply it already
+       * has.
+       */
+      include: TASK_PEOPLE,
     });
 
     await prisma.activity.create({
@@ -380,7 +563,7 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
       },
     });
 
-    res.status(201).json({ success: true, task });
+    res.status(201).json({ success: true, task: withPeople(task) });
   } catch (error) {
     next(error);
   }
@@ -410,6 +593,8 @@ const taskEditSchema = z
     dueDate: z.string().min(1).optional(),
     priority: z.nativeEnum(Priority).optional(),
     notes: z.string().max(4000).nullable().optional(),
+    /** Move it to a different piece of retainer work, or null to ungroup it. */
+    retainerProjectId: z.string().min(1).nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to change' });
 
@@ -426,6 +611,12 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
     const existing = await prisma.task.findFirst({ where: { id, organizationId: orgId, deletedAt: null } });
     if (!existing) {
       res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+
+    const monthClosed = await monthCardRefusal(existing.monthCardId, 'Editing a task on it');
+    if (monthClosed) {
+      res.status(400).json({ success: false, error: monthClosed });
       return;
     }
 
@@ -457,6 +648,48 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
       }
     }
 
+    /*
+     * The same §9 rule as create, with one difference that matters: an edit is
+     * compared against what the task already says. Somebody a manager put on a
+     * shared task must still be able to fix its title, and the form sends the
+     * assignees back untouched when they do — refusing that would lock them
+     * out of their own work.
+     */
+    if (people || assignedById) {
+      const current = await prisma.taskAssignee.findMany({ where: { taskId: id }, select: { userId: true } });
+      const refusal = assignmentRefusal(req, people, assignedById, (current ?? []).map((a) => a.userId));
+      if (refusal) {
+        res.status(403).json({ success: false, error: refusal });
+        return;
+      }
+    }
+
+    // Same pairing rule as create: a task cannot be moved onto a project
+    // belonging to a different retainer than the month it is billed in.
+    if (parsed.data.retainerProjectId) {
+      if (!existing.monthCardId) {
+        res.status(400).json({
+          success: false,
+          error: 'Only a task on a retainer month can belong to a retainer project.',
+        });
+        return;
+      }
+      const pairing = await prisma.retainerProject.findFirst({
+        where: {
+          id: parsed.data.retainerProjectId,
+          retainer: { organizationId: orgId, monthCards: { some: { id: existing.monthCardId } } },
+        },
+        select: { id: true },
+      });
+      if (!pairing) {
+        res.status(400).json({
+          success: false,
+          error: 'That project and that month belong to different retainers.',
+        });
+        return;
+      }
+    }
+
     const nextPeople = people ? [...new Set(people)] : null;
 
     const task = await prisma.task.update({
@@ -472,6 +705,9 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
         ...(dueDate !== undefined ? { dueDate: new Date(dueDate) } : {}),
         ...(priority !== undefined ? { priority } : {}),
         ...(notes !== undefined ? { notes } : {}),
+        ...(parsed.data.retainerProjectId !== undefined
+          ? { retainerProjectId: parsed.data.retainerProjectId }
+          : {}),
         ...(nextPeople
           ? {
               // Replace rather than merge: the form sends the whole set, and a
@@ -582,6 +818,12 @@ tasksRouter.delete('/:id', requirePermission('work.own'), async (req: AuthReques
       return;
     }
 
+    const monthClosed = await monthCardRefusal(task.monthCardId, 'Removing a task from it');
+    if (monthClosed) {
+      res.status(400).json({ success: false, error: monthClosed });
+      return;
+    }
+
     if (task.completedAt || task.status === TaskStatus.DONE || task.status === TaskStatus.CANCELLED) {
       res.status(400).json({
         success: false,
@@ -676,6 +918,15 @@ tasksRouter.patch('/:id/status', requirePermission('work.own'), async (req: Auth
     const task = await prisma.task.findFirst({ where: { id, organizationId: orgId, deletedAt: null } });
     if (!task) {
       res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+
+    // Reopening a finished task on a closed month is the sharpest version of
+    // the problem: it moves that month's "tasks done" after the fact and bumps
+    // the rework count the aging rules read.
+    const monthClosed = await monthCardRefusal(task.monthCardId, 'Changing a task on it');
+    if (monthClosed) {
+      res.status(400).json({ success: false, error: monthClosed });
       return;
     }
 

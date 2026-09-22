@@ -287,7 +287,18 @@ assetsRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
         AssetStatus.BOOKED_OUT,
         AssetStatus.IN_REPAIR,
       ),
-      out: byStatus(AssetStatus.BOOKED_OUT, AssetStatus.ASSIGNED),
+      /*
+       * "Out now" means out on a shoot and expected back — not "held by
+       * somebody". It counted ASSIGNED too, so the three laptops on permanent
+       * custody were folded in, and the tab read "Out now (6)" above a board
+       * showing three cards. The board renders open BOOKINGs, the summary tile
+       * counts open BOOKINGs, and this is the third place the same words are
+       * counted; it is the one that disagreed.
+       *
+       * A laptop assigned to somebody has no due date and is not coming back,
+       * which is the whole distinction between CUSTODY and BOOKING.
+       */
+      out: byStatus(AssetStatus.BOOKED_OUT),
       repair: byStatus(AssetStatus.IN_REPAIR),
       retired: byStatus(AssetStatus.RETIRED, AssetStatus.SOLD, AssetStatus.LOST),
     };

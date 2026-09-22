@@ -4,7 +4,6 @@ import { app } from '../index.js';
 import { prisma } from '../lib/prisma.js';
 import { resolvePermissions, hasPermission, type UserSession } from '../middleware/auth.js';
 import { RolePreset } from '@prisma/client';
-import { ROLE_PRESET_PERMISSIONS } from '@flowzen/shared';
 
 describe('Phase 1: RBAC Permissions & Authorization Gates', () => {
   it('1. Verifies Employee preset defaults to work.own only', () => {

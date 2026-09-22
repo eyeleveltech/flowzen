@@ -12,25 +12,16 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set (see .env.example)}
       POSTGRES_DB: ${POSTGRES_DB:-elitepm}
     ports:
-      - "5433:5432"
+      # Loopback only, for the same reason the API is: Docker's publish rules are
+      # inserted ahead of ufw, so "5433:5432" put Postgres on every interface and
+      # straight onto the internet regardless of the firewall. Nothing outside
+      # this compose network needs it — the containers reach it as `postgres:5432`
+      # on the private network, and an admin can tunnel over SSH.
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-elitepm}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    container_name: elitepm-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -43,7 +34,6 @@ services:
     restart: unless-stopped
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-elitepm}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-elitepm}?schema=public
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - NODE_ENV=production
       # No default: the old `:-super_secret_jwt_key_change_me_in_prod` fallback was a
       # committed, publicly-known signing key — anyone could forge a SUPER_ADMIN token.
@@ -94,7 +84,11 @@ services:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:4000/api}
       - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
     ports:
-      - "3000:3000"
+      # Loopback only. Published on every interface this bypassed the Apache
+      # reverse proxy entirely, which is what terminates TLS — so the app was
+      # reachable over plain HTTP on :3000, and X-Forwarded-For could be spoofed
+      # on the way in. The proxy reaches it on 127.0.0.1:3000.
+      - "127.0.0.1:3000:3000"
     depends_on:
       - api
 
@@ -109,7 +103,7 @@ services:
       - POSTGRES_HOST=postgres
       - POSTGRES_DB=${POSTGRES_DB:-elitepm}
       - POSTGRES_USER=${POSTGRES_USER:-elitepm}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-elitepm_secret}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set (see .env.example)}
       - POSTGRES_EXTRA_OPTS=-Z9
       - SCHEDULE=@daily
       - BACKUP_KEEP_DAYS=7
@@ -125,6 +119,4 @@ volumes:
   uploads_data:
     driver: local
   postgres_backups:
-    driver: local
-  redis_data:
     driver: local

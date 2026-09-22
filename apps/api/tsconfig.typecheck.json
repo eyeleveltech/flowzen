@@ -1,0 +1,14 @@
+{
+  // Type-checks everything, including what `build` deliberately leaves out.
+  //
+  // `tsconfig.json` compiles the server, so its `include` is `src/**/*.ts` and
+  // its `rootDir` is `./src` — which means `prisma/seed.ts` was never checked by
+  // anything. It broke with 21 type errors once and nothing noticed until it was
+  // run against a live database. This config emits nothing and just reads.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["src/**/*.ts", "prisma/**/*.ts"]
+}

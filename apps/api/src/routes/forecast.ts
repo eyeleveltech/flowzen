@@ -1,22 +1,20 @@
 import { Router, type Response, type NextFunction } from 'express';
 import { prisma } from '../lib/prisma.js';
-import { authenticate, type AuthRequest, hasPermission, requirePermission } from '../middleware/auth.js';
-import { ProposalStage } from '@prisma/client';
+import { authenticate, type AuthRequest, requirePermission } from '../middleware/auth.js';
+import { stageProbabilities, STAGE_PROBABILITY_SELECT } from '../utils/stageProbability.js';
 
 export const forecastRouter = Router();
 
 forecastRouter.use(authenticate);
 
-const STAGE_WEIGHTS: Record<ProposalStage, number> = {
-  TALKING: 0.1,
-  PROPOSAL_SENT: 0.3,
-  IN_NEGOTIATION: 0.6,
-  PROFORMA_ISSUED: 0.8,
-  VERBAL_YES: 0.9,
-  WON: 1.0,
-  LOST: 0.0,
-  EXPIRED: 0.0,
-};
+/*
+ * The weights this screen used to keep for itself — 10/30/60/80/90 — were a
+ * third copy, and disagreed with both the Pipeline board (20/40/60/80/95) and
+ * §14 (30/60/85/90). Two screens weighting the same deal differently is worse
+ * than either being wrong: the board and the forecast could not be reconciled
+ * by anyone looking at them side by side. They now read the org's own setting
+ * through utils/stageProbability.ts.
+ */
 
 /**
  * GET /api/forecast/3-month — 3-Month Forward Cash Flow Radar
@@ -36,6 +34,13 @@ forecastRouter.get(
       // to see the forecast as though it had already closed (full value,
       // every month, instead of its stage-weighted contribution).
       const assumeWonId = typeof req.query.assumeWon === 'string' ? req.query.assumeWon : null;
+
+      // The same setting the Pipeline board weights against (§14).
+      const orgForWeights = await prisma.organization.findUnique({
+        where: { id: orgId },
+        select: STAGE_PROBABILITY_SELECT,
+      });
+      const stageWeights = stageProbabilities(orgForWeights);
 
       const now = new Date();
       const months = [0, 1, 2].map((offset) => {
@@ -62,7 +67,7 @@ forecastRouter.get(
 
       // 3. Active Pipeline Proposals (Weighted Inflows)
       const proposals = await prisma.proposal.findMany({
-        where: { organizationId: orgId, outcome: null },
+        where: { organizationId: orgId, deletedAt: null, outcome: null },
         include: {
           company: { select: { id: true, name: true } },
           versions: { orderBy: { n: 'desc' }, take: 1 },
@@ -160,7 +165,7 @@ forecastRouter.get(
           const rawVal = p.versions[0]?.value ? Number(p.versions[0].value) : 0;
           const baseWeight = p.probabilityOverride !== null && p.probabilityOverride !== undefined
             ? p.probabilityOverride / 100
-            : (STAGE_WEIGHTS[p.stage] ?? 0.2);
+            : (stageWeights[p.stage] ?? 0) / 100;
 
           // Apply distance decay for later months
           let effectiveWeight = baseWeight;

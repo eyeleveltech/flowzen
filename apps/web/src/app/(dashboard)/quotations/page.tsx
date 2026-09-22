@@ -1,18 +1,29 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { TableRowsSkeleton } from '@/components/ui/skeleton-loaders';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { plural } from '@/lib/utils';
 import Link from 'next/link';
-import { api, fileUrl, formatMoney } from '@/lib/api-v2';
+import { api, fileUrl, formatMoney, formatDate } from '@/lib/api-v2';
 import { NewProposalModal } from '@/components/clients/NewProposalModal';
 import { ExportCsvButton } from '@/components/ui/export-csv-button';
 import { usePageHeader } from '@/hooks/usePageHeader';
+import { useConfig } from '@/hooks/queries';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { Tabs, type TabDef } from '@/components/ui/tabs';
+import { RotateCcw } from 'lucide-react';
+import toast from 'react-hot-toast';
 
-type ProposalFilter = 'LIVE' | 'CLOSED' | 'PROFORMAS';
+/**
+ * `DELETED` is here rather than only in Settings → Trash because /settings
+ * redirects anyone without setup.admin, and the people who raise proposals —
+ * and so the people who raise one by mistake — are BD, who do not have it.
+ * A recovery screen the person who needs it cannot open is not a recovery
+ * screen. Settings keeps the org-wide view for admins.
+ */
+type ProposalFilter = 'LIVE' | 'CLOSED' | 'PROFORMAS' | 'DELETED';
 
 interface ProposalItem {
   id: string;
@@ -27,6 +38,16 @@ interface ProposalItem {
   proformas: { id: string; number: string; status: string; amount: number }[];
   createdAt: string;
   updatedAt: string;
+}
+
+interface DeletedProposal {
+  id: string;
+  kind: 'RETAINER' | 'PROJECT';
+  stage: string;
+  deletedAt: string;
+  company: { id: string; name: string } | null;
+  owner?: { id: string; name: string } | null;
+  versions: { n: number; value: number }[];
 }
 
 const STAGE_LABEL: Record<string, string> = {
@@ -52,26 +73,48 @@ const STAGE_COLOR: Record<string, string> = {
 };
 
 export default function ProposalsPage() {
-  const [proposals, setProposals] = useState<ProposalItem[]>([]);
   /** A failed load, said out loud instead of only in the console. */
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState<ProposalFilter>('LIVE');
   const [isNewProposalOpen, setIsNewProposalOpen] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await api.proposals.list();
-      if (res.success) setProposals(res.proposals);
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : 'Could not load proposals');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { data: config } = useConfig();
+  const canRestore = Boolean(config?.me.permissions?.includes('pipeline.write'));
 
-  useEffect(() => { load(); }, [load]);
+  const { data, isPending, error } = useQuery({
+    queryKey: ['proposals'],
+    queryFn: () => api.proposals.list(),
+  });
+
+  const { data: trashData } = useQuery({
+    queryKey: ['proposals', 'trash'],
+    queryFn: () => api.proposals.trash(),
+    enabled: canRestore,
+  });
+  const deleted: DeletedProposal[] = trashData?.success ? (trashData.proposals as DeletedProposal[]) : [];
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+
+  const proposals: ProposalItem[] = data?.success ? data.proposals : [];
+  const loading = isPending;
+  const loadError = error instanceof Error ? error.message : error ? 'Could not load proposals' : null;
+
+  /** What the new-proposal flow calls once it has created one. */
+  const load = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['proposals'] });
+  }, [queryClient]);
+
+  const restore = async (p: DeletedProposal) => {
+    setRestoringId(p.id);
+    try {
+      await api.proposals.restore(p.id);
+      toast.success(`${p.company?.name ?? 'Proposal'} is back on the pipeline.`);
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not restore that proposal');
+    } finally {
+      setRestoringId(null);
+    }
+  };
 
 
   const daysSince = (date: string) => Math.ceil((Date.now() - new Date(date).getTime()) / (1000 * 3600 * 24));
@@ -111,12 +154,16 @@ export default function ProposalsPage() {
             rendered its empty state and "the server is down" looked exactly
             like "you have nothing yet".
           */}
-          <ErrorNote onDismiss={() => setLoadError(null)}>{loadError}</ErrorNote>
+          <ErrorNote onDismiss={() => queryClient.resetQueries({ queryKey: ['proposals'] })}>{loadError}</ErrorNote>
         </div>
       )}
       {/* Header */}
       <div className="flex flex-wrap items-center justify-end gap-2 mb-8">
-          <ExportCsvButton href={fileUrl(tab === 'PROFORMAS' ? '/proformas?format=csv' : '/proposals?format=csv')} />
+          {/* The export routes list live records, so it would hand back the
+              opposite of what this tab is showing. */}
+          {tab !== 'DELETED' && (
+            <ExportCsvButton href={fileUrl(tab === 'PROFORMAS' ? '/proformas?format=csv' : '/proposals?format=csv')} />
+          )}
           <button
             className="flex items-center gap-1.5 bg-primary text-white text-sm font-semibold px-4 h-8 rounded-lg hover:bg-primary/90 transition-colors"
             onClick={() => setIsNewProposalOpen(true)}
@@ -160,7 +207,9 @@ export default function ProposalsPage() {
           { key: 'LIVE', label: 'Live', count: live.length },
           { key: 'CLOSED', label: 'Closed', count: closed.length },
           { key: 'PROFORMAS', label: 'Proformas', count: proformas.length },
-        ] as TabDef<'LIVE' | 'CLOSED' | 'PROFORMAS'>[]}
+          // Only for somebody who could actually put one back.
+          ...(canRestore ? [{ key: 'DELETED' as const, label: 'Deleted', count: deleted.length }] : []),
+        ] as TabDef<ProposalFilter>[]}
         active={tab}
         onChange={setTab}
       />
@@ -168,7 +217,51 @@ export default function ProposalsPage() {
       {/* Table */}
       <div className="border border-border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-        {tab === 'PROFORMAS' ? (
+        {tab === 'DELETED' ? (
+          <table className="w-full data-table">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="eyebrow text-left">Company</th>
+                <th className="eyebrow text-left">Kind</th>
+                <th className="eyebrow text-right">Last version</th>
+                <th className="eyebrow text-left">Owner</th>
+                <th className="eyebrow text-left">Deleted</th>
+                <th className="eyebrow text-right">Put back</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {deleted.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-12 text-center text-sm text-secondary">
+                    Nothing deleted. A proposal that has been won or lost cannot be deleted at all — only one nothing
+                    has happened to yet.
+                  </td>
+                </tr>
+              ) : (
+                deleted.map((p) => (
+                  <tr key={p.id} className="hover:bg-subtle transition-colors">
+                    <td className="font-semibold text-primary">{p.company?.name ?? 'No company'}</td>
+                    <td className="text-secondary">{p.kind === 'RETAINER' ? 'Retainer' : 'One time'}</td>
+                    <td className="font-semibold text-primary text-right">
+                      {p.versions[0] ? formatMoney(p.versions[0].value) : '—'}
+                    </td>
+                    <td className="text-secondary">{p.owner?.name ?? '—'}</td>
+                    <td className="text-secondary">{formatDate(p.deletedAt)}</td>
+                    <td className="text-right">
+                      <button
+                        onClick={() => void restore(p)}
+                        disabled={restoringId === p.id}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-secondary hover:bg-subtle hover:text-primary transition-colors disabled:opacity-50"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" /> Restore
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        ) : tab === 'PROFORMAS' ? (
           <table className="w-full data-table">
             <thead>
               <tr className="border-b border-border">

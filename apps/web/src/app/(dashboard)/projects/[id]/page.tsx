@@ -20,6 +20,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, Settings2, Trash2 } from 'lucide-react';
 import { api, ApiError, formatMoney, formatDate, type OrgConfig, type Company } from '@/lib/api-v2';
+import { useTeamMembers } from '@/hooks/queries';
 import toast from 'react-hot-toast';
 import { useConfirmStore } from '@/stores/confirm';
 import { Button } from '@/components/ui/button';
@@ -32,6 +33,7 @@ import { EmptyState, ErrorNote } from '@/components/ui/empty-state';
 import { ActivityFeed, type FeedItem } from '@/components/activities/ActivityFeed';
 import { PageSkeleton } from '@/components/ui/skeleton-loaders';
 import { StatTile } from '@/components/ui/stat-tile';
+import { plural } from '@/lib/utils';
 import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
 import { NewProformaModal } from '@/components/clients/NewProformaModal';
 import { NewWorkTaskModal } from '@/components/work/NewWorkTaskModal';
@@ -103,6 +105,8 @@ type ProjectDetail = {
     estimatedCost: number | null;
     costVariance: number | null;
     costVariancePercent: number | null;
+    /** `'none'` when nobody has recorded a cost or an allocation — see jobProfit.ts. */
+    costBasis?: 'recorded' | 'none';
   };
   costRisk?: {
     projectedCost: number | null;
@@ -153,7 +157,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [config, setConfig] = useState<OrgConfig | null>(null);
-  const [team, setTeam] = useState<{ id: string; name: string; dept: string }[]>([]);
+  const team = useTeamMembers();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   /*
@@ -195,7 +199,6 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       setTasks((tRes.tasks ?? []) as Task[]);
       setConfig(cfg);
       setError(null);
-      void api.team.members().then((r) => setTeam(r.members)).catch(() => {});
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load this project');
     } finally {
@@ -258,6 +261,22 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const actual = project.actualCostTotal != null ? Number(project.actualCostTotal) : null;
   const estimated = project.estimatedCost != null ? Number(project.estimatedCost) : null;
   const overEstimate = actual != null && estimated != null && actual > estimated;
+  /**
+   * Nobody has recorded what this job cost — so `profit` is arithmetic on an
+   * empty set, not a finding. The server decides this (jobProfit.ts), because
+   * a zero on the wire cannot tell "we spent nothing" from "nobody has said".
+   */
+  const noCostBasis = project.profit?.costBasis === 'none';
+  /** The projection already says this job ends below cost. */
+  const headingForLoss = !noCostBasis && project.costRisk?.level === 'LOSS';
+  /** Days past the expected end, for a project still running. Nought when fine. */
+  const overdueByDays = (() => {
+    if (project.status !== 'LIVE') return 0;
+    const end = new Date(project.endDate);
+    if (Number.isNaN(end.getTime())) return 0;
+    const days = Math.floor((Date.now() - end.getTime()) / 86_400_000);
+    return days > 0 ? days : 0;
+  })();
   const openTasks = tasks.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED');
 
   // Cost breakdown by person (brief §10: Project screen requires this).
@@ -402,6 +421,17 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             <span>
               · {date(project.startDate)} – {date(project.endDate)}
             </span>
+            {/*
+              A live project whose end date has gone is the plainest overdue
+              signal the screen has, and it was the one thing here that said
+              nothing: a job that finished eighty days ago still read "Live"
+              with its dates in the same quiet grey as everything else.
+            */}
+            {overdueByDays > 0 && (
+              <span className="font-medium text-danger">
+                · {plural(overdueByDays, 'day')} past the end date
+              </span>
+            )}
           </div>
           {project.description && <p className="mt-2 max-w-2xl text-sm text-secondary">{project.description}</p>}
         </div>
@@ -436,8 +466,19 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         all, which is the half of the business where it matters most, because a
         project ENDS.
       */}
+      {/*
+        Two questions the money tiles have to answer before they show a figure:
+        has anybody said what this cost, and is the figure about to go negative.
+      */}
       <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="Quoted" value={money(project.quotedValue)} note={`${project.percentComplete}% done`} />
+        {/* "33% done" under a money figure reads as "33% billed", which it is
+            not — it is how much of the WORK is finished, and it sits next to a
+            milestone table stating a different percentage that IS about money. */}
+        <StatTile
+          label="Quoted"
+          value={money(project.quotedValue)}
+          note={`${project.percentComplete}% of the work done`}
+        />
         <StatTile
           label="Cost estimate"
           value={estimated != null ? money(estimated) : 'Not set'}
@@ -445,24 +486,55 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         />
         <StatTile
           label="Cost so far"
-          value={actual != null ? money(actual) : '—'}
+          value={noCostBasis ? 'Nothing entered' : actual != null ? money(actual) : '—'}
           note={
-            project.profit
-              ? `${money(project.profit.directCost)} external · ${money(project.profit.peopleCost)} people`
-              : 'external and people'
+            noCostBasis
+              ? 'no costs and nobody allocated yet'
+              : project.profit
+                ? `${money(project.profit.directCost)} external · ${money(project.profit.peopleCost)} people`
+                : 'external and people'
           }
           tone={overEstimate ? 'danger' : undefined}
         />
         {project.profit ? (
+          /*
+            The answer tile, and it has to stop answering when it cannot.
+
+            Two ways it lied. With no costs and nobody allocated, the
+            arithmetic returns the whole quote and a 100% margin — a job with
+            no tasks, no costs and no people read as the best work in the
+            studio, in the one tile designed to be read first. And on a job
+            already projected to overrun the quote it kept the celebratory ink
+            block while the banner directly beneath it said "on course to lose
+            money", so the big number and the warning contradicted each other
+            on the same screen.
+
+            So: "not known yet" when nothing has been recorded, and the dark
+            treatment surrendered — plain card, red figure — once the projection
+            says the job loses money.
+          */
           <StatTile
             label={project.status === 'DELIVERED' ? 'Final profit' : 'Profit so far'}
-            value={money(project.profit.profit)}
-            note={
-              project.profit.marginPercent === null
-                ? 'no quoted value to measure against'
-                : `${project.profit.marginPercent}% margin`
+            value={
+              noCostBasis
+                ? 'Not known yet'
+                : headingForLoss
+                  ? money(project.costRisk?.projectedProfit ?? project.profit.profit)
+                  : money(project.profit.profit)
             }
-            dark
+            note={
+              noCostBasis
+                ? 'enter what this job costs to see it'
+                : headingForLoss
+                  ? 'projected — see the warning below'
+                  : project.profit.marginPercent === null
+                    ? 'no quoted value to measure against'
+                    : `${project.profit.marginPercent}% margin${
+                        project.status === 'DELIVERED' ? '' : ' so far'
+                      }`
+            }
+            dark={!noCostBasis && !headingForLoss}
+            tone={headingForLoss ? 'danger' : undefined}
           />
         ) : (
           <div className="rounded-xl border border-dashed border-border bg-surface p-5">
@@ -548,8 +620,22 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                         <td className="">
                           <Badge tone={MSTATUS[m.status].tone}>{MSTATUS[m.status].label}</Badge>
                         </td>
-                        <td className="text-secondary font-mono text-xs">
-                          {m.proformas?.[0]?.number ?? '—'}
+                        {/*
+                          A milestone can sit at "Proforma raised" with nothing
+                          in this column, because the status advances by hand
+                          and raising the document is a separate act. An em
+                          dash read as "no document needed"; what it actually
+                          means is that the status claims one exists and none
+                          is on file, which is the one case worth naming.
+                        */}
+                        <td className="font-mono text-xs text-secondary">
+                          {m.proformas?.[0]?.number ? (
+                            m.proformas[0].number
+                          ) : m.status === 'PENDING' ? (
+                            '—'
+                          ) : (
+                            <span className="font-sans text-warning-ink">Not on file</span>
+                          )}
                         </td>
                         <td className="text-right">
                           <div className="flex items-center justify-end gap-1">

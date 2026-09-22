@@ -1,6 +1,8 @@
 import { Router, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { forgetWorkCalendar } from '../utils/workCalendar.js';
+import { buildSellerSnapshot, resolveState, sellerBlockGaps } from '../services/documentModel.js';
 import { authenticate, requirePermission, hasPermission, type AuthRequest } from '../middleware/auth.js';
 import { encryptSecret } from '../utils/crypto.js';
 import { resolveMailConfig, sendMail } from '../utils/mailer.js';
@@ -44,6 +46,26 @@ configRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
         dateFormat: 'DD/MM/YYYY',
         fiscalYearStart: org.financialYearStart || 4,
 
+        /*
+         * §14's stage probabilities, for everyone rather than admins only.
+         *
+         * The Pipeline board prints the stage default in every column header,
+         * including empty ones, and it is read by BD — who have pipeline.read
+         * and not setup.admin. It is also not a figure §9 protects: it is a
+         * likelihood, not money, and the board already shows the resulting
+         * per-card percentage to anyone allowed on the board at all.
+         *
+         * Sent so the web stops keeping a fourth copy of the table.
+         */
+        stageProbabilities: {
+          TALKING: org.stageProbTalking,
+          PROPOSAL_SENT: org.stageProbProposalSent,
+          IN_NEGOTIATION: org.stageProbInNegotiation,
+          PROFORMA_ISSUED: org.stageProbProformaIssued,
+          VERBAL_YES: org.stageProbVerbalYes,
+          WON: 100,
+        },
+
         // ── setup.admin: the Organisation and Tax tabs, and nothing else ──
         ...(canSeeSetup
           ? {
@@ -61,6 +83,12 @@ configRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
               // decision made once and printed on stickers, not a display
               // setting every screen needs.
               assetTagPrefix: org.assetTagPrefix,
+              // §14: the working calendar and the stage probabilities are
+              // settings, and until now nothing read either of them.
+              workingHoursStart: org.workingHoursStart,
+              workingHoursEnd: org.workingHoursEnd,
+              workingDays: org.workingDays,
+              holidays: org.holidays,
             }
           : {}),
       },
@@ -70,8 +98,24 @@ configRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
       ...(canSeeSetup
         ? {
             documentSettings: {
+              /*
+               * What the seller block still needs, worked out by the same
+               * function the PDF renderer uses. The screen and the renderer
+               * asking two different questions is how you get a Settings page
+               * that looks complete and a download that refuses.
+               */
+              gaps: sellerBlockGaps(buildSellerSnapshot(org)),
               contactEmail: org.contactEmail,
               gstStateCode: org.gstStateCode,
+              legalName: org.legalName,
+              address: org.address,
+              stateName: org.state,
+              gstNumber: org.gstNumber,
+              pan: org.pan,
+              declarationText: org.declarationText,
+              signatureImage: org.signatureImage,
+              showSignatureBlock: org.showSignatureBlock,
+              sacCodes: org.sacCodes,
               defaultPaymentTerms: org.defaultPaymentTerms,
               defaultProformaValidityDays: org.defaultProformaValidityDays,
               defaultTermsAndConditions: org.defaultTermsAndConditions,
@@ -149,6 +193,16 @@ const orgUpdateSchema = z.object({
   mailFromEmail: z.string().email().optional().or(z.literal('')).nullable(),
   allowPasswordLogin: z.boolean().optional(),
   assetTagPrefix: z.string().min(1).max(12).optional(),
+  workingHoursStart: z.string().regex(/^\d{1,2}:\d{2}$/, 'Use HH:MM').optional(),
+  workingHoursEnd: z.string().regex(/^\d{1,2}:\d{2}$/, 'Use HH:MM').optional(),
+  workingDays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
+  /** §14 "Sundays and public holidays excluded". ISO days the office is shut. */
+  holidays: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')).max(60).optional(),
+  stageProbTalking: z.number().int().min(0).max(100).optional(),
+  stageProbProposalSent: z.number().int().min(0).max(100).optional(),
+  stageProbInNegotiation: z.number().int().min(0).max(100).optional(),
+  stageProbProformaIssued: z.number().int().min(0).max(100).optional(),
+  stageProbVerbalYes: z.number().int().min(0).max(100).optional(),
 });
 
 configRouter.patch('/', requirePermission('setup.admin'), async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -171,6 +225,20 @@ configRouter.patch('/', requirePermission('setup.admin'), async (req: AuthReques
         ...(data.address !== undefined ? { address: data.address || null } : {}),
         ...(data.state !== undefined ? { state: data.state || null } : {}),
         ...(data.gstNumber !== undefined ? { gstNumber: data.gstNumber || null } : {}),
+        /*
+         * The state NAME is what this tab has always asked for, and the state
+         * CODE is what every document's tax is decided against — so picking a
+         * state here used to leave the code behind, and the tab labelled "Tax
+         * identity" would say Karnataka while every invoice was still being
+         * billed as a Tamil Nadu supply. They are one fact, so they are set
+         * together, and the GSTIN is the fallback when only that was given.
+         */
+        ...(data.state !== undefined || data.gstNumber !== undefined
+          ? {
+              gstStateCode:
+                resolveState({ name: data.state, gstin: data.gstNumber }).code ?? undefined,
+            }
+          : {}),
         ...(data.currency !== undefined ? { currency: data.currency } : {}),
         ...(data.timezone !== undefined ? { timezone: data.timezone } : {}),
         ...(data.documentPrefix !== undefined ? { proformaPrefix: data.documentPrefix } : {}),
@@ -179,8 +247,27 @@ configRouter.patch('/', requirePermission('setup.admin'), async (req: AuthReques
         ...(data.mailFromEmail !== undefined ? { mailFromEmail: data.mailFromEmail || null } : {}),
         ...(data.allowPasswordLogin !== undefined ? { allowPasswordLogin: data.allowPasswordLogin } : {}),
         ...(data.assetTagPrefix !== undefined ? { assetTagPrefix: data.assetTagPrefix.replace(/\/+$/, '') } : {}),
+        // §14's working calendar and stage probabilities. Both were columns
+        // nothing wrote and nothing read; the elapsed-time helpers and the
+        // pipeline weighting go through them now.
+        ...(data.workingHoursStart !== undefined ? { workingHoursStart: data.workingHoursStart } : {}),
+        ...(data.workingHoursEnd !== undefined ? { workingHoursEnd: data.workingHoursEnd } : {}),
+        ...(data.workingDays !== undefined ? { workingDays: data.workingDays } : {}),
+        ...(data.holidays !== undefined ? { holidays: Array.from(new Set(data.holidays)).sort() } : {}),
+        ...(data.stageProbTalking !== undefined ? { stageProbTalking: data.stageProbTalking } : {}),
+        ...(data.stageProbProposalSent !== undefined ? { stageProbProposalSent: data.stageProbProposalSent } : {}),
+        ...(data.stageProbInNegotiation !== undefined ? { stageProbInNegotiation: data.stageProbInNegotiation } : {}),
+        ...(data.stageProbProformaIssued !== undefined ? { stageProbProformaIssued: data.stageProbProformaIssued } : {}),
+        ...(data.stageProbVerbalYes !== undefined ? { stageProbVerbalYes: data.stageProbVerbalYes } : {}),
       },
     });
+
+    /*
+     * The calendar is cached for a minute so a task list does not run a query
+     * per row. Dropping it here means a Setup save shows on the screen the
+     * person changed it on, rather than up to a minute later.
+     */
+    forgetWorkCalendar(orgId);
 
     await prisma.activity.create({
       data: {
@@ -316,7 +403,39 @@ configRouter.post('/mail/test', requirePermission('setup.admin'), async (req: Au
 
 const documentSettingsSchema = z.object({
   contactEmail: z.string().email().optional().or(z.literal('')).nullable(),
-  gstStateCode: z.string().length(2).optional().nullable(),
+  /*
+   * CR-02 §2 — the half of the seller block this endpoint owns.
+   *
+   * The address lives on the Organisation tab and the state and GSTIN on Tax
+   * & numbering, and `PATCH /config` is the one thing that writes them — it
+   * is also what keeps `gstStateCode` in step with the state name it is
+   * derived from. Accepting them here as well made two writers for one fact,
+   * and the second did not do that derivation: setting a GSTIN through this
+   * route left the state code behind, still deciding the tax. So they are
+   * not accepted here at all. One field, one writer.
+   */
+  legalName: z.string().trim().max(200).optional().nullable(),
+  pan: z.string().trim().max(15).optional().nullable(),
+  declarationText: z.string().trim().max(1000).optional().nullable(),
+  /**
+   * A scanned signature as a data URI. Capped at roughly 300 KB of base64,
+   * and required to actually be an image: this string is written straight
+   * into the src of an img tag in the PDF template, so anything else is
+   * either a broken document or somebody trying their luck.
+   */
+  signatureImage: z
+    .string()
+    .max(400_000, 'That signature image is too large — use one under about 300 KB')
+    .regex(/^data:image\/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+$/, 'Upload a PNG, JPG or WebP image')
+    .optional()
+    .nullable(),
+  sacCodes: z.array(z.string().trim().min(1).max(20)).max(50).optional(),
+  /**
+   * The "For <legal name> / Authorised Signatory" box. Off is a real answer:
+   * a document emailed under a signed covering note is signed in practice, and
+   * Rule 46 asks for a signature, not for a printed box.
+   */
+  showSignatureBlock: z.boolean().optional(),
   defaultPaymentTerms: z.string().min(1).optional(),
   defaultProformaValidityDays: z.number().int().min(1).max(365).optional(),
   defaultTermsAndConditions: z.array(z.string().min(1)).optional(),
@@ -345,7 +464,16 @@ configRouter.patch(
         where: { id: orgId },
         data: {
           ...(data.contactEmail !== undefined ? { contactEmail: data.contactEmail || null } : {}),
-          ...(data.gstStateCode !== undefined ? { gstStateCode: data.gstStateCode } : {}),
+          ...(data.legalName !== undefined ? { legalName: data.legalName || null } : {}),
+          ...(data.pan !== undefined ? { pan: data.pan || null } : {}),
+          ...(data.declarationText !== undefined ? { declarationText: data.declarationText || null } : {}),
+          ...(data.signatureImage !== undefined ? { signatureImage: data.signatureImage || null } : {}),
+          // De-duplicated and upper-cased: a SAC code is a code, and the list
+          // exists so nobody retypes one — two spellings of 998365 defeats it.
+          ...(data.showSignatureBlock !== undefined ? { showSignatureBlock: data.showSignatureBlock } : {}),
+          ...(data.sacCodes !== undefined
+            ? { sacCodes: Array.from(new Set(data.sacCodes.map((c) => c.toUpperCase()))) }
+            : {}),
           ...(data.defaultPaymentTerms !== undefined ? { defaultPaymentTerms: data.defaultPaymentTerms } : {}),
           ...(data.defaultProformaValidityDays !== undefined ? { defaultProformaValidityDays: data.defaultProformaValidityDays } : {}),
           ...(data.defaultTermsAndConditions !== undefined ? { defaultTermsAndConditions: data.defaultTermsAndConditions } : {}),
@@ -371,8 +499,18 @@ configRouter.patch(
       res.json({
         success: true,
         documentSettings: {
+          gaps: sellerBlockGaps(buildSellerSnapshot(updated)),
           contactEmail: updated.contactEmail,
           gstStateCode: updated.gstStateCode,
+          legalName: updated.legalName,
+          address: updated.address,
+          stateName: updated.state,
+          gstNumber: updated.gstNumber,
+          pan: updated.pan,
+          declarationText: updated.declarationText,
+          signatureImage: updated.signatureImage,
+          showSignatureBlock: updated.showSignatureBlock,
+          sacCodes: updated.sacCodes,
           defaultPaymentTerms: updated.defaultPaymentTerms,
           defaultProformaValidityDays: updated.defaultProformaValidityDays,
           defaultTermsAndConditions: updated.defaultTermsAndConditions,

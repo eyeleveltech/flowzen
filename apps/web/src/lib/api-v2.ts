@@ -67,6 +67,24 @@ async function request<T>(
       window.location.pathname.startsWith(p),
     );
     if (!onAuthPage) {
+      /**
+       * Forget who we thought was signed in, BEFORE navigating.
+       *
+       * The session lives in an httpOnly cookie, but the app decides whether to
+       * render a signed-in shell by reading `flowzen-user` out of localStorage.
+       * Nothing cleared it here, so an expired cookie left the two disagreeing:
+       * the layout kept rendering as signed in, `me()` failed into an empty
+       * catch, and every request 401'd — which is what put a wall of 401s in
+       * the console and made the app look signed in when it was not.
+       *
+       * The one client that did clear it was `lib/api.ts`, which nothing has
+       * imported for a long time. This is the live one.
+       */
+      try {
+        localStorage.removeItem('flowzen-user');
+      } catch {
+        // Private mode, or storage disabled. The redirect below still stands.
+      }
       window.location.href = '/login';
       // Never settle. The page is navigating away, so resolving would render a
       // half-loaded screen and rejecting would surface "Authentication required"
@@ -95,6 +113,7 @@ async function request<T>(
 const get = <T>(e: string) => request<T>(e);
 const post = <T>(e: string, body?: unknown) => request<T>(e, { method: 'POST', body });
 const patch = <T>(e: string, body?: unknown) => request<T>(e, { method: 'PATCH', body });
+const put = <T>(e: string, body?: unknown) => request<T>(e, { method: 'PUT', body });
 const del = <T>(e: string) => request<T>(e, { method: 'DELETE' });
 
 /**
@@ -183,6 +202,13 @@ export interface OrgConfig {
     locale: string;
     dateFormat: string;
     fiscalYearStart: number;
+    /** §14, and what the board's column headers print. WON is always 100. */
+    stageProbabilities?: Record<string, number>;
+    /** §14's working calendar. setup.admin only. */
+    workingHoursStart?: string;
+    workingHoursEnd?: string;
+    workingDays?: number[];
+    holidays?: string[];
     // setup.admin only — absent for everyone else. The organisation's own
     // paperwork is not everybody's to read; see the route for the whole story.
     documentPrefix?: string;
@@ -217,10 +243,34 @@ export interface OrgConfig {
   documentSettings?: DocumentSettings;
 }
 
-/** What a proforma PDF puts on itself — the letterhead a business actually has, not fixed values baked into a template. */
+/** What a proforma or invoice PDF puts on itself — the letterhead a business actually has, not fixed values baked into a template. */
+/** One thing the seller block still needs, and which Settings tab owns it. */
+export interface SellerGap {
+  key: string;
+  label: string;
+  where: string;
+  /** `required` blocks a tax invoice from printing at all. */
+  severity: 'required' | 'recommended';
+}
+
 export interface DocumentSettings {
+  /** Worked out server-side by the same rule the PDF renderer applies. */
+  gaps: SellerGap[];
   contactEmail: string | null;
   gstStateCode: string | null;
+  /** CR-02 §2 — the seller block, entered once and printed on every document. */
+  legalName: string | null;
+  address: string | null;
+  stateName: string | null;
+  gstNumber: string | null;
+  pan: string | null;
+  declarationText: string | null;
+  /** A data URI, or null. Large enough that no screen should render it in a list. */
+  signatureImage: string | null;
+  /** The HSN/SAC codes this business bills under, offered on every line item. */
+  sacCodes: string[];
+  /** Whether documents print "For <legal name> / Authorised Signatory" at the foot. */
+  showSignatureBlock: boolean;
   defaultPaymentTerms: string;
   defaultProformaValidityDays: number;
   defaultTermsAndConditions: string[];
@@ -229,6 +279,99 @@ export interface DocumentSettings {
   bankBranch: string | null;
   bankAccountNumber: string | null;
   bankIfscCode: string | null;
+}
+
+/**
+ * One row of a proforma or invoice items table (CR-02 §5).
+ *
+ * `serialNo` and `amount` are absent on the way OUT to the server: the
+ * position in the array is the serial number, and the amount is units x unit
+ * cost. Sending either would let a document disagree with its own columns.
+ */
+export interface DocumentLineItemInput {
+  particulars: string;
+  units: number;
+  unitCost: number;
+  hsnSac?: string | null;
+}
+
+/** The same row as it comes back, with what the server worked out. */
+export interface DocumentLineItem extends DocumentLineItemInput {
+  id: string;
+  serialNo: number;
+  amount: number;
+  gstRate: number;
+}
+
+/** CR-02 §4 — an open label/value pair, as many as the document needs. */
+export interface DocumentCustomField {
+  label: string;
+  value: string;
+}
+
+/**
+ * CR-02 §4. Its own field, defaulted from the buyer and always editable —
+ * this, not the buyer's GSTIN, is what decides CGST+SGST against IGST.
+ */
+export interface PlaceOfSupply {
+  state?: string | null;
+  code?: string | null;
+}
+
+/**
+ * What the send form opens with (CR-02 §10).
+ *
+ * The subject and the note are drafts, not a message already on its way:
+ * an email to a client gets read by a person before it is sent.
+ */
+/**
+ * A named piece of work inside a retainer — a campaign, a film, an always-on
+ * stream. Carries no money on purpose: the retainer is billed monthly through
+ * its month cards, so a value here would be the same work counted twice.
+ */
+export interface RetainerProject {
+  id: string;
+  name: string;
+  /** Both nullable. A null end date is what ongoing means. */
+  startDate: string | null;
+  endDate: string | null;
+  status: 'ACTIVE' | 'DONE';
+  description: string | null;
+  owner: { id: string; name: string; designation: string | null } | null;
+  /**
+   * The one every retainer has, and where its monthly work lands.
+   *
+   * A retainer task must name a project, so something has to catch the
+   * template tasks the roll spawns on the 1st. Created with the retainer, and
+   * refused when somebody tries to delete it.
+   */
+  isDefault?: boolean;
+  _count?: { tasks: number };
+  /**
+   * How the work inside it is going. The list of projects is the way into a
+   * retainer now rather than a caption above it, so a row has to say more than
+   * its name. Cancelled tasks are excluded from every figure but `cancelled`,
+   * and `donePercent` is null when there is nothing to be a share of.
+   */
+  taskCounts?: {
+    total: number;
+    done: number;
+    open: number;
+    late: number;
+    cancelled: number;
+    donePercent: number | null;
+  };
+  /** The months this project's tasks actually land in, oldest first. */
+  months?: string[];
+}
+
+export interface DocumentEmailDefaults {
+  number: string;
+  subject: string;
+  message: string;
+  /** Everyone on the company record with an email, payer first. */
+  recipients: { name: string; email: string; role: string }[];
+  to: string | null;
 }
 
 /**
@@ -401,70 +544,6 @@ export interface CrmDashboard {
   clients: Partial<Record<CompanyStatus, number>>;
 }
 
-export interface Dashboard {
-  work: {
-    overdue: number;
-    dueToday: number;
-    awaitingMyReview: number;
-    tasks: { id: string; title: string; dueDate: string | null; project: { id: string; name: string } | null }[];
-  };
-  /**
-   * What we are delivering, counted on the SERVER.
-   *
-   * The delivery dashboard counted these in the browser from a capped list, so
-   * "active projects" quietly meant "active projects on the first page".
-   */
-  delivery: { active: number; offTrack: number };
-  clients: Partial<Record<CompanyStatus, number>>;
-  pipeline?: {
-    followUpsDue: {
-      id: string;
-      title: string | null;
-      company: { id: string; name: string };
-      followUpDate: string | null;
-    }[];
-    /** Companies you own with a date set and nothing open against them (§4.4). */
-    companyFollowUpsDue: {
-      id: string;
-      name: string;
-      followUpDate: string;
-      status: CompanyStatus;
-    }[];
-    quotesExpired: {
-      id: string;
-      number: string;
-      validUntil: string | null;
-      company: { id: string; name: string };
-    }[];
-    rotting: {
-      id: string;
-      title: string | null;
-      company: { id: string; name: string };
-      stage: string;
-      daysInStage: number;
-      blockedOn: string | null;
-    }[];
-    quotesAwaitingReply: {
-      id: string;
-      number: string;
-      company: { id: string; name: string };
-      total: string;
-      daysWaiting: number | null;
-    }[];
-  };
-  money?: {
-    mrr: string;
-    billedThisMonth: string;
-    collectedThisMonth: string;
-    outstanding: string;
-    overdue: string;
-    invoicesDueToRaise: number;
-    /** Drafts waiting for a human to check and send — the daily job, since B2. */
-    invoicesToSend: number;
-    overdueInvoices: number;
-    pricesDueForReview: number;
-  };
-}
 
 export type UserStatus = 'ACTIVE' | 'PENDING' | 'INACTIVE';
 
@@ -515,19 +594,6 @@ export interface MemberTaskStats {
  * on the wire. If you read one of these on a screen that is not gated to Manager,
  * expect `undefined`.
  */
-export interface TaskTemplateItem {
-  title: string;
-  /** Day of the month the spawned task is due; the roll job clamps anything past 28. */
-  dayOfMonth?: number;
-}
-
-export interface TaskTemplate {
-  id: string;
-  name: string;
-  items: TaskTemplateItem[];
-  _count?: { retainers: number };
-}
-
 export interface Member {
   id: string;
   name: string;
@@ -668,25 +734,6 @@ export interface PmProjectReport {
     inProgress: number;
     inReview: number;
     open: number;
-    overdue: number;
-  };
-}
-
-export interface PmTeamWorkloadReport {
-  id: string;
-  name: string;
-  avatar: string | null;
-  designation: string | null;
-  department: { id: string; name: string } | null;
-  activeProjectsCount: number;
-  loadStatus: 'AVAILABLE' | 'BALANCED' | 'HIGH' | 'OVERLOADED';
-  completionRate: number;
-  taskStats: {
-    total: number;
-    open: number;
-    inProgress: number;
-    inReview: number;
-    completed: number;
     overdue: number;
   };
 }
@@ -971,10 +1018,6 @@ export const api = {
     auditLog: () => get<AuditEntry[]>('/config/audit-log'),
   },
 
-  dashboard: {
-    get: () => get<Dashboard>('/dashboard'),
-  },
-
   companies: {
     /** GET /companies returns `{success, companies, meta}` — no `.data` key, so this does NOT auto-unwrap. Read `.companies` off the result, not the result itself. */
     list: (params: Record<string, string> = {}) =>
@@ -1013,19 +1056,28 @@ export const api = {
         success: boolean;
         entries: any[];
         /** Per status, following the search but NOT the status filter, so a chip says how many you would get by clicking it. */
-        counts: { ALL: number; NOT_CONTACTED: number; CONTACTED: number; REPLIED: number; DEAD: number };
+        counts: { ALL: number; NOT_CONTACTED: number; FOLLOW_UP: number; MEETING: number; INTERESTED: number; DEAD: number };
         /** Follows no filter — how many cold names exist at all. */
         summary: { cold: number };
         meta: { total: number };
       }>(`/outreach?${new URLSearchParams(params)}`),
     create: (body: Record<string, unknown>) =>
       post<{ success: boolean; entry: any }>('/outreach', body),
-    /** Name, vertical, source, owner — any subset. Refused once the name has been promoted. */
+    /** Name, vertical, source, owner, and the contact details — any subset. Refused once the name has been promoted. */
     update: (id: string, body: Record<string, unknown>) =>
       patch<{ success: boolean; entry: any }>(`/outreach/${id}`, body),
-    /** A plain status change — Replied included. It never creates a Company; that's `promote` below, a separate deliberate step. */
-    updateStatus: (id: string, status: string) =>
-      patch<{ success: boolean; entry: any }>(`/outreach/${id}/status`, { status }),
+    /**
+     * Move a lead along, and write down what was said.
+     *
+     * FOLLOW_UP needs both a date and a note; MEETING needs the date and takes
+     * the note as optional logistics. The server refuses the rest, so the form
+     * asks for them rather than letting a callback exist with no date on it.
+     *
+     * This never creates a Company — that is `promote` below, a separate
+     * deliberate step, and only from INTERESTED.
+     */
+    updateStatus: (id: string, body: { status: string; remarks?: string | null; nextActionDate?: string | null }) =>
+      patch<{ success: boolean; entry: any }>(`/outreach/${id}/status`, body),
     promote: (id: string, body: Record<string, unknown> = {}) =>
       post<{ success: boolean; company: any; entry: any }>(`/outreach/${id}/promote`, body),
     import: (body: { csv?: string; dryRun?: boolean; force?: boolean }) =>
@@ -1059,6 +1111,20 @@ export const api = {
       post<{ success: boolean; proposal: any }>(`/proposals/${id}/win`, { versionId }),
     lose: (id: string, lostReason: string) =>
       post<{ success: boolean; proposal: any }>(`/proposals/${id}/lose`, { lostReason }),
+    /**
+     * Owner, and retainer↔project while the deal is still open. Not the
+     * company — moving a proposal shifts its value between two clients'
+     * pipelines — and not the money, which is what a new version is for.
+     */
+    update: (id: string, body: { ownerId?: string; kind?: 'RETAINER' | 'PROJECT' }) =>
+      patch<{ success: boolean; proposal: any }>(`/proposals/${id}`, body),
+    /**
+     * Soft delete — §16. Only one nothing has happened to yet: the server
+     * refuses a won or lost proposal, and one with a proforma against it.
+     */
+    remove: (id: string) => del<{ success: boolean }>(`/proposals/${id}`),
+    restore: (id: string) => post<{ success: boolean }>(`/proposals/${id}/restore`),
+    trash: () => get<{ success: boolean; proposals: any[] }>('/proposals/trash'),
   },
 
   proformas: {
@@ -1072,7 +1138,13 @@ export const api = {
     update: (id: string, body: Record<string, unknown>) =>
       patch<{ success: boolean; proforma: any }>(`/proformas/${id}`, body),
     /** A link, not a fetch — the browser downloads it with the session cookie. */
+    /** The whole document, line items included — what the list deliberately omits. */
+    get: (id: string) => get<{ success: boolean; proforma: any }>(`/proformas/${id}`),
     pdfUrl: (id: string) => fileUrl(`/proformas/${id}/pdf`),
+    /** CR-02 §10 — the send form's defaults, and the send itself. */
+    emailDefaults: (id: string) => get<DocumentEmailDefaults>(`/proformas/${id}/email`),
+    email: (id: string, body: Record<string, unknown>) =>
+      post<{ success: boolean; sent: boolean; to: string }>(`/proformas/${id}/email`, body),
   },
 
   tasks: {
@@ -1093,6 +1165,12 @@ export const api = {
     remove: (id: string) => del<{ success: boolean }>(`/tasks/${id}`),
     /** What makes the delete above a delete rather than a disappearance. */
     restore: (id: string) => post<{ success: boolean; task: any }>(`/tasks/${id}/restore`),
+    /**
+     * Deleted tasks you could actually put back — yours, or everything with
+     * `work.all`. Without this the restore above was only reachable from a
+     * drawer you still had open.
+     */
+    trash: () => get<{ success: boolean; tasks: any[] }>('/tasks/trash'),
     updateStatus: (id: string, status: string) =>
       patch<{ success: boolean; task: any }>(`/tasks/${id}/status`, { status }),
     wait: (id: string, waitingOn: string) =>
@@ -1116,6 +1194,48 @@ export const api = {
     create: (body: Record<string, unknown>) =>
       post<{ success: boolean; retainer: any }>('/retainers', body),
     /**
+     * Correct the arrangement itself. `renewalDate` is not a field here — the
+     * server derives it from start + term, so sending one would be ignored.
+     *
+     * `repriceOpenMonth` decides what a new rate does to the month you are part
+     * way through: a month card snapshots its revenue when it opens, so
+     * without this the change is invisible until the next roll and the current
+     * month bills at the old figure. `repricedCards` in the reply says how many
+     * actually moved — never a closed or already-invoiced one.
+     */
+    update: (
+      id: string,
+      body: {
+        monthlyValue?: number;
+        startDate?: string;
+        termMonths?: number | null;
+        ownerId?: string;
+        repriceOpenMonth?: boolean;
+      },
+    ) => patch<{ success: boolean; retainer: any; repricedCards: number }>(`/retainers/${id}`, body),
+    /** The named pieces of work inside a retainer. No money on any of them. */
+    projects: (id: string) =>
+      get<{ success: boolean; projects: RetainerProject[] }>(`/retainers/${id}/projects`),
+    createProject: (id: string, body: Record<string, unknown>) =>
+      post<{ success: boolean; project: RetainerProject }>(`/retainers/${id}/projects`, body),
+    updateProject: (id: string, projectId: string, body: Record<string, unknown>) =>
+      patch<{ success: boolean; project: RetainerProject }>(`/retainers/${id}/projects/${projectId}`, body),
+    /** The tasks done under it are kept — they stay on their month card. */
+    /**
+     * One project inside a retainer, opened — its tasks across every month it
+     * touches, grouped by the month that bills them. `projectId` may be the
+     * literal `none` for the work that belongs to no project.
+     */
+    projectTasks: (id: string, projectId: string) =>
+      get<{
+        success: boolean;
+        project: any | null;
+        months: { month: string; status: string; tasks: any[] }[];
+        total: number;
+      }>(`/retainers/${id}/projects/${projectId}/tasks`),
+    deleteProject: (id: string, projectId: string) =>
+      del<{ success: boolean; tasksKept: number }>(`/retainers/${id}/projects/${projectId}`),
+    /**
      * End it. Until this existed a retainer, once started, ran for ever — the
      * monthly roll kept opening cards and spawning tasks for a client who had
      * gone, and MRR kept counting them.
@@ -1127,6 +1247,13 @@ export const api = {
       ),
     getMonthCard: (id: string, month: string) =>
       get<{ success: boolean; monthCard: any }>(`/retainers/${id}/month-cards/${month}`),
+    /**
+     * Putting a closed month back into play. setup.admin only, and the reason
+     * goes on the record — a closed month is a reported month, so reopening it
+     * is the exception rather than a step on the way to entering a cost.
+     */
+    reopenMonth: (id: string, month: string, reason: string) =>
+      post<{ success: boolean; month: string }>(`/retainers/${id}/month-cards/${month}/reopen`, { reason }),
     rollMonth: (month?: string) =>
       post<{ success: boolean; createdCards: number; createdTasks: number }>('/retainers/roll-month', { month }),
   },
@@ -1204,7 +1331,12 @@ export const api = {
       post<{ success: boolean; cost: any }>('/costs', body),
     /** Confirms an auto-rolled recurring cost draft — see workers/recurringCost.cron.ts. */
     confirm: (id: string) => patch<{ success: boolean; cost: any }>(`/costs/${id}/confirm`),
+    /** Correcting one. A mistyped amount used to be uncorrectable. */
+    update: (id: string, body: Record<string, unknown>) =>
+      patch<{ success: boolean; cost: any }>(`/costs/${id}`, body),
     delete: (id: string) => del(`/costs/${id}`),
+    /** Same call, named the way the screens read it. */
+    remove: (id: string) => del(`/costs/${id}`),
     trash: () => get<{ success: boolean; costs: any[] }>('/costs/trash'),
     restore: (id: string) => post<{ success: boolean }>(`/costs/${id}/restore`),
   },
@@ -1285,21 +1417,6 @@ export const api = {
       }>(`/users/${id}`, body),
   },
 
-  taskTemplates: {
-    list: () =>
-      get<{ success: boolean; templates: TaskTemplate[] }>('/task-templates'),
-    create: (body: { name: string; items: TaskTemplateItem[] }) =>
-      post<{ success: boolean; template: TaskTemplate }>('/task-templates', body),
-    update: (id: string, body: { name: string; items: TaskTemplateItem[] }) =>
-      patch<{ success: boolean; template: TaskTemplate }>(`/task-templates/${id}`, body),
-    remove: (id: string) =>
-      del<{ success: boolean }>(`/task-templates/${id}`),
-    trash: () =>
-      get<{ success: boolean; templates: TaskTemplate[] }>('/task-templates/trash'),
-    restore: (id: string) =>
-      post<{ success: boolean }>(`/task-templates/${id}/restore`),
-  },
-
   profile: {
     get: () => get<Profile>('/profile'),
     update: (body: Record<string, unknown>) => patch<Partial<Profile>>('/profile', body),
@@ -1352,6 +1469,27 @@ export const api = {
       post<{ success: boolean; invoice: any }>('/invoices', body),
     recordPayment: (id: string, body: Record<string, unknown>) =>
       post<{ success: boolean; payment: any; invoice: any; isFullySettled: boolean }>(`/invoices/${id}/payments`, body),
+    /**
+     * One invoice, with its document and line items.
+     *
+     * Typed as the invoice itself, not `{ invoice }` — this endpoint answers
+     * under `data`, and `request` above unwraps that. Declaring the wrapper
+     * compiles perfectly well and hands the caller `undefined` at runtime,
+     * which is exactly how the document form silently failed to prefill.
+     */
+    get: (id: string) => get<Record<string, any>>(`/invoices/${id}`),
+    /**
+     * The printable tax invoice (CR-02). Replaces the document wholesale —
+     * the server recomputes every figure from the lines, and sets the
+     * invoice's amount to the document total.
+     */
+    saveDocument: (id: string, body: Record<string, unknown>) =>
+      put<Record<string, any>>(`/invoices/${id}/document`, body),
+    /** A link, not a fetch — 400s until the document above exists. */
+    pdfUrl: (id: string) => fileUrl(`/invoices/${id}/pdf`),
+    emailDefaults: (id: string) => get<DocumentEmailDefaults>(`/invoices/${id}/email`),
+    email: (id: string, body: Record<string, unknown>) =>
+      post<{ success: boolean; sent: boolean; to: string }>(`/invoices/${id}/email`, body),
   },
 
   /**

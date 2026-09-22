@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { TableRowsSkeleton } from '@/components/ui/skeleton-loaders';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { plural } from '@/lib/utils';
@@ -12,6 +13,10 @@ import { api, apiGet, fileUrl, formatMoney, type ProjectProfitRow, type ProjectP
 import { NewInvoiceModal } from '@/components/work/NewInvoiceModal';
 import { NewCostModal } from '@/components/work/NewCostModal';
 import { RecordPaymentModal } from '@/components/work/RecordPaymentModal';
+import { InvoiceDocumentModal } from '@/components/work/InvoiceDocumentModal';
+import { SendDocumentModal } from '@/components/documents/SendDocumentModal';
+import { SellerGapsNote } from '@/components/documents/SellerGapsNote';
+import { useConfig } from '@/hooks/queries';
 import { ExportCsvButton } from '@/components/ui/export-csv-button';
 import { useConfirmStore } from '@/stores/confirm';
 import { usePageHeader } from '@/hooks/usePageHeader';
@@ -33,6 +38,8 @@ interface Invoice {
   agingDays: number;
   balanceDue: number | null;
   totalPaid: number | null;
+  /** CR-02 — whether there is a printable document behind this row yet. */
+  hasDocument: boolean;
   amountMasked?: never;
 }
 
@@ -90,62 +97,68 @@ const STATUS_STYLE: Record<string, string> = {
 
 export default function MoneyPage() {
   const confirmDialog = useConfirmStore((st) => st.confirm);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [toInvoice, setToInvoice] = useState<AwaitingRow[]>([]);
   /** A failed load, said out loud instead of only in the console. */
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [costs, setCosts] = useState<CostRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingCosts, setLoadingCosts] = useState(true);
+  const queryClient = useQueryClient();
   const router = useRouter();
   const [tab, setTab] = useState<MoneyTab>('INVOICES');
   // The one-off half of "did we make money on that job". Held apart from the
   // retainer figures, and never added to them — brief §8.
-  const [projectProfit, setProjectProfit] = useState<{
+  type ProjectProfit = {
     rows: ProjectProfitRow[];
     totals: { delivered: ProjectProfitTotals; live: ProjectProfitTotals };
     atRisk: number;
-  } | null>(null);
+  } | null;
   const [creatingInvoice, setCreatingInvoice] = useState(false);
   const [creatingCost, setCreatingCost] = useState(false);
   const [payingInvoice, setPayingInvoice] = useState<Invoice | null>(null);
-  const [profitRows, setProfitRows] = useState<ProfitRow[]>([]);
-  const [profitTotals, setProfitTotals] = useState<ProfitRow | null>(null);
-  const [profitMonth, setProfitMonth] = useState('');
-  const [loadingProfit, setLoadingProfit] = useState(true);
-  const [overheads, setOverheads] = useState<CostRow[]>([]);
-  const [capital, setCapital] = useState<CostRow[]>([]);
-  const [profitLoaded, setProfitLoaded] = useState(false);
+  const [documentInvoice, setDocumentInvoice] = useState<Invoice | null>(null);
+  const [emailingInvoice, setEmailingInvoice] = useState<Invoice | null>(null);
+  /*
+   * A tax invoice cannot print without the seller's own GSTIN, address and
+   * state — the renderer refuses. Knowing that here means the row can say so
+   * instead of offering a Download that returns an error page.
+   */
+  const { data: config } = useConfig();
+  const sellerGaps = config?.documentSettings?.gaps ?? [];
+  const canPrintTaxInvoice = !sellerGaps.some((g) => g.severity === 'required');
   const [confirmingCost, setConfirmingCost] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
+  const { data: invoiceData, isPending: loading, error: loadQueryError } = useQuery({
+    queryKey: ['invoices', 'list'],
+    queryFn: async () => {
       // GET /invoices returns { success, data, invoices, meta } with `data`
       // and `invoices` aliased to the same array — apiGet's auto-unwrap
       // resolves straight to that array, not the envelope, so `res` here
       // already IS the invoice list.
       const res = await apiGet<Invoice[]>('/invoices');
-      setInvoices(Array.isArray(res) ? res : []);
       // The step before an invoice exists: retainer months carrying none.
       // Loaded with the list rather than on tab click, because the count sits
       // on the tab and a count that appears only after you look is no use.
       const waiting = await api.invoices.awaiting().catch(() => null);
-      setToInvoice(waiting?.rows ?? []);
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : 'Could not load the money screen');
-    }
-    finally { setLoading(false); }
-  }, []);
+      return { invoices: Array.isArray(res) ? res : [], toInvoice: waiting?.rows ?? [] };
+    },
+  });
 
+  const invoices: Invoice[] = invoiceData?.invoices ?? [];
+  const toInvoice: AwaitingRow[] = invoiceData?.toInvoice ?? [];
+  const loadError =
+    loadQueryError instanceof Error ? loadQueryError.message : loadQueryError ? 'Could not load the money screen' : null;
+
+  const { data: costsData, isPending: loadingCosts } = useQuery({
+    queryKey: ['costs', 'list'],
+    queryFn: () => api.costs.list(),
+  });
+  const costs: CostRow[] = Array.isArray(costsData) ? costsData : [];
+
+  /** Refresh after an invoice or payment changes. */
+  const load = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ['invoices'] });
+  }, [queryClient]);
+
+  /** Refresh after a cost is added, confirmed or deleted. */
   const loadCosts = useCallback(async () => {
-    setLoadingCosts(true);
-    try {
-      const res = await api.costs.list();
-      setCosts(Array.isArray(res) ? res : []);
-    } catch (e) { console.error(e); }
-    finally { setLoadingCosts(false); }
-  }, []);
+    await queryClient.invalidateQueries({ queryKey: ['costs'] });
+  }, [queryClient]);
 
   const confirmCost = async (id: string) => {
     setConfirmingCost(id);
@@ -181,9 +194,17 @@ export default function MoneyPage() {
     }
   };
 
-  const loadProfit = useCallback(async () => {
-    setLoadingProfit(true);
-    try {
+  /**
+   * The profit tab, fetched only when it is opened — and then kept.
+   *
+   * This used to be a `profitLoaded` flag guarding a manual loader, which
+   * fetched once and never again. `enabled` expresses the same intent, and the
+   * cache means leaving the tab and coming back is free rather than a reload.
+   */
+  const { data: profitData, isPending: profitPending } = useQuery({
+    queryKey: ['money', 'profit'],
+    enabled: tab === 'PROFIT',
+    queryFn: async () => {
       const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
       const [pl, ov, cap, proj] = await Promise.all([
         api.retainers.profitability(),
@@ -191,21 +212,25 @@ export default function MoneyPage() {
         api.costs.list({ type: 'CAPITAL' }),
         api.projects.profitability(),
       ]);
-      setProjectProfit(proj);
-      if (pl.success) {
-        setProfitRows(pl.rows);
-        setProfitTotals({ companyId: '', companyName: '', ...pl.totals });
-        setProfitMonth(pl.month);
-      }
-      setOverheads(Array.isArray(ov) ? ov : []);
-      setCapital(Array.isArray(cap) ? cap : []);
-    } catch (e) { console.error(e); }
-    finally { setLoadingProfit(false); setProfitLoaded(true); }
-  }, []);
+      return {
+        projectProfit: proj as ProjectProfit,
+        profitRows: pl.success ? pl.rows : [],
+        profitTotals: pl.success ? ({ companyId: '', companyName: '', ...pl.totals } as ProfitRow) : null,
+        profitMonth: pl.success ? pl.month : '',
+        overheads: (Array.isArray(ov) ? ov : []) as CostRow[],
+        capital: (Array.isArray(cap) ? cap : []) as CostRow[],
+      };
+    },
+  });
 
-  useEffect(() => { load(); }, [load]);
-  useEffect(() => { loadCosts(); }, [loadCosts]);
-  useEffect(() => { if (tab === 'PROFIT' && !profitLoaded) void loadProfit(); }, [tab, profitLoaded, loadProfit]);
+  const projectProfit: ProjectProfit = profitData?.projectProfit ?? null;
+  const profitRows: ProfitRow[] = profitData?.profitRows ?? [];
+  const profitTotals: ProfitRow | null = profitData?.profitTotals ?? null;
+  const profitMonth = profitData?.profitMonth ?? '';
+  const overheads: CostRow[] = profitData?.overheads ?? [];
+  const capital: CostRow[] = profitData?.capital ?? [];
+  // Only "loading" while the tab is actually open and waiting.
+  const loadingProfit = tab === 'PROFIT' && profitPending;
 
   const totalCosts = costs.reduce((s, c) => s + (c.amount || 0), 0);
   const overheadsTotal = overheads.reduce((s, c) => s + (c.amount || 0), 0);
@@ -244,7 +269,7 @@ export default function MoneyPage() {
             rendered its empty state and "the server is down" looked exactly
             like "you have nothing yet".
           */}
-          <ErrorNote onDismiss={() => setLoadError(null)}>{loadError}</ErrorNote>
+          <ErrorNote onDismiss={() => queryClient.resetQueries({ queryKey: ['invoices'] })}>{loadError}</ErrorNote>
         </div>
       )}
       {/* Header */}
@@ -301,6 +326,8 @@ export default function MoneyPage() {
         active={tab}
         onChange={setTab}
       />
+
+      {tab === 'INVOICES' && !canPrintTaxInvoice && <SellerGapsNote gaps={sellerGaps} className="mb-3" />}
 
       {tab === 'INVOICES' && (
         <div className="border border-border rounded-xl overflow-hidden">
@@ -366,14 +393,55 @@ export default function MoneyPage() {
                       {new Date(inv.dueAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                     </td>
                     <td className="text-right">
-                      {inv.status !== 'PAID' && inv.status !== 'CANCELLED' && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setPayingInvoice(inv); }}
-                          className="border border-border text-xs font-medium text-body px-3 py-1.5 rounded-lg hover:bg-subtle transition-colors"
-                        >
-                          Record payment
-                        </button>
-                      )}
+                      <div className="flex items-center justify-end gap-2">
+                        {/*
+                          CR-02. An invoice recorded from Tally is a number and an
+                          amount; it becomes a page a client can be sent once the
+                          buyer block and the line items are filled in. Until then
+                          there is nothing to download, so nothing offers to.
+                        */}
+                        {inv.hasDocument && canPrintTaxInvoice && (
+                          <>
+                            <a
+                              href={api.invoices.pdfUrl(inv.id)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-body transition-colors hover:bg-subtle"
+                            >
+                              PDF
+                            </a>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setEmailingInvoice(inv); }}
+                              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-body transition-colors hover:bg-subtle"
+                            >
+                              Email
+                            </button>
+                          </>
+                        )}
+                        {inv.hasDocument && !canPrintTaxInvoice && (
+                          <span
+                            className="rounded-lg border border-dashed border-border px-3 py-1.5 text-xs text-secondary"
+                            title="Set your GSTIN, address and state in Settings and this becomes a download."
+                          >
+                            PDF blocked
+                          </span>
+                        )}
+                        {inv.status !== 'CANCELLED' && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDocumentInvoice(inv); }}
+                            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-body transition-colors hover:bg-subtle"
+                          >
+                            {inv.hasDocument ? 'Edit document' : 'Prepare document'}
+                          </button>
+                        )}
+                        {inv.status !== 'PAID' && inv.status !== 'CANCELLED' && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setPayingInvoice(inv); }}
+                            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-body transition-colors hover:bg-subtle"
+                          >
+                            Record payment
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -807,6 +875,18 @@ export default function MoneyPage() {
           onClose={() => setPayingInvoice(null)}
           onRecorded={() => { setPayingInvoice(null); void load(); }}
         />
+      )}
+
+      {documentInvoice && (
+        <InvoiceDocumentModal
+          invoice={documentInvoice}
+          onClose={() => setDocumentInvoice(null)}
+          onSaved={() => { setDocumentInvoice(null); void load(); }}
+        />
+      )}
+
+      {emailingInvoice && (
+        <SendDocumentModal kind="INVOICE" id={emailingInvoice.id} onClose={() => setEmailingInvoice(null)} />
       )}
     </div>
   );

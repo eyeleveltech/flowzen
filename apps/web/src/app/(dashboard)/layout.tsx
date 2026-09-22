@@ -9,7 +9,7 @@ import { permissionForPath, canSee } from '@/config/navigation';
 import { Sidebar } from '@/components/layout/sidebar';
 import { TopNav } from '@/components/layout/top-nav';
 import { BottomTabs } from '@/components/layout/bottom-tabs';
-import { CommandPalette } from '@/components/layout/command-palette';
+import { CommandPaletteMount } from '@/components/layout/command-palette-mount';
 import { useNotificationStore } from '@/stores/useNotificationStore';
 import { X, Bell } from 'lucide-react';
 import { Icon } from '@/components/ui/icon';
@@ -111,7 +111,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Bottom Tabs — mobile only */}
       {isMobile && <BottomTabs />}
 
-      <CommandPalette />
+      <CommandPaletteMount />
 
       {/* Real-time Toast Notification — positioned above bottom tabs on mobile */}
       {activeToast && (

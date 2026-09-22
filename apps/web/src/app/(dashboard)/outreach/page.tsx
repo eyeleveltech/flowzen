@@ -1,11 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { ShowMore } from '@/components/ui/show-more';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { api, fileUrl } from '@/lib/api-v2';
+import { ApiError, api, fileUrl, type DuplicateVerdict } from '@/lib/api-v2';
+import { DuplicateNotice } from '@/components/clients/DuplicateNotice';
+import { useTeamMembers } from '@/hooks/queries';
 import { ExportCsvButton } from '@/components/ui/export-csv-button';
 import { ImportOutreachModal } from '@/components/clients/ImportOutreachModal';
 import { Select } from '@/components/ui/select';
@@ -16,13 +19,21 @@ import { Field, FieldSelect } from '@/components/ui/field';
 import { Upload, UserPlus } from 'lucide-react';
 import { VERTICAL_LABEL, SOURCE_LABEL, VERTICAL_OPTIONS, SOURCE_OPTIONS, labelFor } from '@/lib/vertical';
 import { RowMenu } from '@/components/ui/row-menu';
-import { Pencil, Send, Building2 } from 'lucide-react';
+import { Pencil, Send, Building2, CalendarClock } from 'lucide-react';
 import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
 import { Search, X } from 'lucide-react';
 import { usePageHeader } from '@/hooks/usePageHeader';
 import { personOptions } from '@/lib/people';
 
-type OutreachStatus = 'NOT_CONTACTED' | 'CONTACTED' | 'REPLIED' | 'DEAD';
+/**
+ * Where the conversation has got to.
+ *
+ * The old set recorded events — contacted, replied — which could say a call
+ * happened and never what to do next. These five describe a conversation with
+ * a next action attached, and two of them carry a date, which is what lets
+ * this screen answer "who am I calling today".
+ */
+type OutreachStatus = 'NOT_CONTACTED' | 'FOLLOW_UP' | 'MEETING' | 'INTERESTED' | 'DEAD';
 
 interface OutreachItem {
   id: string;
@@ -33,21 +44,49 @@ interface OutreachItem {
   ownerId: string;
   owner?: { id: string; name: string; designation?: string | null } | null;
   promotedCompany?: { id: string; name: string; status: string } | null;
+  contactPersonName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  remarks?: string | null;
+  nextActionDate?: string | null;
   importedAt: string;
 }
 
 const STATUS_STYLE: Record<OutreachStatus, string> = {
   NOT_CONTACTED: 'border border-line text-secondary bg-white',
-  CONTACTED: 'border border-info/30 text-info bg-info-tint',
-  REPLIED: 'border border-success/40 text-success bg-success-tint',
+  FOLLOW_UP: 'border border-warning/40 text-warning-ink bg-warning-tint',
+  MEETING: 'border border-info/30 text-info bg-info-tint',
+  INTERESTED: 'border border-success/40 text-success bg-success-tint',
   DEAD: 'border border-border text-secondary bg-subtle',
 };
 
 const STATUS_LABEL: Record<OutreachStatus, string> = {
   NOT_CONTACTED: 'Not contacted',
-  CONTACTED: 'Contacted',
-  REPLIED: 'Replied',
+  FOLLOW_UP: 'Follow up',
+  MEETING: 'Meeting',
+  INTERESTED: 'Interested',
   DEAD: 'Dead',
+};
+
+/** "12 Sep" — short enough to sit under a name without crowding it. */
+const formatDay = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+
+/** A callback whose day has passed is the thing this screen is for. */
+const isOverdue = (iso: string) => new Date(iso).setHours(23, 59, 59, 999) < Date.now();
+
+/** The two statuses that hang off a date, and what that date is called. */
+const CARRIES_ACTION: Partial<Record<OutreachStatus, { dateLabel: string; remarksRequired: boolean; remarksHint: string }>> = {
+  FOLLOW_UP: {
+    dateLabel: 'Call back on',
+    remarksRequired: true,
+    remarksHint: 'What did they say? Why do they want a callback?',
+  },
+  MEETING: {
+    dateLabel: 'Meeting on',
+    remarksRequired: false,
+    remarksHint: 'Time, online or offline, where, and who is going.',
+  },
 };
 
 const STATUS_OPTIONS = (Object.keys(STATUS_LABEL) as OutreachStatus[]).map((value) => ({
@@ -60,19 +99,17 @@ const STATUS_OPTIONS = (Object.keys(STATUS_LABEL) as OutreachStatus[]).map((valu
 
 export default function OutreachPage() {
   const router = useRouter();
-  const [entries, setEntries] = useState<OutreachItem[]>([]);
   /** A failed load, said out loud instead of only in the console. */
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [total, setTotal] = useState(0);
   /**
    * The outreach list is the one that arrives by the hundred — it is bulk
    * imported from a scrape — and the endpoint has always stopped at 200 with
    * no way to ask for more. Pages accumulate; you scan this list, you do not
    * flip through it.
    */
+  const queryClient = useQueryClient();
+  /** A failed ACTION (marking replied, importing). The query owns load errors. */
+  const [actionError, setActionError] = useState<string | null>(null);
   const [pages, setPages] = useState(1);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [loading, setLoading] = useState(true);
 
   /*
    * The two filters, and where each one lives.
@@ -86,19 +123,25 @@ export default function OutreachPage() {
    * somebody can send. The search box does not — a query string rewritten on
    * every keystroke is noise, and the text is in the box in front of you.
    */
-  const [counts, setCounts] = useState({ ALL: 0, NOT_CONTACTED: 0, CONTACTED: 0, REPLIED: 0, DEAD: 0 });
-  const [cold, setCold] = useState(0);
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
 
-  const statusTabs: TabDef<'ALL' | OutreachStatus>[] = [
-    { key: 'ALL', label: 'All', count: counts.ALL },
-    { key: 'NOT_CONTACTED', label: 'Not contacted', count: counts.NOT_CONTACTED },
-    { key: 'CONTACTED', label: 'Contacted', count: counts.CONTACTED },
-    { key: 'REPLIED', label: 'Replied', count: counts.REPLIED },
-    { key: 'DEAD', label: 'Dead', count: counts.DEAD },
+  /**
+   * Keys and labels only. `useTabState` reads `key` and `visible` and never
+   * `count`, so the tab the URL selects can be resolved BEFORE the counts
+   * exist — which matters now that the counts come from a query whose own key
+   * contains the selected tab. Counts are attached further down, once the
+   * query has answered.
+   */
+  const tabDefs: TabDef<'ALL' | OutreachStatus>[] = [
+    { key: 'ALL', label: 'All' },
+    { key: 'NOT_CONTACTED', label: 'Not contacted' },
+    { key: 'FOLLOW_UP', label: 'Follow up' },
+    { key: 'MEETING', label: 'Meeting' },
+    { key: 'INTERESTED', label: 'Interested' },
+    { key: 'DEAD', label: 'Dead' },
   ];
-  const [statusFilter, setStatusFilter] = useTabState(statusTabs, 'status');
+  const [statusFilter, setStatusFilter] = useTabState(tabDefs, 'status');
 
   // Typing is not a request. Without this, "Prestige" is eight fetches and the
   // answer to "P" can land after the answer to "Prestige".
@@ -110,6 +153,9 @@ export default function OutreachPage() {
   // Add modal state
   const [addOpen, setAddOpen] = useState(false);
   const [newName, setNewName] = useState('');
+  const [newContactName, setNewContactName] = useState('');
+  const [newPhone, setNewPhone] = useState('');
+  const [newEmail, setNewEmail] = useState('');
   const [newVertical, setNewVertical] = useState('HEALTHCARE');
   const [newSource, setNewSource] = useState('OUTREACH');
   const [adding, setAdding] = useState(false);
@@ -124,20 +170,32 @@ export default function OutreachPage() {
    * name — but there was no way to see it and no way to change it, so a name
    * added by the wrong person stayed with them.
    */
-  const [team, setTeam] = useState<{ id: string; name: string }[]>([]);
+  const team = useTeamMembers();
   const [newOwnerId, setNewOwnerId] = useState('');
 
   // Edit dialog
   const [editing, setEditing] = useState<OutreachItem | null>(null);
+  const [editContactName, setEditContactName] = useState('');
+  /**
+   * The lead's own history, fetched when the record is opened.
+   *
+   * Cached per lead, so reopening the same one is instant. Needed an
+   * `OutreachEntry` entry in the activity feed's permission map before any of
+   * it was readable — anything absent from that map is refused, not allowed.
+   */
+  const { data: history = [] } = useQuery({
+    queryKey: ['activities', 'OutreachEntry', editing?.id],
+    enabled: Boolean(editing?.id),
+    queryFn: () =>
+      api.activities.list({ entityType: 'OutreachEntry', entityId: editing!.id, limit: '50' }),
+  });
+  const [editPhone, setEditPhone] = useState('');
+  const [editEmail, setEditEmail] = useState('');
   const [editName, setEditName] = useState('');
   const [editVertical, setEditVertical] = useState('HEALTHCARE');
   const [editSource, setEditSource] = useState('OUTREACH');
   const [editOwnerId, setEditOwnerId] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
-
-  useEffect(() => {
-    api.team.members().then((r) => setTeam(r.members ?? [])).catch(() => setTeam([]));
-  }, []);
 
   const openEdit = (e: OutreachItem) => {
     setEditing(e);
@@ -145,6 +203,9 @@ export default function OutreachPage() {
     setEditVertical(e.vertical);
     setEditSource(e.source);
     setEditOwnerId(e.owner?.id ?? e.ownerId ?? '');
+    setEditContactName(e.contactPersonName ?? '');
+    setEditPhone(e.phone ?? '');
+    setEditEmail(e.email ?? '');
   };
 
   const saveEdit = async () => {
@@ -155,6 +216,9 @@ export default function OutreachPage() {
         name: editName.trim(),
         vertical: editVertical,
         source: editSource,
+        contactPersonName: editContactName.trim() || null,
+        phone: editPhone.trim() || null,
+        email: editEmail.trim() || null,
         ...(editOwnerId ? { ownerId: editOwnerId } : {}),
       });
       toast.success('Updated');
@@ -170,20 +234,33 @@ export default function OutreachPage() {
   // Row-level status changes
   const [markingReplied, setMarkingReplied] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  /** The lead and the status being moved to, while its date and note are asked for. */
+  const [actionFor, setActionFor] = useState<{ entry: OutreachItem; status: OutreachStatus } | null>(null);
+  const [actionDate, setActionDate] = useState('');
+  const [actionRemarks, setActionRemarks] = useState('');
+  const [savingAction, setSavingAction] = useState(false);
 
   // Promote modal state
   const [promotingEntry, setPromotingEntry] = useState<OutreachItem | null>(null);
   const [promoteCity, setPromoteCity] = useState('Chennai');
+  const [promoteName, setPromoteName] = useState('');
+  const [promoteVertical, setPromoteVertical] = useState('');
+  const [promoteOwnerId, setPromoteOwnerId] = useState('');
+  const [promoteForce, setPromoteForce] = useState(false);
+  const [promoteVerdict, setPromoteVerdict] = useState<DuplicateVerdict | null>(null);
   const [promoteContactName, setPromoteContactName] = useState('');
   const [promoteContactEmail, setPromoteContactEmail] = useState('');
   const [promoteContactPhone, setPromoteContactPhone] = useState('');
   const [promoting, setPromoting] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
+  const { data, isPending, isFetching, error } = useQuery({
+    queryKey: ['outreach', statusFilter, query, pages],
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
       const rows: OutreachItem[] = [];
       let meta: { total: number } | undefined;
+      let counts = { ALL: 0, NOT_CONTACTED: 0, FOLLOW_UP: 0, MEETING: 0, INTERESTED: 0, DEAD: 0 };
+      let cold = 0;
       for (let p = 1; p <= pages; p++) {
         const res = await api.outreach.list({
           page: String(p),
@@ -195,68 +272,155 @@ export default function OutreachPage() {
         meta = res.meta;
         // The chips follow the search but not the status, so each one reports
         // what you would get by pressing it rather than what you already have.
-        setCounts(res.counts);
-        setCold(res.summary.cold);
+        counts = res.counts;
+        cold = res.summary.cold;
       }
-      setEntries(rows);
-      // From the server. It used to be `res.entries.length`, which is the size
-      // of the page just fetched — the same figure it was being compared
-      // against, so "N more rows" could only ever say zero.
-      setTotal(meta?.total ?? rows.length);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  }, [pages, statusFilter, query]);
+      return {
+        entries: rows,
+        // From the server. It used to be `res.entries.length`, which is the
+        // size of the page just fetched — the same figure it was being
+        // compared against, so "N more rows" could only ever say zero.
+        total: meta?.total ?? rows.length,
+        counts,
+        cold,
+      };
+    },
+  });
 
-  useEffect(() => { load(); }, [load]);
+  const entries: OutreachItem[] = data?.entries ?? [];
+  const total = data?.total ?? 0;
+  const counts = data?.counts ?? { ALL: 0, NOT_CONTACTED: 0, FOLLOW_UP: 0, MEETING: 0, INTERESTED: 0, DEAD: 0 };
+  const cold = data?.cold ?? 0;
+  const loading = isPending;
+  const loadingMore = isFetching && !isPending;
+  const loadError = error instanceof Error ? error.message : error ? 'Could not load the outreach list' : null;
+
+  const statusTabs: TabDef<'ALL' | OutreachStatus>[] = tabDefs.map((t) => ({
+    ...t,
+    count: counts[t.key as keyof typeof counts],
+  }));
+
+  /** What the add / import / status flows call once a row has changed. */
+  const load = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ['outreach'] });
+    // A status change writes a history row, so the trail on the open record
+    // has to be refetched too or it shows the change one edit late.
+    await queryClient.invalidateQueries({ queryKey: ['activities'] });
+  }, [queryClient]);
 
   // Two deliberate steps, on request: marking a reply is a plain status flip
   // (no Company yet), and promoting is its own separate action once a row
   // sits at Replied. A row that's Replied but never promoted just stays
   // visible in this list rather than disappearing, so nothing gets lost —
   // the visible "Promote to company" button on that row is the reminder.
-  const markReplied = async (entry: OutreachItem) => {
-    setMarkingReplied(entry.id);
-    try {
-      await api.outreach.updateStatus(entry.id, 'REPLIED');
-      await load();
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : 'Could not load the outreach list');
-    }
-    finally { setMarkingReplied(null); }
-  };
-
+  /**
+   * Moving a lead along.
+   *
+   * FOLLOW_UP and MEETING cannot be set from the dropdown alone — both need a
+   * date, and a follow-up needs a note as well. Choosing either opens the
+   * little form below rather than firing a request that the server would
+   * refuse; asking for the date is the whole reason those statuses exist.
+   */
   const changeStatus = async (entry: OutreachItem, status: OutreachStatus) => {
+    const carriesAction = Boolean(CARRIES_ACTION[status]);
+    // Re-choosing the status you are already on is how you MOVE a date —
+    // picking Meeting again on a lead already meeting reopens the dialog to
+    // reschedule it. Without this the only way to change a meeting date was to
+    // move the lead to Follow up and back, and Follow up demands a note, so
+    // rescheduling meant inventing a callback that never happened.
+    if (status === entry.status && !carriesAction) return;
+    if (carriesAction) {
+      openAction(entry, status);
+      return;
+    }
     setUpdatingStatus(entry.id);
     try {
-      await api.outreach.updateStatus(entry.id, status);
+      await api.outreach.updateStatus(entry.id, { status });
       await load();
     } catch (e) {
-      // A failed action used to log to the console and stop. The
-      // button simply did nothing, so the natural response was to
-      // press it again.
-      toast.error(e instanceof Error ? e.message : 'Could not mark that replied');
+      // A failed action used to log to the console and stop. The button simply
+      // did nothing, so the natural response was to press it again.
+      toast.error(e instanceof Error ? e.message : 'Could not change that status');
+    } finally {
+      setUpdatingStatus(null);
     }
-    finally { setUpdatingStatus(null); }
+  };
+
+  /**
+   * Open the date-and-note dialog for a lead.
+   *
+   * Pre-filled from the row, so rescheduling starts from the date that is
+   * already there rather than an empty field somebody has to remember.
+   */
+  const openAction = (entry: OutreachItem, status: OutreachStatus) => {
+    setActionFor({ entry, status });
+    setActionDate(entry.nextActionDate?.slice(0, 10) ?? '');
+    setActionRemarks(entry.remarks ?? '');
+  };
+
+  /** Saving the date and note the two action statuses require. */
+  const saveAction = async () => {
+    if (!actionFor) return;
+    setSavingAction(true);
+    try {
+      await api.outreach.updateStatus(actionFor.entry.id, {
+        status: actionFor.status,
+        nextActionDate: actionDate || null,
+        remarks: actionRemarks.trim() || null,
+      });
+      setActionFor(null);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not save that');
+    } finally {
+      setSavingAction(false);
+    }
+  };
+
+  /**
+   * Interested is the gate to promotion, and it means something specific now:
+   * met, happy, and asking for a quotation. A row that sits at Interested and
+   * is never promoted stays visible in this list rather than disappearing —
+   * the button on that row is the reminder.
+   */
+  const markInterested = async (entry: OutreachItem) => {
+    setMarkingReplied(entry.id);
+    try {
+      await api.outreach.updateStatus(entry.id, { status: 'INTERESTED' });
+      await load();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Could not update that row');
+    } finally {
+      setMarkingReplied(null);
+    }
   };
 
   const openPromote = (entry: OutreachItem) => {
     setPromotingEntry(entry);
     setPromoteCity('Chennai');
-    setPromoteContactName('');
-    setPromoteContactEmail('');
-    setPromoteContactPhone('');
+    // Pre-filled from the lead and editable. Everything here was collected
+    // while the lead was cold; the person promoting it has just met them and
+    // is the one who knows the legal name and the right number.
+    setPromoteName(entry.name);
+    setPromoteVertical(entry.vertical);
+    setPromoteOwnerId(entry.owner?.id ?? entry.ownerId ?? '');
+    setPromoteContactName(entry.contactPersonName ?? '');
+    setPromoteContactEmail(entry.email ?? '');
+    setPromoteContactPhone(entry.phone ?? '');
+    setPromoteForce(false);
   };
 
   const confirmPromote = async () => {
     if (!promotingEntry) return;
     setPromoting(true);
+    setPromoteVerdict(null);
     try {
       const res = await api.outreach.promote(promotingEntry.id, {
         city: promoteCity.trim() || 'Chennai',
+        companyName: promoteName.trim() || undefined,
+        vertical: promoteVertical || undefined,
+        ownerId: promoteOwnerId || undefined,
+        ...(promoteForce ? { force: true } : {}),
         contactName: promoteContactName.trim() || undefined,
         contactEmail: promoteContactEmail.trim() || undefined,
         contactPhone: promoteContactPhone.trim() || undefined,
@@ -275,10 +439,19 @@ export default function OutreachPage() {
       }
       await load();
     } catch (e) {
-      // A failed action used to log to the console and stop. The
-      // button simply did nothing, so the natural response was to
-      // press it again.
-      toast.error(e instanceof Error ? e.message : 'Could not change that status');
+      /**
+       * The 409 carries the match, not just a sentence — `{ action, matches,
+       * canForce }` under `data`. Promotion used to run no duplicate check at
+       * all, so a lead whose name already belonged to a client hit the unique
+       * index and came back as a bare "Something went wrong".
+       */
+      if (e instanceof ApiError && e.status === 409 && e.data) {
+        setPromoteVerdict(e.data as DuplicateVerdict);
+      } else {
+        // A failed action used to log to the console and stop. The button
+        // simply did nothing, so the natural response was to press it again.
+        toast.error(e instanceof Error ? e.message : 'Could not promote that lead');
+      }
     }
     finally { setPromoting(false); }
   };
@@ -291,10 +464,16 @@ export default function OutreachPage() {
         name: newName.trim(),
         vertical: newVertical,
         source: newSource,
+        contactPersonName: newContactName.trim() || null,
+        phone: newPhone.trim() || null,
+        email: newEmail.trim() || null,
         ...(newOwnerId ? { ownerId: newOwnerId } : {}),
       });
       setAddOpen(false);
       setNewName('');
+      setNewContactName('');
+      setNewPhone('');
+      setNewEmail('');
       setNewOwnerId('');
       load();
     } catch (e) {
@@ -325,14 +504,14 @@ export default function OutreachPage() {
 
   return (
     <div className="page-shell">
-      {loadError && (
+      {(loadError ?? actionError) && (
         <div className="mb-6">
           {/*
             A failed load used to reach console.error and stop, so the screen
             rendered its empty state and "the server is down" looked exactly
             like "you have nothing yet".
           */}
-          <ErrorNote onDismiss={() => setLoadError(null)}>{loadError}</ErrorNote>
+          <ErrorNote onDismiss={() => { setActionError(null); void queryClient.resetQueries({ queryKey: ['outreach'] }); }}>{loadError ?? actionError}</ErrorNote>
         </div>
       )}
       {/* Page header */}
@@ -430,7 +609,34 @@ export default function OutreachPage() {
               </tr>
             ) : shown.map(e => (
               <tr key={e.id} className="hover:bg-subtle transition-colors">
-                <td className="font-semibold text-primary">{e.name}</td>
+                <td className="font-semibold text-primary">
+                  {e.name}
+                  {/*
+                    The reason this screen exists now. Without the date on the
+                    row, "who am I calling today" is a question you can only
+                    answer by opening every lead one at a time.
+                  */}
+                  {CARRIES_ACTION[e.status] && e.nextActionDate && (
+                    <button
+                      type="button"
+                      onClick={() => openAction(e, e.status)}
+                      title={`Change when — ${e.name}`}
+                      className="mt-0.5 block text-left text-micro font-normal text-secondary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    >
+                      {CARRIES_ACTION[e.status]?.dateLabel}{' '}
+                      <span className={isOverdue(e.nextActionDate) ? 'font-semibold text-danger' : 'font-semibold text-primary'}>
+                        {formatDay(e.nextActionDate)}
+                      </span>
+                      {e.remarks && <span className="text-secondary"> · {e.remarks}</span>}
+                    </button>
+                  )}
+                  {/* A lead with no way to reach it predates the rule that
+                      there must be one. Saying so is how the backlog gets
+                      cleared — the edit form is where it gets fixed. */}
+                  {!e.phone && !e.email && (
+                    <div className="mt-0.5 text-micro font-normal text-warning-ink">No phone or email</div>
+                  )}
+                </td>
                 <td className="text-secondary">{labelFor(VERTICAL_LABEL, e.vertical)}</td>
                 <td className="text-secondary">{labelFor(SOURCE_LABEL, e.source)}</td>
                 <td className="text-secondary">{e.owner?.name ?? 'Unassigned'}</td>
@@ -440,7 +646,7 @@ export default function OutreachPage() {
                     onChange={(v) => changeStatus(e, v as OutreachStatus)}
                     options={STATUS_OPTIONS}
                     disabled={updatingStatus === e.id}
-                    ariaLabel="Change status — e.g. undo a wrong 'Mark as replied'"
+                    ariaLabel="Change status — Follow up and Meeting will ask for a date"
                     className="w-37.5"
                     buttonClassName={`text-micro font-semibold tracking-[0.03em] rounded-full px-2 py-1 gap-1 ${STATUS_STYLE[e.status]}`}
                   />
@@ -452,7 +658,7 @@ export default function OutreachPage() {
                       that did not exist at all until now — sits behind the
                       row menu, the same as on the team screen. */}
                   <div className="flex items-center justify-end gap-2">
-                    {e.status === 'REPLIED' ? (
+                    {e.status === 'INTERESTED' ? (
                       <Button variant="primary" size="sm" onClick={() => openPromote(e)} className="whitespace-nowrap">
                         Promote to company
                       </Button>
@@ -461,27 +667,36 @@ export default function OutreachPage() {
                         variant="secondary"
                         size="sm"
                         loading={markingReplied === e.id}
-                        onClick={() => markReplied(e)}
+                        onClick={() => markInterested(e)}
                         className="whitespace-nowrap"
                       >
-                        Mark as replied
+                        Mark interested
                       </Button>
                     )}
                     <RowMenu
                       label={`Actions for ${e.name}`}
                       actions={[
+                        {
+                          // Discoverable, and reachable by keyboard and on
+                          // mobile — the date on the row is the quick way, but
+                          // it is small and not everybody will find it.
+                          label: e.status === 'MEETING' ? 'Reschedule meeting' : 'Change callback date',
+                          icon: CalendarClock,
+                          onSelect: () => openAction(e, e.status),
+                          visible: Boolean(CARRIES_ACTION[e.status]),
+                        },
                         { label: 'Edit details', icon: Pencil, onSelect: () => openEdit(e) },
                         {
-                          label: 'Mark as replied',
+                          label: 'Mark interested',
                           icon: Send,
-                          onSelect: () => markReplied(e),
-                          visible: e.status !== 'REPLIED',
+                          onSelect: () => markInterested(e),
+                          visible: e.status !== 'INTERESTED',
                         },
                         {
                           label: 'Promote to company',
                           icon: Building2,
                           onSelect: () => openPromote(e),
-                          visible: e.status === 'REPLIED',
+                          visible: e.status === 'INTERESTED',
                         },
                       ]}
                     />
@@ -498,7 +713,7 @@ export default function OutreachPage() {
             total={total}
             loading={loadingMore}
             noun="name"
-            onMore={() => { setLoadingMore(true); setPages((n) => n + 1); }}
+            onMore={() => setPages((n) => n + 1)}
           />
         )}
       </Card>
@@ -516,6 +731,24 @@ export default function OutreachPage() {
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add to outreach list">
         <ModalBody>
           <Field label="Company name" value={newName} onChange={setNewName} required placeholder="Who did you find?" />
+          <Field
+            label="Contact person"
+            value={newContactName}
+            onChange={setNewContactName}
+            placeholder="Who do we ask for?"
+          />
+          {/*
+            One of these two is required, and the server enforces the same rule.
+            A name with no phone and no email is a note, not a lead — nobody can
+            act on it, and it would sit in the list forever looking like work.
+          */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Phone" value={newPhone} onChange={setNewPhone} placeholder="e.g. 98400 11223" />
+            <Field label="Email" type="email" value={newEmail} onChange={setNewEmail} placeholder="e.g. hello@acme.com" />
+          </div>
+          {!newPhone.trim() && !newEmail.trim() && (
+            <p className="text-xs text-secondary">Add a phone number or an email — one of the two is enough.</p>
+          )}
           <FieldSelect label="Vertical" value={newVertical} onChange={setNewVertical} options={VERTICAL_OPTIONS} />
           <FieldSelect label="Source" value={newSource} onChange={setNewSource} options={SOURCE_OPTIONS} />
           {/* The form never asked, and POST quietly filed the name under
@@ -531,8 +764,66 @@ export default function OutreachPage() {
         </ModalBody>
         <ModalFooter>
           <Button variant="ghost" onClick={() => setAddOpen(false)}>Cancel</Button>
-          <Button variant="primary" loading={adding} disabled={!newName.trim()} onClick={() => void addEntry()}>
+          <Button
+            variant="primary"
+            loading={adding}
+            disabled={!newName.trim() || (!newPhone.trim() && !newEmail.trim())}
+            onClick={() => void addEntry()}
+          >
             Add to the list
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      {/*
+        Follow up and Meeting both hang off a date, and the label is what
+        changes rather than the field. Asking here is the point: a callback
+        with no date is not a callback, and the server refuses one anyway.
+      */}
+      <Modal
+        open={Boolean(actionFor)}
+        onClose={() => setActionFor(null)}
+        title={
+          actionFor
+            ? actionFor.status === actionFor.entry.status
+              ? `${actionFor.status === 'MEETING' ? 'Reschedule meeting' : 'Change callback date'} — ${actionFor.entry.name}`
+              : `${STATUS_LABEL[actionFor.status]} — ${actionFor.entry.name}`
+            : ''
+        }
+      >
+        <ModalBody>
+          <Field
+            label={actionFor ? (CARRIES_ACTION[actionFor.status]?.dateLabel ?? 'Date') : 'Date'}
+            type="date"
+            value={actionDate}
+            onChange={setActionDate}
+            required
+          />
+          <Field
+            label="Remarks"
+            textarea
+            value={actionRemarks}
+            onChange={setActionRemarks}
+            required={actionFor ? Boolean(CARRIES_ACTION[actionFor.status]?.remarksRequired) : false}
+            hint={actionFor ? CARRIES_ACTION[actionFor.status]?.remarksHint : undefined}
+            placeholder={actionFor?.status === 'FOLLOW_UP' ? 'They asked us to call back after Diwali…' : '11:30am, offline, at their office…'}
+          />
+          <p className="text-xs text-secondary">
+            Saved to this lead&apos;s history. Earlier notes are kept — this does not replace them.
+          </p>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setActionFor(null)}>Cancel</Button>
+          <Button
+            variant="primary"
+            loading={savingAction}
+            disabled={
+              !actionDate ||
+              (actionFor ? Boolean(CARRIES_ACTION[actionFor.status]?.remarksRequired) && !actionRemarks.trim() : true)
+            }
+            onClick={() => void saveAction()}
+          >
+            Save
           </Button>
         </ModalFooter>
       </Modal>
@@ -543,17 +834,41 @@ export default function OutreachPage() {
         title="Promote to company"
         description={
           promotingEntry
-            ? `${promotingEntry.name} becomes a real Company — marked Replied, and visible everywhere else in the system from here on.`
+            ? `${promotingEntry.name} becomes a real Company — a Prospect, visible everywhere else in the system from here on. The lead is archived, not deleted.`
             : undefined
         }
       >
         <ModalBody>
+          <Field label="Company name" value={promoteName} onChange={setPromoteName} required placeholder="Their legal name" />
           <Field label="City" value={promoteCity} onChange={setPromoteCity} placeholder="Chennai" />
-          <Field label="Contact name" value={promoteContactName} onChange={setPromoteContactName} placeholder="Who replied" />
+          <Field label="Contact person" value={promoteContactName} onChange={setPromoteContactName} placeholder="Who we deal with" />
+          {/* Both carried over from the lead but editable here. The vertical
+              was often a guess when the name was scraped, and the owner of a
+              cold lead is not always who ends up running the account. */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FieldSelect label="Vertical" value={promoteVertical} onChange={setPromoteVertical} options={VERTICAL_OPTIONS} />
+            <FieldSelect
+              label="Owner"
+              value={promoteOwnerId}
+              onChange={setPromoteOwnerId}
+              options={personOptions(team)}
+              placeholder="You"
+            />
+          </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Contact email" type="email" value={promoteContactEmail} onChange={setPromoteContactEmail} placeholder="Optional" />
             <Field label="Contact phone" value={promoteContactPhone} onChange={setPromoteContactPhone} placeholder="Optional" />
           </div>
+          {/* A near-name clash can be overridden; a matching phone or email is
+              the same company and cannot be. The server decides which. */}
+          {promoteVerdict && (
+            <DuplicateNotice
+              verdict={promoteVerdict}
+              checking={false}
+              force={promoteForce}
+              onForce={setPromoteForce}
+            />
+          )}
         </ModalBody>
         <ModalFooter>
           <Button variant="ghost" disabled={promoting} onClick={() => setPromotingEntry(null)}>Cancel</Button>
@@ -566,6 +881,15 @@ export default function OutreachPage() {
       <Modal open={Boolean(editing)} onClose={() => setEditing(null)} title="Edit this name">
         <ModalBody>
           <Field label="Company name" value={editName} onChange={setEditName} required />
+          <Field label="Contact person" value={editContactName} onChange={setEditContactName} placeholder="Who do we ask for?" />
+          {/* This is where a lead that predates the rule gets a way to reach
+              it. The edit form deliberately does NOT require one — refusing
+              every edit until somebody produces a phone number is how a rule
+              stops people using the screen at all. */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Phone" value={editPhone} onChange={setEditPhone} placeholder="e.g. 98400 11223" />
+            <Field label="Email" type="email" value={editEmail} onChange={setEditEmail} placeholder="e.g. hello@acme.com" />
+          </div>
           <FieldSelect label="Vertical" value={editVertical} onChange={setEditVertical} options={VERTICAL_OPTIONS} />
           <FieldSelect label="Source" value={editSource} onChange={setEditSource} options={SOURCE_OPTIONS} />
           <FieldSelect
@@ -575,6 +899,41 @@ export default function OutreachPage() {
             options={personOptions(team)}
             placeholder="Unassigned"
           />
+
+          {/*
+            The trail. `remarks` on the row is only ever the LATEST note — a
+            lead followed up four times keeps four of them here, in order,
+            rather than the last one having eaten the other three.
+          */}
+          <div className="border-t border-border pt-4">
+            <p className="eyebrow mb-2">History</p>
+            {history.length === 0 ? (
+              <p className="text-xs text-secondary">Nothing recorded yet. Status changes show up here.</p>
+            ) : (
+              <ol className="space-y-2">
+                {history.map((h) => (
+                  <li key={h.id} className="text-xs">
+                    <span className="text-secondary">
+                      {new Date(h.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} ·{' '}
+                    </span>
+                    <span className="font-semibold text-primary">
+                      {h.payload?.from === h.payload?.to
+                        ? /* Same status, new date — a reschedule, not a move. */
+                          `${STATUS_LABEL[h.payload?.to as OutreachStatus] ?? h.payload?.to} rescheduled`
+                        : `${STATUS_LABEL[h.payload?.from as OutreachStatus] ?? h.payload?.from} → ${
+                            STATUS_LABEL[h.payload?.to as OutreachStatus] ?? h.payload?.to
+                          }`}
+                    </span>
+                    {h.payload?.nextActionDate && (
+                      <span className="text-secondary"> · {formatDay(h.payload.nextActionDate)}</span>
+                    )}
+                    {h.actor?.name && <span className="text-secondary"> by {h.actor.name}</span>}
+                    {h.payload?.remarks && <div className="mt-0.5 text-secondary">{h.payload.remarks}</div>}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
         </ModalBody>
         <ModalFooter>
           <Button variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>

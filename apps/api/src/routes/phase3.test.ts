@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { calculateWorkingMinutes } from '../utils/workingHours.js';
-import { TaskStatus, TaskWorkType, ProjectStatus, MilestoneStatus } from '@prisma/client';
+import { TaskStatus } from '@prisma/client';
 
 describe('Phase 3: Work Execution & Delivery Engine Logic Tests', () => {
   it('1. Verifies working hours calculation inside Mon-Sat 10:00-19:00 IST', () => {

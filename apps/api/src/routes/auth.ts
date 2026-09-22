@@ -1,11 +1,13 @@
 import { Router, type Response, type RequestHandler } from 'express';
 import { z } from 'zod';
+import crypto from 'node:crypto';
 import rateLimit from 'express-rate-limit';
 import { prisma } from '../lib/prisma.js';
 import { generateToken } from '../utils/jwt.js';
 import { comparePassword, hashPassword } from '../utils/password.js';
 import { authenticate, type AuthRequest, resolvePermissions } from '../middleware/auth.js';
 import { roleForPreset } from '../utils/roles.js';
+import { sendMail } from '../utils/mailer.js';
 
 export const authRouter = Router();
 
@@ -295,6 +297,113 @@ authRouter.post('/accept-invite', authLimiter, async (req, res: Response, next) 
 // cannot assume its mail server will. An admin generates the link from the
 // Team screen (POST /users/:id/reset-link) and hands it over, exactly as
 // invitations already work.
+
+
+// ── Forgot password ─────────────────────────────────────────────────────────
+//
+// §16: "Auth | Email and password ... Password reset by email."
+//
+// Half of this existed: an admin could issue a link from Team, and
+// POST /reset-password below consumes it. What was missing was the person
+// being able to ask for one themselves — so the login screen said to go and
+// find an admin, and out of hours that is the end of the working day.
+//
+// ─── Why the answer never changes ───────────────────────────────────────────
+//
+// This endpoint is unauthenticated, so "no account with that address" would
+// turn it into a way to find out who works here. It answers identically
+// whether the address is a real account, a former employee, or nonsense, and
+// it never says whether mail was actually sent. The only party who learns
+// anything is whoever can read that inbox.
+//
+// Rate limited by the same two-stage limiter as login: per address, then per
+// account, so a list of guessed addresses gets nowhere.
+
+/** A name goes into the HTML of an email, so it is escaped like any other markup. */
+const escapeForMail = (s: string): string =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/** Short, because a live reset link is a live credential. */
+const FORGOT_VALID_MINUTES = 60;
+
+const forgotSchema = z.object({
+  email: z.string().email('Enter the email address you sign in with'),
+});
+
+/** The same reply in every case. Deliberately says "if", not "we have sent". */
+const FORGOT_REPLY = {
+  success: true,
+  message: 'If that address has an account here, a link to set a new password is on its way.',
+};
+
+authRouter.post('/forgot-password', authLimiter, async (req, res: Response, next) => {
+  try {
+    const parsed = forgotSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
+
+    const email = parsed.data.email.trim().toLowerCase();
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, name: true, email: true, active: true, organizationId: true },
+    });
+
+    // An account that has been switched off is not a password problem, and
+    // sending a working link to one would quietly undo the switching off.
+    if (!user || !user.active) {
+      res.json(FORGOT_REPLY);
+      return;
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + FORGOT_VALID_MINUTES * 60 * 1000);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { resetToken: token, resetTokenExpiresAt: expiresAt },
+    });
+
+    const base = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000';
+    const link = `${base}/reset-password?token=${token}`;
+
+    try {
+      await sendMail(user.organizationId, {
+        to: user.email,
+        subject: 'Set a new Flowzen password',
+        html: `
+          <p>Hello ${escapeForMail(user.name)},</p>
+          <p>Somebody asked to reset the password for this Flowzen account. If that was you, use the link below — it works once and expires in ${FORGOT_VALID_MINUTES} minutes.</p>
+          <p><a href="${link}">Set a new password</a></p>
+          <p>If it was not you, nothing has changed and you can ignore this. Your current password still works.</p>
+        `,
+        text: `Somebody asked to reset the password for this Flowzen account.\n\nIf that was you: ${link}\n\nThe link works once and expires in ${FORGOT_VALID_MINUTES} minutes. If it was not you, nothing has changed.`,
+      });
+    } catch {
+      // Mail not configured, or the server refused it. The reply is the same
+      // either way — saying "we could not send it" to an unauthenticated
+      // caller confirms the account exists.
+    }
+
+    // §16: every update writes an Activity row. Issuing a reset token is one,
+    // and it is the row that answers "who asked for this, and when".
+    await prisma.activity.create({
+      data: {
+        organizationId: user.organizationId,
+        entityType: 'User',
+        entityId: user.id,
+        actorId: user.id,
+        verb: 'password_reset_requested',
+        payload: { expiresInMinutes: FORGOT_VALID_MINUTES },
+      },
+    });
+
+    res.json(FORGOT_REPLY);
+  } catch (error) {
+    next(error);
+  }
+});
 
 const resetSchema = z.object({
   token: z.string().min(1, 'This link is missing its token'),

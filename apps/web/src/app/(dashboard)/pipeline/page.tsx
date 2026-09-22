@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { TableRowsSkeleton } from '@/components/ui/skeleton-loaders';
 import { plural } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
@@ -17,6 +18,7 @@ import { AddVersionModal } from '@/components/clients/AddVersionModal';
 import { NewProformaModal } from '@/components/clients/NewProformaModal';
 import { useConfirmStore } from '@/stores/confirm';
 import { usePageHeader } from '@/hooks/usePageHeader';
+import { useConfig } from '@/hooks/queries';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 
 const STAGE_ORDER = ['TALKING', 'PROPOSAL_SENT', 'IN_NEGOTIATION', 'PROFORMA_ISSUED', 'VERBAL_YES', 'WON'];
@@ -28,16 +30,20 @@ const STAGE_LABEL: Record<string, string> = {
   VERBAL_YES: 'Verbal yes',
   WON: 'Won',
 };
-// Matches the per-proposal default in routes/proposals.ts's pipeline
-// endpoint — shown as the column's "likely" label. A card can still carry
-// its own probabilityOverride, which is what the weighted totals actually
-// use (see weightedValue below), not this flat per-stage number.
-const STAGE_PROBABILITY: Record<string, number> = {
-  TALKING: 20,
-  PROPOSAL_SENT: 40,
+/**
+ * The last of four copies of this table, kept only until the real one loads.
+ *
+ * §14 makes these a setting; they now live on the organisation and arrive with
+ * /config. This stays as the shape to render before that request comes back —
+ * the column headers would otherwise print "undefined% likely" for a moment —
+ * and it holds §14's own defaults so a flash of the wrong number is impossible.
+ */
+const STAGE_PROBABILITY_FALLBACK: Record<string, number> = {
+  TALKING: 10,
+  PROPOSAL_SENT: 30,
   IN_NEGOTIATION: 60,
-  PROFORMA_ISSUED: 80,
-  VERBAL_YES: 95,
+  PROFORMA_ISSUED: 85,
+  VERBAL_YES: 90,
   WON: 100,
 };
 
@@ -110,81 +116,71 @@ interface FunnelStep {
 export default function PipelinePage() {
   const router = useRouter();
   const { confirm } = useConfirmStore();
-  const [columns, setColumns] = useState<ColumnData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ liveDeals: 0, notYetQuoted: 0, fullPipeline: 0, weighted: 0, goingStale: 0 });
+  const queryClient = useQueryClient();
+  /*
+   * §14: the stage probabilities are a setting now. The board reads the same
+   * figures the API weights against, so the column header and the card can no
+   * longer disagree — and neither can this screen and the Forecast, which used
+   * to hold a different table again.
+   */
+  const { data: config } = useConfig();
+  const stageProbability = config?.organization?.stageProbabilities ?? STAGE_PROBABILITY_FALLBACK;
   const [overridingCard, setOverridingCard] = useState<PipelineCard | null>(null);
   const [addingVersionFor, setAddingVersionFor] = useState<PipelineCard | null>(null);
   const [raisingProformaFor, setRaisingProformaFor] = useState<PipelineCard | null>(null);
-  const [funnel, setFunnel] = useState<FunnelStep[]>([]);
-  const [funnelMonths, setFunnelMonths] = useState(6);
-  const [loadingFunnel, setLoadingFunnel] = useState(true);
 
+  const { data: board, isPending } = useQuery({
+    queryKey: ['pipeline', 'board'],
+    queryFn: () => api.pipeline.getBoard(),
+  });
+
+  const { data: funnelData, isPending: loadingFunnel } = useQuery({
+    queryKey: ['pipeline', 'funnel'],
+    queryFn: () => api.pipeline.funnel(),
+  });
+
+  const loading = isPending;
+  const funnel: FunnelStep[] = funnelData?.success ? funnelData.steps : [];
+  const funnelMonths = funnelData?.success ? funnelData.months : 6;
+
+  const columns: ColumnData[] = useMemo(() => {
+    if (!board?.success) return [];
+    return STAGE_ORDER.map((stage) => {
+      // quotedValue arrives over the wire as a string — Decimal fields
+      // serialize that way everywhere in this app (api-v2.ts's own
+      // header: "Money arrives as a STRING and stays one"). Fine for
+      // display, but `+` on two strings concatenates instead of adding,
+      // which silently turned every sum below into digit-mashing like
+      // "0" + "250000" + "250000" = "0250000250000". Normalized once,
+      // here, so every reduce() downstream is real arithmetic.
+      const cards: PipelineCard[] = (board.columns[stage] || []).map((c: PipelineCard) => ({
+        ...c,
+        quotedValue: Number(c.quotedValue) || 0,
+      }));
+      const totalValue = cards.reduce((s, c) => s + (c.quotedValue || 0), 0);
+      // Weighted per card, not per column — a per-deal probability
+      // override only means anything if it actually moves this number.
+      const weightedValue = cards.reduce((s, c) => s + (c.quotedValue || 0) * (c.probability / 100), 0);
+      return { stage, cards, totalValue, weightedValue };
+    });
+  }, [board]);
+
+  const stats = useMemo(() => {
+    const allCards = columns.flatMap((c) => c.cards);
+    const live = allCards.filter((c) => c.stage !== 'WON');
+    return {
+      liveDeals: live.length,
+      notYetQuoted: live.filter((c) => c.stage === 'TALKING').length,
+      fullPipeline: live.reduce((s, c) => s + (c.quotedValue || 0), 0),
+      weighted: columns.filter((c) => c.stage !== 'WON').reduce((s, c) => s + c.weightedValue, 0),
+      goingStale: live.filter((c) => c.daysInStage > 25).length,
+    };
+  }, [columns]);
+
+  /** What the drag, override, version and proforma flows call after a change. */
   const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await api.pipeline.getBoard();
-      if (res.success) {
-        const cols: ColumnData[] = STAGE_ORDER.map(stage => {
-          // quotedValue arrives over the wire as a string — Decimal fields
-          // serialize that way everywhere in this app (api-v2.ts's own
-          // header: "Money arrives as a STRING and stays one"). Fine for
-          // display, but `+` on two strings concatenates instead of adding,
-          // which silently turned every sum below into digit-mashing like
-          // "0" + "250000" + "250000" = "0250000250000". Normalized once,
-          // here, so every reduce() downstream is real arithmetic.
-          const cards: PipelineCard[] = (res.columns[stage] || []).map((c: PipelineCard) => ({
-            ...c,
-            quotedValue: Number(c.quotedValue) || 0,
-          }));
-          const totalValue = cards.reduce((s, c) => s + (c.quotedValue || 0), 0);
-          // Weighted per card, not per column — a per-deal probability
-          // override only means anything if it actually moves this number.
-          const weightedValue = cards.reduce((s, c) => s + (c.quotedValue || 0) * (c.probability / 100), 0);
-          return { stage, cards, totalValue, weightedValue };
-        });
-        setColumns(cols);
-
-        const allCards = cols.flatMap(c => c.cards);
-        const live = allCards.filter(c => c.stage !== 'WON');
-        const fullPipeline = live.reduce((s, c) => s + (c.quotedValue || 0), 0);
-        const weighted = cols
-          .filter(c => c.stage !== 'WON')
-          .reduce((s, c) => s + c.weightedValue, 0);
-        const stale = live.filter(c => c.daysInStage > 25).length;
-
-        setStats({
-          liveDeals: live.length,
-          notYetQuoted: live.filter(c => c.stage === 'TALKING').length,
-          fullPipeline,
-          weighted,
-          goingStale: stale,
-        });
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const loadFunnel = useCallback(async () => {
-    setLoadingFunnel(true);
-    try {
-      const res = await api.pipeline.funnel();
-      if (res.success) {
-        setFunnel(res.steps);
-        setFunnelMonths(res.months);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoadingFunnel(false);
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-  useEffect(() => { loadFunnel(); }, [loadFunnel]);
+    await queryClient.invalidateQueries({ queryKey: ['pipeline'] });
+  }, [queryClient]);
 
 
   const findCard = (id: string): PipelineCard | null => {
@@ -327,7 +323,7 @@ export default function PipelinePage() {
                     <span className="text-micro text-secondary">{col.cards.length}</span>
                   </div>
                   <p className="text-xs font-semibold text-primary">{formatMoney(col.totalValue)}</p>
-                  <p className="text-micro text-secondary">{STAGE_PROBABILITY[col.stage]}% likely · {
+                  <p className="text-micro text-secondary">{stageProbability[col.stage]}% likely · {
                     col.stage === 'TALKING' ? 'No proposal yet' :
                     col.stage === 'PROPOSAL_SENT' ? 'Number is with them' :
                     col.stage === 'IN_NEGOTIATION' ? 'They came back' :

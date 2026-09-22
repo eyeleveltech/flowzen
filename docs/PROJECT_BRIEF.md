@@ -27,6 +27,7 @@ Prepared for the development team. Companion to the working prototype in `protot
 18. [Explicitly out of scope](#18-explicitly-out-of-scope)
 19. [Migration](#19-migration)
 20. [Open decisions](#20-open-decisions)
+21. [Amendments since v1.0](#21-amendments-since-v10)
 
 ---
 
@@ -793,3 +794,95 @@ These need a decision from Akmal before or during the relevant stage.
 
 *End of brief. The prototype is the visual specification. Where this document and
 the prototype disagree, ask before choosing.*
+
+---
+
+## 21. Amendments since v1.0
+
+Written 20 September 2026, after auditing the running application against this
+document section by section.
+
+The body above is left as it was written. Everything here is a place where the
+built system and the brief disagreed, and the **system** was judged right — so
+this records the decision rather than pretending the spec was always this. The
+places where the *brief* was right have been fixed in code instead and are not
+listed; they left no disagreement behind.
+
+### 21.1 A Task has more than one owner (amends §4)
+
+§4 defines a Task as "one owner, one due date". The schema carries a
+`TaskAssignee` join and a task can be shared, because three people on one task
+are three people who have to do something about it, and showing it to one of
+them is how the other two find out too late.
+
+Consequences, so they are written down rather than discovered:
+
+- §8's **person load** counts tasks somebody is *on*, not tasks they lead.
+- "My Work" shows a task to every assignee.
+- `assigneeId` still exists and still means the lead. Ownership questions —
+  who is answerable — read that; visibility questions read the assignees.
+
+### 21.2 Nouns added since the vocabulary was closed (amends §4)
+
+§4 says "There are no other nouns." Six have been added since, each for a
+reason that was not foreseen in August:
+
+| Noun | What it is | Why it is not covered by an existing noun |
+|---|---|---|
+| **Retainer project** | A named piece of work inside a retainer — a campaign, an always-on stream | It carries no value, no milestones and no invoice. A Project that carried none of those would not be a Project. |
+| **Asset** (+ movement, maintenance) | Cameras, lenses, laptops — what the studio owns and who is holding it | Not money out at a point in time, which is what a Cost is |
+| **Document line item** | A priced row on a proforma or invoice (CR-02) | A Proforma had one implicit line; a real tax document has many |
+| **Task assignee** | The join behind §21.1 | — |
+| **Alert read** | Whether one person has seen one alert | An Alert is org-wide; "seen" is per person |
+| **Organization** | The tenant everything hangs from | Assumed, never named |
+
+A retainer project is deliberately **not** a Project. §5's test — "does it end?"
+— answers the wrong question inside a retainer, where the fee is monthly and the
+work inside it starts and stops freely.
+
+### 21.3 No "Build spec" screen (amends §10)
+
+§10 lists a Build spec screen, "the developer reference, in app". It was built,
+then removed; a navigation test now asserts it stays removed. The reference is
+this document and the code, which do not go stale in a different place from the
+thing they describe.
+
+### 21.4 Promoting an outreach entry is two steps (amends §11.1)
+
+§11.1 reads steps 2 and 3 as one action: marking an entry replied creates the
+Company. It was built that way and then, on request, split: marking replied only
+changes the status, and promotion is its own explicit action. A reply is not
+always a prospect, and a Company created by a misfiled reply is harder to undo
+than one created on purpose.
+
+### 21.5 Committed revenue is split as revenue, summed as cash (clarifies §8)
+
+§8 says committed revenue is reported "split by Retainer and One time, never
+summed into a single figure". That holds for *revenue*: a monthly recurring
+value and a whole contract are not the same kind of number.
+
+The Forecast does add them, and says so — what it sums is labelled **cash**,
+because a retainer's month and a milestone falling due in the same month are
+both simply money arriving that month, which is what a cash-flow screen is for.
+Weighted pipeline is excluded from that total: it is a probability multiplied by
+a number nobody has signed, and a solvency verdict must never be decided on it.
+
+### 21.6 Stage probabilities: Talking, and where they live (extends §14)
+
+§14 sets Proposal sent 30, In negotiation 60, Proforma issued 85, Verbal yes 90,
+and says they are configurable in Setup. They are now — on the organisation,
+read by the board, the forecast and the web from one place.
+
+§14 does not price **Talking**, because a proposal only reaches the board at
+Proposal sent. The default is **10**, the lower of the two figures the code
+already held, because it feeds a solvency verdict and the forecast must never
+report a surplus that exists only if deals land.
+
+### 21.7 Days in stage comes from the records, not the Activity log (clarifies §8)
+
+§8 defines days in stage as "now − timestamp of the last stage change, from
+Activity". It is taken from the records the stage itself follows — the first and
+latest version, the proforma's raised date, `verbalYesAt`, `wonAt` — which is
+the same answer with one less thing that can be missing. §8's own rule for
+`Proposal.stage` is that it follows records rather than input; this follows the
+same records.

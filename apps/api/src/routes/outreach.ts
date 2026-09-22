@@ -7,6 +7,7 @@ import { parsePagination } from '../utils/query.js';
 import { toCsv, parseCsv } from '../utils/csv.js';
 import { matchEnumValue, VERTICAL_ALIASES } from '../utils/enums.js';
 import { sendCsv } from '../utils/csvResponse.js';
+import { checkForDuplicates } from '../services/duplicateCheck.js';
 
 export const outreachRouter = Router();
 
@@ -52,7 +53,7 @@ outreachRouter.get('/', requirePermission('company.read'), async (req: AuthReque
      */
     const base: any = { ...where };
 
-    if (status && typeof status === 'string' && ['NOT_CONTACTED', 'CONTACTED', 'REPLIED', 'DEAD'].includes(status.toUpperCase())) {
+    if (status && typeof status === 'string' && (Object.values(OutreachStatus) as string[]).includes(status.toUpperCase())) {
       where.status = status.toUpperCase() as OutreachStatus;
     }
 
@@ -131,8 +132,9 @@ outreachRouter.get('/', requirePermission('company.read'), async (req: AuthReque
       counts: {
         ALL: statusFacets.reduce((n, f) => n + f._count, 0),
         NOT_CONTACTED: byStatus(OutreachStatus.NOT_CONTACTED),
-        CONTACTED: byStatus(OutreachStatus.CONTACTED),
-        REPLIED: byStatus(OutreachStatus.REPLIED),
+        FOLLOW_UP: byStatus(OutreachStatus.FOLLOW_UP),
+        MEETING: byStatus(OutreachStatus.MEETING),
+        INTERESTED: byStatus(OutreachStatus.INTERESTED),
         DEAD: byStatus(OutreachStatus.DEAD),
       },
       summary: { cold: coldTotal },
@@ -145,12 +147,33 @@ outreachRouter.get('/', requirePermission('company.read'), async (req: AuthReque
 
 // ── 2. Create Single Outreach Entry ─────────────────────────────────────────
 
-const outreachCreateSchema = z.object({
-  name: z.string().min(1, 'Lead name is required'),
-  vertical: z.nativeEnum(CompanyVertical),
-  source: z.nativeEnum(CompanySource).default(CompanySource.OUTREACH),
-  ownerId: z.string().optional(),
-});
+/**
+ * A lead you cannot reach is a note, not a lead.
+ *
+ * This is the rule the change request states as a database constraint. It
+ * lives here instead — see the migration for why: every row that predates the
+ * change has neither column, and a CHECK constraint (even NOT VALID) then
+ * blocks every future UPDATE of those rows, so nobody could so much as change
+ * their status. Enforced here it applies to every new lead, and says something
+ * a person can act on rather than raising a constraint violation at them.
+ */
+const reachable = <T extends { phone?: string | null; email?: string | null }>(v: T) =>
+  Boolean(v.phone?.trim() || v.email?.trim());
+
+const outreachCreateSchema = z
+  .object({
+    name: z.string().min(1, 'Lead name is required'),
+    vertical: z.nativeEnum(CompanyVertical),
+    source: z.nativeEnum(CompanySource).default(CompanySource.OUTREACH),
+    ownerId: z.string().optional(),
+    contactPersonName: z.string().trim().optional().nullable(),
+    phone: z.string().trim().optional().nullable(),
+    email: z.string().trim().email('That email address does not look right').optional().nullable().or(z.literal('')),
+  })
+  .refine(reachable, {
+    message: 'Add a phone number or an email address — a lead you cannot reach is only a name.',
+    path: ['phone'],
+  });
 
 outreachRouter.post('/', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
   try {
@@ -168,6 +191,9 @@ outreachRouter.post('/', requirePermission('company.write'), async (req: AuthReq
         vertical: parsed.data.vertical,
         source: parsed.data.source,
         ownerId: parsed.data.ownerId || req.user!.userId,
+        contactPersonName: parsed.data.contactPersonName?.trim() || null,
+        phone: parsed.data.phone?.trim() || null,
+        email: parsed.data.email?.trim() || null,
         status: OutreachStatus.NOT_CONTACTED,
       },
     });
@@ -205,6 +231,13 @@ const outreachEditSchema = z
     vertical: z.nativeEnum(CompanyVertical).optional(),
     source: z.nativeEnum(CompanySource).optional(),
     ownerId: z.string().min(1).nullable().optional(),
+    // Editable so the leads that predate this change can be given a way to
+    // reach them. `reachable` is deliberately NOT enforced here: a legacy row
+    // has neither, and refusing every edit until somebody produces a phone
+    // number is how a rule stops people using the screen at all.
+    contactPersonName: z.string().trim().nullable().optional(),
+    phone: z.string().trim().nullable().optional(),
+    email: z.string().trim().email('That email address does not look right').nullable().optional().or(z.literal('')),
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to change' });
 
@@ -234,7 +267,7 @@ outreachRouter.patch('/:id', requirePermission('company.write'), async (req: Aut
       return;
     }
 
-    const { name, vertical, source, ownerId } = parsed.data;
+    const { name, vertical, source, ownerId, contactPersonName, phone, email } = parsed.data;
 
     if (ownerId) {
       const owner = await prisma.user.findFirst({
@@ -254,6 +287,9 @@ outreachRouter.patch('/:id', requirePermission('company.write'), async (req: Aut
         ...(vertical !== undefined ? { vertical } : {}),
         ...(source !== undefined ? { source } : {}),
         ...(ownerId !== undefined ? { ownerId } : {}),
+        ...(contactPersonName !== undefined ? { contactPersonName: contactPersonName || null } : {}),
+        ...(phone !== undefined ? { phone: phone || null } : {}),
+        ...(email !== undefined ? { email: email || null } : {}),
       },
       include: { owner: { select: { id: true, name: true, designation: true } } },
     });
@@ -264,11 +300,67 @@ outreachRouter.patch('/:id', requirePermission('company.write'), async (req: Aut
   }
 });
 
+/**
+ * Moving a lead along, and writing down what was said.
+ *
+ * ─── The two conditional fields ─────────────────────────────────────────────
+ *
+ * FOLLOW_UP and MEETING both hang off `nextActionDate`, and the label on
+ * screen is what changes ("Call back on" / "Meeting on"), not the column.
+ *
+ *   FOLLOW_UP   date and remarks both required — a callback with no date is
+ *               not a callback, and a callback with no reason is a lead
+ *               somebody is quietly parking.
+ *   MEETING     date required, remarks optional (time, online or offline,
+ *               who is going — useful, not load-bearing).
+ *
+ * The other three statuses carry neither, so anything sent with them is
+ * ignored rather than stored where nothing will ever show it.
+ *
+ * ─── The trail ──────────────────────────────────────────────────────────────
+ *
+ * `remarks` on the row is the LATEST note, and nothing more. Every change
+ * writes an Activity row carrying the old status, the new one, and the note
+ * and date entered at that moment — so a lead followed up four times keeps
+ * four call notes in order instead of the last one having eaten the other
+ * three. The feed is where the history is read from; see activities.ts, which
+ * needed an `OutreachEntry` entry of its own before any of this was visible.
+ */
+const statusChangeSchema = z
+  .object({
+    status: z.nativeEnum(OutreachStatus),
+    remarks: z.string().trim().max(2000).optional().nullable(),
+    nextActionDate: z.string().optional().nullable(),
+  })
+  .superRefine((v, ctx) => {
+    const needsDate = v.status === OutreachStatus.FOLLOW_UP || v.status === OutreachStatus.MEETING;
+    if (needsDate && !v.nextActionDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['nextActionDate'],
+        message:
+          v.status === OutreachStatus.FOLLOW_UP
+            ? 'When are you calling them back?'
+            : 'When is the meeting?',
+      });
+    }
+    if (v.status === OutreachStatus.FOLLOW_UP && !v.remarks?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['remarks'],
+        message: 'What did they say? A callback with no note is a lead nobody can pick up.',
+      });
+    }
+    if (v.nextActionDate && Number.isNaN(Date.parse(v.nextActionDate))) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['nextActionDate'], message: 'That date is not a real date' });
+    }
+  });
+
 outreachRouter.patch('/:id/status', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
   try {
-    const { status } = req.body;
-    if (!status || !['NOT_CONTACTED', 'CONTACTED', 'REPLIED', 'DEAD'].includes(status)) {
-      res.status(400).json({ success: false, error: 'Invalid outreach status' });
+    const parsed = statusChangeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
       return;
     }
 
@@ -279,10 +371,48 @@ outreachRouter.patch('/:id/status', requirePermission('company.write'), async (r
       res.status(404).json({ success: false, error: 'Outreach entry not found' });
       return;
     }
+    if (existing.promotedCompanyId) {
+      res.status(400).json({
+        success: false,
+        error: 'This name is already a company. Its status lives on the company record now.',
+      });
+      return;
+    }
 
+    const { status, remarks, nextActionDate } = parsed.data;
+    const carriesAction = status === OutreachStatus.FOLLOW_UP || status === OutreachStatus.MEETING;
+
+    // The date and note belong to FOLLOW_UP and MEETING. Moving to any other
+    // status clears them, because a "call back on" date sitting against a dead
+    // lead is a reminder for something nobody intends to do. The trail below
+    // keeps what they said either way.
     const entry = await prisma.outreachEntry.update({
       where: { id },
-      data: { status: status as OutreachStatus },
+      data: {
+        status,
+        remarks: carriesAction ? (remarks?.trim() || null) : null,
+        nextActionDate: carriesAction && nextActionDate ? new Date(nextActionDate) : null,
+      },
+      include: { owner: { select: { id: true, name: true, designation: true } } },
+    });
+
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'OutreachEntry',
+        entityId: id,
+        actorId: req.user!.userId,
+        verb: 'outreach_status_changed',
+        payload: {
+          name: existing.name,
+          from: existing.status,
+          to: status,
+          // Written down as entered, at the moment it was entered. This is the
+          // record; the column on the row is only ever the most recent one.
+          remarks: remarks?.trim() || null,
+          nextActionDate: carriesAction && nextActionDate ? nextActionDate : null,
+        },
+      },
     });
 
     res.json({ success: true, entry });
@@ -293,11 +423,28 @@ outreachRouter.patch('/:id/status', requirePermission('company.write'), async (r
 
 // ── 4. Promote Outreach Entry to Prospect ───────────────────────────────────
 
+/**
+ * A lead becomes a client.
+ *
+ * Only from INTERESTED, which under the new statuses means something specific:
+ * they have been met, they are happy, and they have asked for a quotation. A
+ * name that has merely been called cannot cross into the Companies directory —
+ * that separation is the point of keeping two lists (§7).
+ *
+ * Every field is pre-filled from the lead and editable, because the person
+ * doing this has just been in the room and knows the legal name better than
+ * the spreadsheet did.
+ */
 const promoteSchema = z.object({
+  companyName: z.string().trim().min(1).max(200).optional(),
   city: z.string().default('Chennai'),
+  vertical: z.nativeEnum(CompanyVertical).optional(),
+  ownerId: z.string().min(1).optional(),
   contactName: z.string().optional(),
   contactEmail: z.string().email().optional().or(z.literal('')),
   contactPhone: z.string().optional().or(z.literal('')),
+  /** Carries a NAME warning past. A matching phone or email cannot be forced. */
+  force: z.boolean().optional(),
 });
 
 outreachRouter.post('/:id/promote', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
@@ -305,9 +452,7 @@ outreachRouter.post('/:id/promote', requirePermission('company.write'), async (r
     const orgId = req.user!.organizationId;
     const id = String(req.params.id);
 
-    const entry = await prisma.outreachEntry.findFirst({
-      where: { id, organizationId: orgId },
-    });
+    const entry = await prisma.outreachEntry.findFirst({ where: { id, organizationId: orgId } });
 
     if (!entry) {
       res.status(404).json({ success: false, error: 'Outreach entry not found' });
@@ -319,41 +464,90 @@ outreachRouter.post('/:id/promote', requirePermission('company.write'), async (r
       return;
     }
 
-    const parsed = promoteSchema.safeParse(req.body);
-    const { city, contactName, contactEmail, contactPhone } = parsed.success ? parsed.data : { city: 'Chennai' };
+    if (entry.status !== OutreachStatus.INTERESTED) {
+      res.status(400).json({
+        success: false,
+        error: 'Only a lead marked Interested can become a company — they have been met and asked for a quotation.',
+      });
+      return;
+    }
 
-    // Transaction: Create company + optional contact + link promotedCompanyId
+    const parsed = promoteSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
+    const { companyName, city, vertical, ownerId, contactName, contactEmail, contactPhone, force } = parsed.data;
+
+    // Everything falls back to what the lead already knows.
+    const name = (companyName || entry.name).trim();
+    const personName = (contactName || entry.contactPersonName || '').trim();
+    const personEmail = (contactEmail || entry.email || '').trim();
+    const personPhone = (contactPhone || entry.phone || '').trim();
+    const useVertical = vertical ?? entry.vertical;
+    const useOwner = ownerId || entry.ownerId || req.user!.userId;
+
+    /**
+     * The same verdict the new-company form runs.
+     *
+     * Promotion used to create the company with no duplicate check at all, so
+     * a lead whose name already belonged to a client hit the unique index on
+     * (organizationId, name) and came back as a bare 500 — Prisma's P2002
+     * carries no HTTP status, and the error handler defaults to 500. Now the
+     * clash is answered properly, and a matching phone or email is caught too,
+     * which only became possible once a lead carried either.
+     */
+    const others = await prisma.company.findMany({
+      where: { organizationId: orgId },
+      select: { id: true, name: true, people: { take: 1, select: { email: true, phone: true } } },
+    });
+    const verdict = checkForDuplicates(
+      { name, email: personEmail || null, phone: personPhone || null },
+      others.map((c) => ({ id: c.id, name: c.name, email: c.people[0]?.email || null, phone: c.people[0]?.phone || null })),
+    );
+
+    if (verdict.action === 'BLOCK' || (verdict.action === 'WARN' && !force)) {
+      res.status(409).json({
+        success: false,
+        error: 'This looks like a company you already have.',
+        data: { ...verdict, canForce: verdict.action === 'WARN' },
+      });
+      return;
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       const company = await tx.company.create({
         data: {
           organizationId: orgId,
-          name: entry.name,
-          vertical: entry.vertical,
+          name,
+          vertical: useVertical,
           source: entry.source,
-          ownerId: entry.ownerId || req.user!.userId,
+          ownerId: useOwner,
           city: city || 'Chennai',
           status: CompanyStatus.PROSPECT,
         },
       });
 
-      if (contactName && contactName.trim()) {
+      // A contact is written whenever the lead carried anything to write —
+      // the details came off the lead, so losing them at the moment of
+      // promotion would throw away the only reason the lead was any use.
+      if (personName || personEmail || personPhone) {
         await tx.person.create({
           data: {
             companyId: company.id,
-            name: contactName.trim(),
-            email: contactEmail || null,
-            phone: contactPhone || null,
+            name: personName || name,
+            email: personEmail || null,
+            phone: personPhone || null,
             role: 'CONTACT',
           },
         });
       }
 
+      // Archived, not deleted: the row keeps its history and simply leaves the
+      // list, which filters on `promotedCompanyId`.
       const updatedEntry = await tx.outreachEntry.update({
         where: { id: entry.id },
-        data: {
-          status: OutreachStatus.REPLIED,
-          promotedCompanyId: company.id,
-        },
+        data: { promotedCompanyId: company.id },
       });
 
       await tx.activity.create({
@@ -411,7 +605,14 @@ outreachRouter.post('/import', requirePermission('company.write'), async (req: A
     const seenInFile = new Set<string>();
 
     const results: ImportRowResult[] = [];
-    const toCreate: { name: string; vertical: CompanyVertical; source: CompanySource }[] = [];
+    const toCreate: {
+      name: string;
+      vertical: CompanyVertical;
+      source: CompanySource;
+      contactPersonName: string | null;
+      phone: string | null;
+      email: string | null;
+    }[] = [];
 
     rows.forEach((row, index) => {
       const rowNum = index + 2; // header is row 1, so the first data row is 2 — matches what the person sees in their spreadsheet
@@ -441,8 +642,38 @@ outreachRouter.post('/import', requirePermission('company.write'), async (req: A
 
       const source = matchEnumValue(row.source, Object.values(CompanySource)) ?? CompanySource.OUTREACH;
 
+      /*
+       * The same rule the manual form applies: a lead you cannot reach is a
+       * note, not a lead.
+       *
+       * This is a change to what a file must contain — sheets that carry only
+       * names will now report every row as INVALID. That is what the dry run
+       * is for: it is a readable list of what needs adding, before anything is
+       * written. Several spellings are accepted because the files come from
+       * scrapes and everybody's export names these columns differently.
+       */
+      const phone = (row.phone || row.mobile || row.contactnumber || row.contact_number || '').trim();
+      const email = (row.email || row.emailaddress || row.email_address || '').trim();
+      if (!phone && !email) {
+        results.push({
+          row: rowNum,
+          name,
+          action: 'INVALID',
+          reason: 'No phone or email — add a column for one of them',
+        });
+        return;
+      }
+      const contactPersonName = (row.contactperson || row.contact_person || row.contactname || row.contact || '').trim();
+
       seenInFile.add(key);
-      toCreate.push({ name, vertical, source });
+      toCreate.push({
+        name,
+        vertical,
+        source,
+        contactPersonName: contactPersonName || null,
+        phone: phone || null,
+        email: email || null,
+      });
       results.push({ row: rowNum, name, action: dryRun ? 'WOULD_CREATE' : 'CREATED' });
     });
 

@@ -2,8 +2,9 @@ import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
-import { CompanyStatus, CompanyVertical, CompanySource, PersonRole } from '@prisma/client';
+import { CompanyStatus, CompanyVertical, CompanySource, PersonRole, TaskWorkType, TaskStatus } from '@prisma/client';
 import { checkForDuplicates, checkForImport } from '../services/duplicateCheck.js';
+import { resolveState } from '../services/documentModel.js';
 import { parsePagination } from '../utils/query.js';
 import { toCsv, parseCsv } from '../utils/csv.js';
 import { matchEnumValue, VERTICAL_ALIASES } from '../utils/enums.js';
@@ -76,6 +77,7 @@ companiesRouter.get('/', requirePermission('company.read'), async (req: AuthRequ
             select: { id: true, name: true, quotedValue: true, status: true },
           },
           proposals: {
+            where: { deletedAt: null },
             orderBy: { createdAt: 'desc' },
             take: 1,
             include: {
@@ -249,6 +251,7 @@ companiesRouter.get('/:id', requirePermission('company.read'), async (req: AuthR
         owner: { select: { id: true, name: true, email: true, dept: true } },
         people: { orderBy: { createdAt: 'asc' } },
         proposals: {
+          where: { deletedAt: null },
           orderBy: { createdAt: 'desc' },
           include: {
             owner: { select: { id: true, name: true } },
@@ -385,7 +388,9 @@ companiesRouter.post('/check-duplicate', requirePermission('company.read'), asyn
     }));
 
     const verdict = checkForDuplicates({ name, email, phone }, mappedExisting);
-    res.json(verdict);
+    // `canForce` is part of the contract the client reads — a near-name clash
+    // can be overridden, an exact phone or email cannot. Create says the same.
+    res.json({ ...verdict, canForce: verdict.action === 'WARN' });
   } catch (error) {
     next(error);
   }
@@ -555,6 +560,11 @@ companiesRouter.post('/import', requirePermission('company.write'), async (req: 
               website: r.website,
               gstin: r.gstin,
               billingAddress: r.billingAddress,
+              // The importer has no state column, but a GSTIN carries one in
+              // its first two digits — so an imported client that will later be
+              // billed starts with the right place of supply rather than none.
+              stateName: resolveState({ gstin: r.gstin }).name,
+              stateCode: resolveState({ gstin: r.gstin }).code,
               ownerId: ownerId || req.user!.userId,
               status: CompanyStatus.PROSPECT,
               ...(r.contact
@@ -610,6 +620,15 @@ const companyCreateSchema = z.object({
   website: z.string().url().optional().or(z.literal('')),
   gstin: z.string().optional().or(z.literal('')),
   billingAddress: z.string().optional().or(z.literal('')),
+  /**
+   * CR-02 §3. Either half is enough — the code alone, or the state name —
+   * and whichever arrives, both are resolved and stored so the two can never
+   * disagree on a document. This is the field that decides CGST+SGST vs IGST,
+   * which used to be read off the GSTIN and so silently defaulted a client
+   * without one to the seller's own state.
+   */
+  stateName: z.string().optional().or(z.literal('')),
+  stateCode: z.string().max(2).optional().or(z.literal('')),
   ownerId: z.string().optional(),
   status: z.nativeEnum(CompanyStatus).default(CompanyStatus.PROSPECT),
 });
@@ -623,20 +642,82 @@ companiesRouter.post('/', requirePermission('company.write'), async (req: AuthRe
     }
 
     const orgId = req.user!.organizationId;
-    const { 
-      name, vertical, source, city, website, gstin, billingAddress, ownerId, status,
-      phone, contact, force
+    const {
+      name, vertical, source, sourceId, city, website, gstin, billingAddress, stateName, stateCode, ownerId, status,
+      phone, followUpDate, contact, force
     } = parsed.data;
 
-    // We skip name warning if force is true, but still check exact matches if needed.
-    // The check-duplicate route handled the live typing.
-    // For safety, check if it already exists exactly.
+    const ownerUserId = ownerId || req.user!.userId;
+
+    /**
+     * Where they came from.
+     *
+     * The form posts `sourceId`, because /config publishes the list as
+     * `{ id, name }` — and the ids ARE the CompanySource values. Nothing read
+     * it, so every company added through the form was stored as OUTREACH
+     * whatever the person picked. `source` stays accepted for API callers that
+     * send the enum directly; the form's value wins when both arrive.
+     */
+    const resolvedSource =
+      (sourceId && (CompanySource as Record<string, CompanySource>)[sourceId]) || source;
+
+    // Whichever half of the state arrived, both are stored — and a GSTIN on
+    // its own is enough, since its first two digits are the state code.
+    const resolvedState = resolveState({ code: stateCode, name: stateName, gstin });
+
+    /**
+     * The same verdict the live check returns, applied at the point of writing.
+     *
+     * Before this, create ran one exact-name lookup and replied with a bare
+     * sentence. The client expects a DuplicateVerdict — `{ action, matches }`
+     * — so it could not read the refusal, could not show what was clashed
+     * with, and `force` (destructured and then never used) could not let a
+     * warned name through. A near-name clash is a WARNING somebody can
+     * override; a matching phone is the same company and cannot be.
+     */
+    const others = await prisma.company.findMany({
+      where: { organizationId: orgId },
+      select: { id: true, name: true, people: { take: 1, select: { email: true, phone: true } } },
+    });
+
+    const verdict = checkForDuplicates(
+      { name, phone: phone ?? contact?.phone ?? null },
+      others.map((c) => ({
+        id: c.id,
+        name: c.name,
+        email: c.people[0]?.email || null,
+        phone: c.people[0]?.phone || null,
+      })),
+    );
+
+    if (verdict.action === 'BLOCK' || (verdict.action === 'WARN' && !force)) {
+      // Under `data`, because that is where the client's ApiError reads a
+      // structured body from. Spread at the top level it arrived as undefined
+      // and the modal fell through to its generic error line.
+      res.status(409).json({
+        success: false,
+        error: 'This looks like a company you already have.',
+        data: { ...verdict, canForce: verdict.action === 'WARN' },
+      });
+      return;
+    }
+
+    // The unique constraint is on (organizationId, name), so an exact repeat
+    // cannot be forced past no matter what the verdict said.
     const existing = await prisma.company.findUnique({
       where: { organizationId_name: { organizationId: orgId, name: name.trim() } },
     });
 
     if (existing) {
-      res.status(409).json({ success: false, error: `A company named '${name.trim()}' already exists.` });
+      res.status(409).json({
+        success: false,
+        error: `A company named '${name.trim()}' already exists.`,
+        data: {
+          action: 'BLOCK',
+          canForce: false,
+          matches: [{ id: existing.id, name: existing.name, reason: 'name', matchedOn: existing.name }],
+        },
+      });
       return;
     }
 
@@ -647,24 +728,37 @@ companiesRouter.post('/', requirePermission('company.write'), async (req: AuthRe
           organizationId: orgId,
           name: name.trim(),
           vertical,
-          source,
+          source: resolvedSource,
           city: city?.trim() || 'Chennai',
           website: website || null,
           gstin: gstin ? gstin.trim() : null,
           billingAddress: billingAddress ? billingAddress.trim() : null,
-          ownerId: ownerId || req.user!.userId,
+          stateName: resolvedState.name,
+          stateCode: resolvedState.code,
+          ownerId: ownerUserId,
           status,
         },
       });
 
-      if (contact) {
+      /**
+       * The phone number, kept.
+       *
+       * Contact details live on Person in this model, and a Person was only
+       * written when a contact NAME was typed — so a phone given on its own
+       * (the common case: somebody reads you a number) was accepted by the
+       * validator, destructured, and dropped. It is also what duplicate
+       * detection matches on, so losing it silently weakened that too.
+       */
+      const contactName = contact?.name?.trim();
+      const contactPhone = contact?.phone || phone || null;
+      if (contactName || contactPhone) {
         await tx.person.create({
           data: {
             companyId: company.id,
-            name: contact.name,
-            phone: contact.phone || null,
-            role: 'CONTACT',
-          }
+            name: contactName || name.trim(),
+            phone: contactPhone,
+            role: PersonRole.CONTACT,
+          },
         });
       }
 
@@ -674,12 +768,42 @@ companiesRouter.post('/', requirePermission('company.write'), async (req: AuthRe
           organizationId: orgId,
           companyId: company.id,
           kind: 'PROJECT',
-          ownerId: ownerId || req.user!.userId,
+          ownerId: ownerUserId,
           stage: 'TALKING',
         }
       });
 
-      return { company, dealId: deal.id };
+      /**
+       * "Follow up on" — the reason the lead ever gets called again.
+       *
+       * Accepted and thrown away before this: there is no followUpDate column
+       * anywhere in the schema, so the field the form calls "the one field that
+       * stops a lead being forgotten" guaranteed exactly that. A follow-up is a
+       * TASK here — that is how a logged meeting already raises its next step,
+       * and tasks are what My Work and the alerts actually read.
+       */
+      let followUpTaskId: string | null = null;
+      if (followUpDate) {
+        const followUp = await tx.task.create({
+          data: {
+            organizationId: orgId,
+            title: `Follow up — ${company.name}`,
+            workType: TaskWorkType.INTERNAL,
+            assigneeId: ownerUserId,
+            createdById: req.user!.userId,
+            assignedById: req.user!.userId,
+            dueDate: new Date(followUpDate),
+            assignedAt: new Date(),
+            status: TaskStatus.TODO,
+            // A task with no join row belongs to nobody — My Work and a
+            // person's load both read this, not `assigneeId`.
+            assignees: { create: { userId: ownerUserId } },
+          },
+        });
+        followUpTaskId = followUp.id;
+      }
+
+      return { company, dealId: deal.id, followUpTaskId };
     });
 
     // Record audit activity
@@ -694,9 +818,9 @@ companiesRouter.post('/', requirePermission('company.write'), async (req: AuthRe
       },
     });
 
-    res.status(201).json({ 
-      success: true, 
-      data: { ...result.company, dealId: result.dealId } 
+    res.status(201).json({
+      success: true,
+      data: { ...result.company, dealId: result.dealId, followUpTaskId: result.followUpTaskId },
     });
   } catch (error) {
     next(error);
@@ -713,6 +837,8 @@ const companyUpdateSchema = z.object({
   website: z.string().optional().nullable(),
   gstin: z.string().optional().nullable(),
   billingAddress: z.string().optional().nullable(),
+  stateName: z.string().optional().nullable(),
+  stateCode: z.string().max(2).optional().nullable(),
   ownerId: z.string().optional().nullable(),
   status: z.nativeEnum(CompanyStatus).optional(),
   lostReason: z.string().optional().nullable(),
@@ -735,9 +861,51 @@ companiesRouter.patch('/:id', requirePermission('company.write'), async (req: Au
       return;
     }
 
+    // Sent as a name, a code, or neither — stored as both, or as neither.
+    // Storing only what was typed is how a company ends up with the state
+    // "Karnataka" and the code 33.
+    const stateTouched = parsed.data.stateName !== undefined || parsed.data.stateCode !== undefined;
+
+    /*
+     * `!== undefined`, not `??`.
+     *
+     * An explicit null is somebody CLEARING the state. `??` read that as "not
+     * supplied" and put the old value straight back, so a state set wrongly
+     * could never be removed — and it went on deciding CGST+SGST against IGST
+     * on every document for that client.
+     */
+    const nextCode = parsed.data.stateCode !== undefined ? parsed.data.stateCode : company.stateCode;
+    const nextName = parsed.data.stateName !== undefined ? parsed.data.stateName : company.stateName;
+
+    /*
+     * Emptying either half clears the state, unless the other half arrives with
+     * a real value in the same request.
+     *
+     * The form has ONE state control and it sends the code, so clearing it
+     * arrives as `{ stateCode: null }` with no name at all. Keeping the stored
+     * name and resolving from it would put the code straight back — the same
+     * bug as the `??` above, one step further along.
+     */
+    const emptied =
+      (parsed.data.stateCode !== undefined && !parsed.data.stateCode) ||
+      (parsed.data.stateName !== undefined && !parsed.data.stateName);
+    const supplied = Boolean(parsed.data.stateCode) || Boolean(parsed.data.stateName);
+
+    const resolvedState = !stateTouched
+      ? null
+      : emptied && !supplied
+        ? { code: null, name: null }
+        : // The GSTIN is deliberately not consulted. It is a fallback for a
+          // company that has never had a state, not a reason to refuse to let
+          // go of one.
+          resolveState({ code: nextCode, name: nextName });
+
     const updated = await prisma.company.update({
       where: { id },
-      data: parsed.data,
+      data: {
+        ...parsed.data,
+        ...(resolvedState ? { stateName: resolvedState.name, stateCode: resolvedState.code } : {}),
+      },
     });
 
     await prisma.activity.create({

@@ -1,17 +1,65 @@
 import {
   PrismaClient, RolePreset, CompanyVertical, CompanySource, CompanyStatus, PersonRole,
   OutreachStatus, ProposalKind, ProposalStage, ProposalOutcome, ProformaSourceType, ProformaStatus,
-  RetainerStatus, MonthCardStatus, ProjectStatus, Priority, MilestoneStatus, TaskWorkType,
-  TaskStatus, WaitingOn, CostType, CostPaidBy, CostTreatment, InvoiceStatus, AlertSeverity,
+  RetainerStatus, RetainerProjectStatus, MonthCardStatus, ProjectStatus, Priority, MilestoneStatus, TaskWorkType,
+  TaskStatus, TaskType, WaitingOn, CostType, CostPaidBy, CostTreatment, InvoiceStatus, AlertSeverity,
+  AssetCategory, AssetStatus, AssetCondition, AssetMovementKind, AssetMaintenanceKind,
 } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { randomBytes } from 'node:crypto';
 
 const prisma = new PrismaClient();
 
-// Fixed "today" for the seeded calendar — keeps overdue/today/this-week/renewal-soon
-// buckets meaningful regardless of when this script actually runs.
-const TODAY = new Date('2026-09-02T00:00:00.000Z');
+/*
+ * "Today" is the day you seed, not a date written into this file.
+ *
+ * It used to be a literal — `2026-09-02` — and every bucket on every screen
+ * was measured from it. Seed on the 20th and the overdue pile is eighteen days
+ * stale, "due today" is due two weeks ago, and the month cards say August and
+ * September when the current month is something else. A demo database whose
+ * calendar is wrong is worse than an empty one: it teaches you to distrust the
+ * dates.
+ *
+ * Anchored to local midnight so a `days(0)` row is today all day, rather than
+ * flipping to yesterday after the clock passes the seeding time.
+ */
+const TODAY = (() => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+})();
 const days = (n: number) => new Date(TODAY.getTime() + n * 86400000);
+
+/** "2026-09" for a date — the key a MonthCard is stored under. */
+/**
+ * Straight-line useful life in months, per category.
+ *
+ * The same table as ASSET_USEFUL_LIFE in @flowzen/shared, written out rather
+ * than imported: the seed runs through `prisma db seed` with its own tsconfig
+ * and pulling a workspace package in here has broken that before.
+ */
+const ASSET_LIFE: Record<AssetCategory, number> = {
+  LAPTOP: 36, DESKTOP: 36, MONITOR: 60, PHONE: 24, STORAGE: 36, NETWORK: 36,
+  CAMERA_BODY: 60, LENS: 84, LIGHTING: 60, AUDIO: 60, GIMBAL_DRONE: 36,
+  SUPPORT: 60, ACCESSORY: 24, OTHER: 60,
+};
+
+const monthKeyOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+const THIS_MONTH = monthKeyOf(TODAY);
+const LAST_MONTH = monthKeyOf(new Date(TODAY.getFullYear(), TODAY.getMonth() - 1, 1));
+
+/**
+ * The Indian financial year a date falls in, as the "26-27" in INV/26-27/0142.
+ *
+ * April start, matching `financialYearStart: 4` on the organization below. The
+ * document numbers were hardcoded to 26-27, which is right only for as long as
+ * the hardcoded TODAY was.
+ */
+const FY = (() => {
+  const y = TODAY.getFullYear();
+  const start = TODAY.getMonth() + 1 >= 4 ? y : y - 1;
+  return `${String(start).slice(2)}-${String(start + 1).slice(2)}`;
+})();
 
 async function main() {
   console.log('Wiping and reseeding Flowzen with a full EyeLevel dataset...');
@@ -22,7 +70,16 @@ async function main() {
   await prisma.$transaction([
     prisma.payment.deleteMany(),
     prisma.activity.deleteMany(),
+    prisma.alertRead.deleteMany(),
     prisma.alert.deleteMany(),
+    // Assets before costs: an asset points at the CAPITAL Cost row that bought
+    // it, and maintenance points at both an asset and (optionally) a cost.
+    prisma.assetMaintenance.deleteMany(),
+    prisma.assetMovement.deleteMany(),
+    prisma.asset.deleteMany(),
+    // Line items hang off a proforma or an invoice; both are deleted below,
+    // and Cascade would take them — but only for rows this list reaches.
+    prisma.documentLineItem.deleteMany(),
     prisma.invoice.deleteMany(),
     prisma.peopleAllocation.deleteMany(),
     prisma.cost.deleteMany(),
@@ -31,8 +88,8 @@ async function main() {
     prisma.proforma.deleteMany(),
     prisma.project.deleteMany(),
     prisma.monthCard.deleteMany(),
+    prisma.retainerProject.deleteMany(),
     prisma.retainer.deleteMany(),
-    prisma.taskTemplate.deleteMany(),
     prisma.proposalVersion.deleteMany(),
     prisma.proposal.deleteMany(),
     prisma.outreachEntry.deleteMany(),
@@ -42,8 +99,47 @@ async function main() {
     prisma.organization.deleteMany(),
   ]);
 
-  const harishHash = await bcrypt.hash('Harish143@', 10);
-  const demoHash = await bcrypt.hash('ChangeMe123!', 10);
+  /**
+   * Seed passwords come from the environment, never from this file.
+   *
+   * They used to be literals — `Harish143@` for the admin and one shared
+   * `ChangeMe123!` for everybody else. Anybody who could read the repository
+   * could sign in as any seeded account, and on a public host that is the
+   * whole application. A literal here is a published credential.
+   *
+   * Local development still wants to be one command, so a random password is
+   * generated and PRINTED when nothing is set. It differs every run, so it
+   * cannot become the known value the literals were.
+   */
+  const generated = randomBytes(12).toString('base64url');
+
+  /*
+   * Blank counts as unset.
+   *
+   * `.env.example` ships these keys as `SEED_ADMIN_PASSWORD=""`, and copying
+   * it to `.env` is the documented way to start. `??` only catches undefined,
+   * so that empty string sailed through and every seeded account was given a
+   * password of "" — while the line that prints the generated one printed
+   * nothing. The setup the README tells you to follow was the one that broke.
+   */
+  const configured = (key: string): string | null => {
+    const raw = process.env[key];
+    return raw && raw.trim() ? raw : null;
+  };
+
+  const configuredAdmin = configured('SEED_ADMIN_PASSWORD');
+  const adminPassword = configuredAdmin ?? generated;
+  const demoPassword = configured('SEED_DEMO_PASSWORD') ?? adminPassword;
+
+  if (!configuredAdmin && process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'SEED_ADMIN_PASSWORD must be set when seeding with NODE_ENV=production. ' +
+        'Refusing to seed a production database with a password this script chose.',
+    );
+  }
+
+  const harishHash = await bcrypt.hash(adminPassword, 10);
+  const demoHash = await bcrypt.hash(demoPassword, 10);
 
   const ALL_PERMS = [
     'work.own', 'work.team', 'work.all', 'company.read', 'company.write',
@@ -52,6 +148,15 @@ async function main() {
   ];
   const HEAD_PERMS = ['work.own', 'work.team', 'work.all', 'money.status', 'cost.enter'];
   const BD_PERMS = ['work.own', 'company.read', 'company.write', 'pipeline.read', 'pipeline.write', 'money.status'];
+  /*
+   * Accounts is a real desk, and nobody was sitting at it.
+   *
+   * §9 defines the preset, the Money screen and the invoice flows are built
+   * for it, and the roster carried nobody who held it — so the one role whose
+   * whole job is money.figures + cost.enter without pipeline access could not
+   * be demonstrated, and the browser suite's `accounts` persona signed in as a
+   * user that did not exist. These match ROLE_PRESET_PERMISSIONS.ACCOUNTS.
+   */
   const ACCOUNTS_PERMS = ['work.own', 'company.read', 'money.status', 'money.figures', 'cost.enter'];
   const EMPLOYEE_PERMS = ['work.own'];
 
@@ -71,6 +176,40 @@ async function main() {
       website: 'https://eyelevelstudio.in',
       contactEmail: 'accounts@eyelevelstudio.in',
       gstStateCode: '33',
+
+      // CR-02 §2 — the seller block every proforma and tax invoice prints.
+      //
+      // The GSTIN and PAN here are PLACEHOLDERS in the statutory format, not
+      // the real registration: a seed populates a demo database, and a real
+      // tax registration number sitting in source control is a number that
+      // ends up on a document nobody meant to issue. Settings > Documents is
+      // where the actual ones are entered, and the document prints whatever
+      // it finds there.
+      //
+      // Each one is overridable from the environment, because a seed WIPES the
+      // database and these are the fields somebody types into Settings once and
+      // never again. The real bank account number and IFSC had been entered in
+      // the running app and existed nowhere else; the next reseed would have
+      // replaced them with the zeros below without saying so. Put the real
+      // values in `.env` (gitignored) and they survive every reseed.
+      legalName: configured('ORG_LEGAL_NAME') ?? 'EyeLevel Growth Studio',
+      // No state on the last line: §2 prints "State and state code" as its own
+      // row underneath, so an address that carries it too reads it out twice.
+      address: configured('ORG_ADDRESS') ?? 'No. 12, 2nd Floor, KK Nagar\nChennai 600078',
+      state: 'Tamil Nadu',
+      gstNumber: configured('ORG_GSTIN') ?? '33AAAAA0000A1Z5',
+      pan: configured('ORG_PAN') ?? 'AAAAA0000A',
+      declarationText:
+        'We declare that this invoice shows the actual price of the services described and that all particulars are true and correct.',
+      // The codes an agency of this shape actually bills under — advertising
+      // services, and design and production — so a line item offers them
+      // rather than asking someone to remember six digits.
+      sacCodes: ['998365', '998386', '998311', '998313'],
+      bankAccountHolderName: configured('ORG_BANK_HOLDER') ?? 'EYE LEVEL GROWTH STUDIO',
+      bankName: configured('ORG_BANK_NAME') ?? 'DBS Bank',
+      bankBranch: configured('ORG_BANK_BRANCH') ?? 'KK Nagar',
+      bankAccountNumber: configured('ORG_BANK_ACCOUNT') ?? '000000000000000',
+      bankIfscCode: configured('ORG_BANK_IFSC') ?? 'DBSS0IN0000',
     },
   });
 
@@ -120,46 +259,9 @@ async function main() {
   const shyam = await mk({ name: 'Shyam', designation: 'Digital Marketing', email: 'shyam@eyelevelstudio.in', dept: 'Digital Marketing', cost: 38000, preset: RolePreset.EMPLOYEE, perms: EMPLOYEE_PERMS });
   const shakila = await mk({ name: 'Shakila', designation: 'Digital Marketing', email: 'shakila@eyelevelstudio.in', dept: 'Digital Marketing', cost: 30000, preset: RolePreset.EMPLOYEE, perms: EMPLOYEE_PERMS });
   const naif = await mk({ name: 'Naif', designation: 'Developer', email: 'naif@eyelevelstudio.in', dept: 'Development', cost: 35000, preset: RolePreset.EMPLOYEE, perms: EMPLOYEE_PERMS });
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // 3. TASK TEMPLATES
-  // ──────────────────────────────────────────────────────────────────────────
-  const blueprint = await prisma.taskTemplate.create({
-    data: {
-      organizationId: org.id,
-      name: 'Full Studio Monthly Retainer Blueprint',
-      items: [
-        { title: 'Monthly Social Media Calendar & Concept', dept: 'Digital Marketing', dayOfMonth: 2, count: 1 },
-        { title: 'Ad Creative Batch 1 (4 Statics + 2 Reels)', dept: 'Design', dayOfMonth: 5, count: 6 },
-        { title: 'Performance Ad Campaign Optimization', dept: 'Digital Marketing', dayOfMonth: 10, count: 1 },
-        { title: 'Mid-Month Video Production Shoot', dept: 'Video & Production', dayOfMonth: 15, count: 1 },
-        { title: 'Ad Creative Batch 2 (Video Iterations)', dept: 'Video & Production', dayOfMonth: 20, count: 3 },
-        { title: 'Monthly Growth & ROAS Performance Report', dept: 'Digital Marketing', dayOfMonth: 28, count: 1 },
-      ],
-    },
-  });
-
-  const lightTemplate = await prisma.taskTemplate.create({
-    data: {
-      organizationId: org.id,
-      name: 'Lite Social-Only Retainer Blueprint',
-      items: [
-        { title: 'Monthly Social Media Calendar & Concept', dept: 'Digital Marketing', dayOfMonth: 2, count: 1 },
-        { title: 'Ad Creative Batch 1 (4 Statics + 2 Reels)', dept: 'Design', dayOfMonth: 5, count: 4 },
-        { title: 'Monthly Growth & ROAS Performance Report', dept: 'Digital Marketing', dayOfMonth: 28, count: 1 },
-      ],
-    },
-  });
-
-  // Retired blueprint, kept only to exercise Setup → Trash restore.
-  const retiredTemplate = await prisma.taskTemplate.create({
-    data: {
-      organizationId: org.id,
-      name: 'Old 2025 Retainer Blueprint (retired)',
-      items: [{ title: 'Legacy Weekly Post', dept: 'Digital Marketing', dayOfMonth: 7, count: 1 }],
-      deletedAt: days(-40),
-    },
-  });
+  // Sees every figure and enters every cost, and cannot touch the pipeline —
+  // the one combination no other person on this roster has.
+  const priya = await mk({ name: 'Priya', designation: 'Accounts', email: 'priya@eyelevelstudio.in', dept: 'Accounts', cost: 34000, preset: RolePreset.ACCOUNTS, perms: ACCOUNTS_PERMS });
 
   // ──────────────────────────────────────────────────────────────────────────
   // 4. COMPANIES & CONTACTS
@@ -206,14 +308,27 @@ async function main() {
   // ──────────────────────────────────────────────────────────────────────────
   // 5. COLD OUTREACH LIST
   // ──────────────────────────────────────────────────────────────────────────
+  // Every lead carries a way to reach it — that is the rule the outreach form
+  // now enforces, and a seed that broke it would make the screen impossible to
+  // demonstrate honestly. Two sit on FOLLOW_UP and one on MEETING so the
+  // conditional date and remarks have something to show.
+  const inDays = (n: number) => new Date(TODAY.getTime() + n * 86400000);
   await prisma.outreachEntry.createMany({
     data: [
-      { organizationId: org.id, name: 'Prestige Group', vertical: CompanyVertical.REAL_ESTATE, source: CompanySource.OUTREACH, ownerId: varsha.id, status: OutreachStatus.NOT_CONTACTED },
-      { organizationId: org.id, name: 'Casagrand', vertical: CompanyVertical.REAL_ESTATE, source: CompanySource.OUTREACH, ownerId: varsha.id, status: OutreachStatus.CONTACTED },
-      { organizationId: org.id, name: 'Kauvery Hospital', vertical: CompanyVertical.HEALTHCARE, source: CompanySource.OUTREACH, ownerId: tanuja.id, status: OutreachStatus.CONTACTED },
-      { organizationId: org.id, name: 'Zoho Partner Network', vertical: CompanyVertical.IT_AND_SAAS, source: CompanySource.OUTREACH, ownerId: tanuja.id, status: OutreachStatus.NOT_CONTACTED },
-      { organizationId: org.id, name: 'Chennai Silks', vertical: CompanyVertical.RETAIL, source: CompanySource.OUTREACH, ownerId: varsha.id, status: OutreachStatus.REPLIED },
-      { organizationId: org.id, name: 'HealthFirst Diagnostic Labs', vertical: CompanyVertical.HEALTHCARE, source: CompanySource.OUTREACH, ownerId: tanuja.id, status: OutreachStatus.DEAD },
+      { organizationId: org.id, name: 'Prestige Group', vertical: CompanyVertical.REAL_ESTATE, source: CompanySource.OUTREACH, ownerId: varsha.id, status: OutreachStatus.NOT_CONTACTED,
+        contactPersonName: 'Rajesh Kumar', phone: '98400 11223', email: null },
+      { organizationId: org.id, name: 'Casagrand', vertical: CompanyVertical.REAL_ESTATE, source: CompanySource.OUTREACH, ownerId: varsha.id, status: OutreachStatus.FOLLOW_UP,
+        contactPersonName: 'Meena Iyer', phone: '98410 55667', email: 'meena@casagrand.example',
+        nextActionDate: inDays(2), remarks: 'Busy with a launch this week. Asked us to call back on Thursday morning.' },
+      { organizationId: org.id, name: 'Kauvery Hospital', vertical: CompanyVertical.HEALTHCARE, source: CompanySource.OUTREACH, ownerId: tanuja.id, status: OutreachStatus.MEETING,
+        contactPersonName: 'Dr Anand S', phone: null, email: 'anand@kauvery.example',
+        nextActionDate: inDays(4), remarks: '11:30am, offline, at their Alwarpet office. Tanuja and Janani attending.' },
+      { organizationId: org.id, name: 'Zoho Partner Network', vertical: CompanyVertical.IT_AND_SAAS, source: CompanySource.OUTREACH, ownerId: tanuja.id, status: OutreachStatus.NOT_CONTACTED,
+        contactPersonName: null, phone: null, email: 'partners@zoho.example' },
+      { organizationId: org.id, name: 'Chennai Silks', vertical: CompanyVertical.RETAIL, source: CompanySource.OUTREACH, ownerId: varsha.id, status: OutreachStatus.INTERESTED,
+        contactPersonName: 'Lakshmi R', phone: '98420 33445', email: 'lakshmi@chennaisilks.example' },
+      { organizationId: org.id, name: 'HealthFirst Diagnostic Labs', vertical: CompanyVertical.HEALTHCARE, source: CompanySource.OUTREACH, ownerId: tanuja.id, status: OutreachStatus.DEAD,
+        contactPersonName: 'Front desk', phone: '44 2345 6789', email: null },
     ],
   });
 
@@ -245,7 +360,7 @@ async function main() {
     return { proposal: p, versions };
   };
 
-  const { proposal: carltonProposal, versions: carltonVersions } = await proposal({
+  const { proposal: carltonProposal } = await proposal({
     companyId: carlton.id, kind: ProposalKind.RETAINER, ownerId: tanuja.id, stage: ProposalStage.WON,
     outcome: ProposalOutcome.WON, wonAt: days(-32), wonVersionN: 2,
     versions: [
@@ -260,25 +375,25 @@ async function main() {
     versions: [{ n: 1, value: 140000, scope: 'Match-day content + performance ads', sentAt: days(-28) }],
   });
 
-  const { proposal: rightHospitalsProposal } = await proposal({
+  await proposal({
     companyId: rightHospitals.id, kind: ProposalKind.RETAINER, ownerId: dilshad.id, stage: ProposalStage.WON,
     outcome: ProposalOutcome.WON, wonAt: days(-70), wonVersionN: 1,
     versions: [{ n: 1, value: 30000, scope: 'Monthly OPD awareness content', sentAt: days(-75) }],
   });
 
-  const { proposal: heavensProposal } = await proposal({
+  await proposal({
     companyId: heavensElix.id, kind: ProposalKind.RETAINER, ownerId: akmal.id, stage: ProposalStage.WON,
     outcome: ProposalOutcome.WON, wonAt: days(-150), wonVersionN: 1,
     versions: [{ n: 1, value: 35000, scope: 'Festive-season D2C content calendar', sentAt: days(-155) }],
   });
 
-  const { proposal: tnpaProposal } = await proposal({
+  await proposal({
     companyId: tnpa.id, kind: ProposalKind.RETAINER, ownerId: akmal.id, stage: ProposalStage.WON,
     outcome: ProposalOutcome.WON, wonAt: days(-240), wonVersionN: 1,
     versions: [{ n: 1, value: 30000, scope: 'Team announcements + tournament coverage', sentAt: days(-245) }],
   });
 
-  const { proposal: daOneProposal } = await proposal({
+  await proposal({
     companyId: daOne.id, kind: ProposalKind.RETAINER, ownerId: akmal.id, stage: ProposalStage.WON,
     outcome: ProposalOutcome.WON, wonAt: days(-118), wonVersionN: 1,
     versions: [{ n: 1, value: 30000, scope: 'Multi-city launch story frames + reels', sentAt: days(-122) }],
@@ -321,7 +436,7 @@ async function main() {
       { n: 2, value: 260000, scope: 'Launch film trimmed to a 60-second cut', sentAt: days(-9) },
     ],
   });
-  const { proposal: pavilionProposal } = await proposal({
+  await proposal({
     companyId: pavilionClub.id, kind: ProposalKind.PROJECT, ownerId: tanuja.id, stage: ProposalStage.VERBAL_YES,
     verbalYesAt: days(-2),
     versions: [{ n: 1, value: 95000, scope: 'Membership launch campaign', sentAt: days(-6) }],
@@ -342,7 +457,7 @@ async function main() {
   // ──────────────────────────────────────────────────────────────────────────
   const carltonProforma = await prisma.proforma.create({
     data: {
-      organizationId: org.id, number: 'EL/PI/26-27/012', companyId: carlton.id,
+      organizationId: org.id, number: `EL/PI/${FY}/012`, companyId: carlton.id,
       sourceType: ProformaSourceType.PROPOSAL, sourceId: carltonProposal.id, amount: 220000,
       raisedAt: days(-32), validTill: days(-21), billingName: 'Carlton Wellness Pvt Ltd',
       gstin: '33AABCC1234F1Z5', status: ProformaStatus.PAID,
@@ -350,63 +465,177 @@ async function main() {
     },
   });
 
-  await prisma.proforma.create({
+  const vosoProforma = await prisma.proforma.create({
     data: {
-      organizationId: org.id, number: 'EL/PI/26-27/013', companyId: voso.id,
+      organizationId: org.id, number: `EL/PI/${FY}/013`, companyId: voso.id,
       sourceType: ProformaSourceType.PROPOSAL, sourceId: vosoProposal.id, amount: 140000,
       raisedAt: days(-19), validTill: days(-4), billingName: 'VOSO Sports Pvt Ltd',
       terms: 'October retainer advance, 100% upfront.',
     },
   });
 
-  await prisma.proforma.create({
+  const elephantineProforma = await prisma.proforma.create({
     data: {
-      organizationId: org.id, number: 'EL/PI/26-27/014', companyId: elephantine.id,
+      organizationId: org.id, number: `EL/PI/${FY}/014`, companyId: elephantine.id,
       sourceType: ProformaSourceType.PROPOSAL, sourceId: elephantineProjectProposal.id, amount: 130000,
       raisedAt: days(-14), validTill: days(1), billingName: 'Elephantine Tales LLP',
       terms: 'Advance for brand, site and launch film — 50% upfront.',
     },
   });
 
+  /*
+   * What each document actually says, line by line.
+   *
+   * A proforma with no line items prints a total and nothing else — no
+   * particulars, no SAC code, no units — which is not a document anybody can
+   * send a client. Nothing seeded these, so every PDF the app could produce
+   * was a header and an amount.
+   *
+   * `amount` is stored rather than derived: it is part of the frozen document,
+   * and a rounding rule that changes later must not change what an issued
+   * document says.
+   */
+  const lineItems = (target: { proformaId?: string; invoiceId?: string }, rows: {
+    particulars: string; units: number; unitCost: number; hsnSac: string;
+  }[]) =>
+    prisma.documentLineItem.createMany({
+      data: rows.map((r, i) => ({
+        ...target, serialNo: i + 1, particulars: r.particulars, units: r.units,
+        unitCost: r.unitCost, hsnSac: r.hsnSac, amount: Math.round(r.units * r.unitCost * 100) / 100,
+        gstRate: 18,
+      })),
+    });
+
+  await lineItems({ proformaId: carltonProforma.id }, [
+    { particulars: 'Monthly retainer — performance marketing, creative and video', units: 1, unitCost: 186440.68, hsnSac: '998365' },
+    { particulars: 'Dedicated shoot day (half day, on location)', units: 1, unitCost: 0, hsnSac: '998386' },
+  ]);
+  await lineItems({ proformaId: vosoProforma.id }, [
+    { particulars: 'Monthly retainer — social content and matchday cutdowns', units: 1, unitCost: 118644.07, hsnSac: '998365' },
+  ]);
+  await lineItems({ proformaId: elephantineProforma.id }, [
+    { particulars: 'Brand identity and collateral system', units: 1, unitCost: 55084.75, hsnSac: '998311' },
+    { particulars: 'Website design and build', units: 1, unitCost: 42372.88, hsnSac: '998313' },
+    { particulars: 'Launch film — 60 second cut', units: 1, unitCost: 12711.86, hsnSac: '998386' },
+  ]);
+
   // ──────────────────────────────────────────────────────────────────────────
   // 8. RETAINERS & MONTH CARDS
   // ──────────────────────────────────────────────────────────────────────────
   const retainer = async (data: {
     companyId: string; monthlyValue: number; startDate: Date; termMonths: number | null;
-    renewalDate: Date | null; ownerId: string; templateId: string;
+    renewalDate: Date | null; ownerId: string;
   }) => prisma.retainer.create({
     data: {
       organizationId: org.id, companyId: data.companyId, monthlyValue: data.monthlyValue,
       startDate: data.startDate, termMonths: data.termMonths, renewalDate: data.renewalDate,
-      ownerId: data.ownerId, status: RetainerStatus.ACTIVE, templateId: data.templateId,
+      ownerId: data.ownerId, status: RetainerStatus.ACTIVE,
     },
   });
 
   // Renewal within 45 days — should trip "Renewal approaching".
-  const carltonRetainer = await retainer({ companyId: carlton.id, monthlyValue: 220000, startDate: days(-32), termMonths: 12, renewalDate: days(18), ownerId: tanuja.id, templateId: blueprint.id });
+  const carltonRetainer = await retainer({ companyId: carlton.id, monthlyValue: 220000, startDate: days(-32), termMonths: 12, renewalDate: days(18), ownerId: tanuja.id });
   // Month-to-month, no fixed term — should trip "No fixed term".
-  const vosoRetainer = await retainer({ companyId: voso.id, monthlyValue: 140000, startDate: days(-20), termMonths: null, renewalDate: null, ownerId: akmal.id, templateId: lightTemplate.id });
-  const rightHospitalsRetainer = await retainer({ companyId: rightHospitals.id, monthlyValue: 30000, startDate: days(-70), termMonths: null, renewalDate: null, ownerId: dilshad.id, templateId: lightTemplate.id });
+  const vosoRetainer = await retainer({ companyId: voso.id, monthlyValue: 140000, startDate: days(-20), termMonths: null, renewalDate: null, ownerId: akmal.id });
+  const rightHospitalsRetainer = await retainer({ companyId: rightHospitals.id, monthlyValue: 30000, startDate: days(-70), termMonths: null, renewalDate: null, ownerId: dilshad.id });
   // Healthy renewal window, well clear of the 45-day alert.
-  const heavensRetainer = await retainer({ companyId: heavensElix.id, monthlyValue: 35000, startDate: days(-150), termMonths: 6, renewalDate: days(60), ownerId: akmal.id, templateId: lightTemplate.id });
-  const tnpaRetainer = await retainer({ companyId: tnpa.id, monthlyValue: 30000, startDate: days(-240), termMonths: 6, renewalDate: days(107), ownerId: akmal.id, templateId: lightTemplate.id });
-  const daOneRetainer = await retainer({ companyId: daOne.id, monthlyValue: 30000, startDate: days(-118), termMonths: null, renewalDate: null, ownerId: akmal.id, templateId: lightTemplate.id });
+  const heavensRetainer = await retainer({ companyId: heavensElix.id, monthlyValue: 35000, startDate: days(-150), termMonths: 6, renewalDate: days(60), ownerId: akmal.id });
+  const tnpaRetainer = await retainer({ companyId: tnpa.id, monthlyValue: 30000, startDate: days(-240), termMonths: 6, renewalDate: days(107), ownerId: akmal.id });
+  const daOneRetainer = await retainer({ companyId: daOne.id, monthlyValue: 30000, startDate: days(-118), termMonths: null, renewalDate: null, ownerId: akmal.id });
 
   const monthCard = async (retainerId: string, month: string, revenue: number, status: MonthCardStatus, closedAt?: Date) =>
     prisma.monthCard.create({ data: { retainerId, month, revenue, status, closedAt } });
 
-  const carltonAug = await monthCard(carltonRetainer.id, '2026-08', 220000, MonthCardStatus.CLOSED, days(-2));
-  const carltonSep = await monthCard(carltonRetainer.id, '2026-09', 220000, MonthCardStatus.OPEN);
-  const vosoAug = await monthCard(vosoRetainer.id, '2026-08', 140000, MonthCardStatus.CLOSED, days(-3));
-  const vosoSep = await monthCard(vosoRetainer.id, '2026-09', 140000, MonthCardStatus.OPEN);
-  const rightAug = await monthCard(rightHospitalsRetainer.id, '2026-08', 30000, MonthCardStatus.CLOSED, days(-4));
-  const rightSep = await monthCard(rightHospitalsRetainer.id, '2026-09', 30000, MonthCardStatus.OPEN);
-  const heavensAug = await monthCard(heavensRetainer.id, '2026-08', 35000, MonthCardStatus.CLOSED, days(-5));
-  const heavensSep = await monthCard(heavensRetainer.id, '2026-09', 35000, MonthCardStatus.OPEN);
-  const tnpaAug = await monthCard(tnpaRetainer.id, '2026-08', 30000, MonthCardStatus.CLOSED, days(-3));
-  const tnpaSep = await monthCard(tnpaRetainer.id, '2026-09', 30000, MonthCardStatus.OPEN);
-  const daOneAug = await monthCard(daOneRetainer.id, '2026-08', 30000, MonthCardStatus.CLOSED, days(-6));
-  const daOneSep = await monthCard(daOneRetainer.id, '2026-09', 30000, MonthCardStatus.OPEN);
+  const carltonAug = await monthCard(carltonRetainer.id, LAST_MONTH, 220000, MonthCardStatus.CLOSED, days(-2));
+  const carltonSep = await monthCard(carltonRetainer.id, THIS_MONTH, 220000, MonthCardStatus.OPEN);
+  const vosoAug = await monthCard(vosoRetainer.id, LAST_MONTH, 140000, MonthCardStatus.CLOSED, days(-3));
+  const vosoSep = await monthCard(vosoRetainer.id, THIS_MONTH, 140000, MonthCardStatus.OPEN);
+  const rightAug = await monthCard(rightHospitalsRetainer.id, LAST_MONTH, 30000, MonthCardStatus.CLOSED, days(-4));
+  const rightSep = await monthCard(rightHospitalsRetainer.id, THIS_MONTH, 30000, MonthCardStatus.OPEN);
+  const heavensAug = await monthCard(heavensRetainer.id, LAST_MONTH, 35000, MonthCardStatus.CLOSED, days(-5));
+  const heavensSep = await monthCard(heavensRetainer.id, THIS_MONTH, 35000, MonthCardStatus.OPEN);
+  const tnpaAug = await monthCard(tnpaRetainer.id, LAST_MONTH, 30000, MonthCardStatus.CLOSED, days(-3));
+  const tnpaSep = await monthCard(tnpaRetainer.id, THIS_MONTH, 30000, MonthCardStatus.OPEN);
+  const daOneAug = await monthCard(daOneRetainer.id, LAST_MONTH, 30000, MonthCardStatus.CLOSED, days(-6));
+  const daOneSep = await monthCard(daOneRetainer.id, THIS_MONTH, 30000, MonthCardStatus.OPEN);
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 8b. PROJECTS INSIDE A RETAINER
+  // ──────────────────────────────────────────────────────────────────────────
+  /*
+   * The named pieces of work a retainer client actually buys.
+   *
+   * Nothing seeded these, so the screen that opens a retainer opened onto an
+   * empty Projects tab and the only card on it was "Not in a project" — the
+   * feature existed, was tested, and had never once been seen with data in it.
+   *
+   * They carry no money on purpose: the retainer is billed monthly through its
+   * month cards, and a value here would be the same work counted twice. What
+   * they carry instead is shape — which is why one of them deliberately spans
+   * both months, one is always-on with no end date, and one is finished.
+   */
+  const retainerProject = (data: {
+    retainerId: string; name: string; startDate?: Date; endDate?: Date | null;
+    ownerId?: string; status?: RetainerProjectStatus; description?: string; isDefault?: boolean;
+  }) => prisma.retainerProject.create({
+    data: {
+      retainerId: data.retainerId, name: data.name,
+      startDate: data.startDate ?? null, endDate: data.endDate ?? null,
+      ownerId: data.ownerId ?? null, status: data.status ?? RetainerProjectStatus.ACTIVE,
+      description: data.description ?? null, isDefault: data.isDefault ?? false,
+    },
+  });
+
+  /*
+   * Every retainer starts with somewhere to put its work.
+   *
+   * A task on a month card names a project — the database enforces it with a
+   * CHECK — so a retainer without one could not hold a task at all, and the
+   * 1st-of-month roll opens an empty card and the team fills it. This is the
+   * floor everything lands in; the campaigns below sit beside it.
+   */
+  const defaultProjects = new Map<string, string>();
+  for (const [ret, owner] of [
+    [carltonRetainer, tanuja], [vosoRetainer, akmal], [rightHospitalsRetainer, dilshad],
+    [heavensRetainer, akmal], [tnpaRetainer, akmal], [daOneRetainer, akmal],
+  ] as [{ id: string }, typeof akmal][]) {
+    const made = await retainerProject({
+      retainerId: ret.id, name: 'Monthly Retainer Work', ownerId: owner.id, isDefault: true,
+      description: 'The monthly work this retainer is for. Campaigns and one-off pieces sit beside it.',
+    });
+    defaultProjects.set(ret.id, made.id);
+  }
+
+  // Carlton — a campaign that runs across the month boundary, which is the
+  // whole reason this model exists, plus the stream that never ends.
+  const carltonDiwali = await retainerProject({
+    retainerId: carltonRetainer.id, name: 'Diwali Campaign', startDate: days(-20), endDate: days(25),
+    ownerId: dilshad.id,
+    description: 'Festive push across Meta and Google — statics, reels and a 30-second brand film.',
+  });
+  const carltonAlwaysOn = await retainerProject({
+    retainerId: carltonRetainer.id, name: 'Always-on Content', startDate: days(-32), endDate: null,
+    ownerId: sneha.id,
+    description: 'The monthly baseline: calendar, statics, reels and the growth report.',
+  });
+  const carltonRebrand = await retainerProject({
+    retainerId: carltonRetainer.id, name: 'Clinic Rebrand Rollout', startDate: days(-60), endDate: days(-8),
+    ownerId: janani.id, status: RetainerProjectStatus.DONE,
+    description: 'Signage, collateral and profile refresh after the new identity landed.',
+  });
+
+  // VOSO — one campaign, so the retainer page has a second shape to show.
+  const vosoLeague = await retainerProject({
+    retainerId: vosoRetainer.id, name: 'League Season Launch', startDate: days(-14), endDate: days(40),
+    ownerId: charles.id,
+    description: 'Fixture announcements, player features and matchday cutdowns.',
+  });
+
+  // Heaven's ELIX — always-on only, no dates at all, which must read as
+  // "ongoing" rather than as missing information.
+  const heavensAlwaysOn = await retainerProject({
+    retainerId: heavensRetainer.id, name: 'Always-on Content', ownerId: shakila.id,
+  });
 
   // ──────────────────────────────────────────────────────────────────────────
   // 9. PROJECTS & MILESTONES
@@ -479,8 +708,20 @@ async function main() {
   // ──────────────────────────────────────────────────────────────────────────
   type TaskRow = {
     title: string; workType: TaskWorkType; workId?: string; monthCardId?: string; projectId?: string;
+    /**
+     * Which piece of retainer work it is part of. Set ALONGSIDE monthCardId,
+     * never instead of it — the month says which card bills the task, this
+     * says what the task is for, and a database trigger refuses a pair that
+     * belongs to two different retainers.
+     */
+    retainerProjectId?: string | null;
     assigneeId: string; createdById: string; dueDate: Date; assignedAt: Date; completedAt?: Date;
     status: TaskStatus; priority?: Priority; waitingOn?: WaitingOn; waitingSince?: Date; waitingTotalMinutes?: number;
+    /** Who checks it before it counts as done. Only some work needs one. */
+    reviewerId?: string;
+    /** The desk it belongs to — what §8's "task type average" groups by. */
+    taskType?: TaskType;
+    notes?: string;
   };
   const taskRows: TaskRow[] = [];
 
@@ -494,13 +735,26 @@ async function main() {
   ];
   const marketingPeople = [dilshad, shyam, shakila];
   const designPeople = [janani, sneha, ramya];
-  const augRetainers = [
-    { card: carltonAug, dept: 'both' }, { card: vosoAug, dept: 'both' }, { card: rightAug, dept: 'marketing' },
-    { card: heavensAug, dept: 'marketing' }, { card: tnpaAug, dept: 'marketing' }, { card: daOneAug, dept: 'design' },
+  /*
+   * `project` here is what makes a campaign cross a month.
+   *
+   * Carlton's Diwali push starts in the closed month and finishes in the open
+   * one, so its tasks sit on two different month cards — two piles that the
+   * month view can never join, and the one thing a retainer project is for.
+   * Opening it shows both months under one heading, with the closed one marked
+   * as closed.
+   */
+  const augRetainers: { card: { id: string }; dept: string; project?: string; baseline?: string; fallback: string }[] = [
+    { card: carltonAug, dept: 'both', project: carltonDiwali.id, baseline: carltonAlwaysOn.id, fallback: defaultProjects.get(carltonRetainer.id)! },
+    { card: vosoAug, dept: 'both', fallback: defaultProjects.get(vosoRetainer.id)! },
+    { card: rightAug, dept: 'marketing', fallback: defaultProjects.get(rightHospitalsRetainer.id)! },
+    { card: heavensAug, dept: 'marketing', baseline: heavensAlwaysOn.id, fallback: defaultProjects.get(heavensRetainer.id)! },
+    { card: tnpaAug, dept: 'marketing', fallback: defaultProjects.get(tnpaRetainer.id)! },
+    { card: daOneAug, dept: 'design', fallback: defaultProjects.get(daOneRetainer.id)! },
   ];
   let recurringOffset = 0;
-  for (const { card, dept } of augRetainers) {
-    for (const r of recurring) {
+  for (const { card, dept, project, baseline, fallback } of augRetainers) {
+    for (const [ri, r] of recurring.entries()) {
       if (dept !== 'both' && dept !== r.dept) continue;
       const people = r.dept === 'design' ? designPeople : marketingPeople;
       const assignee = people[recurringOffset % people.length];
@@ -508,43 +762,82 @@ async function main() {
       const elapsedHours = 6 + (recurringOffset % 6) * 5; // spreads medians across a real range
       taskRows.push({
         title: r.title, workType: TaskWorkType.MONTH_CARD, workId: card.id, monthCardId: card.id,
+        // The first line of the month goes to the campaign, the rest to the
+        // baseline stream — so the campaign genuinely spans two cards and the
+        // baseline has a run of months behind it.
+        retainerProjectId: (ri === 0 ? project : baseline) ?? baseline ?? fallback,
         assigneeId: assignee.id, createdById: dilshad.id, dueDate: days(-28 + (recurringOffset % 5)),
         assignedAt, completedAt: new Date(assignedAt.getTime() + elapsedHours * 3600000),
         status: TaskStatus.DONE,
+        taskType: r.dept === 'design' ? TaskType.DESIGN : TaskType.DIGITAL_MARKETING,
       });
       recurringOffset++;
     }
   }
 
+  /*
+   * The finished campaign's own work.
+   *
+   * A project marked DONE with no tasks under it renders as an empty drill-in,
+   * which reads as "nothing happened" rather than "this is finished". Its work
+   * sits on the closed month, which is also what it looks like to open a
+   * completed campaign: every row done, and the month shut behind it.
+   */
+  for (const [title, who, offset] of [
+    ['Clinic Signage Artwork — Final Files', janani, -26],
+    ['Reception & Collateral Print Handover', sneha, -18],
+    ['Google Business Profile Refresh', shakila, -12],
+  ] as [string, typeof janani, number][]) {
+    const assignedAt = days(offset - 5);
+    taskRows.push({
+      title, workType: TaskWorkType.MONTH_CARD, workId: carltonAug.id, monthCardId: carltonAug.id,
+      retainerProjectId: carltonRebrand.id, assigneeId: who.id, createdById: janani.id,
+      dueDate: days(offset), assignedAt,
+      completedAt: new Date(assignedAt.getTime() + 26 * 3600000),
+      status: TaskStatus.DONE, taskType: TaskType.DESIGN,
+    });
+  }
+
   // September (open) month-card work — the live board for each retainer,
   // spread across overdue / today / this-week / done / on-hold.
-  const sepCards = [
-    { card: carltonSep, lead: dilshad, people: [sneha, shyam] },
-    { card: vosoSep, lead: janani, people: [ramya, sneha] },
-    { card: rightSep, lead: dilshad, people: [shakila] },
-    { card: heavensSep, lead: dilshad, people: [shyam] },
-    { card: tnpaSep, lead: janani, people: [ramya] },
-    { card: daOneSep, lead: charles, people: [janani] },
+  /*
+   * `campaign` and `baseline` are the two projects a month's work falls under.
+   *
+   * Not every card has them, and that is deliberate: Right Hospitals, TNPA and
+   * Da One run with nothing named, so the "Not in a project" card is never an
+   * empty state nobody has seen. Carlton's campaign also appears on LAST
+   * month's card below, which is the case the whole model exists for.
+   */
+  const sepCards: {
+    card: { id: string }; lead: typeof dilshad; people: (typeof sneha)[];
+    campaign?: string; baseline?: string; fallback: string; kind: TaskType;
+  }[] = [
+    { card: carltonSep, lead: dilshad, people: [sneha, shyam], campaign: carltonDiwali.id, baseline: carltonAlwaysOn.id, fallback: defaultProjects.get(carltonRetainer.id)!, kind: TaskType.DIGITAL_MARKETING },
+    { card: vosoSep, lead: janani, people: [ramya, sneha], campaign: vosoLeague.id, fallback: defaultProjects.get(vosoRetainer.id)!, kind: TaskType.VIDEO },
+    { card: rightSep, lead: dilshad, people: [shakila], fallback: defaultProjects.get(rightHospitalsRetainer.id)!, kind: TaskType.DIGITAL_MARKETING },
+    { card: heavensSep, lead: dilshad, people: [shyam], baseline: heavensAlwaysOn.id, fallback: defaultProjects.get(heavensRetainer.id)!, kind: TaskType.DIGITAL_MARKETING },
+    { card: tnpaSep, lead: janani, people: [ramya], fallback: defaultProjects.get(tnpaRetainer.id)!, kind: TaskType.DESIGN },
+    { card: daOneSep, lead: charles, people: [janani], fallback: defaultProjects.get(daOneRetainer.id)!, kind: TaskType.VIDEO },
   ];
   const titlesByCard = [
     'October Instagram Growth Content Calendar', 'Ad Creatives Batch 1: Static Banners',
     'Ad Creatives Batch 2: Reel Cutdowns', 'Brand Video Script Sign-off from Client',
     'Meta Ads Optimization Pass', 'Monthly Growth & ROAS Report',
   ];
-  sepCards.forEach(({ card, lead, people }, ci) => {
+  sepCards.forEach(({ card, lead, people, campaign, baseline, fallback, kind }, ci) => {
     // Overdue
-    taskRows.push({ title: `${titlesByCard[0]} (${ci + 1})`, workType: TaskWorkType.MONTH_CARD, workId: card.id, monthCardId: card.id, assigneeId: people[0].id, createdById: lead.id, dueDate: days(-2), assignedAt: days(-6), status: TaskStatus.TODO });
+    taskRows.push({ title: `${titlesByCard[0]} (${ci + 1})`, workType: TaskWorkType.MONTH_CARD, workId: card.id, monthCardId: card.id, assigneeId: people[0].id, createdById: lead.id, dueDate: days(-2), assignedAt: days(-6), status: TaskStatus.TODO, retainerProjectId: campaign ?? fallback, taskType: kind });
     // Due today
-    taskRows.push({ title: `${titlesByCard[1]} (${ci + 1})`, workType: TaskWorkType.MONTH_CARD, workId: card.id, monthCardId: card.id, assigneeId: people[people.length - 1].id, createdById: lead.id, dueDate: days(0), assignedAt: days(-1), status: TaskStatus.IN_PROGRESS });
+    taskRows.push({ title: `${titlesByCard[1]} (${ci + 1})`, workType: TaskWorkType.MONTH_CARD, workId: card.id, monthCardId: card.id, assigneeId: people[people.length - 1].id, createdById: lead.id, dueDate: days(0), assignedAt: days(-1), status: TaskStatus.IN_PROGRESS, retainerProjectId: campaign ?? fallback, taskType: kind, reviewerId: lead.id });
     // Due this week
-    taskRows.push({ title: `${titlesByCard[2]} (${ci + 1})`, workType: TaskWorkType.MONTH_CARD, workId: card.id, monthCardId: card.id, assigneeId: people[0].id, createdById: lead.id, dueDate: days(4), assignedAt: days(0), status: TaskStatus.TODO });
+    taskRows.push({ title: `${titlesByCard[2]} (${ci + 1})`, workType: TaskWorkType.MONTH_CARD, workId: card.id, monthCardId: card.id, assigneeId: people[0].id, createdById: lead.id, dueDate: days(4), assignedAt: days(0), status: TaskStatus.TODO, retainerProjectId: baseline ?? fallback, taskType: kind });
     // Blocked on client
-    taskRows.push({ title: `${titlesByCard[3]} (${ci + 1})`, workType: TaskWorkType.MONTH_CARD, workId: card.id, monthCardId: card.id, assigneeId: lead.id, createdById: lead.id, dueDate: days(6), assignedAt: days(-2), status: TaskStatus.ON_HOLD, waitingOn: WaitingOn.CLIENT, waitingSince: days(-1), waitingTotalMinutes: 720 });
+    taskRows.push({ title: `${titlesByCard[3]} (${ci + 1})`, workType: TaskWorkType.MONTH_CARD, workId: card.id, monthCardId: card.id, assigneeId: lead.id, createdById: lead.id, dueDate: days(6), assignedAt: days(-2), status: TaskStatus.ON_HOLD, waitingOn: WaitingOn.CLIENT, waitingSince: days(-1), waitingTotalMinutes: 720, retainerProjectId: fallback, taskType: kind, notes: 'Chased twice on WhatsApp. Client is waiting on their own legal sign-off.' });
     // Done, feeds the recurring-title median for Perf Ad Optimization too
     const doneAssigned = days(-4);
-    taskRows.push({ title: `${titlesByCard[4]} (${ci + 1})`, workType: TaskWorkType.MONTH_CARD, workId: card.id, monthCardId: card.id, assigneeId: people[0].id, createdById: lead.id, dueDate: days(-1), assignedAt: doneAssigned, completedAt: new Date(doneAssigned.getTime() + 9 * 3600000), status: TaskStatus.DONE });
+    taskRows.push({ title: `${titlesByCard[4]} (${ci + 1})`, workType: TaskWorkType.MONTH_CARD, workId: card.id, monthCardId: card.id, assigneeId: people[0].id, createdById: lead.id, dueDate: days(-1), assignedAt: doneAssigned, completedAt: new Date(doneAssigned.getTime() + 9 * 3600000), status: TaskStatus.DONE, retainerProjectId: baseline ?? fallback, taskType: kind });
     // Cancelled
-    taskRows.push({ title: `${titlesByCard[5]} (${ci + 1})`, workType: TaskWorkType.MONTH_CARD, workId: card.id, monthCardId: card.id, assigneeId: lead.id, createdById: lead.id, dueDate: days(2), assignedAt: days(-3), status: TaskStatus.CANCELLED });
+    taskRows.push({ title: `${titlesByCard[5]} (${ci + 1})`, workType: TaskWorkType.MONTH_CARD, workId: card.id, monthCardId: card.id, assigneeId: lead.id, createdById: lead.id, dueDate: days(2), assignedAt: days(-3), status: TaskStatus.CANCELLED, retainerProjectId: fallback, taskType: kind });
   });
 
   // Project work
@@ -622,7 +915,9 @@ async function main() {
   await prisma.task.createMany({
     data: taskRows.map((t) => ({
       organizationId: org.id, title: t.title, workType: t.workType, workId: t.workId, monthCardId: t.monthCardId,
-      projectId: t.projectId, assigneeId: t.assigneeId, createdById: t.createdById, dueDate: t.dueDate,
+      projectId: t.projectId, retainerProjectId: t.retainerProjectId ?? null,
+      assigneeId: t.assigneeId, createdById: t.createdById, dueDate: t.dueDate,
+      reviewerId: t.reviewerId, taskType: t.taskType, notes: t.notes,
       // Who asked for the work. The seed has no separate notion of it, so it is
       // whoever raised the task — the same fallback the create route uses.
       assignedById: t.createdById,
@@ -687,9 +982,11 @@ async function main() {
 
   await prisma.cost.createMany({
     data: [
-      { organizationId: org.id, type: CostType.COMPANY, category: 'Salaries', vendor: 'Payroll', amount: 662000, incurredAt: days(-1), enteredById: akmal.id, recurring: true },
-      { organizationId: org.id, type: CostType.COMPANY, category: 'Office Rent', vendor: 'Nungambakkam Commercial Properties', amount: 65000, incurredAt: days(-1), enteredById: akmal.id, recurring: true },
-      { organizationId: org.id, type: CostType.COMPANY, category: 'Software & Tools', vendor: 'Adobe / Figma / Vercel', amount: 18000, incurredAt: days(-1), enteredById: akmal.id, recurring: true },
+      // Entered by Accounts, which is whose job this is — and what makes the
+      // "entered by" column on the cost register show more than one name.
+      { organizationId: org.id, type: CostType.COMPANY, category: 'Salaries', vendor: 'Payroll', amount: 662000, incurredAt: days(-1), enteredById: priya.id, recurring: true },
+      { organizationId: org.id, type: CostType.COMPANY, category: 'Office Rent', vendor: 'Nungambakkam Commercial Properties', amount: 65000, incurredAt: days(-1), enteredById: priya.id, recurring: true },
+      { organizationId: org.id, type: CostType.COMPANY, category: 'Software & Tools', vendor: 'Adobe / Figma / Vercel', amount: 18000, incurredAt: days(-1), enteredById: priya.id, recurring: true },
       { organizationId: org.id, type: CostType.COMPANY, category: 'Internet & Utilities', vendor: 'Airtel Broadband / TNEB', amount: 9500, incurredAt: days(-1), enteredById: akmal.id, recurring: true, treatment: CostTreatment.AKMAL_LOAN, paidBy: CostPaidBy.AKMAL },
       { organizationId: org.id, type: CostType.COMPANY, category: 'Pantry & Tea', vendor: 'Local Vendor', amount: 4800, incurredAt: days(-2), enteredById: akmal.id },
     ],
@@ -709,67 +1006,203 @@ async function main() {
   // August — confirmed (closed month).
   await prisma.peopleAllocation.createMany({
     data: [
-      { userId: dilshad.id, month: '2026-08', workType: TaskWorkType.MONTH_CARD, workId: carltonAug.id, monthCardId: carltonAug.id, proposedPercent: 45, percent: 45, confirmedById: harish.id, confirmedAt: days(-3) },
-      { userId: sneha.id, month: '2026-08', workType: TaskWorkType.MONTH_CARD, workId: carltonAug.id, monthCardId: carltonAug.id, proposedPercent: 30, percent: 30, confirmedById: harish.id, confirmedAt: days(-3) },
-      { userId: shyam.id, month: '2026-08', workType: TaskWorkType.MONTH_CARD, workId: carltonAug.id, monthCardId: carltonAug.id, proposedPercent: 25, percent: 25, confirmedById: harish.id, confirmedAt: days(-3) },
-      { userId: janani.id, month: '2026-08', workType: TaskWorkType.MONTH_CARD, workId: vosoAug.id, monthCardId: vosoAug.id, proposedPercent: 50, percent: 50, confirmedById: harish.id, confirmedAt: days(-4) },
-      { userId: ramya.id, month: '2026-08', workType: TaskWorkType.MONTH_CARD, workId: vosoAug.id, monthCardId: vosoAug.id, proposedPercent: 50, percent: 50, confirmedById: harish.id, confirmedAt: days(-4) },
-      { userId: charles.id, month: '2026-08', workType: TaskWorkType.PROJECT, workId: vosoDroneFilms.id, projectId: vosoDroneFilms.id, proposedPercent: 60, percent: 60, confirmedById: harish.id, confirmedAt: days(-5) },
+      { userId: dilshad.id, month: LAST_MONTH, workType: TaskWorkType.MONTH_CARD, workId: carltonAug.id, monthCardId: carltonAug.id, proposedPercent: 45, percent: 45, confirmedById: harish.id, confirmedAt: days(-3) },
+      { userId: sneha.id, month: LAST_MONTH, workType: TaskWorkType.MONTH_CARD, workId: carltonAug.id, monthCardId: carltonAug.id, proposedPercent: 30, percent: 30, confirmedById: harish.id, confirmedAt: days(-3) },
+      { userId: shyam.id, month: LAST_MONTH, workType: TaskWorkType.MONTH_CARD, workId: carltonAug.id, monthCardId: carltonAug.id, proposedPercent: 25, percent: 25, confirmedById: harish.id, confirmedAt: days(-3) },
+      { userId: janani.id, month: LAST_MONTH, workType: TaskWorkType.MONTH_CARD, workId: vosoAug.id, monthCardId: vosoAug.id, proposedPercent: 50, percent: 50, confirmedById: harish.id, confirmedAt: days(-4) },
+      { userId: ramya.id, month: LAST_MONTH, workType: TaskWorkType.MONTH_CARD, workId: vosoAug.id, monthCardId: vosoAug.id, proposedPercent: 50, percent: 50, confirmedById: harish.id, confirmedAt: days(-4) },
+      { userId: charles.id, month: LAST_MONTH, workType: TaskWorkType.PROJECT, workId: vosoDroneFilms.id, projectId: vosoDroneFilms.id, proposedPercent: 60, percent: 60, confirmedById: harish.id, confirmedAt: days(-5) },
     ],
   });
   // September — a mix of confirmed and still-proposed, to exercise the
   // Time Split confirm workflow.
   await prisma.peopleAllocation.createMany({
     data: [
-      { userId: dilshad.id, month: '2026-09', workType: TaskWorkType.MONTH_CARD, workId: carltonSep.id, monthCardId: carltonSep.id, proposedPercent: 45, percent: 45, confirmedById: harish.id, confirmedAt: days(-1) },
-      { userId: sneha.id, month: '2026-09', workType: TaskWorkType.MONTH_CARD, workId: carltonSep.id, monthCardId: carltonSep.id, proposedPercent: 30, percent: 30 },
-      { userId: shyam.id, month: '2026-09', workType: TaskWorkType.MONTH_CARD, workId: carltonSep.id, monthCardId: carltonSep.id, proposedPercent: 25, percent: 25 },
-      { userId: janani.id, month: '2026-09', workType: TaskWorkType.MONTH_CARD, workId: vosoSep.id, monthCardId: vosoSep.id, proposedPercent: 50, percent: 50, confirmedById: harish.id, confirmedAt: days(0) },
-      { userId: ramya.id, month: '2026-09', workType: TaskWorkType.MONTH_CARD, workId: vosoSep.id, monthCardId: vosoSep.id, proposedPercent: 50, percent: 50 },
-      { userId: charles.id, month: '2026-09', workType: TaskWorkType.PROJECT, workId: vosoDroneFilms.id, projectId: vosoDroneFilms.id, proposedPercent: 65, percent: 65, confirmedById: harish.id, confirmedAt: days(0) },
-      { userId: naif.id, month: '2026-09', workType: TaskWorkType.PROJECT, workId: carltonWebsite.id, projectId: carltonWebsite.id, proposedPercent: 40, percent: 40 },
-      { userId: naif.id, month: '2026-09', workType: TaskWorkType.PROJECT, workId: tnpaSeason2.id, projectId: tnpaSeason2.id, proposedPercent: 35, percent: 35 },
+      { userId: dilshad.id, month: THIS_MONTH, workType: TaskWorkType.MONTH_CARD, workId: carltonSep.id, monthCardId: carltonSep.id, proposedPercent: 45, percent: 45, confirmedById: harish.id, confirmedAt: days(-1) },
+      { userId: sneha.id, month: THIS_MONTH, workType: TaskWorkType.MONTH_CARD, workId: carltonSep.id, monthCardId: carltonSep.id, proposedPercent: 30, percent: 30 },
+      { userId: shyam.id, month: THIS_MONTH, workType: TaskWorkType.MONTH_CARD, workId: carltonSep.id, monthCardId: carltonSep.id, proposedPercent: 25, percent: 25 },
+      { userId: janani.id, month: THIS_MONTH, workType: TaskWorkType.MONTH_CARD, workId: vosoSep.id, monthCardId: vosoSep.id, proposedPercent: 50, percent: 50, confirmedById: harish.id, confirmedAt: days(0) },
+      { userId: ramya.id, month: THIS_MONTH, workType: TaskWorkType.MONTH_CARD, workId: vosoSep.id, monthCardId: vosoSep.id, proposedPercent: 50, percent: 50 },
+      { userId: charles.id, month: THIS_MONTH, workType: TaskWorkType.PROJECT, workId: vosoDroneFilms.id, projectId: vosoDroneFilms.id, proposedPercent: 65, percent: 65, confirmedById: harish.id, confirmedAt: days(0) },
+      { userId: naif.id, month: THIS_MONTH, workType: TaskWorkType.PROJECT, workId: carltonWebsite.id, projectId: carltonWebsite.id, proposedPercent: 40, percent: 40 },
+      { userId: naif.id, month: THIS_MONTH, workType: TaskWorkType.PROJECT, workId: tnpaSeason2.id, projectId: tnpaSeason2.id, proposedPercent: 35, percent: 35 },
     ],
   });
 
   // ──────────────────────────────────────────────────────────────────────────
   // 13. INVOICES & PAYMENTS
   // ──────────────────────────────────────────────────────────────────────────
-  const carltonAugInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: 'INV/26-27/0142', companyId: carlton.id, workType: TaskWorkType.MONTH_CARD, workId: carltonAug.id, amount: 220000, raisedAt: days(-32), dueAt: days(-18), status: InvoiceStatus.PAID, paidAt: days(-22) } });
+  const carltonAugInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: `INV/${FY}/0142`, companyId: carlton.id, workType: TaskWorkType.MONTH_CARD, workId: carltonAug.id, amount: 220000, raisedAt: days(-32), dueAt: days(-18), status: InvoiceStatus.PAID, paidAt: days(-22) } });
   await prisma.monthCard.update({ where: { id: carltonAug.id }, data: { invoiceId: carltonAugInvoice.id } });
   await prisma.payment.create({ data: { invoiceId: carltonAugInvoice.id, amount: 220000, receivedAt: days(-22), mode: 'NEFT', reference: 'HDFC00293849102' } });
 
-  const carltonSepInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: 'INV/26-27/0188', companyId: carlton.id, workType: TaskWorkType.MONTH_CARD, workId: carltonSep.id, amount: 220000, raisedAt: days(-1), dueAt: days(13), status: InvoiceStatus.RAISED } });
+  const carltonSepInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: `INV/${FY}/0188`, companyId: carlton.id, workType: TaskWorkType.MONTH_CARD, workId: carltonSep.id, amount: 220000, raisedAt: days(-1), dueAt: days(13), status: InvoiceStatus.RAISED } });
   await prisma.monthCard.update({ where: { id: carltonSep.id }, data: { invoiceId: carltonSepInvoice.id } });
 
-  const vosoAugInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: 'INV/26-27/0143', companyId: voso.id, workType: TaskWorkType.MONTH_CARD, workId: vosoAug.id, amount: 140000, raisedAt: days(-30), dueAt: days(-16), status: InvoiceStatus.PAID, paidAt: days(-19) } });
+  const vosoAugInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: `INV/${FY}/0143`, companyId: voso.id, workType: TaskWorkType.MONTH_CARD, workId: vosoAug.id, amount: 140000, raisedAt: days(-30), dueAt: days(-16), status: InvoiceStatus.PAID, paidAt: days(-19) } });
   await prisma.monthCard.update({ where: { id: vosoAug.id }, data: { invoiceId: vosoAugInvoice.id } });
   await prisma.payment.create({ data: { invoiceId: vosoAugInvoice.id, amount: 140000, receivedAt: days(-19), mode: 'UPI', reference: 'UPI2609887654' } });
 
   // Overdue — past its due date, not yet paid.
-  const rightAugInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: 'INV/26-27/0139', companyId: rightHospitals.id, workType: TaskWorkType.MONTH_CARD, workId: rightAug.id, amount: 30000, raisedAt: days(-35), dueAt: days(-10), status: InvoiceStatus.OVERDUE } });
+  const rightAugInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: `INV/${FY}/0139`, companyId: rightHospitals.id, workType: TaskWorkType.MONTH_CARD, workId: rightAug.id, amount: 30000, raisedAt: days(-35), dueAt: days(-10), status: InvoiceStatus.OVERDUE } });
   await prisma.monthCard.update({ where: { id: rightAug.id }, data: { invoiceId: rightAugInvoice.id } });
 
-  const heavensAugInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: 'INV/26-27/0140', companyId: heavensElix.id, workType: TaskWorkType.MONTH_CARD, workId: heavensAug.id, amount: 35000, raisedAt: days(-34), dueAt: days(-20), status: InvoiceStatus.PAID, paidAt: days(-25) } });
+  const heavensAugInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: `INV/${FY}/0140`, companyId: heavensElix.id, workType: TaskWorkType.MONTH_CARD, workId: heavensAug.id, amount: 35000, raisedAt: days(-34), dueAt: days(-20), status: InvoiceStatus.PAID, paidAt: days(-25) } });
   await prisma.monthCard.update({ where: { id: heavensAug.id }, data: { invoiceId: heavensAugInvoice.id } });
   await prisma.payment.create({ data: { invoiceId: heavensAugInvoice.id, amount: 35000, receivedAt: days(-25), mode: 'NEFT', reference: 'HDFC00291122334' } });
 
-  const tnpaAugInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: 'INV/26-27/0141', companyId: tnpa.id, workType: TaskWorkType.MONTH_CARD, workId: tnpaAug.id, amount: 30000, raisedAt: days(-33), dueAt: days(-19), status: InvoiceStatus.PAID, paidAt: days(-24) } });
+  const tnpaAugInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: `INV/${FY}/0141`, companyId: tnpa.id, workType: TaskWorkType.MONTH_CARD, workId: tnpaAug.id, amount: 30000, raisedAt: days(-33), dueAt: days(-19), status: InvoiceStatus.PAID, paidAt: days(-24) } });
   await prisma.monthCard.update({ where: { id: tnpaAug.id }, data: { invoiceId: tnpaAugInvoice.id } });
   await prisma.payment.create({ data: { invoiceId: tnpaAugInvoice.id, amount: 30000, receivedAt: days(-24), mode: 'NEFT', reference: 'HDFC00291122335' } });
 
-  const daOneAugInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: 'INV/26-27/0144', companyId: daOne.id, workType: TaskWorkType.MONTH_CARD, workId: daOneAug.id, amount: 30000, raisedAt: days(-31), dueAt: days(-17), status: InvoiceStatus.RAISED } });
+  const daOneAugInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: `INV/${FY}/0144`, companyId: daOne.id, workType: TaskWorkType.MONTH_CARD, workId: daOneAug.id, amount: 30000, raisedAt: days(-31), dueAt: days(-17), status: InvoiceStatus.RAISED } });
   await prisma.monthCard.update({ where: { id: daOneAug.id }, data: { invoiceId: daOneAugInvoice.id } });
 
   // Project-linked invoices (milestone billing), one cancelled for variety.
-  const carltonWebsiteInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: 'INV/26-27/0135', companyId: carlton.id, workType: TaskWorkType.PROJECT, workId: carltonWebsite.id, projectId: carltonWebsite.id, amount: 60000, raisedAt: days(-38), dueAt: days(-24), status: InvoiceStatus.PAID, paidAt: days(-33) } });
+  const carltonWebsiteInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: `INV/${FY}/0135`, companyId: carlton.id, workType: TaskWorkType.PROJECT, workId: carltonWebsite.id, projectId: carltonWebsite.id, amount: 60000, raisedAt: days(-38), dueAt: days(-24), status: InvoiceStatus.PAID, paidAt: days(-33) } });
   // A settled invoice needs the payment that settled it: balance due is
   // `amount - sum(payments)`, so PAID with no payment row reads as money
   // still owed on an invoice nobody owes anything on.
   await prisma.payment.create({ data: { invoiceId: carltonWebsiteInvoice.id, amount: 60000, receivedAt: days(-33), mode: 'NEFT', reference: 'HDFC00290011223' } });
-  const daOneApartmentInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: 'INV/26-27/0136', companyId: daOne.id, workType: TaskWorkType.PROJECT, workId: daOneApartment.id, projectId: daOneApartment.id, amount: 47500, raisedAt: days(-88), dueAt: days(-74), status: InvoiceStatus.PAID, paidAt: days(-80) } });
+  const daOneApartmentInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: `INV/${FY}/0136`, companyId: daOne.id, workType: TaskWorkType.PROJECT, workId: daOneApartment.id, projectId: daOneApartment.id, amount: 47500, raisedAt: days(-88), dueAt: days(-74), status: InvoiceStatus.PAID, paidAt: days(-80) } });
   await prisma.payment.create({ data: { invoiceId: daOneApartmentInvoice.id, amount: 47500, receivedAt: days(-80), mode: 'NEFT', reference: 'HDFC00288776655' } });
-  await prisma.invoice.create({ data: { organizationId: org.id, number: 'INV/26-27/0137', companyId: rightHospitals.id, workType: TaskWorkType.PROJECT, workId: rightHospitalsMicrosite.id, projectId: rightHospitalsMicrosite.id, amount: 28000, raisedAt: days(-15), dueAt: days(-1), status: InvoiceStatus.CANCELLED } });
+  await prisma.invoice.create({ data: { organizationId: org.id, number: `INV/${FY}/0137`, companyId: rightHospitals.id, workType: TaskWorkType.PROJECT, workId: rightHospitalsMicrosite.id, projectId: rightHospitalsMicrosite.id, amount: 28000, raisedAt: days(-15), dueAt: days(-1), status: InvoiceStatus.CANCELLED } });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 13b. ASSET REGISTER
+  // ──────────────────────────────────────────────────────────────────────────
+  /*
+   * The studio's kit, which nothing seeded.
+   *
+   * Assets is a screen in the navigation with three models behind it — the
+   * register, the chain of custody and the maintenance log — and all three
+   * came up empty, so the only thing anybody had ever seen there was an empty
+   * state. A video-and-design agency's most argued-about asset is the camera
+   * body that went out on Friday and has not come back, which is precisely
+   * what the movement table exists to answer.
+   *
+   * Two invariants this has to respect, both enforced in the service layer
+   * rather than by a constraint:
+   *
+   *   1. An asset has at most ONE movement with `returnedAt: null`.
+   *   2. `status` and `currentHolderId` must agree with that open movement —
+   *      ASSIGNED or BOOKED_OUT means somebody holds it, IN_STOCK means the
+   *      holder is null.
+   *
+   * Purchases point at a CAPITAL Cost row rather than owning the spend, so the
+   * register and the P&L cannot disagree about what was paid.
+   */
+  const capitalCost = (category: string, vendor: string, amount: number, at: Date) =>
+    prisma.cost.create({
+      data: {
+        organizationId: org.id, type: CostType.CAPITAL, category, vendor, amount, incurredAt: at,
+        enteredById: akmal.id, paidBy: CostPaidBy.COMPANY, treatment: CostTreatment.COMPANY_EXPENSE,
+      },
+    });
+
+  const asset = async (data: {
+    tag: string; name: string; category: AssetCategory; make?: string; model?: string;
+    serialNumber?: string; price: number; boughtAt: Date; vendor: string; bookable?: boolean;
+    status?: AssetStatus; condition?: AssetCondition; holderId?: string; warrantyMonths?: number;
+    notes?: string;
+  }) => {
+    const cost = await capitalCost(`Equipment — ${data.name}`, data.vendor, data.price, data.boughtAt);
+    return prisma.asset.create({
+      data: {
+        organizationId: org.id, tag: data.tag, name: data.name, category: data.category,
+        make: data.make, model: data.model, serialNumber: data.serialNumber,
+        status: data.status ?? AssetStatus.IN_STOCK,
+        condition: data.condition ?? AssetCondition.GOOD,
+        bookable: data.bookable ?? false,
+        costId: cost.id, purchasePrice: data.price, purchasedAt: data.boughtAt, vendor: data.vendor,
+        // Straight-line life per category, the same defaults ASSET_USEFUL_LIFE
+        // carries — written out here so the seed needs no import from shared.
+        usefulLifeMonths: ASSET_LIFE[data.category],
+        warrantyUntil: data.warrantyMonths
+          ? new Date(data.boughtAt.getFullYear(), data.boughtAt.getMonth() + data.warrantyMonths, data.boughtAt.getDate())
+          : null,
+        currentHolderId: data.holderId ?? null,
+        notes: data.notes,
+      },
+    });
+  };
+
+  const a7iv = await asset({ tag: 'EL/CAM/001', name: 'Sony A7 IV', category: AssetCategory.CAMERA_BODY, make: 'Sony', model: 'ILCE-7M4', serialNumber: '3892011', price: 245000, boughtAt: days(-420), vendor: 'Foto Circle, Chennai', bookable: true, status: AssetStatus.BOOKED_OUT, holderId: charles.id, warrantyMonths: 24 });
+  const fx30 = await asset({ tag: 'EL/CAM/002', name: 'Sony FX30', category: AssetCategory.CAMERA_BODY, make: 'Sony', model: 'ILME-FX30', serialNumber: '4410287', price: 178000, boughtAt: days(-260), vendor: 'Foto Circle, Chennai', bookable: true, warrantyMonths: 24 });
+  const lens2470 = await asset({ tag: 'EL/LEN/001', name: 'Sony 24-70mm f/2.8 GM II', category: AssetCategory.LENS, make: 'Sony', serialNumber: '1820394', price: 186000, boughtAt: days(-400), vendor: 'Foto Circle, Chennai', bookable: true, status: AssetStatus.BOOKED_OUT, holderId: charles.id });
+  const lens35 = await asset({ tag: 'EL/LEN/002', name: 'Sigma 35mm f/1.4 Art', category: AssetCategory.LENS, make: 'Sigma', price: 72000, boughtAt: days(-500), vendor: 'Foto Circle, Chennai', bookable: true, condition: AssetCondition.FAIR, notes: 'Focus ring stiff in the cold. Serviced once.' });
+  const droneMavic = await asset({ tag: 'EL/GMB/001', name: 'DJI Mavic 3 Pro', category: AssetCategory.GIMBAL_DRONE, make: 'DJI', serialNumber: '9921884', price: 215000, boughtAt: days(-180), vendor: 'DJI India', bookable: true, status: AssetStatus.IN_REPAIR, notes: 'Gimbal motor replacement after a hard landing at the VOSO shoot.' });
+  const ronin = await asset({ tag: 'EL/GMB/002', name: 'DJI RS 3 Pro Gimbal', category: AssetCategory.GIMBAL_DRONE, make: 'DJI', price: 82000, boughtAt: days(-300), vendor: 'DJI India', bookable: true });
+  const aputure = await asset({ tag: 'EL/LGT/001', name: 'Aputure 300d II', category: AssetCategory.LIGHTING, make: 'Aputure', price: 68000, boughtAt: days(-350), vendor: 'Pixel Pro Gear', bookable: true });
+  const rodeMic = await asset({ tag: 'EL/AUD/001', name: 'Rode Wireless GO II', category: AssetCategory.AUDIO, make: 'Rode', price: 27000, boughtAt: days(-200), vendor: 'Pixel Pro Gear', bookable: true });
+  const tripod = await asset({ tag: 'EL/SUP/001', name: 'Manfrotto 504X Tripod', category: AssetCategory.SUPPORT, make: 'Manfrotto', price: 46000, boughtAt: days(-380), vendor: 'Pixel Pro Gear', bookable: true });
+  const mbpCharles = await asset({ tag: 'EL/LAP/001', name: 'MacBook Pro 16" M3 Max', category: AssetCategory.LAPTOP, make: 'Apple', serialNumber: 'C02XK1YZQ6NY', price: 329000, boughtAt: days(-310), vendor: 'Imagine Store', status: AssetStatus.ASSIGNED, holderId: charles.id, warrantyMonths: 12 });
+  const mbpSneha = await asset({ tag: 'EL/LAP/002', name: 'MacBook Pro 14" M3', category: AssetCategory.LAPTOP, make: 'Apple', serialNumber: 'C02YL2ZAR7PQ', price: 214000, boughtAt: days(-240), vendor: 'Imagine Store', status: AssetStatus.ASSIGNED, holderId: sneha.id, warrantyMonths: 12 });
+  const mbpNaif = await asset({ tag: 'EL/LAP/003', name: 'MacBook Air 15" M2', category: AssetCategory.LAPTOP, make: 'Apple', price: 134000, boughtAt: days(-150), vendor: 'Imagine Store', status: AssetStatus.ASSIGNED, holderId: naif.id, warrantyMonths: 12 });
+  const oldLaptop = await asset({ tag: 'EL/LAP/004', name: 'Dell XPS 15 (2019)', category: AssetCategory.LAPTOP, make: 'Dell', price: 118000, boughtAt: days(-1600), vendor: 'Dell Direct', status: AssetStatus.RETIRED, condition: AssetCondition.DAMAGED, notes: 'Battery swelled. Kept on the books at salvage until the CA writes it off.' });
+  const monitor = await asset({ tag: 'EL/MON/001', name: 'LG 27" 4K UltraFine', category: AssetCategory.MONITOR, make: 'LG', price: 58000, boughtAt: days(-290), vendor: 'Imagine Store' });
+  const ssd = await asset({ tag: 'EL/STO/001', name: 'Samsung T7 Shield 2TB', category: AssetCategory.STORAGE, make: 'Samsung', price: 19000, boughtAt: days(-120), vendor: 'Amazon Business', bookable: true, status: AssetStatus.BOOKED_OUT, holderId: ramya.id });
+
+  /*
+   * The chain of custody. Closed movements are history; the open ones (no
+   * `returnedAt`) are what the "Out now" board reads, and each has to match the
+   * asset's own status and holder set above.
+   */
+  const movement = (data: {
+    assetId: string; kind: AssetMovementKind; userId: string; issuedById: string;
+    outAt: Date; dueAt?: Date; returnedAt?: Date; receivedById?: string;
+    projectId?: string; monthCardId?: string; purpose?: string;
+    conditionOut?: AssetCondition; conditionIn?: AssetCondition; notes?: string;
+  }) => prisma.assetMovement.create({
+    data: {
+      assetId: data.assetId, kind: data.kind, userId: data.userId, issuedById: data.issuedById,
+      outAt: data.outAt, dueAt: data.dueAt ?? null, returnedAt: data.returnedAt ?? null,
+      receivedById: data.receivedById ?? null, projectId: data.projectId ?? null,
+      monthCardId: data.monthCardId ?? null, purpose: data.purpose,
+      conditionOut: data.conditionOut ?? AssetCondition.GOOD,
+      conditionIn: data.conditionIn ?? null, notes: data.notes,
+    },
+  });
+
+  // Long-term custody — laptops, open-ended, no due date by definition.
+  await movement({ assetId: mbpCharles.id, kind: AssetMovementKind.CUSTODY, userId: charles.id, issuedById: harish.id, outAt: days(-305) });
+  await movement({ assetId: mbpSneha.id, kind: AssetMovementKind.CUSTODY, userId: sneha.id, issuedById: harish.id, outAt: days(-235) });
+  await movement({ assetId: mbpNaif.id, kind: AssetMovementKind.CUSTODY, userId: naif.id, issuedById: harish.id, outAt: days(-145) });
+
+  // Out on a shoot right now, against the job it went out for.
+  await movement({ assetId: a7iv.id, kind: AssetMovementKind.BOOKING, userId: charles.id, issuedById: janani.id, outAt: days(-2), dueAt: days(1), projectId: elephantineDoc.id, purpose: '75 Years Documentary — interview day 2' });
+  await movement({ assetId: lens2470.id, kind: AssetMovementKind.BOOKING, userId: charles.id, issuedById: janani.id, outAt: days(-2), dueAt: days(1), projectId: elephantineDoc.id, purpose: '75 Years Documentary — interview day 2' });
+  // Overdue: due back yesterday and still out, which is the case the overdue
+  // scan exists to find.
+  await movement({ assetId: ssd.id, kind: AssetMovementKind.BOOKING, userId: ramya.id, issuedById: charles.id, outAt: days(-9), dueAt: days(-1), monthCardId: vosoSep.id, purpose: 'Matchday rushes offload' });
+
+  // Returned history, so the log is not only what is out today.
+  await movement({ assetId: fx30.id, kind: AssetMovementKind.BOOKING, userId: charles.id, issuedById: harish.id, outAt: days(-22), dueAt: days(-19), returnedAt: days(-19), receivedById: janani.id, projectId: vosoDroneFilms.id, purpose: 'Drone show principal photography', conditionIn: AssetCondition.GOOD });
+  await movement({ assetId: droneMavic.id, kind: AssetMovementKind.BOOKING, userId: charles.id, issuedById: harish.id, outAt: days(-22), dueAt: days(-19), returnedAt: days(-18), receivedById: harish.id, projectId: vosoDroneFilms.id, purpose: 'Drone show aerials', conditionIn: AssetCondition.DAMAGED, notes: 'Came back with the gimbal arm bent — sent for repair the same day.' });
+  await movement({ assetId: aputure.id, kind: AssetMovementKind.BOOKING, userId: sneha.id, issuedById: janani.id, outAt: days(-40), dueAt: days(-38), returnedAt: days(-38), receivedById: janani.id, projectId: daOneApartment.id, purpose: 'Model apartment shoot', conditionIn: AssetCondition.GOOD });
+
+  // The maintenance log, including the one that is still away.
+  await prisma.assetMaintenance.create({
+    data: {
+      assetId: droneMavic.id, kind: AssetMaintenanceKind.REPAIR, vendor: 'DJI Service Centre, Chennai',
+      amount: 34000, sentAt: days(-17), returnedAt: null, createdById: harish.id,
+      notes: 'Gimbal motor and arm replacement after the VOSO shoot. Quoted 3 weeks.',
+    },
+  });
+  await prisma.assetMaintenance.create({
+    data: {
+      assetId: lens35.id, kind: AssetMaintenanceKind.SERVICE, vendor: 'Sigma Service, Bangalore',
+      amount: 4500, sentAt: days(-210), returnedAt: days(-190), createdById: janani.id,
+      notes: 'Focus ring cleaned and re-greased.',
+    },
+  });
+  await prisma.assetMaintenance.create({
+    data: {
+      assetId: mbpCharles.id, kind: AssetMaintenanceKind.AMC, vendor: 'Imagine Store',
+      amount: 12000, sentAt: days(-310), returnedAt: days(-310), createdById: harish.id,
+      notes: 'AppleCare+ for three years, bought with the machine.',
+    },
+  });
 
   // ──────────────────────────────────────────────────────────────────────────
   // 14. ALERTS
@@ -780,7 +1213,7 @@ async function main() {
       { organizationId: org.id, rule: 'RULE_PROJECT_OVER_ESTIMATE', severity: AlertSeverity.HIGH, entityType: 'Project', entityId: vosoDroneFilms.id, message: 'Drone Show Films is ₹25,000 over its ₹1,90,000 estimate.' },
       { organizationId: org.id, rule: 'RULE_PROJECT_BEHIND_SCHEDULE', severity: AlertSeverity.HIGH, entityType: 'Project', entityId: tnpaSeason2.id, message: 'Season 2 Website is 5 days past its end date and still live.' },
       { organizationId: org.id, rule: 'RULE_RETAINER_EXPIRING', severity: AlertSeverity.MED, entityType: 'Retainer', entityId: carltonRetainer.id, message: 'Carlton Wellness retainer renews in 18 days.' },
-      { organizationId: org.id, rule: 'RULE_INVOICE_OVERDUE', severity: AlertSeverity.HIGH, entityType: 'Invoice', entityId: rightAugInvoice.id, message: 'INV/26-27/0139 (Right Hospitals) is 10 days overdue.' },
+      { organizationId: org.id, rule: 'RULE_INVOICE_OVERDUE', severity: AlertSeverity.HIGH, entityType: 'Invoice', entityId: rightAugInvoice.id, message: `INV/${FY}/0139 (Right Hospitals) is 10 days overdue.` },
       { organizationId: org.id, rule: 'RULE_TASK_AGING', severity: AlertSeverity.LOW, entityType: 'Company', entityId: carlton.id, message: 'Two Carlton tasks are open longer than their usual turnaround.' },
       // Resolved history, so the notification bell and audit trail have some closed alerts too.
       { organizationId: org.id, rule: 'RULE_PROPOSAL_FOLLOWUP', severity: AlertSeverity.LOW, entityType: 'Proposal', entityId: carltonProposal.id, message: 'Carlton proposal had gone quiet before it was won.', resolvedAt: days(-33), acknowledgedById: tanuja.id },
@@ -801,26 +1234,42 @@ async function main() {
       { organizationId: org.id, entityType: 'Project', entityId: carltonWebsite.id, actorId: naif.id, verb: 'project_created', payload: { name: 'Website Build' } },
       { organizationId: org.id, entityType: 'Project', entityId: vosoDroneFilms.id, actorId: charles.id, verb: 'milestone_added', payload: { label: 'Final Cut Delivery' } },
       { organizationId: org.id, entityType: 'Project', entityId: tnpaSeason2.id, actorId: naif.id, verb: 'project_created', payload: { name: 'Season 2 Website' } },
-      { organizationId: org.id, entityType: 'Cost', entityId: 'seed', actorId: akmal.id, verb: 'cost_entered', payload: { category: 'Salaries', amount: 662000 } },
-      { organizationId: org.id, entityType: 'Invoice', entityId: carltonAugInvoice.id, actorId: akmal.id, verb: 'payment_recorded', payload: { amount: 220000, mode: 'NEFT' } },
-      { organizationId: org.id, entityType: 'Invoice', entityId: vosoAugInvoice.id, actorId: akmal.id, verb: 'payment_recorded', payload: { amount: 140000, mode: 'UPI' } },
+      { organizationId: org.id, entityType: 'Cost', entityId: 'seed', actorId: priya.id, verb: 'cost_entered', payload: { category: 'Salaries', amount: 662000 } },
+      { organizationId: org.id, entityType: 'Invoice', entityId: carltonAugInvoice.id, actorId: priya.id, verb: 'payment_recorded', payload: { amount: 220000, mode: 'NEFT' } },
+      { organizationId: org.id, entityType: 'Invoice', entityId: vosoAugInvoice.id, actorId: priya.id, verb: 'payment_recorded', payload: { amount: 140000, mode: 'UPI' } },
       { organizationId: org.id, entityType: 'Company', entityId: indusAlliance.id, actorId: tanuja.id, verb: 'proposal_lost', payload: { reason: 'Budget pulled after Q1 review' } },
       { organizationId: org.id, entityType: 'Company', entityId: sastry.id, actorId: tanuja.id, verb: 'proposal_lost', payload: { reason: 'Took production in-house' } },
       { organizationId: org.id, entityType: 'OutreachEntry', entityId: 'seed', actorId: varsha.id, verb: 'outreach_imported', payload: { count: 6 } },
       { organizationId: org.id, entityType: 'Project', entityId: rightHospitalsMicrosite.id, actorId: harish.id, verb: 'project_cancelled', payload: { reason: 'Client paused web spend for the quarter' } },
-      { organizationId: org.id, entityType: 'TaskTemplate', entityId: retiredTemplate.id, actorId: harish.id, verb: 'template_deleted', payload: { name: retiredTemplate.name } },
     ],
   });
 
   // Counted, not asserted — the line used to claim 13 users and printed it
   // unchanged after two were removed from the roster above.
-  const [userCount, taskCount, assigneeCount] = await Promise.all([
-    prisma.user.count(),
-    prisma.task.count(),
-    prisma.taskAssignee.count(),
+  const [
+    userCount, companyCount, proposalCount, retainerCount, retainerProjectCount,
+    projectCount, taskCount, assigneeCount, taggedCount, costCount, assetCount, lineItemCount,
+  ] = await Promise.all([
+    prisma.user.count(), prisma.company.count(), prisma.proposal.count(),
+    prisma.retainer.count(), prisma.retainerProject.count(), prisma.project.count(),
+    prisma.task.count(), prisma.taskAssignee.count(),
+    prisma.task.count({ where: { retainerProjectId: { not: null } } }),
+    prisma.cost.count(), prisma.asset.count(), prisma.documentLineItem.count(),
   ]);
-  console.log(`Done — organization, ${userCount} users, 16 companies, 9 proposals, 6 retainers, 8 projects, ${taskCount} tasks (${assigneeCount} assignments), costs, invoices, alerts and activity all seeded.`);
-  console.log(`Log in as harish.s@eyelevelstudio.in / Harish143@`);
+  console.log(
+    `Done — ${userCount} users, ${companyCount} companies, ${proposalCount} proposals, ` +
+      `${retainerCount} retainers (${retainerProjectCount} projects inside them), ` +
+      `${projectCount} one-off projects, ${taskCount} tasks (${assigneeCount} assignments, ` +
+      `${taggedCount} under a retainer project), ${costCount} costs, ${assetCount} assets, ` +
+      `${lineItemCount} document line items, plus invoices, alerts and activity.`,
+  );
+  console.log(`Calendar anchored on ${TODAY.toDateString()} — months ${LAST_MONTH} (closed) and ${THIS_MONTH} (open).`);
+  console.log(`Log in as harish.s@eyelevelstudio.in`);
+  if (!configuredAdmin) {
+    // Printed once, here, because nothing else knows it. Set
+    // SEED_ADMIN_PASSWORD (and optionally SEED_DEMO_PASSWORD) to choose it.
+    console.log(`Generated password for every seeded account: ${adminPassword}`);
+  }
 }
 
 main()

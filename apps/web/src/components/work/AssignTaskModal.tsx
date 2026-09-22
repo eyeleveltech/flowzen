@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from 'react';
 import { api, ApiError, type Company } from '@/lib/api-v2';
+import { useTeamMembers } from '@/hooks/queries';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
@@ -28,7 +29,7 @@ export function AssignTaskModal({
   const me = useAuthStore((s) => s.user);
   const [title, setTitle] = useState('');
   const [assignedById, setAssignedById] = useState('');
-  const [team, setTeam] = useState<{ id: string; name: string; designation: string | null; dept: string }[]>([]);
+  const team = useTeamMembers();
   const [dueDate, setDueDate] = useState('');
   const [priority, setPriority] = useState('MEDIUM');
   const [description, setDescription] = useState('');
@@ -43,7 +44,6 @@ export function AssignTaskModal({
 
   useEffect(() => {
     setAssignedById(me?.id ?? '');
-    api.team.members().then((r) => setTeam(r.members ?? [])).catch(() => setTeam([]));
   }, [me?.id]);
 
   useEffect(() => {

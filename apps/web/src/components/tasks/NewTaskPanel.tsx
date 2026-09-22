@@ -15,7 +15,9 @@ import { useEffect, useState } from 'react';
 import { Drawer } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
+import { AssigneeField, AssignedByField } from '@/components/work/AssigneeField';
 import { api, ApiError } from '@/lib/api-v2';
+import { useTeamMembers } from '@/hooks/queries';
 import { PRIORITY_CONFIG } from '@/lib/priority';
 import { personOptions } from '@/lib/people';
 import { useAuthStore } from '@/stores';
@@ -33,25 +35,24 @@ const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => (
 export function NewTaskPanel({ isOpen, onClose, onSuccess, projectId, projectName }: NewTaskPanelProps) {
   const [title, setTitle] = useState('');
   const me = useAuthStore((s) => s.user);
-  const [assigneeId, setAssigneeId] = useState('');
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [assignedById, setAssignedById] = useState('');
   const [priority, setPriority] = useState('MEDIUM');
   const [description, setDescription] = useState('');
   const [dueDate, setDueDate] = useState('');
-  const [team, setTeam] = useState<{ id: string; name: string; dept: string }[]>([]);
+  const team = useTeamMembers();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
     setTitle('');
-    setAssigneeId('');
+    setAssigneeIds([]);
     setAssignedById(me?.id ?? '');
     setPriority('MEDIUM');
     setDescription('');
     setDueDate('');
     setError(null);
-    void api.team.members().then((res) => setTeam(res.members)).catch(() => {});
   }, [isOpen, me?.id]);
 
   const canSave = Boolean(title.trim()) && Boolean(dueDate);
@@ -66,7 +67,7 @@ export function NewTaskPanel({ isOpen, onClose, onSuccess, projectId, projectNam
         title: title.trim(),
         workType: 'PROJECT',
         projectId,
-        assigneeId: assigneeId || undefined,
+        assigneeIds: assigneeIds.length > 0 ? assigneeIds : undefined,
         assignedById: assignedById || undefined,
         dueDate,
         priority,
@@ -94,27 +95,19 @@ export function NewTaskPanel({ isOpen, onClose, onSuccess, projectId, projectNam
 
           <Field label="What needs doing?" value={title} onChange={setTitle} required />
 
-          <div className="grid grid-cols-2 gap-4">
-            <FieldSelect
-              label="Assign to"
-              value={assigneeId}
-              onChange={setAssigneeId}
-              placeholder="Defaults to you"
-              options={personOptions(team)}
-            />
-            <FieldSelect label="Priority" value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} />
-          </div>
+          {/* One box, however many people — and for somebody who may only
+              manage their own work, their own name and no picker at all.
+              Shared with the other task forms so the rule cannot go missing
+              from one of them. */}
+          <AssigneeField value={assigneeIds} onChange={setAssigneeIds} />
+          <FieldSelect label="Priority" value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} />
 
           <div className="grid grid-cols-2 gap-4">
             <Field label="Due date" type="date" value={dueDate} onChange={setDueDate} required />
-            {/* Who wanted it done — not always the person typing it up. */}
-            <FieldSelect
-              label="Assigned by"
-              value={assignedById}
-              onChange={setAssignedById}
-              placeholder="Nobody in particular"
-              options={personOptions(team)}
-            />
+            {/* Who wanted it done — not always the person typing it up, and
+                not something an employee may claim about somebody else. The
+                shared field decides whether to render at all. */}
+            <AssignedByField value={assignedById} onChange={setAssignedById} />
           </div>
 
           <Field label="Description" value={description} onChange={setDescription} textarea rows={4} />

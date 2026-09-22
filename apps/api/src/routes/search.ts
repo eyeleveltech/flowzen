@@ -73,7 +73,7 @@ searchRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
       // `enquiryName` already falls back to the company for a null title.
       canPipeline
         ? prisma.proposal.findMany({
-            where: { organizationId: orgId, company: { name: like } },
+            where: { organizationId: orgId, deletedAt: null, company: { name: like } },
             // `kind` and `createdAt` are what tell two of a client's
             // proposals apart. A proposal has no title, so without them a
             // company with two rendered the same line twice — searching
@@ -156,15 +156,23 @@ searchRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
       // There is no screen that opens a single task, so a task links to the
       // thing it hangs off — the project or the retainer month it belongs to,
       // and /my-work for one that belongs to neither.
+      // Both /projects/:id and /retainers/:id sit behind `work.all`, so for
+      // anybody without it those links bounced straight back to /my-work — the
+      // result was reachable, the destination was not. Notifications already
+      // resolves this the same way (`linkFor`): only offer a link somebody can
+      // actually follow, and send everyone else to the screen that holds their
+      // own copy of the task.
       tasks: tasks.map((t) => ({
         id: t.id,
         title: t.title,
         context: t.project?.name ?? t.monthCard?.retainer.company.name ?? null,
-        href: t.projectId
-          ? `/projects/${t.projectId}`
-          : t.monthCard
-            ? `/retainers/${t.monthCard.retainerId}`
-            : '/my-work',
+        href: !canProjects
+          ? '/my-work'
+          : t.projectId
+            ? `/projects/${t.projectId}`
+            : t.monthCard
+              ? `/retainers/${t.monthCard.retainerId}`
+              : '/my-work',
       })),
       quotes,
       invoices,

@@ -183,6 +183,31 @@ describe('what is left in them', () => {
     expect(res.body.data[0].payload.deal).not.toHaveProperty('value');
     expect(res.body.data[0].payload.deal.stage).toBe('WON');
   });
+
+  it('reaches figures inside a LIST in the payload', async () => {
+    // The gap this closes. Recursion skipped arrays, so `amount` sitting
+    // directly on the payload was removed while the same key one level inside
+    // a list — milestones on a project, lines on an invoice — went out intact.
+    (prisma.activity.findMany as any).mockResolvedValue([
+      {
+        ...rowsWithMoney[0],
+        payload: {
+          note: 'x',
+          milestones: [
+            { label: 'Kickoff', amount: 50000 },
+            { label: 'Delivery', amount: 75000 },
+          ],
+        },
+      },
+    ]);
+    const res = await request(app).get('/api/activities?entityType=Cost').set(...auth('head'));
+    const [first, second] = res.body.data[0].payload.milestones;
+    expect(first).not.toHaveProperty('amount');
+    expect(second).not.toHaveProperty('amount');
+    // The rest of the row survives — this strips figures, it does not blank the entry.
+    expect(first.label).toBe('Kickoff');
+    expect(second.label).toBe('Delivery');
+  });
 });
 
 describe('writing to the audit trail', () => {

@@ -11,6 +11,12 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
+    // On, because the two worst bugs found in the last audit were both a
+    // declared-and-never-read local: an `orgId` that was fetched and then left
+    // out of the query (making one route answer for ANY organisation), and a
+    // `phone`/`force` pair destructured off the request and silently dropped.
+    // The compiler finds that class for free.
+    "noUnusedLocals": true,
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true

@@ -1,33 +1,50 @@
 'use client';
 
 /**
- * One retainer, one month at a time — the Month Card cockpit the brief
- * calls for (§10: "One month of a retainer. Tasks, costs, allocations,
- * invoice, profit.") and the last of the three detail views that had no
- * screen at all: `GET /retainers/:id/month-cards/:month` has existed since
- * the CRM rebuild and nothing ever called it.
+ * One retainer: its projects first, and a month at a time behind them.
+ *
+ * §10 asks for "one month of a retainer — tasks, costs, allocations, invoice,
+ * profit", and that is what this was: a flat list of everything the client was
+ * owed that month, thirty rows with no shape. Which is the problem retainer
+ * projects were added to solve and then did not, because the list was still
+ * the first thing you saw and the grouping was a heading inside it.
+ *
+ * So the order is inverted. A retainer is a handful of named pieces of work —
+ * a Diwali campaign, an always-on stream, a brand film — and a task is
+ * something you reach by opening the one it belongs to. There is no ungrouped
+ * retainer work: a task on a month card names a project, the database enforces
+ * it, and every retainer is created with a default one that catches the
+ * monthly baseline.
+ *
+ * Opening a project shows its tasks across EVERY month it touches, grouped by
+ * the month that bills each one. Scoping that to the month in the header would
+ * put a campaign crossing October into November back into the two unrelated
+ * piles the feature exists to join. Costs, allocations and the invoice are the
+ * other way round — they belong to one month, and the month pill scopes them.
  *
  * The retainer itself (company, term, renewal, owner) is fetched separately
- * from the month card, because a month with no card yet — before the
- * retainer started, or one the roll-month job hasn't reached — still needs
- * that header to render while the body says so.
+ * from the month card, because a month with no card yet — before the retainer
+ * started, or one the roll-month job hasn't reached — still needs that header
+ * to render while the body says so.
  *
- * No Team tab, same reasoning as the Project page: v2 has one ownerId, not
- * a roster. Allocations are shown read-only here — confirming them is a
- * monthly, org-wide action (§13's allocation job, one screen across every
- * job) not a per-retainer one, so it isn't duplicated on this screen.
+ * No Team tab, same reasoning as the Project page: v2 has one ownerId, not a
+ * roster. Allocations are shown read-only here — confirming them is a monthly,
+ * org-wide action (§13's allocation job, one screen across every job) not a
+ * per-retainer one, so it isn't duplicated on this screen.
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, ChevronLeft, ChevronRight, CircleSlash, Plus, ReceiptText } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, CircleSlash, LockOpen, Pencil, Plus, ReceiptText, Trash2 } from 'lucide-react';
 import { api, ApiError, formatMoney, formatDate, type OrgConfig } from '@/lib/api-v2';
+import { useTeamMembers } from '@/hooks/queries';
 import toast from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
 import { Badge, type Tone } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
-import { Card, CardBody } from '@/components/ui/card';
+import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
+import { plural } from '@/lib/utils';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { EmptyState, ErrorNote } from '@/components/ui/empty-state';
@@ -36,7 +53,11 @@ import { StatTile } from '@/components/ui/stat-tile';
 import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
 import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
 import { NewWorkTaskModal } from '@/components/work/NewWorkTaskModal';
+import { RetainerProjectModal } from '@/components/work/RetainerProjectModal';
+import { EditRetainerModal } from '@/components/work/EditRetainerModal';
+import type { RetainerProject } from '@/lib/api-v2';
 import { NewWorkCostModal } from '@/components/work/NewWorkCostModal';
+import { EditCostModal } from '@/components/work/EditCostModal';
 import { RecordPaymentModal } from '@/components/work/RecordPaymentModal';
 import { getPriorityDot, getPriorityLabel } from '@/lib/priority';
 
@@ -66,11 +87,30 @@ type Retainer = {
   owner: { id: string; name: string; email: string; dept: string } | null;
   template: { id: string; name: string } | null;
   monthCards: { id: string; month: string; status: string }[];
+  /** The named pieces of work inside it. No money on any of them. */
+  projects: RetainerProject[];
 };
+
+/**
+ * When a project runs, in the fewest words that are still true.
+ *
+ * A missing end date is not missing information — it is what an always-on
+ * stream looks like, so it reads "from 1 Sep" rather than "1 Sep – —".
+ */
+function describeRun(p: RetainerProject): string {
+  const day = (iso: string) =>
+    new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  if (p.startDate && p.endDate) return `${day(p.startDate)} – ${day(p.endDate)}`;
+  if (p.startDate) return `from ${day(p.startDate)}`;
+  if (p.endDate) return `until ${day(p.endDate)}`;
+  return 'ongoing';
+}
 
 type Task = {
   id: string;
   title: string;
+  /** Which piece of retainer work it is part of, if any. */
+  retainerProject?: { id: string; name: string; status: string } | null;
   status: TStatus;
   priority: string;
   dueDate: string;
@@ -105,12 +145,30 @@ type MonthCard = {
   id: string;
   month: string;
   status: string;
+  /** When the row was made — what says whether the roll or a person opened it. */
+  createdAt?: string;
   revenue: string | number | null;
   directCostsTotal: string | number | null;
+  /** Whether anybody has recorded what the month cost — see retainers.ts. */
+  costBasis?: 'recorded' | 'none';
   tasks: Task[];
   costs: Cost[];
   allocations: Allocation[];
   invoice: Invoice | null;
+};
+
+/**
+ * One project, opened: its tasks across every month it touches.
+ *
+ * Grouped by the month that bills them, newest first, because the month is not
+ * decoration — it is which card the task's cost lands on, and a closed month is
+ * one the screen must not offer to edit. `project` is null for the work that
+ * belongs to no project.
+ */
+type ProjectView = {
+  project: RetainerProject | null;
+  months: { month: string; status: string; tasks: Task[] }[];
+  total: number;
 };
 
 const STATUS: Record<RStatus, { label: string; tone: Tone }> = {
@@ -134,6 +192,9 @@ const currentMonth = () => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 };
 
+/** "2026-09-20T…" → "2026-09". */
+const monthKeyOf = (iso: string | null | undefined) => (iso ? iso.slice(0, 7) : '');
+
 export default function RetainerMonthCardPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -143,7 +204,7 @@ export default function RetainerMonthCardPage() {
   const [retainer, setRetainer] = useState<Retainer | null>(null);
   const [monthCard, setMonthCard] = useState<MonthCard | null>(null);
   const [config, setConfig] = useState<OrgConfig | null>(null);
-  const [team, setTeam] = useState<{ id: string; name: string; dept: string }[]>([]);
+  const team = useTeamMembers();
   const [loadingRetainer, setLoadingRetainer] = useState(true);
   const [loadingMonth, setLoadingMonth] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -156,8 +217,22 @@ export default function RetainerMonthCardPage() {
    * costs on this month card" is a link somebody can send. The month was
    * already addressable; the tab was not.
    */
-  const tabs: TabDef<'tasks' | 'costs' | 'allocations' | 'invoice'>[] = [
-    { key: 'tasks', label: 'Tasks', count: monthCard?.tasks.length ?? 0 },
+  const tabs: TabDef<'projects' | 'costs' | 'allocations' | 'invoice'>[] = [
+    /*
+     * Projects first, and they are how you reach the work.
+     *
+     * The month's tasks used to be a flat list of everything the retainer owed
+     * that month — thirty rows with no shape, which is the problem retainer
+     * projects were added to solve and then did not, because the list was
+     * still the first thing and the grouping was a heading inside it. Now the
+     * projects are the screen and a task is something you find by opening the
+     * piece of work it belongs to.
+     *
+     * No count on the tab: the panel always carries one more card than there
+     * are projects — the work that belongs to none — and a number that has to
+     * be explained is worse than no number.
+     */
+    { key: 'projects', label: 'Projects' },
     {
       key: 'costs',
       label: 'Costs',
@@ -171,13 +246,104 @@ export default function RetainerMonthCardPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [addingTask, setAddingTask] = useState(false);
   const [addingCost, setAddingCost] = useState(false);
+  /** The cost row being corrected, if any. */
+  const [editingCost, setEditingCost] = useState<Cost | null>(null);
   const [enteringInvoice, setEnteringInvoice] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [recordingPayment, setRecordingPayment] = useState(false);
   // The row you clicked. Held by id rather than by object so that a reload
   // after an edit reopens the FRESH task rather than the stale copy that was
   // in the list when it was clicked.
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  // `null` is closed; `{}` is adding; `{ project }` is editing that one.
+  const [projectForm, setProjectForm] = useState<{ project?: RetainerProject } | null>(null);
+
+  /*
+   * Which project is open, in the URL rather than in state.
+   *
+   * "The Diwali campaign on the Carlton retainer" is a thing somebody sends to
+   * somebody else, and the back button should close the project rather than
+   * leave the screen. `none` is the work that belongs to no project — every
+   * task in this database is currently one of those, so it is a real
+   * destination, not an edge case.
+   */
+  const openProjectId = searchParams.get('project');
+  const [projectView, setProjectView] = useState<ProjectView | null>(null);
+  const [loadingProject, setLoadingProject] = useState(false);
+
+  const setOpenProject = (projectId: string | null) => {
+    const q = new URLSearchParams(searchParams.toString());
+    if (projectId) q.set('project', projectId);
+    else q.delete('project');
+    router.push(`/retainers/${id}?${q}`);
+  };
+
+  const loadProjectView = useCallback(async () => {
+    if (!openProjectId) {
+      setProjectView(null);
+      return;
+    }
+    setLoadingProject(true);
+    try {
+      const res = await api.retainers.projectTasks(id, openProjectId);
+      setProjectView(res as unknown as ProjectView);
+    } catch (e) {
+      setProjectView(null);
+      setError(e instanceof Error ? e.message : 'Could not open that project');
+    } finally {
+      setLoadingProject(false);
+    }
+  }, [id, openProjectId]);
+
+  useEffect(() => {
+    void loadProjectView();
+  }, [loadProjectView]);
+
+  /**
+   * Removing a project keeps the work.
+   *
+   * Its tasks stay on their month cards, which is where each month's cost and
+   * profit are counted from — so the confirmation says that rather than the
+   * usual "this cannot be undone", which here would not be true of the part
+   * anybody actually worries about.
+   */
+  const removeProject = async (p: RetainerProject) => {
+    const count = p._count?.tasks ?? 0;
+    const warning = count
+      ? `Remove "${p.name}"? Its ${plural(count, 'task')} stay on their month cards — they just stop being grouped.`
+      : `Remove "${p.name}"?`;
+    if (!window.confirm(warning)) return;
+    try {
+      await api.retainers.deleteProject(id, p.id);
+      toast.success('Project removed');
+      // Its tasks are still here, they just stop being grouped — so go back to
+      // the list rather than leaving you on a project that no longer exists.
+      if (openProjectId === p.id) setOpenProject(null);
+      void loadRetainer();
+      void loadMonthCard();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not remove that project');
+    }
+  };
+
+  /**
+   * Taking a cost off the month.
+   *
+   * Soft-deleted on the server, so the figure it fed into stays explainable —
+   * the confirmation says what it changes rather than the usual "cannot be
+   * undone", which is not the part anybody worries about here.
+   */
+  const removeCost = async (c: Cost) => {
+    if (!window.confirm(`Remove the ${c.vendor} cost? This month's profit moves by ${money(c.amount)}.`)) return;
+    try {
+      await api.costs.remove(c.id);
+      toast.success('Cost removed');
+      await loadMonthCard();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not remove that cost');
+    }
+  };
 
   const loadRetainer = useCallback(async () => {
     setLoadingRetainer(true);
@@ -186,7 +352,6 @@ export default function RetainerMonthCardPage() {
       setRetainer(rRes.retainer as Retainer);
       setConfig(cfg);
       setError(null);
-      void api.team.members().then((r) => setTeam(r.members)).catch(() => {});
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load this retainer');
     } finally {
@@ -242,6 +407,7 @@ export default function RetainerMonthCardPage() {
   const perms = config?.me.permissions ?? [];
   const canEnterCost = perms.includes('cost.enter');
   const canEnterMoney = perms.includes('money.figures');
+  const canWriteCompany = perms.includes('company.write');
   const currency = config?.organization.currency ?? 'INR';
   const locale = config?.organization.locale ?? 'en-IN';
   const tz = config?.organization.timezone ?? 'Asia/Kolkata';
@@ -251,23 +417,157 @@ export default function RetainerMonthCardPage() {
   const revenue = monthCard?.revenue != null ? Number(monthCard.revenue) : null;
   const costsTotal = monthCard?.directCostsTotal != null ? Number(monthCard.directCostsTotal) : null;
   const profit = revenue != null && costsTotal != null ? revenue - costsTotal : null;
+  // The server's own answer to "has anybody said what this month cost?".
+  // A zero here is arithmetic on an empty set, not a finding.
+  const noCostBasis = monthCard?.costBasis === 'none';
+  const confirmedAllocations = (monthCard?.allocations ?? []).filter((a) => a.confirmedAt);
+  /** Days past due, today, for an invoice nobody has paid. Nought when it is fine. */
+  const invoiceOverdueDays = (() => {
+    const inv = monthCard?.invoice;
+    if (!inv || inv.status === 'PAID' || inv.status === 'CANCELLED') return 0;
+    const due = new Date(inv.dueAt);
+    if (Number.isNaN(due.getTime())) return 0;
+    const days = Math.floor((Date.now() - due.getTime()) / 86_400_000);
+    return days > 0 ? days : 0;
+  })();
+  /*
+   * Did the 1st-of-month roll make this card, or did creating the retainer?
+   *
+   * From the card's own timestamp, which is the only thing that actually
+   * knows. The roll runs at 00:05 on the 1st, so a card stamped in its own
+   * month on the 1st or 2nd came from the roll; one stamped later in the month
+   * it covers was opened by hand when the retainer was created.
+   *
+   * Anything else — a backfill, a card built by a seed — gets neither claim.
+   * The sentence exists to tell somebody the month appears on its own; asserting
+   * WHICH way this particular card arrived, wrongly, is worse than not saying.
+   */
+  const cardOrigin: 'rolled' | 'with-retainer' | 'unknown' = (() => {
+    if (!monthCard?.createdAt) return 'unknown';
+    const made = new Date(monthCard.createdAt);
+    if (Number.isNaN(made.getTime())) return 'unknown';
+    const madeMonth = `${made.getFullYear()}-${String(made.getMonth() + 1).padStart(2, '0')}`;
+    if (madeMonth !== monthCard.month) return 'unknown';
+    if (made.getDate() <= 2) return 'rolled';
+    return monthCard.month === monthKeyOf(retainer.startDate) ? 'with-retainer' : 'unknown';
+  })();
   const tasks = monthCard?.tasks ?? [];
+
+  /**
+   * The month's tasks, under the piece of work each is part of.
+   *
+   * Order follows the retainer's own project list so the headings read the
+   * same here as they do in the section above, and anything not in a project
+   * falls to the bottom under one honest heading rather than being hidden.
+   */
+  const taskGroups = (() => {
+    const order = (retainer?.projects ?? []).map((p) => p.id);
+    const byProject = new Map<string, { name: string; tasks: Task[] }>();
+    const loose: Task[] = [];
+    for (const t of tasks) {
+      if (!t.retainerProject) {
+        loose.push(t);
+        continue;
+      }
+      const found = byProject.get(t.retainerProject.id);
+      if (found) found.tasks.push(t);
+      else byProject.set(t.retainerProject.id, { name: t.retainerProject.name, tasks: [t] });
+    }
+    const groups = [...byProject.entries()]
+      .sort((a, b) => {
+        const ai = order.indexOf(a[0]);
+        const bi = order.indexOf(b[0]);
+        return (ai === -1 ? Number.MAX_SAFE_INTEGER : ai) - (bi === -1 ? Number.MAX_SAFE_INTEGER : bi);
+      })
+      .map(([id, g]) => ({ id, name: g.name, tasks: g.tasks }));
+    // A loose task cannot exist any more — the CHECK constraint refuses one —
+    // but a row that somehow arrives without a project is still work somebody
+    // has to do, so it is shown rather than dropped.
+    if (loose.length > 0) groups.push({ id: '', name: 'No project on this task', tasks: loose });
+    return groups;
+  })();
+
+  // One project and nothing loose is not a grouping, it is a heading over the
+  // whole table — so the rows are left plain until there is something to tell
+  // apart.
+  const showGroups = taskGroups.length > 1;
   const openTasks = tasks.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED');
   const doneTasks = tasks.filter((t) => t.status === 'DONE');
-  const donePercent = tasks.length ? Math.round((doneTasks.length / tasks.length) * 100) : 0;
+  /*
+   * Cancelled work is not outstanding work.
+   *
+   * `openTasks` has always excluded it and the denominator did not, so the
+   * card read "1 of 6 · 4 open" — one done plus four open is five, and the
+   * sixth was a task somebody had called off. Live work counts the same six
+   * tasks as five (retainers.ts filters CANCELLED there), so the two screens
+   * disagreed about the same month, and a cancelled task dragged the month's
+   * completion down for as long as the card existed.
+   */
+  const countedTasks = tasks.filter((t) => t.status !== 'CANCELLED');
+  const cancelledCount = tasks.length - countedTasks.length;
+  const donePercent = countedTasks.length
+    ? Math.round((doneTasks.length / countedTasks.length) * 100)
+    : 0;
   const todayStr = new Date().toISOString().slice(0, 10);
+
+  /*
+   * A closed month is a reported month.
+   *
+   * Closing is what fixes the profit figure — the fee is settled, the costs
+   * are in, and somebody has looked at the margin. The screen showed a closed
+   * month as fully editable: Task and Cost enabled, every status dropdown
+   * live. The API refuses these now; this is what stops the screen offering
+   * them in the first place, which is the difference between a guard rail and
+   * an error message.
+   */
+  const monthClosed = monthCard?.status === 'CLOSED';
+  const canReopenMonth = perms.includes('setup.admin');
+
+  const reopenMonth = async () => {
+    const why = window.prompt(
+      `Reopen ${monthLabel(month)}?\n\nIts profit has already been reported. Say what needs to change — it goes on the record.`,
+    );
+    if (why === null) return;
+    if (why.trim().length < 3) {
+      toast.error('Say why the month is being reopened');
+      return;
+    }
+    try {
+      await api.retainers.reopenMonth(id, month, why.trim());
+      toast.success(`${monthLabel(month)} is open again`);
+      await loadMonthCard();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not reopen that month');
+    }
+  };
 
   // Read back out of `tasks` rather than stored on click, so that saving an
   // edit shows the saved values instead of the copy that was in the list when
   // the row was pressed. The client and the month are context the row does not
   // carry and the drawer should not have to fetch.
-  const openRow = openTaskId ? tasks.find((t) => t.id === openTaskId) : undefined;
+  const openRow = openTaskId
+    ? (projectView?.months.flatMap((g) => g.tasks).find((t) => t.id === openTaskId) ??
+      tasks.find((t) => t.id === openTaskId))
+    : undefined;
+  /*
+   * The month it is billed in, and the piece of work it is part of.
+   *
+   * The drawer used to say only "September 2026 retainer" — so a task opened
+   * from inside the Diwali campaign named the retainer and never the campaign,
+   * which is the thing you were looking at. Both facts, in the order they
+   * matter: what this is FOR, and which month pays for it.
+   */
+  const openRowMonth = projectView?.months.find((g) => g.tasks.some((t) => t.id === openTaskId))?.month ?? month;
   const openTask: DrawerTask | null = openRow
     ? {
         ...openRow,
         clientName: retainer.company?.name ?? null,
         clientHref: retainer.company?.id ? `/companies/${retainer.company.id}` : null,
-        workLabel: `${monthLabel(month)} retainer`,
+        workLabel: `${monthLabel(openRowMonth)} retainer`,
+        projectName: openRow.retainerProject?.name ?? null,
+        projectHref: openRow.retainerProject
+          ? `/retainers/${id}?project=${openRow.retainerProject.id}`
+          : null,
       }
     : null;
 
@@ -285,12 +585,295 @@ export default function RetainerMonthCardPage() {
       } else {
         await api.tasks.updateStatus(t.id, next);
       }
-      await loadMonthCard();
+      // Both views read from different requests, and a status change moves a
+      // figure on each — the month's "tasks done" and the project's progress.
+      await Promise.all([loadMonthCard(), loadProjectView()]);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not update that task');
     } finally {
       setBusyId(null);
     }
+  };
+
+  /** One task, as a row. The same row wherever a task is listed on this page. */
+  const TaskRow = ({ t, closed }: { t: Task; closed: boolean }) => {
+    const late = t.status !== 'DONE' && t.status !== 'CANCELLED' && t.dueDate.slice(0, 10) < todayStr;
+    return (
+      <tr onClick={() => setOpenTaskId(t.id)} className="cursor-pointer transition-colors hover:bg-subtle">
+        <td>
+          {/* A button inside the row rather than a click handler alone: the row
+              is the target for a mouse, and this is what a keyboard and a
+              screen reader get to open the same thing. */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpenTaskId(t.id);
+            }}
+            className={`rounded-sm text-left font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+              t.status === 'DONE' || t.status === 'CANCELLED' ? 'text-secondary line-through' : 'text-primary'
+            }`}
+          >
+            {t.title}
+          </button>
+          {t.status === 'ON_HOLD' && t.waitingOn && (
+            <p className="mt-0.5 text-micro text-secondary">
+              waiting on {t.waitingOn === 'CLIENT' ? 'the client' : 'someone else'}
+            </p>
+          )}
+        </td>
+        <td>
+          {/* The lead, and how many others are on it — "Janani +2" rather than
+              three names wrapping a column that has to stay scannable. */}
+          <p className="text-body">
+            {t.assignee?.name ?? 'Unassigned'}
+            {(t.assignees?.length ?? 1) > 1 && (
+              <span className="text-secondary"> +{(t.assignees?.length ?? 1) - 1}</span>
+            )}
+          </p>
+          {t.assignee?.designation && <p className="text-micro text-secondary">{t.assignee.designation}</p>}
+        </td>
+        <td className="whitespace-nowrap text-secondary">{date(t.assignedAt)}</td>
+        <td className={`whitespace-nowrap ${late ? 'font-semibold text-danger' : 'text-secondary'}`}>
+          {date(t.dueDate)}
+        </td>
+        <td>
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-secondary">
+            <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${getPriorityDot(t.priority)}`} />
+            {getPriorityLabel(t.priority)}
+          </span>
+        </td>
+        <td onClick={(e) => e.stopPropagation()}>
+          <Select
+            value={t.status}
+            onChange={(v) => void changeTaskStatus(t, v as TStatus)}
+            options={TASK_STATUS_OPTIONS}
+            ariaLabel={`Status for ${t.title}`}
+            buttonClassName="px-2.5 py-1.5 text-xs w-32"
+            // A closed month has had its profit reported; reopening a finished
+            // task in it moves that month's "tasks done" after the fact.
+            disabled={busyId === t.id || closed}
+          />
+        </td>
+      </tr>
+    );
+  };
+
+  /**
+   * The way into a retainer's work.
+   *
+   * A retainer is not thirty tasks, it is a handful of named pieces of work
+   * with tasks under them — a Diwali campaign, an always-on stream, a brand
+   * film. The month card bills; these say what the work IS. So this is the
+   * first panel, and a task is something you reach by opening the project it
+   * belongs to.
+   *
+   * Every retainer has at least one — "Monthly Retainer Work", created with
+   * the retainer — because a task on a month card must name a project and the
+   * roll needs somewhere to put the monthly baseline on the 1st. So this list
+   * is never empty, and there is no leftover card beside it.
+   */
+  const ProjectsPanel = () => {
+    if (openProjectId) return <ProjectDrillIn />;
+
+    const projects = retainer.projects ?? [];
+
+    return (
+      <>
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-primary">Projects</h2>
+            <p className="mt-0.5 text-micro text-secondary">
+              Covered by the monthly fee — nothing here is billed separately. Open one to see its work.
+            </p>
+          </div>
+          <Button size="sm" icon={Plus} onClick={() => setProjectForm({})}>
+            Project
+          </Button>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {projects.map((p) => (
+            <ProjectCard key={p.id} project={p} />
+          ))}
+        </div>
+
+        {projects.length === 0 && (
+          <p className="mt-4 text-sm text-secondary">
+            No projects on this retainer yet — which should not happen, since one is created with every
+            retainer. Add one and its monthly work will have somewhere to go.
+          </p>
+        )}
+      </>
+    );
+  };
+
+  /** One project as a card: what it is, and how its work is going. */
+  const ProjectCard = ({ project }: { project: RetainerProject }) => {
+    const c = project.taskCounts;
+    const months = project.months;
+    const total = c?.total ?? 0;
+    const done = c?.done ?? 0;
+    const pct = c?.donePercent ?? null;
+
+    return (
+      <button
+        type="button"
+        onClick={() => setOpenProject(project.id)}
+        className="flex flex-col rounded-xl border border-border bg-white p-4 text-left outline-none transition-colors hover:border-primary/40 hover:bg-subtle/40 focus-visible:ring-2 focus-visible:ring-primary/40"
+      >
+        <div className="flex items-start justify-between gap-2">
+          <span
+            className={`text-sm font-semibold ${
+              project.status === 'DONE' ? 'text-secondary line-through' : 'text-primary'
+            }`}
+          >
+            {project.name}
+          </span>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {/* The one the monthly work lands in, so it reads as the floor of
+                the retainer rather than as another campaign. */}
+            {project.isDefault && <Badge tone="info">Monthly</Badge>}
+            {project.status === 'DONE' && <Badge tone="neutral">Done</Badge>}
+          </div>
+        </div>
+
+        <p className="mt-0.5 text-micro text-secondary">
+          {describeRun(project)}
+          {project.owner && ` · ${project.owner.name}`}
+        </p>
+
+        {/* Progress, and the two facts that change what you do next: how much
+            is left, and how much of it is already late. */}
+        <div className="mt-3">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-subtle">
+            <div
+              className={`h-full rounded-full ${pct === 100 ? 'bg-success' : 'bg-primary'}`}
+              style={{ width: `${pct ?? 0}%` }}
+            />
+          </div>
+          <p className="mt-1.5 text-micro text-secondary">
+            {total === 0 ? (
+              'no tasks yet'
+            ) : (
+              <>
+                {done} of {plural(total, 'task')} done
+                {c?.late ? <span className="font-medium text-danger"> · {c.late} late</span> : null}
+              </>
+            )}
+          </p>
+        </div>
+
+        {/* Which months it actually lands in — the thing a project exists to
+            make visible, since a campaign crossing a month used to look like
+            two unrelated piles. */}
+        {months && months.length > 0 && (
+          <p className="mt-2 text-micro text-secondary">
+            {months.length === 1
+              ? monthLabel(months[0])
+              : `${monthLabel(months[0])} – ${monthLabel(months[months.length - 1])}`}
+          </p>
+        )}
+      </button>
+    );
+  };
+
+  /** One project, opened: its tasks, under the month that bills each of them. */
+  const ProjectDrillIn = () => {
+    const p = projectView?.project ?? null;
+
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setOpenProject(null)}
+          className="mb-4 inline-flex items-center gap-1.5 text-sm text-secondary transition-colors hover:text-primary"
+        >
+          <ArrowLeft className="h-4 w-4" strokeWidth={1.75} /> All projects
+        </button>
+
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-semibold text-primary">{p?.name ?? '…'}</h2>
+              {p?.isDefault && <Badge tone="info">Monthly</Badge>}
+              {p?.status === 'DONE' && <Badge tone="neutral">Done</Badge>}
+            </div>
+            <p className="mt-0.5 text-xs text-secondary">
+              {p ? `${describeRun(p)}${p.owner ? ` · ${p.owner.name}` : ''}` : ''}
+            </p>
+            {p?.description && <p className="mt-2 max-w-2xl text-sm text-secondary">{p.description}</p>}
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <Button size="sm" variant="secondary" icon={Plus} onClick={() => setAddingTask(true)} disabled={!monthCard || monthClosed}>
+              Task
+            </Button>
+            {p && (
+              <>
+                <Button size="sm" variant="ghost" onClick={() => setProjectForm({ project: p })}>
+                  Edit
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-danger hover:bg-danger-tint hover:text-danger"
+                  onClick={() => void removeProject(p)}
+                >
+                  Remove
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {loadingProject ? (
+          <PageSkeleton />
+        ) : !projectView || projectView.total === 0 ? (
+          <EmptyState
+            title="Nothing here yet"
+            hint="Add a task from this page, or move one here from the month it sits in."
+          />
+        ) : (
+          <div className="space-y-5">
+            {projectView.months.map((g) => (
+              <Card key={g.month} padding="none">
+                <CardHeader className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <CardTitle>{monthLabel(g.month)}</CardTitle>
+                    {/* Which card these are billed on, and whether it is shut. */}
+                    {g.status === 'CLOSED' && <Badge tone="neutral">Closed</Badge>}
+                    {g.month === month && <Badge tone="info">On screen</Badge>}
+                  </div>
+                  <span className="text-micro text-secondary">{plural(g.tasks.length, 'task')}</span>
+                </CardHeader>
+                <CardBody className="p-0!">
+                  <div className="overflow-x-auto">
+                    <table className="data-table w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border">
+                          <th className="eyebrow text-left">Task</th>
+                          <th className="eyebrow text-left">Assigned to</th>
+                          <th className="eyebrow text-left">Assigned</th>
+                          <th className="eyebrow text-left">Due</th>
+                          <th className="eyebrow text-left">Priority</th>
+                          <th className="eyebrow text-left">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {g.tasks.map((t) => (
+                          <TaskRow key={t.id} t={t} closed={g.status === 'CLOSED'} />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardBody>
+              </Card>
+            ))}
+          </div>
+        )}
+      </>
+    );
   };
 
   return (
@@ -305,6 +888,8 @@ export default function RetainerMonthCardPage() {
             <h1 className="text-2xl font-semibold tracking-tight text-primary">{retainer.company.name}</h1>
             <Badge tone="info">Retainer</Badge>
             <Badge tone={STATUS[retainer.status].tone}>{STATUS[retainer.status].label}</Badge>
+            {/* Which month you are in matters more than usual once it is shut. */}
+            {monthClosed && <Badge tone="neutral">{monthLabel(month)} closed</Badge>}
           </div>
 
           {/*
@@ -353,17 +938,51 @@ export default function RetainerMonthCardPage() {
 
         {/* What you came here to do, where the prototype puts it. */}
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <Button size="sm" variant="secondary" icon={Plus} onClick={() => setAddingTask(true)} disabled={!monthCard}>
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={Plus}
+            onClick={() => setAddingTask(true)}
+            disabled={!monthCard || monthClosed}
+            title={monthClosed ? `${monthLabel(month)} is closed` : undefined}
+          >
             Task
           </Button>
           {canEnterCost && (
-            <Button size="sm" variant="secondary" icon={Plus} onClick={() => setAddingCost(true)} disabled={!monthCard}>
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={Plus}
+              onClick={() => setAddingCost(true)}
+              disabled={!monthCard || monthClosed}
+              title={monthClosed ? `${monthLabel(month)} is closed` : undefined}
+            >
               Cost
             </Button>
           )}
-          {canEnterMoney && monthCard && !monthCard.invoice && (
+          {canEnterMoney && monthCard && !monthCard.invoice && !monthClosed && (
             <Button size="sm" variant="secondary" icon={ReceiptText} onClick={() => setEnteringInvoice(true)}>
               Enter invoice
+            </Button>
+          )}
+          {/*
+            The way back in. Offering nothing at all would only mean a cost
+            that genuinely belongs to August never gets recorded, and the
+            number stays wrong for a better-sounding reason.
+          */}
+          {monthClosed && canReopenMonth && (
+            <Button size="sm" variant="ghost" icon={LockOpen} onClick={() => void reopenMonth()}>
+              Reopen month
+            </Button>
+          )}
+          {/*
+            Correcting it. Gated on seeing figures as well as writing, because
+            the form's first field is the monthly value — and someone who
+            cannot be shown that number would be editing a blank.
+          */}
+          {retainer.status === 'ACTIVE' && canEnterMoney && canWriteCompany && (
+            <Button size="sm" variant="secondary" icon={Pencil} onClick={() => setEditing(true)}>
+              Edit retainer
             </Button>
           )}
           {/*
@@ -389,11 +1008,12 @@ export default function RetainerMonthCardPage() {
 
       {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
 
-      {loadingMonth ? (
-        <PageSkeleton />
-      ) : !monthCard ? (
-        <EmptyState title="No month card here" hint={`Nothing was rolled for ${monthLabel(month)}. Month cards are created automatically on the 1st for an active retainer.`} />
-      ) : (
+      {/*
+        The month figures, when there is a month. Above the tabs because
+        every one of them is an input to Profit, and below the header because
+        the header is what says which month they belong to.
+      */}
+      {!loadingMonth && monthCard && (
         <>
           <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatTile
@@ -401,13 +1021,19 @@ export default function RetainerMonthCardPage() {
               value={
                 <>
                   {doneTasks.length}{' '}
-                  <span className="text-sm font-semibold text-secondary">of {tasks.length}</span>
+                  <span className="text-sm font-semibold text-secondary">of {countedTasks.length}</span>
                 </>
               }
               // "N open" used to sit in the Tasks card's own header, one line
               // under a tab that already said Tasks (6). It belongs with the
               // other task figures, not on a second header repeating the first.
-              note={tasks.length ? `${openTasks.length} open · ${donePercent}% of the month done` : 'nothing scheduled yet'}
+              note={
+                countedTasks.length
+                  ? `${openTasks.length} open · ${donePercent}% of the month done${
+                      cancelledCount ? ` · ${cancelledCount} cancelled` : ''
+                    }`
+                  : 'nothing scheduled yet'
+              }
             />
             <StatTile
               label="Fee"
@@ -422,22 +1048,35 @@ export default function RetainerMonthCardPage() {
             />
             <StatTile
               label="Cost so far"
-              value={canEnterMoney ? money(costsTotal) : 'Hidden'}
-              note="external and people"
+              value={canEnterMoney ? (noCostBasis ? 'Nothing entered' : money(costsTotal)) : 'Hidden'}
+              note={noCostBasis ? 'no costs and no people on this month yet' : 'external and people'}
             />
             {/*
               The one dark card on the screen. Profit is what the month is FOR,
               and the prototype gives it the ink block so it reads first —
               every other figure on the page is an input to this one.
+
+              Which is exactly why it must not answer when it cannot. With no
+              cost rows and no allocations the arithmetic returns the whole fee
+              and a 100% margin, and this card said so in its confident voice:
+              a month nobody had costed read as the best month the studio had
+              ever had. Nought spent and nobody having said what was spent are
+              different facts, and only one of them is a result.
             */}
             <StatTile
               dark
               label="Profit"
-              value={canEnterMoney && profit != null ? money(profit) : 'Hidden'}
+              value={
+                !canEnterMoney ? 'Hidden' : noCostBasis ? 'Not known yet' : profit != null ? money(profit) : 'Hidden'
+              }
               note={
-                canEnterMoney && profit != null && revenue
-                  ? `${((profit / Number(revenue)) * 100).toFixed(1)}% margin`
-                  : 'management only'
+                !canEnterMoney
+                  ? 'management only'
+                  : noCostBasis
+                    ? 'enter this month’s costs to see it'
+                    : profit != null && revenue
+                      ? `${((profit / Number(revenue)) * 100).toFixed(1)}% margin`
+                      : 'management only'
               }
             />
           </div>
@@ -447,10 +1086,38 @@ export default function RetainerMonthCardPage() {
             nobody has to remember, and that is invisible unless it is written
             down next to the evidence.
           */}
+          {/*
+            And only when it is true.
+
+            This said "Nobody created this card — it appeared on the 1st" on
+            every card, including the one that opens the moment a retainer is
+            created mid-month. A card made on the 20th by the person reading
+            the sentence is not a card nobody created, and the template line
+            claimed tasks that were not there.
+          */}
           <div className="mb-5 rounded-r-xl border-l-[3px] border-accent bg-subtle/60 px-4 py-3 text-xs text-body">
-            <b className="mb-0.5 block font-semibold text-primary">Nobody created this card</b>
-            It appeared on the 1st{retainer.template ? ` and its tasks came from the "${retainer.template.name}" template` : ''}. Next month
-            the same happens again, with nothing for anyone to remember.
+            {cardOrigin === 'rolled' ? (
+              <>
+                <b className="mb-0.5 block font-semibold text-primary">Nobody created this card</b>
+                It appeared on the 1st
+                {retainer.template ? ` and its tasks came from the "${retainer.template.name}" template` : ''}. Next month
+                the same happens again, with nothing for anyone to remember.
+              </>
+            ) : cardOrigin === 'with-retainer' ? (
+              <>
+                <b className="mb-0.5 block font-semibold text-primary">This month was opened with the retainer</b>
+                {retainer.template
+                  ? ` Its tasks came from the "${retainer.template.name}" template. From the 1st it happens on its own, with nothing for anyone to remember.`
+                  : ' From the 1st a new card appears on its own, with nothing for anyone to remember.'}
+              </>
+            ) : (
+              <>
+                <b className="mb-0.5 block font-semibold text-primary">Month cards appear on their own</b>
+                One opens for every active retainer on the 1st
+                {retainer.template ? `, with its tasks from the "${retainer.template.name}" template` : ''} — nothing for
+                anyone to remember.
+              </>
+            )}
           </div>
 
           {!canEnterMoney && (
@@ -459,122 +1126,40 @@ export default function RetainerMonthCardPage() {
               The work on this card is yours to see. The figures need the money figures permission.
             </div>
           )}
+        </>
+      )}
 
-          {/*
-            The tab is the heading.
 
-            Each of these four panels used to open with a card header naming
-            itself — so the Tasks panel read "Tasks (6)" in the tab, "Tasks"
-            again as a card title, and "TASK" once more as a column, three
-            deep in a column of eighty pixels. Two of those headers also
-            carried a create button that is already in the page header above,
-            gated identically, so the same action sat on the screen twice.
-          */}
-          <Tabs className="mb-5" tabs={tabs} active={tab} onChange={setTab} />
+        {/*
+          The tab is the heading.
 
-          {tab === 'tasks' && (
-            <Card padding="none">
-              <CardBody className="p-0!">
-                {tasks.length === 0 ? (
-                  <div className="p-6">
-                    <EmptyState title="No tasks yet" hint="The retainer's task template fires on the 1st. Add one by hand if it's needed sooner." action={<Button icon={Plus} onClick={() => setAddingTask(true)}>Task</Button>} />
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm data-table">
-                      <thead>
-                        <tr className="border-b border-border">
-                          <th className="eyebrow text-left">Task</th>
-                          <th className="eyebrow text-left">Assigned to</th>
-                          <th className="eyebrow text-left">Assigned</th>
-                          <th className="eyebrow text-left">Due</th>
-                          <th className="eyebrow text-left">Priority</th>
-                          <th className="eyebrow text-left">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border">
-                        {tasks.map((t) => {
-                          const late = t.status !== 'DONE' && t.status !== 'CANCELLED' && t.dueDate.slice(0, 10) < todayStr;
-                          return (
-                            <tr
-                              key={t.id}
-                              onClick={() => setOpenTaskId(t.id)}
-                              className="cursor-pointer transition-colors hover:bg-subtle"
-                            >
-                              <td className="">
-                                {/*
-                                  A button inside the row rather than a click
-                                  handler alone: the row is the target for a
-                                  mouse, and this is what a keyboard and a
-                                  screen reader get to open the same thing.
-                                */}
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); setOpenTaskId(t.id); }}
-                                  className={`rounded-sm text-left font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${t.status === 'DONE' || t.status === 'CANCELLED' ? 'text-secondary line-through' : 'text-primary'}`}
-                                >
-                                  {t.title}
-                                </button>
-                                {t.status === 'ON_HOLD' && t.waitingOn && (
-                                  <p className="mt-0.5 text-micro text-secondary">
-                                    waiting on {t.waitingOn === 'CLIENT' ? 'the client' : 'someone else'}
-                                  </p>
-                                )}
-                              </td>
-                              {/*
-                                Name over title. The title used to be inside
-                                the name — "Janani (Head, Design)" — so this
-                                column was quietly two facts wide; now it is
-                                two lines, and the name is the one you scan.
-                              */}
-                              <td className="">
-                                {/*
-                                  The lead, and how many others are on it —
-                                  "Janani +2" rather than three names wrapping
-                                  a column that has to stay scannable. The
-                                  drawer lists them.
-                                */}
-                                <p className="text-body">
-                                  {t.assignee?.name ?? 'Unassigned'}
-                                  {(t.assignees?.length ?? 1) > 1 && (
-                                    <span className="text-secondary"> +{(t.assignees?.length ?? 1) - 1}</span>
-                                  )}
-                                </p>
-                                {t.assignee?.designation && (
-                                  <p className="text-micro text-secondary">{t.assignee.designation}</p>
-                                )}
-                              </td>
-                              <td className="whitespace-nowrap text-secondary">{date(t.assignedAt)}</td>
-                              <td className={`whitespace-nowrap ${late ? 'font-semibold text-danger' : 'text-secondary'}`}>
-                                {date(t.dueDate)}
-                              </td>
-                              <td className="">
-                                <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-secondary">
-                                  <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${getPriorityDot(t.priority)}`} />
-                                  {getPriorityLabel(t.priority)}
-                                </span>
-                              </td>
-                              <td className="" onClick={(e) => e.stopPropagation()}>
-                                <Select
-                                  value={t.status}
-                                  onChange={(v) => void changeTaskStatus(t, v as TStatus)}
-                                  options={TASK_STATUS_OPTIONS}
-                                  ariaLabel={`Status for ${t.title}`}
-                                  buttonClassName="px-2.5 py-1.5 text-xs w-32"
-                                  disabled={busyId === t.id}
-                                />
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </CardBody>
-            </Card>
-          )}
+          Each of these four panels used to open with a card header naming
+          itself — so the Tasks panel read "Tasks (6)" in the tab, "Tasks"
+          again as a card title, and "TASK" once more as a column, three
+          deep in a column of eighty pixels. Two of those headers also
+          carried a create button that is already in the page header above,
+          gated identically, so the same action sat on the screen twice.
+        */}
+        <Tabs className="mb-5" tabs={tabs} active={tab} onChange={setTab} />
 
+      {tab === 'projects' && <ProjectsPanel />}
+
+      {/*
+        Costs, allocations and the invoice belong to ONE month — they are the
+        billing side, and the month pill in the header is what scopes them.
+        Projects do not: a campaign runs across months, so its panel is
+        outside this guard and works on a month with no card at all.
+      */}
+      {tab !== 'projects' &&
+        (loadingMonth ? (
+          <PageSkeleton />
+        ) : !monthCard ? (
+          <EmptyState
+            title="No month card here"
+            hint={`Nothing was rolled for ${monthLabel(month)}. Month cards are created automatically on the 1st for an active retainer.`}
+          />
+        ) : (
+          <>
           {tab === 'costs' && (
             <Card padding="none">
               <CardBody className="p-0!">
@@ -592,6 +1177,7 @@ export default function RetainerMonthCardPage() {
                         <th className="eyebrow text-left">Entered by</th>
                         <th className="eyebrow text-left">Date</th>
                         <th className="eyebrow text-right">Amount</th>
+                        {canEnterCost && !monthClosed && <th className="eyebrow text-right">{''}</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -601,10 +1187,52 @@ export default function RetainerMonthCardPage() {
                           <td className="text-secondary">{c.vendor}</td>
                           <td className="text-secondary">{c.enteredBy?.name ?? '—'}</td>
                           <td className="text-secondary">{date(c.incurredAt)}</td>
-                          <td className="text-right">{money(c.amount)}</td>
+                          <td className="text-right tabular-nums">{money(c.amount)}</td>
+                          {/*
+                            A cost could be entered and never corrected. A
+                            mistyped amount could only be deleted and
+                            re-entered, which loses who entered it and when, so
+                            in practice the wrong figure stayed and skewed the
+                            month's margin for good.
+                          */}
+                          {canEnterCost && !monthClosed && (
+                            <td className="text-right whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => setEditingCost(c)}
+                                className="rounded-lg border border-border px-2.5 py-1 text-micro font-medium text-body transition-colors hover:bg-subtle"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void removeCost(c)}
+                                aria-label={`Remove the ${c.vendor} cost`}
+                                className="ml-1.5 rounded-lg border border-border p-1 text-secondary transition-colors hover:border-danger/40 hover:text-danger"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
+                    {/*
+                      What the rows come to. The Cost so far tile adds people
+                      cost on top, so without this line the two numbers look
+                      like a contradiction rather than two different totals.
+                    */}
+                    <tfoot>
+                      <tr className="border-t border-border">
+                        <td colSpan={4} className="text-secondary">
+                          External costs, this month
+                        </td>
+                        <td className="text-right font-semibold text-primary tabular-nums">
+                          {money(monthCard.costs.reduce((a, c) => a + Number(c.amount ?? 0), 0))}
+                        </td>
+                        {canEnterCost && !monthClosed && <td />}
+                      </tr>
+                    </tfoot>
                   </table>
                   </div>
                 )}
@@ -634,8 +1262,17 @@ export default function RetainerMonthCardPage() {
                       {monthCard.allocations.map((a) => (
                         <tr key={a.id}>
                           <td className="font-medium text-primary">{a.user.name} <span className="text-secondary font-normal">· {a.user.dept}</span></td>
-                          <td className="text-right text-secondary">{a.proposedPercent}%</td>
-                          <td className="text-right font-medium text-primary">{a.percent}%</td>
+                          <td className="text-right text-secondary tabular-nums">{a.proposedPercent}%</td>
+                          {/*
+                            Blank until somebody has actually confirmed it.
+                            `percent` carries the proposed figure until then, so
+                            the column read as a confirmed 30% on a row whose
+                            own status said Proposed — two claims about the
+                            same allocation, in adjacent cells.
+                          */}
+                          <td className="text-right font-medium text-primary tabular-nums">
+                            {a.confirmedAt ? `${a.percent}%` : <span className="text-secondary">—</span>}
+                          </td>
                           <td className="">
                             {a.confirmedAt ? (
                               <Badge tone="good">Confirmed{a.confirmedBy ? ` · ${a.confirmedBy.name}` : ''}</Badge>
@@ -646,6 +1283,32 @@ export default function RetainerMonthCardPage() {
                         </tr>
                       ))}
                     </tbody>
+                    {/*
+                      What the month adds up to for these people. Over 100% of
+                      somebody's month is the thing this table exists to catch,
+                      and it could not be seen without adding the column up by
+                      eye.
+                    */}
+                    <tfoot>
+                      <tr className="border-t border-border">
+                        <td className="text-secondary">
+                          {plural(monthCard.allocations.length, 'person', 'people')} on this month
+                        </td>
+                        <td className="text-right font-semibold text-primary tabular-nums">
+                          {monthCard.allocations.reduce((a, x) => a + x.proposedPercent, 0)}%
+                        </td>
+                        <td className="text-right font-semibold text-primary tabular-nums">
+                          {confirmedAllocations.length > 0
+                            ? `${confirmedAllocations.reduce((a, x) => a + x.percent, 0)}%`
+                            : '—'}
+                        </td>
+                        <td className="text-micro text-secondary">
+                          {confirmedAllocations.length === monthCard.allocations.length
+                            ? 'all confirmed'
+                            : `${monthCard.allocations.length - confirmedAllocations.length} still proposed`}
+                        </td>
+                      </tr>
+                    </tfoot>
                   </table>
                   </div>
                 )}
@@ -660,15 +1323,40 @@ export default function RetainerMonthCardPage() {
                   <EmptyState title="No invoice entered yet" hint="Once accounts raise it in Tally, enter the number, date and amount here to mirror it." />
                 ) : (
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between rounded-xl border border-border p-4">
+                    {/*
+                      Overdue is a fact about today, not a status somebody
+                      remembered to set. The row showed RAISED in amber five
+                      days after the due date, because nothing recomputes the
+                      stored status between the nightly scan and this screen —
+                      so the one number on the page that needed chasing was the
+                      one that looked fine.
+                    */}
+                    <div
+                      className={`flex items-center justify-between rounded-xl border p-4 ${
+                        invoiceOverdueDays > 0 ? 'border-danger/40 bg-danger-tint/40' : 'border-border'
+                      }`}
+                    >
                       <div>
                         <p className="text-sm font-semibold text-primary">{monthCard.invoice.number}</p>
-                        <p className="text-xs text-secondary mt-0.5">Due {date(monthCard.invoice.dueAt)}</p>
+                        <p className={`mt-0.5 text-xs ${invoiceOverdueDays > 0 ? 'font-medium text-danger' : 'text-secondary'}`}>
+                          Due {date(monthCard.invoice.dueAt)}
+                          {invoiceOverdueDays > 0 && ` · ${plural(invoiceOverdueDays, 'day')} overdue`}
+                        </p>
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-semibold text-primary">{money(monthCard.invoice.amount)}</p>
-                        <Badge tone={monthCard.invoice.status === 'PAID' ? 'good' : monthCard.invoice.status === 'OVERDUE' ? 'bad' : 'warn'}>
-                          {monthCard.invoice.status}
+                        <Badge
+                          tone={
+                            monthCard.invoice.status === 'PAID'
+                              ? 'good'
+                              : monthCard.invoice.status === 'OVERDUE' || invoiceOverdueDays > 0
+                                ? 'bad'
+                                : 'warn'
+                          }
+                        >
+                          {invoiceOverdueDays > 0 && monthCard.invoice.status !== 'PAID'
+                            ? 'OVERDUE'
+                            : monthCard.invoice.status}
                         </Badge>
                       </div>
                     </div>
@@ -697,20 +1385,71 @@ export default function RetainerMonthCardPage() {
               </CardBody>
             </Card>
           )}
-        </>
-      )}
+          </>
+        ))}
 
       <NewWorkTaskModal
         open={addingTask}
         team={team}
         companyId={retainer.companyId}
         defaultTarget={{ kind: 'MONTH_CARD', monthCardId: monthCard?.id ?? '' }}
+        retainerProjects={retainer.projects ?? []}
+        // Opened from inside a project, the task belongs to it — asking again
+        // on the form would be asking a question the screen already answered.
+        defaultRetainerProjectId={openProjectId ?? undefined}
         onClose={() => setAddingTask(false)}
         onCreated={() => {
           setAddingTask(false);
           void loadMonthCard();
+          void loadRetainer();
+          void loadProjectView();
         }}
       />
+
+      {editingCost && (
+        <EditCostModal
+          cost={editingCost}
+          onClose={() => setEditingCost(null)}
+          onSaved={() => {
+            setEditingCost(null);
+            void loadMonthCard();
+          }}
+        />
+      )}
+
+      {projectForm && (
+        <RetainerProjectModal
+          retainerId={id}
+          project={projectForm.project}
+          onClose={() => setProjectForm(null)}
+          onSaved={() => {
+            setProjectForm(null);
+            void loadRetainer();
+            void loadMonthCard();
+            void loadProjectView();
+          }}
+        />
+      )}
+
+      {editing && (
+        <EditRetainerModal
+          retainer={retainer}
+          companyName={retainer.company.name}
+          /*
+           * Only a month that is open and not yet invoiced can be repriced, and
+           * the server decides that. Naming the month the page is on is enough
+           * for the checkbox to be specific; `repricedCards` in the reply is
+           * what actually reports whether it moved.
+           */
+          openMonthLabel={monthCard && monthCard.status === 'OPEN' && !monthCard.invoice ? monthLabel(month) : null}
+          onClose={() => setEditing(false)}
+          onSaved={() => {
+            setEditing(false);
+            void loadRetainer();
+            void loadMonthCard();
+          }}
+        />
+      )}
 
       <StopRetainerModal
         open={stopping}

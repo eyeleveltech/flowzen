@@ -4,7 +4,7 @@ import { app } from '../index.js';
 import { prisma } from '../lib/prisma.js';
 import { signJwt } from '../utils/jwt.js';
 import { evaluateAgencyHealthRules } from '../workers/scanner.cron.js';
-import { CostType, CostPaidBy, CostTreatment, RolePreset, TaskWorkType } from '@prisma/client';
+import { CostType, CostPaidBy, CostTreatment, RolePreset } from '@prisma/client';
 
 describe('Phase 5: Direct Costs, Allocations & The 12 Health Rules Scanner', () => {
   const adminToken = signJwt({
