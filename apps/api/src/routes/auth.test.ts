@@ -131,6 +131,11 @@ describe('Phase 1: RBAC Permissions & Authorization Gates', () => {
       active: true,
     });
 
+    // Registration is a first-run door: it is only open while the deployment
+    // has no workspace in it. Said explicitly here rather than relying on an
+    // unmocked count, which returns undefined and slides past the gate.
+    (prisma.organization.count as any).mockResolvedValue(0);
+
     const res = await request(app).post('/api/auth/register').send({
       name: 'Test Owner',
       email: randomEmail,
@@ -144,5 +149,29 @@ describe('Phase 1: RBAC Permissions & Authorization Gates', () => {
     expect(res.body.user.email).toBe(randomEmail);
     expect(res.body.user.preset).toBe('MANAGEMENT');
     expect(res.body.user.organization.name).toBe('Acme Test Agency');
+  });
+
+  it('refuses a second workspace on a deployment that already has one', async () => {
+    /*
+     * It had no gate at all — no invite token, no admin check, nothing but a
+     * rate limit and email uniqueness. Anyone who could reach the API could
+     * create their own organisation and a MANAGEMENT account inside this
+     * deployment. Tenancy kept them out of everybody else's rows, but they
+     * would be on the server, in the database, and able to send through
+     * whatever SMTP account it is configured with.
+     */
+    (prisma.organization.count as any).mockResolvedValue(1);
+
+    const res = await request(app).post('/api/auth/register').send({
+      name: 'Somebody Else',
+      email: 'stranger@example.com',
+      password: 'AnotherStrongPassword1!',
+      organizationName: 'Their Own Studio',
+    });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/already set up/i);
+    expect(prisma.organization.create).not.toHaveBeenCalled();
+    expect(prisma.user.create).not.toHaveBeenCalled();
   });
 });

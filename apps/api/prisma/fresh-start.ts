@@ -12,13 +12,21 @@ dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
 /**
  * An empty Flowzen, ready for real work.
  *
+ * By default it EMPTIES the database and stops. The first person to reach
+ * /register then creates the organisation and the admin account through the
+ * app — which is the normal way in, and the only way registration is open
+ * (auth.ts refuses it once a workspace exists).
+ *
+ * Pass ADMIN_EMAIL and ADMIN_PASSWORD only if you would rather have the
+ * account made here — on a box where nobody can reach the web app yet, say.
+ *
  * `seed.ts` fills the database with a demonstration studio — sixteen invented
  * companies, eighty tasks, ten invoices. That is the right thing for a laptop
  * and the wrong thing for the day you start using this for real: a seeded
  * invoice number sitting in a live ledger is a mess you untangle for months.
  *
- * So this is the other script. It wipes everything and leaves exactly two
- * rows: the organisation, and one person who can sign in and invite the rest.
+ * So this is the other script. It wipes everything, and leaves either nothing
+ * at all or — if you ask for one — the organisation and a single account.
  *
  * ─── What it deliberately does NOT set ──────────────────────────────────────
  *
@@ -33,10 +41,10 @@ dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
  * seller GSTIN, which is the behaviour you want until somebody types the real
  * one into Settings.
  *
- *   npm run fresh-start          (in apps/api)
+ *   npm run fresh-start                    empty it, register through the app
+ *   ADMIN_EMAIL=… ADMIN_PASSWORD=… npm run fresh-start    empty it and make the account
  *
- * Refuses to run without ADMIN_EMAIL and ADMIN_PASSWORD, and refuses a
- * password short enough to guess.
+ * Erasing an existing organisation requires naming it in CONFIRM_ERASE.
  */
 
 const prisma = new PrismaClient();
@@ -57,14 +65,15 @@ async function main() {
   const adminPassword = env('ADMIN_PASSWORD');
   const adminName = env('ADMIN_NAME') ?? 'Administrator';
 
-  if (!adminEmail || !adminPassword) {
+  // One without the other is a typo, not an intention — and getting it wrong
+  // leaves an emptied database carrying an account nobody knows the password to.
+  if (Boolean(adminEmail) !== Boolean(adminPassword)) {
     throw new Error(
-      'ADMIN_EMAIL and ADMIN_PASSWORD must be set. This script empties the database ' +
-        'and creates one account; without them there would be no way back in.\n\n' +
-        '  ADMIN_EMAIL="you@eyelevelstudio.in" ADMIN_PASSWORD="…" npm run fresh-start',
+      'ADMIN_EMAIL and ADMIN_PASSWORD go together. Pass both to create the account here, ' +
+        'or neither to empty the database and register through the app.',
     );
   }
-  if (adminPassword.length < 12) {
+  if (adminPassword && adminPassword.length < 12) {
     throw new Error(
       `ADMIN_PASSWORD is ${adminPassword.length} characters. Twelve is the minimum for ` +
         'an account that can see every salary and every margin in the business.',
@@ -139,6 +148,22 @@ async function main() {
     prisma.organization.deleteMany(),
   ]);
 
+  /*
+   * Without an admin, stop here: an empty database is the whole deliverable.
+   *
+   * The first person to reach /register creates the organisation and their own
+   * MANAGEMENT account through the app, which is the normal way in — and the
+   * only time registration is open, because auth.ts refuses it once a
+   * workspace exists.
+   */
+  if (!adminEmail || !adminPassword) {
+    console.log('Done. The database is empty — no organisation, no accounts, no data.\n');
+    console.log('  Open the app and register: the first account creates the workspace');
+    console.log('  and becomes its administrator. Everybody after that is invited.\n');
+    console.log('  Registration closes as soon as that first workspace exists.');
+    return;
+  }
+
   const org = await prisma.organization.create({
     data: {
       name: env('ORG_NAME') ?? 'EyeLevel Growth Studio',
@@ -205,9 +230,11 @@ async function main() {
     !org.bankAccountNumber && 'bank account',
   ].filter(Boolean);
 
-  console.log(`Done. "${org.name}" is empty and ready.\n`);
+  console.log(`Done. "${org.name}" is empty and ready.
+`);
   console.log(`  Sign in as ${admin.email}`);
-  console.log(`  Everything else — people, clients, work — is entered from the app.\n`);
+  console.log(`  Everything else — people, clients, work — is entered from the app.
+`);
   if (missing.length > 0) {
     console.log(`  Still to fill in Settings before a tax invoice will print:`);
     console.log(`    ${missing.join(', ')}`);

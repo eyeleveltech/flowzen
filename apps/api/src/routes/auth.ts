@@ -84,6 +84,31 @@ authRouter.post('/register', authLimiter, async (req, res: Response, next) => {
       return;
     }
 
+    /*
+     * Registration creates a workspace, so it is a first-run door, not a
+     * sign-up page.
+     *
+     * It had no gate at all: no invite token, no admin check, nothing but a
+     * rate limit and email uniqueness. Anyone who could reach the API could
+     * create their own organisation and a MANAGEMENT account inside this
+     * deployment. Tenancy is scoped by organizationId so they could not read
+     * anybody else's rows — but they would be on the server, in the database,
+     * and able to send through whatever SMTP account it is configured with.
+     *
+     * This instance is one studio's, not a product other people sign up to.
+     * So: the first workspace may be created by whoever reaches it first,
+     * which is how a fresh deployment gets its admin, and every account after
+     * that arrives by invitation (POST /users/invite, setup.admin only).
+     */
+    const alreadySetUp = await prisma.organization.count();
+    if (alreadySetUp > 0) {
+      res.status(403).json({
+        success: false,
+        error: 'This workspace is already set up. Ask an administrator to invite you.',
+      });
+      return;
+    }
+
     const { name, email, password, organizationName } = parsed.data;
     const cleanEmail = email.toLowerCase().trim();
 
