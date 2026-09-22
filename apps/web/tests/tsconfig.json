@@ -1,0 +1,20 @@
+{
+  "//": [
+    "The Playwright suite, typechecked on its own.",
+    "",
+    "The app's tsconfig excludes this directory, because `next build` typechecks",
+    "everything it includes — and a spec importing @prisma/client (purge.teardown",
+    "reaches for it because the API's delete is a soft delete) failed the",
+    "production image build on a file that never runs in production.",
+    "",
+    "Excluding it there must not mean nobody checks it, so this config does:",
+    "  npx tsc --noEmit -p tests/tsconfig.json"
+  ],
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["**/*.ts"],
+  "exclude": []
+}

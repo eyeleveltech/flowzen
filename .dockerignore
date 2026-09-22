@@ -23,16 +23,27 @@ coverage
 # absent there. Keeping tests out of the build context fixes the error at its
 # cause and makes the image smaller, while `tsc --noEmit` still checks them on
 # a developer's machine, where they are actually run.
-tests
-playwright.config.ts
-playwright-report
-test-results
+# Paths are matched against the BUILD CONTEXT ROOT, which docker-compose sets
+# to `.` — the repo root. A bare `tests` therefore matches only a top-level
+# tests/ directory and never apps/web/tests, which is why the first attempt at
+# this file changed nothing and the image build failed again with the same
+# error. Spelled out from the root, and repeated as **/ so a second app cannot
+# reintroduce it.
+apps/web/tests
+apps/web/playwright.config.ts
+apps/web/playwright-report
+apps/web/test-results
+**/tests
+**/playwright.config.ts
+**/playwright-report
+**/test-results
 
 # `playwright/.auth/` holds signed-in session cookies for five real accounts.
 # They are gitignored but were NOT dockerignored, so `COPY . .` baked live
 # credentials into a build layer. They never reached the final standalone
 # image, which is luck rather than design.
-playwright
+apps/web/playwright
+**/playwright
 
 # Local scratch and editor state — nothing the build needs.
 .vscode
