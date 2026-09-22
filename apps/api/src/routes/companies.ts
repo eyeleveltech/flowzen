@@ -631,6 +631,21 @@ const companyCreateSchema = z.object({
   stateCode: z.string().max(2).optional().or(z.literal('')),
   ownerId: z.string().optional(),
   status: z.nativeEnum(CompanyStatus).default(CompanyStatus.PROSPECT),
+  /**
+   * "We already work with them" — a migration, not a win.
+   *
+   * §3 makes a company's status derived: it becomes a CLIENT because a
+   * proposal was won, which is what stops "clients" existing who never bought
+   * anything. That rule is right for new business and has no answer for the
+   * day you start using this, when every client you have predates the system —
+   * and without one, recording a two-year-old retainer meant inventing a
+   * proposal, dating it, and winning it, which puts fiction in the win rate.
+   *
+   * So this is the exception, named. It only changes which activity verb is
+   * written, so a migrated client is distinguishable from a won one forever
+   * after; the status itself rides on `status` above.
+   */
+  existingClient: z.boolean().optional(),
 });
 
 companiesRouter.post('/', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
@@ -644,7 +659,7 @@ companiesRouter.post('/', requirePermission('company.write'), async (req: AuthRe
     const orgId = req.user!.organizationId;
     const {
       name, vertical, source, sourceId, city, website, gstin, billingAddress, stateName, stateCode, ownerId, status,
-      phone, followUpDate, contact, force
+      phone, followUpDate, contact, force, existingClient
     } = parsed.data;
 
     const ownerUserId = ownerId || req.user!.userId;
@@ -813,8 +828,15 @@ companiesRouter.post('/', requirePermission('company.write'), async (req: AuthRe
         entityType: 'Company',
         entityId: result.company.id,
         actorId: req.user!.userId,
-        verb: 'company_created',
-        payload: { name: result.company.name, vertical: result.company.vertical, status: result.company.status },
+        // A client brought in from before Flowzen is not a deal anybody won,
+        // and the pipeline figures must never read it as one.
+        verb: existingClient ? 'company_migrated' : 'company_created',
+        payload: {
+          name: result.company.name,
+          vertical: result.company.vertical,
+          status: result.company.status,
+          ...(existingClient ? { existingClient: true } : {}),
+        },
       },
     });
 

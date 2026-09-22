@@ -77,6 +77,21 @@ export function NewClientModal({ onConfirm, onCancel }: Props) {
   const [city, setCity] = useState('');
   const [sourceId, setSourceId] = useState('');
   const [followUpDate, setFollowUpDate] = useState(inTwoDays);
+  /*
+   * A prospect, or somebody you already work with.
+   *
+   * §3 says a company's status is derived, never set — it becomes a CLIENT
+   * because a proposal was won, which is what stops "clients" existing who
+   * never bought anything. That rule is right for new business and has no
+   * answer for the day you start using this, when every client you have
+   * predates the system.
+   *
+   * Recording one as existing is a different act from winning it, so it is a
+   * deliberate choice on the form rather than a status anybody can edit later,
+   * and the server writes a separate activity verb for it so migrated clients
+   * never count towards a win rate.
+   */
+  const [existing, setExisting] = useState(false);
 
   /**
    * Whether this company is already here.
@@ -136,7 +151,9 @@ export function NewClientModal({ onConfirm, onCancel }: Props) {
         phone: phone || null,
         city: city || null,
         sourceId: sourceId || null,
-        followUpDate: followUpDate || null,
+        // A prospect gets chased; somebody you already work with does not.
+        followUpDate: existing ? null : followUpDate || null,
+        ...(existing ? { status: 'CLIENT' as const, existingClient: true } : {}),
         // One transaction on the server: the company, the person, and the card.
         ...(contactName.trim()
           ? { contact: { name: contactName.trim(), phone: phone || null } }
@@ -223,6 +240,25 @@ export function NewClientModal({ onConfirm, onCancel }: Props) {
           />
         </div>
 
+        <FieldSelect
+          label="Are you already working with them?"
+          value={existing ? 'CLIENT' : 'PROSPECT'}
+          onChange={(v) => setExisting(v === 'CLIENT')}
+          options={[
+            { value: 'PROSPECT', label: 'No — someone we are pitching' },
+            { value: 'CLIENT', label: 'Yes — an existing client' },
+          ]}
+          disabled={busy}
+        />
+        {/* `FieldSelect` carries no hint slot, so the explanation sits under it
+            — and it earns the space, because this choice is the difference
+            between a deal you are chasing and a client you already bill. */}
+        <p className="-mt-2 text-xs text-secondary">
+          {existing
+            ? 'Added as a client straight away, so you can put their retainer or project on today. It will not count as a won deal.'
+            : 'They start as a prospect and become a client when a proposal is won.'}
+        </p>
+
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
             label="City"
@@ -250,14 +286,17 @@ export function NewClientModal({ onConfirm, onCancel }: Props) {
           has an owner AND a follow-up date. The owner is defaulted server-side;
           this is the other half, defaulted to two days out.
         */}
-        <Field
-          label="Follow up on"
-          type="date"
-          value={followUpDate}
-          onChange={setFollowUpDate}
-          disabled={busy}
-          hint="When you will come back to them. Change it any time."
-        />
+        {/* Only a prospect needs chasing. */}
+        {!existing && (
+          <Field
+            label="Follow up on"
+            type="date"
+            value={followUpDate}
+            onChange={setFollowUpDate}
+            disabled={busy}
+            hint="When you will come back to them. Change it any time."
+          />
+        )}
 
         {error && <ErrorNote>{error}</ErrorNote>}
 
