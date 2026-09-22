@@ -151,7 +151,11 @@ export function NewProjectModal({ open, onClose, onCreated, prefill }: Props) {
       open={open}
       onClose={onClose}
       title="New project"
-      description={prefill ? 'Value carries over from the won version — adjust anything before saving.' : undefined}
+      description={
+        prefill?.sourceProposalId
+          ? 'Value carries over from the won version — adjust anything before saving.'
+          : 'One-off work with its own price and end date.'
+      }
     >
       <form onSubmit={submit}>
         <ModalBody className="space-y-4">

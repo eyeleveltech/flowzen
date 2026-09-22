@@ -89,7 +89,20 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill }: Props) {
       open={open}
       onClose={onClose}
       title="New retainer"
-      description={prefill ? 'Value carries over from the won version — adjust anything before saving.' : undefined}
+      /*
+       * Only a proposal can carry a value over.
+       *
+       * This keyed off `prefill` alone, which used to mean "opened from a won
+       * proposal" because that was the only way in. It is not any more -- the
+       * client's Work tab opens this with the company filled and nothing else
+       * -- so the line promised a figure that had been carried over from a
+       * won version that does not exist, above a blank Monthly value.
+       */
+      description={
+        prefill?.sourceProposalId
+          ? 'Value carries over from the won version — adjust anything before saving.'
+          : 'What they pay each month. Name the work itself once the retainer exists.'
+      }
     >
       <form onSubmit={submit}>
         <ModalBody className="space-y-4">
