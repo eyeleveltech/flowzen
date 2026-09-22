@@ -40,6 +40,7 @@ import { api, ApiError, formatMoney, formatDate } from '@/lib/api-v2';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useAuthStore } from '@/stores';
+import { useConfig } from '@/hooks/queries';
 import { useConfirmStore } from '@/stores/confirm';
 import { EditCompanyModal } from '@/components/clients/EditCompanyModal';
 import { EditProformaModal } from '@/components/clients/EditProformaModal';
@@ -76,19 +77,39 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
   const [editingProposal, setEditingProposal] = useState<any>(null);
   const [losingProposal, setLosingProposal] = useState<any>(null);
   const [raisingProformaFor, setRaisingProformaFor] = useState<any>(null);
+  /*
+   * Both optional, because work no longer only arrives from a won proposal.
+   *
+   * These were required, which is the type-level shape of the gap: the only
+   * way to open a retainer or a project on this page was from a won proposal
+   * card, so a client you already had -- migrated in, with a year of work
+   * behind them and no proposal on record -- had no button at all. They carry
+   * the proposal's figure when there is one, and ask for it when there is not.
+   */
   const [creatingProjectFor, setCreatingProjectFor] = useState<{
     companyId: string;
     companyName: string;
-    quotedValue: number;
-    sourceProposalId: string;
+    quotedValue?: number;
+    sourceProposalId?: string;
   } | null>(null);
   const [creatingRetainerFor, setCreatingRetainerFor] = useState<{
     companyId: string;
     companyName: string;
-    monthlyValue: number;
-    sourceProposalId: string;
+    monthlyValue?: number;
+    sourceProposalId?: string;
   } | null>(null);
   const { confirm } = useConfirmStore();
+  const { data: pageConfig } = useConfig();
+
+  /*
+   * Work can only hang off a CLIENT, so the button only exists for one.
+   *
+   * Both routes refuse a prospect -- "Win a proposal for them first -- that is
+   * what turns a prospect into a client" -- and a button that always fails is
+   * worse than no button. The empty state says why instead.
+   */
+  const canWrite = pageConfig?.me.permissions?.includes('company.write') ?? false;
+  const canAddWork = canWrite && company?.status === 'CLIENT';
 
   // Add person modal
   const [isAddPersonOpen, setIsAddPersonOpen] = useState(false);
@@ -510,10 +531,39 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                 <h3 className="text-sm font-semibold text-primary">Retainers</h3>
                 <p className="text-micro text-secondary mt-0.5">Recurring monthly work</p>
               </div>
-              <span className="text-micro text-secondary">{plural(company.retainers?.length ?? 0, 'retainer')}</span>
+              <div className="flex items-center gap-3">
+                <span className="text-micro text-secondary">{plural(company.retainers?.length ?? 0, 'retainer')}</span>
+                {canAddWork && (
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      setCreatingRetainerFor({ companyId: company.id, companyName: company.name })
+                    }
+                  >
+                    Add retainer
+                  </Button>
+                )}
+              </div>
             </div>
             {(company.retainers?.length ?? 0) === 0 ? (
-              <p className="px-5 py-10 text-center text-sm text-secondary">No retainer with this client.</p>
+              <div className="px-5 py-10 text-center">
+                <p className="text-sm text-secondary">
+                  {company.status === 'CLIENT'
+                    ? 'No retainer with this client. If they already buy monthly work, add it here.'
+                    : 'A retainer belongs to a client. Win a proposal for them first.'}
+                </p>
+                {canAddWork && (
+                  <Button
+                    variant="secondary"
+                    className="mt-4"
+                    onClick={() =>
+                      setCreatingRetainerFor({ companyId: company.id, companyName: company.name })
+                    }
+                  >
+                    Add retainer
+                  </Button>
+                )}
+              </div>
             ) : (
               <div className="divide-y divide-border">
                 {[...(activeRetainer ? [activeRetainer] : []), ...pastRetainers].map((r: any) => (
@@ -549,10 +599,39 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                     the two are counted separately and never added up here. */}
                 <p className="text-micro text-secondary mt-0.5">One-off work, whole contract</p>
               </div>
-              <span className="text-micro text-secondary">{plural(company.projects?.length ?? 0, 'project')}</span>
+              <div className="flex items-center gap-3">
+                <span className="text-micro text-secondary">{plural(company.projects?.length ?? 0, 'project')}</span>
+                {canAddWork && (
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      setCreatingProjectFor({ companyId: company.id, companyName: company.name })
+                    }
+                  >
+                    Add project
+                  </Button>
+                )}
+              </div>
             </div>
             {(company.projects?.length ?? 0) === 0 ? (
-              <p className="px-5 py-10 text-center text-sm text-secondary">No projects for this client yet.</p>
+              <div className="px-5 py-10 text-center">
+                <p className="text-sm text-secondary">
+                  {company.status === 'CLIENT'
+                    ? 'No one-off work for this client yet.'
+                    : 'A project belongs to a client. Win a proposal for them first.'}
+                </p>
+                {canAddWork && (
+                  <Button
+                    variant="secondary"
+                    className="mt-4"
+                    onClick={() =>
+                      setCreatingProjectFor({ companyId: company.id, companyName: company.name })
+                    }
+                  >
+                    Add project
+                  </Button>
+                )}
+              </div>
             ) : (
               <div className="divide-y divide-border">
                 {[...liveProjects, ...pastProjects].map((pr: any) => {
