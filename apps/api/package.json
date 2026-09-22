@@ -24,7 +24,8 @@
     "check:row-actions": "node test/row-actions.check.mjs",
     "check:command-bar": "node test/command-bar.check.mjs",
     "check:one-page": "tsx test/one-page.check.ts",
-    "check:one-sidebar": "node test/one-sidebar.check.mjs"
+    "check:one-sidebar": "node test/one-sidebar.check.mjs",
+    "fresh-start": "tsx prisma/fresh-start.ts"
   },
   "dependencies": {
     "@flowzen/shared": "*",
