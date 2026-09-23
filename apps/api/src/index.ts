@@ -42,6 +42,16 @@ import { startAlertDigestScheduler } from './workers/alertDigest.cron.js';
 
 const app = express();
 
+/**
+ * Production sits behind one reverse proxy (Apache, per DEPLOY.md), which sets
+ * X-Forwarded-For on every request. Express ignores that header by default, so
+ * `req.ip` was the proxy's own address for every request and express-rate-limit
+ * refused to key on it at all — throwing ERR_ERL_UNEXPECTED_X_FORWARDED_FOR on
+ * real traffic instead of silently mis-limiting. `1` trusts exactly that one
+ * hop rather than the whole chain, which is what a single reverse proxy is.
+ */
+app.set('trust proxy', 1);
+
 app.use(helmet());
 app.use(
   cors({
