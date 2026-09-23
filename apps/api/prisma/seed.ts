@@ -61,7 +61,104 @@ const FY = (() => {
   return `${String(start).slice(2)}-${String(start + 1).slice(2)}`;
 })();
 
+/**
+ * The live database, by name.
+ *
+ * Production runs `eyelevelPm`; local development runs `elitepm`. Matched
+ * case-insensitively because a connection string is typed by hand.
+ */
+const LIVE_DATABASES = ['eyelevelpm'];
+
+/**
+ * Refuse to wipe anything that might be the real business.
+ *
+ * This file deletes every organization, user, client, invoice and payment
+ * before it writes a row, and the figures it writes are invented — ₹220,000 a
+ * month for Carlton, named ad-spend vendors, and a `monthlyCost` (a salary) for
+ * every person. Run against production it would destroy the business's records
+ * and replace them with fiction wearing real names.
+ *
+ * Nothing stopped that. There was no environment check of any kind, and the
+ * path that worries me is not somebody typing `db:seed` at a production
+ * prompt — it is `prisma migrate reset`, which runs this automatically via the
+ * `prisma.seed` entry in package.json, and which is exactly what people reach
+ * for when a migration is stuck on a server.
+ *
+ * Two signals, either of which is enough to stop: the environment says
+ * production, or the database is the live one. `ALLOW_DESTRUCTIVE_SEED=1` is
+ * the deliberate override, for the one case where somebody really does want to
+ * reset a staging copy that happens to look live.
+ *
+ * Neither signal applies to an EMPTY database — see below. That is what lets a
+ * fresh deployment seed itself on first boot without making every redeploy a
+ * disaster.
+ *
+ * Local development is untouched by this — `npm run seed` against `flowzen`
+ * with no NODE_ENV set is not either signal, and stays one command.
+ */
+async function refuseIfLive(): Promise<void> {
+  /*
+   * An empty database changes the question entirely.
+   *
+   * Everything below is about not destroying records. Where there are none,
+   * there is nothing to destroy — so a first-boot seed of a fresh deployment is
+   * allowed to proceed even on production, which is what makes seeding possible
+   * from the Docker entrypoint without making every redeploy a disaster.
+   *
+   * `SEED_ONLY_IF_EMPTY=1` is the other half: with it set, a database that
+   * already has an organisation is left alone and this exits 0 rather than
+   * refusing, so a redeploy is a no-op instead of a failed boot.
+   */
+  const existing = await prisma.organization.count();
+  if (process.env.SEED_ONLY_IF_EMPTY === '1' && existing > 0) {
+    console.log(`Database already has ${existing} organisation(s) — leaving it alone.`);
+    await prisma.$disconnect();
+    process.exit(0);
+  }
+  if (existing === 0) return;
+
+  const url = process.env.DATABASE_URL ?? '';
+  // The path is /dbname, before any ?schema= — parsed rather than regexed so a
+  // password containing a slash cannot fool it.
+  let database = '';
+  let host = 'unknown';
+  try {
+    const parsed = new URL(url);
+    database = parsed.pathname.replace(/^\//, '');
+    host = parsed.host;
+  } catch {
+    // An unparseable URL is its own problem; Prisma will say so. Treat the
+    // database as unknown rather than assuming it is safe.
+  }
+
+  console.log(`Target: ${database || '(unknown)'} on ${host}`);
+
+  const reasons: string[] = [];
+  if (process.env.NODE_ENV === 'production') reasons.push('NODE_ENV is production');
+  if (LIVE_DATABASES.includes(database.toLowerCase())) {
+    reasons.push(`"${database}" is the live database`);
+  }
+  if (reasons.length === 0) return;
+
+  if (process.env.ALLOW_DESTRUCTIVE_SEED === '1') {
+    console.warn(`\nWARNING: ${reasons.join(' and ')}, but ALLOW_DESTRUCTIVE_SEED=1 is set.`);
+    console.warn('Every organization, user, client, invoice and payment is about to be deleted.\n');
+    return;
+  }
+
+  console.error(`\nRefusing to seed: ${reasons.join(' and ')}.`);
+  console.error('');
+  console.error('This script DELETES every organization, user, client, invoice and payment,');
+  console.error('then writes invented figures — including salaries — against real names.');
+  console.error('It is a development dataset, not production data.');
+  console.error('');
+  console.error('If you are certain this database is disposable, re-run with');
+  console.error('ALLOW_DESTRUCTIVE_SEED=1. Take a backup first.');
+  process.exit(1);
+}
+
 async function main() {
+  await refuseIfLive();
   console.log('Wiping and reseeding Flowzen with a full EyeLevel dataset...');
 
   // Delete children before parents — FK order matters even with onDelete rules,

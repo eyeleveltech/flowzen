@@ -29,5 +29,29 @@ fi
 echo "[entrypoint] Applying database migrations (prisma migrate deploy)..."
 npx prisma migrate deploy
 
+# Seed a brand-new deployment, and only a brand-new one.
+#
+# Off unless SEED_ON_FIRST_BOOT=1 is set in the environment, because the seed is
+# a DEVELOPMENT dataset: it invents the figures it writes — monthly fees, ad
+# spend against named vendors, and a salary for every person — against real
+# client and staff names. On a database that is meant to hold the real business,
+# that is fiction wearing a real face. Turn this on to stand up a demo or a
+# fresh environment, not to populate the live studio.
+#
+# Safe on every redeploy regardless: SEED_ONLY_IF_EMPTY=1 makes the seed exit
+# without touching anything once an organisation exists, so the second boot and
+# every boot after it is a no-op. It cannot overwrite data it finds.
+if [ "$SEED_ON_FIRST_BOOT" = "1" ]; then
+  echo "[entrypoint] SEED_ON_FIRST_BOOT=1 — seeding if the database is empty..."
+  # Not `set -e`-fatal: a seed that declines, or fails, must not stop the API
+  # from starting. The API is useful against an empty database; it is useless
+  # not running at all.
+  if SEED_ONLY_IF_EMPTY=1 npx tsx prisma/seed.ts; then
+    echo "[entrypoint] Seed step finished."
+  else
+    echo "[entrypoint] WARNING: seed step failed — starting the API anyway."
+  fi
+fi
+
 echo "[entrypoint] Starting Flowzen API..."
 exec npm run start

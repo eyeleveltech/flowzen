@@ -56,6 +56,16 @@ services:
       - PORT=4000
       # Set to "true" ONLY to bypass the automatic pre-migration backup (not recommended).
       - SKIP_PREMIGRATION_BACKUP=${SKIP_PREMIGRATION_BACKUP:-false}
+      # Seed a brand-new deployment on first boot. OFF by default.
+      #
+      # The seed is a DEVELOPMENT dataset: it invents the figures it writes --
+      # monthly fees, ad spend against named vendors, and a salary for every
+      # person -- against real client and staff names. Turn this on to stand up
+      # a demo or a fresh environment, never to populate the live studio.
+      #
+      # Safe on redeploys either way: the seed leaves any database that already
+      # holds an organisation completely alone.
+      - SEED_ON_FIRST_BOOT=${SEED_ON_FIRST_BOOT:-0}
     ports:
       # Bind to the host LOOPBACK only. Publishing "4000:4000" exposed the API on every
       # interface (and Docker's publish bypasses ufw), so clients could reach it directly,
