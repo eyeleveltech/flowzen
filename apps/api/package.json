@@ -19,6 +19,7 @@
     "studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
     "seed:production": "tsx prisma/seed-production.ts",
+    "clear:business": "tsx prisma/clear-business-data.ts",
     "check:win-handoff": "tsx test/win-handoff.check.ts",
     "check:new-company": "tsx test/new-company.check.ts",
     "check:drill-through": "tsx test/drill-through.check.ts",
