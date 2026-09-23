@@ -56,16 +56,16 @@ services:
       - PORT=4000
       # Set to "true" ONLY to bypass the automatic pre-migration backup (not recommended).
       - SKIP_PREMIGRATION_BACKUP=${SKIP_PREMIGRATION_BACKUP:-false}
-      # Seed a brand-new deployment on first boot. OFF by default.
+      # The production setup check, on by default.
       #
-      # The seed is a DEVELOPMENT dataset: it invents the figures it writes --
-      # monthly fees, ad spend against named vendors, and a salary for every
-      # person -- against real client and staff names. Turn this on to stand up
-      # a demo or a fresh environment, never to populate the live studio.
+      # Sets the SAC codes and the tax-invoice declaration when they are empty,
+      # reports which statutory and bank fields still need entering, and creates
+      # NO business records. Idempotent -- it writes nothing already set and
+      # deletes nothing, so running it every boot is safe. Set to 0 to skip.
       #
-      # Safe on redeploys either way: the seed leaves any database that already
-      # holds an organisation completely alone.
-      - SEED_ON_FIRST_BOOT=${SEED_ON_FIRST_BOOT:-0}
+      # The development seed (21 invented companies, invented salaries) is not
+      # reachable from the deploy flow at all.
+      - RUN_PRODUCTION_SEED=${RUN_PRODUCTION_SEED:-1}
     ports:
       # Bind to the host LOOPBACK only. Publishing "4000:4000" exposed the API on every
       # interface (and Docker's publish bypasses ufw), so clients could reach it directly,

@@ -1194,6 +1194,27 @@ export const api = {
      */
     import: (body: { csv?: string; rows?: Record<string, unknown>[]; dryRun?: boolean; force?: boolean; ownerId?: string }) =>
       post<ImportResult>('/companies/import', body),
+    /**
+     * What the importer reads, from the importer itself.
+     *
+     * Fetched rather than written into the modal, because the modal's own
+     * hand-written list had already drifted from the parser — it promised
+     * columns that were never read and omitted one that was.
+     */
+    importRules: () =>
+      get<{
+        success: boolean;
+        rules: { column: string; also: string[]; required: boolean; note: string }[];
+      }>('/companies/import/rules'),
+    /**
+     * A starting file, with the rules as comment lines above the header.
+     *
+     * A plain URL rather than a fetch: the browser should save it, and the
+     * session cookie goes with the request the same way it does for every other
+     * call. `parseCsv` skips the leading `#` block, so this file imports its own
+     * two example rows unchanged.
+     */
+    importTemplateUrl: () => `${API_URL}/companies/import/template`,
     update: (id: string, data: Partial<Company>) => patch<Company>(`/companies/${id}`, data),
     addContact: (companyId: string, data: any) => post(`/companies/${companyId}/people`, data),
     updateContact: (companyId: string, personId: string, data: any) =>

@@ -16,18 +16,24 @@
  * one record a person is looking at; this is two hundred they are not.
  */
 
-import { useState } from 'react';
-import { AlertTriangle, Check, FileSpreadsheet, Upload, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlertTriangle, Check, Download, FileSpreadsheet, Upload, X } from 'lucide-react';
 import { api, ApiError, type ImportResult } from '@/lib/api-v2';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { ErrorNote, Note } from '@/components/ui/empty-state';
 
-// Only what actually lands somewhere. `size` and `follow up` used to be
-// listed here and there is no column for either, so the file was promising to
-// read two things it then silently dropped.
-const RECOGNISED =
-  'name, contact name, email, phone, website, industry, address, city, state, zip, country, gst, source';
+/*
+ * The columns are no longer written down here.
+ *
+ * They were — a single string listing thirteen names — and it had drifted from
+ * the parser twice over: it promised `country` and `zip`, which land nowhere on
+ * their own, and said nothing about `status`, which decides whether an imported
+ * company is a prospect or somebody you already work with. A list the server
+ * does not own describes the importer as it was when somebody last remembered
+ * to edit this file, so it comes from `/companies/import/rules` now.
+ */
+type Rule = { column: string; also: string[]; required: boolean; note: string };
 
 export function ImportClientsModal({
   onClose,
@@ -43,6 +49,23 @@ export function ImportClientsModal({
   const [error, setError] = useState<string | null>(null);
   /** Carries the name-similarity warnings past. Exact matches never import. */
   const [force, setForce] = useState(false);
+  const [rules, setRules] = useState<Rule[] | null>(null);
+  const [showRules, setShowRules] = useState(false);
+
+  // Not fatal if it fails: the template download and the file picker both still
+  // work, and the rules are in the template itself as comment lines.
+  useEffect(() => {
+    let cancelled = false;
+    void api.companies
+      .importRules()
+      .then((r) => {
+        if (!cancelled) setRules(r.rules);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const pickFile = async (file: File | null) => {
     if (!file) return;
@@ -85,7 +108,7 @@ export function ImportClientsModal({
               {fileName || 'Choose a CSV file'}
             </span>
             <span className="block truncate text-xs text-secondary">
-              First row is the header. Recognised columns: {RECOGNISED}.
+              First row is the header. One row per company.
             </span>
           </span>
           <input
@@ -96,6 +119,57 @@ export function ImportClientsModal({
             onChange={(e) => void pickFile(e.target.files?.[0] ?? null)}
           />
         </label>
+
+        {/*
+          * Somewhere to start, and the rules, before a file is chosen.
+          *
+          * An empty file picker tells you nothing about thirteen accepted
+          * columns, three that silently default, and two duplicate rules — and a
+          * silent default is not an error, so a wrong file looks like a
+          * successful import. The template is a plain link because the browser
+          * should save it; the session cookie rides along as on any other call.
+          */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          <a
+            href={api.companies.importTemplateUrl()}
+            className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline"
+          >
+            <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
+            Download template
+          </a>
+          {rules && (
+            <button
+              type="button"
+              onClick={() => setShowRules((v) => !v)}
+              className="text-secondary hover:text-primary hover:underline"
+              aria-expanded={showRules}
+            >
+              {showRules ? 'Hide the rules' : `What the columns mean (${rules.length})`}
+            </button>
+          )}
+        </div>
+
+        {showRules && rules && (
+          <dl className="max-h-56 space-y-2 overflow-y-auto rounded-xl border border-border bg-surface p-3 text-xs">
+            {rules.map((r) => (
+              <div key={r.column}>
+                <dt className="font-medium text-body">
+                  {r.column}
+                  {r.required && <span className="ml-1.5 text-danger">required</span>}
+                  {r.also.length > 0 && (
+                    <span className="ml-1.5 font-normal text-secondary">
+                      or {r.also.join(', ')}
+                    </span>
+                  )}
+                </dt>
+                <dd className="text-secondary">{r.note}</dd>
+              </div>
+            ))}
+            <p className="border-t border-border pt-2 text-secondary">
+              Retainers, project values, fees and dates are not imported — add those in the app.
+            </p>
+          </dl>
+        )}
 
         {preview && (
           <div className="space-y-3">

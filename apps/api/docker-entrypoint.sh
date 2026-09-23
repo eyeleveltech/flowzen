@@ -29,27 +29,33 @@ fi
 echo "[entrypoint] Applying database migrations (prisma migrate deploy)..."
 npx prisma migrate deploy
 
-# Seed a brand-new deployment, and only a brand-new one.
+# Fill in the invoice boilerplate, and nothing else.
 #
-# Off unless SEED_ON_FIRST_BOOT=1 is set in the environment, because the seed is
-# a DEVELOPMENT dataset: it invents the figures it writes — monthly fees, ad
-# spend against named vendors, and a salary for every person — against real
-# client and staff names. On a database that is meant to hold the real business,
-# that is fiction wearing a real face. Turn this on to stand up a demo or a
-# fresh environment, not to populate the live studio.
+# This runs `prisma/seed-production.ts`, NOT `prisma/seed.ts`. That distinction
+# is the whole point: seed.ts is a development dataset — twenty-one companies,
+# six retainers, a pipeline, invoices and a salary for every person, all of it
+# invented and all of it wearing real client and staff names. The demo seed is
+# deliberately unreachable from this script, so no deploy can ever put fiction
+# into the live database.
 #
-# Safe on every redeploy regardless: SEED_ONLY_IF_EMPTY=1 makes the seed exit
-# without touching anything once an organisation exists, so the second boot and
-# every boot after it is a no-op. It cannot overwrite data it finds.
-if [ "$SEED_ON_FIRST_BOOT" = "1" ]; then
-  echo "[entrypoint] SEED_ON_FIRST_BOOT=1 — seeding if the database is empty..."
-  # Not `set -e`-fatal: a seed that declines, or fails, must not stop the API
-  # from starting. The API is useful against an empty database; it is useless
-  # not running at all.
-  if SEED_ONLY_IF_EMPTY=1 npx tsx prisma/seed.ts; then
-    echo "[entrypoint] Seed step finished."
+# What the production seed does is small by design: it sets the SAC codes and
+# the tax-invoice declaration when they are empty, reports which statutory and
+# bank fields still need entering, and creates no business records at all. Every
+# other organisation setting already has a schema default, and the organisation
+# and its users come from registering through the app.
+#
+# Idempotent, so running it on every boot is safe — it writes nothing that is
+# already set and deletes nothing. On by default for that reason; set
+# RUN_PRODUCTION_SEED=0 to skip it.
+if [ "${RUN_PRODUCTION_SEED:-1}" = "1" ]; then
+  echo "[entrypoint] Checking organisation setup (production seed)..."
+  # Not `set -e`-fatal: a setup check that declines, or fails, must not stop the
+  # API from starting. The API is useful before its invoice boilerplate is
+  # filled in; it is useless not running at all.
+  if npx tsx prisma/seed-production.ts; then
+    echo "[entrypoint] Setup check finished."
   else
-    echo "[entrypoint] WARNING: seed step failed — starting the API anyway."
+    echo "[entrypoint] Setup check did not complete — starting the API anyway."
   fi
 fi
 

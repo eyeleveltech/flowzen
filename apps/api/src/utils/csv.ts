@@ -113,7 +113,25 @@ export const normaliseHeader = (header: string): string =>
  * is not an error, it is an import of nothing.
  */
 export const parseCsv = (text: string): Record<string, string>[] => {
-  const rows = parseRows(text);
+  const all = parseRows(text);
+
+  /*
+   * A leading block of `#` lines is instructions, not data.
+   *
+   * The company import template carries its own rules that way, so the file
+   * somebody downloads explains itself and cannot be separated from its
+   * documentation. Without this the first rule line becomes the header row and
+   * every column silently stops matching.
+   *
+   * Deliberately only at the TOP, and only until the first real row: a `#` in
+   * the middle of a file is far more likely to be somebody's data than a
+   * comment, and dropping a company because its name starts with a hash would
+   * be a worse bug than the one this fixes.
+   */
+  let start = 0;
+  while (start < all.length && (all[start][0] ?? '').trimStart().startsWith('#')) start += 1;
+  const rows = all.slice(start);
+
   if (rows.length < 2) return [];
 
   const headers = rows[0].map(normaliseHeader);

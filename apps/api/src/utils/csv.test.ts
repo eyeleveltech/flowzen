@@ -129,3 +129,32 @@ describe('toCsv', () => {
     expect(strip(toCsv([], [{ label: 'Name', value: () => '' }]))).toBe('Name');
   });
 });
+
+describe('a leading comment block', () => {
+  it('skips # lines so a self-documenting template still parses', () => {
+    /*
+     * The company import template ships its own rules as # lines above the
+     * header, so the file cannot be separated from its documentation. Without
+     * this the first rule line becomes the header row and every column stops
+     * matching — silently, because an unmatched column is not an error.
+     */
+    const rows = parseCsv(
+      [
+        '# Flowzen — company import template',
+        '# Fill in one row per COMPANY.',
+        '#',
+        'name,status,city',
+        'Acme Interiors,PROSPECT,Chennai',
+      ].join('\n'),
+    );
+    expect(rows).toEqual([{ name: 'Acme Interiors', status: 'PROSPECT', city: 'Chennai' }]);
+  });
+
+  it('keeps a # that appears in the data', () => {
+    // Only the leading block is instructions. A hash further down is far more
+    // likely to be somebody's company name, and dropping that row would be a
+    // worse bug than the one the skip fixes.
+    const rows = parseCsv(['name,city', '#1 Cakes,Chennai', 'Acme,Madurai'].join('\n'));
+    expect(rows.map((r) => r.name)).toEqual(['#1 Cakes', 'Acme']);
+  });
+});

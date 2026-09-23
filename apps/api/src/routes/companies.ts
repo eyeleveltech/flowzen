@@ -424,6 +424,126 @@ const asUrl = (raw: string | undefined): string | null => {
   return /^https?:\/\//i.test(v) ? v : `https://${v}`;
 };
 
+/**
+ * What the importer reads, as one list.
+ *
+ * The rules used to exist only as `row.x || row.y` expressions scattered
+ * through the loop below, which meant the screen had to describe them from
+ * memory — and a column the importer quietly ignores looks identical to one it
+ * read, because a silent fallback is not an error. So the template, the on-screen
+ * rules and the parser all come from here.
+ *
+ * `accepts` is every spelling the parser answers to; the first is the one the
+ * template uses. Headers are matched with punctuation and case stripped, so
+ * "Company Name", "company_name" and "COMPANY NAME" are the same column.
+ */
+export const IMPORT_COLUMNS = [
+  { accepts: ['name', 'company', 'companyname'], required: true,
+    note: 'The only column that must have a value. A row without one is reported as invalid.' },
+  { accepts: ['status'], required: false,
+    note: 'PROSPECT (default), CLIENT for somebody you already work with, or PAST. A CLIENT or PAST row is recorded as a migration, never as a won deal.' },
+  { accepts: ['city'], required: false,
+    note: 'Defaults to Chennai if left blank — fill it in rather than letting it.' },
+  { accepts: ['industry', 'vertical'], required: false,
+    note: 'HEALTHCARE, REAL_ESTATE, D2C, SPORTS, IT_AND_SAAS, RETAIL, B2B, HOSPITALITY. Anything unrecognised becomes B2B, so write SaaS rather than "IT & SaaS".' },
+  { accepts: ['source'], required: false,
+    note: 'OUTREACH (default), REFERRAL, INBOUND, PARTNER_AGENCY or NETWORK.' },
+  { accepts: ['contactname', 'contact'], required: false,
+    note: 'The person at the company. With an email or phone, this becomes their first contact.' },
+  { accepts: ['email'], required: false,
+    note: 'An email that already exists on another company means the same customer — that row is never imported, whatever you tick.' },
+  { accepts: ['phone', 'mobile', 'contactnumber'], required: false,
+    note: 'Same rule as email: an exact match is never imported.' },
+  { accepts: ['website'], required: false, note: 'With or without https:// — it is added if missing.' },
+  { accepts: ['gstin', 'gst'], required: false,
+    note: 'Its first two digits set the place of supply, so an imported client is billable without retyping the state.' },
+  { accepts: ['address'], required: false,
+    note: 'Joined with city, state and pincode into the billing address.' },
+  { accepts: ['state'], required: false, note: 'Part of the billing address.' },
+  { accepts: ['pincode', 'zip'], required: false, note: 'Part of the billing address.' },
+] as const;
+
+/**
+ * The same rules, for the screen to show before somebody picks a file.
+ *
+ * The modal used to carry its own hand-written list of columns, which had
+ * already drifted — it promised `country` and `zip` and said nothing about
+ * `status`. A list the server does not own is a list that describes the
+ * importer as it was when somebody last remembered to edit it.
+ */
+companiesRouter.get(
+  '/import/rules',
+  requirePermission('company.write'),
+  (_req: AuthRequest, res: Response) => {
+    res.json({
+      success: true,
+      rules: IMPORT_COLUMNS.map((c) => ({
+        column: c.accepts[0],
+        also: c.accepts.slice(1),
+        required: c.required,
+        note: c.note,
+      })),
+    });
+  },
+);
+
+/**
+ * A file to start from, and the rules written down next to the columns.
+ *
+ * Offered because the alternative is guessing: the importer accepts thirteen
+ * columns under twenty-odd spellings and silently defaults three of them, and
+ * none of that is discoverable from an empty file picker.
+ */
+companiesRouter.get(
+  '/import/template',
+  requirePermission('company.write'),
+  (_req: AuthRequest, res: Response) => {
+    const headers = IMPORT_COLUMNS.map((c) => c.accepts[0]);
+    const example = [
+      'Acme Interiors', 'PROSPECT', 'Chennai', 'REAL_ESTATE', 'REFERRAL',
+      'Priya Raman', 'priya@acmeinteriors.in', '9876543210',
+      'acmeinteriors.in', '33AAAAA0000A1Z5', 'No. 4, Anna Salai', 'Tamil Nadu', '600002',
+    ];
+    const second = [
+      'Bright Foods', 'CLIENT', 'Coimbatore', 'D2C', 'PARTNER_AGENCY',
+      'Suresh Kumar', '', '', '', '', '', 'Tamil Nadu', '',
+    ];
+
+    /*
+     * The rules ride along as commented rows rather than a second sheet or a
+     * separate page, so they cannot be separated from the file they describe.
+     * `parseCsv` skips a leading block of `#` lines, so re-uploading this
+     * template unchanged imports the two example rows and nothing else.
+     */
+    const rules = [
+      '# Flowzen — company import template',
+      '# Fill in one row per COMPANY, not per project or retainer.',
+      '# Delete these # lines and the two example rows before importing.',
+      '#',
+      ...IMPORT_COLUMNS.map((c) => {
+        const also = c.accepts.slice(1);
+        return `# ${c.accepts[0]}${c.required ? ' (required)' : ''}: ${c.note}${
+          also.length ? ` Also accepts: ${also.join(', ')}.` : ''
+        }`;
+      }),
+      '#',
+      '# Retainers, project values, fees and dates are NOT imported. Add those in the app.',
+      '# Run a dry run first — it reports every row before anything is written.',
+    ];
+
+    /*
+     * Written by hand rather than through `toCsv`, which takes column
+     * descriptors over a row type and prepends a UTF-8 BOM — and the BOM has to
+     * be the first bytes of the file, not buried after the rules, or Excel
+     * reads the em dashes as mojibake.
+     */
+    const cell = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+    const body = [headers, example, second].map((r) => r.map(cell).join(',')).join('\r\n');
+
+    sendCsv(res, 'flowzen-company-import-template', `﻿${rules.join('\r\n')}\r\n${body}\r\n`);
+  },
+);
+
 companiesRouter.post('/import', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
@@ -465,6 +585,7 @@ companiesRouter.post('/import', requirePermission('company.write'), async (req: 
       website: string | null;
       gstin: string | null;
       billingAddress: string | null;
+      status: CompanyStatus;
       contact: { name: string; email: string | null; phone: string | null } | null;
     }[] = [];
 
@@ -516,6 +637,17 @@ companiesRouter.post('/import', requirePermission('company.write'), async (req: 
         matchEnumValue(row.industry || row.vertical, Object.values(CompanyVertical), VERTICAL_ALIASES)
         ?? CompanyVertical.B2B;
       const source = matchEnumValue(row.source, Object.values(CompanySource)) ?? CompanySource.OUTREACH;
+      /*
+       * Whether they are already a client, which the importer used to have no
+       * way to say.
+       *
+       * Every row came in as a PROSPECT, so the first thing anybody importing a
+       * real book of business had to do was open all of them and change it by
+       * hand — and on the day you start using this, most of your companies ARE
+       * clients. The Add Company form has had this since the beginning
+       * (`status`, plus the "we already work with them" tick); the file did not.
+       */
+      const status = matchEnumValue(row.status, Object.values(CompanyStatus)) ?? CompanyStatus.PROSPECT;
 
       const billingAddress =
         [row.address, row.city, row.state, row.zip || row.pincode, row.country]
@@ -532,6 +664,7 @@ companiesRouter.post('/import', requirePermission('company.write'), async (req: 
         website: asUrl(row.website),
         gstin: (row.gst || row.gstin || '').trim() || null,
         billingAddress,
+        status,
         // A name, an email or a phone is enough to be worth keeping as the
         // company's first contact — without one there is nobody to record.
         contact:
@@ -567,7 +700,7 @@ companiesRouter.post('/import', requirePermission('company.write'), async (req: 
               stateName: resolveState({ gstin: r.gstin }).name,
               stateCode: resolveState({ gstin: r.gstin }).code,
               ownerId: ownerId || req.user!.userId,
-              status: CompanyStatus.PROSPECT,
+              status: r.status,
               ...(r.contact
                 ? {
                     people: {
@@ -582,6 +715,36 @@ companiesRouter.post('/import', requirePermission('company.write'), async (req: 
                 : {}),
             },
           });
+          /*
+           * A record of where these came from, which an import used to leave no
+           * trace of at all.
+           *
+           * Twenty-two companies appearing in one second with nothing in the
+           * activity log is indistinguishable from twenty-two somebody typed,
+           * and the distinction matters most for the ones that arrive already a
+           * CLIENT: §3 makes status derived — a company is a client because a
+           * proposal was WON — so a client that predates Flowzen is a
+           * migration, not a win, and the pipeline figures must never read it
+           * as one. That is the same reasoning as the Add Company form's
+           * `existingClient` tick, and the same verb.
+           */
+          await tx.activity.create({
+            data: {
+              organizationId: orgId,
+              entityType: 'Company',
+              entityId: company.id,
+              actorId: req.user!.userId,
+              verb: r.status === CompanyStatus.PROSPECT ? 'company_created' : 'company_migrated',
+              payload: {
+                name: company.name,
+                vertical: company.vertical,
+                status: company.status,
+                imported: true,
+                ...(r.status === CompanyStatus.PROSPECT ? {} : { existingClient: true }),
+              },
+            },
+          });
+
           results[r.rowIndex].companyId = company.id;
           created += 1;
         }
