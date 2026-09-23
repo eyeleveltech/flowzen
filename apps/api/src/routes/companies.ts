@@ -412,16 +412,6 @@ interface CompanyImportRow {
   row: number;
   name: string;
   action: 'CREATED' | 'SKIPPED' | 'WOULD_CREATE' | 'INVALID';
-  /**
-   * What this row will come in as.
-   *
-   * Reported because it is the field most likely to be silently wrong: a
-   * `status` column the file spells differently, or leaves out, produces a
-   * PROSPECT without complaining — and eighteen clients arriving as prospects
-   * looks exactly like a successful import until somebody opens the list.
-   * Absent on a row that is not being created.
-   */
-  status?: CompanyStatus;
   reason?: string;
   companyId?: string;
   matches?: { id: string; name: string; reason: string }[];
@@ -714,7 +704,7 @@ companiesRouter.post('/import', requirePermission('company.write'), async (req: 
             : null,
       });
 
-      results.push({ row: rowNum, name, status, action: dryRun ? 'WOULD_CREATE' : 'CREATED' });
+      results.push({ row: rowNum, name, action: dryRun ? 'WOULD_CREATE' : 'CREATED' });
 
       // Later rows are checked against earlier ones too, so one file cannot
       // introduce the duplicate it was meant to prevent.
