@@ -312,3 +312,85 @@ describe('the retainer list carries its projects', () => {
     expect(res.body.retainers[0].projects).toEqual([]);
   });
 });
+
+/**
+ * The name you see first on a new retainer.
+ *
+ * Every retainer is created with one project, because a retainer task must
+ * name one and the 1st-of-month roll needs somewhere to put its work. It was
+ * always called "Monthly Retainer Work" -- a placeholder nobody chose, sitting
+ * on the client's page before anyone had said what the retainer was for, and
+ * impossible to delete because it is the fallback other projects' tasks move
+ * into. Renaming it was the only way out, and nothing said so.
+ */
+describe('naming the first piece of work', () => {
+  /*
+   * Its own token: opening a retainer needs `company.write`, which the head
+   * persona this file is built around does not carry.
+   */
+  const bdAuth = () =>
+    [
+      'Authorization',
+      `Bearer ${signJwt({
+        userId: PM.id,
+        organizationId: 'org-1',
+        email: 'bd@eyelevel.local',
+        preset: RolePreset.BD,
+        permissions: ['work.own', 'company.read', 'company.write', 'pipeline.read'],
+      })}`,
+    ] as const;
+
+  /** POST /retainers against a mocked database, returning the project written. */
+  const createRetainer = async (body: Record<string, unknown>) => {
+    (prisma.user.findUnique as any).mockResolvedValue({
+      id: PM.id,
+      organizationId: 'org-1',
+      name: 'Naif',
+      email: 'bd@eyelevel.local',
+      preset: RolePreset.BD,
+      permissions: ['work.own', 'company.read', 'company.write', 'pipeline.read'],
+      active: true,
+      sessionsValidFrom: null,
+    });
+    (prisma.company.findFirst as any).mockResolvedValue({
+      id: 'co-1',
+      name: 'Acme',
+      organizationId: 'org-1',
+      status: 'CLIENT',
+    });
+    (prisma.retainer.findFirst as any).mockResolvedValue(null);
+    (prisma.retainer.create as any).mockResolvedValue({ id: 'ret-1', companyId: 'co-1' });
+    (prisma.monthCard.create as any).mockResolvedValue({ id: 'mc-1' });
+    (prisma.activity.create as any).mockResolvedValue({});
+    let written: any = null;
+    (prisma.retainerProject.create as any).mockImplementation(async ({ data }: any) => {
+      written = data;
+      return { id: 'rp-1', ...data };
+    });
+
+    const res = await request(app)
+      .post('/api/retainers')
+      .set(...bdAuth())
+      .send({ companyId: 'co-1', monthlyValue: 40000, startDate: '2026-09-01', ...body });
+
+    return { status: res.status, project: written };
+  };
+
+  it('uses the name given at creation', async () => {
+    const { project } = await createRetainer({ firstProjectName: 'Social media management' });
+    expect(project.name).toBe('Social media management');
+    expect(project.isDefault).toBe(true);
+  });
+
+  it('falls back to the placeholder when nothing is given', async () => {
+    const { project } = await createRetainer({});
+    expect(project.name).toBe('Monthly Retainer Work');
+  });
+
+  it('refuses a name that is only whitespace', async () => {
+    // Zod trims before min(1), so this is a bad request rather than a project
+    // silently called "   ", which would be unreadable in every list.
+    const { status } = await createRetainer({ firstProjectName: '   ' });
+    expect(status).toBe(400);
+  });
+});

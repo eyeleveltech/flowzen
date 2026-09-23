@@ -42,6 +42,7 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill }: Props) {
   const [monthlyValue, setMonthlyValue] = useState('');
   const [startDate, setStartDate] = useState('');
   const [termMonths, setTermMonths] = useState('');
+  const [firstProjectName, setFirstProjectName] = useState('');
   const [ownerId, setOwnerId] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +53,7 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill }: Props) {
     setMonthlyValue(prefill?.monthlyValue != null ? String(prefill.monthlyValue) : '');
     setStartDate(new Date().toISOString().slice(0, 10));
     setTermMonths('');
+    setFirstProjectName('');
     setOwnerId('');
     setError(null);
     if (!prefill) {
@@ -73,6 +75,7 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill }: Props) {
         startDate,
         termMonths: termMonths ? Number(termMonths) : undefined,
         ownerId: ownerId || undefined,
+        firstProjectName: firstProjectName.trim() || undefined,
         sourceProposalId: prefill?.sourceProposalId,
       });
       const created = (res as { retainer?: { id: string } }).retainer;
@@ -101,7 +104,7 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill }: Props) {
       description={
         prefill?.sourceProposalId
           ? 'Value carries over from the won version — adjust anything before saving.'
-          : 'What they pay each month. Name the work itself once the retainer exists.'
+          : 'What they pay each month, and what the work is called.'
       }
     >
       <form onSubmit={submit}>
@@ -124,6 +127,16 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill }: Props) {
             />
           )}
           <Field label="Monthly value (₹)" value={monthlyValue} onChange={setMonthlyValue} type="number" required />
+          {/* Optional, and the first thing you see on the retainer afterwards.
+              Left blank it falls back to "Monthly Retainer Work" -- a name
+              nobody chose, which is what this field exists to avoid. */}
+          <Field
+            label="What work is this for?"
+            value={firstProjectName}
+            onChange={setFirstProjectName}
+            placeholder="e.g. Social media management"
+            hint="Optional. You can add more streams of work, and rename this, at any time."
+          />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Start date" value={startDate} onChange={setStartDate} type="date" required />
             <Field

@@ -228,6 +228,17 @@ const retainerCreateSchema = z.object({
   startDate: z.string().min(1, 'Start date is required'),
   termMonths: z.number().optional().nullable(),
   ownerId: z.string().optional(),
+  /**
+   * What to call the first piece of work, instead of the placeholder.
+   *
+   * Every retainer gets one project made with it, because a retainer task must
+   * name one. It used to be called "Monthly Retainer Work" always -- a name
+   * nobody chose, appearing on the client's page before anybody had said what
+   * the retainer is for, and impossible to delete because it is the fallback
+   * every other project's tasks move into. Asking here means the first thing
+   * you see is your own words.
+   */
+  firstProjectName: z.string().trim().min(1).max(80).optional(),
   /** Set when this retainer is created from a won proposal (§11.1 step 11). */
   sourceProposalId: z.string().optional(),
 });
@@ -241,7 +252,7 @@ retainersRouter.post('/', requirePermission('company.write'), async (req: AuthRe
     }
 
     const orgId = req.user!.organizationId;
-    const { companyId, monthlyValue, startDate, termMonths, ownerId, sourceProposalId } = parsed.data;
+    const { companyId, monthlyValue, startDate, termMonths, ownerId, firstProjectName, sourceProposalId } = parsed.data;
 
     /*
      * ─── The gate, and why it could not be the proposal alone ──────────────
@@ -344,10 +355,12 @@ retainersRouter.post('/', requirePermission('company.write'), async (req: AuthRe
     await prisma.retainerProject.create({
       data: {
         retainerId: retainer.id,
-        name: 'Monthly Retainer Work',
+        name: firstProjectName || 'Monthly Retainer Work',
         ownerId: ownerId || req.user!.userId,
         isDefault: true,
-        description: 'The monthly work this retainer is for. Campaigns and one-off pieces sit beside it.',
+        description: firstProjectName
+          ? null
+          : 'The monthly work this retainer is for. Campaigns and one-off pieces sit beside it.',
       },
     });
 
