@@ -504,7 +504,9 @@ function NewTaskModal({ open, onClose, onCreated }: { open: boolean; onClose: ()
     if (open) {
       setTitle(''); setDueDate(''); setPriority('MEDIUM'); setDescription('');
       setScope('INTERNAL'); setCompanyId(''); setTargetKey(''); setError(null);
-      setAssignedById(me?.id ?? '');
+      // Nobody, until somebody says otherwise — see tasks.ts on why this
+    // field means nothing when it is filled in by default.
+    setAssignedById('');
     }
   }, [open, me?.id]);
 

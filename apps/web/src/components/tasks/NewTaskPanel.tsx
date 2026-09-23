@@ -48,7 +48,9 @@ export function NewTaskPanel({ isOpen, onClose, onSuccess, projectId, projectNam
     if (!isOpen) return;
     setTitle('');
     setAssigneeIds([]);
-    setAssignedById(me?.id ?? '');
+    // Nobody, until somebody says otherwise — see tasks.ts on why this
+    // field means nothing when it is filled in by default.
+    setAssignedById('');
     setPriority('MEDIUM');
     setDescription('');
     setDueDate('');

@@ -530,7 +530,20 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
         // is what `canRemove` reads — and the second falls back to it, so a
         // form that does not offer the field behaves exactly as before.
         createdById: req.user!.userId,
-        assignedById: assignedById || req.user!.userId,
+        /*
+         * Nobody, unless somebody was named.
+         *
+         * This defaulted to the caller, so every task you wrote for yourself
+         * recorded you as having handed it to yourself. "Assigned by" is for
+         * the case where somebody ELSE asked -- a Head passing design work
+         * down -- and filling it in by default made that signal meaningless,
+         * because every task carried it.
+         *
+         * `createdById` still records who typed it, always, so nothing is
+         * lost: the task drawer falls back to the creator when nobody handed
+         * the work over.
+         */
+        assignedById: assignedById || null,
         reviewerId: reviewerId || null,
         taskType: taskType ?? null,
         dueDate: new Date(dueDate),

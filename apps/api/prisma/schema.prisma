@@ -869,9 +869,11 @@ model Task {
   /// manager writing out what a Head asked for in a meeting could not say so,
   /// and the task arrived on somebody's screen attributed to the wrong person.
   ///
-  /// Nullable only because 83 rows existed before the column did; they were
-  /// backfilled from `createdById` and every write since sets it, defaulting
-  /// to whoever is typing.
+  /// Null when nobody handed it over, which is most tasks: somebody writing
+  /// out their own work was not asked to do it by themselves. It used to
+  /// default to the caller, so every task carried a value and the field said
+  /// nothing. `createdById` records who typed it either way, and the task
+  /// drawer falls back to that when this is empty.
   assignedById      String?
   /// Who checks it before it counts as done. Optional: most tasks are not
   /// reviewed, and pretending otherwise would put a required picker on every

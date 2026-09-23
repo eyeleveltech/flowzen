@@ -338,7 +338,13 @@ describe('who assigned it, who reviews it, and what kind of work it is', () => {
     expect(data.createdById).toBe('usr-head');
   });
 
-  it('falls back to whoever is typing', async () => {
+  it('stays empty when nobody handed the work over', async () => {
+    /*
+     * This used to fall back to the caller, so a designer writing down their
+     * own work was recorded as having assigned it to themselves. The column
+     * exists to say somebody ELSE asked -- filling it in every time made it
+     * carry no information at all.
+     */
     const res = await request(app)
       .post('/api/tasks')
       .set(...auth('designer'))
@@ -346,7 +352,9 @@ describe('who assigned it, who reviews it, and what kind of work it is', () => {
 
     expect(res.status).toBe(201);
     const { data } = (prisma.task.create as any).mock.calls.at(-1)[0];
-    expect(data.assignedById).toBe('usr-des');
+    expect(data.assignedById).toBeNull();
+    // Who typed it is still recorded, always — that one is an audit fact.
+    expect(data.createdById).toBe('usr-des');
   });
 
   it('refuses somebody who is not on the team', async () => {

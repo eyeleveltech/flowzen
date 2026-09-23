@@ -43,7 +43,9 @@ export function AssignTaskModal({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setAssignedById(me?.id ?? '');
+    // Nobody, until somebody says otherwise — see tasks.ts on why this
+    // field means nothing when it is filled in by default.
+    setAssignedById('');
   }, [me?.id]);
 
   useEffect(() => {

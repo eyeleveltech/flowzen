@@ -84,7 +84,9 @@ export function NewWorkTaskModal({
     setAssigneeIds([]);
     // Whoever is typing, because that is who it usually is. Changing it is
     // the point of the field, not the exception it handles.
-    setAssignedById(me?.id ?? '');
+    // Nobody, until somebody says otherwise — see tasks.ts on why this
+    // field means nothing when it is filled in by default.
+    setAssignedById('');
     setReviewerId('');
     setTaskType('');
     setPriority('MEDIUM');
