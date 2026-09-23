@@ -35,6 +35,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useWorkCacheNudge } from '@/hooks/useWorkCacheNudge';
+import { cn } from '@/lib/utils';
+import { MultiSelect } from '@/components/ui/multi-select';
+import { useAuthStore } from '@/stores';
+import { useConfirmStore } from '@/stores/confirm';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, ChevronLeft, ChevronRight, CircleSlash, LockOpen, Pencil, Plus, ReceiptText, Trash2 } from 'lucide-react';
@@ -202,6 +206,8 @@ export default function RetainerMonthCardPage() {
   const searchParams = useSearchParams();
   const month = searchParams.get('month') || currentMonth();
   const nudgeWorkCaches = useWorkCacheNudge();
+  const { user: me } = useAuthStore();
+  const confirm = useConfirmStore((st) => st.confirm);
 
   const [retainer, setRetainer] = useState<Retainer | null>(null);
   const [monthCard, setMonthCard] = useState<MonthCard | null>(null);
@@ -245,7 +251,6 @@ export default function RetainerMonthCardPage() {
     { key: 'invoice', label: 'Invoice' },
   ];
   const [tab, setTab] = useTabState(tabs);
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [addingTask, setAddingTask] = useState(false);
   const [addingCost, setAddingCost] = useState(false);
   /** The cost row being corrected, if any. */
@@ -257,7 +262,6 @@ export default function RetainerMonthCardPage() {
   // The row you clicked. Held by id rather than by object so that a reload
   // after an edit reopens the FRESH task rather than the stale copy that was
   // in the list when it was clicked.
-  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   // `null` is closed; `{}` is adding; `{ project }` is editing that one.
   const [projectForm, setProjectForm] = useState<{ project?: RetainerProject } | null>(null);
 
@@ -271,63 +275,46 @@ export default function RetainerMonthCardPage() {
    * destination, not an edge case.
    */
   const openProjectId = searchParams.get('project');
-  const [projectView, setProjectView] = useState<ProjectView | null>(null);
-  const [loadingProject, setLoadingProject] = useState(false);
-
-  const setOpenProject = (projectId: string | null) => {
-    const q = new URLSearchParams(searchParams.toString());
-    if (projectId) q.set('project', projectId);
-    else q.delete('project');
-    router.push(`/retainers/${id}?${q}`);
-  };
-
-  const loadProjectView = useCallback(async () => {
-    if (!openProjectId) {
-      setProjectView(null);
-      return;
-    }
-    setLoadingProject(true);
-    try {
-      const res = await api.retainers.projectTasks(id, openProjectId);
-      setProjectView(res as unknown as ProjectView);
-    } catch (e) {
-      setProjectView(null);
-      setError(e instanceof Error ? e.message : 'Could not open that project');
-    } finally {
-      setLoadingProject(false);
-    }
-  }, [id, openProjectId]);
-
-  useEffect(() => {
-    void loadProjectView();
-  }, [loadProjectView]);
-
-  /**
-   * Removing a project keeps the work.
+  /*
+   * What the drill-in is showing, and what it is hiding.
    *
-   * Its tasks stay on their month cards, which is where each month's cost and
-   * profit are counted from — so the confirmation says that rather than the
-   * usual "this cannot be undone", which here would not be true of the part
-   * anybody actually worries about.
+   * A project's tasks were rendered as one Card per month, stacked. A campaign
+   * running August into October was three tables down the page, each with its
+   * own header and its own column row, and the month you actually wanted was
+   * wherever it happened to fall. One container with a month switch shows the
+   * same work in a third of the height.
+   *
+   * `taskMonth` is a FILTER on this project's work, not the page's month card
+   * — that one still lives in the header and decides which month is billed.
    */
-  const removeProject = async (p: RetainerProject) => {
-    const count = p._count?.tasks ?? 0;
-    const warning = count
-      ? `Remove "${p.name}"? Its ${plural(count, 'task')} stay on their month cards — they just stop being grouped.`
-      : `Remove "${p.name}"?`;
-    if (!window.confirm(warning)) return;
-    try {
-      await api.retainers.deleteProject(id, p.id);
-      toast.success('Project removed');
-      // Its tasks are still here, they just stop being grouped — so go back to
-      // the list rather than leaving you on a project that no longer exists.
-      if (openProjectId === p.id) setOpenProject(null);
-      void loadRetainer();
-      void loadMonthCard();
-    } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Could not remove that project');
-    }
-  };
+  /*
+   * Empty means no filter, and it is a list rather than a single choice
+   * because "Open AND Late" is one question, not two.
+   */
+
+  /*
+   * A project has its own page now, so opening one is a navigation.
+   *
+   * `?project=` used to swap this page's body out, which meant a task sat
+   * below the retainer's header, its four tiles and its tabs — and needed a
+   * second month control that could disagree with the first. Old links still
+   * work: the effect below sends them on.
+   */
+  const openProjectHref = (projectId: string) => `/retainers/${id}/projects/${projectId}`;
+
+  /*
+   * Old links still work.
+   *
+   * `?project=` opened a drill-in on this page for months, so it is in
+   * bookmarks, in Slack, and in the URL this app's own project cards used to
+   * produce. Send it to the page that now owns that view rather than showing
+   * a retainer with no sign of what was asked for.
+   */
+  useEffect(() => {
+    if (openProjectId) router.replace(`/retainers/${id}/projects/${openProjectId}`);
+  }, [openProjectId, id, router]);
+
+
 
   /**
    * Taking a cost off the month.
@@ -337,7 +324,13 @@ export default function RetainerMonthCardPage() {
    * undone", which is not the part anybody worries about here.
    */
   const removeCost = async (c: Cost) => {
-    if (!window.confirm(`Remove the ${c.vendor} cost? This month's profit moves by ${money(c.amount)}.`)) return;
+    const ok = await confirm({
+      title: 'Remove this cost?',
+      message: `${c.vendor} — ${money(c.amount)}. This month's profit moves by that much. The row is kept on the server so the figure it fed into stays explainable.`,
+      confirmText: 'Remove cost',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await api.costs.remove(c.id);
       toast.success('Cost removed');
@@ -547,123 +540,7 @@ export default function RetainerMonthCardPage() {
     }
   };
 
-  // Read back out of `tasks` rather than stored on click, so that saving an
-  // edit shows the saved values instead of the copy that was in the list when
-  // the row was pressed. The client and the month are context the row does not
-  // carry and the drawer should not have to fetch.
-  const openRow = openTaskId
-    ? (projectView?.months.flatMap((g) => g.tasks).find((t) => t.id === openTaskId) ??
-      tasks.find((t) => t.id === openTaskId))
-    : undefined;
-  /*
-   * The month it is billed in, and the piece of work it is part of.
-   *
-   * The drawer used to say only "September 2026 retainer" — so a task opened
-   * from inside the Diwali campaign named the retainer and never the campaign,
-   * which is the thing you were looking at. Both facts, in the order they
-   * matter: what this is FOR, and which month pays for it.
-   */
-  const openRowMonth = projectView?.months.find((g) => g.tasks.some((t) => t.id === openTaskId))?.month ?? month;
-  const openTask: DrawerTask | null = openRow
-    ? {
-        ...openRow,
-        clientName: retainer.company?.name ?? null,
-        clientHref: retainer.company?.id ? `/companies/${retainer.company.id}` : null,
-        workLabel: `${monthLabel(openRowMonth)} retainer`,
-        projectName: openRow.retainerProject?.name ?? null,
-        projectHref: openRow.retainerProject
-          ? `/retainers/${id}?project=${openRow.retainerProject.id}`
-          : null,
-      }
-    : null;
 
-  const changeTaskStatus = async (t: Task, next: TStatus) => {
-    if (next === t.status) return;
-    setBusyId(t.id);
-    try {
-      if (next === 'ON_HOLD') {
-        await api.tasks.wait(t.id, 'CLIENT');
-      } else if (t.status === 'ON_HOLD') {
-        // /resume is the only route that closes out waitingSince — always go
-        // through it first, then layer the real target status on top.
-        await api.tasks.resume(t.id);
-        if (next !== 'IN_PROGRESS') await api.tasks.updateStatus(t.id, next);
-      } else {
-        await api.tasks.updateStatus(t.id, next);
-      }
-      // Both views read from different requests, and a status change moves a
-      // figure on each — the month's "tasks done" and the project's progress.
-      await Promise.all([loadMonthCard(), loadProjectView()]);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not update that task');
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  /** One task, as a row. The same row wherever a task is listed on this page. */
-  const TaskRow = ({ t, closed }: { t: Task; closed: boolean }) => {
-    const late = t.status !== 'DONE' && t.status !== 'CANCELLED' && t.dueDate.slice(0, 10) < todayStr;
-    return (
-      <tr onClick={() => setOpenTaskId(t.id)} className="cursor-pointer transition-colors hover:bg-subtle">
-        <td>
-          {/* A button inside the row rather than a click handler alone: the row
-              is the target for a mouse, and this is what a keyboard and a
-              screen reader get to open the same thing. */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setOpenTaskId(t.id);
-            }}
-            className={`rounded-sm text-left font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
-              t.status === 'DONE' || t.status === 'CANCELLED' ? 'text-secondary line-through' : 'text-primary'
-            }`}
-          >
-            {t.title}
-          </button>
-          {t.status === 'ON_HOLD' && t.waitingOn && (
-            <p className="mt-0.5 text-micro text-secondary">
-              waiting on {t.waitingOn === 'CLIENT' ? 'the client' : 'someone else'}
-            </p>
-          )}
-        </td>
-        <td>
-          {/* The lead, and how many others are on it — "Janani +2" rather than
-              three names wrapping a column that has to stay scannable. */}
-          <p className="text-body">
-            {t.assignee?.name ?? 'Unassigned'}
-            {(t.assignees?.length ?? 1) > 1 && (
-              <span className="text-secondary"> +{(t.assignees?.length ?? 1) - 1}</span>
-            )}
-          </p>
-          {t.assignee?.designation && <p className="text-micro text-secondary">{t.assignee.designation}</p>}
-        </td>
-        <td className="whitespace-nowrap text-secondary">{date(t.assignedAt)}</td>
-        <td className={`whitespace-nowrap ${late ? 'font-semibold text-danger' : 'text-secondary'}`}>
-          {date(t.dueDate)}
-        </td>
-        <td>
-          <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-secondary">
-            <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${getPriorityDot(t.priority)}`} />
-            {getPriorityLabel(t.priority)}
-          </span>
-        </td>
-        <td onClick={(e) => e.stopPropagation()}>
-          <Select
-            value={t.status}
-            onChange={(v) => void changeTaskStatus(t, v as TStatus)}
-            options={TASK_STATUS_OPTIONS}
-            ariaLabel={`Status for ${t.title}`}
-            buttonClassName="px-2.5 py-1.5 text-xs w-32"
-            // A closed month has had its profit reported; reopening a finished
-            // task in it moves that month's "tasks done" after the fact.
-            disabled={busyId === t.id || closed}
-          />
-        </td>
-      </tr>
-    );
-  };
 
   /**
    * The way into a retainer's work.
@@ -679,8 +556,21 @@ export default function RetainerMonthCardPage() {
    * roll needs somewhere to put the monthly baseline on the 1st. So this list
    * is never empty, and there is no leftover card beside it.
    */
+  /*
+   * Called, not mounted — `ProjectsPanel()` rather than `<ProjectsPanel />`.
+   *
+   * These are defined inside the page component, so each render makes a NEW
+   * function identity. Mounted as elements, React sees a different component
+   * type every time and unmounts the whole subtree: every piece of local state
+   * under here is destroyed on any parent state change. That is invisible
+   * until something below holds state — a dropdown closed itself the instant
+   * you picked a value from it, because picking re-rendered the page and threw
+   * the dropdown away.
+   *
+   * Calling them inlines the JSX into this component's own tree, which is what
+   * it always was in spirit.
+   */
   const ProjectsPanel = () => {
-    if (openProjectId) return <ProjectDrillIn />;
 
     const projects = retainer.projects ?? [];
 
@@ -725,7 +615,7 @@ export default function RetainerMonthCardPage() {
     return (
       <button
         type="button"
-        onClick={() => setOpenProject(project.id)}
+        onClick={() => router.push(openProjectHref(project.id))}
         className="flex flex-col rounded-xl border border-border bg-white p-4 text-left outline-none transition-colors hover:border-primary/40 hover:bg-subtle/40 focus-visible:ring-2 focus-visible:ring-primary/40"
       >
         <div className="flex items-start justify-between gap-2">
@@ -784,103 +674,6 @@ export default function RetainerMonthCardPage() {
     );
   };
 
-  /** One project, opened: its tasks, under the month that bills each of them. */
-  const ProjectDrillIn = () => {
-    const p = projectView?.project ?? null;
-
-    return (
-      <>
-        <button
-          type="button"
-          onClick={() => setOpenProject(null)}
-          className="mb-4 inline-flex items-center gap-1.5 text-sm text-secondary transition-colors hover:text-primary"
-        >
-          <ArrowLeft className="h-4 w-4" strokeWidth={1.75} /> All projects
-        </button>
-
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-lg font-semibold text-primary">{p?.name ?? '…'}</h2>
-              {p?.isDefault && <Badge tone="info">Monthly</Badge>}
-              {p?.status === 'DONE' && <Badge tone="neutral">Done</Badge>}
-            </div>
-            <p className="mt-0.5 text-xs text-secondary">
-              {p ? `${describeRun(p)}${p.owner ? ` · ${p.owner.name}` : ''}` : ''}
-            </p>
-            {p?.description && <p className="mt-2 max-w-2xl text-sm text-secondary">{p.description}</p>}
-          </div>
-
-          <div className="flex shrink-0 items-center gap-2">
-            <Button size="sm" variant="secondary" icon={Plus} onClick={() => setAddingTask(true)} disabled={!monthCard || monthClosed}>
-              Task
-            </Button>
-            {p && (
-              <>
-                <Button size="sm" variant="ghost" onClick={() => setProjectForm({ project: p })}>
-                  Edit
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-danger hover:bg-danger-tint hover:text-danger"
-                  onClick={() => void removeProject(p)}
-                >
-                  Remove
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {loadingProject ? (
-          <PageSkeleton />
-        ) : !projectView || projectView.total === 0 ? (
-          <EmptyState
-            title="Nothing here yet"
-            hint="Add a task from this page, or move one here from the month it sits in."
-          />
-        ) : (
-          <div className="space-y-5">
-            {projectView.months.map((g) => (
-              <Card key={g.month} padding="none">
-                <CardHeader className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <CardTitle>{monthLabel(g.month)}</CardTitle>
-                    {/* Which card these are billed on, and whether it is shut. */}
-                    {g.status === 'CLOSED' && <Badge tone="neutral">Closed</Badge>}
-                    {g.month === month && <Badge tone="info">On screen</Badge>}
-                  </div>
-                  <span className="text-micro text-secondary">{plural(g.tasks.length, 'task')}</span>
-                </CardHeader>
-                <CardBody className="p-0!">
-                  <div className="overflow-x-auto">
-                    <table className="data-table w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-border">
-                          <th className="eyebrow text-left">Task</th>
-                          <th className="eyebrow text-left">Assigned to</th>
-                          <th className="eyebrow text-left">Assigned</th>
-                          <th className="eyebrow text-left">Due</th>
-                          <th className="eyebrow text-left">Priority</th>
-                          <th className="eyebrow text-left">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border">
-                        {g.tasks.map((t) => (
-                          <TaskRow key={t.id} t={t} closed={g.status === 'CLOSED'} />
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardBody>
-              </Card>
-            ))}
-          </div>
-        )}
-      </>
-    );
-  };
 
   return (
     <>
@@ -945,14 +738,14 @@ export default function RetainerMonthCardPage() {
         {/* What you came here to do, where the prototype puts it. */}
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <Button
-            size="sm"
-            variant="secondary"
-            icon={Plus}
-            onClick={() => setAddingTask(true)}
-            disabled={!monthCard || monthClosed}
-            title={monthClosed ? `${monthLabel(month)} is closed` : undefined}
-          >
-            Task
+              size="sm"
+              variant="secondary"
+              icon={Plus}
+              onClick={() => setAddingTask(true)}
+              disabled={!monthCard || monthClosed}
+              title={monthClosed ? `${monthLabel(month)} is closed` : undefined}
+            >
+              Task
           </Button>
           {canEnterCost && (
             <Button
@@ -1021,8 +814,9 @@ export default function RetainerMonthCardPage() {
       */}
       {!loadingMonth && monthCard && (
         <>
-          <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatTile
+              dense
               label="Tasks"
               value={
                 <>
@@ -1042,6 +836,7 @@ export default function RetainerMonthCardPage() {
               }
             />
             <StatTile
+              dense
               label="Fee"
               value={canEnterMoney ? money(revenue) : 'Hidden'}
               note={
@@ -1053,6 +848,7 @@ export default function RetainerMonthCardPage() {
               }
             />
             <StatTile
+              dense
               label="Cost so far"
               value={canEnterMoney ? (noCostBasis ? 'Nothing entered' : money(costsTotal)) : 'Hidden'}
               note={noCostBasis ? 'no costs and no people on this month yet' : 'external and people'}
@@ -1071,6 +867,7 @@ export default function RetainerMonthCardPage() {
             */}
             <StatTile
               dark
+              dense
               label="Profit"
               value={
                 !canEnterMoney ? 'Hidden' : noCostBasis ? 'Not known yet' : profit != null ? money(profit) : 'Hidden'
@@ -1088,44 +885,19 @@ export default function RetainerMonthCardPage() {
           </div>
 
           {/*
-            The point of the whole screen, said once. A month card is the thing
-            nobody has to remember, and that is invisible unless it is written
-            down next to the evidence.
-          */}
-          {/*
-            And only when it is true.
+            The "month cards appear on their own" banner used to sit here.
 
-            This said "Nobody created this card — it appeared on the 1st" on
-            every card, including the one that opens the moment a retainer is
-            created mid-month. A card made on the 20th by the person reading
-            the sentence is not a card nobody created, and the template line
-            claimed tasks that were not there.
-          */}
-          <div className="mb-5 rounded-r-xl border-l-[3px] border-accent bg-subtle/60 px-4 py-3 text-xs text-body">
-            {cardOrigin === 'rolled' ? (
-              <>
-                <b className="mb-0.5 block font-semibold text-primary">Nobody created this card</b>
-                It appeared on the 1st
-                {retainer.template ? ` and its tasks came from the "${retainer.template.name}" template` : ''}. Next month
-                the same happens again, with nothing for anyone to remember.
-              </>
-            ) : cardOrigin === 'with-retainer' ? (
-              <>
-                <b className="mb-0.5 block font-semibold text-primary">This month was opened with the retainer</b>
-                {retainer.template
-                  ? ` Its tasks came from the "${retainer.template.name}" template. From the 1st it happens on its own, with nothing for anyone to remember.`
-                  : ' From the 1st a new card appears on its own, with nothing for anyone to remember.'}
-              </>
-            ) : (
-              <>
-                <b className="mb-0.5 block font-semibold text-primary">Month cards appear on their own</b>
-                One opens for every active retainer on the 1st
-                {retainer.template ? `, with its tasks from the "${retainer.template.name}" template` : ''} — nothing for
-                anyone to remember.
-              </>
-            )}
-          </div>
+            It explained, in three branches and about seventy pixels, how this
+            card came to exist -- which the subtitle above already says in six
+            words: "Month card, created automatically on the 1st". So it was a
+            permanent slot spent restating the line directly above it.
 
+            It cost more than its height. Measured down this page, roughly
+            440px went on chrome before the first project card and 580px
+            before the first task row, which on a laptop is the whole fold
+            spent before any work appears. Onboarding text earns a permanent
+            slot only while it is still telling you something.
+          */}
           {!canEnterMoney && (
             <div className="mb-5 rounded-xl border border-dashed border-line bg-subtle/40 px-4 py-3.5 text-xs text-secondary">
               <b className="mb-0.5 block font-semibold text-body">Cost and profit are hidden</b>
@@ -1148,7 +920,7 @@ export default function RetainerMonthCardPage() {
         */}
         <Tabs className="mb-5" tabs={tabs} active={tab} onChange={setTab} />
 
-      {tab === 'projects' && <ProjectsPanel />}
+      {tab === 'projects' && ProjectsPanel()}
 
       {/*
         Costs, allocations and the invoice belong to ONE month — they are the
@@ -1402,13 +1174,11 @@ export default function RetainerMonthCardPage() {
         retainerProjects={retainer.projects ?? []}
         // Opened from inside a project, the task belongs to it — asking again
         // on the form would be asking a question the screen already answered.
-        defaultRetainerProjectId={openProjectId ?? undefined}
         onClose={() => setAddingTask(false)}
         onCreated={() => {
           setAddingTask(false);
           void loadMonthCard();
           void loadRetainer();
-          void loadProjectView();
         }}
       />
 
@@ -1432,7 +1202,6 @@ export default function RetainerMonthCardPage() {
             setProjectForm(null);
             void loadRetainer();
             void loadMonthCard();
-            void loadProjectView();
           }}
         />
       )}
@@ -1487,15 +1256,6 @@ export default function RetainerMonthCardPage() {
         exclusive in the data — 0 of 82 rows carry both — so on this screen
         that row would be a dash on every task.
       */}
-      <TaskDrawer
-        task={openTask}
-        statusOptions={TASK_STATUS_OPTIONS}
-        team={team}
-        busy={busyId === openTaskId}
-        onClose={() => setOpenTaskId(null)}
-        onStatusChange={(t, next) => void changeTaskStatus(t as unknown as Task, next as TStatus)}
-        onChanged={() => void loadMonthCard()}
-      />
 
       {enteringInvoice && monthCard && (
         <EnterInvoiceModal

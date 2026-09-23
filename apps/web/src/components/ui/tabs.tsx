@@ -117,7 +117,19 @@ export function Tabs<T extends string>({
       ref={row}
       role="tablist"
       onKeyDown={onKeyDown}
-      className={`flex max-w-full gap-0 overflow-x-auto border-b border-border ${className}`}
+      /*
+       * `no-scrollbar`, because `overflow-x-auto` was drawing one.
+       *
+       * Per spec, setting overflow on one axis turns the other from `visible`
+       * into `auto` — so `overflow-x-auto` gave this a vertical scrollbar too,
+       * and the active tab's underline sits at `-bottom-px`, one pixel outside
+       * the box. One pixel of overflow, a scrollbar on every screen with tabs.
+       *
+       * The scrolling itself stays: on a narrow screen the tabs still swipe.
+       * Only the bar goes. The utility was already in globals.css with nothing
+       * using it.
+       */
+      className={`no-scrollbar flex max-w-full gap-0 overflow-x-auto border-b border-border ${className}`}
     >
       {shown.map((tab) => {
         const Icon = tab.icon;

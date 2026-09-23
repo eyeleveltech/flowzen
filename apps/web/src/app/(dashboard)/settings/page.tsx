@@ -96,6 +96,9 @@ type Form = {
   workingHoursEnd: string;
   workingDays: number[];
   holidays: string;
+  /** Typed to replace what is stored; blank means "leave it alone". */
+  geminiApiKey: string;
+  geminiModel: string;
   stageProbProposalSent: string;
   stageProbInNegotiation: string;
   stageProbProformaIssued: string;
@@ -112,6 +115,17 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  /*
+   * What the key can actually call.
+   *
+   * The model was a text box with a default picked from memory, and Google had
+   * already retired that name — so the assistant's first answer to anybody was
+   * a 404 telling them to change a setting they had no way of knowing the
+   * right value for. Asking the key is the only honest source: availability
+   * varies by key, by region and by month.
+   */
+  const [models, setModels] = useState<string[] | null>(null);
+  const [modelsError, setModelsError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -142,6 +156,9 @@ export default function SettingsPage() {
         workingDays: o.workingDays ?? [1, 2, 3, 4, 5, 6],
         // One per line is how somebody actually types a year of holidays.
         holidays: (o.holidays ?? []).join('\n'),
+        // Never loaded from the server — it is not sent, by design.
+        geminiApiKey: '',
+        geminiModel: o.geminiModel ?? 'gemini-2.5-flash',
         stageProbProposalSent: String(o.stageProbabilities?.PROPOSAL_SENT ?? 30),
         stageProbInNegotiation: String(o.stageProbabilities?.IN_NEGOTIATION ?? 60),
         stageProbProformaIssued: String(o.stageProbabilities?.PROFORMA_ISSUED ?? 85),
@@ -166,6 +183,26 @@ export default function SettingsPage() {
   // The switch the API enforces on every one of these saves, not a rung on the
   // old role ladder — ACCOUNTS maps to ADMIN there while holding no
   // setup.admin, which offered them fields that every save would refuse.
+  useEffect(() => {
+    if (!config?.organization.aiConfigured) {
+      setModels(null);
+      return;
+    }
+    let cancelled = false;
+    void api.assistant
+      .models()
+      .then((r) => {
+        if (!cancelled) setModels(r.models);
+      })
+      .catch((e) => {
+        // Not fatal: the field falls back to free text, which is still usable.
+        if (!cancelled) setModelsError(e instanceof Error ? e.message : 'Could not list models');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [config?.organization.aiConfigured]);
+
   const canEdit = Boolean(config?.me.permissions?.includes('setup.admin'));
 
   const set = <K extends keyof Form>(key: K, value: Form[K]) =>
@@ -201,6 +238,13 @@ export default function SettingsPage() {
           .split(/[\n,]/)
           .map((d) => d.trim())
           .filter(Boolean),
+        /*
+         * Only sent when something was typed. An untouched field is blank, and
+         * blank means "leave the stored key alone" — sending it would clear the
+         * key every time anybody saved any other setting on this page.
+         */
+        ...(form.geminiApiKey.trim() ? { geminiApiKey: form.geminiApiKey.trim() } : {}),
+        geminiModel: form.geminiModel.trim() || 'gemini-2.5-flash',
         stageProbProposalSent: Number(form.stageProbProposalSent),
         stageProbInNegotiation: Number(form.stageProbInNegotiation),
         stageProbProformaIssued: Number(form.stageProbProformaIssued),
@@ -418,6 +462,65 @@ export default function SettingsPage() {
                 <p className="text-micro text-secondary">
                   Won is always 100% and lost is always nothing — neither is a prediction.
                 </p>
+              </CardBody>
+            </Card>
+
+            <Card padding="none">
+              <CardHeader>
+                <CardTitle>Zen — the assistant</CardTitle>
+              </CardHeader>
+              <CardBody className="space-y-4">
+                <p className="text-xs text-secondary">
+                  A Gemini key turns on Zen. It is asked with the month&apos;s real figures — client names,
+                  fees, costs, margins, the pipeline and who is carrying what — so those are sent to Google to
+                  answer a question. Only MANAGEMENT can ask it, and every question is recorded in the activity
+                  log.
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field
+                    label="Gemini API key"
+                    type="password"
+                    value={form.geminiApiKey}
+                    onChange={(v) => set('geminiApiKey', v)}
+                    placeholder={config?.organization.aiConfigured ? '•••••••• (a key is set)' : 'Paste a key to turn it on'}
+                    hint={
+                      config?.organization.aiConfigured
+                        ? 'A key is on file. Type a new one to replace it — leaving this blank keeps the one you have.'
+                        : 'From aistudio.google.com. Stored on the server, never sent to the browser.'
+                    }
+                    disabled={!canEdit}
+                  />
+                  {models && models.length > 0 ? (
+                    <FieldSelect
+                      label="Model"
+                      value={form.geminiModel}
+                      onChange={(v) => set('geminiModel', v)}
+                      options={
+                        // Whatever is stored stays selectable even if the key
+                        // can no longer call it — otherwise the dropdown would
+                        // silently show something other than what is saved.
+                        (models.includes(form.geminiModel)
+                          ? models
+                          : [form.geminiModel, ...models]
+                        ).map((m) => ({ value: m, label: m }))
+                      }
+                      disabled={!canEdit}
+                    />
+                  ) : (
+                    <Field
+                      label="Model"
+                      value={form.geminiModel}
+                      onChange={(v) => set('geminiModel', v)}
+                      placeholder="gemini-2.5-flash"
+                      hint={
+                        modelsError
+                          ? `Could not list models (${modelsError}). Type one if you know it.`
+                          : 'Save a key and this becomes a list of what that key can call.'
+                      }
+                      disabled={!canEdit}
+                    />
+                  )}
+                </div>
               </CardBody>
             </Card>
 

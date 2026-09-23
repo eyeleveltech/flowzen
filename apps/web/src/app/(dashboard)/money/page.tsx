@@ -598,6 +598,7 @@ export default function MoneyPage() {
 
       {tab === 'PROFIT' && (
         <div className="space-y-6">
+
           {/* §8: "Company profit — allRevenue − allDirectCost − salaries −
               overheads. Salary appears once here and is allocated down to
               jobs. Never added twice." Every ingredient was already being

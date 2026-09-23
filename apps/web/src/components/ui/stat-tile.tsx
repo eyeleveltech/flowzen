@@ -58,6 +58,18 @@ export interface StatTileProps {
    *   none   no box at all, for a tile already inside a `Card`.
    */
   frame?: 'card' | 'inset' | 'none';
+  /**
+   * Half the height, same information.
+   *
+   * A row of these is ~140px, which is right at the top of a screen you read
+   * and wrong at the top of a screen you WORK on. On the retainer month card
+   * roughly 440px went on chrome before the first project and 580px before the
+   * first task, so the figures were pushing the work off the fold.
+   *
+   * Dense keeps every figure and its note — the note is the part that says
+   * whether 3 is good — and spends less room saying them.
+   */
+  dense?: boolean;
   className?: string;
 }
 
@@ -68,6 +80,7 @@ export function StatTile({
   tone = 'default',
   dark = false,
   frame = 'card',
+  dense = false,
   className,
 }: StatTileProps) {
   const quiet = dark ? 'text-white/60' : 'text-secondary';
@@ -75,22 +88,23 @@ export function StatTile({
   return (
     <div
       className={cn(
-        frame === 'card' && 'rounded-xl border p-5',
+        frame === 'card' && cn('rounded-xl border', dense ? 'px-4 py-3' : 'p-5'),
         frame === 'card' && (dark ? 'border-primary bg-primary' : 'border-border bg-white'),
-        frame === 'inset' && cn('px-5 py-4', dark ? 'bg-primary' : 'bg-white'),
+        frame === 'inset' && cn(dense ? 'px-4 py-3' : 'px-5 py-4', dark ? 'bg-primary' : 'bg-white'),
         className,
       )}
     >
       <p className={cn('text-micro font-bold uppercase tracking-[0.13em]', quiet)}>{label}</p>
       <p
         className={cn(
-          'mt-2 text-xl font-bold tracking-[-0.6px] tabular-nums leading-[1.2]',
+          'font-bold tracking-[-0.6px] tabular-nums leading-[1.2]',
+          dense ? 'mt-1 text-lg' : 'mt-2 text-xl',
           dark ? 'text-white' : TONE[tone],
         )}
       >
         {value}
       </p>
-      {note && <p className={cn('mt-1.5 text-micro', quiet)}>{note}</p>}
+      {note && <p className={cn('text-micro', dense ? 'mt-0.5' : 'mt-1.5', quiet)}>{note}</p>}
     </div>
   );
 }

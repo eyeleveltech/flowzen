@@ -78,6 +78,7 @@ export function NewClientModal({ onConfirm, onCancel }: Props) {
 
   const [name, setName] = useState('');
   const [contactName, setContactName] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [city, setCity] = useState('');
   const [sourceId, setSourceId] = useState('');
@@ -160,8 +161,21 @@ export function NewClientModal({ onConfirm, onCancel }: Props) {
         followUpDate: existing ? null : followUpDate || null,
         ...(existing ? { status: 'CLIENT' as const, existingClient: true } : {}),
         // One transaction on the server: the company, the person, and the card.
-        ...(contactName.trim()
-          ? { contact: { name: contactName.trim(), phone: phone || null } }
+        /*
+         * Any one of the three is a contact worth keeping.
+         *
+         * This was gated on the NAME alone, so an email typed without a name
+         * went nowhere — the same way the phone used to be lost. The server
+         * guards the same way now, and writes all three onto the Person.
+         */
+        ...(contactName.trim() || contactEmail.trim() || phone.trim()
+          ? {
+              contact: {
+                name: contactName.trim(),
+                phone: phone || null,
+                email: contactEmail.trim() || undefined,
+              },
+            }
           : {}),
         // Carries a NAME warning past. The server ignores it for a phone or email
         // match, which is the point: those are the same company.
@@ -253,6 +267,26 @@ export function NewClientModal({ onConfirm, onCancel }: Props) {
             disabled={busy}
           />
         </div>
+
+        {/*
+          The address a proforma is sent to.
+
+          `Person.email` has always been in the schema and this form never
+          asked for it, so a client added here had a name and a phone and no
+          way to be emailed. Raising a proforma then offered an empty recipient
+          list — documentEmail builds it from the company's people — and
+          somebody had to come back and add the same contact a second time
+          before anything could go out.
+        */}
+        <Field
+          label="Contact email"
+          type="email"
+          value={contactEmail}
+          onChange={setContactEmail}
+          placeholder="e.g. priya@acme.in"
+          hint="Where their proformas and invoices go. You can add more people later."
+          disabled={busy}
+        />
 
         <FieldSelect
           label="Are you already working with them?"

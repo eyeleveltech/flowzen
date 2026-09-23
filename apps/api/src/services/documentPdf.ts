@@ -392,9 +392,21 @@ export async function generateDocumentPdf(
   const doc = await loadRenderableDocument(kind, id, organizationId);
   const html = renderDocumentHtml(doc);
 
+  /*
+   * `--disable-dev-shm-usage`, or this works on a laptop and fails on the server.
+   *
+   * Chromium puts its shared-memory files in /dev/shm, and Docker gives a
+   * container 64MB of it by default. Rendering an A4 page with a brand band
+   * and a table goes past that, Chromium dies mid-render, and the download
+   * fails with nothing useful said. The flag moves that buffer to /tmp, which
+   * is backed by the container's normal filesystem.
+   *
+   * compose also asks for a larger /dev/shm, so the flag is the belt and that
+   * is the braces — each alone fixes it, and neither costs anything.
+   */
   const browser = await puppeteer.launch({
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
   });
   try {
     const page = await browser.newPage();

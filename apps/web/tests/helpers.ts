@@ -194,3 +194,27 @@ export async function writeOrgSettings(api: APIRequestContext, settings: Record<
 export function toast(page: Page, text: string | RegExp) {
   return page.getByText(text).first();
 }
+
+/**
+ * Tell the browser Zen is switched on, whatever the database says.
+ *
+ * `aiConfigured` is just "is there a key on the organisation", and a reseed
+ * takes the key with it. The specs that drive the panel used to `test.skip`
+ * when it was missing — so a reseeded database quietly turned six real tests
+ * into no tests at all, and the run still reported green.
+ *
+ * The key itself is never involved: these specs stub `/assistant/stream`, so
+ * nothing reaches Google. Only the flag that decides whether the panel offers
+ * an input or a link to Settings matters here.
+ */
+export async function zenSwitchedOn(page: Page): Promise<void> {
+  await page.route('**/api/config', async (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const res = await route.fetch();
+    const body = await res.json();
+    // Patched rather than replaced: everything else on /config is what the
+    // page under test actually needs to render.
+    body.organization = { ...body.organization, aiConfigured: true };
+    await route.fulfill({ response: res, json: body });
+  });
+}

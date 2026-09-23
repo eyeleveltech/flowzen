@@ -82,6 +82,8 @@ retainersRouter.get('/', requirePermission('work.all'), async (req: AuthRequest,
   try {
     const orgId = req.user!.organizationId;
     const canSeeFigures = hasPermission(req.user!, 'money.figures');
+    /** Today as `yyyy-mm-dd`, for the late comparison below. */
+    const todayKey = new Date().toISOString().slice(0, 10);
     const { status } = req.query;
     const wantsCsv = req.query.format === 'csv';
     const { page, limit, skip, take } = parsePagination(
@@ -108,7 +110,7 @@ retainersRouter.get('/', requirePermission('work.all'), async (req: AuthRequest,
             take: 3,
             include: {
               invoice: { select: { id: true, number: true, status: true } },
-              tasks: { where: { deletedAt: null }, select: { status: true } },
+              tasks: { where: { deletedAt: null }, select: { status: true, dueDate: true } },
             },
           },
           /*
@@ -159,6 +161,25 @@ retainersRouter.get('/', requirePermission('work.all'), async (req: AuthRequest,
       // work the same way "open" does everywhere else (tasks.ts/team.ts).
       const monthTasksTotal = activeMonthCard?.tasks.filter((t) => t.status !== 'CANCELLED').length ?? 0;
       const monthTasksDone = activeMonthCard?.tasks.filter((t) => t.status === 'DONE').length ?? 0;
+      /*
+       * How much of it is already late.
+       *
+       * The list could say "11 of 18 done" and nothing else, and 11 of 18 reads
+       * the same whether the other seven are due next week or were due last
+       * Tuesday. Without this the only way to find the client who needs you is
+       * to open every client, which is the opposite of what a list is for.
+       *
+       * Same definition as everywhere else: past its due date and neither done
+       * nor cancelled. Compared as `yyyy-mm-dd` strings so a task due today is
+       * not late at one minute past midnight.
+       */
+      const monthTasksLate =
+        activeMonthCard?.tasks.filter(
+          (t) =>
+            t.status !== 'DONE' &&
+            t.status !== 'CANCELLED' &&
+            t.dueDate.toISOString().slice(0, 10) < todayKey,
+        ).length ?? 0;
 
       const maskedActiveMonthCard = activeMonthCard
         ? { ...activeMonthCard, tasks: undefined, revenue: canSeeFigures ? activeMonthCard.revenue : null }
@@ -181,6 +202,7 @@ retainersRouter.get('/', requirePermission('work.all'), async (req: AuthRequest,
         noFixedTermRisk: !r.termMonths && !r.renewalDate,
         monthTasksDone,
         monthTasksTotal,
+        monthTasksLate,
         /*
          * The named pieces of work inside it, and how many are still running.
          *

@@ -36,6 +36,9 @@ import { PageSkeleton } from '@/components/ui/skeleton-loaders';
 import { StatTile } from '@/components/ui/stat-tile';
 import { plural } from '@/lib/utils';
 import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
+import { MultiSelect } from '@/components/ui/multi-select';
+import { useAuthStore } from '@/stores';
+import { TASK_FILTER_OPTIONS, matchesStatusFilter, isTaskLate } from '@/components/retainers/task-shared';
 import { NewProformaModal } from '@/components/clients/NewProformaModal';
 import { NewWorkTaskModal } from '@/components/work/NewWorkTaskModal';
 import { NewWorkCostModal } from '@/components/work/NewWorkCostModal';
@@ -76,7 +79,13 @@ type Task = {
   waitingOn: 'CLIENT' | 'ANOTHER_PERSON' | null;
   waitingSince: string | null;
   reopenCount: number;
-  assignee: { id: string; name: string; dept: string } | null;
+  /*
+   * `designation` and `assignees` have always been on the wire — TASK_PEOPLE
+   * selects both — this type just never declared them, so the screen could not
+   * show what it was already being sent.
+   */
+  assignee: { id: string; name: string; dept: string; designation?: string | null } | null;
+  assignees?: { id: string; name: string; designation?: string | null }[];
 };
 type Cost = { id: string; category: string; vendor: string; amount: string | number | null; incurredAt: string; enteredBy: { id: string; name: string } | null };
 type Invoice = { id: string; number: string; amount: string | number | null; status: string; dueAt: string };
@@ -186,6 +195,17 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [addingTask, setAddingTask] = useState(false);
   const [addingCost, setAddingCost] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  /** Today, for the late comparison in the task table. */
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const { user: me } = useAuthStore();
+  /*
+   * Empty means no filter, and it is a list rather than a single choice
+   * because "Open AND Late" is one question, not two. The same control, the
+   * same vocabulary and the same helpers as a retainer project's task list —
+   * this is the other place the same kind of work is listed.
+   */
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [mineOnly, setMineOnly] = useState(false);
   const [raisingProformaForMilestone, setRaisingProformaForMilestone] = useState<Milestone | null>(null);
   const [addingMilestone, setAddingMilestone] = useState(false);
   const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
@@ -281,6 +301,16 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     return days > 0 ? days : 0;
   })();
   const openTasks = tasks.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED');
+  /** Counted before the filters are applied, so the figures do not move when you use them. */
+  const lateTasks = tasks.filter((t) => isTaskLate(t, todayStr));
+  const visibleTasks = tasks.filter((t) => {
+    if (!matchesStatusFilter(t as never, statusFilter, todayStr)) return false;
+    if (mineOnly && me?.id) {
+      const onIt = t.assignee?.id === me.id || (t.assignees ?? []).some((a) => a.id === me.id);
+      if (!onIt) return false;
+    }
+    return true;
+  });
 
   // Cost breakdown by person (brief §10: Project screen requires this).
   // Grouped across every month the project ran, since a person's allocation
@@ -717,9 +747,41 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
       {tab === 'tasks' && (
         <Card padding="none">
-          <CardHeader>
-            <CardTitle>Tasks</CardTitle>
-            <span className="ml-auto text-micro text-secondary">{openTasks.length} open</span>
+          <CardHeader className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle>Tasks</CardTitle>
+              <span className="text-micro text-secondary">
+                {openTasks.length} open
+                {lateTasks.length > 0 && (
+                  <span className="ml-1.5 font-semibold text-danger">{lateTasks.length} late</span>
+                )}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <MultiSelect
+                compact
+                ariaLabel="Filter by status"
+                placeholder="Any status"
+                options={TASK_FILTER_OPTIONS}
+                value={statusFilter}
+                onChange={setStatusFilter}
+                triggerClassName="h-8 min-w-[9rem] text-xs"
+              />
+              {me?.id && (
+                <button
+                  type="button"
+                  onClick={() => setMineOnly((v) => !v)}
+                  className={`h-8 rounded-lg border px-2.5 text-xs font-semibold transition-colors ${
+                    mineOnly
+                      ? 'border-primary bg-primary text-white'
+                      : 'border-border text-secondary hover:bg-subtle hover:text-primary'
+                  }`}
+                >
+                  Mine
+                </button>
+              )}
+            </div>
           </CardHeader>
           <CardBody className="p-0!">
             {tasks.length === 0 ? (
@@ -727,34 +789,103 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 <EmptyState title="No tasks yet" hint="Add the first one." action={<Button icon={Plus} onClick={() => setAddingTask(true)}>Task</Button>} />
               </div>
             ) : (
-              <ul className="divide-y divide-border">
-                {tasks.map((t) => (
-                  <li key={t.id} className="flex items-center gap-3 px-4 py-3">
-                    <div className="min-w-0 flex-1">
-                      <p className={`flex items-center gap-1.5 text-sm font-medium ${t.status === 'DONE' || t.status === 'CANCELLED' ? 'text-secondary line-through' : 'text-primary'}`}>
-                        {(t.priority === 'HIGH' || t.priority === 'URGENT') && (
-                          <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${getPriorityDot(t.priority)}`} title={getPriorityLabel(t.priority)} />
-                        )}
-                        {t.title}
-                      </p>
-                      <p className="text-xs text-secondary mt-0.5">
-                        {t.assignee?.name ?? 'Unassigned'} · due {date(t.dueDate)}
-                        {t.status === 'ON_HOLD' && t.waitingOn && ' · waiting on ' + (t.waitingOn === 'CLIENT' ? 'client' : 'someone else')}
-                      </p>
-                    </div>
-                    <div className="shrink-0">
-                      <Select
-                        value={t.status}
-                        onChange={(v) => void changeTaskStatus(t, v as TStatus)}
-                        options={TASK_STATUS_OPTIONS}
-                        ariaLabel={`Status for ${t.title}`}
-                        buttonClassName="px-2.5 py-1.5 text-xs w-32"
-                        disabled={busyId === t.id}
-                      />
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              /*
+                The same columns as a retainer project's task list.
+
+                This was a two-line list item — title, then "Janani · due 20
+                Sept" in small grey — which meant the two questions you ask of
+                a task list, who has it and what is late, could not be scanned
+                down a column. Priority was a dot that only appeared for High
+                and Urgent, so Medium and Low looked like no answer at all.
+              */
+              <div className="overflow-x-auto">
+                <table className="data-table w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="eyebrow text-left">Task</th>
+                      <th className="eyebrow text-left">Assigned to</th>
+                      <th className="eyebrow text-left">Assigned</th>
+                      <th className="eyebrow text-left">Due</th>
+                      <th className="eyebrow text-left">Priority</th>
+                      <th className="eyebrow text-left">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {visibleTasks.map((t) => {
+                      const late =
+                        t.status !== 'DONE' &&
+                        t.status !== 'CANCELLED' &&
+                        t.dueDate.slice(0, 10) < todayStr;
+                      return (
+                        <tr key={t.id} className="transition-colors hover:bg-subtle">
+                          <td>
+                            <span
+                              className={`font-medium ${
+                                t.status === 'DONE' || t.status === 'CANCELLED'
+                                  ? 'text-secondary line-through'
+                                  : 'text-primary'
+                              }`}
+                            >
+                              {t.title}
+                            </span>
+                            {t.status === 'ON_HOLD' && t.waitingOn && (
+                              <p className="mt-0.5 text-micro text-secondary">
+                                waiting on {t.waitingOn === 'CLIENT' ? 'the client' : 'someone else'}
+                              </p>
+                            )}
+                          </td>
+                          <td>
+                            <p className="text-body">
+                              {t.assignee?.name ?? 'Unassigned'}
+                              {(t.assignees?.length ?? 1) > 1 && (
+                                <span className="text-secondary">
+                                  {' '}
+                                  +{(t.assignees?.length ?? 1) - 1}
+                                </span>
+                              )}
+                            </p>
+                            {t.assignee?.designation && (
+                              <p className="text-micro text-secondary">{t.assignee.designation}</p>
+                            )}
+                          </td>
+                          <td className="whitespace-nowrap text-secondary">{date(t.assignedAt)}</td>
+                          <td
+                            className={`whitespace-nowrap ${
+                              late ? 'font-semibold text-danger' : 'text-secondary'
+                            }`}
+                          >
+                            {date(t.dueDate)}
+                          </td>
+                          <td className="whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1.5 text-secondary">
+                              <span
+                                className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${getPriorityDot(t.priority)}`}
+                              />
+                              {getPriorityLabel(t.priority)}
+                            </span>
+                          </td>
+                          <td>
+                            <Select
+                              value={t.status}
+                              onChange={(v) => void changeTaskStatus(t, v as TStatus)}
+                              options={TASK_STATUS_OPTIONS}
+                              ariaLabel={`Status for ${t.title}`}
+                              buttonClassName="px-2.5 py-1.5 text-xs w-32"
+                              disabled={busyId === t.id}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {visibleTasks.length === 0 && (
+                  <p className="px-5 py-10 text-center text-sm text-secondary">
+                    Nothing matches that. {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'} on this
+                    project altogether.
+                  </p>
+                )}
+              </div>
             )}
           </CardBody>
         </Card>

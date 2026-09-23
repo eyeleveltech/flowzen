@@ -115,13 +115,20 @@ export function MultiSelect({ id, options, value, onChange, placeholder = 'Selec
     <div className="relative" ref={containerRef}>
       {compact ? (
         // Fixed-height summary trigger — keeps filter bars aligned regardless of selection.
+        //
+        // `aria-label` falls back to the placeholder, as the chip trigger below
+        // already did. This branch used the placeholder ALONE, so the prop
+        // documented as "accessible name when no visible label sits beside it"
+        // did nothing in the one mode whose own comment says it is for filter
+        // bars — where, by definition, no visible label sits beside it. Two
+        // filters in a row were both named after their placeholders.
         <button
           id={id}
           type="button"
           role="combobox"
           aria-haspopup="listbox"
           aria-expanded={isOpen}
-          aria-label={placeholder}
+          aria-label={ariaLabel ?? placeholder}
           onClick={() => setIsOpen((o) => !o)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') { e.preventDefault(); setIsOpen(true); }

@@ -132,6 +132,38 @@ export async function authenticate(
 /**
  * Middleware: Requires a specific permission key.
  */
+/**
+ * Management, and only management.
+ *
+ * Not a permission switch, because no permission says what this means. The
+ * closest is `money.figures`, and ACCOUNTS carries it — so gating on that
+ * would let the accounts desk through a door meant for the people who run the
+ * business. `setup.admin` is wrong for the same reason in reverse: it is about
+ * configuring the app, not about being senior.
+ *
+ * So this reads the PRESET, which is the only thing in the model that means
+ * "runs the business". Note that `hasPermission` lets MANAGEMENT through every
+ * permission gate by design; this is the one place that fact is not enough,
+ * because here the preset IS the requirement rather than a shortcut past it.
+ */
+export function requireManagement() {
+  return function managementGate(req: AuthRequest, res: Response, next: NextFunction): void {
+    if (!req.user) {
+      res.status(401).json({ success: false, error: 'Authentication required' });
+      return;
+    }
+    if (!req.user.active || req.user.preset !== 'MANAGEMENT') {
+      res.status(403).json({
+        success: false,
+        error: 'This is for management only.',
+        detail: 'The assistant answers with figures across the whole business.',
+      });
+      return;
+    }
+    next();
+  };
+}
+
 export function requirePermission(permission: PermissionKey) {
   return function permissionGate(req: AuthRequest, res: Response, next: NextFunction): void {
     if (!req.user) {

@@ -113,25 +113,51 @@ test.describe('the way in', () => {
     expect((await res.json()).error).toMatch(/cannot be removed/i);
   });
 
-  test('opening one shows its tasks, and says which month bills each', async ({ page }) => {
+  test('an old ?project= link lands on the project, with one month control', async ({ page }) => {
     test.skip(!projectId, 'the project could not be created');
-    await page.goto(`/retainers/${retainerId}?project=${projectId}`);
 
-    await expect(page.getByRole('heading', { name: `${MARK} Diwali Campaign` })).toBeVisible({ timeout: 15_000 });
-    // A month heading, not a bare table — the month is which card the task's
-    // cost lands on, and a closed one must not be offered for editing.
+    /*
+     * `?project=` opened a drill-in on the retainer page for months, so it is
+     * in bookmarks and in links people have already sent each other. It
+     * redirects now.
+     */
+    await page.goto(`/retainers/${retainerId}?project=${projectId}`);
+    await expect(page).toHaveURL(new RegExp(`/retainers/${retainerId}/projects/${projectId}`), {
+      timeout: 15_000,
+    });
+
+    await expect(page.getByRole('heading', { name: `${MARK} Diwali Campaign` })).toBeVisible();
     await expect(page.locator('tbody tr').first()).toBeVisible();
-    await expect(page.getByText(/^(January|February|March|April|May|June|July|August|September|October|November|December) \d{4}$/).first()).toBeVisible();
+
+    /*
+     * ONE month control, and it belongs to this page.
+     *
+     * The drill-in had its own on top of the retainer header's, and when a
+     * project had no work in the month the header was on, the two disagreed —
+     * October above, September's tasks below, under tiles counting October.
+     * On its own page there is nothing to disagree with, and this is what
+     * pins that: exactly one.
+     */
+    const months = page.getByRole('group', { name: 'Month' });
+    await expect(months).toHaveCount(1);
+    await expect(months).toHaveText(
+      /(January|February|March|April|May|June|July|August|September|October|November|December) \d{4}|Every month/,
+    );
   });
 
   test('the project is in the URL, so it can be sent to somebody', async ({ page }) => {
     test.skip(!projectId, 'the project could not be created');
     await page.goto(`/retainers/${retainerId}`);
     await page.getByText(`${MARK} Diwali Campaign`).first().click();
-    await expect(page).toHaveURL(new RegExp(`project=${projectId}`), { timeout: 15_000 });
 
-    // And going back closes the project rather than leaving the retainer.
-    await page.getByRole('button', { name: /All projects/ }).click();
+    // A route of its own now, not `?project=` on the retainer.
+    await expect(page).toHaveURL(
+      new RegExp(`/retainers/${retainerId}/projects/${projectId}`),
+      { timeout: 15_000 },
+    );
+
+    // And back goes to the retainer it belongs to, not to Live work.
+    await page.locator(`a[href="/retainers/${retainerId}"]`).first().click();
     await expect(page.getByText('Monthly Retainer Work').first()).toBeVisible({ timeout: 15_000 });
   });
 });
@@ -148,7 +174,7 @@ test.describe('adding a task from inside a project', () => {
      * control said Retainer and invited you to change it.
      */
     test.skip(!projectId, 'the project could not be created');
-    await page.goto(`/retainers/${retainerId}?project=${projectId}`);
+    await page.goto(`/retainers/${retainerId}/projects/${projectId}`);
     await page.getByRole('button', { name: 'Task', exact: true }).first().click();
 
     await expect(page.getByText(`${MARK} Diwali Campaign`).last()).toBeVisible({ timeout: 15_000 });
@@ -179,7 +205,7 @@ test.describe('adding a task from inside a project', () => {
      * is the thing you were looking at.
      */
     test.skip(filed.length === 0, 'no task could be filed under the project');
-    await page.goto(`/retainers/${retainerId}?project=${projectId}`);
+    await page.goto(`/retainers/${retainerId}/projects/${projectId}`);
     await page.locator('tbody tr').first().click();
 
     // `exact`, because a bare "Work" also matches the My Work and Live work
@@ -242,5 +268,125 @@ test.describe('a month with no card', () => {
     // The billing side still says there is nothing for that month.
     await page.getByRole('tab', { name: /^Costs/ }).click();
     await expect(page.getByText('No month card here')).toBeVisible({ timeout: 15_000 });
+  });
+});
+
+/**
+ * Narrowing the list without losing the work.
+ *
+ * A month of retainer work is twenty-odd rows, and the question actually asked
+ * of it is "what is still open" — which needs more than one state selected at
+ * a time, which is why this is a multi-select and not a row of chips.
+ */
+test.describe('narrowing a project', () => {
+  test.use({ storageState: stateFor('admin') });
+
+  test('the status filter takes more than one state at once', async ({ page }) => {
+    test.skip(!projectId, 'the project could not be created');
+    await page.goto(`/retainers/${retainerId}/projects/${projectId}`);
+    await expect(page.locator('tbody tr').first()).toBeVisible({ timeout: 15_000 });
+
+    const before = await page.locator('tbody tr').count();
+
+    // Nothing selected is no filter — the dropdown must not hide work by default.
+    const status = page.getByRole('combobox', { name: 'Filter by status' });
+    await expect(status).toBeVisible();
+
+    await status.click();
+    await page.getByRole('option', { name: 'Done' }).click();
+    // Still open: a second value goes in without replacing the first.
+    await page.getByRole('option', { name: 'Open' }).click();
+    await page.keyboard.press('Escape');
+
+    const after = await page.locator('tbody tr').count();
+    // Open + Done cannot show MORE than everything, and the point of the test
+    // is that picking a second value widens rather than replaces.
+    expect(after).toBeLessThanOrEqual(before);
+    expect(after).toBeGreaterThan(0);
+  });
+
+});
+
+/**
+ * Removing a project asks in the app, not in the browser.
+ *
+ * This was the last `window.confirm` in the codebase, which meant the one
+ * dialog that most needed to explain itself — the tasks SURVIVE, they just
+ * stop being grouped — was the one that could only render unstyled system
+ * text above a button labelled OK.
+ *
+ * A native dialog also cannot be tested: Playwright has to intercept it at the
+ * page level, and nothing can assert what it said.
+ */
+test.describe('removing a project', () => {
+  test.use({ storageState: stateFor('admin') });
+
+  test('the app asks before removing a project, and says what survives', async ({ page }) => {
+    test.skip(!projectId, 'the project could not be created');
+
+    // If a native dialog appears the test must not hang on it — and catching
+    // it here is also how we prove one does NOT appear.
+    let nativeDialogs = 0;
+    page.on('dialog', async (d) => {
+      nativeDialogs += 1;
+      await d.dismiss();
+    });
+
+    await page.goto(`/retainers/${retainerId}/projects/${projectId}`);
+    await expect(page.getByRole('heading', { name: `${MARK} Diwali Campaign` })).toBeVisible({ timeout: 15_000 });
+
+    await page.getByRole('button', { name: 'Remove' }).click();
+
+    // The app's own dialog, naming the project and its own button.
+    await expect(page.getByText(`Remove "${MARK} Diwali Campaign"?`)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Remove project' })).toBeVisible();
+    expect(nativeDialogs).toBe(0);
+
+    // Cancelling leaves the project exactly where it was — this spec's
+    // afterAll still expects it to exist.
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.getByRole('heading', { name: `${MARK} Diwali Campaign` })).toBeVisible();
+  });
+});
+
+/**
+ * One Task button, in the place that answers the question.
+ *
+ * There were two at once inside a project — the page header's and the
+ * project's — a hand's width apart, calling the same handler and opening the
+ * same modal with the same props. Which one survives depends on where you
+ * are, because the form's first question is which project the work belongs
+ * to:
+ *
+ *   inside a project   the project's own button. The answer is already known,
+ *                      so the form states it instead of asking.
+ *   on the list        the page header's. Nothing has said which project yet,
+ *                      so the form asks.
+ */
+test.describe('adding work from the right place', () => {
+  test.use({ storageState: stateFor('admin') });
+
+  test('a project shows exactly one Task button, and the form knows the project', async ({ page }) => {
+    test.skip(!projectId, 'the project could not be created');
+    await page.goto(`/retainers/${retainerId}/projects/${projectId}`);
+    await expect(page.getByRole('heading', { name: `${MARK} Diwali Campaign` })).toBeVisible({ timeout: 15_000 });
+
+    await expect(page.getByRole('button', { name: 'Task', exact: true })).toHaveCount(1);
+
+    await page.getByRole('button', { name: 'Task', exact: true }).click();
+    // Stated, not asked — and the project named is the one we are standing in.
+    await expect(page.getByText(`${MARK} Diwali Campaign`).last()).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Belongs to' })).toHaveCount(0);
+  });
+
+  test('the projects list keeps its Task button, and the form asks', async ({ page }) => {
+    await page.goto(`/retainers/${retainerId}`);
+    await expect(page.getByText('Monthly Retainer Work').first()).toBeVisible({ timeout: 15_000 });
+
+    await expect(page.getByRole('button', { name: 'Task', exact: true })).toHaveCount(1);
+
+    await page.getByRole('button', { name: 'Task', exact: true }).click();
+    // Nothing has said which project, so the picker is there to be answered.
+    await expect(page.getByRole('combobox', { name: 'Belongs to' })).toBeVisible();
   });
 });

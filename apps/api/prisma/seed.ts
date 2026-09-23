@@ -269,14 +269,26 @@ async function main() {
   const co = (data: {
     name: string; vertical: CompanyVertical; source: CompanySource; ownerId: string;
     city: string; status: CompanyStatus; website?: string; gstin?: string;
-    billingAddress?: string; lostReason?: string;
+    billingAddress?: string; lostReason?: string; stateName?: string; stateCode?: string;
   }) => prisma.company.create({ data: { organizationId: org.id, ...data } });
 
   const carlton = await co({ name: 'Carlton Wellness', vertical: CompanyVertical.HEALTHCARE, source: CompanySource.INBOUND, ownerId: tanuja.id, city: 'Chennai', status: CompanyStatus.CLIENT, website: 'https://carltonwellness.in', gstin: '33AABCC1234F1Z5', billingAddress: '42 Khader Nawaz Khan Rd, Nungambakkam, Chennai, Tamil Nadu 600006' });
-  const voso = await co({ name: 'VOSO Sports', vertical: CompanyVertical.SPORTS, source: CompanySource.PARTNER_AGENCY, ownerId: akmal.id, city: 'Chennai', status: CompanyStatus.CLIENT, website: 'https://vososports.in' });
-  const rightHospitals = await co({ name: 'Right Hospitals', vertical: CompanyVertical.HEALTHCARE, source: CompanySource.REFERRAL, ownerId: dilshad.id, city: 'Chennai', status: CompanyStatus.CLIENT });
-  const heavensElix = await co({ name: "Heaven's ELIX", vertical: CompanyVertical.D2C, source: CompanySource.REFERRAL, ownerId: akmal.id, city: 'Chennai', status: CompanyStatus.CLIENT });
-  const tnpa = await co({ name: 'Tamil Nadu Pickleball Association', vertical: CompanyVertical.SPORTS, source: CompanySource.NETWORK, ownerId: akmal.id, city: 'Chennai', status: CompanyStatus.CLIENT });
+  /*
+   * Real-data pass, 23 Sep 2026 — EyeLevel client intake.
+   *
+   * VOSO, Right Hospitals, Heaven's ELIX, TNPA and Pavilion Club below are
+   * corrected to the real numbers Akmal confirmed on the intake call (see
+   * each block's comment for what changed and what is still missing before
+   * an invoice can be raised). Da One Sports is deliberately left untouched —
+   * already entered separately. Five more companies from the same intake
+   * (Dinamalar, Brigade, SPR City, Eagle, Madurai All Stars) are added
+   * further below as new company records. VERTX Drone Light Show is not
+   * added yet — its project value is still unconfirmed.
+   */
+  const voso = await co({ name: 'VOSO Sports', vertical: CompanyVertical.SPORTS, source: CompanySource.PARTNER_AGENCY, ownerId: akmal.id, city: 'Tiruppur', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT, website: 'https://vososports.in' });
+  const rightHospitals = await co({ name: 'Right Hospitals', vertical: CompanyVertical.HEALTHCARE, source: CompanySource.REFERRAL, ownerId: dilshad.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT });
+  const heavensElix = await co({ name: "Heaven's ELIX", vertical: CompanyVertical.D2C, source: CompanySource.REFERRAL, ownerId: akmal.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT });
+  const tnpa = await co({ name: 'Tamil Nadu Pickleball Association', vertical: CompanyVertical.SPORTS, source: CompanySource.NETWORK, ownerId: akmal.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT });
   const daOne = await co({ name: 'Da One High Performance Sports', vertical: CompanyVertical.SPORTS, source: CompanySource.NETWORK, ownerId: akmal.id, city: 'Delhi', status: CompanyStatus.CLIENT });
   const blinkit = await co({ name: 'Blinkit South Region', vertical: CompanyVertical.RETAIL, source: CompanySource.REFERRAL, ownerId: tanuja.id, city: 'Chennai', status: CompanyStatus.CLIENT, gstin: '33AAACB5678H1Z2' });
   const stylori = await co({ name: 'Stylori', vertical: CompanyVertical.D2C, source: CompanySource.OUTREACH, ownerId: tanuja.id, city: 'Chennai', status: CompanyStatus.PROSPECT });
@@ -284,20 +296,49 @@ async function main() {
   const kFashions = await co({ name: 'K Fashions', vertical: CompanyVertical.RETAIL, source: CompanySource.OUTREACH, ownerId: varsha.id, city: 'Chennai', status: CompanyStatus.PROSPECT });
   const elephantine = await co({ name: 'Elephantine Tales', vertical: CompanyVertical.REAL_ESTATE, source: CompanySource.NETWORK, ownerId: akmal.id, city: 'Kodaikanal', status: CompanyStatus.PROSPECT });
   const sparkAligners = await co({ name: 'Spark Aligners', vertical: CompanyVertical.HEALTHCARE, source: CompanySource.PARTNER_AGENCY, ownerId: varsha.id, city: 'Chennai', status: CompanyStatus.PROSPECT });
-  const pavilionClub = await co({ name: 'Pavilion Club', vertical: CompanyVertical.HOSPITALITY, source: CompanySource.NETWORK, ownerId: tanuja.id, city: 'Chennai', status: CompanyStatus.PROSPECT });
+  // Won 23 Sep 2026 — retainer starts 1 Oct 2026 (see the retainer block
+  // below), so this is a CLIENT now rather than the PROSPECT it was seeded as.
+  const pavilionClub = await co({ name: 'Pavilion Club', vertical: CompanyVertical.HOSPITALITY, source: CompanySource.NETWORK, ownerId: tanuja.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT });
   const zenith = await co({ name: 'Zenith FinTech Cloud', vertical: CompanyVertical.IT_AND_SAAS, source: CompanySource.OUTREACH, ownerId: tanuja.id, city: 'Bangalore', status: CompanyStatus.PROSPECT });
   const indusAlliance = await co({ name: 'Indus Alliance', vertical: CompanyVertical.B2B, source: CompanySource.OUTREACH, ownerId: tanuja.id, city: 'Chennai', status: CompanyStatus.PAST, lostReason: 'Budget pulled, Jul 2026' });
   const sastry = await co({ name: 'Sastry Pain Balm', vertical: CompanyVertical.D2C, source: CompanySource.PARTNER_AGENCY, ownerId: tanuja.id, city: 'Chennai', status: CompanyStatus.PAST, lostReason: 'Took production in-house, Aug 2026' });
+
+  /*
+   * New from the same 23 Sep 2026 intake — no matching seed row existed
+   * before. Each is data-complete enough for a company record and a contact;
+   * none has both a real date AND a confirmed value, so none gets a
+   * Proposal/Retainer/Project row here — that would mean inventing a date.
+   * Add those from the app once the missing field (noted per company) is
+   * confirmed.
+   */
+  // DONE AND CLOSED. AI video ₹75,000 + graphic design ₹35,000 = ₹1,10,000 total. Missing: which month payment landed, phone, invoice email, GSTIN, billing address.
+  const dinamalar = await co({ name: 'Dinamalar', vertical: CompanyVertical.B2B, source: CompanySource.PARTNER_AGENCY, ownerId: akmal.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT });
+  // Two completed projects (₹1,11,000 + ₹90,000, done) plus one open quote (video/photography, ₹50,000, not yet won). Missing: dates, phone, invoice email, GSTIN, billing address.
+  const brigade = await co({ name: 'Brigade Enterprises', vertical: CompanyVertical.REAL_ESTATE, source: CompanySource.OUTREACH, ownerId: akmal.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT });
+  // Drone shoot quoted at ₹13,000/day × 10 days = ₹1,30,000, shoot dates not locked. Missing: billing schedule, phone, invoice email, GSTIN, billing address.
+  const sprCity = await co({ name: 'SPR City', vertical: CompanyVertical.REAL_ESTATE, source: CompanySource.OUTREACH, ownerId: akmal.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.PROSPECT });
+  // GMB cleanup (16 profiles + on-site photography) in progress, value not yet set — do not reuse the old ₹35,000/2-profile quote. A separate retainer pitch for this client lives on the Pipeline tab, not here.
+  const eagle = await co({ name: 'Eagle Enterprises', vertical: CompanyVertical.RETAIL, source: CompanySource.PARTNER_AGENCY, ownerId: tanuja.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT });
+  // ON HOLD — decide whether this stays in Flowzen. Social media management, ₹75,000/mo × 2 months = ₹1,50,000 total, Project Start 1 Aug 2026 (see the proposal block below). Missing: expected end date, billing schedule, phone, invoice email, GSTIN, billing address.
+  const maduraiAllStars = await co({ name: 'Madurai All Stars', vertical: CompanyVertical.SPORTS, source: CompanySource.OUTREACH, ownerId: tanuja.id, city: 'Madurai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.PROSPECT });
 
   await prisma.person.createMany({
     data: [
       { companyId: carlton.id, name: 'Dr. Bidya', role: PersonRole.APPROVER, email: 'bidya@carltonwellness.in', phone: '+91 98401 22334' },
       { companyId: carlton.id, name: 'Suresh', role: PersonRole.PAYER, email: 'accounts@carltonwellness.in', phone: '+91 98401 55667' },
-      { companyId: voso.id, name: 'Meera Krishnan', role: PersonRole.APPROVER, email: 'meera@vososports.in', phone: '+91 98402 44556' },
-      { companyId: rightHospitals.id, name: 'Dr. Kavya Somesh', role: PersonRole.APPROVER, email: 'kavya@righthospitals.in', phone: '+91 94001 22110' },
-      { companyId: heavensElix.id, name: 'Farhan Ali', role: PersonRole.PAYER, email: 'farhan@heavenselix.in' },
-      { companyId: tnpa.id, name: 'Ramanathan G', role: PersonRole.CONTACT, email: 'secretary@tnpa.in' },
+      // Real contact via Vyoma — direct phone/email still needed.
+      { companyId: voso.id, name: 'Vijay Shree (via Vyoma)', role: PersonRole.CONTACT },
+      { companyId: rightHospitals.id, name: 'Dr. Kavya Somesh', role: PersonRole.APPROVER, email: 'righthospitalskilpauk@gmail.com', phone: '044-26403939' },
+      // Full name Surya Prakash, Founder and Brewer, per Akmal 23 Sep.
+      { companyId: heavensElix.id, name: 'Surya Prakash', role: PersonRole.PAYER, email: 'surya@heavenselix.com' },
+      { companyId: tnpa.id, name: 'Dr.Kavya', role: PersonRole.CONTACT },
       { companyId: daOne.id, name: 'Suhail Ahmed', role: PersonRole.APPROVER, email: 'suhail@daonesports.com' },
+      { companyId: pavilionClub.id, name: 'Yogesh', role: PersonRole.CONTACT },
+      { companyId: dinamalar.id, name: 'Vijay Shree (via Vyoma)', role: PersonRole.CONTACT },
+      { companyId: brigade.id, name: 'Arun', role: PersonRole.CONTACT },
+      { companyId: sprCity.id, name: 'Ayippan', role: PersonRole.CONTACT },
+      { companyId: eagle.id, name: 'Ganesh (via Vyoma)', role: PersonRole.CONTACT },
+      { companyId: maduraiAllStars.id, name: 'Surya Kumar', role: PersonRole.CONTACT },
       { companyId: blinkit.id, name: 'Rajesh Nair', role: PersonRole.APPROVER, email: 'rajesh.nair@blinkit.com', phone: '+91 98410 99887' },
       { companyId: stylori.id, name: 'Purchase Lead', role: PersonRole.CONTACT, email: 'purchase@stylori.com' },
       { companyId: ramrajCotton.id, name: 'Sanjeev Kumar', role: PersonRole.APPROVER, email: 'sanjeev@ramrajcotton.in' },
@@ -369,28 +410,37 @@ async function main() {
     ],
   });
 
+  // Real value ₹1,20,000/mo, corrected down from ₹1,40,000 per Akmal 23 Sep. Real start 21 Jul 2026.
   const { proposal: vosoProposal } = await proposal({
     companyId: voso.id, kind: ProposalKind.RETAINER, ownerId: akmal.id, stage: ProposalStage.WON,
-    outcome: ProposalOutcome.WON, wonAt: days(-20), wonVersionN: 1,
-    versions: [{ n: 1, value: 140000, scope: 'Match-day content + performance ads', sentAt: days(-28) }],
+    outcome: ProposalOutcome.WON, wonAt: new Date('2026-07-21'), wonVersionN: 1,
+    versions: [{ n: 1, value: 120000, scope: 'Social media management + paid marketing', sentAt: new Date('2026-07-14') }],
   });
 
+  /*
+   * Real engagement type is a one-off project (Google Ads, one month), NOT a
+   * running retainer — the fictional WON retainer this used to model is
+   * replaced below by an actual Retainer/MonthCard pair removed entirely.
+   * ON HOLD per Akmal 23 Sep ("decide whether it goes into Flowzen at all"),
+   * so this stays un-won rather than backdated to a win that has not happened.
+   */
   await proposal({
-    companyId: rightHospitals.id, kind: ProposalKind.RETAINER, ownerId: dilshad.id, stage: ProposalStage.WON,
-    outcome: ProposalOutcome.WON, wonAt: days(-70), wonVersionN: 1,
-    versions: [{ n: 1, value: 30000, scope: 'Monthly OPD awareness content', sentAt: days(-75) }],
+    companyId: rightHospitals.id, kind: ProposalKind.PROJECT, ownerId: dilshad.id, stage: ProposalStage.PROPOSAL_SENT,
+    versions: [{ n: 1, value: 30000, scope: 'Google Ads, one-month engagement (on hold)', sentAt: new Date('2026-06-16') }],
   });
 
+  // Real value ₹40,000/mo, corrected up from ₹35,000 per Akmal 23 Sep.
   await proposal({
     companyId: heavensElix.id, kind: ProposalKind.RETAINER, ownerId: akmal.id, stage: ProposalStage.WON,
     outcome: ProposalOutcome.WON, wonAt: days(-150), wonVersionN: 1,
-    versions: [{ n: 1, value: 35000, scope: 'Festive-season D2C content calendar', sentAt: days(-155) }],
+    versions: [{ n: 1, value: 40000, scope: 'Social media management + content', sentAt: days(-155) }],
   });
 
+  // Real running rate ₹40,000/mo per Akmal 23 Sep (Aug/Sep were billed at ₹65,000/mo as a transitional rate).
   await proposal({
     companyId: tnpa.id, kind: ProposalKind.RETAINER, ownerId: akmal.id, stage: ProposalStage.WON,
     outcome: ProposalOutcome.WON, wonAt: days(-240), wonVersionN: 1,
-    versions: [{ n: 1, value: 30000, scope: 'Team announcements + tournament coverage', sentAt: days(-245) }],
+    versions: [{ n: 1, value: 40000, scope: 'Social media management + TNPPL Season 2 league campaign', sentAt: days(-245) }],
   });
 
   await proposal({
@@ -445,10 +495,23 @@ async function main() {
       { n: 2, value: 260000, scope: 'Launch film trimmed to a 60-second cut', sentAt: days(-9) },
     ],
   });
+  // Real deal: WON 23 Sep 2026, a ₹30,000/mo retainer (social media management)
+  // starting 1 Oct 2026 — not the fictional ₹95,000 project this used to model.
   await proposal({
-    companyId: pavilionClub.id, kind: ProposalKind.PROJECT, ownerId: tanuja.id, stage: ProposalStage.VERBAL_YES,
-    verbalYesAt: days(-2),
-    versions: [{ n: 1, value: 95000, scope: 'Membership launch campaign', sentAt: days(-6) }],
+    companyId: pavilionClub.id, kind: ProposalKind.RETAINER, ownerId: tanuja.id, stage: ProposalStage.WON,
+    outcome: ProposalOutcome.WON, wonAt: new Date('2026-09-23'), wonVersionN: 1,
+    versions: [{ n: 1, value: 30000, scope: 'Social media management', sentAt: new Date('2026-09-16') }],
+  });
+  /*
+   * ON HOLD per Akmal 23 Sep ("decide whether it goes into Flowzen at all") —
+   * included per the 23 Sep 2026 decision to bring it in anyway. Flowzen's
+   * pipeline has no ON_HOLD stage, so this sits at PROPOSAL_SENT rather than
+   * a stage that implies more progress than there has been; move it to WON or
+   * LOST by hand once the business decision is made.
+   */
+  await proposal({
+    companyId: maduraiAllStars.id, kind: ProposalKind.PROJECT, ownerId: tanuja.id, stage: ProposalStage.PROPOSAL_SENT,
+    versions: [{ n: 1, value: 150000, scope: 'Social media management, ₹75,000/mo for 2 months (on hold)', sentAt: new Date('2026-08-01') }],
   });
   await proposal({
     companyId: indusAlliance.id, kind: ProposalKind.RETAINER, ownerId: tanuja.id, stage: ProposalStage.LOST,
@@ -477,7 +540,7 @@ async function main() {
   const vosoProforma = await prisma.proforma.create({
     data: {
       organizationId: org.id, number: `EL/PI/${FY}/013`, companyId: voso.id,
-      sourceType: ProformaSourceType.PROPOSAL, sourceId: vosoProposal.id, amount: 140000,
+      sourceType: ProformaSourceType.PROPOSAL, sourceId: vosoProposal.id, amount: 120000,
       raisedAt: days(-19), validTill: days(-4), billingName: 'VOSO Sports Pvt Ltd',
       terms: 'October retainer advance, 100% upfront.',
     },
@@ -520,7 +583,7 @@ async function main() {
     { particulars: 'Dedicated shoot day (half day, on location)', units: 1, unitCost: 0, hsnSac: '998386' },
   ]);
   await lineItems({ proformaId: vosoProforma.id }, [
-    { particulars: 'Monthly retainer — social content and matchday cutdowns', units: 1, unitCost: 118644.07, hsnSac: '998365' },
+    { particulars: 'Monthly retainer — social media management + paid marketing', units: 1, unitCost: 101694.92, hsnSac: '998365' },
   ]);
   await lineItems({ proformaId: elephantineProforma.id }, [
     { particulars: 'Brand identity and collateral system', units: 1, unitCost: 55084.75, hsnSac: '998311' },
@@ -544,27 +607,36 @@ async function main() {
 
   // Renewal within 45 days — should trip "Renewal approaching".
   const carltonRetainer = await retainer({ companyId: carlton.id, monthlyValue: 220000, startDate: days(-32), termMonths: 12, renewalDate: days(18), ownerId: tanuja.id });
-  // Month-to-month, no fixed term — should trip "No fixed term".
-  const vosoRetainer = await retainer({ companyId: voso.id, monthlyValue: 140000, startDate: days(-20), termMonths: null, renewalDate: null, ownerId: akmal.id });
-  const rightHospitalsRetainer = await retainer({ companyId: rightHospitals.id, monthlyValue: 30000, startDate: days(-70), termMonths: null, renewalDate: null, ownerId: dilshad.id });
-  // Healthy renewal window, well clear of the 45-day alert.
-  const heavensRetainer = await retainer({ companyId: heavensElix.id, monthlyValue: 35000, startDate: days(-150), termMonths: 6, renewalDate: days(60), ownerId: akmal.id });
-  const tnpaRetainer = await retainer({ companyId: tnpa.id, monthlyValue: 30000, startDate: days(-240), termMonths: 6, renewalDate: days(107), ownerId: akmal.id });
+  // Month-to-month, no fixed term — should trip "No fixed term". Real value
+  // ₹1,20,000/mo (corrected down from ₹1,40,000) and real start 21 Jul 2026.
+  const vosoRetainer = await retainer({ companyId: voso.id, monthlyValue: 120000, startDate: new Date('2026-07-21'), termMonths: null, renewalDate: null, ownerId: akmal.id });
+  /*
+   * Right Hospitals' fictional retainer (₹30,000/mo, month cards, an overdue
+   * invoice) is removed here — real engagement is a one-off, on-hold Google
+   * Ads project (see the proposal above), not a running retainer. No
+   * replacement Retainer/Project is created for it: it is ON HOLD, and adding
+   * a live billing engagement would say more than is actually true yet.
+   */
+  // Healthy renewal window, well clear of the 45-day alert. Real value ₹40,000/mo (corrected up from ₹35,000).
+  const heavensRetainer = await retainer({ companyId: heavensElix.id, monthlyValue: 40000, startDate: days(-150), termMonths: 6, renewalDate: days(60), ownerId: akmal.id });
+  // Real running rate ₹40,000/mo (Aug/Sep were billed at ₹65,000/mo as a transitional rate — not modelled here).
+  const tnpaRetainer = await retainer({ companyId: tnpa.id, monthlyValue: 40000, startDate: days(-240), termMonths: 6, renewalDate: days(107), ownerId: akmal.id });
   const daOneRetainer = await retainer({ companyId: daOne.id, monthlyValue: 30000, startDate: days(-118), termMonths: null, renewalDate: null, ownerId: akmal.id });
+  // Real deal, won 23 Sep 2026: ₹30,000/mo, starting 1 Oct 2026. No month
+  // cards yet — work has not started, so there is nothing to bill.
+  const pavilionClubRetainer = await retainer({ companyId: pavilionClub.id, monthlyValue: 30000, startDate: new Date('2026-10-01'), termMonths: null, renewalDate: null, ownerId: tanuja.id });
 
   const monthCard = async (retainerId: string, month: string, revenue: number, status: MonthCardStatus, closedAt?: Date) =>
     prisma.monthCard.create({ data: { retainerId, month, revenue, status, closedAt } });
 
   const carltonAug = await monthCard(carltonRetainer.id, LAST_MONTH, 220000, MonthCardStatus.CLOSED, days(-2));
   const carltonSep = await monthCard(carltonRetainer.id, THIS_MONTH, 220000, MonthCardStatus.OPEN);
-  const vosoAug = await monthCard(vosoRetainer.id, LAST_MONTH, 140000, MonthCardStatus.CLOSED, days(-3));
-  const vosoSep = await monthCard(vosoRetainer.id, THIS_MONTH, 140000, MonthCardStatus.OPEN);
-  const rightAug = await monthCard(rightHospitalsRetainer.id, LAST_MONTH, 30000, MonthCardStatus.CLOSED, days(-4));
-  const rightSep = await monthCard(rightHospitalsRetainer.id, THIS_MONTH, 30000, MonthCardStatus.OPEN);
-  const heavensAug = await monthCard(heavensRetainer.id, LAST_MONTH, 35000, MonthCardStatus.CLOSED, days(-5));
-  const heavensSep = await monthCard(heavensRetainer.id, THIS_MONTH, 35000, MonthCardStatus.OPEN);
-  const tnpaAug = await monthCard(tnpaRetainer.id, LAST_MONTH, 30000, MonthCardStatus.CLOSED, days(-3));
-  const tnpaSep = await monthCard(tnpaRetainer.id, THIS_MONTH, 30000, MonthCardStatus.OPEN);
+  const vosoAug = await monthCard(vosoRetainer.id, LAST_MONTH, 120000, MonthCardStatus.CLOSED, days(-3));
+  const vosoSep = await monthCard(vosoRetainer.id, THIS_MONTH, 120000, MonthCardStatus.OPEN);
+  const heavensAug = await monthCard(heavensRetainer.id, LAST_MONTH, 40000, MonthCardStatus.CLOSED, days(-5));
+  const heavensSep = await monthCard(heavensRetainer.id, THIS_MONTH, 40000, MonthCardStatus.OPEN);
+  const tnpaAug = await monthCard(tnpaRetainer.id, LAST_MONTH, 40000, MonthCardStatus.CLOSED, days(-3));
+  const tnpaSep = await monthCard(tnpaRetainer.id, THIS_MONTH, 40000, MonthCardStatus.OPEN);
   const daOneAug = await monthCard(daOneRetainer.id, LAST_MONTH, 30000, MonthCardStatus.CLOSED, days(-6));
   const daOneSep = await monthCard(daOneRetainer.id, THIS_MONTH, 30000, MonthCardStatus.OPEN);
 
@@ -605,8 +677,9 @@ async function main() {
    */
   const defaultProjects = new Map<string, string>();
   for (const [ret, owner] of [
-    [carltonRetainer, tanuja], [vosoRetainer, akmal], [rightHospitalsRetainer, dilshad],
+    [carltonRetainer, tanuja], [vosoRetainer, akmal],
     [heavensRetainer, akmal], [tnpaRetainer, akmal], [daOneRetainer, akmal],
+    [pavilionClubRetainer, tanuja],
   ] as [{ id: string }, typeof akmal][]) {
     const made = await retainerProject({
       retainerId: ret.id, name: 'Monthly Retainer Work', ownerId: owner.id, isDefault: true,
@@ -756,7 +829,6 @@ async function main() {
   const augRetainers: { card: { id: string }; dept: string; project?: string; baseline?: string; fallback: string }[] = [
     { card: carltonAug, dept: 'both', project: carltonDiwali.id, baseline: carltonAlwaysOn.id, fallback: defaultProjects.get(carltonRetainer.id)! },
     { card: vosoAug, dept: 'both', fallback: defaultProjects.get(vosoRetainer.id)! },
-    { card: rightAug, dept: 'marketing', fallback: defaultProjects.get(rightHospitalsRetainer.id)! },
     { card: heavensAug, dept: 'marketing', baseline: heavensAlwaysOn.id, fallback: defaultProjects.get(heavensRetainer.id)! },
     { card: tnpaAug, dept: 'marketing', fallback: defaultProjects.get(tnpaRetainer.id)! },
     { card: daOneAug, dept: 'design', fallback: defaultProjects.get(daOneRetainer.id)! },
@@ -812,8 +884,8 @@ async function main() {
   /*
    * `campaign` and `baseline` are the two projects a month's work falls under.
    *
-   * Not every card has them, and that is deliberate: Right Hospitals, TNPA and
-   * Da One run with nothing named, so the "Not in a project" card is never an
+   * Not every card has them, and that is deliberate: TNPA and Da One run
+   * with nothing named, so the "Not in a project" card is never an
    * empty state nobody has seen. Carlton's campaign also appears on LAST
    * month's card below, which is the case the whole model exists for.
    */
@@ -823,7 +895,6 @@ async function main() {
   }[] = [
     { card: carltonSep, lead: dilshad, people: [sneha, shyam], campaign: carltonDiwali.id, baseline: carltonAlwaysOn.id, fallback: defaultProjects.get(carltonRetainer.id)!, kind: TaskType.DIGITAL_MARKETING },
     { card: vosoSep, lead: janani, people: [ramya, sneha], campaign: vosoLeague.id, fallback: defaultProjects.get(vosoRetainer.id)!, kind: TaskType.VIDEO },
-    { card: rightSep, lead: dilshad, people: [shakila], fallback: defaultProjects.get(rightHospitalsRetainer.id)!, kind: TaskType.DIGITAL_MARKETING },
     { card: heavensSep, lead: dilshad, people: [shyam], baseline: heavensAlwaysOn.id, fallback: defaultProjects.get(heavensRetainer.id)!, kind: TaskType.DIGITAL_MARKETING },
     { card: tnpaSep, lead: janani, people: [ramya], fallback: defaultProjects.get(tnpaRetainer.id)!, kind: TaskType.DESIGN },
     { card: daOneSep, lead: charles, people: [janani], fallback: defaultProjects.get(daOneRetainer.id)!, kind: TaskType.VIDEO },
@@ -965,7 +1036,6 @@ async function main() {
     { monthCardId: carltonSep.id, category: 'Photography', vendor: 'Arun Studio Photography', amount: 15000, incurredAt: days(-2), by: dilshad },
     { monthCardId: vosoSep.id, category: 'Ad Spend', vendor: 'Meta Ads Manager', amount: 52000, incurredAt: days(-3), by: janani },
     { monthCardId: heavensSep.id, category: 'Influencer Fee', vendor: 'Local D2C Creators', amount: 4000, incurredAt: days(-4), by: dilshad },
-    { monthCardId: rightSep.id, category: 'Stock Assets', vendor: 'Freepik', amount: 6000, incurredAt: days(-5), by: shakila },
     { monthCardId: tnpaSep.id, category: 'Print Collateral', vendor: 'Local Print Shop', amount: 2000, incurredAt: days(-6), by: janani },
     { monthCardId: daOneSep.id, category: 'Freelancer', vendor: 'Editing Freelancer', amount: 19000, incurredAt: days(-7), by: charles },
   ];
@@ -1048,21 +1118,17 @@ async function main() {
   const carltonSepInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: `INV/${FY}/0188`, companyId: carlton.id, workType: TaskWorkType.MONTH_CARD, workId: carltonSep.id, amount: 220000, raisedAt: days(-1), dueAt: days(13), status: InvoiceStatus.RAISED } });
   await prisma.monthCard.update({ where: { id: carltonSep.id }, data: { invoiceId: carltonSepInvoice.id } });
 
-  const vosoAugInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: `INV/${FY}/0143`, companyId: voso.id, workType: TaskWorkType.MONTH_CARD, workId: vosoAug.id, amount: 140000, raisedAt: days(-30), dueAt: days(-16), status: InvoiceStatus.PAID, paidAt: days(-19) } });
+  const vosoAugInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: `INV/${FY}/0143`, companyId: voso.id, workType: TaskWorkType.MONTH_CARD, workId: vosoAug.id, amount: 120000, raisedAt: days(-30), dueAt: days(-16), status: InvoiceStatus.PAID, paidAt: days(-19) } });
   await prisma.monthCard.update({ where: { id: vosoAug.id }, data: { invoiceId: vosoAugInvoice.id } });
-  await prisma.payment.create({ data: { invoiceId: vosoAugInvoice.id, amount: 140000, receivedAt: days(-19), mode: 'UPI', reference: 'UPI2609887654' } });
+  await prisma.payment.create({ data: { invoiceId: vosoAugInvoice.id, amount: 120000, receivedAt: days(-19), mode: 'UPI', reference: 'UPI2609887654' } });
 
-  // Overdue — past its due date, not yet paid.
-  const rightAugInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: `INV/${FY}/0139`, companyId: rightHospitals.id, workType: TaskWorkType.MONTH_CARD, workId: rightAug.id, amount: 30000, raisedAt: days(-35), dueAt: days(-10), status: InvoiceStatus.OVERDUE } });
-  await prisma.monthCard.update({ where: { id: rightAug.id }, data: { invoiceId: rightAugInvoice.id } });
-
-  const heavensAugInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: `INV/${FY}/0140`, companyId: heavensElix.id, workType: TaskWorkType.MONTH_CARD, workId: heavensAug.id, amount: 35000, raisedAt: days(-34), dueAt: days(-20), status: InvoiceStatus.PAID, paidAt: days(-25) } });
+  const heavensAugInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: `INV/${FY}/0140`, companyId: heavensElix.id, workType: TaskWorkType.MONTH_CARD, workId: heavensAug.id, amount: 40000, raisedAt: days(-34), dueAt: days(-20), status: InvoiceStatus.PAID, paidAt: days(-25) } });
   await prisma.monthCard.update({ where: { id: heavensAug.id }, data: { invoiceId: heavensAugInvoice.id } });
-  await prisma.payment.create({ data: { invoiceId: heavensAugInvoice.id, amount: 35000, receivedAt: days(-25), mode: 'NEFT', reference: 'HDFC00291122334' } });
+  await prisma.payment.create({ data: { invoiceId: heavensAugInvoice.id, amount: 40000, receivedAt: days(-25), mode: 'NEFT', reference: 'HDFC00291122334' } });
 
-  const tnpaAugInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: `INV/${FY}/0141`, companyId: tnpa.id, workType: TaskWorkType.MONTH_CARD, workId: tnpaAug.id, amount: 30000, raisedAt: days(-33), dueAt: days(-19), status: InvoiceStatus.PAID, paidAt: days(-24) } });
+  const tnpaAugInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: `INV/${FY}/0141`, companyId: tnpa.id, workType: TaskWorkType.MONTH_CARD, workId: tnpaAug.id, amount: 40000, raisedAt: days(-33), dueAt: days(-19), status: InvoiceStatus.PAID, paidAt: days(-24) } });
   await prisma.monthCard.update({ where: { id: tnpaAug.id }, data: { invoiceId: tnpaAugInvoice.id } });
-  await prisma.payment.create({ data: { invoiceId: tnpaAugInvoice.id, amount: 30000, receivedAt: days(-24), mode: 'NEFT', reference: 'HDFC00291122335' } });
+  await prisma.payment.create({ data: { invoiceId: tnpaAugInvoice.id, amount: 40000, receivedAt: days(-24), mode: 'NEFT', reference: 'HDFC00291122335' } });
 
   const daOneAugInvoice = await prisma.invoice.create({ data: { organizationId: org.id, number: `INV/${FY}/0144`, companyId: daOne.id, workType: TaskWorkType.MONTH_CARD, workId: daOneAug.id, amount: 30000, raisedAt: days(-31), dueAt: days(-17), status: InvoiceStatus.RAISED } });
   await prisma.monthCard.update({ where: { id: daOneAug.id }, data: { invoiceId: daOneAugInvoice.id } });
@@ -1222,7 +1288,6 @@ async function main() {
       { organizationId: org.id, rule: 'RULE_PROJECT_OVER_ESTIMATE', severity: AlertSeverity.HIGH, entityType: 'Project', entityId: vosoDroneFilms.id, message: 'Drone Show Films is ₹25,000 over its ₹1,90,000 estimate.' },
       { organizationId: org.id, rule: 'RULE_PROJECT_BEHIND_SCHEDULE', severity: AlertSeverity.HIGH, entityType: 'Project', entityId: tnpaSeason2.id, message: 'Season 2 Website is 5 days past its end date and still live.' },
       { organizationId: org.id, rule: 'RULE_RETAINER_EXPIRING', severity: AlertSeverity.MED, entityType: 'Retainer', entityId: carltonRetainer.id, message: 'Carlton Wellness retainer renews in 18 days.' },
-      { organizationId: org.id, rule: 'RULE_INVOICE_OVERDUE', severity: AlertSeverity.HIGH, entityType: 'Invoice', entityId: rightAugInvoice.id, message: `INV/${FY}/0139 (Right Hospitals) is 10 days overdue.` },
       { organizationId: org.id, rule: 'RULE_TASK_AGING', severity: AlertSeverity.LOW, entityType: 'Company', entityId: carlton.id, message: 'Two Carlton tasks are open longer than their usual turnaround.' },
       // Resolved history, so the notification bell and audit trail have some closed alerts too.
       { organizationId: org.id, rule: 'RULE_PROPOSAL_FOLLOWUP', severity: AlertSeverity.LOW, entityType: 'Proposal', entityId: carltonProposal.id, message: 'Carlton proposal had gone quiet before it was won.', resolvedAt: days(-33), acknowledgedById: tanuja.id },
@@ -1239,13 +1304,13 @@ async function main() {
       { organizationId: org.id, entityType: 'Proposal', entityId: carltonProposal.id, actorId: tanuja.id, verb: 'proposal_won', payload: { version: 'v2', value: 220000 } },
       { organizationId: org.id, entityType: 'Retainer', entityId: carltonRetainer.id, actorId: harish.id, verb: 'retainer_started', payload: { monthlyValue: 220000, termMonths: 12 } },
       { organizationId: org.id, entityType: 'Company', entityId: voso.id, actorId: akmal.id, verb: 'company_created', payload: { name: 'VOSO Sports' } },
-      { organizationId: org.id, entityType: 'Proposal', entityId: vosoProposal.id, actorId: akmal.id, verb: 'proposal_won', payload: { version: 'v1', value: 140000 } },
+      { organizationId: org.id, entityType: 'Proposal', entityId: vosoProposal.id, actorId: akmal.id, verb: 'proposal_won', payload: { version: 'v1', value: 120000 } },
       { organizationId: org.id, entityType: 'Project', entityId: carltonWebsite.id, actorId: naif.id, verb: 'project_created', payload: { name: 'Website Build' } },
       { organizationId: org.id, entityType: 'Project', entityId: vosoDroneFilms.id, actorId: charles.id, verb: 'milestone_added', payload: { label: 'Final Cut Delivery' } },
       { organizationId: org.id, entityType: 'Project', entityId: tnpaSeason2.id, actorId: naif.id, verb: 'project_created', payload: { name: 'Season 2 Website' } },
       { organizationId: org.id, entityType: 'Cost', entityId: 'seed', actorId: priya.id, verb: 'cost_entered', payload: { category: 'Salaries', amount: 662000 } },
       { organizationId: org.id, entityType: 'Invoice', entityId: carltonAugInvoice.id, actorId: priya.id, verb: 'payment_recorded', payload: { amount: 220000, mode: 'NEFT' } },
-      { organizationId: org.id, entityType: 'Invoice', entityId: vosoAugInvoice.id, actorId: priya.id, verb: 'payment_recorded', payload: { amount: 140000, mode: 'UPI' } },
+      { organizationId: org.id, entityType: 'Invoice', entityId: vosoAugInvoice.id, actorId: priya.id, verb: 'payment_recorded', payload: { amount: 120000, mode: 'UPI' } },
       { organizationId: org.id, entityType: 'Company', entityId: indusAlliance.id, actorId: tanuja.id, verb: 'proposal_lost', payload: { reason: 'Budget pulled after Q1 review' } },
       { organizationId: org.id, entityType: 'Company', entityId: sastry.id, actorId: tanuja.id, verb: 'proposal_lost', payload: { reason: 'Took production in-house' } },
       { organizationId: org.id, entityType: 'OutreachEntry', entityId: 'seed', actorId: varsha.id, verb: 'outreach_imported', payload: { count: 6 } },

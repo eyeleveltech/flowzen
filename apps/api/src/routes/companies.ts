@@ -616,6 +616,16 @@ const companyCreateSchema = z.object({
   contact: z.object({
     name: z.string(),
     phone: z.string().optional().nullable(),
+    /*
+     * The address a proforma is sent to.
+     *
+     * `Person.email` has always existed and this form never asked, so a client
+     * added here had a name and a phone and no way to be emailed. Raising a
+     * proforma then offered an empty recipient list -- documentEmail builds it
+     * from the company's people -- and somebody had to go back and add the
+     * contact a second time before anything could go out.
+     */
+    email: z.string().email('That does not look like an email address').optional().or(z.literal('')),
   }).optional(),
   force: z.boolean().optional(),
   website: z.string().url().optional().or(z.literal('')),
@@ -767,12 +777,17 @@ companiesRouter.post('/', requirePermission('company.write'), async (req: AuthRe
        */
       const contactName = contact?.name?.trim();
       const contactPhone = contact?.phone || phone || null;
-      if (contactName || contactPhone) {
+      const contactEmail = contact?.email?.trim() || null;
+      // Any one of the three is a contact worth keeping. Guarding on name and
+      // phone alone would drop an email given on its own, which is the same
+      // way the phone itself used to be lost.
+      if (contactName || contactPhone || contactEmail) {
         await tx.person.create({
           data: {
             companyId: company.id,
             name: contactName || name.trim(),
             phone: contactPhone,
+            email: contactEmail,
             role: PersonRole.CONTACT,
           },
         });

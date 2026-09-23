@@ -181,6 +181,39 @@ const patchFull = <T>(e: string, body?: unknown) => full<T>('PATCH', e, body);
  * BD sells and cannot see the work, HEAD runs the work and cannot see the
  * pipeline — so it kept offering people doors that were locked.
  */
+/**
+ * A task Zen has filled in, waiting for somebody to press Create.
+ *
+ * Two halves on purpose. `shows` is what the person reads before confirming;
+ * `body` is what gets posted to `POST /tasks`, unchanged, the same call the
+ * task modal makes. Zen never writes a row itself — that click is the write,
+ * which is also the one thing an instruction hidden in a task note cannot get
+ * past.
+ */
+export type TaskDraft = {
+  body: {
+    title: string;
+    dueDate: string;
+    workType: 'MONTH_CARD' | 'PROJECT' | 'INTERNAL';
+    workId?: string;
+    monthCardId?: string;
+    retainerProjectId?: string;
+    projectId?: string;
+    assigneeId: string;
+    priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+    notes?: string;
+  };
+  shows: {
+    title: string;
+    client: string | null;
+    belongsTo: string;
+    assignedTo: string;
+    due: string;
+    priority: string;
+    notes: string | null;
+  };
+};
+
 export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'SALES' | 'MEMBER';
 
 export type CompanyStatus =
@@ -204,6 +237,15 @@ export interface OrgConfig {
     fiscalYearStart: number;
     /** §14, and what the board's column headers print. WON is always 100. */
     stageProbabilities?: Record<string, number>;
+    /**
+     * Whether a Gemini key is on file — never the key itself.
+     *
+     * The Settings screen needs to know if one is set so it can say so and
+     * offer to replace it. It does not need the key, and sending it would put
+     * a Google API key in every signed-in browser.
+     */
+    aiConfigured?: boolean;
+    geminiModel?: string;
     /** §14's working calendar. setup.admin only. */
     workingHoursStart?: string;
     workingHoursEnd?: string;
@@ -997,6 +1039,91 @@ export const api = {
     me: () => get<{ user: unknown }>('/auth/me'),
   },
 
+  assistant: {
+    /** What this organisation's key can actually call — so Settings offers a list, not a guess. */
+    models: () => get<{ success: boolean; models: string[] }>('/assistant/models'),
+    /** Asks about the month's money. The key lives on the server; this never sees it. */
+    ask: (question: string, month?: string) =>
+      post<{ success: boolean; answer: string; model: string; month: string }>('/assistant/ask', {
+        question,
+        ...(month ? { month } : {}),
+      }),
+    /**
+     * The same question, answered as it is written.
+     *
+     * Not `post`, because that reads the whole body before returning — which
+     * is the thing streaming exists to avoid. `onPiece` is called with each
+     * fragment as it lands; the promise settles when the answer is finished.
+     */
+    askStreaming: async (
+      question: string,
+      opts: {
+        history?: { from: 'you' | 'assistant'; text: string }[];
+        month?: string;
+        signal?: AbortSignal;
+        onPiece: (text: string) => void;
+        /** What Zen went to look at, so the wait has a reason on screen. */
+        onTool?: (name: string) => void;
+        /**
+         * A task Zen has filled in for you to check.
+         *
+         * Nothing has been created at this point. The row appears when the
+         * panel posts `draft.body` to `POST /tasks` — the same call the task
+         * modal makes, under the same session — which is why Zen can never put
+         * work on the board that you did not look at first.
+         */
+        onDraft?: (draft: TaskDraft) => void;
+      },
+    ): Promise<void> => {
+      const res = await fetch(`${API_URL}/assistant/stream`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        signal: opts.signal,
+        body: JSON.stringify({
+          question,
+          ...(opts.history ? { history: opts.history } : {}),
+          ...(opts.month ? { month: opts.month } : {}),
+        }),
+      });
+      if (!res.ok || !res.body) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? `Zen could not answer (${res.status}).`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let failure: string | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        // Events are separated by a blank line; a chunk can split one in half,
+        // so whatever is left after the last separator waits for more.
+        const events = buffer.split('\n\n');
+        buffer = events.pop() ?? '';
+        for (const block of events) {
+          const nameLine = block.split('\n').find((l) => l.startsWith('event:'));
+          const dataLine = block.split('\n').find((l) => l.startsWith('data:'));
+          if (!dataLine) continue;
+          const name = nameLine?.slice(6).trim();
+          const data = JSON.parse(dataLine.slice(5).trim()) as {
+            text?: string;
+            error?: string;
+            name?: string;
+            draft?: TaskDraft;
+          };
+          if (name === 'piece' && data.text) opts.onPiece(data.text);
+          if (name === 'tool' && data.name) opts.onTool?.(data.name);
+          if (name === 'draft' && data.draft) opts.onDraft?.(data.draft);
+          if (name === 'error' && data.error) failure = data.error;
+        }
+      }
+      if (failure) throw new Error(failure);
+    },
+  },
   config: {
     get: () => get<OrgConfig>('/config'),
     update: (data: Record<string, unknown>) => patch('/config', data),

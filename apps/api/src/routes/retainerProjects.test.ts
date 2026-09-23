@@ -394,3 +394,87 @@ describe('naming the first piece of work', () => {
     expect(status).toBe(400);
   });
 });
+
+/**
+ * The reason to open a row, said on the row.
+ *
+ * Every column on the live-work table -- owner, monthly, contract, renewal --
+ * is a fact about the AGREEMENT. The only one about the work was "11 of 18
+ * done", and 11 of 18 reads the same whether the other seven are due next week
+ * or were due last Tuesday. So the only way to find the client who needs you
+ * was to open every client, which is the opposite of what a list is for.
+ */
+describe('the retainer list says how much of the month is already late', () => {
+  const YESTERDAY = new Date(Date.now() - 86400000);
+  const TOMORROW = new Date(Date.now() + 86400000);
+  const thisMonth = new Date().toISOString().slice(0, 7);
+
+  /** One retainer whose current month card holds exactly these tasks. */
+  const listWith = async (tasks: { status: string; dueDate: Date }[]) => {
+    (prisma.retainer.count as any).mockResolvedValue(1);
+    (prisma.retainer.findMany as any).mockResolvedValue([
+      {
+        id: 'ret-1',
+        companyId: 'co-1',
+        company: { id: 'co-1', name: 'Carlton Wellness' },
+        owner: { id: 'u-1', name: 'Tanuja' },
+        template: null,
+        monthlyValue: 220000,
+        startDate: new Date('2026-08-01'),
+        termMonths: 12,
+        renewalDate: new Date('2026-10-07'),
+        status: 'ACTIVE',
+        projects: [],
+        monthCards: [{ id: 'mc-1', month: thisMonth, status: 'OPEN', revenue: 220000, invoice: null, tasks }],
+      },
+    ]);
+    const res = await request(app).get('/api/retainers').set(...auth());
+    expect(res.status).toBe(200);
+    return res.body.retainers[0];
+  };
+
+  it('counts a task past its due date', async () => {
+    const row = await listWith([
+      { status: 'TODO', dueDate: YESTERDAY },
+      { status: 'IN_PROGRESS', dueDate: YESTERDAY },
+      { status: 'TODO', dueDate: TOMORROW },
+    ]);
+    expect(row.monthTasksLate).toBe(2);
+  });
+
+  it('does not count work that is finished or called off', async () => {
+    const row = await listWith([
+      { status: 'DONE', dueDate: YESTERDAY },
+      { status: 'CANCELLED', dueDate: YESTERDAY },
+      { status: 'TODO', dueDate: YESTERDAY },
+    ]);
+    expect(row.monthTasksLate).toBe(1);
+  });
+
+  it('does not call a task due today late', async () => {
+    const row = await listWith([{ status: 'TODO', dueDate: new Date() }]);
+    expect(row.monthTasksLate).toBe(0);
+  });
+
+  it('is nought when the month has no card at all', async () => {
+    (prisma.retainer.count as any).mockResolvedValue(1);
+    (prisma.retainer.findMany as any).mockResolvedValue([
+      {
+        id: 'ret-1',
+        companyId: 'co-1',
+        company: { id: 'co-1', name: 'Carlton Wellness' },
+        owner: { id: 'u-1', name: 'Tanuja' },
+        template: null,
+        monthlyValue: 220000,
+        startDate: new Date('2026-08-01'),
+        termMonths: null,
+        renewalDate: null,
+        status: 'ACTIVE',
+        projects: [],
+        monthCards: [],
+      },
+    ]);
+    const res = await request(app).get('/api/retainers').set(...auth());
+    expect(res.body.retainers[0].monthTasksLate).toBe(0);
+  });
+});

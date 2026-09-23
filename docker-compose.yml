@@ -32,6 +32,11 @@ services:
       dockerfile: apps/api/Dockerfile
     container_name: flowzen-api
     restart: unless-stopped
+    # Chromium renders the proforma and invoice PDFs, and puts its shared
+    # memory in /dev/shm. Docker's default there is 64MB, which an A4 page with
+    # a brand band and a line-item table goes past -- so the PDF download died
+    # on the server while working on a laptop.
+    shm_size: 256m
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-elitepm}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-elitepm}?schema=public
       - NODE_ENV=production

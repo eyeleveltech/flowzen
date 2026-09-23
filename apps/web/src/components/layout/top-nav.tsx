@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useUIStore, useAuthStore } from '@/stores';
+import { useConfig } from '@/hooks/queries';
+import { ManagementAssistant } from '@/components/work/ManagementAssistant';
 import { api } from '@/lib/api-v2';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useQueryClient } from '@tanstack/react-query';
@@ -12,6 +14,7 @@ import {
   Search,
   ArrowLeft,
   Bell,
+  Sparkles,
   Plus,
   ChevronDown,
   LogOut,
@@ -78,6 +81,17 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
   const pathname = usePathname();
   const { setCommandPaletteOpen, setMobileSidebarOpen, pageTitle, pageSubtitle } = useUIStore();
   const { user, logout } = useAuthStore();
+  const { data: navConfig } = useConfig();
+  const [showAssistant, setShowAssistant] = useState(false);
+  /*
+   * Management only, and hidden rather than disabled for everybody else.
+   *
+   * The server refuses the route to anyone whose preset is not MANAGEMENT, so
+   * this is presentation, not protection — but a button that always says no is
+   * worse than no button, and this one would be answering questions about
+   * margins and people's workloads.
+   */
+  const mayAskAssistant = user?.preset === 'MANAGEMENT';
   const showBack = isMobile && pathname !== '/my-work';
 
   const queryClient = useQueryClient();
@@ -167,6 +181,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
   ]).filter((item) => canSee(item, user?.permissions));
 
   return (
+    <>
     <header className="sticky top-0 z-30 flex h-14 md:h-16 items-center justify-between border-b border-border bg-white/80 backdrop-blur-xl px-3 sm:px-6">
       <div className="flex items-center flex-1 min-w-0 pr-2 gap-3">
         {showBack ? (
@@ -221,6 +236,20 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
             ⌘K
           </kbd>
         </button>
+
+        {/* The assistant. Its own control, not inside Quick Create's relative
+            wrapper — that box positions Quick Create's dropdown, and a second
+            button living in it was one more thing anchored to the wrong edge. */}
+        {mayAskAssistant && (
+          <button
+            aria-label="Ask Zen"
+            title="Ask Zen"
+            onClick={() => { setShowAssistant(true); setShowNotifications(false); setShowUserMenu(false); }}
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-border text-secondary hover:bg-surface hover:text-primary transition-colors duration-150 motion-reduce:transition-none outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+          >
+            <Sparkles className="h-4 w-4" />
+          </button>
+        )}
 
         {/* Quick Create */}
         <div className="relative">
@@ -535,5 +564,23 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
       </div>
 
     </header>
+
+      {/*
+        Outside the header, deliberately.
+        
+        The header carries `backdrop-blur-xl`, and a backdrop-filter makes an
+        element the containing block for its `fixed` descendants. Rendered
+        inside it, the panel's `fixed inset-0` sized itself to a 56px-tall
+        header instead of the viewport, and its z-50 was trapped under the
+        header's own z-30 stacking context.
+      */}
+      {mayAskAssistant && (
+        <ManagementAssistant
+          open={showAssistant}
+          onClose={() => setShowAssistant(false)}
+          configured={Boolean(navConfig?.organization.aiConfigured)}
+        />
+      )}
+    </>
   );
 }

@@ -59,6 +59,8 @@ interface LiveRetainer {
   noFixedTermRisk: boolean;
   monthTasksDone: number;
   monthTasksTotal: number;
+  /** Past due and neither done nor cancelled — what makes a row worth opening. */
+  monthTasksLate: number;
   /** The named pieces of work inside it — what the client is actually buying. */
   projects?: { id: string; name: string; status: string; endDate?: string | null }[];
   activeProjectCount?: number;
@@ -147,6 +149,7 @@ export default function LiveWorkPage() {
         noFixedTermRisk: r.noFixedTermRisk,
         monthTasksDone: r.monthTasksDone ?? 0,
         monthTasksTotal: r.monthTasksTotal ?? 0,
+        monthTasksLate: r.monthTasksLate ?? 0,
         // This map is a whitelist, not a spread — a field the server starts
         // sending is a field this screen silently drops until it is named here.
         projects: r.projects ?? [],
@@ -157,7 +160,20 @@ export default function LiveWorkPage() {
   });
 
   const allProjects = data?.allProjects ?? [];
-  const retainers = data?.retainers ?? [];
+  /*
+   * Late work first.
+   *
+   * The table was ordered by whatever the API returned, and every column on it
+   * — owner, monthly, contract, renewal — is a fact about the AGREEMENT. None
+   * of them says whether anything needs you today, so finding the client who
+   * does meant opening each one in turn. That is the opposite of what a list
+   * is for.
+   *
+   * Ties keep the server's order, which is alphabetical by client.
+   */
+  const retainers = [...(data?.retainers ?? [])].sort(
+    (a, b) => (b.monthTasksLate ?? 0) - (a.monthTasksLate ?? 0),
+  );
   const loading = isPending;
   const loadError = error instanceof Error ? error.message : error ? 'Could not load live work' : null;
 
@@ -407,8 +423,16 @@ export default function LiveWorkPage() {
                           </span>
                         ) : (
                           <>
-                            <p className="text-sm font-medium text-primary">
+                            <p className="flex items-center gap-2 text-sm font-medium text-primary">
                               {plural(r.activeProjectCount ?? 0, 'project')}
+                              {/* The reason to open this row, said on the row.
+                                  "11 of 18 done" reads the same whether the
+                                  rest is due next week or was due last week. */}
+                              {r.monthTasksLate > 0 && (
+                                <span className="rounded-full bg-danger-tint px-2 py-0.5 text-micro font-semibold text-danger">
+                                  {r.monthTasksLate} late
+                                </span>
+                              )}
                             </p>
                             {/* The first two by name, because "3 projects" is a
                                 number and "Diwali Campaign" is the answer. */}

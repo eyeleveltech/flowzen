@@ -57,6 +57,17 @@ configRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
          *
          * Sent so the web stops keeping a fourth copy of the table.
          */
+        /*
+         * Whether, not what.
+         *
+         * The Settings screen needs to know if a key is on file so it can say
+         * "set" and offer to replace it. It does not need the key, and sending
+         * it would put a Google API key in every signed-in browser's memory
+         * and in the response cache.
+         */
+        aiConfigured: Boolean(org.geminiApiKey),
+        geminiModel: org.geminiModel,
+
         stageProbabilities: {
           PROPOSAL_SENT: org.stageProbProposalSent,
           IN_NEGOTIATION: org.stageProbInNegotiation,
@@ -196,6 +207,15 @@ const orgUpdateSchema = z.object({
   workingDays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
   /** §14 "Sundays and public holidays excluded". ISO days the office is shut. */
   holidays: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')).max(60).optional(),
+  /*
+   * Write-only, both of them.
+   *
+   * The key is accepted here and never sent back by the GET below: the browser
+   * is told whether one is SET, not what it is. An empty string clears it,
+   * which is how you turn the assistant off without a deploy.
+   */
+  geminiApiKey: z.string().trim().max(200).optional(),
+  geminiModel: z.string().trim().min(1).max(100).optional(),
   stageProbProposalSent: z.number().int().min(0).max(100).optional(),
   stageProbInNegotiation: z.number().int().min(0).max(100).optional(),
   stageProbProformaIssued: z.number().int().min(0).max(100).optional(),
@@ -251,6 +271,14 @@ configRouter.patch('/', requirePermission('setup.admin'), async (req: AuthReques
         ...(data.workingHoursEnd !== undefined ? { workingHoursEnd: data.workingHoursEnd } : {}),
         ...(data.workingDays !== undefined ? { workingDays: data.workingDays } : {}),
         ...(data.holidays !== undefined ? { holidays: Array.from(new Set(data.holidays)).sort() } : {}),
+        /*
+         * An empty string CLEARS the key rather than storing "". That is how
+         * the assistant is turned off from Settings, and the difference
+         * between null and an empty string is the difference between "no key"
+         * and "a key that Gemini will reject".
+         */
+        ...(data.geminiApiKey !== undefined ? { geminiApiKey: data.geminiApiKey || null } : {}),
+        ...(data.geminiModel !== undefined ? { geminiModel: data.geminiModel } : {}),
         ...(data.stageProbProposalSent !== undefined ? { stageProbProposalSent: data.stageProbProposalSent } : {}),
         ...(data.stageProbInNegotiation !== undefined ? { stageProbInNegotiation: data.stageProbInNegotiation } : {}),
         ...(data.stageProbProformaIssued !== undefined ? { stageProbProformaIssued: data.stageProbProformaIssued } : {}),

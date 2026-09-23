@@ -309,3 +309,37 @@ describe('what the rest of the office is told', () => {
     expect(emitToOrganization).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * The address a proforma is sent to.
+ *
+ * `Person.email` has been in the schema all along and this form never asked,
+ * so a client added here had a name and a phone and no way to be emailed.
+ * `documentEmail` builds a document's recipient list from the company's
+ * people, so raising a proforma offered an empty list and somebody had to add
+ * the same contact a second time before anything could go out.
+ */
+describe('the contact email', () => {
+  it('is written onto the person', async () => {
+    await create({ contact: { name: 'Priya Sharma', phone: '98765 43210', email: 'priya@acme.in' } });
+    expect(written.person.email).toBe('priya@acme.in');
+    expect(written.person.name).toBe('Priya Sharma');
+  });
+
+  it('keeps a contact who is only an email address', async () => {
+    // The guard used to be name-or-phone, so this wrote no person at all.
+    await create({ contact: { name: '', email: 'accounts@acme.in' } });
+    expect(written.person).toBeDefined();
+    expect(written.person.email).toBe('accounts@acme.in');
+  });
+
+  it('is null rather than empty when nothing was typed', async () => {
+    await create({ contact: { name: 'Priya Sharma' } });
+    expect(written.person.email).toBeNull();
+  });
+
+  it('refuses something that is not an email', async () => {
+    const res = await create({ contact: { name: 'Priya Sharma', email: 'priya-at-acme' } });
+    expect(res.status).toBe(400);
+  });
+});
