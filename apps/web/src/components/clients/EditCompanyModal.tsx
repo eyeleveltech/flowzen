@@ -38,7 +38,6 @@ type Company = {
   gstin: string | null;
   billingAddress: string | null;
   stateCode?: string | null;
-  status?: string;
   ownerId?: string | null;
   owner?: { id: string; name: string } | null;
 };
@@ -63,20 +62,6 @@ export function EditCompanyModal({ company, onConfirm, onCancel }: Props) {
   const [billingAddress, setBillingAddress] = useState(company.billingAddress ?? '');
   const [stateCode, setStateCode] = useState(company.stateCode ?? '');
   const [ownerId, setOwnerId] = useState(company.ownerId ?? company.owner?.id ?? '');
-  /*
-   * Status, which was not editable anywhere.
-   *
-   * §3 makes it derived — a company becomes a CLIENT because a proposal was
-   * WON, which is what stops "clients" existing who never bought anything. That
-   * is right for new business and leaves no way to correct a wrong one: an
-   * imported company arrives as a PROSPECT, and the only route to CLIENT was to
-   * invent a proposal, date it and win it, which puts fiction in the win rate.
-   *
-   * So it is editable here for the same reason the Add Company form has the
-   * "we already work with them" tick: the exception is named rather than
-   * worked around. Changing it records `company_updated`, never a win.
-   */
-  const [status, setStatus] = useState(company.status ?? 'PROSPECT');
 
   useEffect(() => {
     api.team
@@ -101,7 +86,6 @@ export function EditCompanyModal({ company, onConfirm, onCancel }: Props) {
         gstin: gstin.trim() || null,
         billingAddress: billingAddress.trim() || null,
         stateCode: stateCode || null,
-        status,
         ...(ownerId ? { ownerId } : {}),
       } as never);
       toast.success('Company updated');
@@ -144,22 +128,6 @@ export function EditCompanyModal({ company, onConfirm, onCancel }: Props) {
             />
           </div>
 
-          <FieldSelect
-            label="Status"
-            value={status}
-            onChange={setStatus}
-            options={[
-              { value: 'PROSPECT', label: 'Prospect' },
-              { value: 'CLIENT', label: 'Client' },
-              { value: 'PAST', label: 'Past client' },
-            ]}
-            disabled={busy}
-          />
-          <p className="-mt-2 text-xs text-secondary">
-            Normally this follows the work — a company becomes a client when a proposal is won. Set it
-            by hand for somebody you already worked with before Flowzen. It does not create a deal or
-            count as a win.
-          </p>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="City" value={city} onChange={setCity} disabled={busy} />
