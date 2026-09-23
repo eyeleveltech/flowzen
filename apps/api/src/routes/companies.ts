@@ -575,6 +575,23 @@ companiesRouter.post('/import', requirePermission('company.write'), async (req: 
       phone: c.people[0]?.phone ?? null,
     }));
 
+    /*
+     * The names the database will not accept twice.
+     *
+     * `@@unique([organizationId, name])` means an exact repeat is impossible,
+     * and the duplicate check below does not know that: it reports a repeated
+     * name as a SIMILAR name, which `force` is allowed to wave through. Forcing
+     * one then threw P2002 inside the transaction — an opaque 500, and because
+     * it is one transaction, every other row in the file was rolled back with
+     * it. Somebody re-importing a file to pick up a few new companies lost the
+     * lot and was told "Something went wrong".
+     *
+     * Compared on the raw name rather than the normalised one, because the
+     * index is on the raw string: "Acme Ltd" and "Acme" normalise alike but are
+     * two perfectly legal rows, and force should still allow that.
+     */
+    const takenNames = new Set(existingRaw.map((c) => c.name));
+
     const results: CompanyImportRow[] = [];
     const toCreate: {
       rowIndex: number;
@@ -630,6 +647,20 @@ companiesRouter.post('/import', requirePermission('company.write'), async (req: 
           return;
         }
       }
+
+      // An exact repeat is refused whatever `force` says, because the database
+      // refuses it too — and finding that out inside the transaction costs
+      // everybody else's rows.
+      if (takenNames.has(name)) {
+        results.push({
+          row: rowNum,
+          name,
+          action: 'SKIPPED',
+          reason: 'A company with exactly this name already exists',
+        });
+        return;
+      }
+      takenNames.add(name);
 
       // Unknown industries fall back rather than failing the row, matching what
       // the single Add Company form does with the same field.

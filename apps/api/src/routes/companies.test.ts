@@ -177,3 +177,80 @@ describe('who may ask', () => {
     expect(res.status).toBe(403);
   });
 });
+
+/**
+ * Importing a file over companies that already exist.
+ *
+ * `@@unique([organizationId, name])` means an exact repeat is impossible, and
+ * the duplicate check does not know that — it reports a repeated name as a
+ * SIMILAR name, which "add these anyway" was allowed to wave through. Forcing
+ * one threw P2002 inside the transaction: an opaque 500, and since it is ONE
+ * transaction, every other row in the file went with it. Somebody re-importing
+ * a spreadsheet to pick up three new companies lost all of them and was told
+ * "Something went wrong".
+ */
+describe('re-importing a file whose companies are already here', () => {
+  const CSV = ['name,status,city,industry', 'Dinamalar,CLIENT,Chennai,B2B', 'Brand New Co,PROSPECT,Madurai,RETAIL'].join('\n');
+
+  beforeEach(() => {
+    (prisma.company.findMany as any).mockResolvedValue([
+      { id: 'co-dina', name: 'Dinamalar', people: [] },
+    ]);
+    (prisma.$transaction as any).mockImplementation(async (fn: any) =>
+      fn({
+        company: { create: async ({ data }: any) => ({ id: 'co-new', ...data }) },
+        activity: { create: async () => ({}) },
+      }),
+    );
+  });
+
+  it('refuses an exact repeat however hard you press, rather than failing the file', async () => {
+    const res = await request(app)
+      .post('/api/companies/import')
+      .set(...auth(BD))
+      .send({ csv: CSV, force: true });
+
+    // The whole point: a 200 with a readable outcome, not a 500.
+    expect(res.status).toBe(200);
+    const dina = res.body.results.find((r: { name: string }) => r.name === 'Dinamalar');
+    expect(dina.action).toBe('SKIPPED');
+    expect(dina.reason).toMatch(/exactly this name/i);
+  });
+
+  it('still imports the rows that are fine', async () => {
+    // One row the database would reject must not cost the others theirs.
+    const res = await request(app)
+      .post('/api/companies/import')
+      .set(...auth(BD))
+      .send({ csv: CSV, force: true });
+
+    expect(res.body.created).toBe(1);
+    const fresh = res.body.results.find((r: { name: string }) => r.name === 'Brand New Co');
+    expect(fresh.action).toBe('CREATED');
+  });
+
+  it('carries the status from the file, so a client does not arrive as a prospect', async () => {
+    // Every row used to land as PROSPECT, so importing a real book of business
+    // meant opening each one afterwards and changing it by hand.
+    const created: Record<string, unknown>[] = [];
+    (prisma.$transaction as any).mockImplementation(async (fn: any) =>
+      fn({
+        company: {
+          create: async ({ data }: any) => {
+            created.push(data);
+            return { id: 'co-new', ...data };
+          },
+        },
+        activity: { create: async () => ({}) },
+      }),
+    );
+
+    await request(app)
+      .post('/api/companies/import')
+      .set(...auth(BD))
+      .send({ csv: 'name,status,city\nAcme Co,CLIENT,Chennai' });
+
+    expect(created).toHaveLength(1);
+    expect(created[0].status).toBe('CLIENT');
+  });
+});
