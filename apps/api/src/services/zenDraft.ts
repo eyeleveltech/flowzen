@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js';
+import type { AiTool } from './ai/types.js';
 
 /**
  * What Zen may propose, and why it never writes.
@@ -353,7 +354,7 @@ export async function draftTask(
 }
 
 /** The one write-shaped thing Zen may call. */
-export const ZEN_DRAFT_TOOLS = [
+export const ZEN_DRAFT_TOOLS: AiTool[] = [
   {
     name: 'draftTask',
     description:

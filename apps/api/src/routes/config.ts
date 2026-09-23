@@ -6,6 +6,7 @@ import { buildSellerSnapshot, resolveState, sellerBlockGaps } from '../services/
 import { authenticate, requirePermission, hasPermission, type AuthRequest } from '../middleware/auth.js';
 import { encryptSecret } from '../utils/crypto.js';
 import { resolveMailConfig, sendMail } from '../utils/mailer.js';
+import { AI_PROVIDER_IDS } from '../services/ai/index.js';
 
 export const configRouter = Router();
 
@@ -62,11 +63,16 @@ configRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
          *
          * The Settings screen needs to know if a key is on file so it can say
          * "set" and offer to replace it. It does not need the key, and sending
-         * it would put a Google API key in every signed-in browser's memory
-         * and in the response cache.
+         * it would put a live API key in every signed-in browser's memory and
+         * in the response cache.
+         *
+         * The provider, model and address are not secrets and Settings has to
+         * show them, so those do go.
          */
-        aiConfigured: Boolean(org.geminiApiKey),
-        geminiModel: org.geminiModel,
+        aiConfigured: Boolean(org.aiApiKey),
+        aiProvider: org.aiProvider,
+        aiModel: org.aiModel,
+        aiBaseUrl: org.aiBaseUrl,
 
         stageProbabilities: {
           PROPOSAL_SENT: org.stageProbProposalSent,
@@ -208,14 +214,24 @@ const orgUpdateSchema = z.object({
   /** §14 "Sundays and public holidays excluded". ISO days the office is shut. */
   holidays: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')).max(60).optional(),
   /*
-   * Write-only, both of them.
+   * The key is write-only: accepted here and never sent back by the GET above.
+   * The browser is told whether one is SET, not what it is. An empty string
+   * clears it, which is how you turn the assistant off without a deploy.
    *
-   * The key is accepted here and never sent back by the GET below: the browser
-   * is told whether one is SET, not what it is. An empty string clears it,
-   * which is how you turn the assistant off without a deploy.
+   * The provider is checked against the adapters that actually exist rather
+   * than taken as a string, so a typo cannot leave Zen pointed at nothing.
    */
-  geminiApiKey: z.string().trim().max(200).optional(),
-  geminiModel: z.string().trim().min(1).max(100).optional(),
+  aiApiKey: z.string().trim().max(200).optional(),
+  aiProvider: z.enum(AI_PROVIDER_IDS).optional(),
+  aiModel: z.string().trim().min(1).max(100).optional(),
+  /*
+   * Only meaningful for OPENAI_COMPATIBLE, and validated as a URL so a
+   * half-typed address fails here rather than as a fetch error mid-answer.
+   * An empty string clears it.
+   */
+  aiBaseUrl: z
+    .union([z.literal(''), z.string().trim().url('That is not a web address').max(300)])
+    .optional(),
   stageProbProposalSent: z.number().int().min(0).max(100).optional(),
   stageProbInNegotiation: z.number().int().min(0).max(100).optional(),
   stageProbProformaIssued: z.number().int().min(0).max(100).optional(),
@@ -275,10 +291,12 @@ configRouter.patch('/', requirePermission('setup.admin'), async (req: AuthReques
          * An empty string CLEARS the key rather than storing "". That is how
          * the assistant is turned off from Settings, and the difference
          * between null and an empty string is the difference between "no key"
-         * and "a key that Gemini will reject".
+         * and "a key the provider will reject".
          */
-        ...(data.geminiApiKey !== undefined ? { geminiApiKey: data.geminiApiKey || null } : {}),
-        ...(data.geminiModel !== undefined ? { geminiModel: data.geminiModel } : {}),
+        ...(data.aiApiKey !== undefined ? { aiApiKey: data.aiApiKey || null } : {}),
+        ...(data.aiProvider !== undefined ? { aiProvider: data.aiProvider } : {}),
+        ...(data.aiModel !== undefined ? { aiModel: data.aiModel } : {}),
+        ...(data.aiBaseUrl !== undefined ? { aiBaseUrl: data.aiBaseUrl || null } : {}),
         ...(data.stageProbProposalSent !== undefined ? { stageProbProposalSent: data.stageProbProposalSent } : {}),
         ...(data.stageProbInNegotiation !== undefined ? { stageProbInNegotiation: data.stageProbInNegotiation } : {}),
         ...(data.stageProbProformaIssued !== undefined ? { stageProbProformaIssued: data.stageProbProformaIssued } : {}),

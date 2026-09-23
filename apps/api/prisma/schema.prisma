@@ -27,17 +27,31 @@ enum RolePreset {
 model Organization {
   id                 String   @id @default(cuid())
   name               String
-  /// The Gemini key the money assistant answers with.
+  /// Which model provider Zen asks: GEMINI, OPENAI, ANTHROPIC or
+  /// OPENAI_COMPATIBLE.
+  ///
+  /// A plain string rather than a Prisma enum on purpose — the list of
+  /// providers lives in `services/ai`, and making it an enum would mean a
+  /// migration every time one is added. `providerFor` falls back to Gemini for
+  /// a value it does not know, so a bad row degrades rather than 500s.
+  aiProvider         String   @default("GEMINI")
+  /// The key Zen answers with.
   ///
   /// On the organisation rather than in the environment so it can be changed
   /// from Settings without a deploy. It is WRITE-ONLY across the wire:
   /// `/config` never returns it and never has to, because the browser only
   /// needs to know whether one is set and the model is only ever called
   /// server-side. A key that reaches a browser is a key on every laptop.
-  geminiApiKey       String?
+  aiApiKey           String?
   /// Which model to ask. Here rather than compiled in, so a newer one can be
   /// switched to without a deploy.
-  geminiModel        String   @default("gemini-2.5-flash")
+  aiModel            String   @default("gemini-2.5-flash")
+  /// Where to send it, for a provider that has no fixed home.
+  ///
+  /// Null for the three named providers, which know their own endpoints. Set
+  /// for OPENAI_COMPATIBLE, where the whole point is that the person chooses —
+  /// OpenRouter, Groq, a local server.
+  aiBaseUrl          String?
   proformaPrefix     String   @default("EL/PI")
   financialYearStart Int      @default(4) // April = 4
   timezone           String   @default("Asia/Kolkata")

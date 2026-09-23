@@ -61,8 +61,10 @@ const ORG = {
   currency: 'INR',
   timezone: 'Asia/Kolkata',
   financialYearStart: 4,
-  geminiApiKey: 'AIza-super-secret-key',
-  geminiModel: 'gemini-2.0-flash',
+  aiProvider: 'GEMINI',
+  aiApiKey: 'AIza-super-secret-key',
+  aiModel: 'gemini-2.0-flash',
+  aiBaseUrl: null,
   stageProbProposalSent: 30,
   stageProbInNegotiation: 60,
   stageProbProformaIssued: 85,
@@ -88,7 +90,7 @@ beforeEach(() => {
   (prisma.organization.findFirst as any).mockResolvedValue(ORG);
   (prisma.activity.create as any).mockResolvedValue({});
   // Everything the context builder reads. An unmocked one returns undefined
-  // and the builder throws before Gemini is ever reached, which shows up as a
+  // and the builder throws before the provider is ever reached, which shows up as a
   // 500 and tells you nothing.
   (prisma.monthCard.findMany as any).mockResolvedValue([]);
   (prisma.invoice.findMany as any).mockResolvedValue([]);
@@ -96,7 +98,7 @@ beforeEach(() => {
   (prisma.proposal.findMany as any).mockResolvedValue([]);
   (prisma.task.findMany as any).mockResolvedValue([]);
   // The orientation block reads these too. An unmocked one returns undefined
-  // and the builder throws before Gemini is reached, which shows up as a 500
+  // and the builder throws before the provider is reached, which shows up as a 500
   // and tells you nothing about what went wrong.
   (prisma.company.findMany as any).mockResolvedValue([
     { name: 'Da One', status: 'CLIENT' },
@@ -108,7 +110,7 @@ beforeEach(() => {
   ]);
 });
 
-describe('the Gemini key never leaves the server', () => {
+describe('the AI key never leaves the server', () => {
   it('is not in GET /config, anywhere in the response', async () => {
     const res = await request(app).get('/api/config').set(...auth(MANAGEMENT));
 
@@ -121,11 +123,11 @@ describe('the Gemini key never leaves the server', () => {
   it('says only whether one is set', async () => {
     const res = await request(app).get('/api/config').set(...auth(MANAGEMENT));
     expect(res.body.organization.aiConfigured).toBe(true);
-    expect(res.body.organization.geminiApiKey).toBeUndefined();
+    expect(res.body.organization.aiApiKey).toBeUndefined();
   });
 
   it('reports no key as not configured', async () => {
-    (prisma.organization.findUnique as any).mockResolvedValue({ ...ORG, geminiApiKey: null });
+    (prisma.organization.findUnique as any).mockResolvedValue({ ...ORG, aiApiKey: null });
     const res = await request(app).get('/api/config').set(...auth(MANAGEMENT));
     expect(res.body.organization.aiConfigured).toBe(false);
   });
@@ -160,7 +162,7 @@ describe('who may ask it', () => {
   });
 
   it('says plainly when no key is set, rather than failing', async () => {
-    (prisma.organization.findUnique as any).mockResolvedValue({ ...ORG, geminiApiKey: null });
+    (prisma.organization.findUnique as any).mockResolvedValue({ ...ORG, aiApiKey: null });
     const res = await request(app)
       .post('/api/assistant/ask')
       .set(...auth(MANAGEMENT))
@@ -181,7 +183,7 @@ describe('who may ask it', () => {
 });
 
 describe('what it sends', () => {
-  it('asks Gemini with the key in a header, and records the question', async () => {
+  it('asks the provider with the key in a header, and records the question', async () => {
     const fetchMock = vi.fn(async () =>
       new Response(
         JSON.stringify({ candidates: [{ content: { parts: [{ text: 'September is ₹11,000.' }] } }] }),
@@ -233,9 +235,9 @@ describe('what it sends', () => {
  *
  * Three things the plan called for, and each is invisible from the outside —
  * a good answer and a lucky one look identical. So these read the request that
- * went to Gemini rather than the reply that came back.
+ * went to the provider rather than the reply that came back.
  */
-describe('what goes to Gemini', () => {
+describe('what goes to the provider', () => {
   const capture = () => {
     const fetchMock = vi.fn(async () =>
       new Response(
@@ -426,7 +428,7 @@ describe('drafting a task', () => {
     projects: [],
   };
 
-  /** Gemini asks for a draft, is told what happened, then speaks. */
+  /** The model asks for a draft, is told what happened, then speaks. */
   const drafting = (args: Record<string, unknown>) => {
     let call = 0;
     const fetchMock = vi.fn(async () => {
@@ -444,7 +446,7 @@ describe('drafting a task', () => {
     return fetchMock;
   };
 
-  /** What the server handed back to Gemini after running the tool. */
+  /** What the server handed back to the model after running the tool. */
   const toolReply = (fetchMock: ReturnType<typeof drafting>) => {
     const sent = JSON.parse((fetchMock.mock.calls[1] as unknown as [string, RequestInit])[1].body as string);
     return sent.contents.at(-1).parts[0].functionResponse.response.result;

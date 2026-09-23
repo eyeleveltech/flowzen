@@ -5,7 +5,7 @@
  *
  * ─── What this sends ────────────────────────────────────────────────────────
  *
- * The server hands Gemini a snapshot of the month: client names, fees, costs
+ * The server hands the model a snapshot of the month: client names, fees, costs
  * and margins, the open pipeline, how much of the month's work is late, and
  * who is carrying it. That is the point of it — an assistant that cannot see
  * the figures cannot answer the questions anybody actually has — and it is
@@ -291,7 +291,7 @@ export function ManagementAssistant({
         {!configured ? (
           <div className="p-5">
             <p className="text-sm text-secondary">
-              Add a Gemini key in{' '}
+              Add an AI key in{' '}
               <a href="/settings" className="font-medium text-primary hover:underline">
                 Settings → Zen
               </a>{' '}

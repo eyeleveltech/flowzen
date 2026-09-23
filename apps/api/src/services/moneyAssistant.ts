@@ -1,5 +1,12 @@
 import { prisma } from '../lib/prisma.js';
-import { logger } from '../utils/logger.js';
+import {
+  AssistantFailed,
+  AssistantNotConfigured,
+  providerFor,
+  type AiProvider,
+  type AiToolCall,
+  type AiTurn,
+} from './ai/index.js';
 import { ZEN_TOOLS, runZenTool } from './zenTools.js';
 import {
   ZEN_DRAFT_TOOLS,
@@ -9,8 +16,59 @@ import {
   type TaskDraft,
 } from './zenDraft.js';
 
-/** Everything Zen may call: eight ways to look, one way to propose. */
+/**
+ * Zen, the management assistant.
+ *
+ * ─── What leaves this server ────────────────────────────────────────────────
+ *
+ * This sends REAL business data to whichever model provider is configured:
+ * client names, monthly fees, costs, margins and overdue invoices. That was a
+ * deliberate choice — an assistant that cannot see the figures cannot answer the
+ * questions anybody actually has about them — but it is worth being blunt about
+ * in the one file that does it, because nothing else in this app sends a
+ * client's name anywhere.
+ *
+ * Three limits follow from that, and they are the reason this is a service
+ * rather than a fetch inlined in a route:
+ *
+ *   1. The caller must be MANAGEMENT. The route enforces it, as a preset check
+ *      rather than a permission one: the closest permission is `money.figures`
+ *      and ACCOUNTS carries it, so gating on that would let the accounts desk
+ *      read every margin, the pipeline and the team's workload in one answer.
+ *   2. Only summary rows go, and salaries never do. `User.monthlyCost` is
+ *      exposed by no tool. The smaller the payload, the smaller the thing that
+ *      has left.
+ *   3. Every question is recorded as an activity — with the provider, the model
+ *      and what it went and read — so there is a record of what was sent and
+ *      where.
+ *
+ * ─── Why there is no provider in this file ──────────────────────────────────
+ *
+ * There used to be. Gemini's endpoint, its `x-goog-api-key` header, its
+ * `functionCall` / `functionResponse` pair and its SSE shape were all written
+ * in here, so "use a different model" meant rewriting the service — which is
+ * the wrong thing to have to do when a free tier runs out of quota at
+ * lunchtime.
+ *
+ * Now the conversation is built in the neutral shapes from `services/ai` and an
+ * adapter translates. This file decides WHAT to say and when to stop; the
+ * adapter decides how to put it on the wire.
+ *
+ * ─── Why the key is not in the environment ──────────────────────────────────
+ *
+ * It lives on the organisation so it and the provider can be changed from
+ * Settings without a deploy, which is what was asked for. It is never returned
+ * by any route.
+ */
+
+export { AssistantFailed, AssistantNotConfigured } from './ai/index.js';
+
+/** Everything Zen may call: nine ways to look, one way to propose. */
 const ALL_TOOLS = [...ZEN_TOOLS, ...ZEN_DRAFT_TOOLS];
+
+/** How creative Zen is allowed to be about figures, and how much it may say. */
+const TEMPERATURE = 0.2;
+const MAX_OUTPUT_TOKENS = 900;
 
 /**
  * One dispatcher, so the streaming and non-streaming loops cannot drift apart.
@@ -36,47 +94,6 @@ async function runTool(
     : { result: outcome };
 }
 
-/**
- * Zen, the management assistant.
- *
- * ─── What leaves this server ────────────────────────────────────────────────
- *
- * This sends REAL business data to Google: client names, monthly fees, costs,
- * margins and overdue invoices. That was a deliberate choice — an assistant
- * that cannot see the figures cannot answer the questions anybody actually has
- * about them — but it is worth being blunt about in the one file that does it,
- * because nothing else in this app sends a client's name anywhere.
- *
- * Three limits follow from that, and they are the reason this is a service
- * rather than a fetch inlined in a route:
- *
- *   1. The caller must be MANAGEMENT. The route enforces it, as a preset check
- *      rather than a permission one: the closest permission is `money.figures`
- *      and ACCOUNTS carries it, so gating on that would let the accounts desk
- *      read every margin, the pipeline and the team's workload in one answer.
- *   2. Only the CURRENT month goes, and only summary rows — not the task list,
- *      not people's salaries, not the bank details. The smaller the payload,
- *      the smaller the thing that has left.
- *   3. Every question is recorded as an activity, so there is a record of what
- *      was asked and therefore of what was sent.
- *
- * ─── Why the key is not in the environment ──────────────────────────────────
- *
- * It lives on the organisation so it can be changed from Settings without a
- * deploy, which is what was asked for. It is never returned by any route.
- */
-
-const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
-
-export class AssistantNotConfigured extends Error {
-  constructor() {
-    super('No Gemini key is set. Add one in Settings → Zen.');
-    this.name = 'AssistantNotConfigured';
-  }
-}
-
-export class AssistantFailed extends Error {}
-
 /*
  * The fixed snapshot used to live here — a `MoneyContext` interface, a
  * `buildMoneyContext` that assembled this month's fees, costs, invoices,
@@ -91,53 +108,47 @@ export class AssistantFailed extends Error {}
  * deliberately a tenth of the size: names and totals, with `zenTools.ts` for
  * anything deeper.
  */
+
+/** How Zen is set up, and the adapter that goes with it. */
+async function settingsFor(organizationId: string): Promise<{
+  provider: AiProvider;
+  apiKey: string;
+  model: string;
+  baseUrl?: string;
+}> {
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { aiProvider: true, aiApiKey: true, aiModel: true, aiBaseUrl: true },
+  });
+  if (!org?.aiApiKey) throw new AssistantNotConfigured();
+
+  const provider = providerFor(org.aiProvider);
+  const model = org.aiModel || provider.defaultModel;
+  if (!model) {
+    throw new AssistantFailed(`Choose a ${provider.label} model in Settings → Zen.`);
+  }
+  const baseUrl = org.aiBaseUrl || undefined;
+  if (provider.needsBaseUrl && !baseUrl) {
+    throw new AssistantFailed(`Set the ${provider.label} address in Settings → Zen.`);
+  }
+
+  return { provider, apiKey: org.aiApiKey, model, baseUrl };
+}
+
 /**
  * What this key can actually call.
  *
- * The model was a free-text field, defaulted to a name picked from memory when
- * this was written — and Google had already retired it, so Zen's first answer
- * to anybody was a 404 telling them to change a setting they had no way of
- * knowing the right value for.
+ * The model used to be a free-text field, defaulted to a name picked from
+ * memory when this was written — and Google had already retired it, so Zen's
+ * first answer to anybody was a 404 telling them to change a setting they had
+ * no way of knowing the right value for.
  *
- * Asking the key itself is the only honest source: availability varies by key,
- * by region and by month.
+ * Asking the provider itself is the only honest source: availability varies by
+ * key, by region and by month, and now also by provider.
  */
 export async function listAvailableModels(organizationId: string): Promise<string[]> {
-  const org = await prisma.organization.findUnique({
-    where: { id: organizationId },
-    select: { geminiApiKey: true },
-  });
-  if (!org?.geminiApiKey) throw new AssistantNotConfigured();
-
-  let res: Response;
-  try {
-    res = await fetch(`${GEMINI_ENDPOINT}`, { headers: { 'x-goog-api-key': org.geminiApiKey } });
-  } catch {
-    throw new AssistantFailed('Could not reach Gemini to ask what models it has.');
-  }
-  if (!res.ok) {
-    if (res.status === 400 || res.status === 403) throw new AssistantFailed('Gemini refused that key.');
-    throw new AssistantFailed(`Gemini returned ${res.status} listing its models.`);
-  }
-
-  const data = (await res.json()) as {
-    models?: { name?: string; supportedGenerationMethods?: string[] }[];
-  };
-
-  return (data.models ?? [])
-    .filter((m) => (m.supportedGenerationMethods ?? []).includes('generateContent'))
-    .map((m) => (m.name ?? '').replace(/^models\//, ''))
-    /*
-     * Text models only, and only the families this is built for.
-     *
-     * `generateContent` is also offered by image, speech and music models, and
-     * by research agents that take minutes to answer — all of which would show
-     * up in a Settings dropdown as plausible choices that then do nothing
-     * useful with a table of margins.
-     */
-    .filter((n) => /^(gemini|gemma)-/.test(n))
-    .filter((n) => !/-(tts|image|transcribe|embedding|computer-use|robotics)/.test(n))
-    .sort();
+  const { provider, apiKey, baseUrl } = await settingsFor(organizationId);
+  return provider.listModels(apiKey, baseUrl);
 }
 
 /** One earlier turn, as the browser holds it. */
@@ -162,7 +173,7 @@ const MAX_TURN_CHARS = 2000;
  * How many times Zen may go and look something up for one question.
  *
  * Without a cap a vague question can walk the whole database a page at a time,
- * and every round trip is another call against a key that is already rate
+ * and every round trip is another call against a key that may well be rate
  * limited. Four is enough for "which client is worst and what is late on it",
  * which is about as layered as a real question gets.
  */
@@ -251,9 +262,53 @@ function toolSystemPrompt(orient: Awaited<ReturnType<typeof orientation>>, asker
 }
 
 /**
+ * The conversation so far, in the shape every adapter understands.
+ *
+ * Tool calls and their results get appended to this as the loop runs, which is
+ * how the model remembers what it already looked up.
+ */
+const openingTurns = (history: PriorTurn[] | undefined, question: string): AiTurn[] => [
+  ...(history ?? []).slice(-MAX_TURNS).map(
+    (t): AiTurn =>
+      t.from === 'you'
+        ? { role: 'user', text: t.text.slice(0, MAX_TURN_CHARS) }
+        : { role: 'assistant', text: t.text.slice(0, MAX_TURN_CHARS) },
+  ),
+  { role: 'user', text: question },
+];
+
+/** A question asked, and what answering it took. */
+const record = (opts: {
+  organizationId: string;
+  userId: string;
+  question: string;
+  month: string;
+  provider: string;
+  model: string;
+  used: string[];
+}) =>
+  prisma.activity.create({
+    data: {
+      organizationId: opts.organizationId,
+      entityType: 'Organization',
+      entityId: opts.organizationId,
+      actorId: opts.userId,
+      verb: 'assistant_asked',
+      payload: {
+        question: opts.question.slice(0, 500),
+        month: opts.month,
+        // Both, because "which model answered" is now two questions.
+        provider: opts.provider,
+        model: opts.model,
+        used: opts.used,
+      },
+    },
+  });
+
+/**
  * The same question, answered as it is written.
  *
- * `generateContent` returns when the whole answer is ready: three to eight
+ * A non-streamed reply arrives when the whole answer is ready: three to eight
  * seconds of three dots. Nothing about the answer improves by streaming it —
  * what improves is that a long one becomes readable while it is still being
  * written, which for a chat is most of what "fast" means.
@@ -274,138 +329,56 @@ export async function* streamMoneyAssistant(opts: {
   void,
   unknown
 > {
-  const [org, asker] = await Promise.all([
-    prisma.organization.findUnique({
-      where: { id: opts.organizationId },
-      select: { geminiApiKey: true, geminiModel: true },
-    }),
+  const [{ provider, apiKey, model, baseUrl }, asker, orient] = await Promise.all([
+    settingsFor(opts.organizationId),
     prisma.user.findUnique({ where: { id: opts.userId }, select: { name: true } }),
+    orientation(opts.organizationId, opts.month),
   ]);
-  if (!org?.geminiApiKey) throw new AssistantNotConfigured();
 
-  const orient = await orientation(opts.organizationId, opts.month);
-  const model = org.geminiModel || 'gemini-2.5-flash';
-
-  const contents: unknown[] = [
-    ...(opts.history ?? []).slice(-MAX_TURNS).map((t) => ({
-      role: t.from === 'you' ? 'user' : 'model',
-      parts: [{ text: t.text.slice(0, MAX_TURN_CHARS) }],
-    })),
-    { role: 'user', parts: [{ text: opts.question }] },
-  ];
-
+  const turns = openingTurns(opts.history, opts.question);
+  const system = toolSystemPrompt(orient, asker?.name ?? 'somebody');
   const used: string[] = [];
 
-  /**
-   * One streamed turn.
-   *
-   * Yields the text as it arrives and collects any function calls, because a
-   * single turn can do both — the model often says "let me check" and then
-   * asks for something. Returns the calls so the loop can run them.
-   */
-  async function* oneTurn(): AsyncGenerator<
-    { kind: 'text'; text: string },
-    { name: string; args?: Record<string, unknown> }[],
-    unknown
-  > {
-    let res: Response;
-    try {
-      res = await fetch(
-        `${GEMINI_ENDPOINT}/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': org!.geminiApiKey! },
-          body: JSON.stringify({
-            systemInstruction: {
-              parts: [{ text: toolSystemPrompt(orient, asker?.name ?? 'somebody') }],
-            },
-            contents,
-            tools: [{ functionDeclarations: ALL_TOOLS }],
-            generationConfig: { temperature: 0.2, maxOutputTokens: 900 },
-          }),
-        },
-      );
-    } catch {
-      throw new AssistantFailed('Could not reach Gemini. Check the server can make outbound requests.');
-    }
-
-    if (!res.ok || !res.body) {
-      const body = await res.text().catch(() => '');
-      logger.error(`Gemini stream ${res.status} for org ${opts.organizationId}: ${body.slice(0, 300)}`);
-      if (res.status === 400 || res.status === 403) {
-        throw new AssistantFailed('Gemini refused that key. Check it in Settings → Zen.');
-      }
-      if (res.status === 404) throw new AssistantFailed(`Gemini has no model called "${model}".`);
-      if (res.status === 429) throw new AssistantFailed('Gemini is rate-limiting this key. Try again shortly.');
-      if (res.status === 500 || res.status === 503) {
-        throw new AssistantFailed('Gemini is busy at the moment. Try again in a minute.');
-      }
-      throw new AssistantFailed(`Gemini returned ${res.status}.`);
-    }
-
-    const calls: { name: string; args?: Record<string, unknown> }[] = [];
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      /*
-       * A chunk off the network is not a whole line, so the tail waits for the
-       * next one. Splitting on every read is how a stream reader drops text at
-       * random, and the symptom is a word missing from the middle of a sentence.
-       */
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-      for (const line of lines) {
-        if (!line.startsWith('data:')) continue;
-        const payload = line.slice(5).trim();
-        if (!payload || payload === '[DONE]') continue;
-        try {
-          const parsed = JSON.parse(payload) as {
-            candidates?: {
-              content?: {
-                parts?: { text?: string; functionCall?: { name: string; args?: Record<string, unknown> } }[];
-              };
-            }[];
-          };
-          for (const part of parsed.candidates?.[0]?.content?.parts ?? []) {
-            if (part.functionCall) calls.push(part.functionCall);
-            else if (part.text) yield { kind: 'text', text: part.text };
-          }
-        } catch {
-          // A partial object at a chunk edge. The buffer above should prevent
-          // it; skipping beats failing the whole answer.
-        }
-      }
-    }
-    return calls;
-  }
-
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round += 1) {
-    const turn = oneTurn();
-    let calls: { name: string; args?: Record<string, unknown> }[] = [];
+    /*
+     * One streamed turn. The adapter yields the text as it arrives and RETURNS
+     * whatever the model asked for, because a single turn can do both — it
+     * often says "let me check" and asks for something in the same breath.
+     */
+    const turn = provider.stream({
+      apiKey,
+      baseUrl,
+      model,
+      system,
+      turns,
+      tools: ALL_TOOLS,
+      temperature: TEMPERATURE,
+      maxOutputTokens: MAX_OUTPUT_TOKENS,
+    });
+
+    let said = '';
+    let calls: AiToolCall[] = [];
     while (true) {
       const step = await turn.next();
       if (step.done) {
         calls = step.value;
         break;
       }
-      yield step.value;
+      said += step.value.text;
+      yield { kind: 'text', text: step.value.text };
     }
 
     if (calls.length === 0 || round === MAX_TOOL_ROUNDS) break;
 
-    contents.push({ role: 'model', parts: calls.map((c) => ({ functionCall: c })) });
+    turns.push({ role: 'assistant', ...(said ? { text: said } : {}), calls });
+
     const ran = await Promise.all(
       calls.map(async (c) => {
         used.push(c.name);
         // The organisation and the asker both come from the session. A
         // model-supplied one would be a way into another studio's books, or a
         // way to put work on somebody else's plate under their own name.
-        const out = await runTool(c.name, c.args ?? {}, opts.organizationId, opts.userId);
+        const out = await runTool(c.name, c.args, opts.organizationId, opts.userId);
         return { call: c, ...out };
       }),
     );
@@ -415,24 +388,13 @@ export async function* streamMoneyAssistant(opts: {
       yield { kind: 'tool', name: r.call.name };
       if (r.draft) yield { kind: 'draft', draft: r.draft };
     }
-    contents.push({
-      role: 'user',
-      parts: ran.map((r) => ({
-        functionResponse: { name: r.call.name, response: { result: r.result } },
-      })),
+    turns.push({
+      role: 'tool',
+      results: ran.map((r) => ({ name: r.call.name, result: r.result, id: r.call.id })),
     });
   }
 
-  await prisma.activity.create({
-    data: {
-      organizationId: opts.organizationId,
-      entityType: 'Organization',
-      entityId: opts.organizationId,
-      actorId: opts.userId,
-      verb: 'assistant_asked',
-      payload: { question: opts.question.slice(0, 500), month: opts.month, model, used },
-    },
-  });
+  await record({ ...opts, provider: provider.id, model, used });
 }
 
 export async function askMoneyAssistant(opts: {
@@ -441,107 +403,59 @@ export async function askMoneyAssistant(opts: {
   question: string;
   month: string;
   history?: PriorTurn[];
-}): Promise<{ answer: string; model: string; used: string[]; draft?: TaskDraft }> {
-  const [org, asker] = await Promise.all([
-    prisma.organization.findUnique({
-      where: { id: opts.organizationId },
-      select: { geminiApiKey: true, geminiModel: true },
-    }),
+}): Promise<{ answer: string; model: string; provider: string; used: string[]; draft?: TaskDraft }> {
+  const [{ provider, apiKey, model, baseUrl }, asker, orient] = await Promise.all([
+    settingsFor(opts.organizationId),
     prisma.user.findUnique({ where: { id: opts.userId }, select: { name: true } }),
+    orientation(opts.organizationId, opts.month),
   ]);
-  if (!org?.geminiApiKey) throw new AssistantNotConfigured();
 
-  const orient = await orientation(opts.organizationId, opts.month);
-  const model = org.geminiModel || 'gemini-2.5-flash';
-
-  /*
-   * The conversation as Gemini sees it: what has been said, then the question.
-   * Tool calls and their results are appended to this as the loop runs, which
-   * is how the model remembers what it already looked up.
-   */
-  const contents: unknown[] = [
-    ...(opts.history ?? []).slice(-MAX_TURNS).map((t) => ({
-      role: t.from === 'you' ? 'user' : 'model',
-      parts: [{ text: t.text.slice(0, MAX_TURN_CHARS) }],
-    })),
-    { role: 'user', parts: [{ text: opts.question }] },
-  ];
-
+  const turns = openingTurns(opts.history, opts.question);
+  const system = toolSystemPrompt(orient, asker?.name ?? 'somebody');
   const used: string[] = [];
-
-  const callGemini = async () => {
-    let res: Response;
-    try {
-      res = await fetch(`${GEMINI_ENDPOINT}/${encodeURIComponent(model)}:generateContent`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': org.geminiApiKey! },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: toolSystemPrompt(orient, asker?.name ?? 'somebody') }] },
-          contents,
-          tools: [{ functionDeclarations: ALL_TOOLS }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 900 },
-        }),
-      });
-    } catch {
-      throw new AssistantFailed('Could not reach Gemini. Check the server can make outbound requests.');
-    }
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      logger.error(`Gemini ${res.status} for org ${opts.organizationId}: ${body.slice(0, 300)}`);
-      if (res.status === 400 || res.status === 403) {
-        throw new AssistantFailed('Gemini refused that key. Check it in Settings → Zen.');
-      }
-      if (res.status === 404) throw new AssistantFailed(`Gemini has no model called "${model}". Change it in Settings.`);
-      if (res.status === 429) throw new AssistantFailed('Gemini is rate-limiting this key. Try again shortly.');
-      if (res.status === 500 || res.status === 503) {
-        throw new AssistantFailed('Gemini is busy at the moment. Try again in a minute.');
-      }
-      throw new AssistantFailed(`Gemini returned ${res.status}.`);
-    }
-    return (await res.json()) as {
-      candidates?: {
-        content?: { parts?: { text?: string; functionCall?: { name: string; args?: Record<string, unknown> } }[] };
-      }[];
-    };
-  };
 
   /*
    * Ask, run whatever it asked for, ask again.
    *
    * Capped: without a limit a vague question can walk the database a page at a
-   * time, and every round is another call against a key that is already rate
+   * time, and every round is another call against a key that may be rate
    * limited. On the last round the answer has to be whatever it can say from
    * what it has, which is better than a refusal.
    */
   let answer = '';
   let draft: TaskDraft | undefined;
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round += 1) {
-    const data = await callGemini();
-    const parts = data.candidates?.[0]?.content?.parts ?? [];
-    const calls = parts.filter((p) => p.functionCall).map((p) => p.functionCall!);
+    const reply = await provider.complete({
+      apiKey,
+      baseUrl,
+      model,
+      system,
+      turns,
+      tools: ALL_TOOLS,
+      temperature: TEMPERATURE,
+      maxOutputTokens: MAX_OUTPUT_TOKENS,
+    });
 
-    if (calls.length === 0 || round === MAX_TOOL_ROUNDS) {
-      answer = parts.map((p) => p.text ?? '').join('').trim();
+    if (reply.calls.length === 0 || round === MAX_TOOL_ROUNDS) {
+      answer = reply.text;
       break;
     }
 
-    contents.push({ role: 'model', parts: calls.map((c) => ({ functionCall: c })) });
+    turns.push({ role: 'assistant', ...(reply.text ? { text: reply.text } : {}), calls: reply.calls });
 
     const ran = await Promise.all(
-      calls.map(async (c) => {
+      reply.calls.map(async (c) => {
         used.push(c.name);
         // The organisation and the asker both come from the session. A
         // model-supplied one would be a way into another studio's books.
-        const out = await runTool(c.name, c.args ?? {}, opts.organizationId, opts.userId);
+        const out = await runTool(c.name, c.args, opts.organizationId, opts.userId);
         return { call: c, ...out };
       }),
     );
     for (const r of ran) if (r.draft) draft = r.draft;
-    contents.push({
-      role: 'user',
-      parts: ran.map((r) => ({
-        functionResponse: { name: r.call.name, response: { result: r.result } },
-      })),
+    turns.push({
+      role: 'tool',
+      results: ran.map((r) => ({ name: r.call.name, result: r.result, id: r.call.id })),
     });
   }
 
@@ -554,16 +468,7 @@ export async function askMoneyAssistant(opts: {
    * from the same fixed snapshot. Now that Zen chooses what to look at, what
    * it looked at is the more useful half of the record.
    */
-  await prisma.activity.create({
-    data: {
-      organizationId: opts.organizationId,
-      entityType: 'Organization',
-      entityId: opts.organizationId,
-      actorId: opts.userId,
-      verb: 'assistant_asked',
-      payload: { question: opts.question.slice(0, 500), month: opts.month, model, used },
-    },
-  });
+  await record({ ...opts, provider: provider.id, model, used });
 
-  return { answer, model, used, draft };
+  return { answer, model, provider: provider.id, used, draft };
 }

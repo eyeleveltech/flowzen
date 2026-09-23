@@ -8,6 +8,7 @@ import {
   AssistantNotConfigured,
   AssistantFailed,
 } from '../services/moneyAssistant.js';
+import { providerChoices } from '../services/ai/index.js';
 
 /**
  * Asking about the business.
@@ -62,7 +63,7 @@ assistantRouter.post('/ask', requireManagement(), async (req: AuthRequest, res: 
     const month =
       parsed.data.month ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-    const { answer, model, used, draft } = await askMoneyAssistant({
+    const { answer, model, provider, used, draft } = await askMoneyAssistant({
       organizationId: req.user!.organizationId,
       userId: req.user!.userId,
       question: parsed.data.question,
@@ -75,7 +76,7 @@ assistantRouter.post('/ask', requireManagement(), async (req: AuthRequest, res: 
     //
     // `draft` is a task Zen has filled in and nothing more: no row exists, and
     // none will until the browser posts it to POST /tasks on a click.
-    res.json({ success: true, answer, model, month, used, draft });
+    res.json({ success: true, answer, model, provider, month, used, draft });
   } catch (error) {
     /*
      * These two are the user's problem to fix, not a server fault — a missing
@@ -93,6 +94,20 @@ assistantRouter.post('/ask', requireManagement(), async (req: AuthRequest, res: 
     }
     next(error);
   }
+});
+
+/**
+ * What Zen can be pointed at.
+ *
+ * Served rather than hard-coded in the web app so the two cannot disagree about
+ * which providers exist — adding an adapter should not mean editing a list in
+ * Settings as well. Carries each one's default model and address so the form
+ * can fill itself in when the provider changes.
+ *
+ * No key is involved, so this answers whether or not one is set.
+ */
+assistantRouter.get('/providers', requireManagement(), (_req: AuthRequest, res: Response) => {
+  res.json({ success: true, providers: providerChoices() });
 });
 
 /**
@@ -128,7 +143,7 @@ assistantRouter.get('/models', requireManagement(), async (req: AuthRequest, res
  * caller that only wants the finished text should use.
  *
  * Errors are sent as an `error` event rather than a status code, because by
- * the time Gemini refuses the key the response has already begun and its
+ * the time the provider refuses the key the response has already begun and its
  * status is 200 — you cannot change your mind about that afterwards.
  */
 assistantRouter.post('/stream', requireManagement(), async (req: AuthRequest, res: Response) => {

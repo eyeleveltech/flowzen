@@ -238,14 +238,19 @@ export interface OrgConfig {
     /** §14, and what the board's column headers print. WON is always 100. */
     stageProbabilities?: Record<string, number>;
     /**
-     * Whether a Gemini key is on file — never the key itself.
+     * Whether an AI key is on file — never the key itself.
      *
      * The Settings screen needs to know if one is set so it can say so and
      * offer to replace it. It does not need the key, and sending it would put
-     * a Google API key in every signed-in browser.
+     * a live API key in every signed-in browser.
+     *
+     * The provider, model and address are not secrets and Settings has to show
+     * them, so those do come back.
      */
     aiConfigured?: boolean;
-    geminiModel?: string;
+    aiProvider?: string;
+    aiModel?: string;
+    aiBaseUrl?: string | null;
     /** §14's working calendar. setup.admin only. */
     workingHoursStart?: string;
     workingHoursEnd?: string;
@@ -1042,6 +1047,24 @@ export const api = {
   assistant: {
     /** What this organisation's key can actually call — so Settings offers a list, not a guess. */
     models: () => get<{ success: boolean; models: string[] }>('/assistant/models'),
+    /**
+     * Which providers exist, with each one's defaults.
+     *
+     * Fetched rather than written into the page so Settings and the server
+     * cannot disagree about the list — adding an adapter should not mean
+     * editing a dropdown here as well.
+     */
+    providers: () =>
+      get<{
+        success: boolean;
+        providers: {
+          id: string;
+          label: string;
+          defaultModel: string;
+          defaultBaseUrl: string;
+          needsBaseUrl: boolean;
+        }[];
+      }>('/assistant/providers'),
     /** Asks about the month's money. The key lives on the server; this never sees it. */
     ask: (question: string, month?: string) =>
       post<{ success: boolean; answer: string; model: string; month: string }>('/assistant/ask', {

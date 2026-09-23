@@ -96,9 +96,11 @@ type Form = {
   workingHoursEnd: string;
   workingDays: number[];
   holidays: string;
+  aiProvider: string;
   /** Typed to replace what is stored; blank means "leave it alone". */
-  geminiApiKey: string;
-  geminiModel: string;
+  aiApiKey: string;
+  aiModel: string;
+  aiBaseUrl: string;
   stageProbProposalSent: string;
   stageProbInNegotiation: string;
   stageProbProformaIssued: string;
@@ -125,6 +127,15 @@ export default function SettingsPage() {
    * varies by key, by region and by month.
    */
   const [models, setModels] = useState<string[] | null>(null);
+  /*
+   * Which providers exist, from the server.
+   *
+   * Fetched rather than written in here so this dropdown and the adapters
+   * cannot disagree — adding one should not mean editing a list in two places.
+   */
+  const [providers, setProviders] = useState<
+    { id: string; label: string; defaultModel: string; defaultBaseUrl: string; needsBaseUrl: boolean }[]
+  >([]);
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -156,9 +167,12 @@ export default function SettingsPage() {
         workingDays: o.workingDays ?? [1, 2, 3, 4, 5, 6],
         // One per line is how somebody actually types a year of holidays.
         holidays: (o.holidays ?? []).join('\n'),
-        // Never loaded from the server — it is not sent, by design.
-        geminiApiKey: '',
-        geminiModel: o.geminiModel ?? 'gemini-2.5-flash',
+        aiProvider: o.aiProvider ?? 'GEMINI',
+        // Never prefilled: the server does not send it back, and an empty
+        // box that saves as "keep what you have" is the honest shape.
+        aiApiKey: '',
+        aiModel: o.aiModel ?? '',
+        aiBaseUrl: o.aiBaseUrl ?? '',
         stageProbProposalSent: String(o.stageProbabilities?.PROPOSAL_SENT ?? 30),
         stageProbInNegotiation: String(o.stageProbabilities?.IN_NEGOTIATION ?? 60),
         stageProbProformaIssued: String(o.stageProbabilities?.PROFORMA_ISSUED ?? 85),
@@ -183,6 +197,24 @@ export default function SettingsPage() {
   // The switch the API enforces on every one of these saves, not a rung on the
   // old role ladder — ACCOUNTS maps to ADMIN there while holding no
   // setup.admin, which offered them fields that every save would refuse.
+  // Not gated on a key: the list is what you choose FROM, so it has to be
+  // there before there is anything configured.
+  useEffect(() => {
+    let cancelled = false;
+    void api.assistant
+      .providers()
+      .then((r) => {
+        if (!cancelled) setProviders(r.providers);
+      })
+      .catch(() => {
+        // Only MANAGEMENT may ask. Below that the dropdown falls back to
+        // showing whatever is stored, which is all they could do anyway.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     if (!config?.organization.aiConfigured) {
       setModels(null);
@@ -201,9 +233,10 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [config?.organization.aiConfigured]);
+  }, [config?.organization.aiConfigured, config?.organization.aiProvider]);
 
   const canEdit = Boolean(config?.me.permissions?.includes('setup.admin'));
+  const chosen = providers.find((p) => p.id === form?.aiProvider);
 
   const set = <K extends keyof Form>(key: K, value: Form[K]) =>
     setForm((f) => (f ? { ...f, [key]: value } : f));
@@ -243,8 +276,10 @@ export default function SettingsPage() {
          * blank means "leave the stored key alone" — sending it would clear the
          * key every time anybody saved any other setting on this page.
          */
-        ...(form.geminiApiKey.trim() ? { geminiApiKey: form.geminiApiKey.trim() } : {}),
-        geminiModel: form.geminiModel.trim() || 'gemini-2.5-flash',
+        ...(form.aiApiKey.trim() ? { aiApiKey: form.aiApiKey.trim() } : {}),
+        aiProvider: form.aiProvider,
+        ...(form.aiModel.trim() ? { aiModel: form.aiModel.trim() } : {}),
+        aiBaseUrl: form.aiBaseUrl.trim(),
         stageProbProposalSent: Number(form.stageProbProposalSent),
         stageProbInNegotiation: Number(form.stageProbInNegotiation),
         stageProbProformaIssued: Number(form.stageProbProformaIssued),
@@ -471,37 +506,84 @@ export default function SettingsPage() {
               </CardHeader>
               <CardBody className="space-y-4">
                 <p className="text-xs text-secondary">
-                  A Gemini key turns on Zen. It is asked with the month&apos;s real figures — client names,
-                  fees, costs, margins, the pipeline and who is carrying what — so those are sent to Google to
-                  answer a question. Only MANAGEMENT can ask it, and every question is recorded in the activity
-                  log.
+                  A key turns on Zen. It is asked with the month&apos;s real figures — client names, fees,
+                  costs, margins, the pipeline and who is carrying what — so those are sent to whichever
+                  provider you choose in order to answer a question. Salaries never are. Only MANAGEMENT can
+                  ask it, and every question is recorded in the activity log.
                 </p>
                 <div className="grid gap-4 sm:grid-cols-2">
+                  <FieldSelect
+                    label="Provider"
+                    value={form.aiProvider}
+                    onChange={(v) => {
+                      /*
+                       * Changing provider changes what a model name means, so
+                       * the model comes with it. Keeping the old one would
+                       * offer `gemini-2.5-flash` to OpenAI and produce a 404
+                       * at the moment somebody asks a question.
+                       */
+                      const picked = providers.find((p) => p.id === v);
+                      setForm((f) =>
+                        f
+                          ? {
+                              ...f,
+                              aiProvider: v,
+                              aiModel: picked?.defaultModel ?? '',
+                              aiBaseUrl: picked?.needsBaseUrl ? f.aiBaseUrl : '',
+                            }
+                          : f,
+                      );
+                      // The list belongs to the old key and the old provider.
+                      setModels(null);
+                      setModelsError(null);
+                    }}
+                    options={
+                      providers.length
+                        ? providers.map((p) => ({ value: p.id, label: p.label }))
+                        : [{ value: form.aiProvider, label: form.aiProvider }]
+                    }
+                    disabled={!canEdit}
+                  />
                   <Field
-                    label="Gemini API key"
+                    label="API key"
                     type="password"
-                    value={form.geminiApiKey}
-                    onChange={(v) => set('geminiApiKey', v)}
+                    value={form.aiApiKey}
+                    onChange={(v) => set('aiApiKey', v)}
                     placeholder={config?.organization.aiConfigured ? '•••••••• (a key is set)' : 'Paste a key to turn it on'}
                     hint={
                       config?.organization.aiConfigured
                         ? 'A key is on file. Type a new one to replace it — leaving this blank keeps the one you have.'
-                        : 'From aistudio.google.com. Stored on the server, never sent to the browser.'
+                        : `${chosen?.label ?? 'The provider'}'s key. Stored on the server, never sent to the browser.`
                     }
                     disabled={!canEdit}
                   />
+                  {/*
+                    * Only for the compatible option, where the provider IS the
+                    * address: OpenRouter, Groq, a local server. The named three
+                    * know where they live.
+                    */}
+                  {chosen?.needsBaseUrl && (
+                    <Field
+                      label="API address"
+                      value={form.aiBaseUrl}
+                      onChange={(v) => set('aiBaseUrl', v)}
+                      placeholder="https://openrouter.ai/api/v1"
+                      hint="The base URL of an OpenAI-compatible endpoint, up to and including /v1."
+                      disabled={!canEdit}
+                    />
+                  )}
                   {models && models.length > 0 ? (
                     <FieldSelect
                       label="Model"
-                      value={form.geminiModel}
-                      onChange={(v) => set('geminiModel', v)}
+                      value={form.aiModel}
+                      onChange={(v) => set('aiModel', v)}
                       options={
                         // Whatever is stored stays selectable even if the key
                         // can no longer call it — otherwise the dropdown would
                         // silently show something other than what is saved.
-                        (models.includes(form.geminiModel)
+                        (models.includes(form.aiModel)
                           ? models
-                          : [form.geminiModel, ...models]
+                          : [form.aiModel, ...models].filter(Boolean)
                         ).map((m) => ({ value: m, label: m }))
                       }
                       disabled={!canEdit}
@@ -509,9 +591,9 @@ export default function SettingsPage() {
                   ) : (
                     <Field
                       label="Model"
-                      value={form.geminiModel}
-                      onChange={(v) => set('geminiModel', v)}
-                      placeholder="gemini-2.5-flash"
+                      value={form.aiModel}
+                      onChange={(v) => set('aiModel', v)}
+                      placeholder={chosen?.defaultModel || 'Name the model'}
                       hint={
                         modelsError
                           ? `Could not list models (${modelsError}). Type one if you know it.`

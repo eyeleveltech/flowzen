@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js';
+import type { AiTool } from './ai/types.js';
 
 /**
  * What Zen may look up, and how.
@@ -149,7 +150,7 @@ export const ZEN_TOOLS = [
       },
     },
   },
-] as const;
+] as const satisfies readonly AiTool[];
 
 export type ZenToolName = (typeof ZEN_TOOLS)[number]['name'];
 
