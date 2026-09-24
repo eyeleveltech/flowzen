@@ -15,6 +15,7 @@ import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { Tabs, type TabDef } from '@/components/ui/tabs';
 import { RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { STAGE_LABEL } from '@flowzen/shared';
 
 /**
  * `DELETED` is here rather than only in Settings → Trash because /settings
@@ -50,15 +51,6 @@ interface DeletedProposal {
   versions: { n: number; value: number }[];
 }
 
-const STAGE_LABEL: Record<string, string> = {
-  PROPOSAL_SENT: 'Proposal sent',
-  IN_NEGOTIATION: 'In negotiation',
-  PROFORMA_ISSUED: 'Proforma issued',
-  VERBAL_YES: 'Verbal yes',
-  WON: 'Won',
-  LOST: 'Lost',
-  EXPIRED: 'Expired',
-};
 
 const STAGE_COLOR: Record<string, string> = {
   PROPOSAL_SENT: 'text-body',

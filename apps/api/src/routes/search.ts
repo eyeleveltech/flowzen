@@ -15,21 +15,21 @@
 import { Router, type Response, type NextFunction } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, hasPermission, type AuthRequest } from '../middleware/auth.js';
+import { STAGE_LABEL } from '@flowzen/shared';
 
 export const searchRouter = Router();
 
 searchRouter.use(authenticate);
 
-/** How each stage reads on screen. Mirrors the list config sends. */
-const STAGE_NAME: Record<string, string> = {
-  PROPOSAL_SENT: 'Proposal Sent',
-  IN_NEGOTIATION: 'In Negotiation',
-  PROFORMA_ISSUED: 'Proforma Issued',
-  VERBAL_YES: 'Verbal Yes',
-  WON: 'Won',
-  LOST: 'Lost',
-  EXPIRED: 'Expired',
-};
+/*
+ * How each stage reads on screen.
+ *
+ * From @flowzen/shared rather than a copy here. This list used to say it
+ * mirrored the one config sends and had stopped doing so: it was in title case
+ * while both web screens were in sentence case, so the same deal read two ways
+ * depending on whether you found it on the board or through search.
+ */
+const STAGE_NAME = STAGE_LABEL;
 
 /** Enough rows to recognise the one you meant, few enough to scan. */
 const LIMIT = 6;

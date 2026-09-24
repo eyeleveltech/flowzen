@@ -20,6 +20,7 @@ import { useConfirmStore } from '@/stores/confirm';
 import { usePageHeader } from '@/hooks/usePageHeader';
 import { useConfig } from '@/hooks/queries';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
+import { STAGE_LABEL, STAGE_ORDER } from '@flowzen/shared';
 
 /*
  * The board starts where a number does.
@@ -30,14 +31,6 @@ import { StatTile, StatRow } from '@/components/ui/stat-tile';
  * reaches the pipeline now by being sent a proposal, which is what §14 always
  * said: "a proposal only reaches the board at Proposal sent".
  */
-const STAGE_ORDER = ['PROPOSAL_SENT', 'IN_NEGOTIATION', 'PROFORMA_ISSUED', 'VERBAL_YES', 'WON'];
-const STAGE_LABEL: Record<string, string> = {
-  PROPOSAL_SENT: 'Proposal sent',
-  IN_NEGOTIATION: 'In negotiation',
-  PROFORMA_ISSUED: 'Proforma issued',
-  VERBAL_YES: 'Verbal yes',
-  WON: 'Won',
-};
 /**
  * The last of four copies of this table, kept only until the real one loads.
  *
