@@ -1216,6 +1216,15 @@ export const api = {
      */
     importTemplateUrl: () => `${API_URL}/companies/import/template`,
     update: (id: string, data: Partial<Company>) => patch<Company>(`/companies/${id}`, data),
+    /**
+     * Take a company off the books.
+     *
+     * Archives rather than deletes — §16, the row and its history stay and it
+     * leaves the lists. Refused with `code: 'HAS_WORK'` when there is a
+     * retainer, project, invoice, proforma or quoted proposal on it; the answer
+     * then is to mark them a past client, which keeps all of it.
+     */
+    remove: (id: string) => del<{ success: boolean; archived: boolean }>(`/companies/${id}`),
     addContact: (companyId: string, data: any) => post(`/companies/${companyId}/people`, data),
     updateContact: (companyId: string, personId: string, data: any) =>
       patch(`/companies/${companyId}/people/${personId}`, data),

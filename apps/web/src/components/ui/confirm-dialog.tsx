@@ -89,7 +89,21 @@ export function ConfirmDialog() {
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-999 flex items-center justify-center p-4">
+        <div
+          /*
+           * Announced as a dialog.
+           *
+           * It had no role and no aria-modal, so it was a div that happened to
+           * look like a modal: assistive tech read it as part of the page
+           * behind it, and nothing tied the question to its own heading. For a
+           * control whose whole job is "are you sure", that is the wrong thing
+           * to be vague about.
+           */
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="confirm-dialog-title"
+          className="fixed inset-0 z-999 flex items-center justify-center p-4"
+        >
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -122,7 +136,7 @@ export function ConfirmDialog() {
                 {getIcon()}
               </div>
               <div className="flex-1 pt-1 min-w-0">
-                <h3 className="text-base font-semibold text-primary leading-6 truncate">
+                <h3 id="confirm-dialog-title" className="text-base font-semibold text-primary leading-6 truncate">
                   {title}
                 </h3>
                 <p className="mt-2 text-sm text-secondary leading-relaxed">

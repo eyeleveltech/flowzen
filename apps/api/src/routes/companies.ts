@@ -39,8 +39,17 @@ companiesRouter.get('/', requirePermission('company.read'), async (req: AuthRequ
      * describe what each tab WOULD show — a count taken from the filtered rows
      * says every other tab is empty.
      */
-    const where: any = { organizationId: orgId };
-    const facetWhere: any = { organizationId: orgId };
+    /*
+     * Archived companies are gone from every list and every count.
+     *
+     * `archivedAt` has been on the model since the beginning and search already
+     * filtered on it, but nothing set it — so this filter is what makes removing
+     * a company mean anything. The duplicate checks further down deliberately do
+     * NOT filter: an archived row keeps its name, and the unique index still
+     * applies, so a check that ignored them would pass and the insert would fail.
+     */
+    const where: any = { organizationId: orgId, archivedAt: null };
+    const facetWhere: any = { organizationId: orgId, archivedAt: null };
 
     if (status && typeof status === 'string' && ['PROSPECT', 'CLIENT', 'PAST'].includes(status.toUpperCase())) {
       where.status = status.toUpperCase() as CompanyStatus;
@@ -190,7 +199,7 @@ companiesRouter.get('/', requirePermission('company.read'), async (req: AuthRequ
      */
     const [facets, orgTotals, retainerTotals, outreachCount] = await Promise.all([
       prisma.company.groupBy({ by: ['status'], where: facetWhere, _count: true }),
-      prisma.company.groupBy({ by: ['status'], where: { organizationId: orgId }, _count: true }),
+      prisma.company.groupBy({ by: ['status'], where: { organizationId: orgId, archivedAt: null }, _count: true }),
       prisma.retainer.aggregate({
         where: { organizationId: orgId, status: 'ACTIVE' },
         _sum: { monthlyValue: true },
@@ -1163,6 +1172,112 @@ companiesRouter.patch('/:id', requirePermission('company.write'), async (req: Au
     next(error);
   }
 });
+
+// ── Archiving a company ─────────────────────────────────────────────────────
+
+/**
+ * Take a company off the books, if there is nothing on it.
+ *
+ * There was no way to remove one at all. A company added by mistake — a typo, a
+ * duplicate, a lead that turned out to be somebody else's — stayed for ever.
+ * `archivedAt` has existed on the model since the beginning and search already
+ * excludes archived rows, but nothing ever set it: half a feature, with the
+ * reading half live.
+ *
+ * ─── Archived, not deleted ──────────────────────────────────────────────────
+ *
+ * §16: nothing is hard deleted by a user. The row stays, its history stays, and
+ * it leaves the lists.
+ *
+ * ─── What blocks it ─────────────────────────────────────────────────────────
+ *
+ * Any real work: a retainer, a project, an invoice, a proforma, or a proposal
+ * somebody has actually quoted. Those are records with money and dates in them,
+ * and a company is the only thing tying them to a client — removing it would
+ * leave a retainer nothing can render.
+ *
+ * A Prospect-stage proposal with NO versions is not work. It is the placeholder
+ * created when a lead is promoted, carrying no quote and no value, and blocking
+ * on it would make every prospect undeletable — which is the trap the stage
+ * before this one fell into. It goes with the company.
+ *
+ * When something does block, the answer is not to force it through: mark them a
+ * PAST client, which keeps every invoice and project intact and takes them out
+ * of the active list. The message says so rather than leaving the person to
+ * guess.
+ */
+companiesRouter.delete('/:id', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+
+    const company = await prisma.company.findFirst({
+      where: { id, organizationId: orgId },
+      select: { id: true, name: true, status: true, archivedAt: true },
+    });
+    if (!company) {
+      res.status(404).json({ success: false, error: 'Company not found' });
+      return;
+    }
+    if (company.archivedAt) {
+      res.status(400).json({ success: false, error: 'That company has already been removed.' });
+      return;
+    }
+
+    const [retainers, projects, invoices, proformas, quoted] = await Promise.all([
+      prisma.retainer.count({ where: { companyId: id } }),
+      prisma.project.count({ where: { companyId: id } }),
+      prisma.invoice.count({ where: { companyId: id } }),
+      prisma.proforma.count({ where: { companyId: id } }),
+      // A proposal that has been quoted. The empty Prospect placeholder does
+      // not count — see the note above.
+      prisma.proposal.count({ where: { companyId: id, deletedAt: null, versions: { some: {} } } }),
+    ]);
+
+    const held = [
+      [retainers, retainers === 1 ? 'retainer' : 'retainers'],
+      [projects, projects === 1 ? 'project' : 'projects'],
+      [invoices, invoices === 1 ? 'invoice' : 'invoices'],
+      [proformas, proformas === 1 ? 'proforma' : 'proformas'],
+      [quoted, quoted === 1 ? 'proposal' : 'proposals'],
+    ].filter(([n]) => (n as number) > 0) as [number, string][];
+
+    if (held.length > 0) {
+      const list = held.map(([n, word]) => `${n} ${word}`).join(', ');
+      res.status(400).json({
+        success: false,
+        error:
+          `${company.name} has ${list}. A company with work on it is not removed — ` +
+          `mark them a past client instead, which keeps all of it and takes them out of the active list.`,
+        code: 'HAS_WORK',
+        held: Object.fromEntries(held.map(([n, word]) => [word, n])),
+      });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // The placeholder deal, which exists only to put the company on the board.
+      await tx.proposal.deleteMany({ where: { companyId: id, versions: { none: {} } } });
+      await tx.company.update({ where: { id }, data: { archivedAt: new Date() } });
+      await tx.activity.create({
+        data: {
+          organizationId: orgId,
+          entityType: 'Company',
+          entityId: id,
+          actorId: req.user!.userId,
+          verb: 'company_archived',
+          payload: { name: company.name, status: company.status },
+        },
+      });
+    });
+
+    emitToOrganization(orgId, 'lead:updated', { companyId: id });
+    res.json({ success: true, archived: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 
 // ── 5. Add / Update Contact Person (Person) ─────────────────────────────────
 

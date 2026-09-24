@@ -170,6 +170,52 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
     }
   };
 
+  /**
+   * Take this company off the books.
+   *
+   * Archives rather than deletes — the row and its history stay, it leaves the
+   * lists. The server refuses when there is real work on it, and says what is
+   * there; the only honest thing to offer then is marking them a past client,
+   * which keeps every invoice and project and takes them out of the active
+   * list. Forcing it through would strand a retainer whose company is gone.
+   */
+  const handleRemoveCompany = async () => {
+    const ok = await confirm({
+      title: `Remove ${company.name}?`,
+      message:
+        'They leave the client list and the pipeline. Nothing is destroyed — the record and its ' +
+        'history stay, and this can be undone by an admin.',
+      confirmText: 'Remove',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await api.companies.remove(company.id);
+      toast.success(`${company.name} removed`);
+      router.push('/companies');
+    } catch (e) {
+      const message = e instanceof ApiError ? e.message : 'Could not remove this company';
+      if (e instanceof ApiError && e.code === 'HAS_WORK') {
+        const past = await confirm({
+          title: 'There is work on this company',
+          message: `${message}`,
+          confirmText: 'Mark as past client',
+          variant: 'info',
+        });
+        if (!past) return;
+        try {
+          await api.companies.update(company.id, { status: 'PAST' } as never);
+          toast.success(`${company.name} marked as a past client`);
+          void fetchDetail();
+        } catch (inner) {
+          toast.error(inner instanceof ApiError ? inner.message : 'Could not update this company');
+        }
+        return;
+      }
+      toast.error(message);
+    }
+  };
+
   const handleMarkWon = async (proposalId: string, versionId: string, versionN: number, value: number) => {
     const ok = await confirm({
       title: 'Mark this proposal won?',
@@ -299,10 +345,18 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
             </p>
           </div>
         </div>
-        <Button variant="secondary" onClick={() => setIsEditCompanyOpen(true)}>
-          <Pencil className="w-3.5 h-3.5" />
-          Edit
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => setIsEditCompanyOpen(true)}>
+            <Pencil className="w-3.5 h-3.5" />
+            Edit
+          </Button>
+          {canWrite && (
+            <Button variant="ghost" onClick={() => void handleRemoveCompany()}>
+              <Trash2 className="w-3.5 h-3.5" />
+              Remove
+            </Button>
+          )}
+        </div>
       </div>
 
       {/*
