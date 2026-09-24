@@ -27,6 +27,7 @@ import { useConfig } from "@/hooks/queries";
 import { StatTile, StatRow } from "@/components/ui/stat-tile";
 import { STAGE_LABEL, STAGE_ORDER } from "@flowzen/shared";
 import { NewProposalModal } from "@/components/clients/NewProposalModal";
+import { LoseProposalModal } from "@/components/clients/LoseProposalModal";
 
 /*
  * The board starts where a number does.
@@ -83,10 +84,27 @@ type DropAction =
   | { type: "ADD_VERSION" }
   | { type: "PROFORMA" }
   | { type: "VERBAL_YES" }
-  | { type: "WIN" };
+  | { type: "WIN" }
+  | { type: "LOSE" };
 
 function getDropAction(fromStage: string, toStage: string): DropAction {
   if (fromStage === toStage) return { type: "NOOP" };
+  /*
+   * Losing can happen from anywhere, and is the one move that does not go
+   * forward — a deal at Prospect can go quiet just as one at Verbal yes can.
+   * Checked before the order rule below, which would otherwise refuse every
+   * drop onto Lost from a column to its left.
+   *
+   * Nothing comes back from Lost: quoting them again is a new proposal.
+   */
+  if (toStage === "LOST") return { type: "LOSE" };
+  if (fromStage === "LOST") {
+    return {
+      type: "INVALID",
+      reason:
+        "A lost deal does not come back — quote them again as a new proposal.",
+    };
+  }
   const fromIdx = STAGE_ORDER.indexOf(fromStage);
   const toIdx = STAGE_ORDER.indexOf(toStage);
   if (toIdx < fromIdx) {
@@ -171,6 +189,8 @@ export default function PipelinePage() {
    * revise a quote that already went out.
    */
   const [writingProposalFor, setWritingProposalFor] =
+    useState<PipelineCard | null>(null);
+  const [losingProposalFor, setLosingProposalFor] =
     useState<PipelineCard | null>(null);
   const [raisingProformaFor, setRaisingProformaFor] =
     useState<PipelineCard | null>(null);
@@ -322,6 +342,11 @@ export default function PipelinePage() {
         return;
       case "WIN":
         void handleMarkWon(card);
+        return;
+      case "LOSE":
+        // The reason is asked for before anything moves; recording it is the
+        // whole point of the column.
+        setLosingProposalFor(card);
         return;
     }
   };
@@ -653,6 +678,17 @@ export default function PipelinePage() {
           onClose={() => setOverridingCard(null)}
           onSaved={() => {
             setOverridingCard(null);
+            void load();
+          }}
+        />
+      )}
+
+      {losingProposalFor && (
+        <LoseProposalModal
+          proposalId={losingProposalFor.id}
+          onCancel={() => setLosingProposalFor(null)}
+          onConfirm={() => {
+            setLosingProposalFor(null);
             void load();
           }}
         />

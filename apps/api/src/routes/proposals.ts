@@ -32,6 +32,19 @@ const PIPELINE_STAGES: ProposalStage[] = [
   ProposalStage.PROFORMA_ISSUED,
   ProposalStage.VERBAL_YES,
   ProposalStage.WON,
+  /*
+   * Lost, after Won.
+   *
+   * It used to be off the board entirely — the query below kept only deals with
+   * no outcome or a WON one, on the reasoning that a lost deal has left the
+   * pipeline. True of the funnel, and wrong for the screen: losing is the other
+   * way a deal ends, and a board that shows only the wins cannot answer why the
+   * rest went. The reason is recorded now, so the column is where you see it.
+   *
+   * Weighted at zero, like Won is weighted at a hundred: neither is a
+   * prediction any more.
+   */
+  ProposalStage.LOST,
 ];
 
 proposalsRouter.get('/pipeline', requirePermission('pipeline.read'), async (req: AuthRequest, res: Response, next) => {
@@ -55,7 +68,10 @@ proposalsRouter.get('/pipeline', requirePermission('pipeline.read'), async (req:
         // an explicit OR rather than `notIn`, because `outcome NOT IN (...)`
         // would silently drop every still-open proposal too — SQL's three
         // valued logic makes `NULL NOT IN (...)` neither true nor false.
-        OR: [{ outcome: null }, { outcome: ProposalOutcome.WON }],
+        // Expired is the one that still leaves: nobody decided anything, the
+        // quote simply went stale, and a column of those is a list of admin
+        // rather than a stage of the pipeline.
+        OR: [{ outcome: null }, { outcome: ProposalOutcome.WON }, { outcome: ProposalOutcome.LOST }],
       },
       include: {
         company: { select: { id: true, name: true, vertical: true, city: true } },

@@ -3,3 +3,4 @@ export * from './constants/index';
 export * from './constants/gstStates';
 export * from './constants/industries';
 export * from './constants/stages';
+export * from './constants/lostReasons';

@@ -52,6 +52,12 @@ export const STAGE_ORDER: readonly string[] = [
   'PROFORMA_ISSUED',
   'VERBAL_YES',
   'WON',
+  /*
+   * Losing is the other way a deal ends, so it is a column rather than a
+   * disappearance. Expired is not here: nobody decided anything, the quote went
+   * stale, and a column of those is admin rather than a stage.
+   */
+  'LOST',
 ];
 
 /** Falls back to the raw value, so a stage added later shows rather than vanishing. */
