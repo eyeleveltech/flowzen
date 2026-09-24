@@ -1,0 +1,12 @@
+-- A pipeline stage for a promoted lead, before anything is quoted.
+--
+-- This is deliberately not the TALKING stage that was removed. TALKING was
+-- created AUTOMATICALLY for every company added, so the board filled with empty
+-- proposals nobody had asked for, which no quote lay behind, which could not be
+-- advanced, and which had to be deleted by hand.
+--
+-- PROSPECT exists only when somebody deliberately promotes an outreach lead
+-- they have already spoken to. It carries no value until a proposal is written
+-- against it -- so it weights at zero rather than dragging the forecast -- and
+-- it can be deleted freely.
+ALTER TYPE "ProposalStage" ADD VALUE IF NOT EXISTS 'PROSPECT' BEFORE 'PROPOSAL_SENT';

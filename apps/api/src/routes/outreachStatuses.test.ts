@@ -62,7 +62,7 @@ const lead = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-let written: { entry?: any; company?: any; person?: any; activity?: any };
+let written: { entry?: any; company?: any; person?: any; activity?: any; proposal?: any };
 
 beforeEach(() => {
   written = {};
@@ -90,6 +90,8 @@ beforeEach(() => {
     fn({
       company: { create: vi.fn(async ({ data }: any) => ((written.company = data), { id: 'co-new', ...data })) },
       person: { create: vi.fn(async ({ data }: any) => ((written.person = data), { id: 'p-new', ...data })) },
+      // Promoting also puts the company on the board at Prospect.
+      proposal: { create: vi.fn(async ({ data }: any) => ((written.proposal = data), { id: 'prop-new', ...data })) },
       outreachEntry: { update: vi.fn(async ({ data }: any) => ((written.entry = data), { ...lead(), ...data })) },
       activity: { create: vi.fn(async ({ data }: any) => data) },
     }),
@@ -323,5 +325,60 @@ describe('a lead must be reachable', () => {
     const data = (prisma.outreachEntry.create as any).mock.calls.at(-1)[0].data;
     expect(data.contactPersonName).toBe('Meena');
     expect(data.status).toBe('NOT_CONTACTED');
+  });
+});
+
+/**
+ * Promoting a lead puts it on the pipeline board.
+ *
+ * It used to create a company and stop, so a lead you had met and were about
+ * to quote appeared nowhere on the board — the pipeline began when somebody
+ * wrote the proposal, which is after the part that needs chasing.
+ *
+ * The stage it lands in is deliberately not the TALKING stage that was removed.
+ * TALKING was created automatically for every company, so the board filled with
+ * empty proposals nobody asked for, which could not be advanced and had to be
+ * deleted by hand. This happens only on a deliberate promote.
+ */
+describe('promotion reaches the pipeline', () => {
+  const promote = (body: Record<string, unknown> = {}) =>
+    request(app).post('/api/outreach/lead-1/promote').set(...auth()).send({ city: 'Chennai', ...body });
+
+  // Only a lead that has been met and asked for a quotation can be promoted.
+  beforeEach(() => {
+    (prisma.outreachEntry.findFirst as any).mockResolvedValue(lead({ status: OutreachStatus.INTERESTED }));
+  });
+
+  it('creates the deal at Prospect, against the new company', async () => {
+    const res = await promote({});
+    expect(res.status).toBe(201);
+    expect(written.proposal).toMatchObject({
+      stage: 'PROSPECT',
+      companyId: 'co-new',
+    });
+  });
+
+  it('gives it no version, so it carries no value', async () => {
+    // A promoted lead has no quote. The deal weights at zero until a proposal
+    // is written against it, which is what moving it to Proposal Sent does —
+    // the whole reason the stage that came before this one had to go.
+    await promote({});
+    expect(written.proposal.versions).toBeUndefined();
+  });
+
+  it('defaults to a retainer, and takes the kind when one is given', async () => {
+    // Outreach has no field for retainer-or-project, so it cannot carry
+    // forward; the studio's work is mostly retainers.
+    await promote({});
+    expect(written.proposal.kind).toBe('RETAINER');
+
+    await promote({ kind: 'PROJECT' });
+    expect(written.proposal.kind).toBe('PROJECT');
+  });
+
+  it('puts it with whoever owns the company', async () => {
+    await promote({ ownerId: 'usr-other' });
+    expect(written.proposal.ownerId).toBe('usr-other');
+    expect(written.company.ownerId).toBe('usr-other');
   });
 });

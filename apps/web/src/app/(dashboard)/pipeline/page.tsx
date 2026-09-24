@@ -51,6 +51,8 @@ interface PipelineCard {
   id: string;
   companyId: string;
   companyName: string;
+  /** Carried from the lead on promote. Shown where there is no figure yet. */
+  companyVertical?: string | null;
   kind: string;
   stage: string;
   owner?: { name: string } | null;
@@ -71,6 +73,7 @@ interface PipelineCard {
 type DropAction =
   | { type: 'NOOP' }
   | { type: 'INVALID'; reason: string }
+  | { type: 'CREATE_PROPOSAL' }
   | { type: 'ADD_VERSION' }
   | { type: 'PROFORMA' }
   | { type: 'VERBAL_YES' }
@@ -84,6 +87,14 @@ function getDropAction(fromStage: string, toStage: string): DropAction {
     return { type: 'INVALID', reason: 'Stage only moves forward, from a real record — dragging it back is not one.' };
   }
   if (toStage === 'PROPOSAL_SENT') {
+    /*
+     * The one way into this stage by hand: a promoted lead, which sits at
+     * Prospect with nothing quoted. Moving it here IS writing the proposal, so
+     * the drop opens the form rather than setting a stage — the value has to
+     * come from somewhere, and a stage set without one is the empty deal the
+     * board used to be full of.
+     */
+    if (fromStage === 'PROSPECT') return { type: 'CREATE_PROPOSAL' };
     return { type: 'INVALID', reason: 'Nothing sends a proposal back to this stage — it only happens when the proposal is first created.' };
   }
   if (toStage === 'IN_NEGOTIATION') return { type: 'ADD_VERSION' };
@@ -242,6 +253,15 @@ export default function PipelinePage() {
       case 'INVALID':
         toast.error(action.reason);
         return;
+      case 'CREATE_PROPOSAL':
+        /*
+         * The same form as adding a version, because for a promoted lead the
+         * first version IS the proposal: it carries the value, and the API
+         * derives Proposal Sent from its existence rather than from a stage
+         * anybody sets. Until then the deal sits at Prospect worth nothing.
+         */
+        setAddingVersionFor(card);
+        return;
       case 'ADD_VERSION':
         setAddingVersionFor(card);
         return;
@@ -355,14 +375,34 @@ export default function PipelinePage() {
                               }`}
                             >
                               <p className="text-sm font-semibold text-primary mb-1 leading-tight">{card.companyName}</p>
-                              <p className="text-sm font-bold text-primary mb-2">{formatMoney(card.quotedValue)}</p>
+                              {/*
+                                A prospect is a company, not a deal worth nothing.
+                                Nothing has been quoted yet, so printing ₹0 in bold
+                                states a figure that does not exist — and the kind
+                                beside it would assert a retainer-or-project
+                                decision nobody has made. The industry it came in
+                                with is the true thing to show instead.
+                              */}
+                              {card.stage === 'PROSPECT' ? (
+                                <p className="text-sm text-secondary mb-2">Not quoted yet</p>
+                              ) : (
+                                <p className="text-sm font-bold text-primary mb-2">{formatMoney(card.quotedValue)}</p>
+                              )}
                               <div className="flex items-center justify-between mb-1.5">
                                 <div className="flex items-center gap-1">
+                                  {card.stage === 'PROSPECT' ? (
+                                    card.companyVertical && (
+                                      <span className="text-micro px-1.5 py-0.5 rounded font-semibold border border-border text-secondary">
+                                        {card.companyVertical}
+                                      </span>
+                                    )
+                                  ) : (
                                   <span className={`text-micro px-1.5 py-0.5 rounded font-semibold border ${
                                     card.kind === 'RETAINER'
                                       ? 'border-info/30 text-info bg-info-tint'
                                       : 'border-info/30 text-info bg-info-tint'
                                   }`}>{card.kind === 'RETAINER' ? 'Retainer' : 'One time'}</span>
+                                  )}
                                   <span className="text-micro text-secondary">{card.owner?.name?.split(' ')[0]}</span>
                                 </div>
                                 <span className={`text-micro font-semibold ${card.daysInStage > 25 ? 'text-warning-ink' : 'text-secondary'}`}>

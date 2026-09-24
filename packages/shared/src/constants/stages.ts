@@ -27,6 +27,7 @@
  * migration.
  */
 export const STAGE_LABEL: Record<string, string> = {
+  PROSPECT: 'Prospect',
   PROPOSAL_SENT: 'Proposal Sent',
   IN_NEGOTIATION: 'In Negotiation',
   PROFORMA_ISSUED: 'Proforma Issued / Contract Sent',
@@ -45,6 +46,7 @@ export const STAGE_LABEL: Record<string, string> = {
  * literals refuses a string argument.
  */
 export const STAGE_ORDER: readonly string[] = [
+  'PROSPECT',
   'PROPOSAL_SENT',
   'IN_NEGOTIATION',
   'PROFORMA_ISSUED',

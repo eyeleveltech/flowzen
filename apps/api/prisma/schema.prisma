@@ -392,6 +392,15 @@ enum ProposalKind {
 }
 
 enum ProposalStage {
+  /// A lead promoted from outreach, before anything has been quoted.
+  ///
+  /// Deliberately different from the TALKING stage this replaces. TALKING was
+  /// created AUTOMATICALLY for every company, so the board filled with empty
+  /// proposals nobody had asked for and which could not be advanced or
+  /// deleted. This one exists only when somebody deliberately promotes a lead
+  /// they have already spoken to, carries no value until a proposal is written,
+  /// and can be deleted freely.
+  PROSPECT
   PROPOSAL_SENT
   IN_NEGOTIATION
   PROFORMA_ISSUED

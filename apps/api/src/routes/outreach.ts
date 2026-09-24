@@ -2,7 +2,7 @@ import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, type AuthRequest } from '../middleware/auth.js';
-import { CompanyStatus, OutreachStatus } from '@prisma/client';
+import { CompanyStatus, OutreachStatus, ProposalKind, ProposalStage } from '@prisma/client';
 import { DEFAULT_LEAD_SOURCE } from '@flowzen/shared';
 import { parsePagination } from '../utils/query.js';
 import { toCsv, parseCsv } from '../utils/csv.js';
@@ -440,6 +440,12 @@ const promoteSchema = z.object({
   companyName: z.string().trim().min(1).max(200).optional(),
   city: z.string().default('Chennai'),
   vertical: industrySchema.optional(),
+  /*
+   * Retainer or one-off, which the outreach row has no field for and so cannot
+   * carry forward. Defaulted rather than required — the studio's work is mostly
+   * retainers, and it is one click to change on the deal.
+   */
+  kind: z.nativeEnum(ProposalKind).default(ProposalKind.RETAINER),
   ownerId: z.string().min(1).optional(),
   contactName: z.string().optional(),
   contactEmail: z.string().email().optional().or(z.literal('')),
@@ -478,7 +484,7 @@ outreachRouter.post('/:id/promote', requirePermission('company.write'), async (r
       res.status(400).json({ success: false, error: parsed.error.issues[0].message });
       return;
     }
-    const { companyName, city, vertical, ownerId, contactName, contactEmail, contactPhone, force } = parsed.data;
+    const { companyName, city, vertical, kind, ownerId, contactName, contactEmail, contactPhone, force } = parsed.data;
 
     // Everything falls back to what the lead already knows.
     const name = (companyName || entry.name).trim();
@@ -543,6 +549,32 @@ outreachRouter.post('/:id/promote', requirePermission('company.write'), async (r
           },
         });
       }
+
+      /*
+       * And onto the pipeline board, at Prospect.
+       *
+       * Promoting a lead used to create a company and stop, so a company you
+       * had spoken to and were about to quote appeared nowhere on the board —
+       * the pipeline only began when somebody wrote the proposal, which is
+       * after the part that needs chasing.
+       *
+       * No version, so no value: the deal weights at zero until a proposal is
+       * written against it, which is what moving it to Proposal Sent does.
+       *
+       * This is NOT the TALKING stage that was removed. That one was created
+       * automatically for every company, could not be advanced and had to be
+       * deleted by hand. This happens only on a deliberate promote, and is
+       * deletable.
+       */
+      await tx.proposal.create({
+        data: {
+          organizationId: orgId,
+          companyId: company.id,
+          kind,
+          ownerId: useOwner,
+          stage: ProposalStage.PROSPECT,
+        },
+      });
 
       // Archived, not deleted: the row keeps its history and simply leaves the
       // list, which filters on `promotedCompanyId`.

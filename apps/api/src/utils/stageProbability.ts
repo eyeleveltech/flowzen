@@ -30,6 +30,10 @@ import { ProposalStage } from '@prisma/client';
  * sent. §14 never priced it — "a proposal only reaches the board at Proposal
  * sent" — and the stage itself is gone, because the only thing that ever
  * reached it was an empty proposal that adding a company created by itself.
+ *
+ * PROSPECT now sits in that position and is priced at zero for the same
+ * reason: a promoted lead has no quote behind it. The difference from TALKING
+ * is that nothing creates one automatically, and it can be deleted.
  */
 
 /** The columns this reads. Anything with them will do — a full org row, or a select. */
@@ -60,6 +64,15 @@ export const BRIEF_STAGE_PROBABILITIES: StageProbabilitySource = {
 export function stageProbabilities(org: StageProbabilitySource | null | undefined): Record<ProposalStage, number> {
   const o = org ?? BRIEF_STAGE_PROBABILITIES;
   return {
+    /*
+     * Not a prediction, and not configurable.
+     *
+     * A promoted lead has no quote, so there is no value to weight — zero is
+     * the honest figure rather than a probability applied to nothing. §14 has
+     * never priced anything before Proposal sent, and the last stage that sat
+     * there and was priced is the one that had to be removed.
+     */
+    [ProposalStage.PROSPECT]: 0,
     [ProposalStage.PROPOSAL_SENT]: o.stageProbProposalSent,
     [ProposalStage.IN_NEGOTIATION]: o.stageProbInNegotiation,
     [ProposalStage.PROFORMA_ISSUED]: o.stageProbProformaIssued,

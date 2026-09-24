@@ -15,6 +15,18 @@ proposalsRouter.use(authenticate);
 // ── 1. Pipeline 6-Stage Kanban Board ────────────────────────────────────────
 
 const PIPELINE_STAGES: ProposalStage[] = [
+  /*
+   * A lead promoted from outreach, before anything is quoted.
+   *
+   * Promoting used to create a company and stop, so somebody you had met and
+   * were about to quote appeared nowhere on this board — the pipeline began
+   * when the proposal was written, which is after the part that needs chasing.
+   *
+   * It weights at zero: there is no version, so there is no value. Moving it
+   * to Proposal Sent means writing the proposal, which is where a figure
+   * finally comes from.
+   */
+  ProposalStage.PROSPECT,
   ProposalStage.PROPOSAL_SENT,
   ProposalStage.IN_NEGOTIATION,
   ProposalStage.PROFORMA_ISSUED,

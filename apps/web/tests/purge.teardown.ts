@@ -48,10 +48,36 @@ teardown('remove everything the specs created', async () => {
       await db.task.deleteMany({ where: { id: { in: taskIds } } });
     }
 
-    const left = await db.proposalVersion.count({ where: { scopeSummary: { contains: MARK } } });
+    /*
+     * Companies and the outreach leads they were promoted from.
+     *
+     * Not cleaned before, because nothing created one: the specs made proposals
+     * and tasks against companies the seed already had. The Prospect-stage spec
+     * promotes a lead, which creates BOTH — and a company left behind is worse
+     * than a stray task, because the next run's duplicate check sees it and
+     * skips the row the spec is about to assert on.
+     *
+     * Children first: a promoted company owns its contact, its deal and the
+     * activity rows about it.
+     */
+    const companies = await db.company.findMany({ where: { name: { contains: MARK } }, select: { id: true } });
+    const companyIds = companies.map((c) => c.id);
+    if (companyIds.length > 0) {
+      await db.proposal.deleteMany({ where: { companyId: { in: companyIds } } });
+      await db.person.deleteMany({ where: { companyId: { in: companyIds } } });
+      await db.activity.deleteMany({ where: { entityId: { in: companyIds } } });
+      await db.outreachEntry.deleteMany({ where: { promotedCompanyId: { in: companyIds } } });
+      await db.company.deleteMany({ where: { id: { in: companyIds } } });
+    }
+    await db.outreachEntry.deleteMany({ where: { name: { contains: MARK } } });
+
+    const left = (await db.proposalVersion.count({ where: { scopeSummary: { contains: MARK } } }))
+      + (await db.company.count({ where: { name: { contains: MARK } } }))
+      + (await db.outreachEntry.count({ where: { name: { contains: MARK } } }));
     // eslint-disable-next-line no-console
     console.log(
-      `\n[purge] removed ${proposalIds.length} proposal(s) and ${taskIds.length} task(s); ${left} marked row(s) left.`,
+      `\n[purge] removed ${proposalIds.length} proposal(s), ${taskIds.length} task(s) and `
+        + `${companyIds.length} company/companies; ${left} marked row(s) left.`,
     );
     if (left > 0) throw new Error(`purge left ${left} marked rows behind`);
   } finally {
