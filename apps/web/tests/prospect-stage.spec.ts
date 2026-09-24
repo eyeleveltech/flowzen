@@ -95,6 +95,51 @@ test.describe('the Prospect column', () => {
     }
   });
 
+  test('writing its proposal asks what is quoted and whether it is a retainer', async () => {
+    /*
+     * Moving a prospect to Proposal Sent used to open the ADD VERSION form,
+     * which asks for a value and a scope and nothing else. That form exists to
+     * revise a quote that already went out; a promoted lead has none, and it
+     * carries a `kind` that was defaulted at promote because outreach has no
+     * field for it. The person writing the proposal is the first to decide.
+     */
+    const api = await apiAs('admin');
+    const name = marked('Kind Choice Co');
+    const created = await api.post('/api/outreach', {
+      data: { name, vertical: 'Aviation', source: 'LinkedIn', contactPersonName: 'Meera Krishnan' },
+    });
+    const lead = (await created.json()).entry ?? (await created.json());
+    await api.patch(`/api/outreach/${lead.id}/status`, { data: { status: 'INTERESTED' } });
+    await api.post(`/api/outreach/${lead.id}/promote`, { data: { city: 'Coimbatore' } });
+
+    /*
+     * Asserted through the API rather than the screen. The card rendering is
+     * covered by the first test in this file, and driving the drag here as
+     * well meant two specs each promoting a lead and reading the same board —
+     * which raced, and failed on whichever ran second.
+     */
+    const board = await (await api.get('/api/proposals/pipeline')).json();
+    const card = (board.columns.PROSPECT ?? []).find((c: { companyName: string }) => c.companyName === name);
+    expect(card).toBeTruthy();
+
+    // The value and the kind both belong to the deal after this form, and the
+    // deal must be FILLED IN rather than a second one created beside it.
+    const wrote = await api.post(`/api/proposals/${card.id}/versions`, {
+      data: { kind: 'PROJECT', value: 480000, scopeSummary: '75 years documentary' },
+    });
+    expect(wrote.status()).toBe(201);
+
+    const after = await (await api.get('/api/proposals/pipeline')).json();
+    const moved = (after.columns.PROPOSAL_SENT ?? []).find((c: { companyName: string }) => c.companyName === name);
+    expect(moved).toBeTruthy();
+    expect(moved.kind).toBe('PROJECT');
+    expect(moved.quotedValue).toBe(480000);
+    // Still one deal for this company, not two.
+    const everywhere = after.stages.flatMap((s: string) => after.columns[s] ?? [])
+      .filter((c: { companyName: string }) => c.companyName === name);
+    expect(everywhere).toHaveLength(1);
+  });
+
   test('is worth nothing until a proposal is written', async ({ page }) => {
     /*
      * The whole reason the stage before this one had to go: it was priced, and

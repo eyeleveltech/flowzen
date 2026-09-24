@@ -389,6 +389,17 @@ const versionCreateSchema = z.object({
   value: z.number().min(0, 'Value cannot be negative').optional().default(0),
   scopeSummary: z.string().optional().default(''),
   fileUrl: z.string().url().optional().or(z.literal('')),
+  /*
+   * Retainer or one-off, settable only while the deal has no versions.
+   *
+   * A promoted lead reaches the board at Prospect with `kind` defaulted, because
+   * outreach has no field for it — the decision is genuinely made when somebody
+   * sits down to write the proposal. So the form that writes version one offers
+   * it, and this is where it lands. Ignored on a revision: by then a quote has
+   * gone out under one heading or the other, and changing it silently rewrites
+   * what the client was told they were buying.
+   */
+  kind: z.nativeEnum(ProposalKind).optional(),
 });
 
 proposalsRouter.post('/:id/versions', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
@@ -445,6 +456,8 @@ proposalsRouter.post('/:id/versions', requirePermission('pipeline.write'), async
       where: { id },
       data: {
         stage: nextN === 1 ? ProposalStage.PROPOSAL_SENT : ProposalStage.IN_NEGOTIATION,
+        // Only on the first version — see the schema note above.
+        ...(parsed.data.kind && nextN === 1 ? { kind: parsed.data.kind } : {}),
       },
     });
 

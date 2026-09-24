@@ -1,24 +1,28 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { ShowMore } from '@/components/ui/show-more';
-import { ErrorNote } from '@/components/ui/empty-state';
-import { plural } from '@/lib/utils';
-import { api, formatMoney } from '@/lib/api-v2';
-import { useAuthStore } from '@/stores';
-import { NewClientModal } from '@/components/clients/NewClientModal';
-import { ImportClientsModal } from '@/components/clients/ImportClientsModal';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { usePageHeader } from '@/hooks/usePageHeader';
-import { StatTile, StatRow } from '@/components/ui/stat-tile';
-import { Tabs, type TabDef } from '@/components/ui/tabs';
-import { Card } from '@/components/ui/card';
-import { Badge, type Tone } from '@/components/ui/badge';
-import { verticalLabel } from '@/lib/vertical';
+import { useState, useEffect, useCallback } from "react";
+import {
+  useQuery,
+  useQueryClient,
+  keepPreviousData,
+} from "@tanstack/react-query";
+import { ShowMore } from "@/components/ui/show-more";
+import { ErrorNote } from "@/components/ui/empty-state";
+import { plural } from "@/lib/utils";
+import { api, formatMoney } from "@/lib/api-v2";
+import { useAuthStore } from "@/stores";
+import { NewClientModal } from "@/components/clients/NewClientModal";
+import { ImportClientsModal } from "@/components/clients/ImportClientsModal";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { usePageHeader } from "@/hooks/usePageHeader";
+import { StatTile, StatRow } from "@/components/ui/stat-tile";
+import { Tabs, type TabDef } from "@/components/ui/tabs";
+import { Card } from "@/components/ui/card";
+import { Badge, type Tone } from "@/components/ui/badge";
+import { verticalLabel } from "@/lib/vertical";
 
-type CompanyFilter = 'ALL' | 'CLIENT' | 'PROSPECT' | 'PAST';
+type CompanyFilter = "ALL" | "CLIENT" | "PROSPECT" | "PAST";
 
 interface CompanyItem {
   id: string;
@@ -62,9 +66,9 @@ interface Summary {
 type Counts = Record<CompanyFilter, number>;
 
 const STATUS_LABEL: Record<string, string> = {
-  CLIENT: 'Client',
-  PROSPECT: 'Prospect',
-  PAST: 'Past',
+  CLIENT: "Client",
+  PROSPECT: "Prospect",
+  PAST: "Past",
 };
 
 /*
@@ -73,14 +77,14 @@ const STATUS_LABEL: Record<string, string> = {
  * pipeline, and they had all agreed only by accident.
  */
 const STATUS_TONE: Record<string, Tone> = {
-  CLIENT: 'good',
-  PROSPECT: 'warn',
-  PAST: 'neutral',
+  CLIENT: "good",
+  PROSPECT: "warn",
+  PAST: "neutral",
 };
 
 export default function CompaniesPage() {
   const { user } = useAuthStore();
-  const [filter, setFilter] = useState<CompanyFilter>('ALL');
+  const [filter, setFilter] = useState<CompanyFilter>("ALL");
   /** A failed load, said out loud instead of only in the console. */
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -99,7 +103,9 @@ export default function CompaniesPage() {
   const [pages, setPages] = useState(1);
 
   // A new tab starts again at the first page.
-  useEffect(() => { setPages(1); }, [filter]);
+  useEffect(() => {
+    setPages(1);
+  }, [filter]);
 
   /**
    * The list, its tab counts and the summary strip — one cached query.
@@ -114,14 +120,14 @@ export default function CompaniesPage() {
    * already on screen stay put while the longer page is fetched.
    */
   const { data, isPending, isFetching, error } = useQuery({
-    queryKey: ['companies', filter, pages],
+    queryKey: ["companies", filter, pages],
     placeholderData: keepPreviousData,
     queryFn: async () => {
       const rows: CompanyItem[] = [];
       let last: any = null;
       for (let p = 1; p <= pages; p++) {
         const params: Record<string, string> = { page: String(p) };
-        if (filter !== 'ALL') params.status = filter;
+        if (filter !== "ALL") params.status = filter;
         const res = await api.companies.list(params);
         // The list endpoint returns { success, companies, meta, summary, counts }
         // rather than a bare array, so this does not auto-unwrap.
@@ -143,25 +149,45 @@ export default function CompaniesPage() {
 
   const companies = data?.companies ?? [];
   const total = data?.total ?? 0;
-  const summary: Summary =
-    data?.summary ?? { clients: 0, prospects: 0, past: 0, total: 0, outreachCount: 0, contractedMonthly: null, retainerCount: 0 };
-  const counts: Counts = data?.counts ?? { ALL: 0, CLIENT: 0, PROSPECT: 0, PAST: 0 };
-  const loadError = error instanceof Error ? error.message : error ? 'Could not load the client list' : null;
+  const summary: Summary = data?.summary ?? {
+    clients: 0,
+    prospects: 0,
+    past: 0,
+    total: 0,
+    outreachCount: 0,
+    contractedMonthly: null,
+    retainerCount: 0,
+  };
+  const counts: Counts = data?.counts ?? {
+    ALL: 0,
+    CLIENT: 0,
+    PROSPECT: 0,
+    PAST: 0,
+  };
+  const loadError =
+    error instanceof Error
+      ? error.message
+      : error
+        ? "Could not load the client list"
+        : null;
   const loading = isPending;
   // Only the "Load more" button spins; the first load has its own empty state.
   const loadingMore = isFetching && !isPending;
 
   /** What the create/import flows call once they have changed something. */
   const load = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: ['companies'] });
+    void queryClient.invalidateQueries({ queryKey: ["companies"] });
   }, [queryClient]);
 
   // Deep link from Quick Create. This used to sit inside the loader, so it
   // re-ran on every refetch rather than once on arrival.
   useEffect(() => {
-    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('create') === 'true') {
+    if (
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("create") === "true"
+    ) {
       setCreateOpen(true);
-      router.replace('/companies');
+      router.replace("/companies");
     }
   }, [router]);
 
@@ -175,7 +201,7 @@ export default function CompaniesPage() {
   // it, for the day a box appears.
   const filtered = companies;
 
-  usePageHeader('Companies', plural(summary.total, 'record'));
+  usePageHeader("Companies", plural(summary.total, "record"));
 
   return (
     <div className="page-shell">
@@ -186,36 +212,29 @@ export default function CompaniesPage() {
             rendered its empty state and "the server is down" looked exactly
             like "you have nothing yet".
           */}
-          <ErrorNote onDismiss={() => queryClient.resetQueries({ queryKey: ['companies', filter, pages] })}>{loadError}</ErrorNote>
+          <ErrorNote
+            onDismiss={() =>
+              queryClient.resetQueries({
+                queryKey: ["companies", filter, pages],
+              })
+            }
+          >
+            {loadError}
+          </ErrorNote>
         </div>
       )}
-      {/* Page header */}
-      {/*
-        Import is the only action here.
-
-        A company is not something you start on this screen. It begins as a lead
-        in Outreach and becomes a company when that lead is promoted, which is
-        what keeps its origin recorded rather than guessed — a "New" button
-        beside the list was a second, quieter way in that skipped all of that.
-
-        The CSV export went at the same time: one more thing carrying every
-        client's name and their contracted monthly out of the building, beside a
-        list you can already read on screen.
-      */}
-      <div className="flex flex-wrap items-center justify-end gap-2 mb-8">
-          {/* The importer was written, tested and then never mounted — the
-              only way in was to type companies one at a time. */}
-          <button
-            className="flex items-center gap-1.5 border border-border text-sm font-medium text-body px-3 h-8 rounded-lg hover:bg-subtle transition-colors"
-            onClick={() => setImportOpen(true)}
-          >
-            Import
-          </button>
-      </div>
 
       <StatRow className="mb-8">
-        <StatTile label="Clients" value={summary.clients} note="live engagements" />
-        <StatTile label="Prospects" value={summary.prospects} note="real conversations" />
+        <StatTile
+          label="Clients"
+          value={summary.clients}
+          note="live engagements"
+        />
+        <StatTile
+          label="Prospects"
+          value={summary.prospects}
+          note="real conversations"
+        />
         <StatTile
           label="In the Outreach List"
           value={summary.outreachCount}
@@ -223,23 +242,33 @@ export default function CompaniesPage() {
         />
         <StatTile
           label="Contracted Monthly"
-          value={summary.contractedMonthly === null ? 'Hidden' : formatMoney(summary.contractedMonthly)}
+          value={
+            summary.contractedMonthly === null
+              ? "Hidden"
+              : formatMoney(summary.contractedMonthly)
+          }
           note={
             summary.contractedMonthly === null
-              ? `${plural(summary.retainerCount, 'retainer')} running`
-              : `across ${plural(summary.retainerCount, 'retainer')}`
+              ? `${plural(summary.retainerCount, "retainer")} running`
+              : `across ${plural(summary.retainerCount, "retainer")}`
           }
           dark
         />
       </StatRow>
 
       <Tabs
-        tabs={[
-          { key: 'ALL', label: 'All', count: counts.ALL },
-          { key: 'CLIENT', label: STATUS_LABEL.CLIENT, count: counts.CLIENT },
-          { key: 'PROSPECT', label: STATUS_LABEL.PROSPECT, count: counts.PROSPECT },
-          { key: 'PAST', label: STATUS_LABEL.PAST, count: counts.PAST },
-        ] as TabDef<CompanyFilter>[]}
+        tabs={
+          [
+            { key: "ALL", label: "All", count: counts.ALL },
+            { key: "CLIENT", label: STATUS_LABEL.CLIENT, count: counts.CLIENT },
+            {
+              key: "PROSPECT",
+              label: STATUS_LABEL.PROSPECT,
+              count: counts.PROSPECT,
+            },
+            { key: "PAST", label: STATUS_LABEL.PAST, count: counts.PAST },
+          ] as TabDef<CompanyFilter>[]
+        }
         active={filter}
         onChange={setFilter}
       />
@@ -247,79 +276,104 @@ export default function CompaniesPage() {
       {/* Table */}
       <Card padding="none" className="overflow-hidden">
         <div className="overflow-x-auto">
-        <table className="w-full data-table">
-          <thead>
-            <tr className="border-b border-border">
-              <th className="eyebrow text-left">Company</th>
-              <th className="eyebrow text-left">Industry</th>
-              <th className="eyebrow text-left">Status</th>
-              <th className="eyebrow text-left">Owner</th>
-              <th className="eyebrow text-right">Retainer / mo</th>
-              {/* Left, not right. It is a sentence — "Newly added prospect; no
+          <table className="w-full data-table">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="eyebrow text-left">Company</th>
+                <th className="eyebrow text-left">Industry</th>
+                <th className="eyebrow text-left">Status</th>
+                <th className="eyebrow text-left">Owner</th>
+                <th className="eyebrow text-right">Retainer / mo</th>
+                {/* Left, not right. It is a sentence — "Newly added prospect; no
                   proposal sent yet" — and right-aligned prose makes the eye
                   find a new starting point on every row. */}
-              <th className="eyebrow text-left">What’s happening</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {loading ? (
-              <tr><td colSpan={6} className="px-5 py-12 text-center text-sm text-secondary">Loading...</td></tr>
-            ) : filtered.length === 0 ? (
-              <tr><td colSpan={6} className="px-5 py-16 text-center text-sm text-secondary">No companies found.</td></tr>
-            ) : filtered.map(c => (
-              <tr
-                key={c.id}
-                className="hover:bg-subtle transition-colors cursor-pointer"
-                // router.push, not window.location: a full page reload throws
-                // away the session already in memory and re-downloads the app
-                // to move between two screens of it.
-                onClick={() => router.push(`/companies/${c.id}`)}
-              >
-                <td className="">
-                  {/*
+                <th className="eyebrow text-left">What’s happening</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {loading ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-5 py-12 text-center text-sm text-secondary"
+                  >
+                    Loading...
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-5 py-16 text-center text-sm text-secondary"
+                  >
+                    No companies found.
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((c) => (
+                  <tr
+                    key={c.id}
+                    className="hover:bg-subtle transition-colors cursor-pointer"
+                    // router.push, not window.location: a full page reload throws
+                    // away the session already in memory and re-downloads the app
+                    // to move between two screens of it.
+                    onClick={() => router.push(`/companies/${c.id}`)}
+                  >
+                    <td className="">
+                      {/*
                     A real link, not just the row's click handler. You cannot
                     Tab to a table row, so with the handler alone a keyboard or
                     screen-reader user could not open a single client from this
                     list — the primary way into the app. It also makes
                     middle-click-to-new-tab work, which is a mouse benefit.
                   */}
-                  <Link
-                    href={`/companies/${c.id}`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="text-sm font-semibold text-primary rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                  >
-                    {c.name}
-                  </Link>
-                </td>
-                {/* "HOSPITALITY", "IT AND SAAS" — the enum, shouted. The
+                      <Link
+                        href={`/companies/${c.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-sm font-semibold text-primary rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      >
+                        {c.name}
+                      </Link>
+                    </td>
+                    {/* "HOSPITALITY", "IT AND SAAS" — the enum, shouted. The
                     outreach list already had a map for these; both screens
                     read the same one now. */}
-                <td className="text-secondary">{verticalLabel(c.vertical)}</td>
-                <td className="">
-                  <Badge tone={STATUS_TONE[c.status] ?? 'neutral'}>{STATUS_LABEL[c.status] ?? c.status}</Badge>
-                </td>
-                <td className="text-secondary">{c.owner?.name ?? '—'}</td>
-                {/* Tabular, so the rupee figures line up down the column
+                    <td className="text-secondary">
+                      {verticalLabel(c.vertical)}
+                    </td>
+                    <td className="">
+                      <Badge tone={STATUS_TONE[c.status] ?? "neutral"}>
+                        {STATUS_LABEL[c.status] ?? c.status}
+                      </Badge>
+                    </td>
+                    <td className="text-secondary">{c.owner?.name ?? "—"}</td>
+                    {/* Tabular, so the rupee figures line up down the column
                     instead of drifting with the digit widths. */}
-                <td className="text-right tabular-nums">
-                  {c.activeRetainer ? (
-                    formatMoney(c.activeRetainer.monthlyValue)
-                  ) : (
-                    // Fourteen of twenty-one rows have no retainer. A muted
-                    // dash says "not applicable" without drawing the eye down
-                    // a column of them.
-                    <span className="text-muted">—</span>
-                  )}
-                </td>
-                <td className="max-w-72 text-xs text-secondary">
-                  <span className="block truncate" title={c.attentionSentence ?? undefined}>
-                    {c.attentionSentence ?? <span className="text-muted">Nothing to flag</span>}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                    <td className="text-right tabular-nums">
+                      {c.activeRetainer ? (
+                        formatMoney(c.activeRetainer.monthlyValue)
+                      ) : (
+                        // Fourteen of twenty-one rows have no retainer. A muted
+                        // dash says "not applicable" without drawing the eye down
+                        // a column of them.
+                        <span className="text-muted">—</span>
+                      )}
+                    </td>
+                    <td className="max-w-72 text-xs text-secondary">
+                      <span
+                        className="block truncate"
+                        title={c.attentionSentence ?? undefined}
+                      >
+                        {c.attentionSentence ?? (
+                          <span className="text-muted">Nothing to flag</span>
+                        )}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
         {!loading && (
           <ShowMore

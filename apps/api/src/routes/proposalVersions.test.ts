@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import { app } from '../index.js';
 import { prisma } from '../lib/prisma.js';
@@ -94,6 +94,28 @@ describe('the stage a new version leaves the deal in', () => {
     const res = await addVersion({ value: 310000, scopeSummary: 'Revised after the call' });
 
     expect(res.status).toBe(201);
+    expect(updated.stage).toBe('IN_NEGOTIATION');
+  });
+
+  it('takes the kind on the first version, since nobody chose it yet', async () => {
+    /*
+     * A promoted lead reaches the board with `kind` defaulted to RETAINER,
+     * because outreach has no field for it. The person writing the proposal is
+     * the first to actually decide, so the form that writes version one offers
+     * the choice and it lands here.
+     */
+    dealWith(0);
+    await addVersion({ kind: 'PROJECT' });
+    expect(updated.kind).toBe('PROJECT');
+    expect(updated.stage).toBe('PROPOSAL_SENT');
+  });
+
+  it('ignores a kind on a revision, so a sent quote cannot be relabelled', async () => {
+    // By version two a quote has gone out under one heading or the other, and
+    // changing it silently rewrites what the client was told they were buying.
+    dealWith(1);
+    await addVersion({ kind: 'PROJECT' });
+    expect(updated.kind).toBeUndefined();
     expect(updated.stage).toBe('IN_NEGOTIATION');
   });
 

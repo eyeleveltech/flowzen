@@ -24,11 +24,25 @@ import { personOptions } from '@/lib/people';
 type Props = {
   companyId?: string;
   companyName?: string;
+  /**
+   * Fill in a deal that already exists, rather than create one.
+   *
+   * A lead promoted from outreach reaches the board at Prospect as a deal with
+   * no versions — the company is on the pipeline, nothing has been quoted. So
+   * writing its proposal is not a create: creating would leave the company with
+   * two deals, the empty one still sitting in Prospect.
+   *
+   * With this set the form posts version one to that deal instead, which is
+   * what carries the value and moves it to Proposal Sent. The Kind chosen here
+   * lands on the deal too — it was defaulted on promote because outreach has no
+   * field for it, and this is the first point anybody actually decides.
+   */
+  proposalId?: string;
   onConfirm: (proposal: { id: string }) => void;
   onCancel: () => void;
 };
 
-export function NewProposalModal({ companyId, companyName, onConfirm, onCancel }: Props) {
+export function NewProposalModal({ companyId, companyName, proposalId, onConfirm, onCancel }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,17 +77,28 @@ export function NewProposalModal({ companyId, companyName, onConfirm, onCancel }
     setBusy(true);
     setError(null);
     try {
-      const res = await api.proposals.create({
-        companyId: selectedCompanyId,
-        kind,
-        initialValue: parsedValue,
-        scopeSummary: scopeSummary.trim(),
-        fileUrl: fileUrl.trim() || undefined,
-        ownerId: ownerId || undefined,
-      });
-      const created = (res as { proposal?: { id: string } }).proposal;
-      toast.success('Proposal created — v1 is live');
-      if (created?.id) onConfirm(created);
+      if (proposalId) {
+        await api.proposals.addVersion(proposalId, {
+          kind,
+          value: parsedValue,
+          scopeSummary: scopeSummary.trim(),
+          fileUrl: fileUrl.trim() || undefined,
+        });
+        toast.success('Proposal written — the deal moves to Proposal Sent');
+        onConfirm({ id: proposalId });
+      } else {
+        const res = await api.proposals.create({
+          companyId: selectedCompanyId,
+          kind,
+          initialValue: parsedValue,
+          scopeSummary: scopeSummary.trim(),
+          fileUrl: fileUrl.trim() || undefined,
+          ownerId: ownerId || undefined,
+        });
+        const created = (res as { proposal?: { id: string } }).proposal;
+        toast.success('Proposal created — v1 is live');
+        if (created?.id) onConfirm(created);
+      }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not create the proposal');
     } finally {
