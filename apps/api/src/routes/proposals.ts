@@ -430,10 +430,22 @@ proposalsRouter.post('/:id/versions', requirePermission('pipeline.write'), async
       },
     });
 
-    // Auto update stage to in negotiation
+    /*
+     * Where this version leaves the deal.
+     *
+     * "In negotiation is more than one version" is the rule this file already
+     * states elsewhere, but the update here was unconditional. That was
+     * harmless while every proposal was CREATED with version one — this
+     * endpoint only ever added a second — and it stopped being harmless when
+     * promoted leads arrived at Prospect with no versions at all: writing their
+     * first proposal jumped them straight to In negotiation, skipping Proposal
+     * sent, which is the stage that version actually represents.
+     */
     await prisma.proposal.update({
       where: { id },
-      data: { stage: ProposalStage.IN_NEGOTIATION },
+      data: {
+        stage: nextN === 1 ? ProposalStage.PROPOSAL_SENT : ProposalStage.IN_NEGOTIATION,
+      },
     });
 
     await prisma.activity.create({
