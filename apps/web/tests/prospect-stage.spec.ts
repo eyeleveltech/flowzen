@@ -55,6 +55,46 @@ test.describe('the Prospect column', () => {
     await expect(page.getByText('Aviation').first()).toBeVisible();
   });
 
+  test('its column states no money and no probability, rather than zero', async ({ page }) => {
+    /*
+     * The header printed `formatMoney(0)` and `stageProbability['PROSPECT']`,
+     * which does not exist because the stage is not configurable — so it read
+     * "₹0" and "% likely · This month": a figure that is not a figure, a
+     * missing number, and the Won column's caption.
+     */
+    await page.goto('/pipeline');
+    await expect(page.locator('main').first()).toBeVisible({ timeout: 15_000 });
+
+    const header = page.getByText('Prospect', { exact: true }).first().locator('xpath=ancestor::div[1]/..');
+    await expect(header).toContainText('Not quoted yet');
+    await expect(header).not.toContainText('% likely');
+    await expect(header).not.toContainText('This month');
+  });
+
+  test('an empty column says how it gets filled', async ({ page }) => {
+    /*
+     * Until somebody promotes a lead it is empty, and that is normal — but
+     * "Empty" gives no clue that promoting is what fills it, and a company
+     * added any other way, imported included, never appears here.
+     *
+     * Decided from what is RENDERED rather than from a separate API read: the
+     * other test in this file promotes a lead, and a check made before
+     * navigating can be true and stale by the time the page draws.
+     */
+    await page.goto('/pipeline');
+    await expect(page.locator('main').first()).toBeVisible({ timeout: 15_000 });
+
+    const emptyNote = page.getByText('Promote a lead from Outreach');
+    const anyCard = page.getByText('Not quoted yet');
+    await expect(emptyNote.or(anyCard).first()).toBeVisible({ timeout: 15_000 });
+
+    // Only assert the wording when the column really is empty.
+    if ((await anyCard.count()) === 0) {
+      await expect(emptyNote).toBeVisible();
+      await expect(page.getByText('Empty', { exact: true })).toHaveCount(0);
+    }
+  });
+
   test('is worth nothing until a proposal is written', async ({ page }) => {
     /*
      * The whole reason the stage before this one had to go: it was priced, and

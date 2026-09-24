@@ -341,14 +341,30 @@ export default function PipelinePage() {
                     <h3 className="text-xs font-semibold text-primary">{STAGE_LABEL[col.stage]}</h3>
                     <span className="text-micro text-secondary">{col.cards.length}</span>
                   </div>
-                  <p className="text-xs font-semibold text-primary">{formatMoney(col.totalValue)}</p>
-                  <p className="text-micro text-secondary">{stageProbability[col.stage]}% likely · {
-                    col.stage === 'PROPOSAL_SENT' ? 'Number is with them' :
-                    col.stage === 'IN_NEGOTIATION' ? 'They came back' :
-                    col.stage === 'PROFORMA_ISSUED' ? 'Accounts asked to pay' :
-                    col.stage === 'VERBAL_YES' ? 'Agreed, nothing signed' :
-                    'This month'
-                  }</p>
+                  {/*
+                    Prospect has no money and no probability, and saying so is
+                    the point. Printing the total gave it a bold ₹0, and
+                    `stageProbability` has no entry for a stage that is not
+                    configurable — so the line read "% likely · This month",
+                    a missing number followed by the Won column's caption.
+                  */}
+                  {col.stage === 'PROSPECT' ? (
+                    <>
+                      <p className="text-xs font-semibold text-secondary">Not quoted yet</p>
+                      <p className="text-micro text-secondary">Promoted from outreach</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs font-semibold text-primary">{formatMoney(col.totalValue)}</p>
+                      <p className="text-micro text-secondary">{stageProbability[col.stage]}% likely · {
+                        col.stage === 'PROPOSAL_SENT' ? 'Number is with them' :
+                        col.stage === 'IN_NEGOTIATION' ? 'They came back' :
+                        col.stage === 'PROFORMA_ISSUED' ? 'Accounts asked to pay' :
+                        col.stage === 'VERBAL_YES' ? 'Agreed, nothing signed' :
+                        'This month'
+                      }</p>
+                    </>
+                  )}
                 </div>
 
                 {/* Cards */}
@@ -360,7 +376,15 @@ export default function PipelinePage() {
                       className={`h-125 overflow-y-auto space-y-2 p-2 transition-colors ${snapshot.isDraggingOver ? 'bg-primary/5' : ''}`}
                     >
                       {col.cards.length === 0 && !snapshot.isDraggingOver && (
-                        <div className="border border-dashed border-border rounded-xl p-3 text-micro text-secondary text-center">Empty</div>
+                        <div className="border border-dashed border-border rounded-xl p-3 text-micro text-secondary text-center">
+                          {/*
+                            An empty Prospect column is the normal state until
+                            somebody promotes a lead — and "Empty" gives no clue
+                            that promoting is what fills it. Companies added any
+                            other way, imported included, never appear here.
+                          */}
+                          {col.stage === 'PROSPECT' ? 'Promote a lead from Outreach' : 'Empty'}
+                        </div>
                       )}
                       {col.cards.map((card, index) => (
                         <Draggable key={card.id} draggableId={card.id} index={index}>
