@@ -113,7 +113,7 @@ export function EditCompanyModal({ company, onConfirm, onCancel }: Props) {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <FieldSelect
-              label="Vertical"
+              label="Industry"
               value={vertical}
               onChange={setVertical}
               options={VERTICALS.map((v) => ({ value: v, label: titleCase(v) }))}

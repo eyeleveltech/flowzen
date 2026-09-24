@@ -1,4 +1,5 @@
-import { CompanySource, CompanyStatus, CompanyVertical, PersonRole, PrismaClient } from '@prisma/client';
+import { CompanyStatus, PersonRole, PrismaClient } from '@prisma/client';
+import type { Industry, LeadSource } from '@flowzen/shared';
 
 const prisma = new PrismaClient();
 
@@ -53,88 +54,85 @@ type Seed = {
   name: string;
   status: CompanyStatus;
   city: string;
-  vertical: CompanyVertical;
-  source: CompanySource;
+  vertical: Industry;
+  source: LeadSource;
   stateName: string;
   contact?: { name: string; email?: string; phone?: string };
   /** From the sheet, kept so the reason for a value is not lost. */
   note: string;
 };
 
-const C = CompanyVertical;
-const S = CompanySource;
-
 /** Tab "Clients (Flowzen)" — people we work with, or have. */
 const CLIENTS: Seed[] = [
   {
     name: 'VOSO Sports (House of ESSA)', status: CompanyStatus.CLIENT, city: 'Tiruppur',
-    vertical: C.D2C, source: S.PARTNER_AGENCY, stateName: 'Tamil Nadu',
+    vertical: 'E-commerce & D2C', source: 'Partnerships', stateName: 'Tamil Nadu',
     contact: { name: 'Vijay Shree (via Vyoma)' },
     note: 'Retainer Rs 1,20,000/mo, plus a Rs 50,000 website correction and a print catalogue not yet delivered.',
   },
   {
     name: "Heaven's ELIX", status: CompanyStatus.CLIENT, city: 'Chennai',
-    vertical: C.D2C, source: S.OUTREACH, stateName: 'Tamil Nadu',
+    vertical: 'E-commerce & D2C', source: 'Cold Outreach', stateName: 'Tamil Nadu',
     contact: { name: 'Surya Prakash', email: 'surya@heavenselix.com' },
     note: 'Retainer Rs 40,000/mo. Founder and Brewer.',
   },
   {
     name: 'Tamil Nadu Pickleball Association', status: CompanyStatus.CLIENT, city: 'Chennai',
-    vertical: C.SPORTS, source: S.OUTREACH, stateName: 'Tamil Nadu',
+    vertical: 'Sports & Fitness', source: 'Cold Outreach', stateName: 'Tamil Nadu',
     contact: { name: 'Dr. Kavya' },
     note: 'Retainer Rs 40,000/mo from Oct 2026; Rs 65,000/mo for Aug and Sep.',
   },
   {
     name: 'Da One Sports', status: CompanyStatus.CLIENT, city: 'Ghaziabad',
-    vertical: C.SPORTS, source: S.OUTREACH, stateName: 'Uttar Pradesh',
+    vertical: 'Sports & Fitness', source: 'Cold Outreach', stateName: 'Uttar Pradesh',
     contact: { name: 'Jagrit' },
     note: 'Retainer Rs 30,000/mo. Performance marketing for the Janakpuri and Gwalior centres.',
   },
   {
     name: 'Right Hospitals', status: CompanyStatus.CLIENT, city: 'Chennai',
-    vertical: C.HEALTHCARE, source: S.OUTREACH, stateName: 'Tamil Nadu',
+    vertical: 'Healthcare & Wellness', source: 'Cold Outreach', stateName: 'Tamil Nadu',
     contact: { name: 'Dr. Kavya Somesh', email: 'righthospitalskilpauk@gmail.com', phone: '044-26403939' },
     note: 'ON HOLD. One-month Google Ads engagement, Rs 30,000. That email is a general hospital inbox.',
   },
   {
     name: 'Madurai All Stars', status: CompanyStatus.CLIENT, city: 'Madurai',
-    vertical: C.SPORTS, source: S.OUTREACH, stateName: 'Tamil Nadu',
+    vertical: 'Sports & Fitness', source: 'Cold Outreach', stateName: 'Tamil Nadu',
     contact: { name: 'Surya Kumar' },
     note: 'ON HOLD. Rs 75,000/mo for two months from August, Rs 1,50,000 in total.',
   },
   {
     name: 'Brigade Enterprises', status: CompanyStatus.CLIENT, city: 'Chennai',
-    vertical: C.REAL_ESTATE, source: S.OUTREACH, stateName: 'Tamil Nadu',
+    vertical: 'Real Estate & Infrastructure', source: 'Cold Outreach', stateName: 'Tamil Nadu',
     contact: { name: 'Arun' },
     note: 'Two completed projects (Rs 1,11,000 and Rs 90,000) and a Rs 50,000 quote still out.',
   },
   {
     name: 'SPR City', status: CompanyStatus.CLIENT, city: 'Chennai',
-    vertical: C.REAL_ESTATE, source: S.OUTREACH, stateName: 'Tamil Nadu',
+    vertical: 'Real Estate & Infrastructure', source: 'Cold Outreach', stateName: 'Tamil Nadu',
     contact: { name: 'Ayippan' },
     note: 'Drone shoot Rs 1,30,000 (Rs 13,000/day across 10 days). Dates not locked.',
   },
   {
     name: 'Eagle Enterprises / Eagle Mobiles', status: CompanyStatus.CLIENT, city: 'Chennai',
-    vertical: C.RETAIL, source: S.PARTNER_AGENCY, stateName: 'Tamil Nadu',
+    vertical: 'Retail', source: 'Partnerships', stateName: 'Tamil Nadu',
     contact: { name: 'Ganesh (Vyoma)' },
     note: 'GMB cleanup across 16 profiles, in progress and unvalued. A retainer is also quoted.',
   },
   {
     name: 'VERTX Drone Light Show', status: CompanyStatus.CLIENT, city: 'Chennai',
-    vertical: C.B2B, source: S.OUTREACH, stateName: 'Tamil Nadu',
+    vertical: 'Corporate & B2B', source: 'Cold Outreach', stateName: 'Tamil Nadu',
     contact: { name: 'Akash' },
     note: 'Won, delivered and closed, 100% advance paid. Value not on record.',
   },
   {
     name: 'Dinamalar', status: CompanyStatus.CLIENT, city: 'Chennai',
-    vertical: C.B2B, source: S.PARTNER_AGENCY, stateName: 'Tamil Nadu',
+    vertical: 'Corporate & B2B', source: 'Partnerships', stateName: 'Tamil Nadu',
     contact: { name: 'Vijay Shree (via Vyoma)' },
     note: 'Done and closed, Rs 1,10,000 (AI video 75k + design 35k).',
   },
   {
     name: 'Pavilion Club', status: CompanyStatus.CLIENT, city: 'Chennai',
-    vertical: C.HOSPITALITY, source: S.OUTREACH, stateName: 'Tamil Nadu',
+    vertical: 'Hospitality', source: 'Cold Outreach', stateName: 'Tamil Nadu',
     contact: { name: 'Yogesh' },
     note: 'Won 23 Sep 2026, starts 1 Oct. Rs 30,000/mo, below the Rs 75,000 floor.',
   },
@@ -144,35 +142,35 @@ const CLIENTS: Seed[] = [
 const PROSPECTS: Seed[] = [
   {
     name: 'iCube B2B Solutions', status: CompanyStatus.PROSPECT, city: 'Chennai',
-    vertical: C.IT_AND_SAAS, source: S.OUTREACH, stateName: 'Tamil Nadu',
+    vertical: 'Technology & SaaS', source: 'Cold Outreach', stateName: 'Tamil Nadu',
     contact: { name: 'Shaik Abdullah' },
     note: 'Quoted Rs 60,000 retainer, superseding the 11 Aug proposal. Needs a follow-up.',
   },
   {
     name: 'K Fashions Anna Nagar', status: CompanyStatus.PROSPECT, city: 'Chennai',
-    vertical: C.RETAIL, source: S.OUTREACH, stateName: 'Tamil Nadu',
+    vertical: 'Retail', source: 'Cold Outreach', stateName: 'Tamil Nadu',
     note: 'Proposal given and work done, now on hold. Value not on record.',
   },
   {
     name: 'Ramraj Cotton', status: CompanyStatus.PROSPECT, city: 'Tiruppur',
-    vertical: C.RETAIL, source: S.REFERRAL, stateName: 'Tamil Nadu',
+    vertical: 'Retail', source: 'Referrals', stateName: 'Tamil Nadu',
     contact: { name: 'Feroze Sheriff', email: 'Feroze.sheriff@ramrajcotton.net' },
     note: 'On hold. 300+ stores, Rs 2-3 Cr/mo ad potential. Second address on file: Leoantony.m@ramrajcotton.net.',
   },
   {
     name: 'Nippo / Airview', status: CompanyStatus.PROSPECT, city: 'Chennai',
-    vertical: C.D2C, source: S.PARTNER_AGENCY, stateName: 'Tamil Nadu',
+    vertical: 'E-commerce & D2C', source: 'Partnerships', stateName: 'Tamil Nadu',
     contact: { name: 'Arun (marketing head, via Vyoma)' },
     note: 'Plan delivered, awaiting feedback. Do NOT pitch their Amazon/Flipkart or branding agencies.',
   },
   {
     name: 'Her Will', status: CompanyStatus.PROSPECT, city: 'Bangalore',
-    vertical: C.D2C, source: S.INBOUND, stateName: 'Karnataka',
+    vertical: 'E-commerce & D2C', source: 'Website / Inbound', stateName: 'Karnataka',
     note: 'First meeting not scheduled. Brand-name clash with herwill.org.',
   },
   {
     name: 'Mapnostics', status: CompanyStatus.PROSPECT, city: 'Coimbatore',
-    vertical: C.IT_AND_SAAS, source: S.INBOUND, stateName: 'Tamil Nadu',
+    vertical: 'Technology & SaaS', source: 'Website / Inbound', stateName: 'Tamil Nadu',
     contact: { name: 'Boopathi' },
     note: 'Proposal still to send. Sheet said "Coimbatore and Chennai" — confirm the billing city.',
   },

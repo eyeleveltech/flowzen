@@ -1,43 +1,59 @@
+import { INDUSTRIES, LEAD_SOURCES, LEGACY_INDUSTRY, LEGACY_SOURCE } from '@flowzen/shared';
+
 /**
- * The enum on one side, the words a person reads on the other.
+ * Industries and lead sources, for the screens that offer and display them.
  *
- * `CompanyVertical` is stored SCREAMING_SNAKE, and two screens each did their
- * own thing with it: the companies table swapped underscores for spaces and
- * shouted the result — HOSPITALITY, REAL ESTATE, IT AND SAAS — while the
- * outreach list had already been given a map and read "Healthcare".
+ * ─── Why this file barely does anything now ─────────────────────────────────
  *
- * Spelled out rather than derived, because deriving gets the acronyms wrong in
- * both directions: title-casing IT_AND_SAAS produces "It And Saas", and
- * lower-casing D2C and B2B ruins the two that were right to begin with.
+ * It used to hold two maps translating SCREAMING_SNAKE enum members into words
+ * — `IT_AND_SAAS` to "IT & SaaS" — because deriving them got the acronyms wrong
+ * in both directions: title-casing produces "It And Saas", and lower-casing
+ * ruins D2C and B2B. Thirteen values, spelled out by hand.
+ *
+ * The lists are now sixty-seven industries and fourteen sources, and they are
+ * stored as the words themselves. A hand-written map of that size would BE the
+ * feature, and a second copy of the list is a second thing to keep in step. So
+ * the display value is the stored value, and the options come straight from
+ * `@flowzen/shared` — one list, read by the API's validation and by these
+ * dropdowns.
+ *
+ * What survives is the legacy translation. Rows written before the change
+ * carry `REAL_ESTATE`, and a database somewhere may not have run the migration
+ * yet, so a raw enum member still renders as its new name rather than shouting.
  */
-export const VERTICAL_LABEL: Record<string, string> = {
-  HEALTHCARE: 'Healthcare',
-  REAL_ESTATE: 'Real estate',
-  D2C: 'D2C',
-  SPORTS: 'Sports',
-  IT_AND_SAAS: 'IT & SaaS',
-  RETAIL: 'Retail',
-  B2B: 'B2B',
-  HOSPITALITY: 'Hospitality',
-};
 
-export const SOURCE_LABEL: Record<string, string> = {
-  OUTREACH: 'Outreach',
-  REFERRAL: 'Referral',
-  INBOUND: 'Inbound',
-  PARTNER_AGENCY: 'Partner agency',
-  NETWORK: 'Network',
-};
+/** A value that predates the lists, shown as whatever it became. */
+const legacy = (v: string): string => LEGACY_INDUSTRY[v] ?? LEGACY_SOURCE[v] ?? v.replace(/_/g, ' ');
 
-/** Falls back to the raw value, so an enum member added later shows rather than vanishing. */
+/**
+ * What to show for a stored value.
+ *
+ * The map argument is kept for the callers that still pass one; it is consulted
+ * first, then the legacy names, then the value itself — which is the common
+ * case now, since an industry IS its own label.
+ */
 export const labelFor = (map: Record<string, string>, v?: string | null): string =>
-  !v ? '—' : (map[v] ?? v.replace(/_/g, ' '));
+  !v ? '—' : (map[v] ?? legacy(v));
 
-export const verticalLabel = (v?: string | null) => labelFor(VERTICAL_LABEL, v);
-export const sourceLabel = (v?: string | null) => labelFor(SOURCE_LABEL, v);
+export const industryLabel = (v?: string | null) => (!v ? '—' : legacy(v));
+export const sourceLabel = (v?: string | null) => (!v ? '—' : legacy(v));
 
-export const asOptions = (map: Record<string, string>) =>
-  Object.entries(map).map(([value, label]) => ({ value, label }));
+/** Kept under the old name while `vertical` is still what the column is called. */
+export const verticalLabel = industryLabel;
 
-export const VERTICAL_OPTIONS = asOptions(VERTICAL_LABEL);
-export const SOURCE_OPTIONS = asOptions(SOURCE_LABEL);
+const optionsFrom = (values: readonly string[]) => values.map((v) => ({ value: v, label: v }));
+
+export const INDUSTRY_OPTIONS = optionsFrom(INDUSTRIES);
+export const SOURCE_OPTIONS = optionsFrom(LEAD_SOURCES);
+
+/** The old export name, still imported by the outreach screen. */
+export const VERTICAL_OPTIONS = INDUSTRY_OPTIONS;
+
+/*
+ * The two label maps are gone — a stored value is its own label — but the
+ * outreach screen passes them to `labelFor`, so they stay as empty maps rather
+ * than becoming two more copies of the lists. `labelFor` falls through to the
+ * value, which is the right answer.
+ */
+export const VERTICAL_LABEL: Record<string, string> = {};
+export const SOURCE_LABEL: Record<string, string> = {};

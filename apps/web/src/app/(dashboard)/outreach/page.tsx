@@ -572,7 +572,7 @@ export default function OutreachPage() {
           <thead>
             <tr className="border-b border-border bg-subtle/50">
               <th className="eyebrow text-left">Name</th>
-              <th className="eyebrow text-left">Vertical</th>
+              <th className="eyebrow text-left">Industry</th>
               <th className="eyebrow text-left">Source</th>
               <th className="eyebrow text-left">Owner</th>
               <th className="eyebrow text-left">Status</th>
@@ -749,7 +749,7 @@ export default function OutreachPage() {
           {!newPhone.trim() && !newEmail.trim() && (
             <p className="text-xs text-secondary">Add a phone number or an email — one of the two is enough.</p>
           )}
-          <FieldSelect label="Vertical" value={newVertical} onChange={setNewVertical} options={VERTICAL_OPTIONS} />
+          <FieldSelect label="Industry" value={newVertical} onChange={setNewVertical} options={VERTICAL_OPTIONS} />
           <FieldSelect label="Source" value={newSource} onChange={setNewSource} options={SOURCE_OPTIONS} />
           {/* The form never asked, and POST quietly filed the name under
               whoever was logged in — which is right most of the time and was
@@ -846,7 +846,7 @@ export default function OutreachPage() {
               was often a guess when the name was scraped, and the owner of a
               cold lead is not always who ends up running the account. */}
           <div className="grid gap-4 sm:grid-cols-2">
-            <FieldSelect label="Vertical" value={promoteVertical} onChange={setPromoteVertical} options={VERTICAL_OPTIONS} />
+            <FieldSelect label="Industry" value={promoteVertical} onChange={setPromoteVertical} options={VERTICAL_OPTIONS} />
             <FieldSelect
               label="Owner"
               value={promoteOwnerId}
@@ -890,7 +890,7 @@ export default function OutreachPage() {
             <Field label="Phone" value={editPhone} onChange={setEditPhone} placeholder="e.g. 98400 11223" />
             <Field label="Email" type="email" value={editEmail} onChange={setEditEmail} placeholder="e.g. hello@acme.com" />
           </div>
-          <FieldSelect label="Vertical" value={editVertical} onChange={setEditVertical} options={VERTICAL_OPTIONS} />
+          <FieldSelect label="Industry" value={editVertical} onChange={setEditVertical} options={VERTICAL_OPTIONS} />
           <FieldSelect label="Source" value={editSource} onChange={setEditSource} options={SOURCE_OPTIONS} />
           <FieldSelect
             label="Owner"

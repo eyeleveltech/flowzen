@@ -1034,7 +1034,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                   required
                   value={personName}
                   onChange={(e) => setPersonName(e.target.value)}
-                  placeholder="e.g. Dr. Bidya"
+                  placeholder="e.g. Meera Krishnan"
                   className="w-full px-3 py-2 text-sm bg-white border border-border rounded-xl text-primary placeholder:text-muted focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:outline-none"
                 />
               </div>

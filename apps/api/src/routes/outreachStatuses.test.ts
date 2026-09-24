@@ -247,7 +247,8 @@ describe('promotion', () => {
     (prisma.outreachEntry.findFirst as any).mockResolvedValue(lead({ status: OutreachStatus.INTERESTED }));
     const res = await promote({ vertical: 'HEALTHCARE', ownerId: 'usr-other' });
     expect(res.status).toBe(201);
-    expect(written.company.vertical).toBe('HEALTHCARE');
+    // Sent as the old enum member, stored as the industry it became.
+    expect(written.company.vertical).toBe('Healthcare & Wellness');
     expect(written.company.ownerId).toBe('usr-other');
   });
 

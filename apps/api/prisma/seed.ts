@@ -1,10 +1,11 @@
 import {
-  PrismaClient, RolePreset, CompanyVertical, CompanySource, CompanyStatus, PersonRole,
+  PrismaClient, RolePreset, CompanyStatus, PersonRole,
   OutreachStatus, ProposalKind, ProposalStage, ProposalOutcome, ProformaSourceType, ProformaStatus,
   RetainerStatus, RetainerProjectStatus, MonthCardStatus, ProjectStatus, Priority, MilestoneStatus, TaskWorkType,
   TaskStatus, TaskType, WaitingOn, CostType, CostPaidBy, CostTreatment, InvoiceStatus, AlertSeverity,
   AssetCategory, AssetStatus, AssetCondition, AssetMovementKind, AssetMaintenanceKind,
 } from '@prisma/client';
+import type { Industry, LeadSource } from '@flowzen/shared';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
 
@@ -364,12 +365,12 @@ async function main() {
   // 4. COMPANIES & CONTACTS
   // ──────────────────────────────────────────────────────────────────────────
   const co = (data: {
-    name: string; vertical: CompanyVertical; source: CompanySource; ownerId: string;
+    name: string; vertical: Industry; source: LeadSource; ownerId: string;
     city: string; status: CompanyStatus; website?: string; gstin?: string;
     billingAddress?: string; lostReason?: string; stateName?: string; stateCode?: string;
   }) => prisma.company.create({ data: { organizationId: org.id, ...data } });
 
-  const carlton = await co({ name: 'Carlton Wellness', vertical: CompanyVertical.HEALTHCARE, source: CompanySource.INBOUND, ownerId: tanuja.id, city: 'Chennai', status: CompanyStatus.CLIENT, website: 'https://carltonwellness.in', gstin: '33AABCC1234F1Z5', billingAddress: '42 Khader Nawaz Khan Rd, Nungambakkam, Chennai, Tamil Nadu 600006' });
+  const carlton = await co({ name: 'Carlton Wellness', vertical: 'Healthcare & Wellness', source: 'Website / Inbound', ownerId: tanuja.id, city: 'Chennai', status: CompanyStatus.CLIENT, website: 'https://carltonwellness.in', gstin: '33AABCC1234F1Z5', billingAddress: '42 Khader Nawaz Khan Rd, Nungambakkam, Chennai, Tamil Nadu 600006' });
   /*
    * Real-data pass, 23 Sep 2026 — EyeLevel client intake.
    *
@@ -382,23 +383,23 @@ async function main() {
    * further below as new company records. VERTX Drone Light Show is not
    * added yet — its project value is still unconfirmed.
    */
-  const voso = await co({ name: 'VOSO Sports', vertical: CompanyVertical.SPORTS, source: CompanySource.PARTNER_AGENCY, ownerId: akmal.id, city: 'Tiruppur', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT, website: 'https://vososports.in' });
-  const rightHospitals = await co({ name: 'Right Hospitals', vertical: CompanyVertical.HEALTHCARE, source: CompanySource.REFERRAL, ownerId: dilshad.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT });
-  const heavensElix = await co({ name: "Heaven's ELIX", vertical: CompanyVertical.D2C, source: CompanySource.REFERRAL, ownerId: akmal.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT });
-  const tnpa = await co({ name: 'Tamil Nadu Pickleball Association', vertical: CompanyVertical.SPORTS, source: CompanySource.NETWORK, ownerId: akmal.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT });
-  const daOne = await co({ name: 'Da One High Performance Sports', vertical: CompanyVertical.SPORTS, source: CompanySource.NETWORK, ownerId: akmal.id, city: 'Delhi', status: CompanyStatus.CLIENT });
-  const blinkit = await co({ name: 'Blinkit South Region', vertical: CompanyVertical.RETAIL, source: CompanySource.REFERRAL, ownerId: tanuja.id, city: 'Chennai', status: CompanyStatus.CLIENT, gstin: '33AAACB5678H1Z2' });
-  const stylori = await co({ name: 'Stylori', vertical: CompanyVertical.D2C, source: CompanySource.OUTREACH, ownerId: tanuja.id, city: 'Chennai', status: CompanyStatus.PROSPECT });
-  const ramrajCotton = await co({ name: 'Ramraj Cotton', vertical: CompanyVertical.D2C, source: CompanySource.REFERRAL, ownerId: tanuja.id, city: 'Chennai', status: CompanyStatus.PROSPECT });
-  const kFashions = await co({ name: 'K Fashions', vertical: CompanyVertical.RETAIL, source: CompanySource.OUTREACH, ownerId: varsha.id, city: 'Chennai', status: CompanyStatus.PROSPECT });
-  const elephantine = await co({ name: 'Elephantine Tales', vertical: CompanyVertical.REAL_ESTATE, source: CompanySource.NETWORK, ownerId: akmal.id, city: 'Kodaikanal', status: CompanyStatus.PROSPECT });
-  const sparkAligners = await co({ name: 'Spark Aligners', vertical: CompanyVertical.HEALTHCARE, source: CompanySource.PARTNER_AGENCY, ownerId: varsha.id, city: 'Chennai', status: CompanyStatus.PROSPECT });
+  const voso = await co({ name: 'VOSO Sports', vertical: 'Sports & Fitness', source: 'Partnerships', ownerId: akmal.id, city: 'Tiruppur', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT, website: 'https://vososports.in' });
+  const rightHospitals = await co({ name: 'Right Hospitals', vertical: 'Healthcare & Wellness', source: 'Referrals', ownerId: dilshad.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT });
+  const heavensElix = await co({ name: "Heaven's ELIX", vertical: 'E-commerce & D2C', source: 'Referrals', ownerId: akmal.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT });
+  const tnpa = await co({ name: 'Tamil Nadu Pickleball Association', vertical: 'Sports & Fitness', source: 'Networking & Events', ownerId: akmal.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT });
+  const daOne = await co({ name: 'Da One High Performance Sports', vertical: 'Sports & Fitness', source: 'Networking & Events', ownerId: akmal.id, city: 'Delhi', status: CompanyStatus.CLIENT });
+  const blinkit = await co({ name: 'Blinkit South Region', vertical: 'Retail', source: 'Referrals', ownerId: tanuja.id, city: 'Chennai', status: CompanyStatus.CLIENT, gstin: '33AAACB5678H1Z2' });
+  const stylori = await co({ name: 'Stylori', vertical: 'E-commerce & D2C', source: 'Cold Outreach', ownerId: tanuja.id, city: 'Chennai', status: CompanyStatus.PROSPECT });
+  const ramrajCotton = await co({ name: 'Ramraj Cotton', vertical: 'E-commerce & D2C', source: 'Referrals', ownerId: tanuja.id, city: 'Chennai', status: CompanyStatus.PROSPECT });
+  const kFashions = await co({ name: 'K Fashions', vertical: 'Retail', source: 'Cold Outreach', ownerId: varsha.id, city: 'Chennai', status: CompanyStatus.PROSPECT });
+  const elephantine = await co({ name: 'Elephantine Tales', vertical: 'Real Estate & Infrastructure', source: 'Networking & Events', ownerId: akmal.id, city: 'Kodaikanal', status: CompanyStatus.PROSPECT });
+  const sparkAligners = await co({ name: 'Spark Aligners', vertical: 'Healthcare & Wellness', source: 'Partnerships', ownerId: varsha.id, city: 'Chennai', status: CompanyStatus.PROSPECT });
   // Won 23 Sep 2026 — retainer starts 1 Oct 2026 (see the retainer block
   // below), so this is a CLIENT now rather than the PROSPECT it was seeded as.
-  const pavilionClub = await co({ name: 'Pavilion Club', vertical: CompanyVertical.HOSPITALITY, source: CompanySource.NETWORK, ownerId: tanuja.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT });
-  const zenith = await co({ name: 'Zenith FinTech Cloud', vertical: CompanyVertical.IT_AND_SAAS, source: CompanySource.OUTREACH, ownerId: tanuja.id, city: 'Bangalore', status: CompanyStatus.PROSPECT });
-  const indusAlliance = await co({ name: 'Indus Alliance', vertical: CompanyVertical.B2B, source: CompanySource.OUTREACH, ownerId: tanuja.id, city: 'Chennai', status: CompanyStatus.PAST, lostReason: 'Budget pulled, Jul 2026' });
-  const sastry = await co({ name: 'Sastry Pain Balm', vertical: CompanyVertical.D2C, source: CompanySource.PARTNER_AGENCY, ownerId: tanuja.id, city: 'Chennai', status: CompanyStatus.PAST, lostReason: 'Took production in-house, Aug 2026' });
+  const pavilionClub = await co({ name: 'Pavilion Club', vertical: 'Hospitality', source: 'Networking & Events', ownerId: tanuja.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT });
+  const zenith = await co({ name: 'Zenith FinTech Cloud', vertical: 'Technology & SaaS', source: 'Cold Outreach', ownerId: tanuja.id, city: 'Bangalore', status: CompanyStatus.PROSPECT });
+  const indusAlliance = await co({ name: 'Indus Alliance', vertical: 'Corporate & B2B', source: 'Cold Outreach', ownerId: tanuja.id, city: 'Chennai', status: CompanyStatus.PAST, lostReason: 'Budget pulled, Jul 2026' });
+  const sastry = await co({ name: 'Sastry Pain Balm', vertical: 'E-commerce & D2C', source: 'Partnerships', ownerId: tanuja.id, city: 'Chennai', status: CompanyStatus.PAST, lostReason: 'Took production in-house, Aug 2026' });
 
   /*
    * New from the same 23 Sep 2026 intake — no matching seed row existed
@@ -409,15 +410,15 @@ async function main() {
    * confirmed.
    */
   // DONE AND CLOSED. AI video ₹75,000 + graphic design ₹35,000 = ₹1,10,000 total. Missing: which month payment landed, phone, invoice email, GSTIN, billing address.
-  const dinamalar = await co({ name: 'Dinamalar', vertical: CompanyVertical.B2B, source: CompanySource.PARTNER_AGENCY, ownerId: akmal.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT });
+  const dinamalar = await co({ name: 'Dinamalar', vertical: 'Corporate & B2B', source: 'Partnerships', ownerId: akmal.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT });
   // Two completed projects (₹1,11,000 + ₹90,000, done) plus one open quote (video/photography, ₹50,000, not yet won). Missing: dates, phone, invoice email, GSTIN, billing address.
-  const brigade = await co({ name: 'Brigade Enterprises', vertical: CompanyVertical.REAL_ESTATE, source: CompanySource.OUTREACH, ownerId: akmal.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT });
+  const brigade = await co({ name: 'Brigade Enterprises', vertical: 'Real Estate & Infrastructure', source: 'Cold Outreach', ownerId: akmal.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT });
   // Drone shoot quoted at ₹13,000/day × 10 days = ₹1,30,000, shoot dates not locked. Missing: billing schedule, phone, invoice email, GSTIN, billing address.
-  const sprCity = await co({ name: 'SPR City', vertical: CompanyVertical.REAL_ESTATE, source: CompanySource.OUTREACH, ownerId: akmal.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.PROSPECT });
+  const sprCity = await co({ name: 'SPR City', vertical: 'Real Estate & Infrastructure', source: 'Cold Outreach', ownerId: akmal.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.PROSPECT });
   // GMB cleanup (16 profiles + on-site photography) in progress, value not yet set — do not reuse the old ₹35,000/2-profile quote. A separate retainer pitch for this client lives on the Pipeline tab, not here.
-  const eagle = await co({ name: 'Eagle Enterprises', vertical: CompanyVertical.RETAIL, source: CompanySource.PARTNER_AGENCY, ownerId: tanuja.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT });
+  const eagle = await co({ name: 'Eagle Enterprises', vertical: 'Retail', source: 'Partnerships', ownerId: tanuja.id, city: 'Chennai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.CLIENT });
   // ON HOLD — decide whether this stays in Flowzen. Social media management, ₹75,000/mo × 2 months = ₹1,50,000 total, Project Start 1 Aug 2026 (see the proposal block below). Missing: expected end date, billing schedule, phone, invoice email, GSTIN, billing address.
-  const maduraiAllStars = await co({ name: 'Madurai All Stars', vertical: CompanyVertical.SPORTS, source: CompanySource.OUTREACH, ownerId: tanuja.id, city: 'Madurai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.PROSPECT });
+  const maduraiAllStars = await co({ name: 'Madurai All Stars', vertical: 'Sports & Fitness', source: 'Cold Outreach', ownerId: tanuja.id, city: 'Madurai', stateName: 'Tamil Nadu', stateCode: '33', status: CompanyStatus.PROSPECT });
 
   await prisma.person.createMany({
     data: [
@@ -453,19 +454,19 @@ async function main() {
   const inDays = (n: number) => new Date(TODAY.getTime() + n * 86400000);
   await prisma.outreachEntry.createMany({
     data: [
-      { organizationId: org.id, name: 'Prestige Group', vertical: CompanyVertical.REAL_ESTATE, source: CompanySource.OUTREACH, ownerId: varsha.id, status: OutreachStatus.NOT_CONTACTED,
+      { organizationId: org.id, name: 'Prestige Group', vertical: 'Real Estate & Infrastructure', source: 'Cold Outreach', ownerId: varsha.id, status: OutreachStatus.NOT_CONTACTED,
         contactPersonName: 'Rajesh Kumar', phone: '98400 11223', email: null },
-      { organizationId: org.id, name: 'Casagrand', vertical: CompanyVertical.REAL_ESTATE, source: CompanySource.OUTREACH, ownerId: varsha.id, status: OutreachStatus.FOLLOW_UP,
+      { organizationId: org.id, name: 'Casagrand', vertical: 'Real Estate & Infrastructure', source: 'Cold Outreach', ownerId: varsha.id, status: OutreachStatus.FOLLOW_UP,
         contactPersonName: 'Meena Iyer', phone: '98410 55667', email: 'meena@casagrand.example',
         nextActionDate: inDays(2), remarks: 'Busy with a launch this week. Asked us to call back on Thursday morning.' },
-      { organizationId: org.id, name: 'Kauvery Hospital', vertical: CompanyVertical.HEALTHCARE, source: CompanySource.OUTREACH, ownerId: tanuja.id, status: OutreachStatus.MEETING,
+      { organizationId: org.id, name: 'Kauvery Hospital', vertical: 'Healthcare & Wellness', source: 'Cold Outreach', ownerId: tanuja.id, status: OutreachStatus.MEETING,
         contactPersonName: 'Dr Anand S', phone: null, email: 'anand@kauvery.example',
         nextActionDate: inDays(4), remarks: '11:30am, offline, at their Alwarpet office. Tanuja and Janani attending.' },
-      { organizationId: org.id, name: 'Zoho Partner Network', vertical: CompanyVertical.IT_AND_SAAS, source: CompanySource.OUTREACH, ownerId: tanuja.id, status: OutreachStatus.NOT_CONTACTED,
+      { organizationId: org.id, name: 'Zoho Partner Network', vertical: 'Technology & SaaS', source: 'Cold Outreach', ownerId: tanuja.id, status: OutreachStatus.NOT_CONTACTED,
         contactPersonName: null, phone: null, email: 'partners@zoho.example' },
-      { organizationId: org.id, name: 'Chennai Silks', vertical: CompanyVertical.RETAIL, source: CompanySource.OUTREACH, ownerId: varsha.id, status: OutreachStatus.INTERESTED,
+      { organizationId: org.id, name: 'Chennai Silks', vertical: 'Retail', source: 'Cold Outreach', ownerId: varsha.id, status: OutreachStatus.INTERESTED,
         contactPersonName: 'Lakshmi R', phone: '98420 33445', email: 'lakshmi@chennaisilks.example' },
-      { organizationId: org.id, name: 'HealthFirst Diagnostic Labs', vertical: CompanyVertical.HEALTHCARE, source: CompanySource.OUTREACH, ownerId: tanuja.id, status: OutreachStatus.DEAD,
+      { organizationId: org.id, name: 'HealthFirst Diagnostic Labs', vertical: 'Healthcare & Wellness', source: 'Cold Outreach', ownerId: tanuja.id, status: OutreachStatus.DEAD,
         contactPersonName: 'Front desk', phone: '44 2345 6789', email: null },
     ],
   });

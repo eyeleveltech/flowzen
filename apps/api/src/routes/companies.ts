@@ -3,12 +3,13 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { emitToOrganization } from '../sse.js';
 import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
-import { CompanyStatus, CompanyVertical, CompanySource, PersonRole, TaskWorkType, TaskStatus } from '@prisma/client';
+import { CompanyStatus, PersonRole, TaskWorkType, TaskStatus } from '@prisma/client';
+import { DEFAULT_INDUSTRY, DEFAULT_LEAD_SOURCE } from '@flowzen/shared';
 import { checkForDuplicates, checkForImport } from '../services/duplicateCheck.js';
 import { resolveState } from '../services/documentModel.js';
 import { parsePagination } from '../utils/query.js';
 import { toCsv, parseCsv } from '../utils/csv.js';
-import { matchEnumValue, VERTICAL_ALIASES } from '../utils/enums.js';
+import { matchEnumValue, resolveIndustry, resolveLeadSource, industrySchema, leadSourceSchema } from '../utils/enums.js';
 import { sendCsv } from '../utils/csvResponse.js';
 
 export const companiesRouter = Router();
@@ -46,8 +47,8 @@ companiesRouter.get('/', requirePermission('company.read'), async (req: AuthRequ
     }
 
     if (vertical && typeof vertical === 'string') {
-      where.vertical = vertical as CompanyVertical;
-      facetWhere.vertical = vertical as CompanyVertical;
+      where.vertical = vertical;
+      facetWhere.vertical = vertical;
     }
 
     if (ownerId && typeof ownerId === 'string') {
@@ -596,8 +597,8 @@ companiesRouter.post('/import', requirePermission('company.write'), async (req: 
     const toCreate: {
       rowIndex: number;
       name: string;
-      vertical: CompanyVertical;
-      source: CompanySource;
+      vertical: string;
+      source: string;
       city: string;
       website: string | null;
       gstin: string | null;
@@ -664,10 +665,8 @@ companiesRouter.post('/import', requirePermission('company.write'), async (req: 
 
       // Unknown industries fall back rather than failing the row, matching what
       // the single Add Company form does with the same field.
-      const vertical =
-        matchEnumValue(row.industry || row.vertical, Object.values(CompanyVertical), VERTICAL_ALIASES)
-        ?? CompanyVertical.B2B;
-      const source = matchEnumValue(row.source, Object.values(CompanySource)) ?? CompanySource.OUTREACH;
+      const vertical = resolveIndustry(row.industry || row.vertical);
+      const source = resolveLeadSource(row.source);
       /*
        * Whether they are already a client, which the importer used to have no
        * way to say.
@@ -801,8 +800,8 @@ companiesRouter.post('/import', requirePermission('company.write'), async (req: 
 
 const companyCreateSchema = z.object({
   name: z.string().min(1, 'Company name is required'),
-  vertical: z.nativeEnum(CompanyVertical).optional().default(CompanyVertical.B2B),
-  source: z.nativeEnum(CompanySource).optional().default(CompanySource.OUTREACH),
+  vertical: industrySchema.optional().default(DEFAULT_INDUSTRY),
+  source: leadSourceSchema.optional().default(DEFAULT_LEAD_SOURCE),
   sourceId: z.string().optional().nullable(),
   city: z.string().optional().nullable().default('Chennai'),
   phone: z.string().optional().nullable(),
@@ -878,8 +877,7 @@ companiesRouter.post('/', requirePermission('company.write'), async (req: AuthRe
      * whatever the person picked. `source` stays accepted for API callers that
      * send the enum directly; the form's value wins when both arrive.
      */
-    const resolvedSource =
-      (sourceId && (CompanySource as Record<string, CompanySource>)[sourceId]) || source;
+    const resolvedSource = (sourceId && resolveLeadSource(sourceId)) || source;
 
     // Whichever half of the state arrived, both are stored — and a GSTIN on
     // its own is enough, since its first two digits are the state code.
@@ -1070,8 +1068,8 @@ companiesRouter.post('/', requirePermission('company.write'), async (req: AuthRe
 
 const companyUpdateSchema = z.object({
   name: z.string().min(1).optional(),
-  vertical: z.nativeEnum(CompanyVertical).optional(),
-  source: z.nativeEnum(CompanySource).optional(),
+  vertical: industrySchema.optional(),
+  source: leadSourceSchema.optional(),
   city: z.string().optional(),
   website: z.string().optional().nullable(),
   gstin: z.string().optional().nullable(),

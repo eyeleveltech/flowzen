@@ -5,11 +5,10 @@ import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-quer
 import { ShowMore } from '@/components/ui/show-more';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { plural } from '@/lib/utils';
-import { api, fileUrl, formatMoney } from '@/lib/api-v2';
+import { api, formatMoney } from '@/lib/api-v2';
 import { useAuthStore } from '@/stores';
 import { NewClientModal } from '@/components/clients/NewClientModal';
 import { ImportClientsModal } from '@/components/clients/ImportClientsModal';
-import { ExportCsvButton } from '@/components/ui/export-csv-button';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { usePageHeader } from '@/hooks/usePageHeader';
@@ -191,8 +190,19 @@ export default function CompaniesPage() {
         </div>
       )}
       {/* Page header */}
+      {/*
+        Import is the only action here.
+
+        A company is not something you start on this screen. It begins as a lead
+        in Outreach and becomes a company when that lead is promoted, which is
+        what keeps its origin recorded rather than guessed — a "New" button
+        beside the list was a second, quieter way in that skipped all of that.
+
+        The CSV export went at the same time: one more thing carrying every
+        client's name and their contracted monthly out of the building, beside a
+        list you can already read on screen.
+      */}
       <div className="flex flex-wrap items-center justify-end gap-2 mb-8">
-          <ExportCsvButton href={fileUrl('/companies?format=csv')} />
           {/* The importer was written, tested and then never mounted — the
               only way in was to type companies one at a time. */}
           <button
@@ -200,12 +210,6 @@ export default function CompaniesPage() {
             onClick={() => setImportOpen(true)}
           >
             Import
-          </button>
-          <button
-            className="flex items-center gap-1.5 bg-primary text-white text-sm font-semibold px-4 h-8 rounded-lg hover:bg-primary/90 transition-colors"
-            onClick={() => setCreateOpen(true)}
-          >
-            <span className="text-base leading-none">+</span> New
           </button>
       </div>
 
@@ -247,7 +251,7 @@ export default function CompaniesPage() {
           <thead>
             <tr className="border-b border-border">
               <th className="eyebrow text-left">Company</th>
-              <th className="eyebrow text-left">Vertical</th>
+              <th className="eyebrow text-left">Industry</th>
               <th className="eyebrow text-left">Status</th>
               <th className="eyebrow text-left">Owner</th>
               <th className="eyebrow text-right">Retainer / mo</th>
@@ -338,6 +342,15 @@ export default function CompaniesPage() {
         />
       )}
 
+      {/*
+        Still mounted, with no button on this page to open it.
+
+        Creation is reached from where a company actually begins — the
+        pipeline's "New lead", and Quick Create — both of which arrive here as
+        `?create=true`. Unmounting this would leave those two pointing at
+        nothing, and the pipeline's own note is the reason they point here at
+        all: a pipeline starts with a lead, and a lead IS a company.
+      */}
       {createOpen && (
         <NewClientModal
           onConfirm={() => {

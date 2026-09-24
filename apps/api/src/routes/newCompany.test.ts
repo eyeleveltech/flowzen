@@ -115,22 +115,30 @@ const create = (body: Record<string, unknown>) =>
     .send({ name: 'Acme Foods', vertical: 'D2C', ...body });
 
 describe('the fields the form actually asks for', () => {
-  it('stores the source that was picked, not OUTREACH', async () => {
+  it('stores the source that was picked, not the default', async () => {
+    // Sent as the old enum member, stored as the name it became: the lists are
+    // words now, and anything still posting `REFERRAL` has to keep working.
     const res = await create({ sourceId: 'REFERRAL' });
     expect(res.status).toBe(201);
-    expect(written.company.source).toBe('REFERRAL');
+    expect(written.company.source).toBe('Referrals');
   });
 
-  it('still accepts the enum directly, for a caller that is not the form', async () => {
+  it('still accepts a legacy value directly, for a caller that is not the form', async () => {
     const res = await create({ source: 'NETWORK' });
     expect(res.status).toBe(201);
-    expect(written.company.source).toBe('NETWORK');
+    expect(written.company.source).toBe('Networking & Events');
+  });
+
+  it('takes a source from the current list as written', async () => {
+    const res = await create({ source: 'Justdial' });
+    expect(res.status).toBe(201);
+    expect(written.company.source).toBe('Justdial');
   });
 
   it('ignores a source id that is not a real one instead of crashing', async () => {
     const res = await create({ sourceId: 'nonsense' });
     expect(res.status).toBe(201);
-    expect(written.company.source).toBe('OUTREACH');
+    expect(written.company.source).toBe('Cold Outreach');
   });
 
   it('keeps a phone given without a contact name', async () => {

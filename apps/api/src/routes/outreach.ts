@@ -2,10 +2,11 @@ import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, type AuthRequest } from '../middleware/auth.js';
-import { CompanyVertical, CompanySource, CompanyStatus, OutreachStatus } from '@prisma/client';
+import { CompanyStatus, OutreachStatus } from '@prisma/client';
+import { DEFAULT_LEAD_SOURCE } from '@flowzen/shared';
 import { parsePagination } from '../utils/query.js';
 import { toCsv, parseCsv } from '../utils/csv.js';
-import { matchEnumValue, VERTICAL_ALIASES } from '../utils/enums.js';
+import { matchIndustry, resolveLeadSource, industrySchema, leadSourceSchema } from '../utils/enums.js';
 import { sendCsv } from '../utils/csvResponse.js';
 import { checkForDuplicates } from '../services/duplicateCheck.js';
 
@@ -58,7 +59,7 @@ outreachRouter.get('/', requirePermission('company.read'), async (req: AuthReque
     }
 
     if (vertical && typeof vertical === 'string') {
-      where.vertical = vertical as CompanyVertical;
+      where.vertical = vertical;
     }
 
     if (search && typeof search === 'string' && search.trim()) {
@@ -163,8 +164,8 @@ const reachable = <T extends { phone?: string | null; email?: string | null }>(v
 const outreachCreateSchema = z
   .object({
     name: z.string().min(1, 'Lead name is required'),
-    vertical: z.nativeEnum(CompanyVertical),
-    source: z.nativeEnum(CompanySource).default(CompanySource.OUTREACH),
+    vertical: industrySchema,
+    source: leadSourceSchema.default(DEFAULT_LEAD_SOURCE),
     ownerId: z.string().optional(),
     contactPersonName: z.string().trim().optional().nullable(),
     phone: z.string().trim().optional().nullable(),
@@ -228,8 +229,8 @@ outreachRouter.post('/', requirePermission('company.write'), async (req: AuthReq
 const outreachEditSchema = z
   .object({
     name: z.string().min(1, 'A name is required').max(200).optional(),
-    vertical: z.nativeEnum(CompanyVertical).optional(),
-    source: z.nativeEnum(CompanySource).optional(),
+    vertical: industrySchema.optional(),
+    source: leadSourceSchema.optional(),
     ownerId: z.string().min(1).nullable().optional(),
     // Editable so the leads that predate this change can be given a way to
     // reach them. `reachable` is deliberately NOT enforced here: a legacy row
@@ -438,7 +439,7 @@ outreachRouter.patch('/:id/status', requirePermission('company.write'), async (r
 const promoteSchema = z.object({
   companyName: z.string().trim().min(1).max(200).optional(),
   city: z.string().default('Chennai'),
-  vertical: z.nativeEnum(CompanyVertical).optional(),
+  vertical: industrySchema.optional(),
   ownerId: z.string().min(1).optional(),
   contactName: z.string().optional(),
   contactEmail: z.string().email().optional().or(z.literal('')),
@@ -607,8 +608,8 @@ outreachRouter.post('/import', requirePermission('company.write'), async (req: A
     const results: ImportRowResult[] = [];
     const toCreate: {
       name: string;
-      vertical: CompanyVertical;
-      source: CompanySource;
+      vertical: string;
+      source: string;
       contactPersonName: string | null;
       phone: string | null;
       email: string | null;
@@ -634,13 +635,13 @@ outreachRouter.post('/import', requirePermission('company.write'), async (req: A
       }
 
       const verticalRaw = row.vertical || row.industry;
-      const vertical = matchEnumValue(verticalRaw, Object.values(CompanyVertical), VERTICAL_ALIASES);
+      const vertical = matchIndustry(verticalRaw);
       if (!vertical) {
-        results.push({ row: rowNum, name, action: 'INVALID', reason: `Unrecognised vertical "${verticalRaw ?? ''}"` });
+        results.push({ row: rowNum, name, action: 'INVALID', reason: `Unrecognised industry "${verticalRaw ?? ''}"` });
         return;
       }
 
-      const source = matchEnumValue(row.source, Object.values(CompanySource)) ?? CompanySource.OUTREACH;
+      const source = resolveLeadSource(row.source);
 
       /*
        * The same rule the manual form applies: a lead you cannot reach is a

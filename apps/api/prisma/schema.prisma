@@ -237,24 +237,7 @@ model User {
 // 2. CRM & CLIENT SPINE
 // ──────────────────────────────────────────────────────────────────────────────
 
-enum CompanyVertical {
-  HEALTHCARE
-  REAL_ESTATE
-  D2C
-  SPORTS
-  IT_AND_SAAS
-  RETAIL
-  B2B
-  HOSPITALITY
-}
 
-enum CompanySource {
-  OUTREACH
-  REFERRAL
-  INBOUND
-  PARTNER_AGENCY
-  NETWORK
-}
 
 enum CompanyStatus {
   PROSPECT
@@ -266,8 +249,15 @@ model Company {
   id             String          @id @default(cuid())
   organizationId String
   name           String
-  vertical       CompanyVertical
-  source         CompanySource   @default(OUTREACH)
+  /// What the company does, from `INDUSTRIES` in @flowzen/shared.
+  ///
+  /// A string rather than an enum: the list is sixty-seven long and exists to
+  /// grow, and an enum would mean a migration every time the studio takes on a
+  /// kind of work it has not done before. The API validates against the shared
+  /// list, so an unknown value is refused at the door rather than by Postgres.
+  vertical       String
+  /// Where the lead came from, from `LEAD_SOURCES` in @flowzen/shared.
+  source         String          @default("Cold Outreach")
   ownerId        String?
   city           String
   website        String?
@@ -347,8 +337,15 @@ model OutreachEntry {
   id                String          @id @default(cuid())
   organizationId    String
   name              String
-  vertical          CompanyVertical
-  source            CompanySource   @default(OUTREACH)
+  /// What the company does, from `INDUSTRIES` in @flowzen/shared.
+  ///
+  /// A string rather than an enum: the list is sixty-seven long and exists to
+  /// grow, and an enum would mean a migration every time the studio takes on a
+  /// kind of work it has not done before. The API validates against the shared
+  /// list, so an unknown value is refused at the door rather than by Postgres.
+  vertical          String
+  /// Where the lead came from, from `LEAD_SOURCES` in @flowzen/shared.
+  source            String          @default("Cold Outreach")
   ownerId           String?
   status            OutreachStatus  @default(NOT_CONTACTED)
   /// Who to ask for. Carried into the Person row on promotion.
