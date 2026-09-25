@@ -5,6 +5,7 @@ import { useWorkCacheNudge } from '@/hooks/useWorkCacheNudge';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, type TabDef } from '@/components/ui/tabs';
 import { plural } from '@/lib/utils';
+import { activityText, activityScope, activityDetail } from '@/lib/activity';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { 
@@ -309,6 +310,31 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
   const pastRetainers = (company.retainers ?? []).filter((r: any) => r.status !== 'ACTIVE');
   const liveProjects = (company.projects ?? []).filter((pr: any) => pr.status === 'LIVE');
   const pastProjects = (company.projects ?? []).filter((pr: any) => pr.status !== 'LIVE');
+
+  /*
+   * Won, and not yet set up as work — what the create forms offer to link to.
+   *
+   * A deal is unfulfilled when no retainer or project names it as its source.
+   * Kind decides which form it belongs in: a retainer proposal is not something
+   * a one-off project is built from, and offering it there would invite the
+   * mismatch the API refuses anyway.
+   */
+  const unfulfilledDeals = (kind: 'RETAINER' | 'PROJECT') =>
+    ((company.proposals ?? []) as any[])
+      .filter(
+        (p) =>
+          p.outcome === 'WON' &&
+          p.kind === kind &&
+          !(company.retainers ?? []).some((r: any) => r.sourceProposalId === p.id) &&
+          !(company.projects ?? []).some((pr: any) => pr.sourceProposalId === p.id),
+      )
+      .map((p) => ({
+        id: p.id,
+        label: `v${p.wonVersion?.n ?? 1} · ${formatMoney(Number(p.wonVersion?.value ?? 0))}${
+          p.wonVersion?.scopeSummary ? ` · ${String(p.wonVersion.scopeSummary).slice(0, 40)}` : ''
+        }`,
+        value: Number(p.wonVersion?.value ?? 0),
+      }));
 
   return (
     <div className="page-shell space-y-6">
@@ -1059,15 +1085,36 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
             <p className="text-xs text-muted py-2">No recorded activities for this company.</p>
           ) : (
             <div className="space-y-3">
-              {company.activities.map((a: any) => (
-                <div key={a.id} className="text-xs flex items-center justify-between py-2 border-b border-border/60 last:border-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-primary">{a.actor?.name || 'System'}</span>
-                    <span className="text-secondary">{a.verb.replace(/_/g, ' ')}</span>
+              {/*
+                Said in words, and with the record it happened to.
+
+                The row printed the stored verb with its underscores swapped
+                for spaces — "proposal version added" — which reads as a column
+                name. It matters more now the tab carries the whole client's
+                history rather than the company row alone: without the chip,
+                "Edited the project" and "Edited the retainer" are the same
+                line.
+              */}
+              {company.activities.map((a: any) => {
+                const scope = activityScope(a.entityType);
+                const detail = activityDetail(a);
+                return (
+                  <div key={a.id} className="text-xs flex items-start justify-between gap-3 py-2 border-b border-border/60 last:border-0">
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <span className="font-medium text-primary">{a.actor?.name || 'System'}</span>
+                        <span className="text-secondary">{activityText(a.verb)}</span>
+                        {scope && (
+                          <span className="eyebrow rounded border border-border bg-subtle px-1.5 py-0.5">{scope}</span>
+                        )}
+                      </div>
+                      {/* What was quoted, and where the deal moved to. */}
+                      {detail && <p className="mt-0.5 text-muted">{detail}</p>}
+                    </div>
+                    <span className="shrink-0 text-muted">{formatDate(a.at, 'Asia/Kolkata', 'en-IN', true)}</span>
                   </div>
-                  <span className="text-muted">{formatDate(a.at, 'Asia/Kolkata', 'en-IN', true)}</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </Card>
@@ -1253,7 +1300,17 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         />
       )}
 
+      {/*
+        The won deals with nothing built from them yet.
+
+        Both forms open two ways: from the proposal card, which already knows
+        which deal it is, and from the Work tab's "Add" button, which used to
+        know nothing — so a retainer created there had no link back to the deal
+        that sold it, the proposal went on offering "Create retainer from this",
+        and nothing could put the quote beside what is actually running.
+      */}
       <NewProjectModal
+        deals={unfulfilledDeals('PROJECT')}
         open={Boolean(creatingProjectFor)}
         onClose={() => setCreatingProjectFor(null)}
         prefill={creatingProjectFor ?? undefined}
@@ -1265,6 +1322,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
       />
 
       <NewRetainerModal
+        deals={unfulfilledDeals('RETAINER')}
         open={Boolean(creatingRetainerFor)}
         onClose={() => setCreatingRetainerFor(null)}
         prefill={creatingRetainerFor ?? undefined}

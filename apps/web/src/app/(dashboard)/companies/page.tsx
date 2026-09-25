@@ -19,6 +19,8 @@ import { usePageHeader } from "@/hooks/usePageHeader";
 import { StatTile, StatRow } from "@/components/ui/stat-tile";
 import { Tabs, type TabDef } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Upload } from "lucide-react";
 import { Badge, type Tone } from "@/components/ui/badge";
 import { verticalLabel } from "@/lib/vertical";
 
@@ -223,6 +225,22 @@ export default function CompaniesPage() {
           </ErrorNote>
         </div>
       )}
+
+      {/*
+        Import, and only import.
+
+        Creating a company here was taken away on purpose — a company starts as
+        an outreach lead and is promoted — and Export went with it. The importer
+        went too, in the same pass, which left a screen with no way to bring a
+        client list in at all and a modal nothing could open. It is how the
+        eighteen real companies got here in the first place.
+      */}
+      <div className="mb-6 flex justify-end">
+        <Button variant="secondary" size="sm" onClick={() => setImportOpen(true)}>
+          <Upload className="h-3.5 w-3.5" strokeWidth={2} />
+          Import
+        </Button>
+      </div>
 
       <StatRow className="mb-8">
         <StatTile

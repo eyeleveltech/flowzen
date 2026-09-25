@@ -41,26 +41,48 @@ test.describe('which AI Zen asks', () => {
   };
 
   /**
-   * FieldSelect is a listbox, not a native select — open it, then pick.
+   * Opens the provider list, and waits for it to settle.
+   *
+   * `Select` draws its list in a portal, positioned from the trigger's own rect,
+   * and closes itself on any scroll so the two cannot drift apart. Playwright
+   * scrolls the trigger into view before clicking it and the browser dispatches
+   * that scroll a frame AFTER the click — so the list opens, is measured against
+   * a rect that is already stale, and is shut by the scroll that revealed it.
+   * The click then retries against an element that is both moving and about to
+   * detach, which is the "element is not stable" this used to fail on.
+   *
+   * A person scrolls and then clicks. So: scroll first, then open it until it
+   * stays open.
+   */
+  const openList = async (page: import('@playwright/test').Page) => {
+    const box = page.getByRole('combobox', { name: 'Provider' });
+    await box.scrollIntoViewIfNeeded();
+    await expect(async () => {
+      await box.click();
+      await expect(page.getByRole('listbox')).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 20_000 });
+    return box;
+  };
+
+  /**
+   * Open it, then pick.
    *
    * Choosing a provider rebuilds the form below it, so the wait at the end is
    * not politeness: without it the next `choose` clicks an option that is being
-   * replaced underneath it, and the run fails on "element is not stable" every
-   * few goes.
+   * replaced underneath it.
    */
   const choose = async (page: import('@playwright/test').Page, label: string) => {
-    const box = page.getByRole('combobox', { name: 'Provider' });
-    await box.click();
+    const box = await openList(page);
     await page.getByRole('option', { name: label, exact: true }).click();
     await expect(box).toContainText(label);
   };
 
   test('offers every provider the server has an adapter for', async ({ page }) => {
-    const provider = await openZen(page);
+    await openZen(page);
 
     // Fetched, not written into the page — so this failing means the list and
     // the adapters have drifted apart, which is the bug worth catching.
-    await provider.click();
+    await openList(page);
     const names = await page.getByRole('option').allInnerTexts();
     expect(names.map((n) => n.trim())).toEqual([
       'Gemini',

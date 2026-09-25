@@ -28,14 +28,33 @@ type Prefill = {
   sourceProposalId?: string;
 };
 
+/** A won deal this company has not turned into work yet. */
+export type UnfulfilledDeal = {
+  id: string;
+  /** What it says on the card — "v2 · ₹60,000 · Monthly retainer". */
+  label: string;
+  /** The won version's figure, carried into the form when it is chosen. */
+  value: number;
+};
+
 type Props = {
   open: boolean;
   onClose: () => void;
   onCreated: (id: string) => void;
   prefill?: Prefill;
+  /**
+   * The won deals this retainer could be coming from.
+   *
+   * Passed by the caller that knows them — the client's own page. Without this
+   * the form asks nothing, which is how a retainer created from the Work tab
+   * ended up with no link back to the deal that sold it: the proposal kept
+   * offering "Create retainer from this" as though nothing had happened, and
+   * nothing could compare what was quoted with what is running.
+   */
+  deals?: UnfulfilledDeal[];
 };
 
-export function NewRetainerModal({ open, onClose, onCreated, prefill }: Props) {
+export function NewRetainerModal({ open, onClose, onCreated, prefill, deals = [] }: Props) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const team = useTeamMembers();
   const [companyId, setCompanyId] = useState('');
@@ -44,8 +63,16 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill }: Props) {
   const [termMonths, setTermMonths] = useState('');
   const [firstProjectName, setFirstProjectName] = useState('');
   const [ownerId, setOwnerId] = useState('');
+  const [sourceProposalId, setSourceProposalId] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /*
+   * Only asked when there is something to ask about: a deal was won for this
+   * client and no retainer has been built from it. Opened from the proposal
+   * itself the answer is already known, so the question does not appear.
+   */
+  const asksWhichDeal = !prefill?.sourceProposalId && deals.length > 0;
 
   useEffect(() => {
     if (!open) return;
@@ -55,6 +82,7 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill }: Props) {
     setTermMonths('');
     setFirstProjectName('');
     setOwnerId('');
+    setSourceProposalId(prefill?.sourceProposalId ?? '');
     setError(null);
     if (!prefill) {
       void api.companies.list().then((res) => setCompanies(res.companies)).catch(() => {});
@@ -76,7 +104,7 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill }: Props) {
         termMonths: termMonths ? Number(termMonths) : undefined,
         ownerId: ownerId || undefined,
         firstProjectName: firstProjectName.trim() || undefined,
-        sourceProposalId: prefill?.sourceProposalId,
+        sourceProposalId: prefill?.sourceProposalId ?? sourceProposalId ?? undefined,
       });
       const created = (res as { retainer?: { id: string } }).retainer;
       if (created?.id) onCreated(created.id);
@@ -124,6 +152,25 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill }: Props) {
               required
               placeholder="Choose a company…"
               options={companies.map((c) => ({ value: c.id, label: c.name }))}
+            />
+          )}
+          {asksWhichDeal && (
+            <FieldSelect
+              label="From which won deal?"
+              value={sourceProposalId}
+              onChange={(v) => {
+                setSourceProposalId(v);
+                // The value it was sold at, rather than a figure retyped from
+                // memory. Still editable — what was agreed can differ from what
+                // was quoted, and the retainer is the thing being agreed now.
+                const deal = deals.find((d) => d.id === v);
+                if (deal) setMonthlyValue(String(deal.value));
+              }}
+              options={[
+                { value: '', label: 'Not from a proposal' },
+                ...deals.map((d) => ({ value: d.id, label: d.label })),
+              ]}
+              hint="Linking it carries the figure over and ties the work back to the deal that sold it."
             />
           )}
           <Field label="Monthly value (₹)" value={monthlyValue} onChange={setMonthlyValue} type="number" required />

@@ -30,6 +30,37 @@ async function openProposalsTab(page: any, companyId: string) {
   await expect(page.getByRole('button', { name: /Actions for this/ }).first()).toBeVisible({ timeout: 15_000 });
 }
 
+/**
+ * The card of the proposal that was won.
+ *
+ * A company holds several proposals — and since promoting a lead raises a
+ * Prospect deal, the newest one on a client's tab is often a live one. Taking
+ * the first card meant the "won" tests were opening an open proposal and
+ * quietly asserting nothing. The won one is the card that says so.
+ */
+function wonCard(page: any) {
+  return page.locator('div.rounded-card').filter({ hasText: /Won on v/ }).first();
+}
+
+/**
+ * Opens a proposal's action menu, and waits for it to stay open.
+ *
+ * `RowMenu` closes on any scroll, on purpose — it is positioned from the
+ * trigger's own rect and would otherwise drift away from the row it belongs to.
+ * Playwright scrolls the trigger into view before clicking it and the browser
+ * dispatches that scroll a frame AFTER the click, so the menu opens and is
+ * immediately shut by the scroll that revealed it. A person scrolls and then
+ * clicks; only the robot does both at once.
+ */
+async function openRowMenu(page: any, item: string, scope?: any) {
+  const trigger = (scope ?? page).getByRole('button', { name: /Actions for this/ }).first();
+  await trigger.scrollIntoViewIfNeeded();
+  await expect(async () => {
+    await trigger.click();
+    await expect(page.getByRole('menuitem', { name: item })).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
+}
+
 test.describe('editing a proposal', () => {
   test.use({ storageState: stateFor('admin') });
 
@@ -38,8 +69,8 @@ test.describe('editing a proposal', () => {
     await createProbeProposal(api, company.id);
     await openProposalsTab(page, company.id);
 
-    await page.getByRole('button', { name: /Actions for this/ }).first().click();
-    await page.getByText('Edit proposal').click();
+    await openRowMenu(page, 'Edit proposal');
+    await page.getByRole('menuitem', { name: 'Edit proposal' }).click();
 
     const dialog = page.getByText('Edit proposal', { exact: true }).first();
     await expect(dialog).toBeVisible();
@@ -72,8 +103,10 @@ test.describe('editing a proposal', () => {
     test.skip(!wonRow, 'the seed has no won proposal to check against');
 
     await openProposalsTab(page, wonRow.company.id);
-    await page.getByRole('button', { name: /Actions for this/ }).first().click();
-    await page.getByText('Edit proposal').click();
+    const card = wonCard(page);
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    await openRowMenu(page, 'Edit proposal', card);
+    await page.getByRole('menuitem', { name: 'Edit proposal' }).click();
 
     await expect(page.getByText(/Settled when this proposal closed/)).toBeVisible();
   });
@@ -90,8 +123,8 @@ test.describe('deleting a proposal', () => {
     const before = await (await api.get('/api/proposals?limit=500')).json();
     const countBefore = (before.proposals ?? []).length;
 
-    await page.getByRole('button', { name: /Actions for this/ }).first().click();
-    await page.getByText('Delete proposal').click();
+    await openRowMenu(page, 'Delete proposal');
+    await page.getByRole('menuitem', { name: 'Delete proposal' }).click();
 
     // The honest warning for a soft delete is not "this cannot be undone".
     await expect(page.getByText(/It comes off the pipeline board/)).toBeVisible();
@@ -110,11 +143,13 @@ test.describe('deleting a proposal', () => {
     test.skip(!wonRow, 'the seed has no won proposal to check against');
 
     await openProposalsTab(page, wonRow.company.id);
-    await page.getByRole('button', { name: /Actions for this/ }).first().click();
+    const card = wonCard(page);
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    await openRowMenu(page, 'Edit proposal', card);
 
-    await expect(page.getByText('Edit proposal')).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Edit proposal' })).toBeVisible();
     // Not offering it beats offering it and turning the person down.
-    await expect(page.getByText('Delete proposal')).toHaveCount(0);
+    await expect(page.getByRole('menuitem', { name: 'Delete proposal' })).toHaveCount(0);
   });
 
   test('the server refuses a won one even if the request is made directly', async () => {

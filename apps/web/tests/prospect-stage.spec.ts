@@ -106,8 +106,19 @@ test.describe('the Prospect column', () => {
     const api = await apiAs('admin');
     const name = marked('Kind Choice Co');
     const created = await api.post('/api/outreach', {
-      data: { name, vertical: 'Aviation', source: 'LinkedIn', contactPersonName: 'Meera Krishnan' },
+      // A lead needs a way to reach it — the API refuses one with neither a
+      // phone nor an email, and this asked for neither. The refusal then
+      // surfaced here as "the card is not on the board", which is true and
+      // says nothing about why.
+      data: {
+        name,
+        vertical: 'Aviation',
+        source: 'LinkedIn',
+        contactPersonName: 'Meera Krishnan',
+        phone: '9840011224',
+      },
     });
+    expect(created.status(), await created.text()).toBe(201);
     const lead = (await created.json()).entry ?? (await created.json());
     await api.patch(`/api/outreach/${lead.id}/status`, { data: { status: 'INTERESTED' } });
     await api.post(`/api/outreach/${lead.id}/promote`, { data: { city: 'Coimbatore' } });

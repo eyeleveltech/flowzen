@@ -23,6 +23,7 @@ import { Field, FieldSelect } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { PRIORITY_CONFIG } from '@/lib/priority';
 import { personOptions } from '@/lib/people';
+import type { UnfulfilledDeal } from '@/components/clients/NewRetainerModal';
 
 type Prefill = {
   companyId: string;
@@ -36,6 +37,12 @@ type Props = {
   onClose: () => void;
   onCreated: (id: string) => void;
   prefill?: Prefill;
+  /**
+   * The won deals this project could be coming from — see `NewRetainerModal`,
+   * which asks the same question for the same reason: a project created from
+   * the client's Work tab had no link back to the deal that sold it.
+   */
+  deals?: UnfulfilledDeal[];
 };
 
 const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label }));
@@ -52,7 +59,7 @@ type CustomRow = { label: string; percent: string };
 const blankRow = (): CustomRow => ({ label: '', percent: '' });
 
 
-export function NewProjectModal({ open, onClose, onCreated, prefill }: Props) {
+export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [] }: Props) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const team = useTeamMembers();
   const [companyId, setCompanyId] = useState('');
@@ -68,12 +75,17 @@ export function NewProjectModal({ open, onClose, onCreated, prefill }: Props) {
   const [customRows, setCustomRows] = useState<CustomRow[]>([blankRow(), blankRow()]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sourceProposalId, setSourceProposalId] = useState('');
+
+  /* Only where there is a won deal with no project built from it yet. */
+  const asksWhichDeal = !prefill?.sourceProposalId && deals.length > 0;
 
   useEffect(() => {
     if (!open) return;
     setCompanyId(prefill?.companyId ?? '');
     setName('');
     setQuotedValue(prefill?.quotedValue != null ? String(prefill.quotedValue) : '');
+    setSourceProposalId(prefill?.sourceProposalId ?? '');
     setEstimatedCost('');
     setStartDate('');
     setEndDate('');
@@ -135,7 +147,7 @@ export function NewProjectModal({ open, onClose, onCreated, prefill }: Props) {
         priority,
         description: description.trim() || undefined,
         milestones: milestonesForBilling(),
-        sourceProposalId: prefill?.sourceProposalId,
+        sourceProposalId: prefill?.sourceProposalId ?? sourceProposalId ?? undefined,
       });
       const created = (res as { project?: { id: string } }).project;
       if (created?.id) onCreated(created.id);
@@ -174,6 +186,22 @@ export function NewProjectModal({ open, onClose, onCreated, prefill }: Props) {
               required
               placeholder="Choose a company…"
               options={companies.map((c) => ({ value: c.id, label: c.name }))}
+            />
+          )}
+          {asksWhichDeal && (
+            <FieldSelect
+              label="From which won deal?"
+              value={sourceProposalId}
+              onChange={(v) => {
+                setSourceProposalId(v);
+                const deal = deals.find((d) => d.id === v);
+                if (deal) setQuotedValue(String(deal.value));
+              }}
+              options={[
+                { value: '', label: 'Not from a proposal' },
+                ...deals.map((d) => ({ value: d.id, label: d.label })),
+              ]}
+              hint="Linking it carries the quote over and ties the work back to the deal that sold it."
             />
           )}
           <Field label="Project name" value={name} onChange={setName} required />

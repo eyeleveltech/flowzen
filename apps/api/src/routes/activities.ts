@@ -4,7 +4,11 @@ import { prisma } from '../lib/prisma.js';
 import { authenticate, hasPermission, type AuthRequest } from '../middleware/auth.js';
 import { parsePagination } from '../utils/query.js';
 import { TaskWorkType, TaskStatus } from '@prisma/client';
-import type { PermissionKey } from '@flowzen/shared';
+import {
+  ACTIVITY_READ_PERMISSION as READ_PERMISSION,
+  canReadActivityType,
+  stripMoney,
+} from '../utils/activityAccess.js';
 
 /**
  * The audit trail — who did what, and when.
@@ -37,96 +41,6 @@ import type { PermissionKey } from '@flowzen/shared';
 export const activitiesRouter = Router();
 
 activitiesRouter.use(authenticate);
-
-/**
- * The permission each entity's own screen requires.
- *
- * `undefined` means everybody — a Task's history is visible to anyone who can
- * reach the task, and task visibility is already narrowed elsewhere.
- *
- * Anything NOT in this map is refused rather than allowed. A new entity type
- * arriving with no entry should disappear from the feed until somebody decides
- * who may read it, which is the safe direction to fail.
- */
-const READ_PERMISSION: Record<string, PermissionKey | undefined> = {
-  Company: 'company.read',
-  // A cold lead's history is readable by whoever can read the outreach list
-  // itself. Without an entry here the status trail would be written on every
-  // change and then filtered out of the feed for everybody, because anything
-  // absent from this map is refused rather than allowed.
-  OutreachEntry: 'company.read',
-  Proposal: 'pipeline.read',
-  Proforma: 'pipeline.read',
-  Project: 'work.all',
-  MonthCard: 'work.all',
-  Retainer: 'work.all',
-  Task: undefined,
-  Asset: undefined,
-  Invoice: 'money.status',
-  Cost: 'cost.enter',
-  User: 'setup.admin',
-  Organization: 'setup.admin',
-};
-
-const readable = (req: AuthRequest, entityType: string): boolean => {
-  if (!(entityType in READ_PERMISSION)) return false;
-  const needed = READ_PERMISSION[entityType];
-  return needed === undefined || hasPermission(req.user!, needed);
-};
-
-/**
- * Figures, out of a payload, for somebody without `money.figures`.
- *
- * Matched on the KEY rather than on a list of verbs, because the leak was never
- * about a particular verb — it was about `amount` riding along inside whatever
- * happened to be logged. A new activity that puts a rupee value in its payload
- * is covered the day it is written rather than the day somebody notices.
- */
-const MONEY_KEYS = new Set([
-  'amount',
-  'value',
-  'quotedValue',
-  'estimatedCost',
-  'monthlyValue',
-  'monthlyCost',
-  'paymentAmount',
-  'totalPaid',
-  'revenue',
-  'purchasePrice',
-  'disposalValue',
-  'salvageValue',
-  'bookValue',
-  // The closing figure a delivered project stamps (projects.ts, brief §11.3
-  // step 6). A HEAD carries work.all — enough to read a project's history —
-  // and not money.figures, so without these the new profit feature would have
-  // reopened a smaller version of the leak this file exists to close.
-  'profit',
-  'directCost',
-  'peopleCost',
-  'actualCost',
-  'costVariance',
-  'marginPercent',
-  'costVariancePercent',
-  'projectedCost',
-  'projectedProfit',
-]);
-
-const stripMoney = (payload: unknown): unknown => {
-  // Walk INTO arrays rather than handing them back whole. The early return used
-  // to cover `Array.isArray` too, so a figure one level inside a list — the
-  // milestones on a project, the lines on an invoice — went out untouched while
-  // the same key sitting directly on the object was removed. The promise this
-  // function makes is that a new money key is covered the day it is written,
-  // and that was only true for keys that never appeared inside a list.
-  if (Array.isArray(payload)) return payload.map(stripMoney);
-  if (!payload || typeof payload !== 'object') return payload;
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(payload as Record<string, unknown>)) {
-    if (MONEY_KEYS.has(k)) continue;
-    out[k] = v && typeof v === 'object' ? stripMoney(v) : v;
-  }
-  return out;
-};
 
 /**
  * GET /api/activities — one entity's history, or the feed you are allowed.
@@ -163,7 +77,7 @@ activitiesRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunc
     } = { organizationId: orgId };
 
     if (typeof entityType === 'string' && entityType) {
-      if (!readable(req, entityType)) {
+      if (!canReadActivityType(req, entityType)) {
         res.status(403).json({
           success: false,
           error: 'Insufficient permissions',
@@ -176,7 +90,7 @@ activitiesRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunc
     } else {
       // No entity named: answer with the types this person could open anyway,
       // rather than everything in the organisation.
-      const allowed = Object.keys(READ_PERMISSION).filter((t) => readable(req, t));
+      const allowed = Object.keys(READ_PERMISSION).filter((t) => canReadActivityType(req, t));
       if (allowed.length === 0) {
         res.json({ success: true, data: [], activities: [], meta: { page, limit, total: 0, totalPages: 1 } });
         return;
@@ -277,7 +191,7 @@ activitiesRouter.post('/', async (req: AuthRequest, res: Response, next: NextFun
       return;
     }
 
-    if (!readable(req, entityType)) {
+    if (!canReadActivityType(req, entityType)) {
       res.status(403).json({
         success: false,
         error: 'Insufficient permissions',

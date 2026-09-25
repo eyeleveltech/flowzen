@@ -2,7 +2,14 @@ import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, type AuthRequest } from '../middleware/auth.js';
-import { ProposalKind, ProposalStage, ProposalOutcome, CompanyStatus } from '@prisma/client';
+import {
+  ProposalKind,
+  ProposalStage,
+  ProposalOutcome,
+  CompanyStatus,
+  RetainerStatus,
+  ProjectStatus,
+} from '@prisma/client';
 import { parsePagination } from '../utils/query.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
@@ -139,6 +146,76 @@ proposalsRouter.get('/pipeline', requirePermission('pipeline.read'), async (req:
       return p.createdAt;
     };
 
+    /*
+     * Whether a won deal has actually been set up as work.
+     *
+     * Winning marks the deal and makes the company a client; it does NOT create
+     * the retainer or the project — that is a separate decision, with a value,
+     * a start date and an owner. So a deal can sit in Won with nothing running
+     * behind it, and the board had no way to say so. The Won card asks for it
+     * now, which is the only place somebody is looking at the moment they win.
+     */
+    const won = proposals.filter((p) => p.stage === ProposalStage.WON);
+    const wonIds = won.map((p) => p.id);
+    const workByProposal = new Map<string, { type: 'RETAINER' | 'PROJECT'; id: string; linked: boolean }>();
+
+    if (wonIds.length > 0) {
+      const wonCompanyIds = Array.from(new Set(won.map((p) => p.companyId)));
+
+      const [linkedRetainers, linkedProjects, companyRetainers, companyProjects] = await Promise.all([
+        prisma.retainer.findMany({
+          where: { organizationId: orgId, sourceProposalId: { in: wonIds } },
+          select: { id: true, sourceProposalId: true },
+        }),
+        prisma.project.findMany({
+          where: { organizationId: orgId, sourceProposalId: { in: wonIds } },
+          select: { id: true, sourceProposalId: true },
+        }),
+        /*
+         * And the work that exists without saying which deal it came from.
+         *
+         * `sourceProposalId` is only set by the two "create from this proposal"
+         * buttons; the client's Work tab created retainers and projects with no
+         * link at all, and the seed never set one — 0 of 6 retainers and 0 of 8
+         * projects carry it. Without this second look every won card would ask
+         * to set up a retainer that has been running for months, which is a
+         * worse lie than saying nothing.
+         */
+        prisma.retainer.findMany({
+          where: { organizationId: orgId, companyId: { in: wonCompanyIds }, status: RetainerStatus.ACTIVE },
+          select: { id: true, companyId: true },
+        }),
+        prisma.project.findMany({
+          where: { organizationId: orgId, companyId: { in: wonCompanyIds }, status: ProjectStatus.LIVE },
+          select: { id: true, companyId: true },
+        }),
+      ]);
+
+      for (const r of linkedRetainers) if (r.sourceProposalId) workByProposal.set(r.sourceProposalId, { type: 'RETAINER', id: r.id, linked: true });
+      for (const pr of linkedProjects) if (pr.sourceProposalId) workByProposal.set(pr.sourceProposalId, { type: 'PROJECT', id: pr.id, linked: true });
+
+      const retainerByCompany = new Map(companyRetainers.map((r) => [r.companyId, r.id]));
+      const projectByCompany = new Map(companyProjects.map((pr) => [pr.companyId, pr.id]));
+
+      for (const p of won) {
+        if (workByProposal.has(p.id)) continue;
+        const guess =
+          p.kind === ProposalKind.RETAINER
+            ? retainerByCompany.get(p.companyId)
+            : projectByCompany.get(p.companyId);
+        // `linked: false` — this work exists for the client but does not name
+        // this deal as its source, so the board opens it rather than asking for
+        // it, and says nothing it cannot stand behind.
+        if (guess) {
+          workByProposal.set(p.id, {
+            type: p.kind === ProposalKind.RETAINER ? 'RETAINER' : 'PROJECT',
+            id: guess,
+            linked: false,
+          });
+        }
+      }
+    }
+
     for (const p of proposals) {
       const currentVersion = p.versions[0] || null;
       const daysInStage = Math.max(
@@ -166,6 +243,8 @@ proposalsRouter.get('/pipeline', requirePermission('pipeline.read'), async (req:
         probability: proposalProbability(p, org),
         daysInStage,
         proforma: proformasByProposal.get(p.id)?.[0] || null,
+        // Null on a won deal means the work has not been set up yet.
+        work: workByProposal.get(p.id) ?? null,
         updatedAt: p.updatedAt,
       };
 
@@ -468,14 +547,30 @@ proposalsRouter.post('/:id/versions', requirePermission('pipeline.write'), async
      * first proposal jumped them straight to In negotiation, skipping Proposal
      * sent, which is the stage that version actually represents.
      */
+    const stageTo = nextN === 1 ? ProposalStage.PROPOSAL_SENT : ProposalStage.IN_NEGOTIATION;
+
     await prisma.proposal.update({
       where: { id },
       data: {
-        stage: nextN === 1 ? ProposalStage.PROPOSAL_SENT : ProposalStage.IN_NEGOTIATION,
+        stage: stageTo,
         // Only on the first version — see the schema note above.
         ...(parsed.data.kind && nextN === 1 ? { kind: parsed.data.kind } : {}),
       },
     });
+
+    /*
+     * What the trail has to be able to answer.
+     *
+     * "Proposal version added, n: 2, value: 480000" does not say the deal moved
+     * from Proposal sent to In negotiation, and it does not say what the number
+     * was before it was revised — which is the whole question somebody asks a
+     * month later. Both are known right here and were both thrown away.
+     *
+     * `previousValue` is a money key, so it is stripped from the payload for
+     * anybody without `money.figures`, exactly like `value` — see
+     * utils/activityAccess.ts.
+     */
+    const previous = proposal.versions[0];
 
     await prisma.activity.create({
       data: {
@@ -484,7 +579,13 @@ proposalsRouter.post('/:id/versions', requirePermission('pipeline.write'), async
         entityId: id,
         actorId: req.user!.userId,
         verb: 'proposal_version_added',
-        payload: { n: nextN, value: parsed.data.value },
+        payload: {
+          n: nextN,
+          value: parsed.data.value,
+          ...(previous ? { previousValue: Number(previous.value) } : {}),
+          stageFrom: proposal.stage,
+          stageTo,
+        },
       },
     });
 
@@ -549,7 +650,7 @@ proposalsRouter.patch('/:id/stage', requirePermission('pipeline.write'), async (
         entityId: id,
         actorId: req.user!.userId,
         verb: 'verbal_yes',
-        payload: {},
+        payload: { stageFrom: existing.stage, stageTo: ProposalStage.VERBAL_YES },
       },
     });
 
@@ -640,6 +741,23 @@ proposalsRouter.post('/:id/win', requirePermission('pipeline.write'), async (req
       return;
     }
 
+    /*
+     * A deal is settled once. See the note on /lose below — this is the same
+     * hole from the other side: winning an already-won proposal would build a
+     * SECOND retainer or project from it, and winning a lost one would bring a
+     * dead deal back as live work.
+     */
+    if (proposal.outcome) {
+      res.status(400).json({
+        success: false,
+        error:
+          proposal.outcome === ProposalOutcome.WON
+            ? 'This deal is already won.'
+            : 'This deal was marked lost. Quote them again as a new proposal rather than reopening this one.',
+      });
+      return;
+    }
+
     const version = await prisma.proposalVersion.findFirst({
       where: { id: versionId, proposalId: id },
     });
@@ -674,7 +792,13 @@ proposalsRouter.post('/:id/win', requirePermission('pipeline.write'), async (req
           entityId: id,
           actorId: req.user!.userId,
           verb: 'proposal_won',
-          payload: { version: `v${version.n}`, value: version.value, companyName: proposal.company.name },
+          payload: {
+            version: `v${version.n}`,
+            value: version.value,
+            companyName: proposal.company.name,
+            stageFrom: proposal.stage,
+            stageTo: ProposalStage.WON,
+          },
         },
       });
 
@@ -710,7 +834,13 @@ proposalsRouter.post('/:id/lose', requirePermission('pipeline.write'), async (re
     // wrote. POST /:id/win, sixty lines above, has always checked this.
     const existing = await prisma.proposal.findFirst({
       where: { id, organizationId: orgId, deletedAt: null },
-      select: { id: true, stage: true, company: { select: { name: true } } },
+      select: {
+        id: true,
+        stage: true,
+        outcome: true,
+        companyId: true,
+        company: { select: { id: true, name: true, status: true } },
+      },
     });
 
     if (!existing) {
@@ -718,32 +848,137 @@ proposalsRouter.post('/:id/lose', requirePermission('pipeline.write'), async (re
       return;
     }
 
-    const updated = await prisma.proposal.update({
-      where: { id },
-      data: {
-        stage: ProposalStage.LOST,
-        outcome: ProposalOutcome.LOST,
-        lostReason: parsed.data.lostReason.trim(),
-      },
-    });
+    if (existing.outcome === ProposalOutcome.LOST) {
+      res.status(400).json({ success: false, error: 'This deal is already marked lost.' });
+      return;
+    }
 
-    // §16: "Every create, update and status change writes an Activity row. No
-    // exceptions." Winning wrote one and losing did not — so the half of the
-    // win rate that hurts was the half with no trail, and the stage a deal
-    // died at was lost with it, because LOST overwrites `stage`.
-    await prisma.activity.create({
-      data: {
-        organizationId: orgId,
-        entityType: 'Proposal',
-        entityId: id,
-        actorId: req.user!.userId,
-        verb: 'proposal_lost',
-        payload: {
-          companyName: existing.company.name,
-          lostFromStage: existing.stage,
+    /*
+     * ─── Losing a deal that was won ─────────────────────────────────────────
+     *
+     * Nothing checked this, and the board offered the move: dragging a card
+     * from Won to Lost was accepted, the outcome flipped — and NOTHING ELSE
+     * moved. `wonAt` and `wonVersionId` stayed, the retainer or project the win
+     * created stayed live, and the company stayed a CLIENT, which is what
+     * somebody noticed. The deal then counted on both sides of the win rate.
+     *
+     * Winning is not a label on a proposal; it is what BUILT the work. So the
+     * question is not "was this won" but "is anything still running because of
+     * it":
+     *
+     *   nothing live   → allowed. A win pressed by mistake, or a client whose
+     *                    retainer has already been stopped, and the record
+     *                    should say what actually happened.
+     *   something live → refused, naming what has to be dealt with first.
+     *                    Stopping a retainer closes its months and cancelling a
+     *                    project settles its cost — real decisions with their
+     *                    own screens, not something a drag does silently.
+     */
+    const wasWon = existing.outcome === ProposalOutcome.WON;
+
+    if (wasWon) {
+      const [liveRetainers, liveProjects] = await Promise.all([
+        prisma.retainer.findMany({
+          where: { organizationId: orgId, sourceProposalId: id, status: RetainerStatus.ACTIVE },
+          select: { id: true },
+        }),
+        prisma.project.findMany({
+          where: { organizationId: orgId, sourceProposalId: id, status: ProjectStatus.LIVE },
+          select: { id: true, name: true },
+        }),
+      ]);
+
+      if (liveRetainers.length > 0 || liveProjects.length > 0) {
+        const todo = [
+          liveRetainers.length > 0 ? 'stop the retainer' : null,
+          liveProjects.length > 0
+            ? `cancel ${liveProjects.length === 1 ? `“${liveProjects[0].name}”` : `${liveProjects.length} live projects`}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' and ');
+
+        res.status(400).json({
+          success: false,
+          error: `This deal was won and the work it created is still running — ${todo} first. Losing it now would leave the work live and ${existing.company.name} a client.`,
+        });
+        return;
+      }
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const proposal = await tx.proposal.update({
+        where: { id },
+        data: {
+          stage: ProposalStage.LOST,
+          outcome: ProposalOutcome.LOST,
           lostReason: parsed.data.lostReason.trim(),
+          // The record cannot claim both. A proposal saying it was won on v2
+          // AND lost is the state that made this findable in the first place.
+          ...(wasWon ? { wonVersionId: null, wonAt: null } : {}),
         },
-      },
+      });
+
+      /*
+       * And what the company is now.
+       *
+       * Winning is the only thing that makes a client, and nothing ever took it
+       * back — so a company whose only won deal had just been marked lost
+       * stayed a CLIENT for ever. It is derived here from what is actually
+       * live:
+       *
+       *   still has live work, or another won deal → CLIENT, unchanged
+       *   had work, and none of it is running now  → PAST — they were a client
+       *   never had any work at all                → PROSPECT — the win was a
+       *                                              mis-click, and they are
+       *                                              back where they were
+       */
+      let companyStatusTo: CompanyStatus | null = null;
+
+      if (wasWon) {
+        const [activeRetainers, liveProjects, otherWins, everRetainers, everProjects] = await Promise.all([
+          tx.retainer.count({ where: { companyId: existing.companyId, status: RetainerStatus.ACTIVE } }),
+          tx.project.count({ where: { companyId: existing.companyId, status: ProjectStatus.LIVE } }),
+          tx.proposal.count({
+            where: { companyId: existing.companyId, outcome: ProposalOutcome.WON, deletedAt: null, NOT: { id } },
+          }),
+          tx.retainer.count({ where: { companyId: existing.companyId } }),
+          tx.project.count({ where: { companyId: existing.companyId } }),
+        ]);
+
+        if (activeRetainers === 0 && liveProjects === 0 && otherWins === 0) {
+          companyStatusTo = everRetainers + everProjects > 0 ? CompanyStatus.PAST : CompanyStatus.PROSPECT;
+          await tx.company.update({
+            where: { id: existing.companyId },
+            data: { status: companyStatusTo },
+          });
+        }
+      }
+
+      await tx.activity.create({
+        data: {
+          organizationId: orgId,
+          entityType: 'Proposal',
+          entityId: id,
+          actorId: req.user!.userId,
+          verb: 'proposal_lost',
+          payload: {
+            companyName: existing.company.name,
+            // The stage it died at. Named before `stageFrom` existed, kept
+            // because rows already carry it and a test asserts it; the feed
+            // reads either.
+            lostFromStage: existing.stage,
+            stageTo: ProposalOutcome.LOST,
+            lostReason: parsed.data.lostReason.trim(),
+            ...(wasWon ? { reversedAWin: true } : {}),
+            ...(companyStatusTo
+              ? { companyStatusFrom: existing.company.status, companyStatusTo }
+              : {}),
+          },
+        },
+      });
+
+      return proposal;
     });
 
     res.json({ success: true, proposal: updated });

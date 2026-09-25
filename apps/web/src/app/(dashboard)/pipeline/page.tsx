@@ -28,6 +28,8 @@ import { StatTile, StatRow } from "@/components/ui/stat-tile";
 import { STAGE_LABEL, STAGE_ORDER } from "@flowzen/shared";
 import { NewProposalModal } from "@/components/clients/NewProposalModal";
 import { LoseProposalModal } from "@/components/clients/LoseProposalModal";
+import { NewRetainerModal } from "@/components/clients/NewRetainerModal";
+import { NewProjectModal } from "@/components/clients/NewProjectModal";
 
 /*
  * The board starts where a number does.
@@ -69,6 +71,16 @@ interface PipelineCard {
   currentVersionId: string | null;
   currentVersionNumber: number;
   probability: number;
+  /**
+   * The retainer or project built from this deal, once it exists.
+   *
+   * Winning marks the deal and makes the company a client; it does not create
+   * the work. Null on a won card means nobody has set it up yet — which is the
+   * thing the board could not say, so a deal could be won on Friday and have
+   * nothing running behind it on Monday with nothing anywhere pointing that
+   * out.
+   */
+  work?: { type: "RETAINER" | "PROJECT"; id: string; linked: boolean } | null;
 }
 
 /**
@@ -97,6 +109,22 @@ function getDropAction(fromStage: string, toStage: string): DropAction {
    *
    * Nothing comes back from Lost: quoting them again is a new proposal.
    */
+  /*
+   * Out of Won, there is one move: to Lost, and only when nothing is running.
+   *
+   * Dragging Won → Lost used to flip the outcome and move nothing else — the
+   * retainer or project the win created stayed live and the company stayed a
+   * client, while the deal counted on both sides of the win rate. The server
+   * decides now: it allows the correction when the work has already been
+   * stopped or cancelled (or was never created), and refuses with the name of
+   * what has to be dealt with first. Forward from Won means nothing at all.
+   */
+  if (fromStage === "WON" && toStage !== "LOST") {
+    return {
+      type: "INVALID",
+      reason: "A won deal has nowhere else to go. Its work lives on the client's page now.",
+    };
+  }
   if (toStage === "LOST") return { type: "LOSE" };
   if (fromStage === "LOST") {
     return {
@@ -262,6 +290,16 @@ export default function PipelinePage() {
     return null;
   };
 
+  /*
+   * Setting the work up, straight after the win.
+   *
+   * The moment somebody wins a deal is the moment they know what was agreed —
+   * the value, when it starts, who runs it. Leaving the board and finding the
+   * client's page later is where that gets lost, and a won deal with no
+   * retainer behind it is invisible everywhere except the client's own screen.
+   */
+  const [settingUpWork, setSettingUpWork] = useState<PipelineCard | null>(null);
+
   const handleMarkWon = async (card: PipelineCard) => {
     if (!card.currentVersionId) {
       toast.error("This proposal has no version to win against.");
@@ -278,6 +316,9 @@ export default function PipelinePage() {
       await api.proposals.win(card.id, card.currentVersionId);
       toast.success("Proposal won");
       await load();
+      // Asked here rather than assumed: the deal is won either way, and the
+      // card keeps asking if this is dismissed.
+      setSettingUpWork(card);
     } catch (err) {
       toast.error(
         err instanceof ApiError
@@ -573,17 +614,60 @@ export default function PipelinePage() {
                                   {card.daysInStage}d
                                 </span>
                               </div>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setOverridingCard(card);
-                                }}
-                                className="text-micro font-semibold text-secondary hover:text-primary hover:underline"
-                                title="Override win probability for this deal"
-                              >
-                                {card.probability}% likely
-                              </button>
+                              {card.stage === "WON" ? (
+                                /*
+                                  What is still missing.
+
+                                  Winning does not create the retainer or the
+                                  project — that is a separate decision, with a
+                                  start date and an owner. A won card with
+                                  nothing behind it used to look exactly like one
+                                  with a retainer running, so work that was sold
+                                  and never set up was invisible until somebody
+                                  opened the client.
+                                */
+                                card.work ? (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      router.push(
+                                        card.work!.type === "RETAINER"
+                                          ? `/retainers/${card.work!.id}`
+                                          : `/projects/${card.work!.id}`,
+                                      );
+                                    }}
+                                    className="text-micro font-semibold text-secondary hover:text-primary hover:underline"
+                                  >
+                                    {card.work.type === "RETAINER" ? "Open retainer" : "Open project"}
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSettingUpWork(card);
+                                    }}
+                                    className="text-micro font-semibold text-warning-ink hover:underline"
+                                  >
+                                    {card.kind === "RETAINER"
+                                      ? "Set up the retainer →"
+                                      : "Create the project →"}
+                                  </button>
+                                )
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOverridingCard(card);
+                                  }}
+                                  className="text-micro font-semibold text-secondary hover:text-primary hover:underline"
+                                  title="Override win probability for this deal"
+                                >
+                                  {card.probability}% likely
+                                </button>
+                              )}
                             </div>
                           )}
                         </Draggable>
@@ -707,6 +791,54 @@ export default function PipelinePage() {
           }}
         />
       )}
+
+      {/*
+        Setting the work up.
+
+        The same two forms the client's page uses, opened with the deal already
+        chosen — so the value carries over and the retainer or project is tied
+        back to what sold it. Which form depends on what was quoted: a monthly
+        retainer or a one-off project.
+      */}
+      <NewRetainerModal
+        open={Boolean(settingUpWork) && settingUpWork?.kind === "RETAINER"}
+        onClose={() => setSettingUpWork(null)}
+        prefill={
+          settingUpWork
+            ? {
+                companyId: settingUpWork.companyId,
+                companyName: settingUpWork.companyName,
+                monthlyValue: settingUpWork.quotedValue,
+                sourceProposalId: settingUpWork.id,
+              }
+            : undefined
+        }
+        onCreated={(id) => {
+          setSettingUpWork(null);
+          toast.success("Retainer created");
+          router.push(`/retainers/${id}`);
+        }}
+      />
+
+      <NewProjectModal
+        open={Boolean(settingUpWork) && settingUpWork?.kind === "PROJECT"}
+        onClose={() => setSettingUpWork(null)}
+        prefill={
+          settingUpWork
+            ? {
+                companyId: settingUpWork.companyId,
+                companyName: settingUpWork.companyName,
+                quotedValue: settingUpWork.quotedValue,
+                sourceProposalId: settingUpWork.id,
+              }
+            : undefined
+        }
+        onCreated={(id) => {
+          setSettingUpWork(null);
+          toast.success("Project created");
+          router.push(`/projects/${id}`);
+        }}
+      />
 
       {addingVersionFor && (
         <AddVersionModal

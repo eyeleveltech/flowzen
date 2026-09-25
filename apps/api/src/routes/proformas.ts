@@ -349,7 +349,14 @@ proformasRouter.post('/', requirePermission('pipeline.write'), async (req: AuthR
         });
 
         // If source is a proposal, auto update proposal stage to PROFORMA_ISSUED
+        let stageFrom: string | null = null;
         if (sourceType === ProformaSourceType.PROPOSAL) {
+          // Read before the write: issuing the proforma is what moved the deal,
+          // and the trail should say where it moved FROM. Nothing recorded that,
+          // so the one stage change nobody performs by hand was also the one
+          // with no history.
+          const source = await tx.proposal.findUnique({ where: { id: sourceId }, select: { stage: true } });
+          stageFrom = source?.stage ?? null;
           await tx.proposal.update({
             where: { id: sourceId },
             data: { stage: 'PROFORMA_ISSUED' },
@@ -373,7 +380,13 @@ proformasRouter.post('/', requirePermission('pipeline.write'), async (req: AuthR
             entityId: created.id,
             actorId: req.user!.userId,
             verb: 'proforma_generated',
-            payload: { number: nextNumber, amount: snapshot.subtotal, total: snapshot.total, billingName },
+            payload: {
+              number: nextNumber,
+              amount: snapshot.subtotal,
+              total: snapshot.total,
+              billingName,
+              ...(stageFrom ? { stageFrom, stageTo: 'PROFORMA_ISSUED' } : {}),
+            },
           },
         });
 

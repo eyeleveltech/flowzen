@@ -1,6 +1,7 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { canReadActivityType, stripMoney } from '../utils/activityAccess.js';
 import { emitToOrganization } from '../sse.js';
 import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
 import { CompanyStatus, PersonRole, TaskWorkType, TaskStatus } from '@prisma/client';
@@ -301,13 +302,67 @@ companiesRouter.get('/:id', requirePermission('company.read'), async (req: AuthR
       return;
     }
 
-    // Fetch activity audit log
-    const activities = await prisma.activity.findMany({
-      where: { organizationId: orgId, entityId: id },
+    /*
+     * The company's history — including what happened to its records.
+     *
+     * This asked for rows whose `entityId` is the company, and nothing else
+     * logs against a company. Winning a deal, adding a version, marking one
+     * lost, starting a retainer, raising an invoice: every one of those is
+     * written against the proposal, retainer or invoice it happened to, so the
+     * Activity tab on a client showed "created" and a rename, while four real
+     * events sat in the table invisible. Carlton Wellness: 1 row shown, 4
+     * hidden.
+     *
+     * Each type is included only for somebody allowed to read that type's
+     * history elsewhere — the same map `/activities` enforces — so this does
+     * not become the back way into the pipeline for an accounts desk that
+     * cannot open the board.
+     */
+    const companyProposals = await prisma.proposal.findMany({
+      // Deleted ones too: "X deleted the proposal" is exactly the kind of thing
+      // an audit trail exists for, and the include above drops them.
+      where: { organizationId: orgId, companyId: id },
+      select: { id: true },
+    });
+
+    const scopes: { type: string; ids: string[] }[] = [
+      { type: 'Proposal', ids: companyProposals.map((x) => x.id) },
+      { type: 'Proforma', ids: company.proformas.map((x) => x.id) },
+      { type: 'Project', ids: company.projects.map((x) => x.id) },
+      { type: 'Retainer', ids: company.retainers.map((x) => x.id) },
+      { type: 'MonthCard', ids: company.retainers.flatMap((r) => r.monthCards.map((m) => m.id)) },
+      { type: 'Invoice', ids: company.invoices.map((x) => x.id) },
+    ];
+
+    const rows = await prisma.activity.findMany({
+      where: {
+        organizationId: orgId,
+        OR: [
+          { entityId: id },
+          ...scopes
+            .filter((s) => s.ids.length > 0 && canReadActivityType(req, s.type))
+            .map((s) => ({ entityType: s.type, entityId: { in: s.ids } })),
+        ],
+      },
       orderBy: { at: 'desc' },
-      take: 25,
+      // Higher than the old 25 because the trail now spans the whole client
+      // rather than the company row alone.
+      take: 60,
       include: { actor: { select: { id: true, name: true } } },
     });
+
+    /*
+     * And the figures come out for anybody without `money.figures`.
+     *
+     * The old query returned payloads untouched to anyone holding
+     * `company.read` — which BD holds — and a won proposal's payload carries
+     * its value. `/activities` has stripped these since it was written; this
+     * endpoint never did, and now that it returns invoice and proposal history
+     * it would be the wider hole of the two.
+     */
+    const activities = canSeeFinancials
+      ? rows
+      : rows.map((a) => ({ ...a, payload: stripMoney(a.payload) }));
 
     // Strip sensitive financials if user lacks money.figures. This used to
     // stop at invoices/payments — retainer.monthlyValue, project.quotedValue/

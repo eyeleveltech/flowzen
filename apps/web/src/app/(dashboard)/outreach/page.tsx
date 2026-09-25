@@ -517,8 +517,14 @@ export default function OutreachPage() {
       {/* Page header */}
       <div className="flex flex-wrap items-center justify-end gap-2 mb-8">
           <ExportCsvButton href={fileUrl('/outreach?format=csv')} />
+          {/*
+            "New lead", not "New name". A name is what you have before you know
+            whether there is anything there; every other screen calls the thing
+            on this list a lead, and the button is where somebody learns what
+            they are about to create.
+          */}
           <Button variant="primary" size="sm" icon={UserPlus} onClick={() => setAddOpen(true)}>
-            New name
+            New lead
           </Button>
       </div>
 
