@@ -7,11 +7,9 @@ import { ErrorNote } from '@/components/ui/empty-state';
 import { plural } from '@/lib/utils';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { api, apiGet, formatMoney, fileUrl } from '@/lib/api-v2';
-import { ExportCsvButton } from '@/components/ui/export-csv-button';
+import { api, apiGet, formatMoney } from '@/lib/api-v2';
 import { usePageHeader } from '@/hooks/usePageHeader';
 import { NewInternalProjectModal } from '@/components/work/NewInternalProjectModal';
-import { NewRetainerModal } from '@/components/clients/NewRetainerModal';
 import { getPriorityBadge, getPriorityLabel } from '@/lib/priority';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
@@ -127,7 +125,6 @@ export default function LiveWorkPage() {
   // Live is how you still find those.
   const [projectStatusFilter, setProjectStatusFilter] = useState('LIVE');
   const [creatingProject, setCreatingProject] = useState(false);
-  const [creatingRetainer, setCreatingRetainer] = useState(false);
   /** The At Risk tile names its rows rather than only counting them. */
   const [showAtRisk, setShowAtRisk] = useState(false);
 
@@ -293,24 +290,15 @@ export default function LiveWorkPage() {
           <ErrorNote onDismiss={() => queryClient.resetQueries({ queryKey: qk.liveWork })}>{loadError}</ErrorNote>
         </div>
       )}
-      {/* Header */}
+      {/*
+        Header.
+
+        Down to one button. The two CSV exports and New retainer have gone: a
+        retainer is started from the client it belongs to, which is where the
+        won proposal behind it lives, and this screen is for reading what is
+        running rather than for starting it.
+      */}
       <div className="flex flex-wrap items-center justify-end gap-2 mb-8">
-        <ExportCsvButton href={fileUrl('/retainers?format=csv')} label="Export retainers CSV" />
-        <ExportCsvButton href={fileUrl('/projects?format=csv')} label="Export projects CSV" />
-        {/*
-          Both halves of the business, not one. This screen could start a
-          project and not a retainer: the only way to open one was to find a
-          won proposal on a company record, so "we agreed a retainer" had no
-          route from the screen that lists them.
-        */}
-        {canCreateProject && (
-          <button
-            className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-4 text-sm font-semibold text-body transition-colors hover:bg-subtle"
-            onClick={() => setCreatingRetainer(true)}
-          >
-            <span className="text-base leading-none">+</span> New retainer
-          </button>
-        )}
         {/*
           An INTERNAL project, and only that.
 
@@ -658,20 +646,6 @@ export default function LiveWorkPage() {
         }}
       />
 
-      {/*
-        No prefill: opened from here it asks which client, the way the form
-        already handles being opened without a won proposal behind it. The
-        server still refuses a company that has bought nothing — a prospect is
-        not a client — and says so in a sentence.
-      */}
-      <NewRetainerModal
-        open={creatingRetainer}
-        onClose={() => setCreatingRetainer(false)}
-        onCreated={(id) => {
-          setCreatingRetainer(false);
-          router.push(`/retainers/${id}`);
-        }}
-      />
     </div>
   );
 }
