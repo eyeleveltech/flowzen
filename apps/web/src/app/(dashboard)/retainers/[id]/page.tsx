@@ -950,8 +950,8 @@ export default function RetainerMonthCardPage() {
                   <table className="w-full text-sm data-table">
                     <thead>
                       <tr className="border-b border-border">
-                        <th className="eyebrow text-left">Category</th>
-                        <th className="eyebrow text-left">Vendor</th>
+                        <th className="eyebrow text-left">Paid towards</th>
+                        <th className="eyebrow text-left">Paid to</th>
                         <th className="eyebrow text-left">Entered by</th>
                         <th className="eyebrow text-left">Date</th>
                         <th className="eyebrow text-right">Amount</th>

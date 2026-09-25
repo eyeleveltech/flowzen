@@ -541,7 +541,7 @@ export default function MoneyPage() {
                 <th className="eyebrow text-left">What</th>
                 <th className="eyebrow text-left">Kind</th>
                 <th className="eyebrow text-left">Against</th>
-                <th className="eyebrow text-left">Vendor</th>
+                <th className="eyebrow text-left">Paid to</th>
                 <th className="eyebrow text-left">Paid by</th>
                 <th className="eyebrow text-right">Amount</th>
                 <th className=""></th>
@@ -801,8 +801,8 @@ export default function MoneyPage() {
             <table className="w-full data-table">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="eyebrow text-left">Category</th>
-                  <th className="eyebrow text-left">Vendor</th>
+                  <th className="eyebrow text-left">Paid towards</th>
+                  <th className="eyebrow text-left">Paid to</th>
                   <th className="eyebrow text-left">Paid by</th>
                   <th className="eyebrow text-right">Amount</th>
                 </tr>
@@ -833,8 +833,8 @@ export default function MoneyPage() {
             <table className="w-full data-table">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="eyebrow text-left">Category</th>
-                  <th className="eyebrow text-left">Vendor</th>
+                  <th className="eyebrow text-left">Paid towards</th>
+                  <th className="eyebrow text-left">Paid to</th>
                   <th className="eyebrow text-left">Paid by</th>
                   <th className="eyebrow text-right">Amount</th>
                 </tr>

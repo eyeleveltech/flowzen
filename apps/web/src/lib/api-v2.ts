@@ -1185,6 +1185,33 @@ export const api = {
     list: (params: Record<string, string> = {}) =>
       get<{ success: boolean; companies: Company[]; meta: unknown }>(`/companies?${new URLSearchParams(params)}`),
     get: (id: string) => get<Record<string, unknown>>(`/companies/${id}`),
+    /** What is on a company — read before offering to remove it, so the dialog can say what each way out costs. */
+    holdings: (id: string) =>
+      get<{
+        success: boolean;
+        company: { id: string; name: string; status: string };
+        holdings: {
+          people: number;
+          proposals: number;
+          quoted: number;
+          proformas: number;
+          retainers: number;
+          projects: number;
+          invoices: number;
+          paidInvoices: number;
+          tasks: number;
+          costs: number;
+        };
+      }>(`/companies/${id}/holdings`),
+    /**
+     * Destroy a company and everything on it. `setup.admin`, and the name has to
+     * be typed — checked on the server, so this is a gate rather than a prompt.
+     */
+    deletePermanently: (id: string, confirmName: string) =>
+      post<{ success: boolean; deleted: { name: string } & Record<string, number> }>(
+        `/companies/${id}/delete-permanently`,
+        { confirmName },
+      ),
     /** Ask before creating, so the warning arrives while somebody is still typing. */
     checkDuplicate: (body: { name: string; email?: string; phone?: string }) =>
       post<DuplicateVerdict>('/companies/check-duplicate', body),

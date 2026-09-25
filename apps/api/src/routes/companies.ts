@@ -1261,6 +1261,233 @@ companiesRouter.patch('/:id', requirePermission('company.write'), async (req: Au
  * of the active list. The message says so rather than leaving the person to
  * guess.
  */
+/**
+ * Everything this company holds, counted.
+ *
+ * The same numbers the remove dialog shows and the permanent delete reports
+ * afterwards, read once so the two cannot disagree about what was there.
+ */
+async function companyHoldings(orgId: string, id: string) {
+  const [people, proposals, quoted, proformas, retainers, projects, invoices, paidInvoices, tasks, costs] =
+    await Promise.all([
+      prisma.person.count({ where: { companyId: id } }),
+      prisma.proposal.count({ where: { companyId: id } }),
+      // A proposal that has been quoted. The empty Prospect placeholder does
+      // not count as work on the company.
+      prisma.proposal.count({ where: { companyId: id, deletedAt: null, versions: { some: {} } } }),
+      prisma.proforma.count({ where: { companyId: id } }),
+      prisma.retainer.count({ where: { companyId: id } }),
+      prisma.project.count({ where: { companyId: id } }),
+      prisma.invoice.count({ where: { companyId: id } }),
+      prisma.invoice.count({ where: { companyId: id, payments: { some: {} } } }),
+      prisma.task.count({
+        where: {
+          organizationId: orgId,
+          OR: [{ project: { companyId: id } }, { monthCard: { retainer: { companyId: id } } }],
+        },
+      }),
+      prisma.cost.count({
+        where: {
+          organizationId: orgId,
+          OR: [{ project: { companyId: id } }, { monthCard: { retainer: { companyId: id } } }],
+        },
+      }),
+    ]);
+
+  return { people, proposals, quoted, proformas, retainers, projects, invoices, paidInvoices, tasks, costs };
+}
+
+// ── What a company holds, before deciding what to do with it ────────────────
+//
+// The remove dialog offers two ways out and they are not the same size, so it
+// has to be able to say which one it is talking about: "a past client, keeping
+// 3 proposals, a retainer with 6 months and 14 tasks" reads differently from
+// the same sentence under "delete for ever".
+
+companiesRouter.get('/:id/holdings', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+
+    const company = await prisma.company.findFirst({
+      where: { id, organizationId: orgId },
+      select: { id: true, name: true, status: true },
+    });
+    if (!company) {
+      res.status(404).json({ success: false, error: 'Company not found' });
+      return;
+    }
+
+    res.json({ success: true, company, holdings: await companyHoldings(orgId, id) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── Deleting a company for good ─────────────────────────────────────────────
+//
+// §16 says nothing is hard deleted by a user, and this is the deliberate
+// exception: a company entered twice, or typed in by mistake, is not history
+// worth keeping and archiving it leaves it in every picker for ever. So it is
+// allowed, and made as hard to do by accident as it deserves:
+//
+//   * `setup.admin` -- removing a company is a different decision from working
+//     with one, and `company.write` is held by every BD.
+//   * the exact name, typed, checked HERE rather than only in the dialog: the
+//     browser is not the gate.
+//   * refused outright when an invoice has a payment against it. Money that
+//     came in is a statutory record; the rest of this can be re-entered and
+//     that cannot. Marking them a past client keeps all of it.
+//
+// What survives is one activity row on the organisation, because the fact that
+// somebody deleted a company is exactly the kind of thing an audit trail is
+// for -- and it cannot live on the company, which is gone.
+
+companiesRouter.post('/:id/delete-permanently', requirePermission('setup.admin'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+    const confirmName = typeof req.body?.confirmName === 'string' ? req.body.confirmName.trim() : '';
+
+    const company = await prisma.company.findFirst({
+      where: { id, organizationId: orgId },
+      select: { id: true, name: true, status: true },
+    });
+    if (!company) {
+      res.status(404).json({ success: false, error: 'Company not found' });
+      return;
+    }
+
+    if (confirmName !== company.name) {
+      res.status(400).json({
+        success: false,
+        error: `Type the company's name exactly -- "${company.name}" -- to delete it and everything on it.`,
+        code: 'NAME_MISMATCH',
+      });
+      return;
+    }
+
+    const holdings = await companyHoldings(orgId, id);
+
+    if (holdings.paidInvoices > 0) {
+      res.status(400).json({
+        success: false,
+        error:
+          `${company.name} has ${holdings.paidInvoices} invoice${holdings.paidInvoices === 1 ? '' : 's'} with a payment recorded against ` +
+          `${holdings.paidInvoices === 1 ? 'it' : 'them'}. Money that came in is a record this app does not destroy -- ` +
+          `mark them a past client instead, which keeps all of it and takes them out of the active lists.`,
+        code: 'HAS_PAYMENTS',
+      });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const [projects, retainers, proposals, proformas, invoices, people] = await Promise.all([
+        tx.project.findMany({ where: { companyId: id }, select: { id: true } }),
+        tx.retainer.findMany({ where: { companyId: id }, select: { id: true } }),
+        tx.proposal.findMany({ where: { companyId: id }, select: { id: true } }),
+        tx.proforma.findMany({ where: { companyId: id }, select: { id: true } }),
+        tx.invoice.findMany({ where: { companyId: id }, select: { id: true } }),
+        tx.person.findMany({ where: { companyId: id }, select: { id: true } }),
+      ]);
+
+      const projectIds = projects.map((x) => x.id);
+      const retainerIds = retainers.map((x) => x.id);
+      const monthCards = await tx.monthCard.findMany({
+        where: { retainerId: { in: retainerIds } },
+        select: { id: true },
+      });
+      const retainerProjects = await tx.retainerProject.findMany({
+        where: { retainerId: { in: retainerIds } },
+        select: { id: true },
+      });
+      const monthCardIds = monthCards.map((x) => x.id);
+      const retainerProjectIds = retainerProjects.map((x) => x.id);
+
+      /*
+       * Tasks first, by hand, before anything cascades.
+       *
+       * `retainer_projects` has a BEFORE DELETE trigger that refuses to remove
+       * the default project while it still holds work -- which is right when
+       * somebody deletes one project, and fatal here, because a cascade gives
+       * no order: the projects can go before the tasks hanging off them and the
+       * whole delete fails with an error nobody can read. Costs and allocations
+       * follow for the same reason -- their links are SET NULL, so left alone
+       * they would survive as rows pointing at nothing.
+       */
+      await tx.peopleAllocation.deleteMany({
+        where: { OR: [{ projectId: { in: projectIds } }, { monthCardId: { in: monthCardIds } }] },
+      });
+      await tx.task.deleteMany({
+        where: {
+          OR: [
+            { projectId: { in: projectIds } },
+            { monthCardId: { in: monthCardIds } },
+            { retainerProjectId: { in: retainerProjectIds } },
+          ],
+        },
+      });
+      await tx.cost.deleteMany({
+        where: { OR: [{ projectId: { in: projectIds } }, { monthCardId: { in: monthCardIds } }] },
+      });
+
+      // The trail of everything that is about to stop existing.
+      await tx.activity.deleteMany({
+        where: {
+          organizationId: orgId,
+          entityId: {
+            in: [
+              id,
+              ...projectIds,
+              ...retainerIds,
+              ...monthCardIds,
+              ...retainerProjectIds,
+              ...proposals.map((x) => x.id),
+              ...proformas.map((x) => x.id),
+              ...invoices.map((x) => x.id),
+              ...people.map((x) => x.id),
+            ],
+          },
+        },
+      });
+      await tx.alert.deleteMany({
+        where: {
+          organizationId: orgId,
+          entityId: { in: [id, ...projectIds, ...retainerIds, ...monthCardIds, ...invoices.map((x) => x.id)] },
+        },
+      });
+
+      // And the company, which cascades the rest: contacts, proposals and their
+      // versions, proformas and their lines, retainers with their months and
+      // projects, projects with their milestones, invoices with their lines.
+      await tx.company.delete({ where: { id } });
+
+      /*
+       * One row, on the organisation.
+       *
+       * Written last and deliberately not against the company: the company no
+       * longer exists, and a row pointing at a dead id is unreadable. Who did
+       * it, what it was called and what went with it are the three things
+       * somebody will want to know.
+       */
+      await tx.activity.create({
+        data: {
+          organizationId: orgId,
+          entityType: 'Organization',
+          entityId: orgId,
+          actorId: req.user!.userId,
+          verb: 'company_deleted_permanently',
+          payload: { name: company.name, status: company.status, ...holdings },
+        },
+      });
+    });
+
+    res.json({ success: true, deleted: { name: company.name, ...holdings } });
+  } catch (error) {
+    next(error);
+  }
+});
+
 companiesRouter.delete('/:id', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;

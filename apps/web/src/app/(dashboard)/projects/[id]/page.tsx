@@ -42,6 +42,7 @@ import { TASK_FILTER_OPTIONS, matchesStatusFilter, isTaskLate } from '@/componen
 import { NewProformaModal } from '@/components/clients/NewProformaModal';
 import { NewWorkTaskModal } from '@/components/work/NewWorkTaskModal';
 import { NewWorkCostModal } from '@/components/work/NewWorkCostModal';
+import { EditCostModal } from '@/components/work/EditCostModal';
 import { PRIORITY_CONFIG, getPriorityDot, getPriorityBadge, getPriorityLabel } from '@/lib/priority';
 import { personOptions } from '@/lib/people';
 
@@ -194,6 +195,15 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [editing, setEditing] = useState(false);
   const [addingTask, setAddingTask] = useState(false);
   const [addingCost, setAddingCost] = useState(false);
+  /*
+   * A cost can be corrected here, the way it already can on a retainer month.
+   *
+   * The row offered Delete and nothing else, so a typo in the amount or the
+   * wrong heading meant deleting the row and entering it again — which loses
+   * who entered it and when, the two things that make a figure explainable
+   * later. The modal is the same one the retainer uses.
+   */
+  const [editingCost, setEditingCost] = useState<any>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   /** Today, for the late comparison in the task table. */
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -904,15 +914,15 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           <CardBody className="p-0!">
             {project.costs.length === 0 ? (
               <div className="p-6">
-                <EmptyState title="Nothing spent yet" hint="Vendor bills and expenses entered against this project show up here." />
+                <EmptyState title="Nothing spent yet" hint="Bills and expenses entered against this project show up here." />
               </div>
             ) : (
               <div className="overflow-x-auto">
               <table className="w-full text-sm data-table">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="eyebrow text-left">Category</th>
-                    <th className="eyebrow text-left">Vendor</th>
+                    <th className="eyebrow text-left">Paid towards</th>
+                    <th className="eyebrow text-left">Paid to</th>
                     <th className="eyebrow text-left">Entered by</th>
                     <th className="eyebrow text-left">Date</th>
                     <th className="eyebrow text-right">Amount</th>
@@ -928,12 +938,20 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                       <td className="text-secondary">{date(c.incurredAt)}</td>
                       <td className="text-right">{money(c.amount)}</td>
                       {canEnterCost && (
-                        <td className="text-right">
+                        <td className="text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => setEditingCost(c)}
+                            className="rounded-lg border border-border px-2.5 py-1 text-micro font-medium text-body transition-colors hover:bg-subtle"
+                          >
+                            Edit
+                          </button>
                           <button
                             onClick={() => void removeCost(c)}
                             disabled={busyId === c.id}
+                            aria-label={`Remove the ${c.vendor} cost`}
                             title="Delete cost"
-                            className="rounded-lg p-1.5 text-secondary hover:bg-danger-tint hover:text-danger transition-colors"
+                            className="ml-1.5 rounded-lg p-1.5 text-secondary hover:bg-danger-tint hover:text-danger transition-colors"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -1008,6 +1026,17 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           void load();
         }}
       />
+
+      {editingCost && (
+        <EditCostModal
+          cost={editingCost}
+          onClose={() => setEditingCost(null)}
+          onSaved={() => {
+            setEditingCost(null);
+            void load();
+          }}
+        />
+      )}
 
       <NewWorkCostModal
         open={addingCost}

@@ -166,7 +166,7 @@ export function NewCostModal({ onClose, onCreated }: { onClose: () => void; onCr
           {categoryOptions ? (
             <>
               <FieldSelect
-                label="Category"
+                label="Paid towards"
                 value={category}
                 onChange={setCategory}
                 required
@@ -186,10 +186,10 @@ export function NewCostModal({ onClose, onCreated }: { onClose: () => void; onCr
             </>
           ) : (
             // Capital and loans have no list to run out of.
-            <Field label="Category" value={category} onChange={setCategory} required placeholder="e.g. Equipment" />
+            <Field label="Paid towards" value={category} onChange={setCategory} required placeholder="e.g. Equipment" />
           )}
 
-          <Field label="Vendor" value={vendor} onChange={setVendor} required />
+          <Field label="Paid to" value={vendor} onChange={setVendor} required placeholder="Who the money went to" />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Amount (₹)" value={amount} onChange={setAmount} type="number" required />
             <Field label="Date" value={incurredAt} onChange={setIncurredAt} type="date" required />

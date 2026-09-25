@@ -22,6 +22,20 @@ type Props = {
   onCreated: () => void;
 };
 
+/**
+ * Whose money it was.
+ *
+ * The Money screen's form has always asked; this one never did, so a cost paid
+ * out of somebody's own pocket on a shoot was recorded as the company's and the
+ * loan back to them was invisible. Same three answers as the other form, from
+ * the same enum, because two lists of the same thing drift.
+ */
+const PAID_BY_OPTIONS = [
+  { value: 'COMPANY', label: 'Company' },
+  { value: 'AKMAL', label: 'Akmal' },
+  { value: 'JAMEEL_N_J_MACSON', label: 'Jameel, N J Macson' },
+];
+
 const COST_CATEGORIES = ['Ad spend', 'Freelancer', 'Photography and video', 'Printing', 'Hosting and domain', 'Stock and licences', 'Travel, client', 'Venue and events'];
 
 /**
@@ -43,6 +57,7 @@ export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
   const [category, setCategory] = useState('');
   const [otherCategory, setOtherCategory] = useState('');
   const [vendor, setVendor] = useState('');
+  const [paidBy, setPaidBy] = useState('COMPANY');
   const [amount, setAmount] = useState('');
   const [incurredAt, setIncurredAt] = useState('');
   const [saving, setSaving] = useState(false);
@@ -53,6 +68,7 @@ export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
       setCategory('');
       setOtherCategory('');
       setVendor('');
+      setPaidBy('COMPANY');
       setAmount('');
       setIncurredAt(new Date().toISOString().slice(0, 10));
       setError(null);
@@ -76,6 +92,7 @@ export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
         monthCardId: target.kind === 'MONTH_CARD' ? target.monthCardId : undefined,
         category: storedCategory,
         vendor: vendor.trim(),
+        paidBy,
         amount: Number(amount),
         incurredAt,
       });
@@ -92,7 +109,7 @@ export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
       <form onSubmit={submit}>
         <ModalBody className="space-y-4">
           <FieldSelect
-            label="Category"
+            label="Paid towards"
             value={category}
             onChange={setCategory}
             required
@@ -109,7 +126,14 @@ export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
               hint="Stored as the category itself, so the next one like it groups with this."
             />
           )}
-          <Field label="Vendor" value={vendor} onChange={setVendor} required />
+          <Field
+            label="Paid to"
+            value={vendor}
+            onChange={setVendor}
+            required
+            placeholder="Who the money went to"
+          />
+          <FieldSelect label="Paid by" value={paidBy} onChange={setPaidBy} required options={PAID_BY_OPTIONS} />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Amount (₹)" value={amount} onChange={setAmount} type="number" required />
             <Field label="Date" value={incurredAt} onChange={setIncurredAt} type="date" required />

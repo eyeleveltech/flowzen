@@ -113,8 +113,9 @@ costsRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction)
     if (wantsCsv) {
       const csv = toCsv(data, [
         { label: 'Type', value: (c) => c.type },
-        { label: 'Category', value: (c) => c.category },
-        { label: 'Vendor', value: (c) => c.vendor },
+        // The words the screens use: what it was for, and who got it.
+        { label: 'Paid towards', value: (c) => c.category },
+        { label: 'Paid to', value: (c) => c.vendor },
         { label: 'Amount', value: (c) => c.amount ?? '' },
         { label: 'Incurred', value: (c) => c.incurredAt.toISOString().slice(0, 10) },
         { label: 'Committed, not paid', value: (c) => (c.committedNotPaid ? 'Yes' : 'No') },

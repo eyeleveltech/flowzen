@@ -77,8 +77,8 @@ export function EditCostModal({ cost, onSaved, onClose }: Props) {
     >
       <form onSubmit={submit}>
         <ModalBody className="space-y-4">
-          <Field label="Category" value={category} onChange={setCategory} required />
-          <Field label="Vendor" value={vendor} onChange={setVendor} required />
+          <Field label="Paid towards" value={category} onChange={setCategory} required />
+          <Field label="Paid to" value={vendor} onChange={setVendor} required />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Amount (₹)" value={amount} onChange={setAmount} type="number" required />
             <Field label="Date" value={incurredAt} onChange={setIncurredAt} type="date" required />
