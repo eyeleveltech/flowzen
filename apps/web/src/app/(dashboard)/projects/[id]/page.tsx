@@ -88,7 +88,7 @@ type Task = {
   assignee: { id: string; name: string; dept: string; designation?: string | null } | null;
   assignees?: { id: string; name: string; designation?: string | null }[];
 };
-type Cost = { id: string; category: string; vendor: string; amount: string | number | null; incurredAt: string; enteredBy: { id: string; name: string } | null };
+type Cost = { id: string; category: string; vendor: string; paidBy?: string | null; amount: string | number | null; incurredAt: string; enteredBy: { id: string; name: string } | null };
 type Invoice = { id: string; number: string; amount: string | number | null; status: string; dueAt: string };
 type Allocation = {
   id: string;
@@ -1022,6 +1022,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                   <tr className="border-b border-border">
                     <th className="eyebrow text-left">Paid towards</th>
                     <th className="eyebrow text-left">Paid to</th>
+                    <th className="eyebrow text-left">Company</th>
                     <th className="eyebrow text-left">Entered by</th>
                     <th className="eyebrow text-left">Date</th>
                     <th className="eyebrow text-right">Amount</th>
@@ -1033,6 +1034,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                     <tr key={c.id}>
                       <td className="font-medium text-primary">{c.category}</td>
                       <td className="text-secondary">{c.vendor}</td>
+                      <td className="text-secondary">{c.paidBy || '—'}</td>
                       <td className="text-secondary">{c.enteredBy?.name ?? '—'}</td>
                       <td className="text-secondary whitespace-nowrap">{fullDate(c.incurredAt)}</td>
                       <td className="text-right">{money(c.amount)}</td>

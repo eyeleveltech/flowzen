@@ -125,7 +125,7 @@ export default function CostSheet() {
         <h1 className="mt-1 text-xl font-semibold text-primary">Costs{client ? ` · ${client}` : ''}</h1>
         {job && <p className="mt-0.5 text-sm text-secondary">{job}</p>}
         <p className="mt-2 text-xs text-secondary">
-          Printed {formatDate(new Date().toISOString(), tz, locale)}
+          Printed {formatDate(new Date().toISOString(), tz, locale, true)}
           {rows ? ` · ${rows.length} ${rows.length === 1 ? 'entry' : 'entries'}` : ''}
         </p>
       </header>
@@ -149,7 +149,7 @@ export default function CostSheet() {
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} className="border-b border-border/60 align-top">
-                <td className="py-2 pr-3 whitespace-nowrap text-secondary">{formatDate(r.incurredAt, tz, locale)}</td>
+                <td className="py-2 pr-3 whitespace-nowrap text-secondary">{formatDate(r.incurredAt, tz, locale, true)}</td>
                 <td className="py-2 pr-3 font-medium text-primary">{r.category}</td>
                 <td className="py-2 pr-3">{r.vendor}</td>
                 <td className="py-2 pr-3 text-secondary">{r.paidBy}</td>

@@ -26,6 +26,8 @@ export type EditableCost = {
   id: string;
   category: string;
   vendor: string;
+  /** Whose money it was. Named `paidBy` on the record, "Company" on screen. */
+  paidBy?: string | null;
   amount: string | number | null;
   incurredAt: string;
 };
@@ -39,13 +41,28 @@ type Props = {
 export function EditCostModal({ cost, onSaved, onClose }: Props) {
   const [category, setCategory] = useState(cost.category ?? '');
   const [vendor, setVendor] = useState(cost.vendor ?? '');
+  /*
+   * Whose money it was, which this form left out.
+   *
+   * Both entry forms collect it, the server has accepted it on PATCH since it
+   * was added, and every list and the printed sheet show it — so the one place
+   * a wrong one could be corrected was the only place that did not ask. A cost
+   * filed against the wrong company had to be deleted and re-entered, which is
+   * exactly what this form exists to avoid.
+   */
+  const [paidBy, setPaidBy] = useState(cost.paidBy ?? '');
   const [amount, setAmount] = useState(cost.amount != null ? String(cost.amount) : '');
   const [incurredAt, setIncurredAt] = useState((cost.incurredAt ?? '').slice(0, 10));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const canSave =
-    category.trim().length > 0 && vendor.trim().length > 0 && Number(amount) > 0 && Boolean(incurredAt) && !busy;
+    category.trim().length > 0 &&
+    vendor.trim().length > 0 &&
+    paidBy.trim().length > 0 &&
+    Number(amount) > 0 &&
+    Boolean(incurredAt) &&
+    !busy;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,6 +73,7 @@ export function EditCostModal({ cost, onSaved, onClose }: Props) {
       await api.costs.update(cost.id, {
         category: category.trim(),
         vendor: vendor.trim(),
+        paidBy: paidBy.trim(),
         amount: Number(amount),
         incurredAt,
       });
@@ -79,6 +97,7 @@ export function EditCostModal({ cost, onSaved, onClose }: Props) {
         <ModalBody className="space-y-4">
           <Field label="Paid towards" value={category} onChange={setCategory} required />
           <Field label="Paid to" value={vendor} onChange={setVendor} required />
+          <Field label="Company" value={paidBy} onChange={setPaidBy} required placeholder="Whose money it was" />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Amount (₹)" value={amount} onChange={setAmount} type="number" required />
             <Field label="Date" value={incurredAt} onChange={setIncurredAt} type="date" required />

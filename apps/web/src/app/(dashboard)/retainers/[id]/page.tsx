@@ -134,7 +134,7 @@ type Task = {
   creator?: { id: string; name: string } | null;
   reviewer?: { id: string; name: string } | null;
 };
-type Cost = { id: string; category: string; vendor: string; amount: string | number | null; incurredAt: string; enteredBy: { id: string; name: string } | null };
+type Cost = { id: string; category: string; vendor: string; paidBy?: string | null; amount: string | number | null; incurredAt: string; enteredBy: { id: string; name: string } | null };
 type Allocation = {
   id: string;
   percent: number;
@@ -989,6 +989,7 @@ export default function RetainerMonthCardPage() {
                       <tr className="border-b border-border">
                         <th className="eyebrow text-left">Paid towards</th>
                         <th className="eyebrow text-left">Paid to</th>
+                        <th className="eyebrow text-left">Company</th>
                         <th className="eyebrow text-left">Entered by</th>
                         <th className="eyebrow text-left">Date</th>
                         <th className="eyebrow text-right">Amount</th>
@@ -1000,6 +1001,7 @@ export default function RetainerMonthCardPage() {
                         <tr key={c.id}>
                           <td className="font-medium text-primary">{c.category}</td>
                           <td className="text-secondary">{c.vendor}</td>
+                          <td className="text-secondary">{c.paidBy || '—'}</td>
                           <td className="text-secondary">{c.enteredBy?.name ?? '—'}</td>
                           <td className="text-secondary whitespace-nowrap">{fullDate(c.incurredAt)}</td>
                           <td className="text-right tabular-nums">{money(c.amount)}</td>
@@ -1039,7 +1041,7 @@ export default function RetainerMonthCardPage() {
                     */}
                     <tfoot>
                       <tr className="border-t border-border">
-                        <td colSpan={4} className="text-secondary">
+                        <td colSpan={5} className="text-secondary">
                           External costs, this month
                         </td>
                         <td className="text-right font-semibold text-primary tabular-nums">
