@@ -526,14 +526,13 @@ export default function LiveWorkPage() {
                     <th className="eyebrow text-left">Owner</th>
                     <th className="eyebrow text-left">Priority</th>
                     <th className="eyebrow text-right">Quoted</th>
-                    <th className="eyebrow text-right">Cost so far</th>
                     <th className="eyebrow text-left">Progress</th>
                     <th className="eyebrow text-left">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {projects.length === 0 && !loading && (
-                    <tr><td colSpan={8} className="px-5 py-12 text-center text-sm text-secondary">No projects match this filter.</td></tr>
+                    <tr><td colSpan={7} className="px-5 py-12 text-center text-sm text-secondary">No projects match this filter.</td></tr>
                   )}
                   {projects.map((p) => {
                     const quoted = p.quotedValue != null ? Number(p.quotedValue) : null;
@@ -560,20 +559,6 @@ export default function LiveWorkPage() {
                           </span>
                         </td>
                         <td className="font-semibold text-primary text-right">{canSeeFigures ? money(quoted) : '—'}</td>
-                        {/*
-                          Nought spent and nobody having said what was spent
-                          are different facts. The detail page says "Nothing
-                          entered" for the second; this column printed ₹0, which
-                          is the claim the project screen was fixed to stop
-                          making.
-                        */}
-                        <td className={`text-right font-semibold ${over ? 'text-danger' : 'text-secondary'}`}>
-                          {!canSeeFigures ? '—' : p.profit?.costBasis === 'none' ? (
-                            <span className="font-normal text-secondary">not entered</span>
-                          ) : (
-                            money(actual)
-                          )}
-                        </td>
                         <td className="" style={{ width: 140 }}>
                           <Bar pct={donePct} tone={over ? 'warn' : donePct === 100 ? 'good' : 'default'} />
                           <div className="text-micro text-secondary mt-1">
