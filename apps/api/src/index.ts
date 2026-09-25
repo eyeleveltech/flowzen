@@ -18,6 +18,7 @@ import { proformasRouter } from './routes/proformas.js';
 import { tasksRouter } from './routes/tasks.js';
 import { retainersRouter } from './routes/retainers.js';
 import { projectsRouter } from './routes/projects.js';
+import { internalProjectsRouter } from './routes/internalProjects.js';
 import { teamRouter } from './routes/team.js';
 import { sseRouter } from './sse.js';
 import { assistantRouter } from './routes/assistant.js';
@@ -116,6 +117,7 @@ app.use('/api/forecast', forecastRouter);
 app.use('/api/brief', briefRouter);
 app.use('/api/costs', costsRouter);
 app.use('/api/allocations', allocationsRouter);
+app.use('/api/internal-projects', internalProjectsRouter);
 app.use('/api/assets', assetsRouter);
 
 // Start background health rules scanner

@@ -39,6 +39,7 @@ import { Toggle } from '@/components/ui/toggle';
 import { ErrorNote, Note } from '@/components/ui/empty-state';
 import { PageSkeleton } from '@/components/ui/skeleton-loaders';
 import { MailTab } from './components/MailTab';
+import { InternalWorkSection } from './components/InternalWorkSection';
 import { DocumentSettingsTab } from './components/DocumentSettingsTab';
 import { OnboardingTab } from './components/OnboardingTab';
 import { TrashTab } from './components/TrashTab';
@@ -559,6 +560,13 @@ export default function SettingsPage() {
                 hint="Removing one does not move anybody already in it — they keep the department they were given until somebody edits them."
               />
             </SectionCard>
+
+            {/*
+              Beside Departments because it is the same kind of thing: an
+              org-level list that exists to organise work, with no client and no
+              money anywhere near it.
+            */}
+            <InternalWorkSection canEdit={canEdit} />
 
             <SectionCard
               title="Stage probabilities"

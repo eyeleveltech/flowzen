@@ -169,6 +169,7 @@ model Organization {
   retainers       Retainer[]
   projects        Project[]
   tasks           Task[]
+  internalProjects InternalProject[]
   costs           Cost[]
   invoices        Invoice[]
   alerts          Alert[]
@@ -218,6 +219,7 @@ model User {
   organization         Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   ownedCompanies       Company[]          @relation("CompanyOwner")
   retainerProjects     RetainerProject[]  @relation("RetainerProjectOwner")
+  internalProjects     InternalProject[]  @relation("InternalProjectOwner")
   ownedProposals       Proposal[]         @relation("ProposalOwner")
   ownedOutreach        OutreachEntry[]    @relation("OutreachOwner")
   ownedRetainers       Retainer[]         @relation("RetainerOwner")
@@ -657,6 +659,45 @@ enum RetainerProjectStatus {
   DONE
 }
 
+/// A named piece of the studio's own work.
+///
+/// Internal tasks had nowhere to live. `workType: INTERNAL` was the whole
+/// filing — no month card, no project, nothing — so the studio's website
+/// refresh, a hiring round, GST filing prep and an office Wi-Fi renewal all
+/// sat in one flat list, told apart only by who happened to be holding them.
+///
+/// This is `RetainerProject` with the retainer taken off: a bucket that groups
+/// tasks and holds no money. Deliberately so — there is no company, no value,
+/// no invoice and no cost column pointing here, so it cannot drift into being
+/// something that gets billed or costed. It is an organising tool, and the
+/// schema is what keeps it one.
+model InternalProject {
+  id             String                @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?               @db.Text
+  /// Who is answerable for it. Nullable: naming somebody is useful, not
+  /// required, and plenty of internal work is simply the studio's.
+  ownerId        String?
+  status         InternalProjectStatus @default(ACTIVE)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner        User?        @relation("InternalProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  tasks        Task[]
+
+  /// One bucket per name, so the list cannot quietly grow two "Hiring"s.
+  @@unique([organizationId, name])
+  @@index([organizationId, status])
+  @@map("internal_projects")
+}
+
+enum InternalProjectStatus {
+  ACTIVE
+  DONE
+}
+
 /// A named piece of work inside a retainer.
 ///
 /// A retainer client does not buy "six tasks in September" — they buy a
@@ -897,6 +938,16 @@ model Task {
   /// month the task is billed and costed in; this is what the task is FOR.
   /// A campaign running October into November is one project whose tasks sit
   /// in two different month cards, and both facts have to survive.
+  /// Which piece of the studio's OWN work this task is part of.
+  ///
+  /// Only ever set on an INTERNAL task, and always optional — unlike a
+  /// retainer task, which the database requires to name a project. Most
+  /// internal work genuinely belongs to nothing ("Office Wi-Fi vendor
+  /// renewal"), and forcing a bucket on it would only breed empty ones.
+  ///
+  /// It carries no money and never can: a Cost points at a month card or a
+  /// one-time project, and there is no column here for it to reach.
+  internalProjectId String?
   retainerProjectId String?
   /// The lead. Kept alongside `assignees` rather than replaced by it: forty
   /// reads across nine files ask "whose task is this", a task always has
@@ -957,12 +1008,16 @@ model Task {
   /// the tasks that were done under it. They stay on their month card, which
   /// is where the month's cost and profit are counted from.
   retainerProject RetainerProject? @relation(fields: [retainerProjectId], references: [id], onDelete: SetNull)
+  /// SetNull for the same reason as the retainer one: closing down a bucket
+  /// must not take the work that was done under it.
+  internalProject InternalProject? @relation(fields: [internalProjectId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, assigneeId, status])
   @@index([dueDate, status])
   @@index([monthCardId])
   @@index([projectId])
   @@index([retainerProjectId])
+  @@index([internalProjectId])
   @@map("tasks")
 }
 

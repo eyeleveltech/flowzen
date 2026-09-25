@@ -30,7 +30,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { Pencil, Trash2 } from 'lucide-react';
-import { api, formatDate } from '@/lib/api-v2';
+import { api, formatDate, type InternalProject } from '@/lib/api-v2';
 import { useConfirmStore } from '@/stores';
 import { Drawer } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
@@ -48,6 +48,10 @@ export type DrawerTask = {
   id: string;
   title: string;
   status: string;
+  /** MONTH_CARD, PROJECT or INTERNAL — what kind of work this is. */
+  workType?: string;
+  /** Which piece of the studio's own work it is filed under, if any. */
+  internalProjectId?: string | null;
   priority: string;
   dueDate: string;
   assignedAt?: string | null;
@@ -119,6 +123,16 @@ export function TaskDrawer({
   const [dueDate, setDueDate] = useState('');
   const [priority, setPriority] = useState('MEDIUM');
   const [notes, setNotes] = useState('');
+  /*
+   * Where an internal task is filed.
+   *
+   * This is the path that matters most for internal projects: creating a bucket
+   * backfills nothing, so every task that already exists is filed by opening it
+   * here and choosing one. It is also how a task moves between buckets, and how
+   * it comes back out — "Not part of anything" clears it.
+   */
+  const [internalProjects, setInternalProjects] = useState<InternalProject[]>([]);
+  const [internalProjectId, setInternalProjectId] = useState('');
 
   // Reset to the task in front of you whenever it changes, including when the
   // drawer is closed and reopened on a different row — otherwise the form
@@ -135,7 +149,19 @@ export function TaskDrawer({
     setDueDate(dateValue(task?.dueDate));
     setPriority(task?.priority ?? 'MEDIUM');
     setNotes(task?.notes ?? '');
+    setInternalProjectId(task?.internalProjectId ?? '');
   }, [task]);
+
+  // Only for an internal task, and only the open buckets. Nothing else has a
+  // use for this list, and asking for it on every task would be a request per
+  // row opened.
+  useEffect(() => {
+    if (task?.workType !== 'INTERNAL') return;
+    void api.internalProjects
+      .list('ACTIVE')
+      .then((res) => setInternalProjects(res.projects))
+      .catch(() => {});
+  }, [task?.workType]);
 
   if (!task) return null;
 
@@ -156,6 +182,7 @@ export function TaskDrawer({
         ...(team && assignedById ? { assignedById } : {}),
         reviewerId: reviewerId || null,
         taskType: taskType || null,
+        ...(task.workType === 'INTERNAL' ? { internalProjectId: internalProjectId || null } : {}),
         ...(team && assigneeIds.length > 0 ? { assigneeIds } : {}),
       });
       toast.success('Task updated');
@@ -271,6 +298,16 @@ export function TaskDrawer({
                 placeholder="Not set"
                 options={TASK_TYPE_OPTIONS}
               />
+              {task.workType === 'INTERNAL' && internalProjects.length > 0 && (
+                <FieldSelect
+                  label="Which work"
+                  value={internalProjectId}
+                  onChange={setInternalProjectId}
+                  placeholder="Not part of anything"
+                  options={internalProjects.map((ip) => ({ value: ip.id, label: ip.name }))}
+                  hint="The studio's own work — a hiring round, the website, compliance."
+                />
+              )}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Due date" type="date" value={dueDate} onChange={setDueDate} required />
                 <FieldSelect label="Priority" value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} />

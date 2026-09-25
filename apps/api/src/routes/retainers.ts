@@ -1294,21 +1294,49 @@ retainersRouter.patch('/:id', requirePermission('company.write'), async (req: Au
       return;
     }
 
-    // Moving the start forward past a month that has already been opened would
-    // leave a card for a month the retainer now says had not begun.
+    /*
+     * Moving the start forward, past months that already have cards.
+     *
+     * This used to refuse outright the moment any card predated the new start,
+     * which left no way out of the commonest mistake there is here: entering a
+     * retainer with today's date when it begins next month. Creating it opens
+     * this month's card at the full fee, the edit form is then the obvious
+     * place to fix the date, and the edit form said no — so the only remaining
+     * option was to stop the retainer and build it again.
+     *
+     * The refusal was aimed at the right thing and drawn in the wrong place.
+     * What must not be disowned is a month that has been WORKED. A card the
+     * roll opened with nothing against it — no tasks, no costs, no invoice — is
+     * the same empty card the stop route already deletes, for the same reason
+     * written there: leaving it behind would bill for a month that never
+     * happened.
+     *
+     * So: worked months still refuse, and they say which. Empty ones are
+     * removed with the change, inside the same transaction.
+     */
+    let cardsToDrop: string[] = [];
     if (startDate !== undefined) {
-      const earliest = await prisma.monthCard.findFirst({
-        where: { retainerId: id },
+      const before = await prisma.monthCard.findMany({
+        where: { retainerId: id, month: { lt: monthKey(nextStart) } },
         orderBy: { month: 'asc' },
-        select: { month: true },
+        include: { _count: { select: { tasks: true, costs: true, allocations: true } } },
       });
-      if (earliest && monthKey(nextStart) > earliest.month) {
+
+      const worked = before.filter(
+        (c) => c._count.tasks > 0 || c._count.costs > 0 || c._count.allocations > 0 || c.invoiceId !== null,
+      );
+      if (worked.length > 0) {
         res.status(400).json({
           success: false,
-          error: `This retainer already has a month card for ${earliest.month}. The start date cannot be later than the first month worked.`,
+          error:
+            `${worked.map((c) => c.month).join(', ')} ${worked.length === 1 ? 'has' : 'have'} work against ` +
+            `${worked.length === 1 ? 'it' : 'them'} — tasks, costs or an invoice — so the start date cannot move past ` +
+            `${worked.length === 1 ? 'that month' : 'those months'}.`,
         });
         return;
       }
+
+      cardsToDrop = before.map((c) => c.id);
     }
 
     // Derived, never accepted: same formula as the create route.
@@ -1344,6 +1372,13 @@ retainersRouter.patch('/:id', requirePermission('company.write'), async (req: Au
         },
       });
 
+      // The empty months the new start date says never began. Nothing is on
+      // them — the check above refused if anything was — so this removes the
+      // revenue they were counting and nothing else.
+      if (cardsToDrop.length > 0) {
+        await tx.monthCard.deleteMany({ where: { id: { in: cardsToDrop } } });
+      }
+
       let count = 0;
       if (rateChanged && repriceOpenMonth) {
         // Open and not yet invoiced only. A closed month has been worked and a
@@ -1367,7 +1402,15 @@ retainersRouter.patch('/:id', requirePermission('company.write'), async (req: Au
             ...(rateChanged
               ? { monthlyValueFrom: Number(existing.monthlyValue), monthlyValueTo: monthlyValue, repricedCards: count }
               : {}),
-            ...(startChanged ? { startDateTo: nextStart.toISOString().slice(0, 10) } : {}),
+            ...(startChanged
+              ? {
+                  startDateFrom: existing.startDate.toISOString().slice(0, 10),
+                  startDateTo: nextStart.toISOString().slice(0, 10),
+                  // Named, because a month disappearing off a client is exactly
+                  // the kind of thing somebody asks about later.
+                  ...(cardsToDrop.length > 0 ? { emptyMonthsRemoved: cardsToDrop.length } : {}),
+                }
+              : {}),
             ...(termChanged ? { termMonthsFrom: existing.termMonths, termMonthsTo: termMonths } : {}),
             ...(ownerChanged ? { ownerFrom: existing.ownerId, ownerTo: ownerId } : {}),
           },
@@ -1377,7 +1420,7 @@ retainersRouter.patch('/:id', requirePermission('company.write'), async (req: Au
       return { retainer: updated, repricedCards: count };
     });
 
-    res.json({ success: true, retainer, repricedCards });
+    res.json({ success: true, retainer, repricedCards, emptyMonthsRemoved: cardsToDrop.length });
   } catch (error) {
     next(error);
   }

@@ -3,7 +3,7 @@
 /** Quickly handing a specific person a task, from the Team screen — the assignee isn't a field, it's why this opened. */
 
 import { useEffect, useState } from 'react';
-import { api, ApiError, type Company } from '@/lib/api-v2';
+import { api, ApiError, type Company, type InternalProject } from '@/lib/api-v2';
 import { useTeamMembers } from '@/hooks/queries';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
@@ -55,6 +55,16 @@ export function AssignTaskModal({
   const [loadingTargets, setLoadingTargets] = useState(false);
   const [targets, setTargets] = useState<Target[]>([]);
   const [targetKey, setTargetKey] = useState('');
+  /*
+   * Which piece of the studio's own work, when this is not a client's.
+   *
+   * Optional on purpose. A retainer task must name a project because the
+   * database insists; most internal work genuinely belongs to nothing —
+   * "Office Wi-Fi vendor renewal" is not a programme — and forcing a bucket on
+   * it would only breed empty ones.
+   */
+  const [internalProjects, setInternalProjects] = useState<InternalProject[]>([]);
+  const [internalProjectId, setInternalProjectId] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,6 +77,16 @@ export function AssignTaskModal({
   useEffect(() => {
     if (scope !== 'CLIENT') return;
     void api.companies.list().then((res) => setCompanies(res.companies)).catch(() => {});
+  }, [scope]);
+
+  // Only the open ones: a finished piece of work is not somewhere to put new
+  // work, and Settings is where a closed one is reopened.
+  useEffect(() => {
+    if (scope !== 'INTERNAL') return;
+    void api.internalProjects
+      .list('ACTIVE')
+      .then((res) => setInternalProjects(res.projects))
+      .catch(() => {});
   }, [scope]);
 
   useEffect(() => {
@@ -151,6 +171,7 @@ export function AssignTaskModal({
         // What the work is for, alongside the month that bills it. Omitted for
         // a one-time project, which is its own answer to both questions.
         retainerProjectId: scope === 'CLIENT' ? selectedTarget?.retainerProjectId : undefined,
+        internalProjectId: scope === 'INTERNAL' ? internalProjectId || undefined : undefined,
         projectId: scope === 'CLIENT' ? selectedTarget?.projectId : undefined,
         priority,
         assignedById: assignedById || undefined,
@@ -180,6 +201,22 @@ export function AssignTaskModal({
               { value: 'CLIENT', label: 'A client’s work' },
             ]}
           />
+
+          {/*
+            Where internal work gets filed. Hidden until there is something to
+            file it under, so a studio that does not use these never sees an
+            empty dropdown asking a question it has no answer to.
+          */}
+          {scope === 'INTERNAL' && internalProjects.length > 0 && (
+            <FieldSelect
+              label="Which work"
+              value={internalProjectId}
+              onChange={setInternalProjectId}
+              placeholder="Not part of anything"
+              options={internalProjects.map((p) => ({ value: p.id, label: p.name }))}
+              hint="The studio's own work — a hiring round, the website, compliance."
+            />
+          )}
 
           {scope === 'CLIENT' && (
             <>

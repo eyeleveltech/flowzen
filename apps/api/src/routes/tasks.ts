@@ -94,6 +94,9 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
         project: {
           include: { company: true },
         },
+        // An internal task has no client to be labelled by, so without this
+        // every one of them reads as nothing at all on this screen.
+        internalProject: { select: { id: true, name: true } },
         ...TASK_PEOPLE,
       },
     });
@@ -163,7 +166,12 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
         // ever set. Formatted on the web, the way the retainer screen already
         // does it — "2026-09" is a key, not a label.
         monthCardMonth: t.monthCard?.month ?? null,
-        projectName: t.project?.name ?? null,
+        projectName: t.project?.name ?? t.internalProject?.name ?? null,
+        // The drawer reads this to show what the task is already filed under.
+        // Without it, opening a filed task would show "Not part of anything"
+        // and saving would clear it. (workType is already above.)
+        internalProjectId: t.internalProjectId,
+        internalProjectName: t.internalProject?.name ?? null,
         workingHoursText: workingHours.formatted,
         workingMinutes: workingHours.totalMinutes,
         typeMedianMinutes,
@@ -350,6 +358,13 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
          * the month it is billed in, not the work it is.
          */
         retainerProject: { select: { id: true, name: true } },
+        /*
+         * And the internal kind. An internal task has no client to be labelled
+         * by, so without this every one of them read as "Internal" and nothing
+         * else — the studio's website refresh and a hiring round looked like
+         * the same row.
+         */
+        internalProject: { select: { id: true, name: true } },
         ...TASK_PEOPLE,
       },
     });
@@ -397,8 +412,10 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
         projectId: t.projectId,
         // Whichever kind of project it is — a one-off, or a stream of work
         // inside a retainer.
-        projectName: t.project?.name ?? t.retainerProject?.name ?? null,
+        projectName: t.project?.name ?? t.retainerProject?.name ?? t.internalProject?.name ?? null,
         retainerProjectId: t.retainerProjectId,
+        internalProjectId: t.internalProjectId,
+        internalProjectName: t.internalProject?.name ?? null,
         monthCardMonth: t.monthCard?.month ?? null,
         retainerId: t.monthCard?.retainerId ?? null,
         workingHoursText: workingHours.formatted,
@@ -572,6 +589,8 @@ const taskCreateSchema = z.object({
   projectId: z.string().optional().nullable(),
   /** Which piece of retainer work this is part of. Set alongside the month card, never instead of it. */
   retainerProjectId: z.string().optional().nullable(),
+  /** Which piece of the studio's own work this is part of. Internal tasks only, and always optional. */
+  internalProjectId: z.string().optional().nullable(),
   assigneeId: z.string().optional(),
   /** Everybody on it. The first is the lead; `assigneeId` still works on its own. */
   assigneeIds: z.array(z.string().min(1)).min(1).max(20).optional(),
@@ -666,7 +685,7 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
     }
 
     const orgId = req.user!.organizationId;
-    const { title, workType, workId, monthCardId, projectId, retainerProjectId, assigneeId, assigneeIds, assignedById, reviewerId, taskType, dueDate, priority, notes } =
+    const { title, workType, workId, monthCardId, projectId, retainerProjectId, internalProjectId, assigneeId, assigneeIds, assignedById, reviewerId, taskType, dueDate, priority, notes } =
       parsed.data;
 
     // `assigneeIds` wins when both arrive; `assigneeId` alone still means a
@@ -743,6 +762,32 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
       resolvedProjectId = await defaultProjectId(card.retainer);
     }
 
+    /*
+     * The studio's own work, if it was named.
+     *
+     * No default to fall back on, unlike the retainer side: a retainer task
+     * must name a project because the database says so, and most internal work
+     * genuinely belongs to nothing. An empty bucket per loose task would be
+     * worse than no bucket at all.
+     */
+    if (internalProjectId) {
+      if (workType !== TaskWorkType.INTERNAL) {
+        res.status(400).json({
+          success: false,
+          error: 'Only an internal task can belong to a piece of internal work.',
+        });
+        return;
+      }
+      const owned = await prisma.internalProject.findFirst({
+        where: { id: internalProjectId, organizationId: orgId },
+        select: { id: true },
+      });
+      if (!owned) {
+        res.status(400).json({ success: false, error: 'That internal project is not one of yours.' });
+        return;
+      }
+    }
+
     if (retainerProjectId) {
       if (!resolvedMonthCardId) {
         res.status(400).json({
@@ -776,6 +821,7 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
         monthCardId: resolvedMonthCardId,
         projectId: projectId || (workType === 'PROJECT' ? workId : null),
         retainerProjectId: resolvedProjectId,
+        internalProjectId: internalProjectId || null,
         assigneeId: people[0],
         // Who typed it, and who asked for it. The first is never chosen — it
         // is what `canRemove` reads — and the second falls back to it, so a
@@ -859,6 +905,15 @@ const taskEditSchema = z
     notes: z.string().max(4000).nullable().optional(),
     /** Move it to a different piece of retainer work, or null to ungroup it. */
     retainerProjectId: z.string().min(1).nullable().optional(),
+    /**
+     * File an internal task under a piece of the studio's own work, or null to
+     * take it back out.
+     *
+     * This is the path that matters most for internal projects: nothing is
+     * backfilled when a bucket is created, so every task that already exists
+     * gets filed by editing it.
+     */
+    internalProjectId: z.string().min(1).nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to change' });
 
@@ -928,6 +983,24 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
       }
     }
 
+    if (parsed.data.internalProjectId) {
+      if (existing.workType !== TaskWorkType.INTERNAL) {
+        res.status(400).json({
+          success: false,
+          error: 'Only an internal task can belong to a piece of internal work.',
+        });
+        return;
+      }
+      const owned = await prisma.internalProject.findFirst({
+        where: { id: parsed.data.internalProjectId, organizationId: orgId },
+        select: { id: true },
+      });
+      if (!owned) {
+        res.status(400).json({ success: false, error: 'That internal project is not one of yours.' });
+        return;
+      }
+    }
+
     // Same pairing rule as create: a task cannot be moved onto a project
     // belonging to a different retainer than the month it is billed in.
     if (parsed.data.retainerProjectId) {
@@ -971,6 +1044,9 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
         ...(notes !== undefined ? { notes } : {}),
         ...(parsed.data.retainerProjectId !== undefined
           ? { retainerProjectId: parsed.data.retainerProjectId }
+          : {}),
+        ...(parsed.data.internalProjectId !== undefined
+          ? { internalProjectId: parsed.data.internalProjectId }
           : {}),
         ...(nextPeople
           ? {

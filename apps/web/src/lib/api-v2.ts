@@ -198,6 +198,7 @@ export type TaskDraft = {
     workId?: string;
     monthCardId?: string;
     retainerProjectId?: string;
+    internalProjectId?: string;
     projectId?: string;
     assigneeId: string;
     priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
@@ -479,6 +480,22 @@ export interface Stage {
   rottingDays: number | null;
   requiresForecast: boolean;
   fields?: StageFieldDef[];
+}
+
+/**
+ * A named piece of the studio's own work.
+ *
+ * It groups internal tasks and nothing else — no client, no value, no invoice.
+ * Deliberately: there is no cost column pointing at one, so it cannot turn into
+ * something that gets billed.
+ */
+export interface InternalProject {
+  id: string;
+  name: string;
+  description: string | null;
+  owner: { id: string; name: string } | null;
+  status: 'ACTIVE' | 'DONE';
+  taskCounts: { total: number; done: number; open: number; late: number };
 }
 
 export interface Company {
@@ -1379,6 +1396,26 @@ export const api = {
     emailDefaults: (id: string) => get<DocumentEmailDefaults>(`/proformas/${id}/email`),
     email: (id: string, body: Record<string, unknown>) =>
       post<{ success: boolean; sent: boolean; to: string }>(`/proformas/${id}/email`, body),
+  },
+
+  /**
+   * The studio own work, in named pieces.
+   *
+   * A bucket that groups internal tasks and holds no money -- no client, no
+   * value, no invoice. See routes/internalProjects.ts on why that is a schema
+   * guarantee rather than a convention.
+   */
+  internalProjects: {
+    list: (status?: string) =>
+      get<{ success: boolean; projects: InternalProject[] }>(
+        `/internal-projects${status ? `?status=${status}` : ''}`,
+      ),
+    create: (body: { name: string; description?: string | null; ownerId?: string | null }) =>
+      post<{ success: boolean; project: InternalProject }>('/internal-projects', body),
+    update: (id: string, body: Record<string, unknown>) =>
+      patch<{ success: boolean; project: InternalProject }>(`/internal-projects/${id}`, body),
+    /** Only an empty one -- a bucket with work under it is marked done instead. */
+    remove: (id: string) => del(`/internal-projects/${id}`),
   },
 
   tasks: {
