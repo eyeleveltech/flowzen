@@ -154,7 +154,10 @@ export function AssignTaskModal({
   }, [companyId, scope]);
 
   const selectedTarget = targets.find((t) => t.key === targetKey);
-  const canSave = Boolean(title.trim()) && Boolean(dueDate) && (scope === 'INTERNAL' || Boolean(selectedTarget));
+  const canSave =
+    Boolean(title.trim()) &&
+    Boolean(dueDate) &&
+    (scope === 'INTERNAL' ? Boolean(internalProjectId) : Boolean(selectedTarget));
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -203,20 +206,36 @@ export function AssignTaskModal({
           />
 
           {/*
-            Where internal work gets filed. Hidden until there is something to
-            file it under, so a studio that does not use these never sees an
-            empty dropdown asking a question it has no answer to.
+            Which piece of the studio's own work, before anything else.
+
+            This was optional at first, on the reasoning that plenty of internal
+            work belongs to nothing in particular. In practice an optional field
+            is a skipped field, and the flat list of internal tasks it existed to
+            fix stayed flat. So the answer comes first and the task follows.
+
+            With none created yet it says so and points at where they are made,
+            rather than showing a required dropdown with nothing in it.
           */}
-          {scope === 'INTERNAL' && internalProjects.length > 0 && (
-            <FieldSelect
-              label="Which work"
-              value={internalProjectId}
-              onChange={setInternalProjectId}
-              placeholder="Not part of anything"
-              options={internalProjects.map((p) => ({ value: p.id, label: p.name }))}
-              hint="The studio's own work — a hiring round, the website, compliance."
-            />
-          )}
+          {scope === 'INTERNAL' &&
+            (internalProjects.length > 0 ? (
+              <FieldSelect
+                label="Which work"
+                value={internalProjectId}
+                onChange={setInternalProjectId}
+                required
+                placeholder="Choose…"
+                options={internalProjects.map((p) => ({ value: p.id, label: p.name }))}
+                hint="The studio's own work — a hiring round, the website, compliance."
+              />
+            ) : (
+              <p className="rounded-xl border border-border bg-subtle/40 px-3 py-2.5 text-xs text-secondary">
+                There is no internal work to file this under yet. Add one on{' '}
+                <a href="/live-work?tab=internal" className="font-medium text-primary hover:underline">
+                  Live work → Internal
+                </a>{' '}
+                first.
+              </p>
+            ))}
 
           {scope === 'CLIENT' && (
             <>

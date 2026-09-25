@@ -21,6 +21,7 @@ import { z } from 'zod';
 import { InternalProjectStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, type AuthRequest } from '../middleware/auth.js';
+import { TASK_PEOPLE, withPeople } from './tasks.js';
 
 export const internalProjectsRouter = Router();
 
@@ -88,6 +89,64 @@ internalProjectsRouter.get(
         include: withTasks,
       });
       res.json({ success: true, projects: rows.map(summarise) });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * GET /api/internal-projects/:id
+ *
+ * One bucket and everything filed under it. The list endpoint carries counts;
+ * this carries the tasks themselves, because the page it feeds is where the
+ * work is actually read and added to.
+ */
+internalProjectsRouter.get(
+  '/:id',
+  requirePermission('work.all'),
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const project = await prisma.internalProject.findFirst({
+        where: { id: String(req.params.id), organizationId: req.user!.organizationId },
+        include: {
+          owner: { select: { id: true, name: true } },
+          tasks: {
+            where: { deletedAt: null },
+            orderBy: [{ status: 'asc' }, { dueDate: 'asc' }],
+            include: TASK_PEOPLE,
+          },
+        },
+      });
+      if (!project) {
+        res.status(404).json({ success: false, error: 'Not found' });
+        return;
+      }
+
+      const today = new Date().toISOString().slice(0, 10);
+      const counted = project.tasks.filter((t) => COUNTED(t.status));
+      const done = counted.filter((t) => t.status === 'DONE').length;
+
+      res.json({
+        success: true,
+        project: {
+          ...project,
+          tasks: project.tasks.map((t) => ({
+            ...withPeople(t),
+            // The same flag every other task list computes, so a row reads the
+            // same here as it does on My Work.
+            isOverdue: t.status !== 'DONE' && t.status !== 'CANCELLED' && t.dueDate.toISOString().slice(0, 10) < today,
+          })),
+          taskCounts: {
+            total: counted.length,
+            done,
+            open: counted.length - done,
+            late: counted.filter(
+              (t) => t.status !== 'DONE' && t.dueDate.toISOString().slice(0, 10) < today,
+            ).length,
+          },
+        },
+      });
     } catch (e) {
       next(e);
     }

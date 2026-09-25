@@ -601,7 +601,11 @@ export default function LiveWorkPage() {
                 {[...internalProjects]
                   .sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : a.status === 'ACTIVE' ? -1 : 1))
                   .map((ip) => (
-                    <tr key={ip.id} className={ip.status === 'DONE' ? 'text-secondary' : undefined}>
+                    <tr
+                      key={ip.id}
+                      className={`cursor-pointer transition-colors hover:bg-subtle ${ip.status === 'DONE' ? 'text-secondary' : ''}`}
+                      onClick={() => router.push(`/internal-projects/${ip.id}`)}
+                    >
                       <td className="font-medium text-primary">
                         {ip.name}
                         {ip.description && (

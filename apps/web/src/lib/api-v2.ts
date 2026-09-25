@@ -1410,6 +1410,9 @@ export const api = {
       get<{ success: boolean; projects: InternalProject[] }>(
         `/internal-projects${status ? `?status=${status}` : ''}`,
       ),
+    /** One bucket and the tasks under it — what the project page reads. */
+    get: (id: string) =>
+      get<{ success: boolean; project: any }>(`/internal-projects/${id}`),
     create: (body: { name: string; description?: string | null; ownerId?: string | null }) =>
       post<{ success: boolean; project: InternalProject }>('/internal-projects', body),
     update: (id: string, body: Record<string, unknown>) =>
