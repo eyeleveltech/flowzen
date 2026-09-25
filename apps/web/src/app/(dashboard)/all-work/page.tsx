@@ -104,6 +104,7 @@ export default function AllWorkPage() {
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [depts, setDepts] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<string[]>(['UNFINISHED']);
+  const [clients, setClients] = useState<string[]>([]);
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [q, setQ] = useState('');
   const [openTask, setOpenTask] = useState<Task | null>(null);
@@ -120,11 +121,12 @@ export default function AllWorkPage() {
     const p: Record<string, string> = {};
     if (assigneeIds.length > 0) p.assigneeId = assigneeIds.join(',');
     if (depts.length > 0) p.dept = depts.join(',');
+    if (clients.length > 0) p.companyId = clients.join(',');
     if (statuses.length > 0) p.status = statuses.join(',');
     if (overdueOnly) p.overdue = '1';
     if (q.trim()) p.q = q.trim();
     return p;
-  }, [assigneeIds, depts, statuses, overdueOnly, q]);
+  }, [assigneeIds, depts, clients, statuses, overdueOnly, q]);
 
   const { data, isPending, error, refetch } = useQuery({
     queryKey: ['all-work', params],
@@ -140,6 +142,7 @@ export default function AllWorkPage() {
   const filtered =
     assigneeIds.length > 0 ||
     depts.length > 0 ||
+    clients.length > 0 ||
     overdueOnly ||
     q.trim().length > 0 ||
     !(statuses.length === 1 && statuses[0] === 'UNFINISHED');
@@ -208,6 +211,29 @@ export default function AllWorkPage() {
               onChange={setDepts}
               placeholder="Any department"
               options={departments.map((d) => ({ value: d, label: d }))}
+            />
+          </div>
+          <div className="w-48">
+            <span className="eyebrow mb-1.25 block">Client</span>
+            {/*
+              Internal first, and deliberately: work with no client — the
+              showreel, our own site — is the one thing nobody is looking for
+              by name, and burying it under twenty company names is how it
+              goes unnoticed. The list holds the clients that actually have
+              work, taken from every task rather than the filtered ones.
+            */}
+            <MultiSelect
+              ariaLabel="Filter by client"
+              value={clients}
+              onChange={setClients}
+              placeholder="Any client"
+              options={[
+                ...(data?.hasInternal ? [{ value: 'INTERNAL', label: 'Internal' }] : []),
+                ...((data?.clients ?? []) as { id: string; name: string }[]).map((c) => ({
+                  value: c.id,
+                  label: c.name,
+                })),
+              ]}
             />
           </div>
           <div className="w-44">

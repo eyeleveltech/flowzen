@@ -1356,6 +1356,10 @@ export const api = {
       get<{
         success: boolean;
         tasks: any[];
+        /** The clients that have work, for the filter — from every task, not the filtered ones. */
+        clients: { id: string; name: string }[];
+        /** Whether anything has no client at all, so "Internal" is worth offering. */
+        hasInternal: boolean;
         counts: { total: number; open: number; waiting: number; overdue: number; unassigned: number };
       }>(`/tasks/all?${new URLSearchParams(params)}`),
     create: (body: Record<string, unknown>) =>

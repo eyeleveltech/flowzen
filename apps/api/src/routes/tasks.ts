@@ -283,13 +283,26 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
     if (people.length > 0) and.push({ assignees: { some: { userId: { in: people } } } });
     if (depts.length > 0) and.push({ assignees: { some: { user: { dept: { in: depts } } } } });
     if (typeof q === 'string' && q.trim()) and.push({ title: { contains: q.trim(), mode: 'insensitive' } });
-    if (typeof companyId === 'string' && companyId) {
-      and.push({
-        OR: [
-          { project: { companyId } },
-          { monthCard: { retainer: { companyId } } },
-        ],
-      });
+    /*
+     * Clients, with `INTERNAL` among them.
+     *
+     * Work with no project and no month card is the studio's own — the showreel,
+     * the website, the thing nobody is billed for — and it is labelled Internal
+     * everywhere it is shown. It is the one "client" that is not a row in the
+     * companies table, so it is a value in this filter rather than a separate
+     * switch: "Internal and Carlton Wellness" is one question, and two controls
+     * would make it two.
+     */
+    const clients = list(companyId);
+    if (clients.length > 0) {
+      const named = clients.filter((c) => c !== 'INTERNAL');
+      const or: any[] = [];
+      if (named.length > 0) {
+        or.push({ project: { companyId: { in: named } } });
+        or.push({ monthCard: { retainer: { companyId: { in: named } } } });
+      }
+      if (clients.includes('INTERNAL')) or.push({ AND: [{ projectId: null }, { monthCardId: null }] });
+      and.push({ OR: or });
     }
 
     /*
@@ -416,9 +429,36 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
       return;
     }
 
+    /*
+     * What the filter can offer, from EVERY task rather than the filtered ones.
+     *
+     * Derived from `rows`, choosing one client would rebuild the dropdown with
+     * one option in it and there would be no way to get to a second without
+     * clearing first — the same fault the team screen's department filter had.
+     */
+    const [projectClients, retainerClients, internalCount] = await Promise.all([
+      prisma.project.findMany({
+        where: { organizationId: orgId, tasks: { some: { deletedAt: null } } },
+        select: { company: { select: { id: true, name: true } } },
+      }),
+      prisma.monthCard.findMany({
+        where: { retainer: { organizationId: orgId }, tasks: { some: { deletedAt: null } } },
+        select: { retainer: { select: { company: { select: { id: true, name: true } } } } },
+      }),
+      prisma.task.count({
+        where: { organizationId: orgId, deletedAt: null, projectId: null, monthCardId: null },
+      }),
+    ]);
+
+    const byId = new Map<string, string>();
+    for (const pr of projectClients) byId.set(pr.company.id, pr.company.name);
+    for (const mc of retainerClients) byId.set(mc.retainer.company.id, mc.retainer.company.name);
+
     res.json({
       success: true,
       tasks: rows,
+      clients: Array.from(byId, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
+      hasInternal: internalCount > 0,
       counts: {
         total: rows.length,
         // Open is "not finished with", not a single status: TODO and
