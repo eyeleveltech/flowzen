@@ -1215,16 +1215,19 @@ export const api = {
     /** Ask before creating, so the warning arrives while somebody is still typing. */
     checkDuplicate: (body: { name: string; email?: string; phone?: string }) =>
       post<DuplicateVerdict>('/companies/check-duplicate', body),
-    /**
-     * Create a company — and, unless told otherwise, its first card on the board.
+    /*
+     * There is no `create` here.
      *
-     * `contact` and `startDeal` are handled server-side in ONE transaction. They
-     * used to be two more calls made after this one returned, each wrapped in its
-     * own try/catch that logged and carried on — so a company could be saved with
-     * its contact silently missing.
+     * A company is an outreach lead that was promoted — `POST /outreach/:id/promote`
+     * is what makes one, and it carries the lead's history with it. The form that
+     * made a company out of nothing is gone, along with the Quick Create entry
+     * that opened it: the same client could arrive two ways, one of them with no
+     * record of who found them or what was said.
+     *
+     * The importer (`import`, below) is the exception, for a list that predates
+     * Flowzen. `POST /companies` still exists on the server for it and for the
+     * promote path to build on.
      */
-    create: (body: Record<string, unknown>) =>
-      post<Company>('/companies', body),
     /**
      * A spreadsheet of companies (§4.4).
      *

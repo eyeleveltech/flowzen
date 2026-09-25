@@ -2,7 +2,7 @@ import {
   PrismaClient, RolePreset, CompanyStatus, PersonRole,
   OutreachStatus, ProposalKind, ProposalStage, ProposalOutcome, ProformaSourceType, ProformaStatus,
   RetainerStatus, RetainerProjectStatus, MonthCardStatus, ProjectStatus, Priority, MilestoneStatus, TaskWorkType,
-  TaskStatus, TaskType, WaitingOn, CostType, CostPaidBy, CostTreatment, InvoiceStatus, AlertSeverity,
+  TaskStatus, TaskType, WaitingOn, CostType, CostTreatment, InvoiceStatus, AlertSeverity,
   AssetCategory, AssetStatus, AssetCondition, AssetMovementKind, AssetMaintenanceKind,
 } from '@prisma/client';
 import type { Industry, LeadSource } from '@flowzen/shared';
@@ -1152,7 +1152,7 @@ async function main() {
     data: [...directCosts, ...projectCosts].map((c: any) => ({
       organizationId: org.id, type: CostType.DIRECT, workType: c.monthCardId ? TaskWorkType.MONTH_CARD : TaskWorkType.PROJECT,
       workId: c.monthCardId ?? c.projectId, monthCardId: c.monthCardId, projectId: c.projectId, category: c.category,
-      vendor: c.vendor, amount: c.amount, incurredAt: c.incurredAt, paidBy: CostPaidBy.COMPANY,
+      vendor: c.vendor, amount: c.amount, incurredAt: c.incurredAt, paidBy: 'Company',
       treatment: CostTreatment.COMPANY_EXPENSE, enteredById: c.by.id,
     })),
   });
@@ -1164,7 +1164,7 @@ async function main() {
       { organizationId: org.id, type: CostType.COMPANY, category: 'Salaries', vendor: 'Payroll', amount: 662000, incurredAt: days(-1), enteredById: priya.id, recurring: true },
       { organizationId: org.id, type: CostType.COMPANY, category: 'Office Rent', vendor: 'Nungambakkam Commercial Properties', amount: 65000, incurredAt: days(-1), enteredById: priya.id, recurring: true },
       { organizationId: org.id, type: CostType.COMPANY, category: 'Software & Tools', vendor: 'Adobe / Figma / Vercel', amount: 18000, incurredAt: days(-1), enteredById: priya.id, recurring: true },
-      { organizationId: org.id, type: CostType.COMPANY, category: 'Internet & Utilities', vendor: 'Airtel Broadband / TNEB', amount: 9500, incurredAt: days(-1), enteredById: akmal.id, recurring: true, treatment: CostTreatment.AKMAL_LOAN, paidBy: CostPaidBy.AKMAL },
+      { organizationId: org.id, type: CostType.COMPANY, category: 'Internet & Utilities', vendor: 'Airtel Broadband / TNEB', amount: 9500, incurredAt: days(-1), enteredById: akmal.id, recurring: true, treatment: CostTreatment.AKMAL_LOAN, paidBy: 'Akmal' },
       { organizationId: org.id, type: CostType.COMPANY, category: 'Pantry & Tea', vendor: 'Local Vendor', amount: 4800, incurredAt: days(-2), enteredById: akmal.id },
     ],
   });
@@ -1269,7 +1269,7 @@ async function main() {
     prisma.cost.create({
       data: {
         organizationId: org.id, type: CostType.CAPITAL, category, vendor, amount, incurredAt: at,
-        enteredById: akmal.id, paidBy: CostPaidBy.COMPANY, treatment: CostTreatment.COMPANY_EXPENSE,
+        enteredById: akmal.id, paidBy: 'Company', treatment: CostTreatment.COMPANY_EXPENSE,
       },
     });
 

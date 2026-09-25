@@ -55,8 +55,20 @@ const BILLING_OPTIONS = [
   { value: 'CUSTOM', label: 'Custom milestones' },
 ];
 
-type CustomRow = { label: string; percent: string };
-const blankRow = (): CustomRow => ({ label: '', percent: '' });
+/**
+ * A custom milestone, as the form holds it.
+ *
+ * Both figures, because both get typed. "40% of the quote" is how a proposal
+ * is written and "₹17,500 on delivery" is how a client agrees it, and asking
+ * for only the percentage made the second one arithmetic somebody did on a
+ * phone before typing the answer — which is where the rounding argument starts.
+ *
+ * Whichever is typed fills in the other. The AMOUNT is the one that is stored
+ * exactly; `Milestone.percent` is a whole number in the database, so ₹17,500 of
+ * ₹60,000 is 29% and the money is still ₹17,500.
+ */
+type CustomRow = { label: string; percent: string; amount: string };
+const blankRow = (): CustomRow => ({ label: '', percent: '', amount: '' });
 
 
 export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [] }: Props) {
@@ -102,8 +114,42 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [] 
 
   const quoted = Number(quotedValue) || 0;
   const customPercentTotal = customRows.reduce((s, r) => s + (Number(r.percent) || 0), 0);
-  const customFilled = customRows.filter((r) => r.label.trim() && Number(r.percent) > 0);
-  const customValid = billing !== 'CUSTOM' || (customFilled.length > 0 && customPercentTotal === 100);
+  const customAmountTotal = customRows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const customFilled = customRows.filter((r) => r.label.trim() && Number(r.amount) > 0);
+
+  /*
+   * One typed, the other worked out. Rounded to the rupee for the percent,
+   * because the column it lands in is an integer.
+   */
+  const fromPercent = (percent: string): Partial<CustomRow> =>
+    quoted > 0 && Number(percent) > 0
+      ? { percent, amount: String(Math.round((quoted * Number(percent)) / 100)) }
+      : { percent };
+
+  const fromAmount = (amount: string): Partial<CustomRow> =>
+    quoted > 0 && Number(amount) > 0
+      ? { amount, percent: String(Math.round((Number(amount) / quoted) * 100)) }
+      : { amount };
+
+  /*
+   * The quote is the total, so the split has to add up to it — checked in
+   * rupees rather than percent, because that is what gets invoiced. One rupee
+   * per row of slack, which is all rounding can cost.
+   */
+  const amountsMatch = quoted > 0 && Math.abs(customAmountTotal - quoted) <= customRows.length;
+  // Below 1% of the quote a milestone rounds to zero percent, which the server
+  // refuses. Said here rather than sent and bounced.
+  const anyTooSmall = customFilled.some((r) => Number(r.percent) < 1);
+  /*
+   * Checked in rupees, not percent.
+   *
+   * Percentages summing to 100 is the same statement when every row was typed
+   * as a percentage, and a weaker one the moment somebody types amounts: three
+   * amounts can read 33/33/33 and still be a thousand rupees short of the
+   * quote. What gets invoiced is the money.
+   */
+  const customValid =
+    billing !== 'CUSTOM' || (customFilled.length > 0 && amountsMatch && !anyTooSmall);
 
   const canSave =
     Boolean(companyId) && Boolean(name.trim()) && quoted > 0 && Boolean(startDate) && Boolean(endDate) && customValid;
@@ -119,8 +165,8 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [] 
     }
     if (billing === 'CUSTOM') {
       return customFilled.map((r) => {
-        const percent = Number(r.percent);
-        return { label: r.label.trim(), percent, amount: Math.round((quoted * percent) / 100) };
+        // The amount as typed or derived; the percent as the label for it.
+        return { label: r.label.trim(), percent: Number(r.percent), amount: Number(r.amount) };
       });
     }
     return [
@@ -247,7 +293,6 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [] 
           {billing === 'CUSTOM' && (
             <div className="space-y-2">
               {customRows.map((row, idx) => {
-                const percent = Number(row.percent) || 0;
                 return (
                   <div key={idx} className="flex items-center gap-2">
                     <input
@@ -261,13 +306,18 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [] 
                       className="w-20 rounded-xl border border-border bg-white px-3 py-2 text-sm text-body outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25"
                       type="number"
                       value={row.percent}
-                      onChange={(e) => updateRow(idx, { percent: e.target.value })}
+                      onChange={(e) => updateRow(idx, fromPercent(e.target.value))}
                       placeholder="%"
                       aria-label={`Milestone ${idx + 1} percent of the quote`}
                     />
-                    <span className="w-24 shrink-0 text-xs text-secondary text-right">
-                      {percent > 0 && quoted > 0 ? formatMoney(Math.round((quoted * percent) / 100)) : ''}
-                    </span>
+                    <input
+                      className="w-28 rounded-xl border border-border bg-white px-3 py-2 text-sm text-body outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25"
+                      type="number"
+                      value={row.amount}
+                      onChange={(e) => updateRow(idx, fromAmount(e.target.value))}
+                      placeholder="₹"
+                      aria-label={`Milestone ${idx + 1} amount`}
+                    />
                     <button
                       type="button"
                       onClick={() => removeRow(idx)}
@@ -286,9 +336,16 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [] 
               >
                 <Plus className="h-3.5 w-3.5" /> Add milestone
               </button>
-              <p className={`text-xs ${customPercentTotal === 100 ? 'text-secondary' : 'text-danger font-medium'}`}>
-                {customPercentTotal}% of 100% allocated
-                {customPercentTotal !== 100 ? ' — must add up to 100%' : ''}
+              <p className={`text-xs ${amountsMatch ? 'text-secondary' : 'text-danger font-medium'}`}>
+                {quoted > 0 ? (
+                  <>
+                    {formatMoney(customAmountTotal)} of {formatMoney(quoted)} allocated · {customPercentTotal}%
+                    {!amountsMatch && ' — the milestones must add up to the quoted value'}
+                  </>
+                ) : (
+                  'Enter the quoted value first — the split is worked out against it'
+                )}
+                {anyTooSmall && ' · every milestone needs at least 1% of the quote'}
               </p>
             </div>
           )}

@@ -112,24 +112,33 @@ export function Tabs<T extends string>({
     row.current?.querySelector<HTMLButtonElement>(`[data-tab="${next.key}"]`)?.focus();
   };
 
+  /*
+   * ─── The line is on the wrapper, not on the strip ─────────────────────────
+   *
+   * Per spec, `overflow-x: auto` turns the OTHER axis from `visible` into
+   * `auto` — so this row could scroll vertically as well, and the active tab's
+   * mark was placed at `-bottom-px`: two pixels living entirely outside the
+   * box. Measured on every screen with tabs, at every width:
+   *
+   *     clientHeight 39 · scrollHeight 41 · overflowY auto
+   *
+   * The scrollbar that caused was hidden with `no-scrollbar`, which left the
+   * overflow in place — a strip that can be nudged two pixels, with the mark in
+   * the part that gets clipped.
+   *
+   * Splitting them fixes the cause: the wrapper draws the hairline and does not
+   * scroll, the strip scrolls horizontally and holds nothing outside itself,
+   * and the mark sits at `bottom-0` — inside the box, immediately above the
+   * line. Same picture, no overflow.
+   */
   return (
+    <div className={`border-b border-border ${className}`}>
     <div
       ref={row}
       role="tablist"
       onKeyDown={onKeyDown}
-      /*
-       * `no-scrollbar`, because `overflow-x-auto` was drawing one.
-       *
-       * Per spec, setting overflow on one axis turns the other from `visible`
-       * into `auto` — so `overflow-x-auto` gave this a vertical scrollbar too,
-       * and the active tab's underline sits at `-bottom-px`, one pixel outside
-       * the box. One pixel of overflow, a scrollbar on every screen with tabs.
-       *
-       * The scrolling itself stays: on a narrow screen the tabs still swipe.
-       * Only the bar goes. The utility was already in globals.css with nothing
-       * using it.
-       */
-      className={`no-scrollbar flex max-w-full gap-0 overflow-x-auto border-b border-border ${className}`}
+      // `no-scrollbar`: the swipe stays on a narrow screen, the bar goes.
+      className="no-scrollbar relative flex max-w-full gap-0 overflow-x-auto"
     >
       {shown.map((tab) => {
         const Icon = tab.icon;
@@ -143,7 +152,7 @@ export function Tabs<T extends string>({
             aria-selected={selected}
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(tab.key)}
-            className={`relative -mb-px flex shrink-0 items-center gap-2 whitespace-nowrap rounded-t-sm px-4 py-2.5 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 ${
+            className={`relative flex shrink-0 items-center gap-2 whitespace-nowrap rounded-t-sm px-4 py-2.5 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 ${
               selected ? 'font-[650] text-primary' : 'font-normal text-secondary hover:text-primary'
             }`}
           >
@@ -169,13 +178,14 @@ export function Tabs<T extends string>({
               <motion.span
                 layoutId={`tab-underline-${id}`}
                 aria-hidden="true"
-                className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-accent"
+                className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-accent"
                 transition={{ type: 'spring', stiffness: 420, damping: 34 }}
               />
             )}
           </button>
         );
       })}
+    </div>
     </div>
   );
 }

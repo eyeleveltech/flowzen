@@ -21,7 +21,10 @@ test.describe('the Companies page actions', () => {
 
   const open = async (page: import('@playwright/test').Page, query = '') => {
     await page.goto(`/companies${query}`);
-    await expect(page.getByRole('button', { name: 'Import', exact: true })).toBeVisible({ timeout: 15_000 });
+    // The tab strip, not a button: what this file is about is which BUTTONS
+    // the page offers, so waiting on one of them to decide the page has loaded
+    // makes every test here fail for the same reason when one of them changes.
+    await expect(page.getByRole('tab').first()).toBeVisible({ timeout: 15_000 });
   };
 
   test('offers Import, and neither New nor Export', async ({ page }) => {
@@ -35,14 +38,30 @@ test.describe('the Companies page actions', () => {
     await expect(page.getByRole('link', { name: /export/i })).toHaveCount(0);
   });
 
-  test('still opens creation from the deep link the pipeline uses', async ({ page }) => {
+  test('has no way to create a company, even by the old deep link', async ({ page }) => {
     /*
-     * `?create=true` is how Quick Create's "New company" and the pipeline's
-     * "New lead" both arrive. Taking the button away must not take this with
-     * it — that would break the two screens where a lead actually starts.
+     * `?create=true` used to open a company form here, and Quick Create's "New
+     * company" pointed at it. A company is not created on any screen: it is an
+     * outreach lead that was worth promoting, and promoting is what collects
+     * the rest of its details. Two doors meant the same client could arrive
+     * with no record of who found them or what was said.
+     *
+     * The old link lands on the list, which is the honest answer.
      */
     await open(page, '?create=true');
-    await expect(page.getByRole('dialog').or(page.getByText(/New Client|Add Company|New Company/i)).first())
-      .toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByText(/New Client|Add Company|New Company/i)).toHaveCount(0);
+  });
+
+  test('Quick Create sends you to outreach instead, and it opens the lead form', async ({ page }) => {
+    await open(page);
+    await page.getByRole('button', { name: /Quick create|Create|^\+$/ }).first().click();
+    const item = page.getByRole('link', { name: 'New lead' }).or(page.getByText('New lead', { exact: true })).first();
+    await expect(item).toBeVisible({ timeout: 10_000 });
+    await item.click();
+
+    await expect(page).toHaveURL(/\/outreach/, { timeout: 15_000 });
+    // And the form it points at actually opens, rather than landing on a list.
+    await expect(page.getByRole('dialog', { name: /Add to outreach list/i })).toBeVisible({ timeout: 15_000 });
   });
 });

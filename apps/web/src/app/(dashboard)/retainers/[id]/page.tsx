@@ -41,7 +41,7 @@ import { useAuthStore } from '@/stores';
 import { useConfirmStore } from '@/stores/confirm';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, ChevronLeft, ChevronRight, CircleSlash, LockOpen, Pencil, Plus, ReceiptText, Trash2 } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, CircleSlash, LockOpen, Pencil, Plus, Printer, ReceiptText, Trash2 } from 'lucide-react';
 import { api, ApiError, formatMoney, formatDate, type OrgConfig } from '@/lib/api-v2';
 import { useTeamMembers } from '@/hooks/queries';
 import toast from 'react-hot-toast';
@@ -757,6 +757,25 @@ export default function RetainerMonthCardPage() {
               title={monthClosed ? `${monthLabel(month)} is closed` : undefined}
             >
               Cost
+            </Button>
+          )}
+          {/*
+            What this month cost, on paper. Works on a closed month too — that
+            is when somebody is most likely to want it.
+          */}
+          {monthCard && (
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={Printer}
+              onClick={() =>
+                window.open(
+                  `/print/costs?monthCardId=${monthCard.id}&client=${encodeURIComponent(retainer?.company?.name ?? '')}&job=${encodeURIComponent(`Retainer · ${monthLabel(month)}`)}`,
+                  '_blank',
+                )
+              }
+            >
+              Print costs
             </Button>
           )}
           {canEnterMoney && monthCard && !monthCard.invoice && !monthClosed && (

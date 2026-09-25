@@ -14,6 +14,7 @@
  */
 
 import fs from 'node:fs';
+import { logger } from '../utils/logger.js';
 import path from 'node:path';
 import puppeteer from 'puppeteer';
 import { SupplyType } from '@prisma/client';
@@ -404,10 +405,34 @@ export async function generateDocumentPdf(
    * compose also asks for a larger /dev/shm, so the flag is the belt and that
    * is the braces — each alone fixes it, and neither costs anything.
    */
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-  });
+  /*
+   * If Chromium will not start, say so in those words.
+   *
+   * A PDF download that fails on the server and works on a laptop is always
+   * one of three things — the binary is not in the image, the image is older
+   * than the Dockerfile that installs it, or /dev/shm is the default 64MB —
+   * and all three surfaced as a 500 with a stack trace about a socket hangup.
+   * The message names the executable it tried, which is the one fact that
+   * separates them.
+   */
+  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  let browser;
+  try {
+    browser = await puppeteer.launch({
+      headless: true,
+      ...(executablePath ? { executablePath } : {}),
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    });
+  } catch (cause) {
+    const said = cause instanceof Error ? cause.message.split('\n')[0] : String(cause);
+    logger.error(
+      `PDF renderer could not start (executablePath=${executablePath ?? 'puppeteer default'}): ${said}`,
+    );
+    throw new Error(
+      `The PDF renderer could not start on this server. It tried ${executablePath ?? "Puppeteer's own Chromium"}. ` +
+        `Check that Chromium is installed in the running image and that /dev/shm is not the 64MB default.`,
+    );
+  }
   try {
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: 'load' });

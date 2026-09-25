@@ -175,9 +175,19 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
   const quickCreateItems = ([
     { label: 'New project', href: '/live-work?tab=PROJECTS&create=true', icon: FolderKanban, needs: 'company.write' as const },
     { label: 'New task', href: '/my-work?create=true', icon: CheckSquare, needs: 'work.own' as const },
-    // "New Lead" opened a deal form. There is no deal to create — a card exists
-    // because a company exists (§8.7) — so this is what it always meant.
-    { label: 'New company', href: '/companies?create=true', icon: Building2, needs: 'company.write' as const },
+    /*
+      * A company is not created; it is promoted.
+      *
+      * This offered "New company", which opened a form that made one out of
+      * nothing — so the same client could arrive two ways, one of them with no
+      * record of where they came from, who found them or what was said. A
+      * company exists because a lead was worth promoting, and the outreach
+      * entry is the history that makes the client's page make sense.
+      *
+      * The one exception is the importer on the Companies page, which is how a
+      * list that predates Flowzen gets in.
+      */
+    { label: 'New lead', href: '/outreach?create=true', icon: Building2, needs: 'company.write' as const },
   ]).filter((item) => canSee(item, user?.permissions));
 
   return (

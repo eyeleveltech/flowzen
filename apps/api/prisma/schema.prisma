@@ -971,11 +971,11 @@ enum CostType {
   CAPITAL
 }
 
-enum CostPaidBy {
-  COMPANY
-  AKMAL
-  JAMEEL_N_J_MACSON
-}
+/// Who paid is typed, not chosen -- see the 20260925120000 migration. Two
+/// partners and the firm were written into the database in 2026, so anybody
+/// else putting their own money into a shoot had nowhere to be recorded. The
+/// loan accounting still runs off `CostTreatment`, which stays an enum because
+/// those three ARE the rule.
 
 enum CostTreatment {
   COMPANY_EXPENSE
@@ -996,7 +996,7 @@ model Cost {
   amount            Decimal       @db.Decimal(12, 2)
   incurredAt        DateTime      @db.Date
   committedNotPaid  Boolean       @default(false)
-  paidBy            CostPaidBy    @default(COMPANY)
+  paidBy            String        @default("Company")
   treatment         CostTreatment @default(COMPANY_EXPENSE)
   enteredById       String
   recurring         Boolean       @default(false)

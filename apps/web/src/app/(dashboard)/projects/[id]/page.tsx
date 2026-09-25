@@ -19,7 +19,7 @@ import { use, useCallback, useEffect, useState } from 'react';
 import { useWorkCacheNudge } from '@/hooks/useWorkCacheNudge';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Plus, Settings2, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Printer, Settings2, Trash2 } from 'lucide-react';
 import { api, ApiError, formatMoney, formatDate, type OrgConfig, type Company } from '@/lib/api-v2';
 import { useTeamMembers } from '@/hooks/queries';
 import toast from 'react-hot-toast';
@@ -527,12 +527,21 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           value={estimated != null ? money(estimated) : 'Not set'}
           note={estimated == null ? 'nothing to compare against' : 'what we thought it would take'}
         />
+        {/*
+          A number, including when the number is nought.
+
+          This said "Nothing entered", which is the same fact written as prose:
+          a job with no costs against it has cost ₹0, and a tile of four figures
+          with one sentence in it reads as an error rather than an answer. The
+          note underneath is where "nothing recorded yet" belongs, because that
+          is the part somebody might want to act on.
+        */}
         <StatTile
-          label="Cost so far"
-          value={noCostBasis ? 'Nothing entered' : actual != null ? money(actual) : '—'}
+          label="Cost"
+          value={money(actual ?? 0)}
           note={
             noCostBasis
-              ? 'no costs and nobody allocated yet'
+              ? 'nothing recorded yet'
               : project.profit
                 ? `${money(project.profit.directCost)} external · ${money(project.profit.peopleCost)} people`
                 : 'external and people'
@@ -557,24 +566,20 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             says the job loses money.
           */
           <StatTile
-            label={project.status === 'DELIVERED' ? 'Final profit' : 'Profit so far'}
+            label={project.status === 'DELIVERED' ? 'Final profit' : 'Profit'}
             value={
-              noCostBasis
-                ? 'Not known yet'
-                : headingForLoss
-                  ? money(project.costRisk?.projectedProfit ?? project.profit.profit)
-                  : money(project.profit.profit)
+              headingForLoss
+                ? money(project.costRisk?.projectedProfit ?? project.profit.profit)
+                : money(project.profit.profit)
             }
             note={
               noCostBasis
-                ? 'enter what this job costs to see it'
+                ? 'the whole quote — no costs recorded against it yet'
                 : headingForLoss
                   ? 'projected — see the warning below'
                   : project.profit.marginPercent === null
                     ? 'no quoted value to measure against'
-                    : `${project.profit.marginPercent}% margin${
-                        project.status === 'DELIVERED' ? '' : ' so far'
-                      }`
+                    : `${project.profit.marginPercent}% margin`
             }
             dark={!noCostBasis && !headingForLoss}
             tone={headingForLoss ? 'danger' : undefined}
@@ -905,8 +910,28 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         <Card padding="none">
           <CardHeader>
             <CardTitle>Costs</CardTitle>
+            {/*
+              A sheet of what this job cost, for a meeting or for whoever is
+              asking. A page the browser prints rather than the statutory PDF
+              pipeline, which exists for documents that go out with a number on
+              them — see app/print/costs.
+            */}
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={Printer}
+              className="ml-auto"
+              onClick={() =>
+                window.open(
+                  `/print/costs?projectId=${project.id}&client=${encodeURIComponent(project.company?.name ?? '')}&job=${encodeURIComponent(project.name)}`,
+                  '_blank',
+                )
+              }
+            >
+              Print
+            </Button>
             {canEnterCost && (
-              <Button size="sm" variant="ghost" icon={Plus} className="ml-auto" onClick={() => setAddingCost(true)}>
+              <Button size="sm" variant="ghost" icon={Plus} className="ml-2" onClick={() => setAddingCost(true)}>
                 Cost
               </Button>
             )}

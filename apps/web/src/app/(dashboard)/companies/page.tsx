@@ -11,7 +11,6 @@ import { ErrorNote } from "@/components/ui/empty-state";
 import { plural } from "@/lib/utils";
 import { api, formatMoney } from "@/lib/api-v2";
 import { useAuthStore } from "@/stores";
-import { NewClientModal } from "@/components/clients/NewClientModal";
 import { ImportClientsModal } from "@/components/clients/ImportClientsModal";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -86,9 +85,8 @@ const STATUS_TONE: Record<string, Tone> = {
 
 export default function CompaniesPage() {
   const { user } = useAuthStore();
-  const [filter, setFilter] = useState<CompanyFilter>("ALL");
+  const [filter, setFilter] = useState<CompanyFilter>("CLIENT");
   /** A failed load, said out loud instead of only in the console. */
-  const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const router = useRouter();
 
@@ -181,17 +179,17 @@ export default function CompaniesPage() {
     void queryClient.invalidateQueries({ queryKey: ["companies"] });
   }, [queryClient]);
 
-  // Deep link from Quick Create. This used to sit inside the loader, so it
-  // re-ran on every refetch rather than once on arrival.
-  useEffect(() => {
-    if (
-      typeof window !== "undefined" &&
-      new URLSearchParams(window.location.search).get("create") === "true"
-    ) {
-      setCreateOpen(true);
-      router.replace("/companies");
-    }
-  }, [router]);
+  /*
+   * `?create=true` used to open a company form here.
+   *
+   * A company is not created on this screen, or any other: it is an outreach
+   * lead that was worth promoting, and promoting is what collects the rest of
+   * its details. Quick Create points at /outreach now. An old link or a
+   * bookmark lands on the list, which is the honest answer rather than a form
+   * that makes a client with no history behind it.
+   *
+   * Importing is the one exception, and it has its own button above.
+   */
 
   // The server already applied the tab. Filtering again here was harmless,
   // but it is the tell: this page believed `companies` was the whole list,
@@ -225,22 +223,6 @@ export default function CompaniesPage() {
           </ErrorNote>
         </div>
       )}
-
-      {/*
-        Import, and only import.
-
-        Creating a company here was taken away on purpose — a company starts as
-        an outreach lead and is promoted — and Export went with it. The importer
-        went too, in the same pass, which left a screen with no way to bring a
-        client list in at all and a modal nothing could open. It is how the
-        eighteen real companies got here in the first place.
-      */}
-      <div className="mb-6 flex justify-end">
-        <Button variant="secondary" size="sm" onClick={() => setImportOpen(true)}>
-          <Upload className="h-3.5 w-3.5" strokeWidth={2} />
-          Import
-        </Button>
-      </div>
 
       <StatRow className="mb-8">
         <StatTile
@@ -277,7 +259,6 @@ export default function CompaniesPage() {
       <Tabs
         tabs={
           [
-            { key: "ALL", label: "All", count: counts.ALL },
             { key: "CLIENT", label: STATUS_LABEL.CLIENT, count: counts.CLIENT },
             {
               key: "PROSPECT",
@@ -285,6 +266,7 @@ export default function CompaniesPage() {
               count: counts.PROSPECT,
             },
             { key: "PAST", label: STATUS_LABEL.PAST, count: counts.PAST },
+            { key: "ALL", label: "All", count: counts.ALL },
           ] as TabDef<CompanyFilter>[]
         }
         active={filter}
@@ -414,24 +396,6 @@ export default function CompaniesPage() {
         />
       )}
 
-      {/*
-        Still mounted, with no button on this page to open it.
-
-        Creation is reached from where a company actually begins — the
-        pipeline's "New lead", and Quick Create — both of which arrive here as
-        `?create=true`. Unmounting this would leave those two pointing at
-        nothing, and the pipeline's own note is the reason they point here at
-        all: a pipeline starts with a lead, and a lead IS a company.
-      */}
-      {createOpen && (
-        <NewClientModal
-          onConfirm={() => {
-            setCreateOpen(false);
-            load();
-          }}
-          onCancel={() => setCreateOpen(false)}
-        />
-      )}
     </div>
   );
 }

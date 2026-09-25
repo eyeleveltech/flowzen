@@ -4,7 +4,7 @@ import { app } from '../index.js';
 import { prisma } from '../lib/prisma.js';
 import { signJwt } from '../utils/jwt.js';
 import { evaluateAgencyHealthRules } from '../workers/scanner.cron.js';
-import { CostType, CostPaidBy, CostTreatment, RolePreset } from '@prisma/client';
+import { CostType, CostTreatment, RolePreset } from '@prisma/client';
 
 describe('Phase 5: Direct Costs, Allocations & The 12 Health Rules Scanner', () => {
   const adminToken = signJwt({
@@ -103,7 +103,7 @@ describe('Phase 5: Direct Costs, Allocations & The 12 Health Rules Scanner', () 
       vendor: 'Meta Ads',
       amount: 25000,
       incurredAt: new Date(),
-      paidBy: CostPaidBy.COMPANY,
+      paidBy: 'Company',
       treatment: CostTreatment.COMPANY_EXPENSE,
       enteredById: 'usr-head-1',
     });

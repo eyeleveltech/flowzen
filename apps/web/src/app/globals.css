@@ -399,20 +399,26 @@
   }
 }
 
-/* ── Print: Executive report export (only #exec-report prints) ── */
+/* ── Print ──────────────────────────────────────────────────────────────────
+ *
+ * There used to be a rule here that blanked the whole body and turned one
+ * element back on:
+ *
+ *     body * { visibility: hidden !important; }
+ *     #exec-report, #exec-report * { visibility: visible !important; }
+ *
+ * It was written for an executive report on the Monday brief that printed one
+ * card out of a dashboard. That element is gone -- `#exec-report` appears
+ * nowhere in the app -- and the rule stayed, unscoped, as a statement about
+ * every page in the product: anything printed came out blank, because there
+ * was nothing left to turn back on. The cost sheet at /print/costs is a page
+ * whose whole job is to be printed, and it printed an empty sheet with the
+ * browser's header and footer on it.
+ *
+ * A page that is the printout prints itself. `.no-print` is how a screen hides
+ * its own chrome, which is the only thing this section needs to say.
+ */
 @media print {
   .no-print { display: none !important; }
-  body * { visibility: hidden !important; }
-  #exec-report, #exec-report * { visibility: visible !important; }
-  #exec-report {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    padding: 0;
-    background: #fff;
-  }
-  /* keep each section from splitting awkwardly across pages */
-  #exec-report > div > div { break-inside: avoid; }
   @page { margin: 14mm; }
 }

@@ -2,7 +2,7 @@ import { Router, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, type AuthRequest, hasPermission, requirePermission } from '../middleware/auth.js';
-import { CostType, CostPaidBy, CostTreatment, TaskWorkType } from '@prisma/client';
+import { CostType, CostTreatment, TaskWorkType } from '@prisma/client';
 import { parsePagination } from '../utils/query.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
@@ -119,7 +119,7 @@ costsRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction)
         { label: 'Amount', value: (c) => c.amount ?? '' },
         { label: 'Incurred', value: (c) => c.incurredAt.toISOString().slice(0, 10) },
         { label: 'Committed, not paid', value: (c) => (c.committedNotPaid ? 'Yes' : 'No') },
-        { label: 'Paid by', value: (c) => c.paidBy },
+        { label: 'Company', value: (c) => c.paidBy },
         { label: 'Treatment', value: (c) => c.treatment },
         { label: 'Entered by', value: (c) => c.enteredBy.name },
         { label: 'Recurring', value: (c) => (c.recurring ? 'Yes' : 'No') },
@@ -156,7 +156,11 @@ const createCostSchema = z.object({
   amount: z.number().positive(),
   incurredAt: z.string().optional(),
   committedNotPaid: z.boolean().default(false),
-  paidBy: z.nativeEnum(CostPaidBy).default(CostPaidBy.COMPANY),
+  /*
+   * Typed, not chosen. Trimmed and defaulted rather than validated against a
+   * list -- the list was the problem. See the 20260925120000 migration.
+   */
+  paidBy: z.string().trim().min(1, 'Say who paid').max(80).default('Company'),
   treatment: z.nativeEnum(CostTreatment).default(CostTreatment.COMPANY_EXPENSE),
   recurring: z.boolean().default(false),
   notes: z.string().optional().nullable(),
@@ -369,7 +373,7 @@ const editCostSchema = z.object({
   amount: z.number().positive().optional(),
   incurredAt: z.string().optional(),
   committedNotPaid: z.boolean().optional(),
-  paidBy: z.nativeEnum(CostPaidBy).optional(),
+  paidBy: z.string().trim().min(1).max(80).optional(),
   treatment: z.nativeEnum(CostTreatment).optional(),
   recurring: z.boolean().optional(),
   notes: z.string().optional().nullable(),

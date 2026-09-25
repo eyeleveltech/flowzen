@@ -27,11 +27,6 @@ const COMPANY_CATEGORIES = ['Salaries', 'Office rent', 'Internet and utilities',
 // Same escape hatch as the project and retainer form — see NewWorkCostModal.
 const OTHER_CATEGORY = 'Other';
 
-const PAID_BY_OPTIONS = [
-  { value: 'COMPANY', label: 'Company' },
-  { value: 'AKMAL', label: 'Akmal' },
-  { value: 'JAMEEL_N_J_MACSON', label: 'Jameel, N J Macson' },
-];
 const TREATMENT_OPTIONS = [
   { value: 'COMPANY_EXPENSE', label: 'Company expense' },
   { value: 'AKMAL_LOAN', label: 'Akmal loan' },
@@ -51,7 +46,7 @@ export function NewCostModal({ onClose, onCreated }: { onClose: () => void; onCr
   const [vendor, setVendor] = useState('');
   const [amount, setAmount] = useState('');
   const [incurredAt, setIncurredAt] = useState(new Date().toISOString().slice(0, 10));
-  const [paidBy, setPaidBy] = useState('COMPANY');
+  const [paidBy, setPaidBy] = useState('');
   const [treatment, setTreatment] = useState('COMPANY_EXPENSE');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +88,7 @@ export function NewCostModal({ onClose, onCreated }: { onClose: () => void; onCr
   const canSave =
     Boolean(storedCategory) &&
     Boolean(vendor.trim()) &&
+    Boolean(paidBy.trim()) &&
     Number(amount) > 0 &&
     Boolean(incurredAt) &&
     (type !== 'DIRECT' || Boolean(selectedTarget));
@@ -109,7 +105,7 @@ export function NewCostModal({ onClose, onCreated }: { onClose: () => void; onCr
         vendor: vendor.trim(),
         amount: Number(amount),
         incurredAt,
-        paidBy,
+        paidBy: paidBy.trim(),
         treatment,
         workType: type === 'DIRECT' ? selectedTarget?.workType : undefined,
         monthCardId: type === 'DIRECT' ? selectedTarget?.monthCardId : undefined,
@@ -195,7 +191,8 @@ export function NewCostModal({ onClose, onCreated }: { onClose: () => void; onCr
             <Field label="Date" value={incurredAt} onChange={setIncurredAt} type="date" required />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <FieldSelect label="Paid by" value={paidBy} onChange={setPaidBy} required options={PAID_BY_OPTIONS} />
+            {/* Typed, not chosen — see NewWorkCostModal and the migration. */}
+            <Field label="Company" value={paidBy} onChange={setPaidBy} required placeholder="Whose money it was" />
             <FieldSelect label="Treatment" value={treatment} onChange={setTreatment} required options={TREATMENT_OPTIONS} />
           </div>
           {error && <ErrorNote>{error}</ErrorNote>}

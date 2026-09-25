@@ -22,20 +22,6 @@ type Props = {
   onCreated: () => void;
 };
 
-/**
- * Whose money it was.
- *
- * The Money screen's form has always asked; this one never did, so a cost paid
- * out of somebody's own pocket on a shoot was recorded as the company's and the
- * loan back to them was invisible. Same three answers as the other form, from
- * the same enum, because two lists of the same thing drift.
- */
-const PAID_BY_OPTIONS = [
-  { value: 'COMPANY', label: 'Company' },
-  { value: 'AKMAL', label: 'Akmal' },
-  { value: 'JAMEEL_N_J_MACSON', label: 'Jameel, N J Macson' },
-];
-
 const COST_CATEGORIES = ['Ad spend', 'Freelancer', 'Photography and video', 'Printing', 'Hosting and domain', 'Stock and licences', 'Travel, client', 'Venue and events'];
 
 /**
@@ -57,7 +43,19 @@ export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
   const [category, setCategory] = useState('');
   const [otherCategory, setOtherCategory] = useState('');
   const [vendor, setVendor] = useState('');
-  const [paidBy, setPaidBy] = useState('COMPANY');
+  /*
+   * Whose money it was, typed.
+   *
+   * This form never asked at all, so a cost somebody paid out of their own
+   * pocket on a shoot was recorded as the company's and the loan back to them
+   * was invisible. It was three fixed names in the database until the
+   * 20260925120000 migration -- two partners and the firm -- which left anybody
+   * else with nowhere to be recorded.
+   */
+  // Starts empty. Prefilled with "Company" it had to be cleared before a
+  // person's name could be typed, which is the wrong way round for a field
+  // whose whole point is that it is not always the firm.
+  const [paidBy, setPaidBy] = useState('');
   const [amount, setAmount] = useState('');
   const [incurredAt, setIncurredAt] = useState('');
   const [saving, setSaving] = useState(false);
@@ -68,7 +66,7 @@ export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
       setCategory('');
       setOtherCategory('');
       setVendor('');
-      setPaidBy('COMPANY');
+      setPaidBy('');
       setAmount('');
       setIncurredAt(new Date().toISOString().slice(0, 10));
       setError(null);
@@ -78,7 +76,8 @@ export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
   /** What actually gets stored — the typed words when the list ran out. */
   const storedCategory = category === OTHER_CATEGORY ? otherCategory.trim() : category;
 
-  const canSave = Boolean(storedCategory) && vendor.trim().length > 0 && Number(amount) > 0;
+  const canSave =
+    Boolean(storedCategory) && vendor.trim().length > 0 && paidBy.trim().length > 0 && Number(amount) > 0;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,7 +91,7 @@ export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
         monthCardId: target.kind === 'MONTH_CARD' ? target.monthCardId : undefined,
         category: storedCategory,
         vendor: vendor.trim(),
-        paidBy,
+        paidBy: paidBy.trim(),
         amount: Number(amount),
         incurredAt,
       });
@@ -133,7 +132,14 @@ export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
             required
             placeholder="Who the money went to"
           />
-          <FieldSelect label="Paid by" value={paidBy} onChange={setPaidBy} required options={PAID_BY_OPTIONS} />
+          <Field
+            label="Company"
+            value={paidBy}
+            onChange={setPaidBy}
+            required
+            placeholder="Whose money it was"
+            hint="The firm, or the person who paid for it out of their own pocket."
+          />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Amount (₹)" value={amount} onChange={setAmount} type="number" required />
             <Field label="Date" value={incurredAt} onChange={setIncurredAt} type="date" required />

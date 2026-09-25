@@ -542,7 +542,7 @@ export default function MoneyPage() {
                 <th className="eyebrow text-left">Kind</th>
                 <th className="eyebrow text-left">Against</th>
                 <th className="eyebrow text-left">Paid to</th>
-                <th className="eyebrow text-left">Paid by</th>
+                <th className="eyebrow text-left">Company</th>
                 <th className="eyebrow text-right">Amount</th>
                 <th className=""></th>
               </tr>
@@ -565,7 +565,7 @@ export default function MoneyPage() {
                   </td>
                   <td className="text-secondary">{costAgainst(c)}</td>
                   <td className="text-secondary">{c.vendor}</td>
-                  <td className="text-secondary">{c.paidBy?.replace(/_/g, ' ')}</td>
+                  <td className="text-secondary">{c.paidBy}</td>
                   <td className="font-semibold text-primary text-right">{c.amount != null ? formatMoney(c.amount) : '—'}</td>
                   <td className="text-right">
                     <div className="flex items-center justify-end gap-2">
@@ -803,7 +803,7 @@ export default function MoneyPage() {
                 <tr className="border-b border-border">
                   <th className="eyebrow text-left">Paid towards</th>
                   <th className="eyebrow text-left">Paid to</th>
-                  <th className="eyebrow text-left">Paid by</th>
+                  <th className="eyebrow text-left">Company</th>
                   <th className="eyebrow text-right">Amount</th>
                 </tr>
               </thead>
@@ -816,7 +816,7 @@ export default function MoneyPage() {
                   <tr key={c.id} className="hover:bg-subtle transition-colors">
                     <td className="font-semibold text-primary">{c.category}</td>
                     <td className="text-secondary">{c.vendor}</td>
-                    <td className="text-secondary">{c.paidBy?.replace(/_/g, ' ')}</td>
+                    <td className="text-secondary">{c.paidBy}</td>
                     <td className="font-semibold text-primary text-right">{c.amount != null ? formatMoney(c.amount) : '—'}</td>
                   </tr>
                 ))}
@@ -835,7 +835,7 @@ export default function MoneyPage() {
                 <tr className="border-b border-border">
                   <th className="eyebrow text-left">Paid towards</th>
                   <th className="eyebrow text-left">Paid to</th>
-                  <th className="eyebrow text-left">Paid by</th>
+                  <th className="eyebrow text-left">Company</th>
                   <th className="eyebrow text-right">Amount</th>
                 </tr>
               </thead>
@@ -848,7 +848,7 @@ export default function MoneyPage() {
                   <tr key={c.id} className="hover:bg-subtle transition-colors">
                     <td className="font-semibold text-primary">{c.category}</td>
                     <td className="text-secondary">{c.vendor}</td>
-                    <td className="text-secondary">{c.paidBy?.replace(/_/g, ' ')}</td>
+                    <td className="text-secondary">{c.paidBy}</td>
                     <td className="font-semibold text-primary text-right">{c.amount != null ? formatMoney(c.amount) : '—'}</td>
                   </tr>
                 ))}

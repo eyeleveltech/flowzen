@@ -152,6 +152,18 @@ export default function OutreachPage() {
 
   // Add modal state
   const [addOpen, setAddOpen] = useState(false);
+
+  /*
+   * Quick Create's "New lead" arrives as `?create=true`, the same pattern
+   * /my-work and /live-work use. Replaced out of the URL straight away, so a
+   * refresh or a back button does not reopen the form.
+   */
+  useEffect(() => {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('create') === 'true') {
+      setAddOpen(true);
+      router.replace('/outreach');
+    }
+  }, [router]);
   const [newName, setNewName] = useState('');
   const [newContactName, setNewContactName] = useState('');
   const [newPhone, setNewPhone] = useState('');
