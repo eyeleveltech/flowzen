@@ -106,6 +106,28 @@ const SECTIONS: Section[] = [
     restore: (id) => api.tasks.restore(id),
   },
   {
+    /*
+     * A lead that should not have been on the list — typed twice, a typo, a bad
+     * import line. Marking one Dead is a different statement, and it stays in
+     * the Dead tab where it is counted.
+     */
+    key: 'outreach',
+    heading: 'Outreach leads',
+    permission: 'company.write',
+    needs: 'company',
+    noun: 'Lead',
+    load: async () =>
+      (await api.outreach.trash()).entries.map((e: any) => ({
+        id: e.id,
+        title: e.name,
+        subtitle: [e.owner?.name ?? 'Unassigned', e.status?.toLowerCase().replace(/_/g, ' ')]
+          .filter(Boolean)
+          .join(' · '),
+        deletedAt: e.deletedAt,
+      })),
+    restore: (id) => api.outreach.restore(id),
+  },
+  {
     key: 'costs',
     heading: 'Costs',
     permission: 'setup.admin',

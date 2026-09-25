@@ -19,7 +19,8 @@ import { Field, FieldSelect } from '@/components/ui/field';
 import { Upload, UserPlus } from 'lucide-react';
 import { VERTICAL_LABEL, SOURCE_LABEL, VERTICAL_OPTIONS, SOURCE_OPTIONS, labelFor } from '@/lib/vertical';
 import { RowMenu } from '@/components/ui/row-menu';
-import { Pencil, Send, Building2, CalendarClock } from 'lucide-react';
+import { useConfirmStore } from '@/stores/confirm';
+import { Pencil, Send, Building2, CalendarClock, Trash2 } from 'lucide-react';
 import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
 import { Search, X } from 'lucide-react';
 import { usePageHeader } from '@/hooks/usePageHeader';
@@ -107,6 +108,7 @@ export default function OutreachPage() {
    * flip through it.
    */
   const queryClient = useQueryClient();
+  const confirm = useConfirmStore((st) => st.confirm);
   /** A failed ACTION (marking replied, importing). The query owns load errors. */
   const [actionError, setActionError] = useState<string | null>(null);
   const [pages, setPages] = useState(1);
@@ -333,6 +335,32 @@ export default function OutreachPage() {
    * little form below rather than firing a request that the server would
    * refuse; asking for the date is the whole reason those statuses exist.
    */
+  /**
+   * Take a lead off the list, reversibly.
+   *
+   * Says where it goes, because "delete" in this app has never meant destroyed
+   * — and a confirmation that overstates what it does is one people learn to
+   * click through.
+   */
+  const removeEntry = async (entry: OutreachItem) => {
+    const ok = await confirm({
+      title: `Delete ${entry.name}?`,
+      message:
+        'It comes off the outreach list and out of every count. Nothing is destroyed — Settings → Trash puts it back. ' +
+        'To record a lead that went nowhere, mark it Dead instead: that is what the Dead tab counts.',
+      confirmText: 'Delete',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await api.outreach.remove(entry.id);
+      toast.success(`${entry.name} removed`);
+      await queryClient.invalidateQueries({ queryKey: ['outreach'] });
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not remove this lead');
+    }
+  };
+
   const changeStatus = async (entry: OutreachItem, status: OutreachStatus) => {
     const carriesAction = Boolean(CARRIES_ACTION[status]);
     // Re-choosing the status you are already on is how you MOVE a date —
@@ -715,6 +743,25 @@ export default function OutreachPage() {
                           icon: Building2,
                           onSelect: () => openPromote(e),
                           visible: e.status === 'INTERESTED',
+                        },
+                        /*
+                         * Not the same as Dead.
+                         *
+                         * Dead is the end of a conversation and belongs in the
+                         * count of how many were lost. This is a row that should
+                         * not be on the list — typed twice, a typo, a bad import
+                         * line — and leaving those in the Dead tab makes the one
+                         * number that tab exists to give untrue.
+                         *
+                         * Absent once a lead has been promoted: it is that
+                         * company's history, and the server refuses it anyway.
+                         */
+                        {
+                          label: 'Delete',
+                          icon: Trash2,
+                          tone: 'danger',
+                          onSelect: () => void removeEntry(e),
+                          visible: !e.promotedCompany,
                         },
                       ]}
                     />

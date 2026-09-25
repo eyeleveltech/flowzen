@@ -54,6 +54,7 @@ import { LoseProposalModal } from '@/components/clients/LoseProposalModal';
 import { NewProformaModal } from '@/components/clients/NewProformaModal';
 import { NewProjectModal } from '@/components/clients/NewProjectModal';
 import { RemoveCompanyModal } from '@/components/clients/RemoveCompanyModal';
+import { EditContactModal } from '@/components/clients/EditContactModal';
 import { NewRetainerModal } from '@/components/clients/NewRetainerModal';
 
 export default function CompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -122,6 +123,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
 
   // Add person modal
   const [isAddPersonOpen, setIsAddPersonOpen] = useState(false);
+  const [editingContact, setEditingContact] = useState<any>(null);
   const [personName, setPersonName] = useState('');
   const [personRole, setPersonRole] = useState<'APPROVER' | 'PAYER' | 'CONTACT'>('CONTACT');
   const [personEmail, setPersonEmail] = useState('');
@@ -222,6 +224,34 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
    * proposal is refused by the server, which is why the action is not even
    * offered on one.
    */
+  /**
+   * Withdrawing a proforma.
+   *
+   * There is no way to delete one and there should not be: it is a numbered
+   * document that went to a client, and the series never reuses a number.
+   * Cancelling is what says "this one does not stand" while the number stays
+   * spoken for — and it gives the milestone back, so a proforma raised against
+   * the wrong line can actually be undone.
+   */
+  const handleCancelProforma = async (pi: any) => {
+    const ok = await confirm({
+      title: `Cancel proforma ${pi.number}?`,
+      message:
+        'It stops counting as raised, and the milestone it was raised against goes back to Pending so it can be changed or removed. ' +
+        'The document and its number are kept — a gap in the series means one was cancelled, which is expected.',
+      confirmText: 'Cancel it',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await api.proformas.updateStatus(pi.id, 'CANCELLED');
+      toast.success(`${pi.number} cancelled`);
+      await fetchDetail();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not cancel this proforma');
+    }
+  };
+
   const handleDeleteProposal = async (prop: any) => {
     const ok = await confirm({
       title: 'Delete this proposal?',
@@ -440,6 +470,23 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                           )}
                         </div>
                       </div>
+                      {/*
+                        A contact could be added and never corrected — a typo in
+                        a name, somebody who became the approver, a phone number
+                        that changed. The route has existed the whole time with
+                        nothing calling it, so the only fix was adding a second
+                        person for the same human.
+                      */}
+                      {canWrite && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingContact(p)}
+                          aria-label={`Edit ${p.name}`}
+                          className="shrink-0 rounded-lg border border-border px-2.5 py-1 text-micro font-medium text-body transition-colors hover:bg-subtle"
+                        >
+                          Edit
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -497,7 +544,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                   {liveProjects.map((pr: any) => (
                     <Link
                       key={pr.id}
-                      href={`/projects/${pr.id}`}
+                      href={`/projects/${pr.id}?from=company`}
                       className="block rounded-xl border border-info/30 bg-info-tint/40 p-4 transition-colors hover:bg-info-tint/70 outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     >
                       <span className="eyebrow text-info">
@@ -611,7 +658,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                 {[...(activeRetainer ? [activeRetainer] : []), ...pastRetainers].map((r: any) => (
                   <Link
                     key={r.id}
-                    href={`/retainers/${r.id}`}
+                    href={`/retainers/${r.id}?from=company`}
                     className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 transition-colors hover:bg-subtle outline-none focus-visible:bg-subtle focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
                   >
                     <div className="min-w-0">
@@ -682,7 +729,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                   return (
                     <Link
                       key={pr.id}
-                      href={`/projects/${pr.id}`}
+                      href={`/projects/${pr.id}?from=company`}
                       className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 transition-colors hover:bg-subtle outline-none focus-visible:bg-subtle focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
                     >
                       <div className="min-w-0">
@@ -829,7 +876,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                     <div className="flex items-center justify-between pt-3 border-t border-border">
                       {linkedProject ? (
                         <Link
-                          href={`/projects/${linkedProject.id}`}
+                          href={`/projects/${linkedProject.id}?from=company`}
                           className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
                         >
                           <FolderOpen className="w-3.5 h-3.5" />
@@ -859,7 +906,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                     <div className="flex items-center justify-between pt-3 border-t border-border">
                       {linkedRetainer ? (
                         <Link
-                          href={`/retainers/${linkedRetainer.id}`}
+                          href={`/retainers/${linkedRetainer.id}?from=company`}
                           className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
                         >
                           <FolderOpen className="w-3.5 h-3.5" />
@@ -973,6 +1020,19 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                         >
                           <Pencil className="w-3.5 h-3.5" />
                           Edit
+                        </button>
+                      )}
+                      {/* The only way to withdraw one — see handleCancelProforma.
+                          Absent once it is paid: money against it is its own
+                          record and cancelling the document does not undo it. */}
+                      {canWrite && pi.status === 'UNPAID' && (
+                        <button
+                          type="button"
+                          onClick={() => void handleCancelProforma(pi)}
+                          className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-secondary transition-colors hover:border-danger/40 hover:bg-danger-tint hover:text-danger"
+                          title="Cancel this proforma"
+                        >
+                          Cancel
                         </button>
                       )}
                       <a
@@ -1277,6 +1337,18 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         company, and offer "past client" as a consolation in a second dialog —
         so the choice was discovered by being turned down rather than offered.
       */}
+      {editingContact && company && (
+        <EditContactModal
+          companyId={company.id}
+          contact={editingContact}
+          onClose={() => setEditingContact(null)}
+          onSaved={() => {
+            setEditingContact(null);
+            void fetchDetail();
+          }}
+        />
+      )}
+
       {removing && company && (
         <RemoveCompanyModal
           companyId={company.id}
@@ -1300,7 +1372,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         onCreated={(id) => {
           setCreatingProjectFor(null);
           toast.success('Project created');
-          router.push(`/projects/${id}`);
+          router.push(`/projects/${id}?from=company`);
         }}
       />
 
@@ -1312,7 +1384,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         onCreated={(id) => {
           setCreatingRetainerFor(null);
           toast.success('Retainer created');
-          router.push(`/retainers/${id}`);
+          router.push(`/retainers/${id}?from=company`);
         }}
       />
     </div>

@@ -378,6 +378,10 @@ model OutreachEntry {
   promotedCompanyId String?         @unique
   importedAt        DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
+  /// Removed by a person, and restorable from Settings > Trash. Marking a lead
+  /// Dead is the end of a conversation; this is for a row that should not have
+  /// been on the list at all -- typed twice, a typo, a bad import line.
+  deletedAt         DateTime?
 
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   // `ownerId` has been written since the first version — POST defaults it to
@@ -389,6 +393,7 @@ model OutreachEntry {
   promotedCompany Company?     @relation("PromotedCompany", fields: [promotedCompanyId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, status])
+  @@index([organizationId, deletedAt])
   @@map("outreach_entries")
 }
 

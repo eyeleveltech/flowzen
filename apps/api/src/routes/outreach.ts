@@ -39,7 +39,9 @@ outreachRouter.get('/', requirePermission('company.read'), async (req: AuthReque
      * `?includePromoted=true` brings them back for an export that wants the
      * whole history of who was contacted.
      */
-    const where: any = { organizationId: orgId };
+    // `deletedAt` on every read: a removed lead is gone from the list, the
+    // counts and the tabs, and lives in Settings > Trash until it is restored.
+    const where: any = { organizationId: orgId, deletedAt: null };
     if (req.query.includePromoted !== 'true') where.promotedCompanyId = null;
 
     /*
@@ -108,7 +110,7 @@ outreachRouter.get('/', requirePermission('company.read'), async (req: AuthReque
       prisma.outreachEntry.groupBy({ by: ['status'], where: statusFacetWhere, _count: true }),
       // Follows nothing. The banner says how many cold names exist, which is
       // not a statement about whatever is filtered on screen right now.
-      prisma.outreachEntry.count({ where: { organizationId: orgId, promotedCompanyId: null } }),
+      prisma.outreachEntry.count({ where: { organizationId: orgId, promotedCompanyId: null, deletedAt: null } }),
     ]);
 
     if (wantsCsv) {
@@ -454,6 +456,115 @@ const promoteSchema = z.object({
   force: z.boolean().optional(),
 });
 
+// ── Removing a lead, and putting it back ────────────────────────────────────
+//
+// The list had one way out: mark it Dead. That is the right end for a lead that
+// went nowhere — who found them, what was said, when it stopped — and the wrong
+// end for a row typed twice, a typo, or a line from a bad import. Those sat in
+// the Dead tab pretending to be leads that failed, which makes the one number
+// that tab exists to give untrue.
+//
+// Soft, like everything else a person removes (§16). A promoted lead is refused
+// outright: it IS that company's history — where they came from, who found
+// them — and the company's own page reads it.
+
+outreachRouter.delete('/:id', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+
+    const entry = await prisma.outreachEntry.findFirst({
+      where: { id, organizationId: orgId },
+      select: { id: true, name: true, status: true, deletedAt: true, promotedCompanyId: true },
+    });
+    if (!entry) {
+      res.status(404).json({ success: false, error: 'Outreach entry not found' });
+      return;
+    }
+    if (entry.deletedAt) {
+      res.status(400).json({ success: false, error: 'That lead has already been removed.' });
+      return;
+    }
+    if (entry.promotedCompanyId) {
+      res.status(400).json({
+        success: false,
+        error: `${entry.name} was promoted to a company, and this row is where that company came from. Remove the company instead if it should not be there.`,
+        code: 'ALREADY_PROMOTED',
+      });
+      return;
+    }
+
+    await prisma.outreachEntry.update({ where: { id }, data: { deletedAt: new Date() } });
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'OutreachEntry',
+        entityId: id,
+        actorId: req.user!.userId,
+        verb: 'deleted',
+        payload: { name: entry.name, status: entry.status },
+      },
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// What can be put back — the other half of the delete above, and the reason it
+// is a delete rather than a disappearance.
+outreachRouter.get('/trash', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const entries = await prisma.outreachEntry.findMany({
+      where: { organizationId: orgId, deletedAt: { not: null } },
+      orderBy: { deletedAt: 'desc' },
+      take: 100,
+      include: { owner: { select: { id: true, name: true } } },
+    });
+    res.json({ success: true, entries });
+  } catch (error) {
+    next(error);
+  }
+});
+
+outreachRouter.post('/:id/restore', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+
+    const entry = await prisma.outreachEntry.findFirst({
+      where: { id, organizationId: orgId },
+      select: { id: true, name: true, deletedAt: true },
+    });
+    if (!entry) {
+      res.status(404).json({ success: false, error: 'Outreach entry not found' });
+      return;
+    }
+    if (!entry.deletedAt) {
+      res.status(400).json({ success: false, error: 'That lead is already on the list.' });
+      return;
+    }
+
+    const restored = await prisma.outreachEntry.update({ where: { id }, data: { deletedAt: null } });
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'OutreachEntry',
+        entityId: id,
+        actorId: req.user!.userId,
+        verb: 'restored',
+        payload: { name: entry.name },
+      },
+    });
+
+    res.json({ success: true, entry: restored });
+  } catch (error) {
+    next(error);
+  }
+});
+
 outreachRouter.post('/:id/promote', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
@@ -631,7 +742,9 @@ outreachRouter.post('/import', requirePermission('company.write'), async (req: A
     const rows = parseCsv(csv);
 
     const [existingEntries, existingCompanies] = await Promise.all([
-      prisma.outreachEntry.findMany({ where: { organizationId: orgId }, select: { name: true } }),
+      // A removed row is not a duplicate — re-importing a line somebody deleted
+      // is how a mistake gets corrected.
+      prisma.outreachEntry.findMany({ where: { organizationId: orgId, deletedAt: null }, select: { name: true } }),
       prisma.company.findMany({ where: { organizationId: orgId }, select: { name: true } }),
     ]);
     const existingNames = new Set([...existingEntries, ...existingCompanies].map((r) => r.name.trim().toLowerCase()));

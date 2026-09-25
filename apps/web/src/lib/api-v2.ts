@@ -1285,6 +1285,18 @@ export const api = {
       }>(`/outreach?${new URLSearchParams(params)}`),
     create: (body: Record<string, unknown>) =>
       post<{ success: boolean; entry: any }>('/outreach', body),
+    /**
+     * Take a lead off the list.
+     *
+     * Not the same as marking it Dead: Dead is the end of a conversation, this
+     * is a row that should not have been there — typed twice, a typo, a bad
+     * import line. Soft, so Settings → Trash puts it back. Refused once the
+     * lead has been promoted, because it is that company's history.
+     */
+    remove: (id: string) => del<{ success: boolean }>(`/outreach/${id}`),
+    /** What can be put back — the other half of `remove`. */
+    trash: () => get<{ success: boolean; entries: any[] }>('/outreach/trash'),
+    restore: (id: string) => post<{ success: boolean; entry: any }>(`/outreach/${id}/restore`, {}),
     /** Name, vertical, source, owner, and the contact details — any subset. Refused once the name has been promoted. */
     update: (id: string, body: Record<string, unknown>) =>
       patch<{ success: boolean; entry: any }>(`/outreach/${id}`, body),

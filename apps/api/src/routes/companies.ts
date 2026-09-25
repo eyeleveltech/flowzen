@@ -210,7 +210,8 @@ companiesRouter.get('/', requirePermission('company.read'), async (req: AuthRequ
       // in this list, not kept out of it — which is what the tile's own note
       // says — and /outreach hides promoted rows for exactly that reason. The
       // unfiltered count made the two screens disagree, 7 against 5.
-      prisma.outreachEntry.count({ where: { organizationId: orgId, promotedCompanyId: null } }),
+      // Removed leads are not in the outreach list, so they are not in its count.
+      prisma.outreachEntry.count({ where: { organizationId: orgId, promotedCompanyId: null, deletedAt: null } }),
     ]);
 
     const tally = (rows: { status: CompanyStatus; _count: number }[]) => {
@@ -1622,7 +1623,20 @@ companiesRouter.post('/:id/people', requirePermission('company.write'), async (r
 
 companiesRouter.patch('/:id/people/:personId', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
   try {
-    const parsed = personSchema.partial().safeParse(req.body);
+    /*
+     * A cleared box is a cleared field.
+     *
+     * `personSchema` takes a string or `''` — never null — so a form that sent
+     * `email: null` for "we do not have this any more" was refused with
+     * "Expected string, received null", which is the schema's words about a
+     * fact nobody typed. Nulls are read as blanks here, and blanks are stored
+     * as null below: an empty string in the column is neither an address nor
+     * the absence of one.
+     */
+    const body = Object.fromEntries(
+      Object.entries(req.body ?? {}).map(([k, v]) => [k, v === null ? '' : v]),
+    );
+    const parsed = personSchema.partial().safeParse(body);
     if (!parsed.success) {
       res.status(400).json({ success: false, error: parsed.error.issues[0].message });
       return;
@@ -1650,7 +1664,12 @@ companiesRouter.patch('/:id/people/:personId', requirePermission('company.write'
 
     const updated = await prisma.person.update({
       where: { id: personId },
-      data: parsed.data,
+      data: {
+        ...parsed.data,
+        ...(parsed.data.email !== undefined ? { email: parsed.data.email || null } : {}),
+        ...(parsed.data.phone !== undefined ? { phone: parsed.data.phone || null } : {}),
+        ...(parsed.data.linkedin !== undefined ? { linkedin: parsed.data.linkedin || null } : {}),
+      },
     });
 
     await prisma.activity.create({
