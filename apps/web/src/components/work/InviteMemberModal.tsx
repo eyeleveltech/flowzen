@@ -8,10 +8,20 @@
  * has no way to invite anybody the first time a server refuses a connection.
  * Once accept-invite is opened and a password set, the account activates
  * itself.
+ *
+ * ─── Department is chosen, not typed ────────────────────────────────────────
+ *
+ * It was a text box with "e.g. Design" under it, which is how the same team
+ * came to exist as "Video & Production" and "Video / Production" — and this is
+ * the form that creates people, so it was the one writing the new spellings.
+ * It offers the organisation's list now, the same list Settings holds and the
+ * member edit form offers. A brand-new org has no list yet, so the box comes
+ * back for that case rather than blocking the first invitation.
  */
 
 import { useState } from 'react';
 import { api, ApiError } from '@/lib/api-v2';
+import { useConfig } from '@/hooks/queries';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
@@ -29,6 +39,9 @@ export function InviteMemberModal({ onClose, onInvited }: { onClose: () => void;
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [dept, setDept] = useState('');
+  // The organisation's list, edited in Settings — see ListField there.
+  const { data: config } = useConfig();
+  const departments = config?.organization.departments ?? [];
   const [preset, setPreset] = useState('EMPLOYEE');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +103,24 @@ export function InviteMemberModal({ onClose, onInvited }: { onClose: () => void;
         <ModalBody className="space-y-4">
           <Field label="Name" value={name} onChange={setName} required />
           <Field label="Email" value={email} onChange={setEmail} type="email" required />
-          <Field label="Department" value={dept} onChange={setDept} required placeholder="e.g. Design" />
+          {departments.length > 0 ? (
+            <FieldSelect
+              label="Department"
+              value={dept}
+              onChange={setDept}
+              required
+              options={[{ value: '', label: 'Choose a department…' }, ...departments.map((d) => ({ value: d, label: d }))]}
+            />
+          ) : (
+            <Field
+              label="Department"
+              value={dept}
+              onChange={setDept}
+              required
+              placeholder="e.g. Design"
+              hint="No departments are set up yet. Add them under Settings → Organisation and this becomes a list."
+            />
+          )}
           <FieldSelect label="Access preset" value={preset} onChange={setPreset} required options={PRESET_OPTIONS} />
           {error && <ErrorNote>{error}</ErrorNote>}
         </ModalBody>

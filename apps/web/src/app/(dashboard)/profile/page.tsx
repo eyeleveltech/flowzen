@@ -4,13 +4,28 @@
  * Your own account.
  *
  * Deliberately narrow. Email is not editable because it is what you sign in as,
- * and your role is not here at all — nobody promotes themselves, and a screen
- * that appears to offer it invites the attempt (master plan §5).
+ * and nothing here changes what the app lets you do — nobody promotes
+ * themselves, and a screen that appears to offer it invites the attempt
+ * (master plan §5).
+ *
+ * ─── An access level is not a job title ─────────────────────────────
+ *
+ * The one thing this page said about who you are was "Level: Super Admin" — a
+ * value of a generic ladder (MEMBER → SUPER_ADMIN) that nobody at this agency
+ * uses, derived from the access preset, and printed where a person expects to
+ * read their job. The two come apart in practice: a developer holds MANAGEMENT
+ * access, and reads a screen telling him he is a Super Admin in a company where
+ * that title does not exist.
+ *
+ * So the job — job title and department — leads, beside the name, and the
+ * access level is a separate line, in the agency's own words ("Management"),
+ * said to be access. `lib/people.ts` sets out the four fields and why they are
+ * four.
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import { Check, KeyRound, ShieldCheck } from 'lucide-react';
-import { api, ApiError, formatDate, type OrgConfig, type Profile, type Role } from '@/lib/api-v2';
+import { api, ApiError, formatDate, type OrgConfig, type Profile } from '@/lib/api-v2';
 import { useAuthStore } from '@/stores';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -20,14 +35,7 @@ import { ErrorNote, Note } from '@/components/ui/empty-state';
 import { PageSkeleton } from '@/components/ui/skeleton-loaders';
 import { getInitials, getAvatarColor } from '@/lib/utils';
 import { HeldAssets } from '@/components/assets/HeldAssets';
-
-const ROLE_LABEL: Record<Role, string> = {
-  SUPER_ADMIN: 'Super Admin',
-  ADMIN: 'Admin',
-  MANAGER: 'Manager',
-  SALES: 'Sales',
-  MEMBER: 'Member',
-};
+import { presetLabel } from '@/lib/people';
 
 export default function ProfilePage() {
   const { setAuth, user } = useAuthStore();
@@ -104,6 +112,12 @@ export default function ProfilePage() {
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-primary">{profile?.name}</p>
+                  {/* What you do, not what the app lets you do. */}
+                  {(profile?.designation || profile?.dept) && (
+                    <p className="truncate text-xs text-body">
+                      {[profile?.designation, profile?.dept].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
                   <p className="truncate text-xs text-secondary">{profile?.email}</p>
                 </div>
               </div>
@@ -111,7 +125,12 @@ export default function ProfilePage() {
               <Field label="Name" value={name} onChange={setName} required />
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Job title" value={designation} onChange={setDesignation} />
+                <Field
+                  label="Job title"
+                  value={designation}
+                  onChange={setDesignation}
+                  hint="What you are called at work — “Developer”. Not your access."
+                />
                 <Field label="Phone" type="tel" value={phone} onChange={setPhone} />
               </div>
             </CardBody>
@@ -145,9 +164,14 @@ export default function ProfilePage() {
             <dl className="space-y-2.5">
               <Row label="Email" value={profile?.email ?? '—'} hint="This is what you sign in as." />
               <Row
-                label="Level"
-                value={profile ? ROLE_LABEL[profile.role] : '—'}
-                hint="Only an admin can change this — nobody promotes themselves."
+                label="Department"
+                value={profile?.dept || '—'}
+                hint="The team you sit in. An admin sets this, and Settings holds the list."
+              />
+              <Row
+                label="App access"
+                value={presetLabel(profile?.preset)}
+                hint="What the app lets you do — not a job title. Only an admin can change it, and nobody promotes themselves."
               />
               <Row label="Organisation" value={profile?.organization.name ?? '—'} />
               <Row label="Joined" value={formatDate(profile?.joiningDate, tz, locale)} />

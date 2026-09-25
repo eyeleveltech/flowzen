@@ -188,6 +188,10 @@ test.describe('§14 · the working calendar', () => {
     await expect(page.getByText('Working calendar')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('Stage probabilities')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sun' })).toBeVisible();
-    await expect(page.getByLabel(/Public holidays/)).toBeVisible();
+    // Holidays are a list you add to a day at a time now, not a box of lines
+    // — see settings-lists.spec.ts. The heading still names the setting; the
+    // control is named for what it does.
+    await expect(page.getByText('Public holidays', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Add a holiday')).toBeVisible();
   });
 });

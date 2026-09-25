@@ -2,8 +2,6 @@ import { clsx, type ClassValue } from 'clsx';
 import { extendTailwindMerge } from 'tailwind-merge';
 import { format } from 'date-fns';
 
-import { ROLE_LABELS } from '@flowzen/shared';
-
 /**
  * tailwind-merge, taught about this app's own type step.
  *
@@ -24,11 +22,6 @@ const twMerge = extendTailwindMerge({
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
-}
-
-export function getRoleLabel(role?: string | null): string {
-  if (!role) return '—';
-  return ROLE_LABELS[role] || role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 export function safeDate(date: string | Date | number | null | undefined): Date | null {

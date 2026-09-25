@@ -21,7 +21,9 @@ import { RowMenu } from '@/components/ui/row-menu';
 import { MemberDrawer } from '@/components/work/MemberDrawer';
 import { Badge } from '@/components/ui/badge';
 import { presetLabel } from '@/lib/people';
-import { KeyRound, Package, Plus, ShieldCheck, UserMinus } from 'lucide-react';
+import { KeyRound, Package, Pencil, Plus, ShieldCheck, UserMinus } from 'lucide-react';
+import { EditMemberModal } from '@/components/work/EditMemberModal';
+import { useConfig } from '@/hooks/queries';
 
 interface TeamMember {
   id: string;
@@ -50,12 +52,16 @@ export default function MembersPage() {
    * the product that promised something it could not do.
    */
   const canInvite = useAuthStore((s) => s.user?.permissions?.includes('setup.admin') ?? false);
+  // The departments the edit form offers — a setting, not a hardcoded list.
+  const { data: pageConfig } = useConfig();
+  const departments = pageConfig?.organization.departments ?? [];
   /** A failed load, said out loud instead of only in the console. */
   const [deptFilter, setDeptFilter] = useState('ALL');
   const queryClient = useQueryClient();
   const [assigningTo, setAssigningTo] = useState<TeamMember | null>(null);
   const [inviting, setInviting] = useState(false);
   const [editingAccessFor, setEditingAccessFor] = useState<TeamMember | null>(null);
+  const [editingDetailsFor, setEditingDetailsFor] = useState<TeamMember | null>(null);
   const [resettingFor, setResettingFor] = useState<TeamMember | null>(null);
   const [kitFor, setKitFor] = useState<TeamMember | null>(null);
   const [deactivating, setDeactivating] = useState<TeamMember | null>(null);
@@ -303,6 +309,18 @@ export default function MembersPage() {
                     <RowMenu
                       label={`Actions for ${m.name}`}
                       actions={[
+                        /*
+                         * Their own details — name, email, department. Nothing
+                         * could change these, so a misspelled name stayed wrong
+                         * for ever. `setup.admin` only, which is the same gate
+                         * the server puts on the route.
+                         */
+                        {
+                          label: 'Edit details',
+                          icon: Pencil,
+                          onSelect: () => setEditingDetailsFor(m),
+                          visible: canInvite,
+                        },
                         { label: 'Assign a task', icon: Plus, onSelect: () => setAssigningTo(m) },
                         // What company kit is logged out to them. The register
                         // answers this by holder; this is the way in from the
@@ -368,6 +386,18 @@ export default function MembersPage() {
 
       {resettingFor && (
         <ResetLinkModal person={resettingFor} onClose={() => setResettingFor(null)} />
+      )}
+
+      {editingDetailsFor && (
+        <EditMemberModal
+          member={editingDetailsFor}
+          departments={departments}
+          onCancel={() => setEditingDetailsFor(null)}
+          onConfirm={() => {
+            setEditingDetailsFor(null);
+            void load();
+          }}
+        />
       )}
 
       {deactivating && (

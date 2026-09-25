@@ -8,7 +8,13 @@
  * in person, so this was the one dead link nobody could avoid.
  *
  * Deliberately narrow, matching the screen: email is what you sign in as, and
- * `preset` is not here at all — nobody promotes themselves.
+ * nothing here changes what the app lets you do — nobody promotes themselves.
+ *
+ * `preset` and `dept` are sent, read-only. The screen used to show one line
+ * about who you are — the old generic ladder, spelled "Super Admin" — which is
+ * an access level dressed as a job title, and the two genuinely come apart: a
+ * developer can hold MANAGEMENT access. So the screen now says both, each
+ * named for what it is, and needs both facts to do it.
  */
 
 import { Router, type Response, type NextFunction } from 'express';
@@ -44,10 +50,17 @@ profileRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunctio
       // a colour derived from the name, so null is the honest answer, not a gap.
       avatar: null,
       designation: user.designation,
+      // The team they sit in. Theirs to know, an admin's to set — same as the
+      // access level below it.
+      dept: user.dept,
       phone: user.phone,
       // The day the account was made. There is no separate joining date to keep
       // in step with it, and inventing one would only let the two disagree.
       joiningDate: user.createdAt.toISOString(),
+      // `preset` is how this agency describes access — Employee, Head,
+      // Management. `role` is the same fact in the older generic vocabulary the
+      // client still gates some navigation on; see utils/roles.ts.
+      preset: user.preset,
       role: roleForPreset(user.preset),
       organization: user.organization,
       signIn: {

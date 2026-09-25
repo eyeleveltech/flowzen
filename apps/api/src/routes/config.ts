@@ -69,6 +69,14 @@ configRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
          * The provider, model and address are not secrets and Settings has to
          * show them, so those do go.
          */
+        /*
+         * The departments a person can belong to.
+         *
+         * Sent to everyone, not just admins: the member list groups by
+         * department and the edit form offers them, so any screen showing a
+         * team needs the list.
+         */
+        departments: org.departments,
         aiConfigured: Boolean(org.aiApiKey),
         aiProvider: org.aiProvider,
         aiModel: org.aiModel,
@@ -221,6 +229,16 @@ const orgUpdateSchema = z.object({
    * The provider is checked against the adapters that actually exist rather
    * than taken as a string, so a typo cannot leave Zen pointed at nothing.
    */
+  /*
+   * Departments, as a whole list rather than one at a time.
+   *
+   * Trimmed, de-duplicated and sorted on the way in, because this is a text
+   * box somebody types into and "Design " and "design" are the same team. A
+   * department already assigned to somebody is NOT protected here — removing
+   * one leaves their record carrying a value the dropdown no longer offers,
+   * which the edit form shows rather than silently changing.
+   */
+  departments: z.array(z.string().trim().min(1).max(60)).max(40).optional(),
   aiApiKey: z.string().trim().max(200).optional(),
   aiProvider: z.enum(AI_PROVIDER_IDS).optional(),
   aiModel: z.string().trim().min(1).max(100).optional(),
@@ -293,6 +311,9 @@ configRouter.patch('/', requirePermission('setup.admin'), async (req: AuthReques
          * between null and an empty string is the difference between "no key"
          * and "a key the provider will reject".
          */
+        ...(data.departments !== undefined
+          ? { departments: [...new Set(data.departments.map((d) => d.trim()).filter(Boolean))].sort() }
+          : {}),
         ...(data.aiApiKey !== undefined ? { aiApiKey: data.aiApiKey || null } : {}),
         ...(data.aiProvider !== undefined ? { aiProvider: data.aiProvider } : {}),
         ...(data.aiModel !== undefined ? { aiModel: data.aiModel } : {}),

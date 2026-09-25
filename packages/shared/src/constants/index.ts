@@ -57,12 +57,16 @@ export const PRIORITY_CONFIG: Record<string, { dot: string; badge: string; color
   URGENT: { dot: 'bg-danger', badge: 'bg-danger-tint text-danger border-danger/30', color: 'text-danger', label: 'Urgent', icon: '⚡' },
 };
 
-export const ROLE_LABELS: Record<string, string> = {
-  SUPER_ADMIN: 'Super Admin',
-  ADMIN: 'Admin',
-  PROJECT_MANAGER: 'Project Manager',
-  TEAM_MEMBER: 'Team Member',
-};
+/*
+ * There is no role-label map here any more.
+ *
+ * This one listed SUPER_ADMIN, ADMIN, PROJECT_MANAGER and TEAM_MEMBER — not one
+ * of which is a value of `RolePreset`, the enum the database actually stores —
+ * so it never labelled anything, and its only caller (`getRoleLabel`) had no
+ * callers of its own. Worse, the words it held are job titles standing in for
+ * access levels, which is the confusion `web/src/lib/people.ts` exists to keep
+ * apart. Access is spelled by `presetLabel` there, in this agency's own words.
+ */
 
 export const STATUS_LABELS: Record<string, string> = {
   ACTIVE: 'Active',

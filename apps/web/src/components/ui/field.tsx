@@ -113,6 +113,14 @@ export interface FieldSelectProps extends SelectProps {
   id?: string;
   label: string;
   error?: string;
+  /**
+   * The line under the control, same as `Field`'s.
+   *
+   * `Field` has had one since it was written and `FieldSelect` never did, so a
+   * dropdown that needed a word of explanation had to put a paragraph beside it
+   * and hope it lined up.
+   */
+  hint?: string;
 }
 
 export function FieldSelect({
@@ -120,6 +128,7 @@ export function FieldSelect({
   label,
   required,
   error,
+  hint,
   value,
   onChange,
   options,
@@ -155,6 +164,11 @@ export function FieldSelect({
       {error && (
         <p id={`${fieldId}-error`} aria-live="polite" className="mt-1 text-micro text-danger">
           {error}
+        </p>
+      )}
+      {!error && hint && (
+        <p id={`${fieldId}-hint`} className="mt-1 text-micro text-secondary">
+          {hint}
         </p>
       )}
     </div>

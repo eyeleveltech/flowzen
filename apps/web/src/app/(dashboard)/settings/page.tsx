@@ -8,9 +8,12 @@
  * the prefix and financial year decide what a document is called (master plan
  * §3.11). That is why it is a screen and not a config file.
  *
- * Tabbed rather than one long form, because the sections answer different
+ * Sectioned rather than one long form, because the parts answer different
  * questions and are edited at different times — the tax identity is set once,
- * the team changes constantly.
+ * the team changes constantly. The sections are a column beside the panel on a
+ * wide screen and a single scrolling strip on a narrow one; nine of them in one
+ * wrapping row of buttons reflowed as the window changed width, which moved the
+ * thing you were about to click.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -25,13 +28,13 @@ import {
   type AuditEntry,
   type Member,
   type OrgConfig,
-  type Role,
 } from '@/lib/api-v2';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardHeader, CardTitle, CardBody } from '@/components/ui/card';
+import { SectionCard } from '@/components/ui/section-card';
 import { Field, FieldSelect } from '@/components/ui/field';
+import { ListField } from '@/components/ui/list-field';
 import { Toggle } from '@/components/ui/toggle';
 import { ErrorNote, Note } from '@/components/ui/empty-state';
 import { PageSkeleton } from '@/components/ui/skeleton-loaders';
@@ -41,19 +44,43 @@ import { OnboardingTab } from './components/OnboardingTab';
 import { TrashTab } from './components/TrashTab';
 import { AssetsTab } from './components/AssetsTab';
 
-const TABS = [
-  { key: 'organisation', label: 'Organisation' },
-  { key: 'documents', label: 'Tax & numbering' },
-  { key: 'proforma', label: 'Documents & billing' },
-  { key: 'email', label: 'Email' },
-  { key: 'team', label: 'Team' },
-  { key: 'assets', label: 'Assets' },
-  { key: 'onboarding', label: 'Onboarding' },
-  { key: 'trash', label: 'Trash' },
-  { key: 'activity', label: 'Activity' },
+/**
+ * The sections, in groups.
+ *
+ * Nine of them in one wrapping row of buttons came to two and a half rows on a
+ * laptop, in the order they happened to be built — so "Trash" sat beside
+ * "Onboarding" and the row you were on moved as the window changed width. They
+ * answer three different kinds of question, and grouping them says which:
+ * what the agency IS, WHO is here, and what HAPPENED.
+ */
+const GROUPS = [
+  {
+    label: 'The agency',
+    tabs: [
+      { key: 'organisation', label: 'Organisation', caption: 'Identity, calendar, assistant' },
+      { key: 'documents', label: 'Tax & numbering', caption: 'GST, prefixes, currency' },
+      { key: 'proforma', label: 'Documents & billing', caption: 'What a document says' },
+      { key: 'email', label: 'Email', caption: 'How it is sent' },
+    ],
+  },
+  {
+    label: 'People & kit',
+    tabs: [
+      { key: 'team', label: 'Team', caption: 'Who is here' },
+      { key: 'assets', label: 'Assets', caption: 'Tags and depreciation' },
+      { key: 'onboarding', label: 'Onboarding', caption: 'What a new client needs' },
+    ],
+  },
+  {
+    label: 'Records',
+    tabs: [
+      { key: 'trash', label: 'Trash', caption: 'Removed, not gone' },
+      { key: 'activity', label: 'Activity', caption: 'Who changed what' },
+    ],
+  },
 ] as const;
 
-type TabKey = (typeof TABS)[number]['key'];
+type TabKey = (typeof GROUPS)[number]['tabs'][number]['key'];
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -95,7 +122,16 @@ type Form = {
   workingHoursStart: string;
   workingHoursEnd: string;
   workingDays: number[];
-  holidays: string;
+  /*
+   * Lists, not text.
+   *
+   * Both were a textarea holding one value per line, split on save — so the
+   * control could not refuse a duplicate department or a date typed the wrong
+   * way round, and the blank line at the end of a paste was normal. `ListField`
+   * holds the list itself and adds to it one row at a time.
+   */
+  holidays: string[];
+  departments: string[];
   aiProvider: string;
   /** Typed to replace what is stored; blank means "leave it alone". */
   aiApiKey: string;
@@ -165,8 +201,8 @@ export default function SettingsPage() {
         workingHoursStart: o.workingHoursStart ?? '10:00',
         workingHoursEnd: o.workingHoursEnd ?? '19:00',
         workingDays: o.workingDays ?? [1, 2, 3, 4, 5, 6],
-        // One per line is how somebody actually types a year of holidays.
-        holidays: (o.holidays ?? []).join('\n'),
+        holidays: o.holidays ?? [],
+        departments: o.departments ?? [],
         aiProvider: o.aiProvider ?? 'GEMINI',
         // Never prefilled: the server does not send it back, and an empty
         // box that saves as "keep what you have" is the honest shape.
@@ -266,11 +302,11 @@ export default function SettingsPage() {
         workingHoursStart: form.workingHoursStart,
         workingHoursEnd: form.workingHoursEnd,
         workingDays: form.workingDays,
-        // Typed one per line, but a pasted comma-separated list should work too.
-        holidays: form.holidays
-          .split(/[\n,]/)
-          .map((d) => d.trim())
-          .filter(Boolean),
+        // Already a list, and already trimmed and de-duplicated by the control
+        // that collected it. The server sorts and de-duplicates again — it
+        // cannot assume a browser sent it.
+        departments: form.departments,
+        holidays: form.holidays,
         /*
          * Only sent when something was typed. An untouched field is blank, and
          * blank means "leave the stored key alone" — sending it would clear the
@@ -326,27 +362,57 @@ export default function SettingsPage() {
           </Note>
         )}
 
-        <div className="flex flex-wrap gap-1 border-b border-border pb-3">
-          {TABS.map((t) => (
-            <Button
-              key={t.key}
-              size="sm"
-              variant={tab === t.key ? 'primary' : 'ghost'}
-              onClick={() => setTab(t.key)}
-            >
-              {t.label}
-            </Button>
-          ))}
-        </div>
+        <div className="grid gap-5 lg:grid-cols-[14rem_minmax(0,1fr)] lg:items-start">
+          {/*
+            A column on a wide screen, a single scrolling strip on a narrow one.
+            Wrapping was the problem: it reflowed as the window changed and put
+            the section you were reading on a different line than the one you
+            clicked.
+          */}
+          <nav
+            aria-label="Settings sections"
+            className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 lg:sticky lg:top-4 lg:mx-0 lg:flex-col lg:gap-4 lg:overflow-visible lg:px-0 lg:pb-0"
+          >
+            {GROUPS.map((group) => (
+              <div key={group.label} className="flex shrink-0 gap-1.5 lg:flex-col lg:gap-0.5">
+                <p className="eyebrow hidden px-2 pb-1 lg:block">{group.label}</p>
+                {group.tabs.map((t) => {
+                  const on = tab === t.key;
+                  return (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => setTab(t.key)}
+                      aria-current={on ? 'page' : undefined}
+                      className={`shrink-0 rounded-xl px-3 py-2 text-left text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                        on
+                          ? 'bg-primary/5 font-medium text-primary'
+                          : 'text-body hover:bg-subtle hover:text-primary'
+                      }`}
+                    >
+                      {t.label}
+                      {/*
+                        Orientation for the eye, not part of the button's name:
+                        without `aria-hidden` this reads out as "Trash Removed,
+                        not gone", and anything asking for the button called
+                        "Trash" — a screen reader user, or a test — finds
+                        nothing. Hidden entirely on a strip you scroll sideways.
+                      */}
+                      <span aria-hidden="true" className="mt-0.5 hidden text-micro font-normal text-secondary lg:block">
+                        {t.caption}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </nav>
+
+          <div className="min-w-0 space-y-5">
 
         {tab === 'organisation' && (
           <form onSubmit={save} className="space-y-5">
-            <Card padding="none">
-              <CardHeader>
-                <CardTitle>Who you are</CardTitle>
-              </CardHeader>
-              <CardBody className="space-y-4">
-                <p className="text-xs text-secondary">Printed on every document you send out.</p>
+            <SectionCard title="Who you are" description="Printed on every document you send out.">
                 <Field
                   label="Organisation name"
                   value={form.name}
@@ -366,14 +432,12 @@ export default function SettingsPage() {
                   rows={3}
                   disabled={!canEdit}
                 />
-              </CardBody>
-            </Card>
+            </SectionCard>
 
-            <Card padding="none">
-              <CardHeader>
-                <CardTitle>Authentication & Security</CardTitle>
-              </CardHeader>
-              <CardBody className="space-y-4">
+            <SectionCard
+              title="Signing in"
+              description="How people reach the app, and where the mail it sends comes from."
+            >
                 <div className="rounded-xl border border-border bg-surface p-3">
                   <Toggle
                     checked={form.allowPasswordLogin}
@@ -398,8 +462,7 @@ export default function SettingsPage() {
                     </Button>
                   </div>
                 </div>
-              </CardBody>
-            </Card>
+            </SectionCard>
 
             {/*
               §14 makes both of these settings — "All configurable in Setup" —
@@ -407,15 +470,10 @@ export default function SettingsPage() {
               columns existed and nothing read them; the stage probabilities
               were compiled into three different files that disagreed.
             */}
-            <Card padding="none">
-              <CardHeader>
-                <CardTitle>Working calendar</CardTitle>
-              </CardHeader>
-              <CardBody className="space-y-4">
-                <p className="text-xs text-secondary">
-                  What counts as working time. Every elapsed figure in the app — how long a task took, your average
-                  close, the medians the aging alert compares against — is measured against this.
-                </p>
+            <SectionCard
+              title="Working calendar"
+              description="What counts as working time. Every elapsed figure in the app — how long a task took, your average close, the medians the aging alert compares against — is measured against this."
+            >
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field
                     label="Day starts"
@@ -465,29 +523,53 @@ export default function SettingsPage() {
                     })}
                   </div>
                 </div>
-                <Field
+                <ListField
                   label="Public holidays"
-                  value={form.holidays}
+                  values={form.holidays}
                   onChange={(v) => set('holidays', v)}
-                  textarea
-                  rows={4}
+                  type="date"
+                  addLabel="Add a holiday"
                   disabled={!canEdit}
-                  placeholder={'2026-01-14\n2026-11-08'}
-                  hint="One date per line, as YYYY-MM-DD. A day here is not counted as working time, the same way a Sunday is not."
+                  empty="No holidays yet — only the days off above."
+                  format={(d) => formatDate(d, tz, locale)}
+                  hint="A day here is not counted as working time, the same way a Sunday is not."
                 />
-              </CardBody>
-            </Card>
+            </SectionCard>
 
-            <Card padding="none">
-              <CardHeader>
-                <CardTitle>Stage probabilities</CardTitle>
-              </CardHeader>
-              <CardBody className="space-y-4">
-                <p className="text-xs text-secondary">
+            {/*
+              Its own section, not a field at the bottom of the working
+              calendar. A department is not a working-time setting — it is read
+              by the team list, the capacity view and the member edit form, and
+              it was only here because this was the card that happened to be
+              open when it was added.
+            */}
+            <SectionCard
+              title="Departments"
+              description="The teams people belong to. Added one at a time, because the same team spelled two ways is two teams: this list is what the team screen groups by and the only thing the member edit form offers."
+            >
+              <ListField
+                label="Departments"
+                hideLabel
+                values={form.departments}
+                onChange={(v) => set('departments', v)}
+                addLabel="Add a department"
+                placeholder="e.g. Video / Production"
+                disabled={!canEdit}
+                empty="No departments yet. Add the ones you actually have."
+                hint="Removing one does not move anybody already in it — they keep the department they were given until somebody edits them."
+              />
+            </SectionCard>
+
+            <SectionCard
+              title="Stage probabilities"
+              description={
+                <>
                   How likely a deal at each stage is to land. Weighted pipeline is the deal&apos;s value multiplied by
                   this, so it decides what the Pipeline board and the Forecast both report. A single deal can still be
                   overridden on its own card.
-                </p>
+                </>
+              }
+            >
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="Proposal sent (%)" value={form.stageProbProposalSent} onChange={(v) => set('stageProbProposalSent', v)} type="number" disabled={!canEdit} />
                   <Field label="In negotiation (%)" value={form.stageProbInNegotiation} onChange={(v) => set('stageProbInNegotiation', v)} type="number" disabled={!canEdit} />
@@ -497,20 +579,19 @@ export default function SettingsPage() {
                 <p className="text-micro text-secondary">
                   Won is always 100% and lost is always nothing — neither is a prediction.
                 </p>
-              </CardBody>
-            </Card>
+            </SectionCard>
 
-            <Card padding="none">
-              <CardHeader>
-                <CardTitle>Zen — the assistant</CardTitle>
-              </CardHeader>
-              <CardBody className="space-y-4">
-                <p className="text-xs text-secondary">
+            <SectionCard
+              title="Zen — the assistant"
+              description={
+                <>
                   A key turns on Zen. It is asked with the month&apos;s real figures — client names, fees,
                   costs, margins, the pipeline and who is carrying what — so those are sent to whichever
-                  provider you choose in order to answer a question. Salaries never are. Only MANAGEMENT can
+                  provider you choose in order to answer a question. Salaries never are. Only Management can
                   ask it, and every question is recorded in the activity log.
-                </p>
+                </>
+              }
+            >
                 <div className="grid gap-4 sm:grid-cols-2">
                   <FieldSelect
                     label="Provider"
@@ -603,8 +684,7 @@ export default function SettingsPage() {
                     />
                   )}
                 </div>
-              </CardBody>
-            </Card>
+            </SectionCard>
 
             {canEdit && <SaveBar saving={saving} saved={saved} />}
           </form>
@@ -612,14 +692,10 @@ export default function SettingsPage() {
 
         {tab === 'documents' && (
           <form onSubmit={save} className="space-y-5">
-            <Card padding="none">
-              <CardHeader>
-                <CardTitle>Tax identity</CardTitle>
-              </CardHeader>
-              <CardBody className="space-y-4">
-                <p className="text-xs text-secondary">
-                  Decides which tax applies on every quotation and invoice.
-                </p>
+            <SectionCard
+              title="Tax identity"
+              description="Decides which tax applies on every quotation and invoice."
+            >
                 <div className="grid gap-4 sm:grid-cols-2">
                   <FieldSelect
                     label="State"
@@ -642,14 +718,12 @@ export default function SettingsPage() {
                   anywhere else means IGST. The place of supply is set per document and defaults
                   to the client&apos;s state.
                 </p>
-              </CardBody>
-            </Card>
+            </SectionCard>
 
-            <Card padding="none">
-              <CardHeader>
-                <CardTitle>Numbering</CardTitle>
-              </CardHeader>
-              <CardBody className="space-y-4">
+            <SectionCard
+              title="Numbering"
+              description="What every quotation and invoice is called, and where the count starts again."
+            >
                 <p className="font-mono text-xs text-secondary">
                   {form.documentPrefix || 'XX'}/QT/2026-27/001
                 </p>
@@ -677,17 +751,12 @@ export default function SettingsPage() {
                   Numbers are never reused. A gap means a document was created and removed, which is
                   expected.
                 </Note>
-              </CardBody>
-            </Card>
+            </SectionCard>
 
-            <Card padding="none">
-              <CardHeader>
-                <CardTitle>Dates and money</CardTitle>
-              </CardHeader>
-              <CardBody className="space-y-4">
-                <p className="text-xs text-secondary">
-                  Every due date and day boundary is worked out here, never in the browser.
-                </p>
+            <SectionCard
+              title="Dates and money"
+              description="Every due date and day boundary is worked out here, never in the browser."
+            >
                 <div className="grid gap-4 sm:grid-cols-3">
                   {/* "IST" is a valid identifier meaning India, Israel AND Ireland. */}
                   <Field
@@ -712,8 +781,7 @@ export default function SettingsPage() {
                     disabled={!canEdit}
                   />
                 </div>
-              </CardBody>
-            </Card>
+            </SectionCard>
 
             {canEdit && <SaveBar saving={saving} saved={saved} />}
           </form>
@@ -732,38 +800,44 @@ export default function SettingsPage() {
         )}
 
         {tab === 'team' && (
-          <Card padding="none">
-            <CardHeader>
-              <CardTitle>The people here</CardTitle>
+          <SectionCard
+            title="The people here"
+            description="Read-only — inviting somebody, editing their details and changing what they can reach all happen on the Team screen."
+            aside={
               <Link href="/members">
-                <Button size="sm">Invite and change levels</Button>
+                <Button size="sm">Open Team</Button>
               </Link>
-            </CardHeader>
-            <CardBody>
-              <ul className="divide-y divide-border">
-                {team.map((m) => (
-                  <li key={m.id} className="flex flex-wrap items-center gap-2 py-2.5 first:pt-0">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-primary">{m.name}</p>
-                      <p className="truncate text-xs text-secondary">{m.email}</p>
-                    </div>
-                    <Badge>{(m.role ?? '').replace('_', ' ').toLowerCase()}</Badge>
-                    <Badge
-                      tone={m.status === 'ACTIVE' ? 'good' : m.status === 'PENDING' ? 'warn' : 'neutral'}
-                    >
-                      {m.status.toLowerCase()}
-                    </Badge>
-                  </li>
-                ))}
-                {team.length === 0 && (
-                  <li className="py-2 text-sm text-secondary">Just you so far.</li>
-                )}
-              </ul>
-              <p className="mt-3 text-xs text-secondary">
-                Roles are a ladder — each level includes everything below it.
-              </p>
-            </CardBody>
-          </Card>
+            }
+            bodyClassName=""
+          >
+            <ul className="divide-y divide-border">
+              {team.map((m) => (
+                <li key={m.id} className="flex flex-wrap items-center gap-2 py-2.5 first:pt-0">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm text-primary">{m.name}</p>
+                    {/*
+                      The job, not the access level. This row used to carry a
+                      badge reading "super admin" — a rung of an old generic
+                      ladder, printed where a person's job belongs; see
+                      `lib/people.ts`. What they are called and which team they
+                      sit in is what a list of "the people here" is for.
+                    */}
+                    <p className="truncate text-xs text-secondary">
+                      {[m.designation, m.department?.name].filter(Boolean).join(' · ') || m.email}
+                    </p>
+                  </div>
+                  <Badge
+                    tone={m.status === 'ACTIVE' ? 'good' : m.status === 'PENDING' ? 'warn' : 'neutral'}
+                  >
+                    {m.status.toLowerCase()}
+                  </Badge>
+                </li>
+              ))}
+              {team.length === 0 && (
+                <li className="py-2 text-sm text-secondary">Just you so far.</li>
+              )}
+            </ul>
+          </SectionCard>
         )}
 
 
@@ -783,15 +857,12 @@ export default function SettingsPage() {
         {tab === 'trash' && <TrashTab />}
 
         {tab === 'activity' && (
-          <Card padding="none">
-            <CardHeader>
-              <CardTitle>Who changed what</CardTitle>
-            </CardHeader>
-            <CardBody>
-              <p className="mb-3 text-xs text-secondary">
-                The last hundred changes to people and money. Read-only — an audit log something can
-                edit is not one.
-              </p>
+          <SectionCard
+            title="Who changed what"
+            description="The last hundred changes to people and money. Read-only — an audit log something can edit is not one."
+            bodyClassName=""
+          >
+            <>
               {audit.length === 0 ? (
                 <p className="text-sm text-secondary">Nothing recorded yet.</p>
               ) : (
@@ -814,17 +885,31 @@ export default function SettingsPage() {
                   ))}
                 </ol>
               )}
-            </CardBody>
-          </Card>
+            </>
+          </SectionCard>
         )}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
+/**
+ * Save, kept in reach.
+ *
+ * The button sat at the very bottom of a form five cards long, so changing the
+ * working hours meant scrolling past the assistant's API key to commit them —
+ * and nothing on the way down said there was anything to save. Sticky, it is
+ * where the change is.
+ */
 function SaveBar({ saving, saved }: { saving: boolean; saved: boolean }) {
   return (
-    <div className="flex items-center justify-end gap-3">
+    /* Above the phone's tab bar, which is fixed to the bottom under `md`. */
+    <div className="sticky bottom-[4.75rem] z-10 flex items-center justify-end gap-3 rounded-card border border-border bg-white/95 px-4 py-3 backdrop-blur md:bottom-0">
+      <span className="mr-auto text-micro text-secondary">
+        These settings apply to everybody in the agency.
+      </span>
       {saved && (
         <span className="inline-flex items-center gap-1 text-xs text-success">
           <Check className="h-3.5 w-3.5" /> Saved

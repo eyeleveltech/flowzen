@@ -256,6 +256,14 @@ export interface OrgConfig {
     workingHoursEnd?: string;
     workingDays?: number[];
     holidays?: string[];
+    /**
+     * The departments a person can belong to.
+     *
+     * Sent to everyone, because the member list groups by department and the
+     * edit form offers them — any screen showing a team needs the list, not
+     * just the one that edits it.
+     */
+    departments?: string[];
     // setup.admin only — absent for everyone else. The organisation's own
     // paperwork is not everybody's to read; see the route for the whole story.
     documentPrefix?: string;
@@ -680,6 +688,10 @@ export interface Profile {
   email: string;
   avatar: string | null;
   designation: string | null;
+  /** The team they sit in. Read-only here — an admin sets it. */
+  dept: string | null;
+  /** What the app lets them do — EMPLOYEE / HEAD / BD / ACCOUNTS / MANAGEMENT. */
+  preset: string | null;
   phone: string | null;
   joiningDate: string;
   role: Role;
@@ -1332,6 +1344,20 @@ export const api = {
       get<{ success: boolean; counts: any; tasks: { today: any[]; overdue: any[]; thisWeek: any[]; later: any[]; completed: any[] } }>('/tasks/my'),
     list: (params: Record<string, string> = {}) =>
       get<{ success: boolean; tasks: any[] }>(`/tasks?${new URLSearchParams(params)}`),
+    /**
+     * Every task in the agency, for `work.all` — Head and Management.
+     *
+     * Separate from `list` because it answers a different question: `list` is
+     * "the tasks on this job", narrowed to the caller unless they run the work,
+     * and this is "what is everybody carrying", with the client and the job
+     * attached to each row.
+     */
+    all: (params: Record<string, string> = {}) =>
+      get<{
+        success: boolean;
+        tasks: any[];
+        counts: { total: number; open: number; waiting: number; overdue: number; unassigned: number };
+      }>(`/tasks/all?${new URLSearchParams(params)}`),
     create: (body: Record<string, unknown>) =>
       post<{ success: boolean; task: any }>('/tasks', body),
     /** Title, assignee, due date, priority, notes — any subset. Status has its own route. */

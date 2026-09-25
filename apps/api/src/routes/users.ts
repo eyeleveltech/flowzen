@@ -280,6 +280,17 @@ usersRouter.post('/invite', requirePermission('setup.admin'), async (req: AuthRe
 // this endpoint works around.
 
 const updateSchema = z.object({
+  /*
+   * A person's own details, which nothing could change.
+   *
+   * The only editable fields were their access, their cost and whether they
+   * were switched on — so a misspelled name, or somebody who changed theirs,
+   * stayed wrong for ever. `email` is the login, so a typo locks them out;
+   * the unique index is what catches a clash and the handler turns it into a
+   * sentence rather than a 500.
+   */
+  name: z.string().trim().min(1, 'A name is required').max(120).optional(),
+  email: z.string().trim().email('That is not an email address').optional(),
   preset: z.nativeEnum(RolePreset).optional(),
   permissions: z.array(z.enum(PERMISSION_KEYS)).optional(),
   monthlyCost: z.number().min(0).optional(),
@@ -310,7 +321,7 @@ usersRouter.patch('/:id', requirePermission('setup.admin'), async (req: AuthRequ
       return;
     }
 
-    const { preset, permissions, monthlyCost, dept, active, force } = parsed.data;
+    const { name, email, preset, permissions, monthlyCost, dept, active, force } = parsed.data;
 
     // ── The offboarding gate ────────────────────────────────────────────────
     //
@@ -363,9 +374,32 @@ usersRouter.patch('/:id', requirePermission('setup.admin'), async (req: AuthRequ
       }
     }
 
+    /*
+     * The email is the login and the unique index is the only thing enforcing
+     * it, so a clash arrives as P2002 — an opaque 500 unless it is caught here
+     * and turned into the one sentence that helps.
+     */
+    if (email !== undefined) {
+      const clash = await prisma.user.findFirst({
+        where: { email: email.toLowerCase(), NOT: { id } },
+        select: { name: true },
+      });
+      if (clash) {
+        res.status(400).json({
+          success: false,
+          error: `${clash.name} already uses that email address.`,
+        });
+        return;
+      }
+    }
+
     const updated = await prisma.user.update({
       where: { id },
       data: {
+        ...(name !== undefined ? { name } : {}),
+        // Lower-cased, because the unique index is not: "A@x.com" and
+        // "a@x.com" would be two accounts and one person.
+        ...(email !== undefined ? { email: email.toLowerCase() } : {}),
         ...(preset !== undefined ? { preset } : {}),
         ...(permissions !== undefined ? { permissions } : {}),
         ...(monthlyCost !== undefined ? { monthlyCost } : {}),

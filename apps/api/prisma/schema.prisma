@@ -64,6 +64,16 @@ model Organization {
   /// working time and every elapsed figure was overstated. ISO "YYYY-MM-DD"
   /// dates, because a public holiday is a specific day, not a weekday rule.
   holidays           String[] @default([])
+  /// The departments a person can belong to.
+  ///
+  /// A setting rather than a hardcoded list, because every agency divides
+  /// itself differently and this one has already changed its mind once —
+  /// `User.dept` is free text today, so the same team is spread across
+  /// "Video & Production" and "Video/Production" with nothing to stop it.
+  ///
+  /// Seeded from the departments already in use, so nobody's existing value is
+  /// orphaned the day this becomes a dropdown.
+  departments        String[] @default([])
 
   // Organisation identity — Settings' own "Organisation" tab has always
   // collected these; there was nowhere real for them to land.

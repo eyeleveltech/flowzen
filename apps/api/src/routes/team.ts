@@ -141,7 +141,23 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
       where: { organizationId: orgId, active: true },
       orderBy: { dept: 'asc' },
     });
-    const allDepts = deptRows.map((d) => d.dept);
+
+    /*
+     * The organisation's list, plus anything somebody is actually in.
+     *
+     * Derived from the people alone, a department added in Settings did not
+     * exist here until somebody was moved into it — so the list Settings holds
+     * and the list this filter offers disagreed, which is exactly what the
+     * setting was added to stop. Taken from Settings alone, a person sitting in
+     * an old spelling ("Video & Production", still on four people) would be
+     * unfilterable and effectively invisible. The union is the only answer that
+     * loses nobody.
+     */
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { departments: true },
+    });
+    const allDepts = Array.from(new Set([...(org?.departments ?? []), ...deptRows.map((d) => d.dept)])).sort();
 
     if (req.query.format === 'csv') {
       const csv = toCsv(formatted, [
