@@ -275,6 +275,15 @@ export default function RetainerMonthCardPage() {
    * destination, not an edge case.
    */
   const openProjectId = searchParams.get('project');
+
+  /*
+   * Where the back link goes. `?from=company` is set by the client's Work tab;
+   * anything else lands on Live work, which is where a retainer is found when
+   * it is not being looked at from its client.
+   */
+  const cameFromCompany = searchParams.get('from') === 'company' && Boolean(retainer?.company?.id);
+  const backHref = cameFromCompany ? `/companies/${retainer?.company?.id}?tab=WORK` : '/live-work';
+  const backLabel = cameFromCompany ? (retainer?.company?.name ?? 'Client') : 'Live work';
   /*
    * What the drill-in is showing, and what it is hiding.
    *
@@ -411,6 +420,8 @@ export default function RetainerMonthCardPage() {
   const locale = config?.organization.locale ?? 'en-IN';
   const tz = config?.organization.timezone ?? 'Asia/Kolkata';
   const date = (v: string | null | undefined) => formatDate(v, tz, locale);
+  /** A cost is dated to the day, year included: a list can span two. */
+  const fullDate = (v: string | null | undefined) => formatDate(v, tz, locale, true);
   const money = (v: string | number | null | undefined) => formatMoney(v, currency, locale);
 
   const revenue = monthCard?.revenue != null ? Number(monthCard.revenue) : null;
@@ -677,8 +688,10 @@ export default function RetainerMonthCardPage() {
 
   return (
     <>
-      <Link href="/live-work" className="mb-4 inline-flex items-center gap-1.5 text-sm text-secondary transition-colors hover:text-primary">
-        <ArrowLeft className="h-4 w-4" strokeWidth={1.75} /> Live work
+      {/* Back to the client when that is where this was opened from — see the
+          note on the project page's own back link. */}
+      <Link href={backHref} className="mb-4 inline-flex items-center gap-1.5 text-sm text-secondary transition-colors hover:text-primary">
+        <ArrowLeft className="h-4 w-4" strokeWidth={1.75} /> {backLabel}
       </Link>
 
       <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start">
@@ -866,11 +879,18 @@ export default function RetainerMonthCardPage() {
                   : 'needs the money figures permission'
               }
             />
+            {/*
+              A number, including when the number is nought — same as a
+              one-time project's. "Nothing entered" is the same fact written as
+              prose, and a row of figures with a sentence in it reads as an
+              error rather than an answer. The note carries "nothing recorded
+              yet", which is the part somebody might act on.
+            */}
             <StatTile
               dense
-              label="Cost so far"
-              value={canEnterMoney ? (noCostBasis ? 'Nothing entered' : money(costsTotal)) : 'Hidden'}
-              note={noCostBasis ? 'no costs and no people on this month yet' : 'external and people'}
+              label="Cost"
+              value={canEnterMoney ? money(costsTotal ?? 0) : 'Hidden'}
+              note={noCostBasis ? 'nothing recorded yet' : 'external and people'}
             />
             {/*
               The one dark card on the screen. Profit is what the month is FOR,
@@ -888,14 +908,12 @@ export default function RetainerMonthCardPage() {
               dark
               dense
               label="Profit"
-              value={
-                !canEnterMoney ? 'Hidden' : noCostBasis ? 'Not known yet' : profit != null ? money(profit) : 'Hidden'
-              }
+              value={!canEnterMoney ? 'Hidden' : profit != null ? money(profit) : 'Hidden'}
               note={
                 !canEnterMoney
                   ? 'management only'
                   : noCostBasis
-                    ? 'enter this month’s costs to see it'
+                    ? 'the whole fee — nothing costed against this month yet'
                     : profit != null && revenue
                       ? `${((profit / Number(revenue)) * 100).toFixed(1)}% margin`
                       : 'management only'
@@ -983,7 +1001,7 @@ export default function RetainerMonthCardPage() {
                           <td className="font-medium text-primary">{c.category}</td>
                           <td className="text-secondary">{c.vendor}</td>
                           <td className="text-secondary">{c.enteredBy?.name ?? '—'}</td>
-                          <td className="text-secondary">{date(c.incurredAt)}</td>
+                          <td className="text-secondary whitespace-nowrap">{fullDate(c.incurredAt)}</td>
                           <td className="text-right tabular-nums">{money(c.amount)}</td>
                           {/*
                             A cost could be entered and never corrected. A

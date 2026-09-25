@@ -805,10 +805,45 @@ projectsRouter.patch('/:id/milestones/:milestoneId', requirePermission('work.all
     // milestone id from another organisation would update just as happily.
     const existing = await prisma.milestone.findFirst({
       where: { id: milestoneId, projectId: id, project: { organizationId: orgId } },
+      // Cancelled ones do not count: a cancelled proforma is a document that was
+      // withdrawn, and holding the milestone down for it would mean a mistake
+      // can never be undone.
+      include: { _count: { select: { proformas: { where: { status: { not: 'CANCELLED' } } } } } },
     });
     if (!existing) {
       res.status(404).json({ success: false, error: 'Milestone not found' });
       return;
+    }
+
+    /*
+     * Back down the ladder, once, for a mis-click.
+     *
+     * The status only ever went forward on screen — Pending, Proforma raised,
+     * Invoiced, Paid, and no button at the end — so "Mark paid" pressed on the
+     * wrong row was a one-way door: the milestone counted as collected, the
+     * progress bar moved, and the only way back was the database.
+     *
+     * It can go back now, with one thing held: not below Proforma raised while
+     * a proforma exists against it. That document went to the client with a
+     * number on it, and a milestone claiming nothing has been raised while one
+     * has is the disagreement this rule exists to prevent.
+     */
+    const LADDER = [
+      MilestoneStatus.PENDING,
+      MilestoneStatus.PROFORMA_RAISED,
+      MilestoneStatus.INVOICED,
+      MilestoneStatus.PAID,
+    ];
+    if (status !== undefined && LADDER.indexOf(status) < LADDER.indexOf(existing.status)) {
+      if (status === MilestoneStatus.PENDING && existing._count.proformas > 0) {
+        res.status(400).json({
+          success: false,
+          error:
+            'A proforma has been raised against this milestone, so it cannot go back to Pending. ' +
+            'Cancel the proforma first — on the client, under Invoices & Proformas — and this returns to Pending by itself.',
+        });
+        return;
+      }
     }
 
     // The billing structure (label/percent/amount) is locked the moment a
@@ -856,14 +891,17 @@ projectsRouter.delete('/:id/milestones/:milestoneId', requirePermission('work.al
 
     const existing = await prisma.milestone.findFirst({
       where: { id: milestoneId, projectId: id, project: { organizationId: orgId } },
-      include: { _count: { select: { proformas: true } } },
+      // Cancelled ones do not count: a cancelled proforma is a document that was
+      // withdrawn, and holding the milestone down for it would mean a mistake
+      // can never be undone.
+      include: { _count: { select: { proformas: { where: { status: { not: 'CANCELLED' } } } } } },
     });
     if (!existing) {
       res.status(404).json({ success: false, error: 'Milestone not found' });
       return;
     }
     if (existing.status !== MilestoneStatus.PENDING || existing._count.proformas > 0) {
-      res.status(400).json({ success: false, error: 'This milestone already has billing against it and cannot be deleted.' });
+      res.status(400).json({ success: false, error: 'This milestone has a live proforma against it. Cancel the proforma first — on the client, under Invoices & Proformas — and this can be removed.' });
       return;
     }
 

@@ -18,7 +18,7 @@
 import { use, useCallback, useEffect, useState } from 'react';
 import { useWorkCacheNudge } from '@/hooks/useWorkCacheNudge';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Plus, Printer, Settings2, Trash2 } from 'lucide-react';
 import { api, ApiError, formatMoney, formatDate, type OrgConfig, type Company } from '@/lib/api-v2';
 import { useTeamMembers } from '@/hooks/queries';
@@ -160,9 +160,27 @@ const MSTATUS_NEXT: Record<MStatus, MStatus | null> = {
   PAID: null,
 };
 
+/*
+ * And back, one step, for a mis-click.
+ *
+ * The ladder only ever went up, and there was no button at Paid — so "Mark
+ * paid" pressed on the wrong row counted the money as collected, moved the
+ * progress bar, and left the database as the only way back.
+ *
+ * Not below Proforma raised while a proforma exists: the server refuses it,
+ * because that document went to the client with a number on it.
+ */
+const MSTATUS_BACK: Record<MStatus, MStatus | null> = {
+  PENDING: null,
+  PROFORMA_RAISED: 'PENDING',
+  INVOICED: 'PROFORMA_RAISED',
+  PAID: 'INVOICED',
+};
+
 export default function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const confirm = useConfirmStore((st) => st.confirm);
   const nudgeWorkCaches = useWorkCacheNudge();
 
@@ -289,6 +307,16 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const locale = config?.organization.locale ?? 'en-IN';
   const tz = config?.organization.timezone ?? 'Asia/Kolkata';
   const date = (v: string | null | undefined) => formatDate(v, tz, locale);
+  /** A cost is dated to the day, year included: a list can span two. */
+  const fullDate = (v: string | null | undefined) => formatDate(v, tz, locale, true);
+
+  /*
+   * Where the back link goes. `?from=company` is set by the client's Work tab
+   * and by anything else that owns this project in its own page.
+   */
+  const cameFromCompany = searchParams.get('from') === 'company' && Boolean(project?.company?.id);
+  const backHref = cameFromCompany ? `/companies/${project?.company?.id}?tab=WORK` : '/live-work?tab=PROJECTS';
+  const backLabel = cameFromCompany ? (project?.company?.name ?? 'Client') : 'Projects';
   const money = (v: string | number | null) => formatMoney(v, currency, locale);
 
   const actual = project.actualCostTotal != null ? Number(project.actualCostTotal) : null;
@@ -350,6 +378,30 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       await load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not update that milestone');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const stepMilestoneBack = async (m: Milestone) => {
+    const back = MSTATUS_BACK[m.status];
+    if (!back) return;
+    const ok = await confirm({
+      title: `Move back to ${MSTATUS[back].label}?`,
+      message:
+        m.status === 'PAID'
+          ? 'It stops counting as collected, and the progress on this project moves with it. Nothing else changes — an invoice or a proforma raised against it stays as it is.'
+          : 'Nothing else changes — any document already raised against it stays as it is.',
+      confirmText: `Move to ${MSTATUS[back].label.toLowerCase()}`,
+      variant: 'info',
+    });
+    if (!ok) return;
+    setBusyId(m.id);
+    try {
+      await api.projects.updateMilestone(project.id, m.id, back);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not move that milestone back');
     } finally {
       setBusyId(null);
     }
@@ -439,8 +491,18 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
   return (
     <>
-      <Link href="/live-work?tab=PROJECTS" className="mb-4 inline-flex items-center gap-1.5 text-sm text-secondary transition-colors hover:text-primary">
-        <ArrowLeft className="h-4 w-4" strokeWidth={1.75} /> Projects
+      {/*
+        Back to where you came from.
+
+        This always said "Projects" and always went to Live work, so opening a
+        project from a client's Work tab and pressing back left the client
+        entirely — and the way back was two more clicks through a list of every
+        project in the studio. The screens that link here say so with `?from=`;
+        anything else still lands on Live work, which is where a project is
+        found when it is not being looked at from its client.
+      */}
+      <Link href={backHref} className="mb-4 inline-flex items-center gap-1.5 text-sm text-secondary transition-colors hover:text-primary">
+        <ArrowLeft className="h-4 w-4" strokeWidth={1.75} /> {backLabel}
       </Link>
 
       <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
@@ -715,6 +777,18 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                                 Mark {MSTATUS[MSTATUS_NEXT[m.status]!].label.toLowerCase()}
                               </Button>
                             )}
+                            {/* The way back from a mis-click — see MSTATUS_BACK. */}
+                            {canManage && MSTATUS_BACK[m.status] && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                loading={busyId === m.id}
+                                onClick={() => void stepMilestoneBack(m)}
+                                title={`Move back to ${MSTATUS[MSTATUS_BACK[m.status]!].label}`}
+                              >
+                                Undo
+                              </Button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -960,7 +1034,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                       <td className="font-medium text-primary">{c.category}</td>
                       <td className="text-secondary">{c.vendor}</td>
                       <td className="text-secondary">{c.enteredBy?.name ?? '—'}</td>
-                      <td className="text-secondary">{date(c.incurredAt)}</td>
+                      <td className="text-secondary whitespace-nowrap">{fullDate(c.incurredAt)}</td>
                       <td className="text-right">{money(c.amount)}</td>
                       {canEnterCost && (
                         <td className="text-right whitespace-nowrap">
@@ -1178,6 +1252,40 @@ function EditProjectModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /*
+   * The billing split, editable here.
+   *
+   * It could be chosen when the project was created and never changed: the only
+   * way to move a 40/30/30 to 50/50 afterwards was the pencil on each row of the
+   * Milestones tab, one at a time, with no running total to say whether the
+   * result still came to the quote. Same builder as the create form, and the
+   * same rule — percent and value each fill in the other.
+   *
+   * A milestone that has been billed is shown and locked, because the server
+   * refuses to change one once a proforma exists against it. Its money still
+   * counts towards the total, or the sums would disagree with the invoices.
+   */
+  type MRow = { id?: string; label: string; percent: string; amount: string; locked: boolean; status: string };
+  const [rows, setRows] = useState<MRow[]>([]);
+  const [removed, setRemoved] = useState<string[]>([]);
+
+  const quotedNumber = Number(quotedValue) || 0;
+  const rowAmountTotal = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+  const rowsAddUp = quotedNumber > 0 && Math.abs(rowAmountTotal - quotedNumber) <= Math.max(1, rows.length);
+
+  const setRow = (idx: number, patch: Partial<MRow>) =>
+    setRows((list) => list.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+
+  const rowFromPercent = (percent: string): Partial<MRow> =>
+    quotedNumber > 0 && Number(percent) > 0
+      ? { percent, amount: String(Math.round((quotedNumber * Number(percent)) / 100)) }
+      : { percent };
+
+  const rowFromAmount = (amount: string): Partial<MRow> =>
+    quotedNumber > 0 && Number(amount) > 0
+      ? { amount, percent: String(Math.round((Number(amount) / quotedNumber) * 100)) }
+      : { amount };
+
   useEffect(() => {
     if (!project) return;
     setName(project.name);
@@ -1189,6 +1297,19 @@ function EditProjectModal({
     setStatus(project.status);
     setPriority(project.priority);
     setDescription(project.description ?? '');
+    setRows(
+      (project.milestones ?? []).map((m: any) => ({
+        id: m.id,
+        label: m.label,
+        percent: String(m.percent ?? ''),
+        amount: m.amount != null ? String(Number(m.amount)) : '',
+        // Anything past Pending has a document against it; the server refuses
+        // to change those and this says so rather than letting somebody try.
+        locked: m.status !== 'PENDING',
+        status: m.status,
+      })),
+    );
+    setRemoved([]);
     setError(null);
   }, [project]);
 
@@ -1210,6 +1331,39 @@ function EditProjectModal({
         priority,
         description: description.trim() || null,
       });
+
+      /*
+       * The split, as a diff.
+       *
+       * Removed first, then changed, then added: a project briefly holding two
+       * halves of a rewrite would sum to more than the quote, and the deletes
+       * are what make room. Each call is its own request because each one is
+       * its own decision on the server — a milestone with billing against it
+       * refuses, and the refusal names which.
+       */
+      for (const id of removed) {
+        await api.projects.deleteMilestone(project.id, id);
+      }
+      const original = new Map((project.milestones ?? []).map((m: any) => [m.id, m]));
+      for (const r of rows) {
+        const label = r.label.trim();
+        const percent = Number(r.percent) || 0;
+        const amount = Number(r.amount) || 0;
+        if (!label || amount <= 0) continue;
+        if (!r.id) {
+          await api.projects.addMilestone(project.id, { label, percent, amount });
+          continue;
+        }
+        if (r.locked) continue;
+        const was: any = original.get(r.id);
+        const changed =
+          !was ||
+          was.label !== label ||
+          Number(was.percent) !== percent ||
+          Number(was.amount) !== amount;
+        if (changed) await api.projects.editMilestone(project.id, r.id, { label, percent, amount });
+      }
+
       onSaved();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save this project');
@@ -1246,6 +1400,76 @@ function EditProjectModal({
           </div>
           <FieldSelect label="Priority" value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} />
           <Field label="Description" value={description} onChange={setDescription} textarea rows={3} />
+
+          {/* ── Billing milestones ──────────────────────────────────────── */}
+          <div className="space-y-2">
+            <span className="eyebrow block">Billing milestones</span>
+            {rows.length === 0 && (
+              <p className="text-xs text-secondary">No milestones — this project bills in one go.</p>
+            )}
+            {rows.map((row, idx) => (
+              <div key={row.id ?? `new-${idx}`} className="flex items-center gap-2">
+                <input
+                  className="flex-1 rounded-xl border border-border bg-white px-3 py-2 text-sm text-body outline-none disabled:bg-subtle/60 disabled:text-secondary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25"
+                  value={row.label}
+                  onChange={(e) => setRow(idx, { label: e.target.value })}
+                  placeholder="Milestone label"
+                  aria-label={`Milestone ${idx + 1} label`}
+                  disabled={row.locked}
+                />
+                <input
+                  className="w-20 rounded-xl border border-border bg-white px-3 py-2 text-sm text-body outline-none disabled:bg-subtle/60 disabled:text-secondary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25"
+                  type="number"
+                  value={row.percent}
+                  onChange={(e) => setRow(idx, rowFromPercent(e.target.value))}
+                  placeholder="%"
+                  aria-label={`Milestone ${idx + 1} percent of the quote`}
+                  disabled={row.locked}
+                />
+                <input
+                  className="w-28 rounded-xl border border-border bg-white px-3 py-2 text-sm text-body outline-none disabled:bg-subtle/60 disabled:text-secondary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25"
+                  type="number"
+                  value={row.amount}
+                  onChange={(e) => setRow(idx, rowFromAmount(e.target.value))}
+                  placeholder="₹"
+                  aria-label={`Milestone ${idx + 1} amount`}
+                  disabled={row.locked}
+                />
+                {row.locked ? (
+                  /* Billed, so the figures are settled — the document that went
+                     out says what they were. */
+                  <span className="w-20 shrink-0 text-right text-micro text-secondary" title="A proforma has been raised against this one">
+                    {row.status.replace(/_/g, ' ').toLowerCase()}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (row.id) setRemoved((list) => [...list, row.id!]);
+                      setRows((list) => list.filter((_, i) => i !== idx));
+                    }}
+                    className="w-20 shrink-0 rounded-lg p-1.5 text-right text-secondary hover:text-danger"
+                    aria-label={`Remove milestone ${idx + 1}`}
+                  >
+                    <Trash2 className="ml-auto h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => setRows((list) => [...list, { label: '', percent: '', amount: '', locked: false, status: 'PENDING' }])}
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              <Plus className="h-3.5 w-3.5" /> Add milestone
+            </button>
+            {rows.length > 0 && (
+              <p className={`text-xs ${rowsAddUp ? 'text-secondary' : 'text-danger font-medium'}`}>
+                {formatMoney(rowAmountTotal)} of {formatMoney(quotedNumber)} allocated
+                {!rowsAddUp && ' — the milestones must add up to the quoted value'}
+              </p>
+            )}
+          </div>
           {error && <ErrorNote>{error}</ErrorNote>}
         </ModalBody>
         <ModalFooter>

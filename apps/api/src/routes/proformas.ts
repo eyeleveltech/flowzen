@@ -426,6 +426,45 @@ proformasRouter.patch('/:id/status', requirePermission('pipeline.write'), async 
       data: { status: status as ProformaStatus },
     });
 
+    /*
+     * Cancelling one gives its milestone back.
+     *
+     * Raising a proforma moves the milestone to Proforma raised — status
+     * follows the record — so withdrawing the document has to move it back, or
+     * the milestone claims a document exists that no longer does. That was the
+     * dead end: the milestone could not return to Pending and could not be
+     * removed, and the only advice was to delete a proforma, which nothing can
+     * do.
+     *
+     * Only from Proforma raised. Once it has been invoiced or paid, money has
+     * moved on its own record and cancelling this document does not undo that.
+     */
+    if (status === 'CANCELLED' && existing.milestoneId) {
+      const milestone = await prisma.milestone.findFirst({
+        where: { id: existing.milestoneId },
+        include: { _count: { select: { proformas: { where: { status: { not: 'CANCELLED' } } } } } },
+      });
+      if (milestone && milestone.status === 'PROFORMA_RAISED' && milestone._count.proformas === 0) {
+        await prisma.milestone.update({ where: { id: milestone.id }, data: { status: 'PENDING' } });
+        await prisma.activity.create({
+          data: {
+            organizationId: orgId,
+            entityType: 'Project',
+            entityId: milestone.projectId,
+            actorId: req.user!.userId,
+            verb: 'milestone_status_changed',
+            payload: {
+              milestoneId: milestone.id,
+              label: milestone.label,
+              from: 'PROFORMA_RAISED',
+              to: 'PENDING',
+              because: `Proforma ${existing.number} was cancelled`,
+            },
+          },
+        });
+      }
+    }
+
     res.json({ success: true, proforma });
   } catch (error) {
     next(error);
