@@ -461,7 +461,23 @@ export default function MyWorkPage() {
   );
 }
 
-type Target = { label: string; workType: 'RETAINER' | 'PROJECT'; monthCardId?: string; projectId?: string };
+/**
+ * One thing a task can be filed against.
+ *
+ * A retainer option is a piece of work INSIDE the retainer, not the retainer's
+ * month — see the note in the loader below. `key` is what the dropdown stores,
+ * and it is the retainer project or the one-time project, both unique.
+ */
+type Target = {
+  key: string;
+  label: string;
+  workType: 'RETAINER' | 'PROJECT';
+  monthCardId?: string;
+  retainerProjectId?: string;
+  projectId?: string;
+  /** Which month a retainer option bills into, for the line under the field. */
+  month?: string;
+};
 
 function NewTaskModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
   const me = useAuthStore((s) => s.user);
@@ -528,11 +544,50 @@ function NewTaskModal({ open, onClose, onCreated }: { open: boolean; onClose: ()
         for (const r of company.retainers ?? []) {
           if (r.status !== 'ACTIVE') continue;
           const currentMonth = (r.monthCards ?? [])[0];
-          if (currentMonth) list.push({ label: `Retainer — ${currentMonth.month}`, workType: 'RETAINER', monthCardId: currentMonth.id });
+          if (!currentMonth) continue;
+          /*
+           * The retainer's projects, not the retainer.
+           *
+           * This offered "Retainer — 2026-09", which is a month, and a month
+           * is not a job: it says when the work is billed, never what it is
+           * for. Choosing it sent the month card alone, and the server filed
+           * the task under that retainer's default project — so a VOSO task
+           * meant for League Season Launch landed in Monthly Retainer Work,
+           * and this form had no way to say otherwise.
+           *
+           * The month is not dropped, it rides along on the option: a task
+           * still has to sit on the month that pays for it, which is what the
+           * line under the field says and what `tasks_month_card_needs_project`
+           * enforces at the database.
+           */
+          const parts = (r.projects ?? []).filter((p: any) => p.status !== 'DONE');
+          if (parts.length === 0) {
+            // Every retainer is created with a default project, so this is the
+            // old shape of the data rather than a case worth designing for —
+            // it files exactly as it did before.
+            list.push({
+              key: currentMonth.id,
+              label: `Retainer — ${currentMonth.month}`,
+              workType: 'RETAINER',
+              monthCardId: currentMonth.id,
+              month: currentMonth.month,
+            });
+            continue;
+          }
+          for (const p of parts) {
+            list.push({
+              key: p.id,
+              label: `Retainer — ${p.name}`,
+              workType: 'RETAINER',
+              monthCardId: currentMonth.id,
+              retainerProjectId: p.id,
+              month: currentMonth.month,
+            });
+          }
         }
         for (const p of company.projects ?? []) {
           if (p.status !== 'LIVE') continue;
-          list.push({ label: `Project — ${p.name}`, workType: 'PROJECT', projectId: p.id });
+          list.push({ key: p.id, label: `Project — ${p.name}`, workType: 'PROJECT', projectId: p.id });
         }
         setTargets(list);
       })
@@ -540,7 +595,7 @@ function NewTaskModal({ open, onClose, onCreated }: { open: boolean; onClose: ()
       .finally(() => setLoadingTargets(false));
   }, [companyId, scope]);
 
-  const selectedTarget = targets.find((t) => (t.monthCardId ?? t.projectId) === targetKey);
+  const selectedTarget = targets.find((t) => t.key === targetKey);
   const canSave = Boolean(title.trim()) && Boolean(dueDate) && (scope === 'INTERNAL' || Boolean(selectedTarget));
 
   const submit = async (e: React.FormEvent) => {
@@ -553,6 +608,9 @@ function NewTaskModal({ open, onClose, onCreated }: { open: boolean; onClose: ()
         title: title.trim(),
         workType: scope === 'INTERNAL' ? 'INTERNAL' : selectedTarget?.workType === 'RETAINER' ? 'MONTH_CARD' : 'PROJECT',
         monthCardId: scope === 'CLIENT' ? selectedTarget?.monthCardId : undefined,
+        // What the work is for, alongside the month that bills it. Omitted for
+        // a one-time project, which is its own answer to both questions.
+        retainerProjectId: scope === 'CLIENT' ? selectedTarget?.retainerProjectId : undefined,
         projectId: scope === 'CLIENT' ? selectedTarget?.projectId : undefined,
         dueDate,
         priority,
@@ -605,7 +663,8 @@ function NewTaskModal({ open, onClose, onCreated }: { open: boolean; onClose: ()
                 required
                 disabled={!companyId || loadingTargets}
                 placeholder={!companyId ? 'Choose a company first' : loadingTargets ? 'Loading…' : targets.length === 0 ? 'Nothing live' : 'Choose…'}
-                options={targets.map((t) => ({ value: (t.monthCardId ?? t.projectId)!, label: t.label }))}
+                options={targets.map((t) => ({ value: t.key, label: t.label }))}
+                hint={selectedTarget?.month ? `Billed on the ${selectedTarget.month} month card.` : undefined}
               />
             </>
           )}

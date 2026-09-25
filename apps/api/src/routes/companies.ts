@@ -282,6 +282,23 @@ companiesRouter.get('/:id', requirePermission('company.read'), async (req: AuthR
               orderBy: { month: 'desc' },
               include: { invoice: true },
             },
+            /*
+             * The pieces of work inside the retainer.
+             *
+             * A retainer task carries two facts — which month it is billed in,
+             * and what it is FOR — and only the first was on this payload. So
+             * every form that builds its job picker from a company (Assign
+             * task, My Work) could offer the month and nothing else, and each
+             * task they created fell into the retainer's default project
+             * whichever campaign it actually belonged to.
+             *
+             * Default first, because it is the one most work belongs to.
+             */
+            projects: {
+              where: { status: 'ACTIVE' },
+              orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
+              select: { id: true, name: true, status: true, isDefault: true },
+            },
           },
         },
         projects: {

@@ -38,7 +38,6 @@ type Row = {
   paidBy: string;
   amount: number | null;
   incurredAt: string;
-  enteredBy?: { name: string } | null;
   project?: { name: string; company?: { name: string } | null } | null;
   monthCard?: { month: string; retainer?: { company?: { name: string } | null } | null } | null;
 };
@@ -142,7 +141,6 @@ export default function CostSheet() {
               <th className="py-2 pr-3 font-medium">Paid towards</th>
               <th className="py-2 pr-3 font-medium">Paid to</th>
               <th className="py-2 pr-3 font-medium">Company</th>
-              <th className="py-2 pr-3 font-medium">Entered by</th>
               <th className="py-2 text-right font-medium">Amount</th>
             </tr>
           </thead>
@@ -153,7 +151,6 @@ export default function CostSheet() {
                 <td className="py-2 pr-3 font-medium text-primary">{r.category}</td>
                 <td className="py-2 pr-3">{r.vendor}</td>
                 <td className="py-2 pr-3 text-secondary">{r.paidBy}</td>
-                <td className="py-2 pr-3 text-secondary">{r.enteredBy?.name ?? '—'}</td>
                 <td className="py-2 text-right whitespace-nowrap">
                   {typeof r.amount === 'number' ? formatMoney(r.amount) : '—'}
                 </td>
@@ -162,7 +159,7 @@ export default function CostSheet() {
           </tbody>
           <tfoot>
             <tr>
-              <td colSpan={5} className="py-3 pr-3 text-right text-sm font-semibold text-primary">
+              <td colSpan={4} className="py-3 pr-3 text-right text-sm font-semibold text-primary">
                 Total
               </td>
               <td className="py-3 text-right text-sm font-semibold text-primary whitespace-nowrap">
