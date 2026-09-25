@@ -10,11 +10,12 @@ import { useRouter } from 'next/navigation';
 import { api, apiGet, formatMoney, fileUrl } from '@/lib/api-v2';
 import { ExportCsvButton } from '@/components/ui/export-csv-button';
 import { usePageHeader } from '@/hooks/usePageHeader';
-import { NewProjectModal } from '@/components/clients/NewProjectModal';
+import { NewInternalProjectModal } from '@/components/work/NewInternalProjectModal';
 import { NewRetainerModal } from '@/components/clients/NewRetainerModal';
 import { getPriorityBadge, getPriorityLabel } from '@/lib/priority';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 
 interface LiveAlert { rule: string; severity: 'HIGH' | 'MED' | 'LOW'; message: string }
 
@@ -105,9 +106,19 @@ export default function LiveWorkPage() {
    * hook also matches case-insensitively, which the hand-rolled read did not —
    * `?tab=projects` silently did nothing.
    */
-  const TABS: TabDef<'RETAINERS' | 'PROJECTS'>[] = [
+  /*
+   * Three kinds of work, not two.
+   *
+   * The studio's own work had nowhere on this screen: Retainers and Projects
+   * are both a client's, so a hiring round or the website refresh was visible
+   * only as loose tasks on somebody's My Work. It sits beside them rather than
+   * on a page of its own because "what is the studio working on" is one
+   * question, and the answer was being given in two halves.
+   */
+  const TABS: TabDef<'RETAINERS' | 'PROJECTS' | 'INTERNAL'>[] = [
     { key: 'RETAINERS', label: 'Retainers' },
     { key: 'PROJECTS', label: 'Projects' },
+    { key: 'INTERNAL', label: 'Internal' },
   ];
   const [tab, setTab] = useTabState(TABS);
   // Defaults to Live — the one status this screen is actually about — but a
@@ -177,20 +188,37 @@ export default function LiveWorkPage() {
   const loading = isPending;
   const loadError = error instanceof Error ? error.message : error ? 'Could not load live work' : null;
 
+  /*
+   * Every internal project, finished ones included.
+   *
+   * Unlike the other two tabs, which show live work and filter the rest away:
+   * a finished piece of internal work is not a delivered project with a value
+   * and an invoice behind it, it is simply a bucket nobody is adding to, and
+   * hiding it would mean the only way to see last quarter's hiring round was
+   * Settings. Done rows are marked and sort last.
+   */
+  const { data: internalData } = useQuery({
+    queryKey: ['internal-projects'],
+    queryFn: () => api.internalProjects.list(),
+  });
+  const internalProjects = internalData?.projects ?? [];
+
   /** What the create flows call once they have added something. */
   const load = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: qk.liveWork });
+    void queryClient.invalidateQueries({ queryKey: ['internal-projects'] });
   }, [queryClient]);
 
-  // Quick Create's "New project" lands here with ?tab=PROJECTS&create=true —
-  // same pattern as /companies and /my-work's own ?create=true handling.
+  // Quick Create's "New project" lands here with ?create=true — same pattern
+  // as /companies and /my-work's own handling. It opens the internal form now,
+  // because that is the only kind of project this screen starts.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     // The tab itself is the hook's business now; this is only the create flag.
     if (params.get('create') === 'true') {
       setCreatingProject(true);
-      router.replace('/live-work?tab=projects');
+      router.replace('/live-work?tab=internal');
     }
   }, [router]);
 
@@ -283,12 +311,22 @@ export default function LiveWorkPage() {
             <span className="text-base leading-none">+</span> New retainer
           </button>
         )}
+        {/*
+          An INTERNAL project, and only that.
+
+          This used to open the client project form, which was the one place in
+          the app a client project could be started without a deal behind it —
+          everywhere else it comes off a won proposal, which is what ties the
+          work to what was sold. A retainer is different and keeps its button:
+          "we agreed a retainer" needs a route from the screen that lists them.
+          A client project already has one, on the company.
+        */}
         {canCreateProject && (
           <button
             className="flex items-center gap-1.5 bg-primary text-white text-sm font-semibold px-4 h-8 rounded-lg hover:bg-primary/90 transition-colors"
-            onClick={() => { setTab('PROJECTS'); setCreatingProject(true); }}
+            onClick={() => { setTab('INTERNAL'); setCreatingProject(true); }}
           >
-            <span className="text-base leading-none">+</span> New project
+            <span className="text-base leading-none">+</span> New internal project
           </button>
         )}
       </div>
@@ -349,7 +387,8 @@ export default function LiveWorkPage() {
         tabs={[
           { key: 'RETAINERS', label: 'Retainers', count: retainers.length },
           { key: 'PROJECTS', label: 'Projects', count: projects.length },
-        ] as TabDef<'RETAINERS' | 'PROJECTS'>[]}
+          { key: 'INTERNAL', label: 'Internal', count: internalProjects.length },
+        ] as TabDef<'RETAINERS' | 'PROJECTS' | 'INTERNAL'>[]}
         active={tab}
         onChange={setTab}
       />
@@ -562,6 +601,59 @@ export default function LiveWorkPage() {
         </>
       )}
 
+      {tab === 'INTERNAL' && (
+        <div className="border border-border rounded-xl overflow-hidden mt-6">
+          <div className="overflow-x-auto">
+            <table className="w-full data-table">
+              <thead>
+                <tr className="border-b border-border bg-subtle">
+                  <th className="eyebrow text-left">Internal project</th>
+                  <th className="eyebrow text-left">Owner</th>
+                  <th className="eyebrow text-right">Open</th>
+                  <th className="eyebrow text-right">Done</th>
+                  <th className="eyebrow text-right">Late</th>
+                  <th className="eyebrow text-left">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {internalProjects.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-5 py-12 text-center text-sm text-secondary">
+                      Nothing yet. Internal tasks work perfectly well without one — start a project when several
+                      belong together.
+                    </td>
+                  </tr>
+                )}
+                {/* Done last: still here to be found, out of the way of what is running. */}
+                {[...internalProjects]
+                  .sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : a.status === 'ACTIVE' ? -1 : 1))
+                  .map((ip) => (
+                    <tr key={ip.id} className={ip.status === 'DONE' ? 'text-secondary' : undefined}>
+                      <td className="font-medium text-primary">
+                        {ip.name}
+                        {ip.description && (
+                          <span className="block text-micro font-normal text-secondary">{ip.description}</span>
+                        )}
+                      </td>
+                      <td className="text-secondary">{ip.owner?.name ?? '—'}</td>
+                      <td className="text-right tabular-nums">{ip.taskCounts.open}</td>
+                      <td className="text-right tabular-nums text-secondary">{ip.taskCounts.done}</td>
+                      <td className={`text-right tabular-nums ${ip.taskCounts.late > 0 ? 'font-semibold text-danger' : 'text-secondary'}`}>
+                        {ip.taskCounts.late || '—'}
+                      </td>
+                      <td>
+                        <Badge tone={ip.status === 'ACTIVE' ? 'good' : 'neutral'}>
+                          {ip.status === 'ACTIVE' ? 'Active' : 'Done'}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {!loading && liveProjects.length === 0 && retainers.length === 0 && (
         <div className="border border-border rounded-xl py-16 text-center mt-6">
           <p className="text-sm font-bold text-primary mb-1">Nothing live</p>
@@ -569,12 +661,15 @@ export default function LiveWorkPage() {
         </div>
       )}
 
-      <NewProjectModal
+      {/* No redirect afterwards: an internal project has no page of its own —
+          it is a bucket, and the list it lands in is this one. */}
+      <NewInternalProjectModal
         open={creatingProject}
         onClose={() => setCreatingProject(false)}
-        onCreated={(id) => {
+        onCreated={() => {
           setCreatingProject(false);
-          router.push(`/projects/${id}`);
+          setTab('INTERNAL');
+          load();
         }}
       />
 

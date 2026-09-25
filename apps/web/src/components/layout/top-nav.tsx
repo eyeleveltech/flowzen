@@ -173,7 +173,13 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
  * they could not perform, none of them saying so until you walked into them.
  */
   const quickCreateItems = ([
-    { label: 'New project', href: '/live-work?tab=PROJECTS&create=true', icon: FolderKanban, needs: 'company.write' as const },
+    /*
+      A client's project is not created from a menu; it comes off a won
+      proposal, which is what ties the work to what was sold. This entry
+      opened the client project form and was the one route round that, so it
+      says what it actually makes now.
+    */
+    { label: 'New internal project', href: '/live-work?create=true', icon: FolderKanban, needs: 'company.write' as const },
     { label: 'New task', href: '/my-work?create=true', icon: CheckSquare, needs: 'work.own' as const },
     /*
       * A company is not created; it is promoted.
