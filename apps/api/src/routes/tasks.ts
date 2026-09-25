@@ -239,6 +239,201 @@ tasksRouter.get('/trash', requirePermission('work.own'), async (req: AuthRequest
     next(error);
   }
 });
+// ── Everything, for the people who run the work ─────────────────────────────
+//
+// `/my` answers "what am I doing", and every screen after it answers "what is
+// happening on this one job". Neither answers the question a head of department
+// or the management actually asks: what is the whole team carrying right now,
+// who is behind, and what is stuck waiting on somebody else.
+//
+// It was reachable only by opening fourteen people's drawers one at a time, or
+// by asking. `work.all` is exactly the right gate — it is what Head and
+// Management hold and nobody else does, and it is the same switch that lets
+// them open Live work and a project.
+
+tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const { assigneeId, dept, status, overdue, q, companyId } = req.query;
+    const wantsCsv = req.query.format === 'csv';
+
+    /*
+     * Filters that stack rather than overwrite each other.
+     *
+     * Person and department both narrow by who is ON the task, so writing both
+     * onto `where.assignees` would silently drop the first — an AND array is
+     * the only shape that means "both".
+     */
+    /*
+     * Each filter takes a list, comma separated.
+     *
+     * One value each was the wrong shape for the question: "how are Design and
+     * Content doing this week" and "what are these two carrying between them"
+     * are the normal asks, and a single-value filter makes somebody run the
+     * screen twice and add up in their head.
+     */
+    const list = (v: unknown): string[] =>
+      typeof v === 'string' && v.trim()
+        ? v.split(',').map((x) => x.trim()).filter(Boolean)
+        : [];
+
+    const and: any[] = [];
+    const people = list(assigneeId);
+    const depts = list(dept);
+    if (people.length > 0) and.push({ assignees: { some: { userId: { in: people } } } });
+    if (depts.length > 0) and.push({ assignees: { some: { user: { dept: { in: depts } } } } });
+    if (typeof q === 'string' && q.trim()) and.push({ title: { contains: q.trim(), mode: 'insensitive' } });
+    if (typeof companyId === 'string' && companyId) {
+      and.push({
+        OR: [
+          { project: { companyId } },
+          { monthCard: { retainer: { companyId } } },
+        ],
+      });
+    }
+
+    /*
+     * `UNFINISHED` is not a status, it is the question.
+     *
+     * Sorted by due date and including everything, the screen opened on work
+     * delivered in June — true, and not what somebody running a team came to
+     * find out. "Not done and not cancelled" spans three statuses, so it cannot
+     * be a value in the column, and asking the browser to filter it would make
+     * the counts describe a different list than the one on screen.
+     */
+    /*
+     * `UNFINISHED` stands for the three statuses that mean "still owed", so it
+     * expands rather than filtering on a column — and it can be picked
+     * alongside, say, Done, which is how "everything except cancelled" is
+     * asked for.
+     */
+    const statuses = list(status).flatMap((v) =>
+      v === 'UNFINISHED' ? [TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.ON_HOLD] : [v as TaskStatus],
+    );
+    const statusWhere = statuses.length > 0 ? { status: { in: Array.from(new Set(statuses)) } } : {};
+
+    const where: any = {
+      organizationId: orgId,
+      deletedAt: null,
+      ...statusWhere,
+      ...(and.length > 0 ? { AND: and } : {}),
+    };
+
+    const tasks = await prisma.task.findMany({
+      where,
+      // Oldest due first: the point of the screen is what is late, and a list
+      // that opens on next month's work buries it.
+      orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
+      take: wantsCsv ? 5000 : 500,
+      include: {
+        monthCard: { include: { retainer: { include: { company: true } } } },
+        project: { include: { company: true } },
+        /*
+         * A retainer task's project.
+         *
+         * `projectId` is the one-off kind; a task inside a retainer month
+         * carries `retainerProjectId` alongside its month card instead. Reading
+         * only the first left every retainer row labelled "2026-09", which is
+         * the month it is billed in, not the work it is.
+         */
+        retainerProject: { select: { id: true, name: true } },
+        ...TASK_PEOPLE,
+      },
+    });
+
+    const calendar = await loadWorkCalendar(orgId);
+    const now = new Date();
+    /*
+     * The calendar day, not the UTC one.
+     *
+     * `toISOString().slice(0, 10)` is yesterday until half past five each
+     * morning in IST, which would mark a day's work overdue before anybody
+     * started it. Same fix as zenDraft.ts.
+     */
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    const formatted = tasks.map((t) => {
+      const due = new Date(t.dueDate);
+      const dueStr = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`;
+      const settled = t.status === TaskStatus.DONE || t.status === TaskStatus.CANCELLED;
+      const workingHours = workingMinutesOn(calendar, t.assignedAt, t.completedAt || now, t.waitingTotalMinutes);
+
+      return {
+        id: t.id,
+        title: t.title,
+        workType: t.workType,
+        workId: t.workId,
+        status: t.status,
+        priority: t.priority,
+        taskType: t.taskType,
+        waitingOn: t.waitingOn,
+        waitingSince: t.waitingSince,
+        dueDate: t.dueDate,
+        assignedAt: t.assignedAt,
+        completedAt: t.completedAt,
+        reopenCount: t.reopenCount,
+        notes: t.notes,
+        assignee: t.assignee,
+        assignees: t.assignees.map((a) => a.user),
+        assignedBy: t.assignedBy,
+        creator: t.creator,
+        reviewer: t.reviewer,
+        // What it is for, in the words the rest of the app uses.
+        clientName: t.monthCard?.retainer.company.name || t.project?.company.name || 'Internal',
+        companyId: t.monthCard?.retainer.companyId || t.project?.companyId || null,
+        projectId: t.projectId,
+        // Whichever kind of project it is — a one-off, or a stream of work
+        // inside a retainer.
+        projectName: t.project?.name ?? t.retainerProject?.name ?? null,
+        retainerProjectId: t.retainerProjectId,
+        monthCardMonth: t.monthCard?.month ?? null,
+        retainerId: t.monthCard?.retainerId ?? null,
+        workingHoursText: workingHours.formatted,
+        workingMinutes: workingHours.totalMinutes,
+        isOverdue: !settled && dueStr < today,
+        isToday: !settled && dueStr === today,
+      };
+    });
+
+    // Applied after formatting, because "overdue" is a question about the
+    // calendar and the status together rather than a column to filter on.
+    const rows = overdue === '1' || overdue === 'true' ? formatted.filter((t) => t.isOverdue) : formatted;
+
+    if (wantsCsv) {
+      const csv = toCsv(rows, [
+        { label: 'Task', value: (t) => t.title },
+        { label: 'For', value: (t) => t.clientName },
+        { label: 'Project', value: (t) => t.projectName ?? '' },
+        { label: 'Assigned to', value: (t) => t.assignees.map((a) => a.name).join(', ') },
+        { label: 'Designation', value: (t) => t.assignees.map((a) => a.designation ?? '').join(', ') },
+        { label: 'Status', value: (t) => t.status },
+        { label: 'Assigned on', value: (t) => t.assignedAt.toISOString().slice(0, 10) },
+        { label: 'Due', value: (t) => t.dueDate.toISOString().slice(0, 10) },
+        { label: 'Overdue', value: (t) => (t.isOverdue ? 'yes' : '') },
+        { label: 'Elapsed', value: (t) => t.workingHoursText },
+      ]);
+      sendCsv(res, `all-tasks-${new Date().toISOString().slice(0, 10)}`, csv);
+      return;
+    }
+
+    res.json({
+      success: true,
+      tasks: rows,
+      counts: {
+        total: rows.length,
+        // Open is "not finished with", not a single status: TODO and
+        // IN_PROGRESS are both work somebody still owes.
+        open: rows.filter((t) => t.status === TaskStatus.TODO || t.status === TaskStatus.IN_PROGRESS).length,
+        waiting: rows.filter((t) => t.status === TaskStatus.ON_HOLD).length,
+        overdue: rows.filter((t) => t.isOverdue).length,
+        unassigned: rows.filter((t) => t.assignees.length === 0).length,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ── 2. List Tasks with Filters ──────────────────────────────────────────────
 
 tasksRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
@@ -251,7 +446,23 @@ tasksRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, res
       wantsCsv ? { defaultLimit: 10000, maxLimit: 10000 } : { defaultLimit: 200, maxLimit: 500 },
     );
 
-    const where: any = { organizationId: orgId, deletedAt: null };
+    /*
+     * Narrowed to what this person may see.
+     *
+     * This was organisation-scoped and nothing else: `GET /tasks` is gated on
+     * `work.own`, which every employee holds, and it returned EVERY task in the
+     * agency to any of them. The screens all pass a filter, so nobody noticed —
+     * but the endpoint is the boundary, not the screen that happens to call it.
+     * The same rule /trash has used since it was written: everything for
+     * `work.all`, your own otherwise.
+     */
+    const seesEverything = (req.user!.permissions ?? []).includes('work.all');
+
+    const where: any = {
+      organizationId: orgId,
+      deletedAt: null,
+      ...(seesEverything ? {} : { OR: [{ assignees: { some: { userId: req.user!.userId } } }, { createdById: req.user!.userId }] }),
+    };
     if (workType && typeof workType === 'string') where.workType = workType as TaskWorkType;
     if (workId && typeof workId === 'string') where.workId = workId;
     if (monthCardId && typeof monthCardId === 'string') where.monthCardId = monthCardId;

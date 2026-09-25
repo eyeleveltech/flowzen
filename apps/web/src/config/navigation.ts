@@ -1,6 +1,7 @@
 import {
   CheckSquare,
   Columns,
+  ListChecks,
   Globe,
   RefreshCcw,
   Diamond,
@@ -86,6 +87,13 @@ export const NAV_SECTIONS: NavSection[] = [
       // Everybody has their own work, so this names no permission at all.
       { label: 'My Work', href: '/my-work', icon: CheckSquare, isPrimaryMobile: true },
       { label: 'Team', href: '/members', icon: Columns, needs: 'work.team', isPrimaryMobile: true },
+      /*
+       * Everything anybody is carrying. `work.all` is Head and Management —
+       * the same switch that opens Live work and a project — so BD and
+       * Accounts do not get a list of what the studio is doing, and an
+       * Employee has My Work above it.
+       */
+      { label: 'All tasks', href: '/all-work', icon: ListChecks, needs: 'work.all' },
     ],
   },
   {
