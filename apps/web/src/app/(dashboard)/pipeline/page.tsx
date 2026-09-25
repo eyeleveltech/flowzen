@@ -14,7 +14,8 @@ import {
 } from "@hello-pangea/dnd";
 import { api, ApiError, formatMoney, fileUrl } from "@/lib/api-v2";
 import { Modal, ModalBody, ModalFooter } from "@/components/ui/modal";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
+import { RowMenu } from "@/components/ui/row-menu";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { ErrorNote } from "@/components/ui/empty-state";
@@ -328,6 +329,37 @@ export default function PipelinePage() {
     }
   };
 
+  /**
+   * Removing a deal that should not be on the board.
+   *
+   * It was only reachable from the client's Proposals tab, which is two clicks
+   * and a scroll from the card you are looking at — so a duplicate raised
+   * against the wrong company sat on the board because deleting it was more
+   * work than ignoring it, and every column total counted it.
+   *
+   * Soft, like everything else (§16): the versions are kept and Settings →
+   * Trash puts it back. Said in the confirmation, because "cannot be undone" is
+   * the one thing this is not.
+   */
+  const handleDeleteProposal = async (card: PipelineCard) => {
+    const ok = await confirm({
+      title: "Delete this proposal?",
+      message: `It comes off the board and out of ${card.companyName}'s record. Its versions are kept, so it can be restored.`,
+      confirmText: "Delete it",
+      variant: "danger",
+    });
+    if (!ok) return;
+    try {
+      await api.proposals.remove(card.id);
+      toast.success("Proposal deleted");
+      await load();
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : "Could not delete this proposal",
+      );
+    }
+  };
+
   const handleVerbalYes = async (card: PipelineCard) => {
     const ok = await confirm({
       title: "Flag verbal yes?",
@@ -552,20 +584,62 @@ export default function PipelinePage() {
                               ref={dragProvided.innerRef}
                               {...dragProvided.draggableProps}
                               {...dragProvided.dragHandleProps}
-                              onClick={() =>
-                                router.push(
-                                  `/companies/${card.companyId}?tab=PROPOSALS`,
-                                )
-                              }
+                              onClick={(e) => {
+                                /*
+                                  The whole card opens the client, and the menu
+                                  lives inside it — so the menu has to be
+                                  excluded by WHERE the click came from rather
+                                  than by stopping propagation, which depends on
+                                  handler order and lost the race often enough to
+                                  open the client instead of the menu.
+                                */
+                                if ((e.target as HTMLElement).closest('[data-card-menu]')) return;
+                                router.push(`/companies/${card.companyId}?tab=PROPOSALS`);
+                              }}
                               className={`border border-border bg-white rounded-xl p-3 cursor-pointer hover:border-primary/30 transition-colors ${
                                 dragSnapshot.isDragging
                                   ? "shadow-overlay border-primary/40"
                                   : ""
                               }`}
                             >
-                              <p className="text-sm font-semibold text-primary mb-1 leading-tight">
-                                {card.companyName}
-                              </p>
+                              <div className="mb-1 flex items-start justify-between gap-1">
+                                <p className="text-sm font-semibold text-primary leading-tight">
+                                  {card.companyName}
+                                </p>
+                                {/*
+                                  Stops the card underneath: the whole card is
+                                  the drag handle and opens the client, so
+                                  without this, opening the menu would do both.
+                                */}
+                                <div
+                                  data-card-menu
+                                  // Still stopped, so a click on the menu does
+                                  // not start a drag of the card under it.
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="-mr-1 -mt-0.5 shrink-0"
+                                >
+                                  <RowMenu
+                                    label={`Actions for ${card.companyName}`}
+                                    actions={[
+                                      {
+                                        label: "Delete proposal",
+                                        icon: Trash2,
+                                        tone: "danger",
+                                        /*
+                                          Won and lost are refused by the server
+                                          — the win rate counts them, and a won
+                                          one has a client and real work built on
+                                          it. RowMenu draws no button at all when
+                                          nothing is visible, so a settled card
+                                          simply has no menu.
+                                        */
+                                        visible: card.stage !== "WON" && card.stage !== "LOST",
+                                        onSelect: () => void handleDeleteProposal(card),
+                                      },
+                                    ]}
+                                  />
+                                </div>
+                              </div>
                               {/*
                                 A prospect is a company, not a deal worth nothing.
                                 Nothing has been quoted yet, so printing ₹0 in bold
