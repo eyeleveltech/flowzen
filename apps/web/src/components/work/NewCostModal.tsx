@@ -24,6 +24,9 @@ type Target = { label: string; workType: 'RETAINER' | 'PROJECT'; monthCardId?: s
 const CLIENT_CATEGORIES = ['Ad spend', 'Freelancer', 'Photography and video', 'Printing', 'Hosting and domain', 'Stock and licences', 'Travel, client', 'Venue and events'];
 const COMPANY_CATEGORIES = ['Salaries', 'Office rent', 'Internet and utilities', 'Software', 'Pantry and tea', 'Travel, not client', 'Professional fees', 'Marketing, our own'];
 
+// Same escape hatch as the project and retainer form — see NewWorkCostModal.
+const OTHER_CATEGORY = 'Other';
+
 const PAID_BY_OPTIONS = [
   { value: 'COMPANY', label: 'Company' },
   { value: 'AKMAL', label: 'Akmal' },
@@ -44,6 +47,7 @@ export function NewCostModal({ onClose, onCreated }: { onClose: () => void; onCr
   const [targetKey, setTargetKey] = useState('');
 
   const [category, setCategory] = useState('');
+  const [otherCategory, setOtherCategory] = useState('');
   const [vendor, setVendor] = useState('');
   const [amount, setAmount] = useState('');
   const [incurredAt, setIncurredAt] = useState(new Date().toISOString().slice(0, 10));
@@ -83,8 +87,11 @@ export function NewCostModal({ onClose, onCreated }: { onClose: () => void; onCr
   }, [companyId, type]);
 
   const selectedTarget = targets.find((t) => (t.monthCardId ?? t.projectId) === targetKey);
+  /** What actually gets stored — the typed words when the list ran out. */
+  const storedCategory = category === OTHER_CATEGORY ? otherCategory.trim() : category.trim();
+
   const canSave =
-    Boolean(category.trim()) &&
+    Boolean(storedCategory) &&
     Boolean(vendor.trim()) &&
     Number(amount) > 0 &&
     Boolean(incurredAt) &&
@@ -98,7 +105,7 @@ export function NewCostModal({ onClose, onCreated }: { onClose: () => void; onCr
     try {
       await api.costs.create({
         type,
-        category: category.trim(),
+        category: storedCategory,
         vendor: vendor.trim(),
         amount: Number(amount),
         incurredAt,
@@ -157,15 +164,28 @@ export function NewCostModal({ onClose, onCreated }: { onClose: () => void; onCr
           )}
 
           {categoryOptions ? (
-            <FieldSelect
-              label="Category"
-              value={category}
-              onChange={setCategory}
-              required
-              placeholder="Choose…"
-              options={categoryOptions.map((c) => ({ value: c, label: c }))}
-            />
+            <>
+              <FieldSelect
+                label="Category"
+                value={category}
+                onChange={setCategory}
+                required
+                placeholder="Choose…"
+                options={[...categoryOptions, OTHER_CATEGORY].map((c) => ({ value: c, label: c }))}
+              />
+              {category === OTHER_CATEGORY && (
+                <Field
+                  label="What kind of cost?"
+                  value={otherCategory}
+                  onChange={setOtherCategory}
+                  required
+                  placeholder="e.g. Location bond"
+                  hint="Stored as the category itself, so the next one like it groups with this."
+                />
+              )}
+            </>
           ) : (
+            // Capital and loans have no list to run out of.
             <Field label="Category" value={category} onChange={setCategory} required placeholder="e.g. Equipment" />
           )}
 

@@ -24,8 +24,24 @@ type Props = {
 
 const COST_CATEGORIES = ['Ad spend', 'Freelancer', 'Photography and video', 'Printing', 'Hosting and domain', 'Stock and licences', 'Travel, client', 'Venue and events'];
 
+/**
+ * The escape hatch on a fixed list.
+ *
+ * Eight categories cover most of what an agency spends on a job and not all of
+ * it — a bond for a location, a courier, a permit. With no way out of the list
+ * the cost went in under whichever heading looked closest, so the category
+ * stopped meaning anything, or it did not go in at all and the job's profit was
+ * wrong by the amount nobody recorded.
+ *
+ * Choosing Other asks what it was and stores THOSE words as the category, not
+ * "Other" — so a second location bond next month can be grouped with the first
+ * rather than joining a pile that has to be read line by line.
+ */
+export const OTHER_CATEGORY = 'Other';
+
 export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
   const [category, setCategory] = useState('');
+  const [otherCategory, setOtherCategory] = useState('');
   const [vendor, setVendor] = useState('');
   const [amount, setAmount] = useState('');
   const [incurredAt, setIncurredAt] = useState('');
@@ -35,6 +51,7 @@ export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
   useEffect(() => {
     if (open) {
       setCategory('');
+      setOtherCategory('');
       setVendor('');
       setAmount('');
       setIncurredAt(new Date().toISOString().slice(0, 10));
@@ -42,7 +59,10 @@ export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
     }
   }, [open]);
 
-  const canSave = Boolean(category) && vendor.trim().length > 0 && Number(amount) > 0;
+  /** What actually gets stored — the typed words when the list ran out. */
+  const storedCategory = category === OTHER_CATEGORY ? otherCategory.trim() : category;
+
+  const canSave = Boolean(storedCategory) && vendor.trim().length > 0 && Number(amount) > 0;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,7 +74,7 @@ export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
         type: 'DIRECT',
         projectId: target.kind === 'PROJECT' ? target.projectId : undefined,
         monthCardId: target.kind === 'MONTH_CARD' ? target.monthCardId : undefined,
-        category,
+        category: storedCategory,
         vendor: vendor.trim(),
         amount: Number(amount),
         incurredAt,
@@ -77,8 +97,18 @@ export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
             onChange={setCategory}
             required
             placeholder="Choose…"
-            options={COST_CATEGORIES.map((c) => ({ value: c, label: c }))}
+            options={[...COST_CATEGORIES, OTHER_CATEGORY].map((c) => ({ value: c, label: c }))}
           />
+          {category === OTHER_CATEGORY && (
+            <Field
+              label="What kind of cost?"
+              value={otherCategory}
+              onChange={setOtherCategory}
+              required
+              placeholder="e.g. Location bond"
+              hint="Stored as the category itself, so the next one like it groups with this."
+            />
+          )}
           <Field label="Vendor" value={vendor} onChange={setVendor} required />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Amount (₹)" value={amount} onChange={setAmount} type="number" required />
