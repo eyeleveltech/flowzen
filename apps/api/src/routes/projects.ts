@@ -639,7 +639,9 @@ projectsRouter.patch('/:id', requirePermission('company.write'), async (req: Aut
 
     const orgId = req.user!.organizationId;
     const id = String(req.params.id);
-    const existing = await prisma.project.findFirst({ where: { id, organizationId: orgId } });
+    // Not a deleted one: editing something that has been thrown away writes
+    // changes nobody can see, and the restore route is how it comes back.
+    const existing = await prisma.project.findFirst({ where: { id, organizationId: orgId, deletedAt: null } });
     if (!existing) {
       res.status(404).json({ success: false, error: 'Project not found' });
       return;
@@ -793,14 +795,46 @@ projectsRouter.delete('/:id', requirePermission('setup.admin'), async (req: Auth
     const project = await prisma.project.findFirst({
       where: { id, organizationId: orgId, deletedAt: null },
       include: {
-        _count: { select: { tasks: true, costs: { where: { deletedAt: null } } } },
+        // Both filtered. `tasks` counted deleted rows while `costs` beside it
+        // did not, so a task somebody had thrown away blocked the project for
+        // good, with a message naming work that no longer exists.
+        _count: {
+          select: { tasks: { where: { deletedAt: null } }, costs: { where: { deletedAt: null } } },
+        },
         milestones: { select: { status: true } },
+        /*
+         * The invoices raised straight against the project.
+         *
+         * A milestone-linked invoice already blocks this through the billing
+         * check below — raising one moves its milestone past PENDING. But an
+         * invoice can name a project and no milestone, which is how a job
+         * billed in one go is recorded, and nothing looked for those. Two of
+         * them exist in this database.
+         *
+         * So the project was deletable, and its invoice stayed on the client's
+         * Money tab afterwards — money counted against work the record no
+         * longer showed, with a link that opened a 404.
+         */
+        invoices: { where: { status: { not: 'CANCELLED' } }, select: { number: true } },
       },
     });
     if (!project) {
       res.status(404).json({ success: false, error: 'Project not found' });
       return;
     }
+
+    if (project.invoices.length > 0) {
+      const [first] = project.invoices;
+      res.status(400).json({
+        success: false,
+        error:
+          project.invoices.length === 1
+            ? `Invoice ${first.number} was raised against this project. Cancel it first — it is a document the client has.`
+            : `${project.invoices.length} invoices were raised against this project. Cancel them first — they are documents the client has.`,
+      });
+      return;
+    }
+
     const hasBillingHistory = project.milestones.some((m) => m.status !== 'PENDING');
     if (project._count.tasks > 0 || project._count.costs > 0 || hasBillingHistory) {
       res.status(400).json({

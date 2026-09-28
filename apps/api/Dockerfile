@@ -72,6 +72,14 @@ COPY --from=builder /app/packages/shared/package.json ./packages/shared/package.
 # Copy built app and required files
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
+# The brand mark the proforma and the invoice print.
+#
+# `documentPdf.ts` reads it off disk at render time — `assets/brand/…` relative
+# to the compiled file — and this stage copied dist, prisma, the package file
+# and the entrypoint, and not this. So every PDF download on the server failed
+# with a bare ENOENT that the error handler turned into "Something went wrong",
+# while the same download worked on a laptop, where the repo is the filesystem.
+COPY --from=builder /app/apps/api/assets ./apps/api/assets
 COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
 COPY --from=builder /app/apps/api/docker-entrypoint.sh ./apps/api/docker-entrypoint.sh
 RUN chmod +x ./apps/api/docker-entrypoint.sh

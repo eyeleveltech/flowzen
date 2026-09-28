@@ -650,6 +650,8 @@ model Retainer {
   monthCards   MonthCard[]
   projects     RetainerProject[]
 
+  /// One retainer per deal — see the note on Project.
+  @@unique([sourceProposalId])
   @@index([organizationId, status])
   @@index([companyId])
   @@map("retainers")
@@ -840,8 +842,22 @@ model Project {
   invoices       Invoice[]
   assetMovements AssetMovement[]
 
+  /// One project per deal.
+  ///
+  /// The application already checked, and the check could not see a project in
+  /// the bin — so deleting one freed its proposal, a second could be created
+  /// from the same deal, and restoring the first left two live projects
+  /// claiming one win. The pipeline then linked the card to whichever the
+  /// database happened to return last.
+  ///
+  /// Postgres allows many NULLs under a unique index, so work created without
+  /// naming its deal is unaffected.
+  @@unique([sourceProposalId])
   @@index([organizationId, status])
   @@index([companyId])
+  /// Every list of live work now filters on `deletedAt`, and neither index
+  /// above covers it.
+  @@index([organizationId, deletedAt])
   @@map("projects")
 }
 

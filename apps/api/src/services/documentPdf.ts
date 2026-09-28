@@ -39,7 +39,30 @@ let cachedLogoDataUri: string | null = null;
 function getLogoDataUri(): string {
   if (cachedLogoDataUri) return cachedLogoDataUri;
   const logoPath = path.join(__dirname, '../../assets/brand/eyelevel-logo-color-new.png');
-  const buf = fs.readFileSync(logoPath);
+  /*
+   * Said plainly, because the bare version was unreadable.
+   *
+   * The runtime image copied dist, prisma and the entrypoint and not the
+   * assets folder, so this threw ENOENT on the server and worked on every
+   * laptop, where the repo IS the filesystem. The error handler turned that
+   * into `{"error":"Something went wrong","code":"ENOENT"}` — which names no
+   * file, no path and no cause, and left the same puzzle to be solved twice.
+   *
+   * Not silently skipped: the mark is the letterhead on a document that goes
+   * to a client and gets filed for seven years, and a proforma quietly missing
+   * it is worse than a download that refuses and says why.
+   */
+  let buf: Buffer;
+  try {
+    buf = fs.readFileSync(logoPath);
+  } catch (cause) {
+    const said = cause instanceof Error ? cause.message : String(cause);
+    logger.error(`Brand mark missing for the PDF renderer at ${logoPath}: ${said}`);
+    throw new Error(
+      `The brand mark this document prints could not be read at ${logoPath}. ` +
+        `On a server that means the image was built without apps/api/assets — check the Dockerfile copies it.`,
+    );
+  }
   cachedLogoDataUri = `data:image/png;base64,${buf.toString('base64')}`;
   return cachedLogoDataUri;
 }

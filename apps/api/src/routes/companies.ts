@@ -85,7 +85,9 @@ companiesRouter.get('/', requirePermission('company.read'), async (req: AuthRequ
             select: { id: true, monthlyValue: true, startDate: true, renewalDate: true, status: true },
           },
           projects: {
-            where: { status: 'LIVE' },
+            // Live AND not thrown away. Status alone let a deleted project go
+            // on counting as live work against the client in the list.
+            where: { status: 'LIVE', deletedAt: null },
             select: { id: true, name: true, quotedValue: true, status: true },
           },
           proposals: {
@@ -124,7 +126,10 @@ companiesRouter.get('/', requirePermission('company.read'), async (req: AuthRequ
             attentionSentence = 'Active retainer.';
           }
         } else if (c.projects.length > 0) {
-          attentionSentence = `${c.projects.length} live project milestone in progress.`;
+          // It counted projects and then said "milestone", and never agreed
+          // with its own number: two projects read "2 live project milestone".
+          attentionSentence =
+            c.projects.length === 1 ? '1 live project.' : `${c.projects.length} live projects.`;
         }
       } else if (c.status === 'PAST') {
         attentionSentence = c.lostReason ? `Concluded: ${c.lostReason}` : 'Past relationship.';
@@ -302,6 +307,11 @@ companiesRouter.get('/:id', requirePermission('company.read'), async (req: AuthR
           },
         },
         projects: {
+          // `deletedAt` was not filtered here, so a deleted project kept
+          // appearing on the client's Work tab — with its milestones, its
+          // invoices and its value — and there was no way to get rid of it.
+          // Trash is at Settings; this is the client's record of live work.
+          where: { deletedAt: null },
           orderBy: { createdAt: 'desc' },
           include: {
             milestones: { orderBy: { order: 'asc' } },
@@ -363,14 +373,32 @@ companiesRouter.get('/:id', requirePermission('company.read'), async (req: AuthR
     const companyProposals = await prisma.proposal.findMany({
       // Deleted ones too: "X deleted the proposal" is exactly the kind of thing
       // an audit trail exists for, and the include above drops them.
-      where: { organizationId: orgId, companyId: id },
+      // `deletedAt: undefined` is how a query opts out of the soft-delete
+      // default — see lib/prisma.ts. It is not a no-op.
+      where: { organizationId: orgId, companyId: id, deletedAt: undefined },
+      select: { id: true },
+    });
+
+    /*
+     * And the same for projects, for the same reason.
+     *
+     * The `projects` include is filtered to live work, because that is what the
+     * Work tab is. Building the activity scope from it meant a deleted
+     * project's whole history went with it — including the "deleted" row that
+     * says why it went. The one event somebody would come to this tab looking
+     * for was the one it could no longer show.
+     */
+    const companyProjects = await prisma.project.findMany({
+      // Deleted ones too, for the same reason as the proposals above: the row
+      // that says why a project went is the one somebody comes here to find.
+      where: { organizationId: orgId, companyId: id, deletedAt: undefined },
       select: { id: true },
     });
 
     const scopes: { type: string; ids: string[] }[] = [
       { type: 'Proposal', ids: companyProposals.map((x) => x.id) },
       { type: 'Proforma', ids: company.proformas.map((x) => x.id) },
-      { type: 'Project', ids: company.projects.map((x) => x.id) },
+      { type: 'Project', ids: companyProjects.map((x) => x.id) },
       { type: 'Retainer', ids: company.retainers.map((x) => x.id) },
       { type: 'MonthCard', ids: company.retainers.flatMap((r) => r.monthCards.map((m) => m.id)) },
       { type: 'Invoice', ids: company.invoices.map((x) => x.id) },
@@ -1316,25 +1344,36 @@ companiesRouter.patch('/:id', requirePermission('company.write'), async (req: Au
 async function companyHoldings(orgId: string, id: string) {
   const [people, proposals, quoted, proformas, retainers, projects, invoices, paidInvoices, tasks, costs] =
     await Promise.all([
+      /*
+       * Everything, deleted included.
+       *
+       * This is read by the remove dialog and by the permanent delete, and
+       * both are asking what is THERE — a proposal in the bin is still a row
+       * that will be destroyed, and saying "0 proposals" before destroying
+       * three would be a lie of exactly the kind this count exists to prevent.
+       * `deletedAt: undefined` opts out of the default; see lib/prisma.ts.
+       */
       prisma.person.count({ where: { companyId: id } }),
-      prisma.proposal.count({ where: { companyId: id } }),
+      prisma.proposal.count({ where: { companyId: id, deletedAt: undefined } }),
       // A proposal that has been quoted. The empty Prospect placeholder does
       // not count as work on the company.
       prisma.proposal.count({ where: { companyId: id, deletedAt: null, versions: { some: {} } } }),
       prisma.proforma.count({ where: { companyId: id } }),
       prisma.retainer.count({ where: { companyId: id } }),
-      prisma.project.count({ where: { companyId: id } }),
+      prisma.project.count({ where: { companyId: id, deletedAt: undefined } }),
       prisma.invoice.count({ where: { companyId: id } }),
       prisma.invoice.count({ where: { companyId: id, payments: { some: {} } } }),
       prisma.task.count({
         where: {
           organizationId: orgId,
+          deletedAt: undefined,
           OR: [{ project: { companyId: id } }, { monthCard: { retainer: { companyId: id } } }],
         },
       }),
       prisma.cost.count({
         where: {
           organizationId: orgId,
+          deletedAt: undefined,
           OR: [{ project: { companyId: id } }, { monthCard: { retainer: { companyId: id } } }],
         },
       }),
@@ -1552,15 +1591,24 @@ companiesRouter.delete('/:id', requirePermission('company.write'), async (req: A
       return;
     }
 
-    const [retainers, projects, invoices, proformas, quoted] = await Promise.all([
-      prisma.retainer.count({ where: { companyId: id } }),
-      prisma.project.count({ where: { companyId: id } }),
-      prisma.invoice.count({ where: { companyId: id } }),
-      prisma.proforma.count({ where: { companyId: id } }),
-      // A proposal that has been quoted. The empty Prospect placeholder does
-      // not count — see the note above.
-      prisma.proposal.count({ where: { companyId: id, deletedAt: null, versions: { some: {} } } }),
-    ]);
+    /*
+     * One reader, so the two cannot disagree.
+     *
+     * This route counted five of the same things `companyHoldings` counts, in
+     * its own copy — which is exactly how the two came to have different
+     * soft-delete semantics: the remove dialog said "keeping 1 project" while
+     * the archive refused because of a project nobody could see. A third
+     * caller would have made it three copies.
+     *
+     * `projects` is the one that is NOT taken from holdings, deliberately.
+     * Holdings answers "what is there", deleted rows included, because it
+     * feeds the permanent delete. This refusal answers "what has to be dealt
+     * with first", and a project in the bin is not something anybody can act
+     * on — the sentence would send them looking for it.
+     */
+    const holdings = await companyHoldings(orgId, id);
+    const { retainers, invoices, proformas, quoted } = holdings;
+    const projects = await prisma.project.count({ where: { companyId: id } });
 
     const held = [
       [retainers, retainers === 1 ? 'retainer' : 'retainers'],

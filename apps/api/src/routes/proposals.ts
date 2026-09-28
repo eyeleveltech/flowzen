@@ -168,7 +168,9 @@ proposalsRouter.get('/pipeline', requirePermission('pipeline.read'), async (req:
           select: { id: true, sourceProposalId: true },
         }),
         prisma.project.findMany({
-          where: { organizationId: orgId, sourceProposalId: { in: wonIds } },
+          // A deleted project is not work this deal produced any more, and a
+          // Won card pointing at one opens a page that 404s.
+          where: { organizationId: orgId, sourceProposalId: { in: wonIds }, deletedAt: null },
           select: { id: true, sourceProposalId: true },
         }),
         /*
@@ -186,7 +188,7 @@ proposalsRouter.get('/pipeline', requirePermission('pipeline.read'), async (req:
           select: { id: true, companyId: true },
         }),
         prisma.project.findMany({
-          where: { organizationId: orgId, companyId: { in: wonCompanyIds }, status: ProjectStatus.LIVE },
+          where: { organizationId: orgId, companyId: { in: wonCompanyIds }, status: ProjectStatus.LIVE, deletedAt: null },
           select: { id: true, companyId: true },
         }),
       ]);
@@ -883,7 +885,16 @@ proposalsRouter.post('/:id/lose', requirePermission('pipeline.write'), async (re
           select: { id: true },
         }),
         prisma.project.findMany({
-          where: { organizationId: orgId, sourceProposalId: id, status: ProjectStatus.LIVE },
+          /*
+           * Live AND not thrown away.
+           *
+           * Without the second half this refused to mark a deal lost because
+           * of a project sitting in the bin — and the refusal said "cancel it
+           * first", which could not be done: a deleted project is not on the
+           * client, not on the board, and PATCH refuses it. A deal could
+           * become impossible to close.
+           */
+          where: { organizationId: orgId, sourceProposalId: id, status: ProjectStatus.LIVE, deletedAt: null },
           select: { id: true, name: true },
         }),
       ]);
@@ -938,12 +949,15 @@ proposalsRouter.post('/:id/lose', requirePermission('pipeline.write'), async (re
       if (wasWon) {
         const [activeRetainers, liveProjects, otherWins, everRetainers, everProjects] = await Promise.all([
           tx.retainer.count({ where: { companyId: existing.companyId, status: RetainerStatus.ACTIVE } }),
-          tx.project.count({ where: { companyId: existing.companyId, status: ProjectStatus.LIVE } }),
+          // A project in the bin is not live work, and counting it as such
+          // left the company a CLIENT with nothing behind it — the exact state
+          // the block above exists to prevent.
+          tx.project.count({ where: { companyId: existing.companyId, status: ProjectStatus.LIVE, deletedAt: null } }),
           tx.proposal.count({
             where: { companyId: existing.companyId, outcome: ProposalOutcome.WON, deletedAt: null, NOT: { id } },
           }),
           tx.retainer.count({ where: { companyId: existing.companyId } }),
-          tx.project.count({ where: { companyId: existing.companyId } }),
+          tx.project.count({ where: { companyId: existing.companyId, deletedAt: null } }),
         ]);
 
         if (activeRetainers === 0 && liveProjects === 0 && otherWins === 0) {

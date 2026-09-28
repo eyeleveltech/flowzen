@@ -433,6 +433,11 @@ export async function runZenTool(
       const rows = await prisma.project.findMany({
         where: {
           organizationId,
+          // Every other query in this file filters; this one did not, so the
+          // assistant would describe a deleted project in prose — with its
+          // value and its status — which is the hardest place to spot a
+          // phantom row.
+          deletedAt: null,
           ...(args.status ? { status: String(args.status) as never } : {}),
           ...(args.client
             ? { company: { name: { contains: String(args.client), mode: 'insensitive' as const } } }
