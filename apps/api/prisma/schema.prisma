@@ -161,20 +161,20 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users           User[]
-  companies       Company[]
-  outreachEntries OutreachEntry[]
-  proposals       Proposal[]
-  proformas       Proforma[]
-  retainers       Retainer[]
-  projects        Project[]
-  tasks           Task[]
+  users            User[]
+  companies        Company[]
+  outreachEntries  OutreachEntry[]
+  proposals        Proposal[]
+  proformas        Proforma[]
+  retainers        Retainer[]
+  projects         Project[]
+  tasks            Task[]
   internalProjects InternalProject[]
-  costs           Cost[]
-  invoices        Invoice[]
-  alerts          Alert[]
-  activities      Activity[]
-  assets          Asset[]
+  costs            Cost[]
+  invoices         Invoice[]
+  alerts           Alert[]
+  activities       Activity[]
+  assets           Asset[]
 
   /// "EL" -> EL/CAM/001. The stickers get printed once, so this is a setting
   /// rather than a constant, but changing it does not renumber what exists.
@@ -249,8 +249,6 @@ model User {
 // 2. CRM & CLIENT SPINE
 // ──────────────────────────────────────────────────────────────────────────────
 
-
-
 enum CompanyStatus {
   PROSPECT
   CLIENT
@@ -258,7 +256,7 @@ enum CompanyStatus {
 }
 
 model Company {
-  id             String          @id @default(cuid())
+  id             String        @id @default(cuid())
   organizationId String
   name           String
   /// What the company does, from `INDUSTRIES` in @flowzen/shared.
@@ -269,12 +267,12 @@ model Company {
   /// list, so an unknown value is refused at the door rather than by Postgres.
   vertical       String
   /// Where the lead came from, from `LEAD_SOURCES` in @flowzen/shared.
-  source         String          @default("Cold Outreach")
+  source         String        @default("Cold Outreach")
   ownerId        String?
   city           String
   website        String?
   gstin          String?
-  billingAddress String?         @db.Text
+  billingAddress String?       @db.Text
   /// CR-02 §3. A code plus a name rather than either alone: the code is what
   /// decides CGST+SGST vs IGST, and the name is what prints. Both, because
   /// deriving the code from the GSTIN is exactly the bug this fixes — a client
@@ -282,10 +280,10 @@ model Company {
   stateName      String?
   stateCode      String?
   lostReason     String?
-  status         CompanyStatus   @default(PROSPECT)
+  status         CompanyStatus @default(PROSPECT)
   archivedAt     DateTime?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   owner         User?          @relation("CompanyOwner", fields: [ownerId], references: [id], onDelete: SetNull)
@@ -296,6 +294,9 @@ model Company {
   projects      Project[]
   invoices      Invoice[]
   outreachEntry OutreachEntry? @relation("PromotedCompany")
+  /// Tasks ABOUT this client that are not work on their retainer or project
+  /// — chasing them, mostly. See `Task.companyId`.
+  tasks         Task[]         @relation("CompanyTasks")
 
   @@unique([organizationId, name])
   @@index([organizationId, status])
@@ -346,7 +347,7 @@ enum OutreachStatus {
 }
 
 model OutreachEntry {
-  id                String          @id @default(cuid())
+  id                String         @id @default(cuid())
   organizationId    String
   name              String
   /// What the company does, from `INDUSTRIES` in @flowzen/shared.
@@ -357,9 +358,9 @@ model OutreachEntry {
   /// list, so an unknown value is refused at the door rather than by Postgres.
   vertical          String
   /// Where the lead came from, from `LEAD_SOURCES` in @flowzen/shared.
-  source            String          @default("Cold Outreach")
+  source            String         @default("Cold Outreach")
   ownerId           String?
-  status            OutreachStatus  @default(NOT_CONTACTED)
+  status            OutreachStatus @default(NOT_CONTACTED)
   /// Who to ask for. Carried into the Person row on promotion.
   contactPersonName String?
   /// At least one of `phone` and `email` must be present — a name you cannot
@@ -371,15 +372,15 @@ model OutreachEntry {
   /// The latest call note. The full trail is in Activity — status changes
   /// write one row each, so a lead followed up four times keeps four notes.
   /// This column is what the row shows; it is not the history.
-  remarks           String?         @db.Text
+  remarks           String?        @db.Text
   /// One column, two meanings, set by the status: the day we agreed to call
   /// back (FOLLOW_UP) or the day of the meeting (MEETING). Deliberately NOT
   /// called `followUpDate` — it holds meeting dates too, and that name already
   /// means something different on the company form.
-  nextActionDate    DateTime?       @db.Date
-  promotedCompanyId String?         @unique
-  importedAt        DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  nextActionDate    DateTime?      @db.Date
+  promotedCompanyId String?        @unique
+  importedAt        DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
   /// Removed by a person, and restorable from Settings > Trash. Marking a lead
   /// Dead is the end of a conversation; this is for a row that should not have
   /// been on the list at all -- typed twice, a typo, a bad import line.
@@ -774,7 +775,6 @@ model MonthCard {
   @@map("month_cards")
 }
 
-
 // ──────────────────────────────────────────────────────────────────────────────
 // 5. PROJECTS & MILESTONES
 // ──────────────────────────────────────────────────────────────────────────────
@@ -809,6 +809,22 @@ model Project {
   status           ProjectStatus @default(LIVE)
   priority         Priority      @default(MEDIUM)
   description      String?       @db.Text
+  /// Work done for a client without charging for it.
+  ///
+  /// The sample reel, the pilot design, the trial piece — real work, with real
+  /// people and real costs behind it, and no invoice at the end. There was no
+  /// way to record one: `quotedValue` had to be positive and a project refused
+  /// a company that was still a prospect, which is exactly who a sample is
+  /// usually FOR.
+  ///
+  /// It does not make the company a client. §3 says a company becomes one
+  /// because a proposal was won, and a sample is not a sale — so a prospect
+  /// stays a prospect while the studio works for free to win them.
+  ///
+  /// Nothing can be billed against it: no milestones, no proforma, no invoice.
+  /// Its costs are real and are counted, which is the point — it is what
+  /// winning that client cost before they paid anything.
+  isSample         Boolean       @default(false)
   sourceProposalId String?
   deletedAt        DateTime?
   createdAt        DateTime      @default(now())
@@ -849,6 +865,13 @@ model Milestone {
 
   project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   proformas Proforma[]
+  /// The tax invoices raised against this milestone.
+  ///
+  /// It used to be evidenced only through a proforma, and Tally is this
+  /// studio's book of record — so an invoice raised there directly had nowhere
+  /// to attach, and the only way to reflect it was to type the milestone's
+  /// status by hand. That is what made INVOICED and PAID claims, not facts.
+  invoices  Invoice[]
 
   @@index([projectId, order])
   @@map("milestones")
@@ -938,6 +961,19 @@ model Task {
   /// month the task is billed and costed in; this is what the task is FOR.
   /// A campaign running October into November is one project whose tasks sit
   /// in two different month cards, and both facts have to survive.
+  /// Which client this task is ABOUT, when it is not work on their retainer
+  /// or project.
+  ///
+  /// Chasing somebody is the case: three places already create "Follow up —
+  /// Acme" as an internal task — adding a company with a follow-up date,
+  /// logging a meeting with one, and the scanner when a proposal stalls — and
+  /// every one of them put the client's name in a STRING and nothing else. So
+  /// the company's own page could not show what was outstanding against it,
+  /// and a rename left the task pointing at a name nobody uses any more.
+  ///
+  /// Never set on a month-card or project task: there the client is already
+  /// known from the work, and a second answer is a second thing to disagree.
+  companyId         String?
   /// Which piece of the studio's OWN work this task is part of.
   ///
   /// Only ever set on an INTERNAL task, and always optional — unlike a
@@ -1008,6 +1044,9 @@ model Task {
   /// the tasks that were done under it. They stay on their month card, which
   /// is where the month's cost and profit are counted from.
   retainerProject RetainerProject? @relation(fields: [retainerProjectId], references: [id], onDelete: SetNull)
+  /// Cascade, like the month card and the project: chasing a client that no
+  /// longer exists is not work anybody has to do.
+  company         Company?         @relation("CompanyTasks", fields: [companyId], references: [id], onDelete: Cascade)
   /// SetNull for the same reason as the retainer one: closing down a bucket
   /// must not take the work that was done under it.
   internalProject InternalProject? @relation(fields: [internalProjectId], references: [id], onDelete: SetNull)
@@ -1018,6 +1057,7 @@ model Task {
   @@index([projectId])
   @@index([retainerProjectId])
   @@index([internalProjectId])
+  @@index([companyId, status])
   @@map("tasks")
 }
 
@@ -1053,7 +1093,19 @@ model Cost {
   projectId         String?
   category          String
   vendor            String
+  /// What actually left the account, tax included.
+  ///
+  /// Everything reads this — profit, the month's cost, the printed sheet, the
+  /// CSV — so it has to be the real figure, not the figure before tax. The
+  /// split is recoverable from `gstPercent`.
   amount            Decimal       @db.Decimal(12, 2)
+  /// The GST rate on this bill, when there was one.
+  ///
+  /// Null means nobody said — which is not the same as 0%, and is what every
+  /// cost entered before this field existed carries. The base is
+  /// `amount / (1 + gstPercent/100)`; it is derived rather than stored so the
+  /// two figures can never drift apart.
+  gstPercent        Int?
   incurredAt        DateTime      @db.Date
   committedNotPaid  Boolean       @default(false)
   paidBy            String        @default("Company")
@@ -1132,6 +1184,13 @@ model Invoice {
   paidAt         DateTime?     @db.Date
   proformaId     String?       @unique
   projectId      String?
+  /// Which billing milestone this invoice settles, when it settles one.
+  ///
+  /// Set from the proforma it was raised against, or directly when the invoice
+  /// came out of Tally with no Flowzen proforma behind it. It is what lets a
+  /// milestone's status be DERIVED — raising moves it to Invoiced, the payment
+  /// that settles it moves it to Paid — rather than typed.
+  milestoneId    String?
 
   /// The buyer block, snapshotted at entry -- the same four fields, under the
   /// same names, as Proforma carries, so one renderer serves both.
@@ -1201,8 +1260,12 @@ model Invoice {
   monthCard    MonthCard?         @relation
   payments     Payment[]
   lineItems    DocumentLineItem[]
+  /// SetNull: removing a milestone must never remove the tax invoice that
+  /// settled it — that document went to a client and is a statutory record.
+  milestone    Milestone?         @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
 
   @@unique([organizationId, number])
+  @@index([milestoneId])
   @@index([organizationId, status])
   @@index([companyId])
   @@map("invoices")

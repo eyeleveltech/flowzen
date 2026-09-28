@@ -11,6 +11,7 @@ import { api, ApiError } from '@/lib/api-v2';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
+import { GstAmountFields, grossFromBase } from '@/components/work/GstAmountFields';
 import { ErrorNote } from '@/components/ui/empty-state';
 
 type Target = { kind: 'PROJECT'; projectId: string } | { kind: 'MONTH_CARD'; monthCardId: string };
@@ -56,6 +57,8 @@ export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
   // person's name could be typed, which is the wrong way round for a field
   // whose whole point is that it is not always the firm.
   const [paidBy, setPaidBy] = useState('');
+  /** The rate on the bill. '' is no GST, which is not 0%. */
+  const [gstPercent, setGstPercent] = useState('');
   const [amount, setAmount] = useState('');
   const [incurredAt, setIncurredAt] = useState('');
   const [saving, setSaving] = useState(false);
@@ -92,7 +95,9 @@ export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
         category: storedCategory,
         vendor: vendor.trim(),
         paidBy: paidBy.trim(),
-        amount: Number(amount),
+        gstPercent: gstPercent ? Number(gstPercent) : null,
+        // The total, tax included — what actually leaves the account.
+        amount: grossFromBase(amount, gstPercent),
         incurredAt,
       });
       onCreated();
@@ -140,10 +145,15 @@ export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
             placeholder="Whose money it was"
             hint="The firm, or the person who paid for it out of their own pocket."
           />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Amount (₹)" value={amount} onChange={setAmount} type="number" required />
-            <Field label="Date" value={incurredAt} onChange={setIncurredAt} type="date" required />
-          </div>
+          {/* The bill's figure and its tax, with the total said out loud —
+              see GstAmountFields on why the TOTAL is what gets stored. */}
+          <GstAmountFields
+            amount={amount}
+            onAmountChange={setAmount}
+            gstPercent={gstPercent}
+            onGstChange={setGstPercent}
+          />
+          <Field label="Date" value={incurredAt} onChange={setIncurredAt} type="date" required />
           {error && <ErrorNote>{error}</ErrorNote>}
         </ModalBody>
         <ModalFooter>

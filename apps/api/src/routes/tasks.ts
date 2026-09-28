@@ -718,6 +718,14 @@ const taskCreateSchema = z.object({
   retainerProjectId: z.string().optional().nullable(),
   /** Which piece of the studio's own work this is part of. Internal tasks only, and always optional. */
   internalProjectId: z.string().optional().nullable(),
+  /**
+   * Which client this task is ABOUT — chasing them, mostly.
+   *
+   * Internal tasks only. A month-card or project task already knows its client
+   * through the work it sits on, and a second answer is a second thing that
+   * can disagree with the first.
+   */
+  companyId: z.string().optional().nullable(),
   assigneeId: z.string().optional(),
   /** Everybody on it. The first is the lead; `assigneeId` still works on its own. */
   assigneeIds: z.array(z.string().min(1)).min(1).max(20).optional(),
@@ -812,7 +820,7 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
     }
 
     const orgId = req.user!.organizationId;
-    const { title, workType, workId, monthCardId, projectId, retainerProjectId, internalProjectId, assigneeId, assigneeIds, assignedById, reviewerId, taskType, dueDate, priority, notes } =
+    const { title, workType, workId, monthCardId, projectId, retainerProjectId, internalProjectId, companyId, assigneeId, assigneeIds, assignedById, reviewerId, taskType, dueDate, priority, notes } =
       parsed.data;
 
     // `assigneeIds` wins when both arrive; `assigneeId` alone still means a
@@ -897,6 +905,24 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
      * genuinely belongs to nothing. An empty bucket per loose task would be
      * worse than no bucket at all.
      */
+    if (companyId) {
+      if (workType !== TaskWorkType.INTERNAL) {
+        res.status(400).json({
+          success: false,
+          error: 'Only an internal task names the client it is about — work on a retainer or a project already knows.',
+        });
+        return;
+      }
+      const owned = await prisma.company.findFirst({
+        where: { id: companyId, organizationId: orgId },
+        select: { id: true },
+      });
+      if (!owned) {
+        res.status(404).json({ success: false, error: 'Company not found' });
+        return;
+      }
+    }
+
     if (internalProjectId) {
       if (workType !== TaskWorkType.INTERNAL) {
         res.status(400).json({
@@ -949,6 +975,7 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
         projectId: projectId || (workType === 'PROJECT' ? workId : null),
         retainerProjectId: resolvedProjectId,
         internalProjectId: internalProjectId || null,
+        companyId: companyId || null,
         assigneeId: people[0],
         // Who typed it, and who asked for it. The first is never chosen — it
         // is what `canRemove` reads — and the second falls back to it, so a

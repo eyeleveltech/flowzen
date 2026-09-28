@@ -71,6 +71,9 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
           organizationId,
           title: `Follow up — ${p.company.name} proposal`,
           workType: TaskWorkType.INTERNAL,
+          // So the chase shows on the client it is about, rather than only in
+          // whoever's My Work it landed in.
+          companyId: p.company.id,
           assigneeId: p.ownerId,
           createdById: p.ownerId,
           assignees: { create: { userId: p.ownerId } },
@@ -345,7 +348,6 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
   for (const p of liveProjects) {
     const profit = jobProfit({
       quotedValue: Number(p.quotedValue),
-      estimatedCost: p.estimatedCost === null ? null : Number(p.estimatedCost),
       directCost: p.costs.reduce((sum, c) => sum + Number(c.amount), 0),
       peopleCost: p.allocations.reduce(
         (sum, a) => sum + (a.percent / 100) * Number(a.user.monthlyCost),

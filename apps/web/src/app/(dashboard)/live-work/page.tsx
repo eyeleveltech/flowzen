@@ -23,7 +23,8 @@ interface LiveProject {
   company: { id: string; name: string; vertical: string };
   owner?: { id: string; name: string } | null;
   quotedValue: number | string | null;
-  estimatedCost?: number | string | null;
+  /** Work given away — nothing quoted, nothing billed, costs still counted. */
+  isSample?: boolean;
   actualCostTotal: number | string | null;
   /** `'none'` when nobody has recorded a cost or an allocation — see jobProfit.ts. */
   profit?: { costBasis?: 'recorded' | 'none' };
@@ -233,7 +234,11 @@ export default function LiveWorkPage() {
 
   const noContractCount = retainers.filter((r) => r.noFixedTermRisk).length;
   const flaggedProjects = liveProjects.filter((p) => p.alerts.length > 0);
-  const oneTimeInFlight = liveProjects.reduce((s, p) => s + Number(p.quotedValue || 0), 0);
+  // Samples are excluded: this is money in flight, and nothing is coming for
+  // work that was given away. Their COST still lands in the cost figures.
+  const oneTimeInFlight = liveProjects
+    .filter((p) => !p.isSample)
+    .reduce((s, p) => s + Number(p.quotedValue || 0), 0);
   /*
    * "At risk" — flagged by rule, not opinion: a retainer close to lapsing (or
    * with no contract at all) plus a project the alert engine has actually
@@ -525,7 +530,9 @@ export default function LiveWorkPage() {
                   {projects.map((p) => {
                     const quoted = p.quotedValue != null ? Number(p.quotedValue) : null;
                     const actual = p.actualCostTotal != null ? Number(p.actualCostTotal) : null;
-                    const over = quoted != null && actual != null && actual > (Number(p.estimatedCost) || quoted);
+                    // Spent more than the client agreed to pay, which is
+                    // the only comparison left worth colouring a bar for.
+                    const over = quoted != null && actual != null && actual > quoted;
                     const donePct = p.totalTasksCount > 0 ? Math.round(((p.totalTasksCount - p.openTasksCount) / p.totalTasksCount) * 100) : 0;
                     const status = projectStatus(p);
                     return (
@@ -546,7 +553,17 @@ export default function LiveWorkPage() {
                             {getPriorityLabel(p.priority)}
                           </span>
                         </td>
-                        <td className="font-semibold text-primary text-right">{canSeeFigures ? money(quoted) : '—'}</td>
+                        {/* "₹0" reads as a deal worth nothing; "Sample" reads
+                            as the decision it was. */}
+                        <td className="font-semibold text-primary text-right">
+                          {p.isSample ? (
+                            <span className="text-micro font-medium text-secondary">Sample</span>
+                          ) : canSeeFigures ? (
+                            money(quoted)
+                          ) : (
+                            '—'
+                          )}
+                        </td>
                         <td className="" style={{ width: 140 }}>
                           <Bar pct={donePct} tone={over ? 'warn' : donePct === 100 ? 'good' : 'default'} />
                           <div className="text-micro text-secondary mt-1">

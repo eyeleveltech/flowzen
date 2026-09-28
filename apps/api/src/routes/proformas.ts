@@ -230,9 +230,19 @@ proformasRouter.post('/', requirePermission('pipeline.write'), async (req: AuthR
     if (milestoneId) {
       const milestone = await prisma.milestone.findFirst({
         where: { id: milestoneId, project: { organizationId: orgId, companyId } },
+        include: { project: { select: { isSample: true, name: true } } },
       });
       if (!milestone) {
         res.status(404).json({ success: false, error: 'Milestone not found for this company' });
+        return;
+      }
+      // Sample work is given away. A proforma is a request for money, so there
+      // is nothing for this one to ask for.
+      if (milestone.project.isSample) {
+        res.status(400).json({
+          success: false,
+          error: `${milestone.project.name} is sample work — there is nothing to bill against it. Move it off sample work first if it is being charged for.`,
+        });
         return;
       }
       if (milestone.status !== 'PENDING') {

@@ -16,6 +16,7 @@ import { api, ApiError, type Company } from '@/lib/api-v2';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
+import { GstAmountFields, grossFromBase } from '@/components/work/GstAmountFields';
 import { ErrorNote } from '@/components/ui/empty-state';
 
 type CostType = 'DIRECT' | 'COMPANY' | 'CAPITAL';
@@ -47,6 +48,8 @@ export function NewCostModal({ onClose, onCreated }: { onClose: () => void; onCr
   const [amount, setAmount] = useState('');
   const [incurredAt, setIncurredAt] = useState(new Date().toISOString().slice(0, 10));
   const [paidBy, setPaidBy] = useState('');
+  /** The rate on the bill. '' is no GST, which is not 0%. */
+  const [gstPercent, setGstPercent] = useState('');
   const [treatment, setTreatment] = useState('COMPANY_EXPENSE');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,9 +106,12 @@ export function NewCostModal({ onClose, onCreated }: { onClose: () => void; onCr
         type,
         category: storedCategory,
         vendor: vendor.trim(),
-        amount: Number(amount),
+        // The total, tax included — what actually leaves the account.
+        amount: grossFromBase(amount, gstPercent),
         incurredAt,
         paidBy: paidBy.trim(),
+        // The money that actually leaves, which is what every figure reads.
+        gstPercent: gstPercent ? Number(gstPercent) : null,
         treatment,
         workType: type === 'DIRECT' ? selectedTarget?.workType : undefined,
         monthCardId: type === 'DIRECT' ? selectedTarget?.monthCardId : undefined,
@@ -186,10 +192,15 @@ export function NewCostModal({ onClose, onCreated }: { onClose: () => void; onCr
           )}
 
           <Field label="Paid to" value={vendor} onChange={setVendor} required placeholder="Who the money went to" />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Amount (₹)" value={amount} onChange={setAmount} type="number" required />
-            <Field label="Date" value={incurredAt} onChange={setIncurredAt} type="date" required />
-          </div>
+          {/* The bill's figure and its tax, with the total said out loud —
+              see GstAmountFields on why the TOTAL is what gets stored. */}
+          <GstAmountFields
+            amount={amount}
+            onAmountChange={setAmount}
+            gstPercent={gstPercent}
+            onGstChange={setGstPercent}
+          />
+          <Field label="Date" value={incurredAt} onChange={setIncurredAt} type="date" required />
           <div className="grid gap-4 sm:grid-cols-2">
             {/* Typed, not chosen — see NewWorkCostModal and the migration. */}
             <Field label="Company" value={paidBy} onChange={setPaidBy} required placeholder="Whose money it was" />

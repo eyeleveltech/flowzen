@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, type AuthRequest, hasPermission, requirePermission } from '../middleware/auth.js';
 import { issueWithRetry } from '../utils/documentNumber.js';
-import { InvoiceStatus, MonthCardStatus, TaskWorkType } from '@prisma/client';
+import { InvoiceStatus, MilestoneStatus, MonthCardStatus, TaskWorkType } from '@prisma/client';
 import { parsePagination } from '../utils/query.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
@@ -347,6 +347,15 @@ const createInvoiceSchema = z.object({
   projectId: z.string().optional().nullable(),
   proformaId: z.string().optional().nullable(),
   monthCardId: z.string().optional().nullable(),
+  /**
+   * The billing milestone this invoice settles.
+   *
+   * Sent when the invoice was raised in Tally against a milestone with no
+   * Flowzen proforma behind it — which is the normal case here, Tally being
+   * the book of record. When a proforma IS behind it, the milestone is taken
+   * from the proforma instead and this can be left out.
+   */
+  milestoneId: z.string().optional().nullable(),
   customNumber: z.string().optional(),
 });
 
@@ -375,6 +384,7 @@ invoicesRouter.post(
         projectId,
         proformaId,
         monthCardId,
+        milestoneId,
         customNumber,
       } = parsed.data;
 
@@ -398,10 +408,22 @@ invoicesRouter.post(
       if (projectId) {
         const project = await prisma.project.findFirst({
           where: { id: projectId, organizationId: orgId, companyId, deletedAt: null },
-          select: { id: true },
+          select: { id: true, isSample: true },
         });
         if (!project) {
           res.status(404).json({ success: false, error: 'Project not found for this company' });
+          return;
+        }
+        /*
+         * Nothing is charged for a sample.
+         *
+         * An invoice against one is either a mistake or the moment somebody
+         * decided to charge after all — and the second wants the project moved
+         * off sample work deliberately and on the record, rather than as a
+         * side effect of billing it.
+         */
+        if (project.isSample) {
+          res.status(400).json({ success: false, error: 'Sample work is not billed — there is nothing to raise against it. Move it off sample work first if it is being charged for.' });
           return;
         }
       }
@@ -436,6 +458,47 @@ invoicesRouter.post(
         }
       }
 
+      /*
+       * Which milestone this invoice settles.
+       *
+       * Named outright, or inherited from the proforma it was raised against.
+       * Either way it is what makes the milestone's status a FACT: raising the
+       * invoice moves it to Invoiced, and the payment that settles the invoice
+       * moves it to Paid. Before this the last two rungs of the ladder could
+       * only be typed, because an invoice had nowhere to say what it was for.
+       */
+      let settlesMilestoneId: string | null = milestoneId || null;
+      if (!settlesMilestoneId && proformaId) {
+        const pf = await prisma.proforma.findFirst({
+          where: { id: proformaId, organizationId: orgId },
+          select: { milestoneId: true },
+        });
+        settlesMilestoneId = pf?.milestoneId ?? null;
+      }
+      if (settlesMilestoneId) {
+        const ms = await prisma.milestone.findFirst({
+          where: {
+            id: settlesMilestoneId,
+            project: { organizationId: orgId, companyId, deletedAt: null },
+          },
+          select: { id: true, label: true, status: true, projectId: true, invoices: { select: { id: true, status: true } } },
+        });
+        if (!ms) {
+          res.status(404).json({ success: false, error: 'That milestone is not on a project of this client.' });
+          return;
+        }
+        // One live invoice per milestone. A second one is either a duplicate or
+        // a correction, and both want the first cancelled rather than doubled.
+        const live = ms.invoices.filter((i) => i.status !== 'CANCELLED');
+        if (live.length > 0) {
+          res.status(400).json({
+            success: false,
+            error: `${ms.label} already has an invoice against it. Cancel that one first if this is a correction.`,
+          });
+          return;
+        }
+      }
+
       const now = new Date();
       const raisedDate = raisedAt ? new Date(raisedAt) : now;
       const dueDate = dueAt ? new Date(dueAt) : new Date(raisedDate.getTime() + 15 * 24 * 3600 * 1000); // 15 days credit
@@ -459,6 +522,7 @@ invoicesRouter.post(
               workId: workId || undefined,
               projectId: projectId || undefined,
               proformaId: proformaId || undefined,
+              milestoneId: settlesMilestoneId || undefined,
               status: InvoiceStatus.RAISED,
             },
             include: { company: true },
@@ -466,6 +530,14 @@ invoicesRouter.post(
 
           if (monthCard) {
             await tx.monthCard.update({ where: { id: monthCard.id }, data: { invoiceId: created.id } });
+          }
+
+          // Derived, not typed: the milestone is Invoiced BECAUSE this exists.
+          if (settlesMilestoneId) {
+            await tx.milestone.update({
+              where: { id: settlesMilestoneId },
+              data: { status: MilestoneStatus.INVOICED },
+            });
           }
 
           return created;
@@ -555,6 +627,21 @@ invoicesRouter.post(
           },
           include: { payments: true, company: true },
         });
+
+        /*
+         * The milestone follows the money, not somebody's finger.
+         *
+         * Recording a payment used to leave the milestone alone entirely, so
+         * the only way to show a milestone as Paid was to say so — which is
+         * how eleven of them came to sit at Paid with no document at all. Now
+         * the last rung is settled by the same event that settles the invoice.
+         */
+        if (invoice.milestoneId) {
+          await prisma.milestone.update({
+            where: { id: invoice.milestoneId },
+            data: { status: MilestoneStatus.PAID },
+          });
+        }
       }
 
       // Log payment activity

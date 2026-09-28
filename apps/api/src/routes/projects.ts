@@ -75,7 +75,6 @@ projectsRouter.get('/', requirePermission('work.all'), async (req: AuthRequest, 
       const actualCostTotal = directCost + peopleCost;
       const profit = jobProfit({
         quotedValue: Number(p.quotedValue),
-        estimatedCost: p.estimatedCost === null ? null : Number(p.estimatedCost),
         directCost,
         peopleCost,
         costEntries: p.costs.length + p.allocations.length,
@@ -104,7 +103,9 @@ projectsRouter.get('/', requirePermission('work.all'), async (req: AuthRequest, 
         companyId: p.companyId,
         company: p.company,
         quotedValue: canSeeFigures ? p.quotedValue : null,
-        estimatedCost: canSeeFigures ? p.estimatedCost : null,
+        // Not money, so not masked: whether work was given away is a fact
+        // about the work, and the list has to label it either way.
+        isSample: p.isSample,
         actualCostTotal: canSeeFigures ? actualCostTotal : null,
         ...(canSeeFigures ? { profit, costRisk: risk } : {}),
         percentComplete: progress.percent,
@@ -127,7 +128,6 @@ projectsRouter.get('/', requirePermission('work.all'), async (req: AuthRequest, 
         { label: 'Name', value: (p) => p.name },
         { label: 'Company', value: (p) => p.company.name },
         { label: 'Quoted value', value: (p) => (p.quotedValue != null ? Number(p.quotedValue) : '') },
-        { label: 'Estimated cost', value: (p) => (p.estimatedCost != null ? Number(p.estimatedCost) : '') },
         { label: 'Actual cost', value: (p) => (p.actualCostTotal != null ? Number(p.actualCostTotal) : '') },
         { label: 'External cost', value: (p) => p.profit?.directCost ?? '' },
         { label: 'People cost', value: (p) => p.profit?.peopleCost ?? '' },
@@ -201,7 +201,6 @@ projectsRouter.get(
         const peopleCost = allocationCost(p.allocations);
         const profit = jobProfit({
           quotedValue: Number(p.quotedValue),
-          estimatedCost: p.estimatedCost === null ? null : Number(p.estimatedCost),
           directCost,
           peopleCost,
           costEntries: p.costs.length + p.allocations.length,
@@ -302,7 +301,17 @@ projectsRouter.get('/:id', requirePermission('work.all'), async (req: AuthReques
         owner: { select: { id: true, name: true, email: true, dept: true } },
         milestones: {
           orderBy: { order: 'asc' },
-          include: { proformas: { select: { id: true, number: true, status: true }, orderBy: { createdAt: 'desc' }, take: 1 } },
+          include: {
+            proformas: { select: { id: true, number: true, status: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+            // The invoice that settles it, which is what the screen needs to
+            // offer "record the payment" against the right document.
+            invoices: {
+              where: { status: { not: 'CANCELLED' } },
+              select: { id: true, number: true, amount: true, status: true },
+              orderBy: { raisedAt: 'desc' },
+              take: 1,
+            },
+          },
         },
         tasks: {
           where: { deletedAt: null },
@@ -342,7 +351,6 @@ projectsRouter.get('/:id', requirePermission('work.all'), async (req: AuthReques
     // part that changes what the next quote looks like.
     const profit = jobProfit({
       quotedValue: Number(project.quotedValue),
-      estimatedCost: project.estimatedCost === null ? null : Number(project.estimatedCost),
       directCost,
       peopleCost,
       costEntries: project.costs.length + project.allocations.length,
@@ -381,7 +389,6 @@ projectsRouter.get('/:id', requirePermission('work.all'), async (req: AuthReques
       project: {
         ...project,
         quotedValue: canSeeFigures ? project.quotedValue : null,
-        estimatedCost: canSeeFigures ? project.estimatedCost : null,
         actualCostTotal: canSeeFigures ? actualCostTotal : null,
         // Absent, not nulled, without money.figures — the same rule the asset
         // register follows. How far through the work is stays visible to
@@ -408,13 +415,36 @@ const milestoneInputSchema = z.object({
   amount: z.number().positive(),
 });
 
+/*
+ * There is no cost estimate on a project any more.
+ *
+ * It asked what the work would cost at the one moment nobody knows — before
+ * any of it has been done — and then almost nothing read the answer. Cost risk
+ * now judges against the QUOTE, which is a figure somebody actually agreed to
+ * pay, and the rule for it was already written as the fallback for every
+ * project that never had an estimate. The column is still on the table; it is
+ * simply no longer collected, shown or read.
+ */
 const projectCreateSchema = z.object({
   companyId: z.string().min(1, 'Company is required'),
   name: z.string().min(1, 'Project name is required'),
-  quotedValue: z.number().positive('Quoted value must be positive'),
-  estimatedCost: z.number().optional().nullable(),
-  startDate: z.string().min(1, 'Start date is required'),
-  endDate: z.string().min(1, 'End date is required'),
+  /**
+   * Nought is allowed only for a sample — see `isSample`. Paid work with no
+   * number on it is how a project ends up unbillable and nobody notices.
+   */
+  quotedValue: z.number().min(0, 'Quoted value cannot be negative').optional().default(0),
+  /** Work done to win somebody, with nothing to invoice at the end of it. */
+  isSample: z.boolean().optional().default(false),
+  /*
+   * Required for paid work, optional for a sample — checked below rather than
+   * here, because zod cannot see `isSample` from inside a field.
+   *
+   * A sample is often decided and started in the same breath ("send them
+   * something"), and asking when it ends before anybody has begun it is the
+   * kind of question that stops a thing being written down at all.
+   */
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
   ownerId: z.string().optional(),
   priority: z.nativeEnum(Priority).optional(),
   description: z.string().optional().nullable(),
@@ -432,7 +462,28 @@ projectsRouter.post('/', requirePermission('company.write'), async (req: AuthReq
     }
 
     const orgId = req.user!.organizationId;
-    const { companyId, name, quotedValue, estimatedCost, startDate, endDate, ownerId, priority, description, milestones, sourceProposalId } = parsed.data;
+    const { companyId, name, quotedValue, isSample, startDate, endDate, ownerId, priority, description, milestones, sourceProposalId } = parsed.data;
+
+    // Paid work has a price. Only a sample may be worth nothing, and only a
+    // sample may skip having one.
+    if (!isSample && !(quotedValue > 0)) {
+      res.status(400).json({ success: false, error: 'Quoted value must be positive — or mark this as sample work.' });
+      return;
+    }
+    // Paid work is scheduled; a sample is just started. Both dates fall back to
+    // today for a sample, so the row still sits somewhere on a timeline.
+    if (!isSample && (!startDate || !endDate)) {
+      res.status(400).json({ success: false, error: 'A project needs a start date and an expected end.' });
+      return;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const start = startDate || today;
+    const end = endDate || startDate || today;
+
+    if (isSample && (milestones?.length || 0) > 0) {
+      res.status(400).json({ success: false, error: 'Sample work is not billed, so it cannot carry billing milestones.' });
+      return;
+    }
 
     /*
      * The company has to have bought something first.
@@ -454,10 +505,22 @@ projectsRouter.post('/', requirePermission('company.write'), async (req: AuthReq
       res.status(404).json({ success: false, error: 'Company not found' });
       return;
     }
-    if (company.status === CompanyStatus.PROSPECT) {
+    /*
+     * A prospect may be given a sample, and nothing else.
+     *
+     * The guard is about selling: a company becomes a CLIENT because a
+     * proposal was won, so live PAID work for somebody who has bought nothing
+     * is the contradiction it exists to stop. A sample is not a sale — it is
+     * the thing you make in order TO sell — so it does not contradict
+     * anything, and refusing it was what made the money spent winning a client
+     * invisible.
+     *
+     * The company stays a prospect either way. Nothing here promotes anybody.
+     */
+    if (company.status === CompanyStatus.PROSPECT && !isSample) {
       res.status(400).json({
         success: false,
-        error: `${company.name} is still a prospect. Win a proposal for them first — that is what turns a prospect into a client.`,
+        error: `${company.name} is still a prospect. Win a proposal for them first — that is what turns a prospect into a client. Sample work can be recorded for them now.`,
       });
       return;
     }
@@ -484,7 +547,9 @@ projectsRouter.post('/', requirePermission('company.write'), async (req: AuthReq
       }
     }
 
-    const defaultMilestones = milestones || [
+    // Nothing to bill, so nothing to split. Without this a sample would be
+    // born with three ₹0 milestones, which reads as a billing plan.
+    const defaultMilestones = isSample ? [] : milestones || [
       { label: 'Advance Payment', percent: 40, amount: quotedValue * 0.4 },
       { label: 'Phase 1 Sign-off', percent: 30, amount: quotedValue * 0.3 },
       { label: 'Final Delivery & Handover', percent: 30, amount: quotedValue * 0.3 },
@@ -497,9 +562,9 @@ projectsRouter.post('/', requirePermission('company.write'), async (req: AuthReq
           companyId,
           name: name.trim(),
           quotedValue,
-          estimatedCost: estimatedCost || null,
-          startDate: new Date(startDate),
-          endDate: new Date(endDate),
+          isSample,
+          startDate: new Date(start),
+          endDate: new Date(end),
           ownerId: ownerId || req.user!.userId,
           status: ProjectStatus.LIVE,
           priority: priority ?? Priority.MEDIUM,
@@ -547,13 +612,21 @@ projectsRouter.post('/', requirePermission('company.write'), async (req: AuthReq
 const projectEditSchema = z.object({
   name: z.string().min(1).optional(),
   quotedValue: z.number().positive().optional(),
-  estimatedCost: z.number().positive().optional().nullable(),
   startDate: z.string().min(1).optional(),
   endDate: z.string().min(1).optional(),
   ownerId: z.string().min(1).optional(),
   status: z.nativeEnum(ProjectStatus).optional(),
   priority: z.nativeEnum(Priority).optional(),
   description: z.string().optional().nullable(),
+  /**
+   * Turning paid work into a sample, or a sample into paid work.
+   *
+   * Both happen for real: a piece quoted and then given away to keep a client
+   * sweet, and a sample the client liked enough to pay for. What must not
+   * happen is either one landing on top of billing that already exists, which
+   * is what the guards below are for.
+   */
+  isSample: z.boolean().optional(),
 });
 
 projectsRouter.patch('/:id', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
@@ -572,19 +645,71 @@ projectsRouter.patch('/:id', requirePermission('company.write'), async (req: Aut
       return;
     }
 
-    const { name, quotedValue, estimatedCost, startDate, endDate, ownerId, status, priority, description } = parsed.data;
+    const { name, quotedValue, startDate, endDate, ownerId, status, priority, description, isSample } = parsed.data;
+
+    /*
+     * ─── Switching between sample and paid ─────────────────────────────────
+     *
+     * → SAMPLE: refused once anything has been billed. A proforma or an
+     *   invoice is a document that left the building; a project cannot
+     *   retrospectively have been free. Milestones that are merely PENDING are
+     *   another matter — nothing was raised against them — so they are removed
+     *   with the change and the count is reported, rather than left behind as
+     *   a billing plan on work that is not billed.
+     *
+     * → PAID: needs a price. Going from nothing to paid without one produces
+     *   exactly the unbillable project this release is trying to stamp out, so
+     *   the value has to arrive in the same request.
+     */
+    let clearedMilestones = 0;
+    if (isSample !== undefined && isSample !== existing.isSample) {
+      if (isSample) {
+        const billed = await prisma.milestone.count({
+          where: {
+            projectId: id,
+            OR: [
+              { status: { not: 'PENDING' } },
+              { proformas: { some: { status: { not: 'CANCELLED' } } } },
+              { invoices: { some: { status: { not: 'CANCELLED' } } } },
+            ],
+          },
+        });
+        const invoices = await prisma.invoice.count({
+          where: { projectId: id, organizationId: orgId, status: { not: 'CANCELLED' } },
+        });
+        if (billed > 0 || invoices > 0) {
+          res.status(400).json({
+            success: false,
+            error:
+              'This project has already been billed, so it cannot become sample work. Cancel the proforma or invoice against it first.',
+          });
+          return;
+        }
+        clearedMilestones = (await prisma.milestone.deleteMany({ where: { projectId: id } })).count;
+      } else {
+        const price = quotedValue ?? Number(existing.quotedValue);
+        if (!(price > 0)) {
+          res.status(400).json({
+            success: false,
+            error: 'Paid work needs a quoted value. Enter one to move this off sample work.',
+          });
+          return;
+        }
+      }
+    }
+
     const project = await prisma.project.update({
       where: { id },
       data: {
         ...(name !== undefined ? { name: name.trim() } : {}),
         ...(quotedValue !== undefined ? { quotedValue } : {}),
-        ...(estimatedCost !== undefined ? { estimatedCost } : {}),
         ...(startDate !== undefined ? { startDate: new Date(startDate) } : {}),
         ...(endDate !== undefined ? { endDate: new Date(endDate) } : {}),
         ...(ownerId !== undefined ? { ownerId } : {}),
         ...(status !== undefined ? { status } : {}),
         ...(priority !== undefined ? { priority } : {}),
         ...(description !== undefined ? { description: description || null } : {}),
+        ...(isSample !== undefined ? { isSample } : {}),
       },
     });
 
@@ -595,7 +720,12 @@ projectsRouter.patch('/:id', requirePermission('company.write'), async (req: Aut
         entityId: id,
         actorId: req.user!.userId,
         verb: 'project_edited',
-        payload: { fields: Object.keys(parsed.data) },
+        payload: {
+          fields: Object.keys(parsed.data),
+          // Named, because a billing plan disappearing is exactly the kind of
+          // thing somebody asks about later.
+          ...(clearedMilestones > 0 ? { milestonesRemoved: clearedMilestones } : {}),
+        },
       },
     });
 
@@ -622,7 +752,6 @@ projectsRouter.patch('/:id', requirePermission('company.write'), async (req: Aut
       if (closing) {
         const finalProfit = jobProfit({
           quotedValue: Number(closing.quotedValue),
-          estimatedCost: closing.estimatedCost === null ? null : Number(closing.estimatedCost),
           directCost: closing.costs.reduce((acc, c) => acc + Number(c.amount), 0),
           peopleCost: allocationCost(closing.allocations),
         });
@@ -639,7 +768,7 @@ projectsRouter.patch('/:id', requirePermission('company.write'), async (req: Aut
       }
     }
 
-    res.json({ success: true, project });
+    res.json({ success: true, project, milestonesRemoved: clearedMilestones });
   } catch (error) {
     next(error);
   }
@@ -757,6 +886,16 @@ projectsRouter.post('/:id/milestones', requirePermission('work.all'), async (req
       return;
     }
 
+    // A billing plan on work that is not billed is a contradiction — and the
+    // one that would quietly make a sample chargeable again.
+    if (project.isSample) {
+      res.status(400).json({
+        success: false,
+        error: 'Sample work is not billed, so it cannot carry billing milestones. Move it off sample work first.',
+      });
+      return;
+    }
+
     const nextOrder = project.milestones.reduce((max, m) => Math.max(max, m.order), -1) + 1;
     const milestone = await prisma.milestone.create({
       data: { projectId: id, label: parsed.data.label, percent: parsed.data.percent, amount: parsed.data.amount, order: nextOrder },
@@ -844,6 +983,41 @@ projectsRouter.patch('/:id/milestones/:milestoneId', requirePermission('work.all
         });
         return;
       }
+    }
+
+    /*
+     * ─── Forward is earned, not claimed ────────────────────────────────────
+     *
+     * This guarded backward moves only, so a milestone could be walked up to
+     * Invoiced and then Paid with one click each and nothing behind either —
+     * no document, no number, no money. Eleven of them in this database sit
+     * past Pending with no proforma at all, which is how "collected" became a
+     * figure nobody could reconcile against Tally.
+     *
+     * §3 says status is derived. It already was for the first rung: raising a
+     * proforma moves a milestone to Proforma raised, cancelling one gives it
+     * back. The other two rungs now work the same way — recording the invoice
+     * moves it to Invoiced, and the payment that settles that invoice moves it
+     * to Paid. Both happen by themselves, which is why this refuses rather
+     * than asks.
+     *
+     * The refusal names the thing to do instead, because "not allowed" without
+     * a next step is how people end up typing it in somewhere else.
+     */
+    const DERIVED_FORWARD: Partial<Record<MilestoneStatus, string>> = {
+      [MilestoneStatus.PROFORMA_RAISED]:
+        'Raise the proforma — on the client, under Invoices & Proformas — and this moves to Proforma raised by itself.',
+      [MilestoneStatus.INVOICED]:
+        'Enter the invoice against this milestone — its Tally number, amount and date — and this moves to Invoiced by itself.',
+      [MilestoneStatus.PAID]:
+        'Record the payment against that invoice and this moves to Paid by itself, once the invoice is fully settled.',
+    };
+    if (status !== undefined && LADDER.indexOf(status) > LADDER.indexOf(existing.status)) {
+      res.status(400).json({
+        success: false,
+        error: `A milestone's status follows its documents rather than being set. ${DERIVED_FORWARD[status]}`,
+      });
+      return;
     }
 
     // The billing structure (label/percent/amount) is locked the moment a

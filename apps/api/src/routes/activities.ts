@@ -228,6 +228,7 @@ activitiesRouter.post('/', async (req: AuthRequest, res: Response, next: NextFun
             organizationId: orgId,
             title: `Follow up — ${company.name}`,
             workType: TaskWorkType.INTERNAL,
+            companyId: company.id,
             assigneeId: company.ownerId ?? userId,
             createdById: userId,
             dueDate: new Date(followUpDate),

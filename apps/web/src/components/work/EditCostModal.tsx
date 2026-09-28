@@ -20,6 +20,7 @@ import { api, ApiError } from '@/lib/api-v2';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
+import { GstAmountFields, grossFromBase, baseFromGross } from '@/components/work/GstAmountFields';
 import { ErrorNote } from '@/components/ui/empty-state';
 
 export type EditableCost = {
@@ -29,6 +30,8 @@ export type EditableCost = {
   /** Whose money it was. Named `paidBy` on the record, "Company" on screen. */
   paidBy?: string | null;
   amount: string | number | null;
+  /** The rate the amount already includes, if one was recorded. */
+  gstPercent?: number | null;
   incurredAt: string;
 };
 
@@ -51,7 +54,13 @@ export function EditCostModal({ cost, onSaved, onClose }: Props) {
    * exactly what this form exists to avoid.
    */
   const [paidBy, setPaidBy] = useState(cost.paidBy ?? '');
-  const [amount, setAmount] = useState(cost.amount != null ? String(cost.amount) : '');
+  /*
+    * Shown as it was entered — the bill's figure and its rate — not as the
+    * total. Re-editing a ₹11,800 row as "11800 + 18%" would put ₹13,924 back
+    * into the month, which is how a correction turns into a second mistake.
+    */
+   const [gstPercent, setGstPercent] = useState(cost.gstPercent != null ? String(cost.gstPercent) : '');
+   const [amount, setAmount] = useState(baseFromGross(cost.amount, cost.gstPercent));
   const [incurredAt, setIncurredAt] = useState((cost.incurredAt ?? '').slice(0, 10));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +83,8 @@ export function EditCostModal({ cost, onSaved, onClose }: Props) {
         category: category.trim(),
         vendor: vendor.trim(),
         paidBy: paidBy.trim(),
-        amount: Number(amount),
+        amount: grossFromBase(amount, gstPercent),
+        gstPercent: gstPercent ? Number(gstPercent) : null,
         incurredAt,
       });
       toast.success('Cost updated');
@@ -98,10 +108,15 @@ export function EditCostModal({ cost, onSaved, onClose }: Props) {
           <Field label="Paid towards" value={category} onChange={setCategory} required />
           <Field label="Paid to" value={vendor} onChange={setVendor} required />
           <Field label="Company" value={paidBy} onChange={setPaidBy} required placeholder="Whose money it was" />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Amount (₹)" value={amount} onChange={setAmount} type="number" required />
-            <Field label="Date" value={incurredAt} onChange={setIncurredAt} type="date" required />
-          </div>
+          {/* The bill's figure and its tax, with the total said out loud —
+              see GstAmountFields on why the TOTAL is what gets stored. */}
+          <GstAmountFields
+            amount={amount}
+            onAmountChange={setAmount}
+            gstPercent={gstPercent}
+            onGstChange={setGstPercent}
+          />
+          <Field label="Date" value={incurredAt} onChange={setIncurredAt} type="date" required />
           {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
         </ModalBody>
         <ModalFooter>

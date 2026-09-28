@@ -43,6 +43,7 @@ import { NewProformaModal } from '@/components/clients/NewProformaModal';
 import { NewWorkTaskModal } from '@/components/work/NewWorkTaskModal';
 import { NewWorkCostModal } from '@/components/work/NewWorkCostModal';
 import { EditCostModal } from '@/components/work/EditCostModal';
+import { MilestoneInvoiceModal, type MilestoneForBilling } from '@/components/work/MilestoneInvoiceModal';
 import { PRIORITY_CONFIG, getPriorityDot, getPriorityBadge, getPriorityLabel } from '@/lib/priority';
 import { personOptions } from '@/lib/people';
 
@@ -68,6 +69,8 @@ type Milestone = {
   status: MStatus;
   order: number;
   proformas?: { id: string; number: string; status: string }[];
+  /** The invoice settling it, when one has been recorded. */
+  invoices?: { id: string; number: string; amount: string | number | null; status: string }[];
 };
 type Task = {
   id: string;
@@ -103,7 +106,8 @@ type ProjectDetail = {
   companyId: string;
   company: { id: string; name: string; vertical: string; city: string };
   quotedValue: string | number | null;
-  estimatedCost: string | number | null;
+  /** Work given away — nothing quoted, nothing billed, costs still counted. */
+  isSample?: boolean;
   actualCostTotal: string | number | null;
   /** Absent without money.figures — the server does not send it. */
   profit?: {
@@ -113,9 +117,6 @@ type ProjectDetail = {
     actualCost: number;
     profit: number;
     marginPercent: number | null;
-    estimatedCost: number | null;
-    costVariance: number | null;
-    costVariancePercent: number | null;
     /** `'none'` when nobody has recorded a cost or an allocation — see jobProfit.ts. */
     costBasis?: 'recorded' | 'none';
   };
@@ -197,7 +198,14 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
    * thing peopleBreakdown groups by further down.
    */
   const tabs: TabDef<'milestones' | 'tasks' | 'costs' | 'people' | 'activity'>[] = [
-    { key: 'milestones', label: 'Milestones', count: project?.milestones.length ?? 0 },
+    // Hidden on sample work rather than shown empty: an empty billing plan
+    // invites somebody to fill it in, and the server would refuse them.
+    {
+      key: 'milestones',
+      label: 'Milestones',
+      count: project?.milestones.length ?? 0,
+      visible: !project?.isSample,
+    },
     { key: 'tasks', label: 'Tasks', count: tasks.length },
     {
       key: 'costs',
@@ -222,6 +230,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
    * later. The modal is the same one the retainer uses.
    */
   const [editingCost, setEditingCost] = useState<any>(null);
+  const [billing, setBilling] = useState<{ mode: 'INVOICE' | 'PAYMENT'; milestone: MilestoneForBilling } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   /** Today, for the late comparison in the task table. */
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -320,8 +329,9 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const money = (v: string | number | null) => formatMoney(v, currency, locale);
 
   const actual = project.actualCostTotal != null ? Number(project.actualCostTotal) : null;
-  const estimated = project.estimatedCost != null ? Number(project.estimatedCost) : null;
-  const overEstimate = actual != null && estimated != null && actual > estimated;
+  // Against the quote now, not against a guess made before the work began.
+  const overEstimate =
+    actual != null && project.quotedValue != null && actual > Number(project.quotedValue);
   /**
    * Nobody has recorded what this job cost — so `profit` is arithmetic on an
    * empty set, not a finding. The server decides this (jobProfit.ts), because
@@ -369,19 +379,30 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     }, {}),
   ).sort((a, b) => (b.cost ?? b.totalPercent) - (a.cost ?? a.totalPercent));
 
-  const advanceMilestone = async (m: Milestone) => {
-    const next = MSTATUS_NEXT[m.status];
-    if (!next) return;
-    setBusyId(m.id);
-    try {
-      await api.projects.updateMilestone(project.id, m.id, next);
-      await load();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not update that milestone');
-    } finally {
-      setBusyId(null);
-    }
-  };
+  /*
+   * Moving a milestone on now means writing down what moved it.
+   *
+   * This used to PATCH the status straight up the ladder, which recorded
+   * nothing at all — no number, no amount, no date, nobody — so "invoiced" and
+   * "collected" were assertions and could not be reconciled against Tally.
+   * The server refuses that now; the status follows the document.
+   *
+   * Proforma raised is not here because it already worked that way: raising
+   * the proforma is what moves it, on the client's Invoices & Proformas tab.
+   */
+  const billMilestone = (m: Milestone, mode: 'INVOICE' | 'PAYMENT') =>
+    setBilling({
+      mode,
+      milestone: {
+        id: m.id,
+        label: m.label,
+        amount: m.amount,
+        status: m.status,
+        // The route sends at most one live invoice per milestone; the payment
+        // form needs the one it is paying against.
+        invoice: m.invoices?.[0] ?? null,
+      },
+    });
 
   const stepMilestoneBack = async (m: Milestone) => {
     const back = MSTATUS_BACK[m.status];
@@ -579,15 +600,12 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         {/* "33% done" under a money figure reads as "33% billed", which it is
             not — it is how much of the WORK is finished, and it sits next to a
             milestone table stating a different percentage that IS about money. */}
+        {/* ₹0 reads as "we charged nothing and that is the deal"; "Sample
+            work" reads as the decision it actually was. */}
         <StatTile
-          label="Quoted"
-          value={money(project.quotedValue)}
+          label={project.isSample ? 'Charged' : 'Quoted'}
+          value={project.isSample ? 'Nothing — sample' : money(project.quotedValue)}
           note={`${project.percentComplete}% of the work done`}
-        />
-        <StatTile
-          label="Cost estimate"
-          value={estimated != null ? money(estimated) : 'Not set'}
-          note={estimated == null ? 'nothing to compare against' : 'what we thought it would take'}
         />
         {/*
           A number, including when the number is nought.
@@ -772,9 +790,20 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                                 </button>
                               </>
                             )}
-                            {canManage && m.status !== 'PENDING' && MSTATUS_NEXT[m.status] && (
-                              <Button size="sm" variant="ghost" loading={busyId === m.id} onClick={() => void advanceMilestone(m)}>
-                                Mark {MSTATUS[MSTATUS_NEXT[m.status]!].label.toLowerCase()}
+                            {/*
+                              Gated on money.figures, not on canManage: these
+                              write an invoice and a payment, which is the
+                              accounts desk's act. A Head running the work can
+                              see the ladder and cannot claim money moved on it.
+                            */}
+                            {canSeeFigures && m.status === 'PROFORMA_RAISED' && (
+                              <Button size="sm" variant="ghost" onClick={() => billMilestone(m, 'INVOICE')}>
+                                Record invoice
+                              </Button>
+                            )}
+                            {canSeeFigures && m.status === 'INVOICED' && (
+                              <Button size="sm" variant="ghost" onClick={() => billMilestone(m, 'PAYMENT')}>
+                                Record payment
                               </Button>
                             )}
                             {/* The way back from a mis-click — see MSTATUS_BACK. */}
@@ -1128,6 +1157,20 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         }}
       />
 
+      {billing && project?.company?.id && (
+        <MilestoneInvoiceModal
+          mode={billing.mode}
+          projectId={project.id}
+          companyId={project.company.id}
+          milestone={billing.milestone}
+          onClose={() => setBilling(null)}
+          onDone={() => {
+            setBilling(null);
+            void load();
+          }}
+        />
+      )}
+
       {editingCost && (
         <EditCostModal
           cost={editingCost}
@@ -1244,7 +1287,16 @@ function EditProjectModal({
 }) {
   const [name, setName] = useState('');
   const [quotedValue, setQuotedValue] = useState('');
-  const [estimatedCost, setEstimatedCost] = useState('');
+  /*
+   * Moving work between given away and charged for.
+   *
+   * Both directions happen: a piece quoted and then handed over to keep a
+   * client sweet, and a sample they liked enough to pay for. The server
+   * refuses either once anything has been billed, and turning a project into
+   * a sample clears the milestones that were never raised against — so the
+   * warning below says so before somebody finds out by doing it.
+   */
+  const [isSample, setIsSample] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [ownerId, setOwnerId] = useState('');
@@ -1292,7 +1344,6 @@ function EditProjectModal({
     if (!project) return;
     setName(project.name);
     setQuotedValue(project.quotedValue != null ? String(Number(project.quotedValue)) : '');
-    setEstimatedCost(project.estimatedCost != null ? String(Number(project.estimatedCost)) : '');
     setStartDate(project.startDate.slice(0, 10));
     setEndDate(project.endDate.slice(0, 10));
     setOwnerId(project.ownerId);
@@ -1312,6 +1363,7 @@ function EditProjectModal({
       })),
     );
     setRemoved([]);
+    setIsSample(Boolean(project.isSample));
     setError(null);
   }, [project]);
 
@@ -1324,8 +1376,8 @@ function EditProjectModal({
     try {
       await api.projects.update(project.id, {
         name: name.trim(),
-        quotedValue: quotedValue ? Number(quotedValue) : undefined,
-        estimatedCost: estimatedCost ? Number(estimatedCost) : null,
+        isSample,
+        quotedValue: isSample ? 0 : quotedValue ? Number(quotedValue) : undefined,
         startDate,
         endDate,
         ownerId: ownerId || undefined,
@@ -1381,7 +1433,6 @@ function EditProjectModal({
           <Field label="Project name" value={name} onChange={setName} required />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Quoted value (₹)" value={quotedValue} onChange={setQuotedValue} type="number" required />
-            <Field label="Your cost estimate (₹)" value={estimatedCost} onChange={setEstimatedCost} type="number" />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Start date" value={startDate} onChange={setStartDate} type="date" required />
@@ -1403,8 +1454,35 @@ function EditProjectModal({
           <FieldSelect label="Priority" value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} />
           <Field label="Description" value={description} onChange={setDescription} textarea rows={3} />
 
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-subtle/40 p-3">
+            <input
+              type="checkbox"
+              checked={isSample}
+              onChange={(e) => setIsSample(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+            />
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-primary">This is sample work</span>
+              <span className="mt-0.5 block text-xs text-secondary">
+                Nothing is quoted and nothing is billed. What it costs is still tracked.
+              </span>
+              {/* Said before it happens, not discovered afterwards. */}
+              {isSample && !project.isSample && rows.length > 0 && (
+                <span className="mt-1.5 block text-xs font-medium text-warning-ink">
+                  The {rows.length} billing milestone{rows.length === 1 ? '' : 's'} below will be removed. If anything has
+                  already been billed, the change is refused instead.
+                </span>
+              )}
+              {!isSample && project.isSample && (
+                <span className="mt-1.5 block text-xs font-medium text-warning-ink">
+                  Moving this off sample work needs a quoted value.
+                </span>
+              )}
+            </span>
+          </label>
+
           {/* ── Billing milestones ──────────────────────────────────────── */}
-          <div className="space-y-2">
+          <div className={`space-y-2 ${isSample ? 'hidden' : ''}`}>
             <span className="eyebrow block">Billing milestones</span>
             {rows.length === 0 && (
               <p className="text-xs text-secondary">No milestones — this project bills in one go.</p>

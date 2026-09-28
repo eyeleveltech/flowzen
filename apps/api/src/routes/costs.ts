@@ -97,6 +97,9 @@ costsRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction)
       category: c.category,
       vendor: c.vendor,
       amount: canSeeFigures ? Number(c.amount) : null,
+      // A rate is not a figure — it says nothing about how much was spent, so
+      // it is not masked with the money.
+      gstPercent: c.gstPercent,
       incurredAt: c.incurredAt,
       committedNotPaid: c.committedNotPaid,
       paidBy: c.paidBy,
@@ -120,6 +123,7 @@ costsRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction)
         { label: 'Incurred', value: (c) => c.incurredAt.toISOString().slice(0, 10) },
         { label: 'Committed, not paid', value: (c) => (c.committedNotPaid ? 'Yes' : 'No') },
         { label: 'Company', value: (c) => c.paidBy },
+        { label: 'GST %', value: (c) => (c.gstPercent == null ? '' : c.gstPercent) },
         { label: 'Treatment', value: (c) => c.treatment },
         { label: 'Entered by', value: (c) => c.enteredBy.name },
         { label: 'Recurring', value: (c) => (c.recurring ? 'Yes' : 'No') },
@@ -161,6 +165,16 @@ const createCostSchema = z.object({
    * list -- the list was the problem. See the 20260925120000 migration.
    */
   paidBy: z.string().trim().min(1, 'Say who paid').max(80).default('Company'),
+  /**
+   * The GST rate on this bill.
+   *
+   * `amount` is and stays the money that actually left, tax included — every
+   * figure in the app reads it. This is what makes the split recoverable
+   * afterwards, so "₹11,800" can still be read back as "₹10,000 + 18%".
+   *
+   * Null means nobody said, which is not the same as 0%.
+   */
+  gstPercent: z.number().int().min(0).max(28).optional().nullable(),
   treatment: z.nativeEnum(CostTreatment).default(CostTreatment.COMPANY_EXPENSE),
   recurring: z.boolean().default(false),
   notes: z.string().optional().nullable(),
@@ -295,6 +309,7 @@ costsRouter.post(
           incurredAt: incurredDate,
           committedNotPaid: parsed.data.committedNotPaid,
           paidBy: parsed.data.paidBy,
+          gstPercent: parsed.data.gstPercent ?? null,
           treatment: parsed.data.treatment,
           enteredById: req.user!.userId,
           recurring: parsed.data.recurring,
@@ -374,6 +389,7 @@ const editCostSchema = z.object({
   incurredAt: z.string().optional(),
   committedNotPaid: z.boolean().optional(),
   paidBy: z.string().trim().min(1).max(80).optional(),
+  gstPercent: z.number().int().min(0).max(28).optional().nullable(),
   treatment: z.nativeEnum(CostTreatment).optional(),
   recurring: z.boolean().optional(),
   notes: z.string().optional().nullable(),
@@ -416,6 +432,7 @@ costsRouter.patch(
           ...(d.incurredAt !== undefined ? { incurredAt: new Date(d.incurredAt) } : {}),
           ...(d.committedNotPaid !== undefined ? { committedNotPaid: d.committedNotPaid } : {}),
           ...(d.paidBy !== undefined ? { paidBy: d.paidBy } : {}),
+          ...(d.gstPercent !== undefined ? { gstPercent: d.gstPercent } : {}),
           ...(d.treatment !== undefined ? { treatment: d.treatment } : {}),
           ...(d.recurring !== undefined ? { recurring: d.recurring } : {}),
           ...(d.notes !== undefined ? { notes: d.notes } : {}),

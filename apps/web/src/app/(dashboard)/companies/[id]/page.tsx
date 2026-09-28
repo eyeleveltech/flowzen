@@ -56,6 +56,8 @@ import { NewProjectModal } from '@/components/clients/NewProjectModal';
 import { RemoveCompanyModal } from '@/components/clients/RemoveCompanyModal';
 import { EditContactModal } from '@/components/clients/EditContactModal';
 import { NewRetainerModal } from '@/components/clients/NewRetainerModal';
+import { ScheduleFollowUpModal } from '@/components/clients/ScheduleFollowUpModal';
+import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
 
 export default function CompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -101,6 +103,29 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
     monthlyValue?: number;
     sourceProposalId?: string;
   } | null>(null);
+  /*
+   * Sample work gets its own button, not a tick inside the project one.
+   *
+   * The three are different decisions — a monthly commitment, a priced piece
+   * of work, and something given away — and putting the third behind a
+   * checkbox in the second made it a variant of paid work rather than its own
+   * thing. It is also the only one a prospect can have.
+   */
+  const [creatingSampleFor, setCreatingSampleFor] = useState<{
+    companyId: string;
+    companyName: string;
+  } | null>(null);
+  const [schedulingFollowUp, setSchedulingFollowUp] = useState(false);
+  /*
+   * A follow-up IS a task, so it opens like one.
+   *
+   * The same drawer My Work uses — mark it done, put it on hold, change who is
+   * chasing, add what came of the call. Rebuilding a smaller version of that
+   * here would mean a follow-up behaved differently depending on which screen
+   * you found it from, which is how two screens come to disagree.
+   */
+  const [openFollowUp, setOpenFollowUp] = useState<any>(null);
+  const [followUpBusyId, setFollowUpBusyId] = useState<string | null>(null);
   const { confirm } = useConfirmStore();
   const { data: pageConfig } = useConfig();
 
@@ -300,8 +325,27 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
    */
   const activeRetainer = company.retainers?.find((r: any) => r.status === 'ACTIVE') ?? null;
   const pastRetainers = (company.retainers ?? []).filter((r: any) => r.status !== 'ACTIVE');
-  const liveProjects = (company.projects ?? []).filter((pr: any) => pr.status === 'LIVE');
-  const pastProjects = (company.projects ?? []).filter((pr: any) => pr.status !== 'LIVE');
+  /*
+   * Paid work and sample work are never mixed.
+   *
+   * §8's rule that retainer and one-time money are never summed applies here
+   * too, harder: a sample has no money at all, so a list totalling "projects"
+   * with one in it would be counting a ₹0 row as a deal.
+   */
+  /*
+   * Chasing this client — outstanding first, then what has already happened.
+   *
+   * Done ones are kept rather than hidden: "has anybody spoken to them" is
+   * answered by the call on the 4th, not by an empty list.
+   */
+  const followUps = (company.tasks ?? []) as any[];
+  const openFollowUps = followUps.filter((t) => t.status !== 'DONE');
+  const doneFollowUps = followUps.filter((t) => t.status === 'DONE');
+
+  const paidProjects = (company.projects ?? []).filter((pr: any) => !pr.isSample);
+  const sampleProjects = (company.projects ?? []).filter((pr: any) => pr.isSample);
+  const liveProjects = paidProjects.filter((pr: any) => pr.status === 'LIVE');
+  const pastProjects = paidProjects.filter((pr: any) => pr.status !== 'LIVE');
 
   /*
    * Won, and not yet set up as work — what the create forms offer to link to.
@@ -615,13 +659,13 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
       {activeTab === 'WORK' && (
         <div className="space-y-6">
           <Card padding="none">
-            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+            <div className="flex items-center justify-between rounded-t-card border-b border-border bg-primary/80 px-5 py-4">
               <div>
-                <h3 className="text-sm font-semibold text-primary">Retainers</h3>
-                <p className="text-micro text-secondary mt-0.5">Recurring monthly work</p>
+                <h3 className="text-sm font-semibold text-white">Retainers</h3>
+                <p className="text-micro text-white/70 mt-0.5">Recurring monthly work</p>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-micro text-secondary">{plural(company.retainers?.length ?? 0, 'retainer')}</span>
+                <span className="text-micro text-white/80">{plural(company.retainers?.length ?? 0, 'retainer')}</span>
                 {canAddWork && (
                   <Button
                     variant="secondary"
@@ -681,15 +725,15 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
           </Card>
 
           <Card padding="none">
-            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+            <div className="flex items-center justify-between rounded-t-card border-b border-border bg-primary/80 px-5 py-4">
               <div>
-                <h3 className="text-sm font-semibold text-primary">Projects</h3>
+                <h3 className="text-sm font-semibold text-white">Projects</h3>
                 {/* Brief §8: retainer and one-time money are never summed, so
                     the two are counted separately and never added up here. */}
-                <p className="text-micro text-secondary mt-0.5">One-off work, whole contract</p>
+                <p className="text-micro text-white/80 mt-0.5">One-off work, whole contract</p>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-micro text-secondary">{plural(company.projects?.length ?? 0, 'project')}</span>
+                <span className="text-micro text-white/80">{plural(paidProjects.length, 'project')}</span>
                 {canAddWork && (
                   <Button
                     variant="secondary"
@@ -702,12 +746,12 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                 )}
               </div>
             </div>
-            {(company.projects?.length ?? 0) === 0 ? (
+            {paidProjects.length === 0 ? (
               <div className="px-5 py-10 text-center">
                 <p className="text-sm text-secondary">
                   {company.status === 'CLIENT'
                     ? 'No one-off work for this client yet.'
-                    : 'A project belongs to a client. Win a proposal for them first.'}
+                    : 'A project belongs to a client. Win a proposal for them first — sample work can be added now.'}
                 </p>
                 {canAddWork && (
                   <Button
@@ -746,6 +790,145 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                         {pr.status === 'LIVE' ? 'Live' : pr.status === 'DELIVERED' ? 'Delivered' : 'Cancelled'}
                       </Badge>
                     </Link>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+
+          {/*
+            Sample work, kept apart from both.
+
+            It is the only kind of work a prospect can have, it has no value and
+            no billing, and its whole reason for being recorded is the cost —
+            so listing it beside priced work would put a ₹0 row in a column of
+            deals and invite somebody to add the two together.
+          */}
+          <Card padding="none">
+            <div className="flex items-center justify-between rounded-t-card border-b border-border bg-primary/80 px-5 py-4">
+              <div>
+                <h3 className="text-sm font-semibold text-white">Sample work</h3>
+                <p className="text-micro text-white/80 mt-0.5">Given away — nothing billed, cost still counted</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-micro text-white/80">{plural(sampleProjects.length, 'sample')}</span>
+                {canAddWork && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => setCreatingSampleFor({ companyId: company.id, companyName: company.name })}
+                  >
+                    Add sample
+                  </Button>
+                )}
+              </div>
+            </div>
+            {sampleProjects.length === 0 ? (
+              <div className="px-5 py-10 text-center">
+                <p className="text-sm text-secondary">
+                  Nothing given away to {company.name} yet. A sample reel, a pilot design, a trial piece — record it
+                  here and what it costs shows up against them.
+                </p>
+                {canAddWork && (
+                  <Button
+                    variant="secondary"
+                    className="mt-4"
+                    onClick={() => setCreatingSampleFor({ companyId: company.id, companyName: company.name })}
+                  >
+                    Add sample
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {sampleProjects.map((pr: any) => (
+                  <Link
+                    key={pr.id}
+                    href={`/projects/${pr.id}?from=company`}
+                    className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 transition-colors hover:bg-subtle outline-none focus-visible:bg-subtle focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-primary">{pr.name}</p>
+                      {/* No value on the line, because there is none. The date
+                          is what locates it; the cost lives on the project. */}
+                      <p className="text-micro text-secondary mt-0.5">
+                        {pr.startDate ? formatDate(pr.startDate) : 'No dates set'}
+                      </p>
+                    </div>
+                    <Badge tone={pr.status === 'LIVE' ? 'good' : pr.status === 'DELIVERED' ? 'info' : 'neutral'}>
+                      {pr.status === 'LIVE' ? 'Live' : pr.status === 'DELIVERED' ? 'Delivered' : 'Cancelled'}
+                    </Badge>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {/*
+            Chasing them.
+
+            Not work FOR the client, which is why it is not in any of the three
+            cards above — nothing here is billed and nothing here is delivered.
+            It is the thing that keeps a relationship from going quiet, and it
+            was invisible: three parts of this system already created "Follow
+            up — {name}" tasks and every one of them put the client in a string
+            and nowhere else, so this page could not show a single one.
+          */}
+          <Card padding="none">
+            <div className="flex items-center justify-between rounded-t-card border-b border-border bg-primary/80 px-5 py-4">
+              <div>
+                <h3 className="text-sm font-semibold text-white">Follow-ups</h3>
+                <p className="text-micro text-white/80 mt-0.5">Chasing them — not billed, not delivered</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-micro text-white/80">
+                  {openFollowUps.length > 0 ? `${openFollowUps.length} outstanding` : 'nothing outstanding'}
+                </span>
+                <Button variant="secondary" onClick={() => setSchedulingFollowUp(true)}>
+                  Schedule follow-up
+                </Button>
+              </div>
+            </div>
+            {followUps.length === 0 ? (
+              <div className="px-5 py-10 text-center">
+                <p className="text-sm text-secondary">
+                  Nobody is due to chase {company.name}. Schedule the next one and it lands in their My Work on the day.
+                </p>
+                <Button variant="secondary" className="mt-4" onClick={() => setSchedulingFollowUp(true)}>
+                  Schedule follow-up
+                </Button>
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {[...openFollowUps, ...doneFollowUps].map((t: any) => {
+                  const due = t.dueDate ? new Date(t.dueDate) : null;
+                  const overdue =
+                    t.status !== 'DONE' && due != null && due.toISOString().slice(0, 10) < new Date().toISOString().slice(0, 10);
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setOpenFollowUp(t)}
+                      className="flex w-full flex-wrap items-center justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-subtle outline-none focus-visible:bg-subtle focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
+                    >
+                      <div className="min-w-0">
+                        <p className={`text-sm font-semibold ${t.status === 'DONE' ? 'text-secondary' : 'text-primary'}`}>
+                          {t.title}
+                        </p>
+                        <p className="text-micro text-secondary mt-0.5">
+                          {t.status === 'DONE' && t.completedAt
+                            ? `Done ${formatDate(t.completedAt)}`
+                            : /* Late is said on the row it applies to. */
+                              <span className={overdue ? 'font-semibold text-danger' : undefined}>
+                                Due {due ? formatDate(due.toISOString()) : '—'}
+                              </span>}
+                          {t.assignee?.name ? ` · ${t.assignee.name}` : ''}
+                        </p>
+                        {t.notes && <p className="mt-1 text-micro text-secondary">{t.notes}</p>}
+                      </div>
+                      <Badge tone={t.status === 'DONE' ? 'neutral' : overdue ? 'bad' : 'good'}>
+                        {t.status === 'DONE' ? 'Done' : overdue ? 'Overdue' : 'Open'}
+                      </Badge>
+                    </button>
                   );
                 })}
               </div>
@@ -1375,6 +1558,58 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
           router.push(`/projects/${id}?from=company`);
         }}
       />
+
+      {/* Same form, opened with the question already answered — see
+          `forceSample` on the modal. */}
+      <NewProjectModal
+        forceSample
+        open={Boolean(creatingSampleFor)}
+        onClose={() => setCreatingSampleFor(null)}
+        prefill={creatingSampleFor ?? undefined}
+        onCreated={(id) => {
+          setCreatingSampleFor(null);
+          toast.success('Sample work added');
+          router.push(`/projects/${id}?from=company`);
+        }}
+      />
+
+      {/* The same drawer every other task list opens. */}
+      <TaskDrawer
+        task={openFollowUp as DrawerTask | null}
+        statusOptions={[
+          { value: 'TODO', label: 'To do' },
+          { value: 'IN_PROGRESS', label: 'In progress' },
+          { value: 'ON_HOLD', label: 'On hold' },
+          { value: 'DONE', label: 'Done' },
+          { value: 'CANCELLED', label: 'Cancelled' },
+        ]}
+        busy={followUpBusyId === openFollowUp?.id}
+        onClose={() => setOpenFollowUp(null)}
+        onStatusChange={async (t, next) => {
+          setFollowUpBusyId(t.id);
+          try {
+            await api.tasks.updateStatus(t.id, next);
+            await fetchDetail();
+            setOpenFollowUp(null);
+          } catch (e) {
+            toast.error(e instanceof ApiError ? e.message : 'Could not change that');
+          } finally {
+            setFollowUpBusyId(null);
+          }
+        }}
+        onChanged={() => void fetchDetail()}
+      />
+
+      {schedulingFollowUp && (
+        <ScheduleFollowUpModal
+          company={{ id: company.id, name: company.name, ownerId: company.owner?.id ?? null }}
+          onClose={() => setSchedulingFollowUp(false)}
+          onScheduled={() => {
+            setSchedulingFollowUp(false);
+            void fetchDetail();
+          }}
+        />
+      )}
 
       <NewRetainerModal
         deals={unfulfilledDeals('RETAINER')}

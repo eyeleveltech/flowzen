@@ -312,6 +312,30 @@ companiesRouter.get('/:id', requirePermission('company.read'), async (req: AuthR
           orderBy: { raisedAt: 'desc' },
           include: { payments: true },
         },
+        /*
+         * What is outstanding against this client that is not work FOR them.
+         *
+         * Chasing, mostly — scheduled by hand, written when a meeting is
+         * logged, or raised by the scanner when a proposal goes quiet. All
+         * three existed already and none of them was visible here.
+         *
+         * Cancelled ones are dropped; done ones are kept, because "we called
+         * them on the 4th" is the answer to "has anybody spoken to them".
+         */
+        tasks: {
+          where: { deletedAt: null, status: { not: 'CANCELLED' } },
+          orderBy: [{ status: 'asc' }, { dueDate: 'asc' }],
+          take: 20,
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            dueDate: true,
+            completedAt: true,
+            notes: true,
+            assignee: { select: { id: true, name: true } },
+          },
+        },
       },
     });
 
@@ -1099,6 +1123,10 @@ companiesRouter.post('/', requirePermission('company.write'), async (req: AuthRe
             organizationId: orgId,
             title: `Follow up — ${company.name}`,
             workType: TaskWorkType.INTERNAL,
+            // Linked, not just named. Before this the client lived in the
+            // title and nowhere else, so their own page could not show what
+            // was outstanding against them.
+            companyId: company.id,
             assigneeId: ownerUserId,
             createdById: req.user!.userId,
             assignedById: req.user!.userId,

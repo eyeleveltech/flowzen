@@ -1,0 +1,22 @@
+-- The tax on a cost, recorded rather than done in somebody's head.
+--
+-- A bill arrives as ₹10,000 plus 18% GST, and what leaves the account is
+-- ₹11,800. Flowzen only ever asked for one number, so whoever entered it had
+-- to decide which one to type — and both answers were wrong in a different
+-- way. Type the base and the month's cost is understated by the tax. Type the
+-- gross and the rate is gone, so nothing can ever separate the two again.
+--
+-- `amount` stays what it has always been: the money that actually left. Every
+-- figure in the system reads it — profit, the month's cost, the printed sheet,
+-- the CSV — and none of them should change meaning because a new column
+-- appeared. What is new is the RATE, which makes the split recoverable:
+-- base = amount / (1 + gstPercent/100).
+--
+-- Null, not 0. Every cost entered before today has a real amount and nobody
+-- recorded whether tax was in it, and "we did not say" is a different fact
+-- from "there was no tax". A 0 default would have quietly asserted the second
+-- about every row already in the table.
+--
+-- Additive: one nullable column. Nothing is dropped and no existing row moves.
+
+ALTER TABLE "costs" ADD COLUMN "gstPercent" INTEGER;

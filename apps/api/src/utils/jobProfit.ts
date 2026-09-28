@@ -27,8 +27,6 @@
 export type ProjectFinancials = {
   /** What the client agreed to pay. The revenue side of a project, entire. */
   quotedValue: number;
-  /** What we thought it would cost, when somebody bothered to say. */
-  estimatedCost: number | null;
   /** Vendor bills, ad spend, licences — money that left the company. */
   directCost: number;
   /** Allocated salary: the people, at the share of their month this had. */
@@ -55,10 +53,16 @@ export type JobProfit = {
   profit: number;
   /** One decimal place. `null` when there is no revenue to be a share of. */
   marginPercent: number | null;
-  estimatedCost: number | null;
-  /** Actual against estimate. Positive means over. `null` with no estimate. */
-  costVariance: number | null;
-  costVariancePercent: number | null;
+  /*
+   * There is deliberately no estimate here any more.
+   *
+   * A project carried "what we thought it would cost", and the only things
+   * that ever read it were a variance figure and its percentage — reporting,
+   * not judgement. Cost RISK, which is what actually raises the alert and
+   * colours the screen, is computed from profit against progress and never
+   * looked at the estimate at all. So the field asked for a number at the one
+   * moment nobody knows it, and then nothing used the answer.
+   */
   /**
    * Whether anybody has recorded what this job cost.
    *
@@ -87,12 +91,6 @@ export function jobProfit(f: ProjectFinancials): JobProfit {
     // with no quoted value reads as "we broke even", which is a claim; null
     // reads as "there is nothing to divide by", which is the truth.
     marginPercent: revenue > 0 ? Math.round((profit / revenue) * 1000) / 10 : null,
-    estimatedCost: f.estimatedCost,
-    costVariance: f.estimatedCost === null ? null : round2(actualCost - f.estimatedCost),
-    costVariancePercent:
-      f.estimatedCost === null || f.estimatedCost === 0
-        ? null
-        : Math.round(((actualCost - f.estimatedCost) / f.estimatedCost) * 1000) / 10,
     // Older callers that do not pass a count are taken at their word rather
     // than accused of having no data; only an explicit nought means nothing
     // has been recorded.
@@ -193,29 +191,23 @@ export function costRisk(input: {
     };
   }
 
-  if (p.estimatedCost !== null && p.estimatedCost > 0) {
-    const overBy = Math.round(((projectedCost - p.estimatedCost) / p.estimatedCost) * 100);
-    if (overBy >= 25) {
-      return {
-        projectedCost,
-        projectedProfit,
-        level: 'OVER',
-        reason: `${pct}% done and on course for ${overBy}% over the cost estimate.`,
-      };
-    }
-    if (overBy >= 10) {
-      return {
-        projectedCost,
-        projectedProfit,
-        level: 'WATCH',
-        reason: `${pct}% done and tracking ${overBy}% above the cost estimate.`,
-      };
-    }
-  }
-
-  // No estimate to judge against, so fall back to the margin itself. A job
-  // heading for single-digit margin is worth a look even when nobody wrote
-  // down what it was supposed to cost.
+  /*
+   * ─── What used to sit here ─────────────────────────────────────────────
+   *
+   * Two rungs judged against the project's cost estimate: 25% over projected
+   * to OVER, 10% over to WATCH. The estimate is gone — it asked for a number
+   * at the one moment nobody knows it, and a guess made on day one is a poor
+   * thing to judge a real month against.
+   *
+   * What is left is the rule that was already written underneath as the
+   * fallback, and it needs no guess: a job heading for a margin under 10% is
+   * worth a look, and one heading below cost is LOSS. Both are measured
+   * against the QUOTE, which is a number somebody actually agreed.
+   *
+   * One consequence, stated plainly: OVER can no longer be reached, so
+   * PROJECT_OVER_ESTIMATE now fires only on LOSS. Fewer alerts, each a
+   * serious one.
+   */
   if (p.revenue > 0 && projectedProfit / p.revenue < 0.1) {
     return {
       projectedCost,

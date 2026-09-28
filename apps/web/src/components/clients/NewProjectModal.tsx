@@ -2,7 +2,7 @@
 
 /**
  * Creating a project — brief §11.3 step 1: "Project created from an accepted
- * quote. `quotedValue` required, `estimatedCost` optional but strongly
+ * quote. `quotedValue` required for paid work,
  * encouraged."
  *
  * Opened bare (from Live Work's Projects tab) it asks for a company like any
@@ -43,6 +43,16 @@ type Props = {
    * the client's Work tab had no link back to the deal that sold it.
    */
   deals?: UnfulfilledDeal[];
+  /**
+   * Opened from the Sample work card, where the answer is not a question.
+   *
+   * The tick disappears rather than sitting there pre-ticked: the card the
+   * person pressed already said what this is, and a control that only ever
+   * has one value is furniture. It also stops somebody turning a sample into
+   * paid work in a form headed "Sample work", which is a confusing place to
+   * make that decision — the project's own Edit form is where that belongs.
+   */
+  forceSample?: boolean;
 };
 
 const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label }));
@@ -71,19 +81,31 @@ type CustomRow = { label: string; percent: string; amount: string };
 const blankRow = (): CustomRow => ({ label: '', percent: '', amount: '' });
 
 
-export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [] }: Props) {
+export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [], forceSample = false }: Props) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const team = useTeamMembers();
   const [companyId, setCompanyId] = useState('');
   const [name, setName] = useState('');
   const [quotedValue, setQuotedValue] = useState('');
-  const [estimatedCost, setEstimatedCost] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [ownerId, setOwnerId] = useState('');
   const [priority, setPriority] = useState('MEDIUM');
   const [description, setDescription] = useState('');
   const [billing, setBilling] = useState<Billing>('STANDARD');
+  /*
+   * Work given away to win somebody.
+   *
+   * The sample reel, the pilot design, the trial piece. It is real work with
+   * real costs behind it and no invoice at the end, and there was no way to
+   * record one: a project had to be worth something, and it refused a company
+   * that was still a prospect — which is exactly who a sample is usually for.
+   *
+   * With this on, the two things that only exist to be charged for — the quote
+   * and the billing split — go away rather than sitting there asking to be
+   * filled in with nought.
+   */
+  const [isSample, setIsSample] = useState(forceSample);
   const [customRows, setCustomRows] = useState<CustomRow[]>([blankRow(), blankRow()]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -98,13 +120,13 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [] 
     setName('');
     setQuotedValue(prefill?.quotedValue != null ? String(prefill.quotedValue) : '');
     setSourceProposalId(prefill?.sourceProposalId ?? '');
-    setEstimatedCost('');
     setStartDate('');
     setEndDate('');
     setOwnerId('');
     setPriority('MEDIUM');
     setDescription('');
     setBilling('STANDARD');
+    setIsSample(forceSample);
     setCustomRows([blankRow(), blankRow()]);
     setError(null);
     if (!prefill) {
@@ -151,8 +173,22 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [] 
   const customValid =
     billing !== 'CUSTOM' || (customFilled.length > 0 && amountsMatch && !anyTooSmall);
 
+  /*
+   * A sample asks for one thing: what to call it.
+   *
+   * Everything else a project needs exists to bill or to schedule it, and a
+   * sample does neither. Dates fall back to today on the server, the owner
+   * falls back to whoever is typing, and there is no price to give. A form
+   * that demands four answers before it will record "we sent them a reel" is
+   * a form people work around.
+   *
+   * The name stays because a row has to be findable, and five projects all
+   * called the same thing are five rows nobody can tell apart.
+   */
   const canSave =
-    Boolean(companyId) && Boolean(name.trim()) && quoted > 0 && Boolean(startDate) && Boolean(endDate) && customValid;
+    Boolean(companyId) &&
+    Boolean(name.trim()) &&
+    (isSample || (quoted > 0 && Boolean(startDate) && Boolean(endDate) && customValid));
 
   const addRow = () => setCustomRows((prev) => [...prev, blankRow()]);
   const removeRow = (idx: number) => setCustomRows((prev) => prev.filter((_, i) => i !== idx));
@@ -185,14 +221,15 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [] 
       const res = await api.projects.create({
         companyId,
         name: name.trim(),
-        quotedValue: quoted,
-        estimatedCost: estimatedCost ? Number(estimatedCost) : undefined,
+        quotedValue: isSample ? 0 : quoted,
+        isSample,
         startDate,
         endDate,
         ownerId: ownerId || undefined,
         priority,
         description: description.trim() || undefined,
-        milestones: milestonesForBilling(),
+        // Nothing to bill, so no split. Sending one would be refused anyway.
+        milestones: isSample ? undefined : milestonesForBilling(),
         sourceProposalId: prefill?.sourceProposalId ?? sourceProposalId ?? undefined,
       });
       const created = (res as { project?: { id: string } }).project;
@@ -208,11 +245,13 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [] 
     <Modal
       open={open}
       onClose={onClose}
-      title="New project"
+      title={forceSample ? 'New sample work' : 'New project'}
       description={
-        prefill?.sourceProposalId
-          ? 'Value carries over from the won version — adjust anything before saving.'
-          : 'One-off work with its own price and end date.'
+        forceSample
+          ? 'Work given away — nothing quoted and nothing billed. What it costs is tracked, so you can see what winning this client took.'
+          : prefill?.sourceProposalId
+            ? 'Value carries over from the won version — adjust anything before saving.'
+            : 'One-off work with its own price and end date.'
       }
     >
       <form onSubmit={submit}>
@@ -251,19 +290,51 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [] 
             />
           )}
           <Field label="Project name" value={name} onChange={setName} required />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Quoted value (₹)" value={quotedValue} onChange={setQuotedValue} type="number" required />
-            <Field
-              label="Your cost estimate (₹)"
-              value={estimatedCost}
-              onChange={setEstimatedCost}
-              type="number"
-              hint="Optional — without it you still get cost tracking, just no quoted-against-estimated comparison."
+
+          {/*
+            Asked before the money, because it decides whether there is any —
+            unless the screen that opened this already answered it.
+          */}
+          {!forceSample && (
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-subtle/40 p-3">
+            <input
+              type="checkbox"
+              checked={isSample}
+              onChange={(e) => setIsSample(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
             />
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-primary">This is sample work</span>
+              <span className="mt-0.5 block text-xs text-secondary">
+                Work given away — a sample, a pilot, a trial piece. Nothing is quoted and nothing is billed, but what it
+                costs is tracked, so you can see what winning this client took.
+              </span>
+            </span>
+          </label>
+          )}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {!isSample && (
+              <Field label="Quoted value (₹)" value={quotedValue} onChange={setQuotedValue} type="number" required />
+            )}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Start date" value={startDate} onChange={setStartDate} type="date" required />
-            <Field label="Expected end" value={endDate} onChange={setEndDate} type="date" required />
+            <Field
+              label="Start date"
+              value={startDate}
+              onChange={setStartDate}
+              type="date"
+              required={!isSample}
+              hint={isSample ? 'Left blank, it is today.' : undefined}
+            />
+            <Field
+              label="Expected end"
+              value={endDate}
+              onChange={setEndDate}
+              type="date"
+              required={!isSample}
+              hint={isSample ? 'Optional — a sample rarely has one.' : undefined}
+            />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <FieldSelect
@@ -277,9 +348,11 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [] 
           </div>
           <Field label="Description" value={description} onChange={setDescription} textarea rows={3} />
 
-          <FieldSelect label="Billing" value={billing} onChange={(v) => setBilling(v as Billing)} options={BILLING_OPTIONS} />
+          {!isSample && (
+            <FieldSelect label="Billing" value={billing} onChange={(v) => setBilling(v as Billing)} options={BILLING_OPTIONS} />
+          )}
 
-          {billing !== 'CUSTOM' && quoted > 0 && (
+          {!isSample && billing !== 'CUSTOM' && quoted > 0 && (
             <div className="rounded-xl border border-border bg-subtle/40 p-3 text-xs text-secondary space-y-1">
               {milestonesForBilling().map((m) => (
                 <div key={m.label} className="flex justify-between">
@@ -290,7 +363,7 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [] 
             </div>
           )}
 
-          {billing === 'CUSTOM' && (
+          {!isSample && billing === 'CUSTOM' && (
             <div className="space-y-2">
               {customRows.map((row, idx) => {
                 return (
