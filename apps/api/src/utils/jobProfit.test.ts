@@ -9,8 +9,9 @@ import { jobProfit, percentComplete, costRisk } from './jobProfit.js';
  * three, and an over-budget job that is still profitable.
  */
 
-// A ₹4,50,000 build, estimated at ₹2,00,000 to deliver.
-const base = { quotedValue: 450_000, estimatedCost: 200_000, directCost: 60_000, peopleCost: 90_000 };
+// A ₹4,50,000 build. There is no estimate on a project any more — cost risk
+// judges against the quote, which is a figure somebody actually agreed to pay.
+const base = { quotedValue: 450_000, directCost: 60_000, peopleCost: 90_000 };
 
 describe('job profit', () => {
   it('is revenue less both kinds of cost', () => {
@@ -41,17 +42,6 @@ describe('job profit', () => {
     expect(p.marginPercent).toBe(-33.3);
   });
 
-  it('compares against the estimate when there is one', () => {
-    const p = jobProfit({ ...base, directCost: 150_000, peopleCost: 100_000 });
-    expect(p.costVariance).toBe(50_000);
-    expect(p.costVariancePercent).toBe(25);
-  });
-
-  it('says nothing about variance when nobody estimated', () => {
-    const p = jobProfit({ ...base, estimatedCost: null });
-    expect(p.costVariance).toBeNull();
-    expect(p.costVariancePercent).toBeNull();
-  });
 });
 
 describe('percent complete', () => {
@@ -98,13 +88,13 @@ describe('cost risk — the warning that arrives in time to matter', () => {
     expect(r.level).toBe('LOSS');
   });
 
-  it('calls a job that is over budget but still profitable OVER, not LOSS', () => {
-    // ₹90,000 spent at 50% done → ₹1,80,000 projected against a ₹1,20,000
-    // estimate: 50% over, and still ₹2,70,000 of profit. Both true; only one
-    // is worth the loudest word.
-    const p = jobProfit({ ...base, estimatedCost: 120_000, directCost: 40_000, peopleCost: 50_000 });
+  it('does not cry LOSS over a job that is spending hard but still profitable', () => {
+    // ₹90,000 spent at 50% done → ₹1,80,000 projected against a ₹4,50,000
+    // quote: still ₹2,70,000 of profit. Spending fast is not losing money, and
+    // only one of those is worth the loudest word.
+    const p = jobProfit({ ...base, directCost: 40_000, peopleCost: 50_000 });
     const r = costRisk({ profit: p, percentComplete: 50 });
-    expect(r.level).toBe('OVER');
+    expect(r.level).not.toBe('LOSS');
     expect(r.projectedProfit).toBeGreaterThan(0);
   });
 
@@ -115,8 +105,8 @@ describe('cost risk — the warning that arrives in time to matter', () => {
     expect(r.reason).toBeNull();
   });
 
-  it('still notices a thin margin when nobody wrote down an estimate', () => {
-    const p = jobProfit({ ...base, estimatedCost: null, directCost: 120_000, peopleCost: 90_000 });
+  it('notices a thin margin', () => {
+    const p = jobProfit({ ...base, directCost: 120_000, peopleCost: 90_000 });
     const r = costRisk({ profit: p, percentComplete: 50 });
     expect(r.level).toBe('WATCH');
     expect(r.reason).toMatch(/margin under 10%/);

@@ -112,7 +112,7 @@ export const LEAD_SOURCES = [
   'Referrals',
   'Existing Clients',
   'Networking & Events',
-  'Partnerships',
+  'Outsource',
   'Email Marketing',
   'Google / SEO',
   'Justdial',
@@ -156,7 +156,9 @@ export const LEGACY_SOURCE: Record<string, LeadSource> = {
   OUTREACH: 'Cold Outreach',
   REFERRAL: 'Referrals',
   INBOUND: 'Website / Inbound',
-  PARTNER_AGENCY: 'Partnerships',
+  // The studio's word for it. What used to be called Partnerships is work
+  // that comes in from another agency outsourcing to us.
+  PARTNER_AGENCY: 'Outsource',
   NETWORK: 'Networking & Events',
 };
 

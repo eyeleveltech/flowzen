@@ -88,8 +88,12 @@ const SOURCE_ALIASES: Record<string, LeadSource> = {
   outreach: 'Cold Outreach',
   cold: 'Cold Outreach',
   referral: 'Referrals',
-  partner: 'Partnerships',
-  partneragency: 'Partnerships',
+  partner: 'Outsource',
+  partneragency: 'Outsource',
+  // What the list used to be called, so a spreadsheet written before the
+  // rename still lands on the right row.
+  partnerships: 'Outsource',
+  outsource: 'Outsource',
   network: 'Networking & Events',
   networking: 'Networking & Events',
   social: 'Social Media',

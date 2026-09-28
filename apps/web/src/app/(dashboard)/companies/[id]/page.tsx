@@ -993,11 +993,12 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                             label: 'Delete proposal',
                             icon: Trash2,
                             tone: 'danger',
-                            // Won and lost are refused by the server — the funnel
-                            // and the win rate count them, and a won one has a
-                            // client and real work built on it. Not offering the
-                            // action beats offering it and turning it down.
-                            visible: live,
+                            // Lost stays refused: the funnel counts it. Won is
+                            // offered, because a win pressed by mistake had no
+                            // honest way back — marking it lost invented a
+                            // defeat. The server refuses one that built a
+                            // retainer or a project, and names it.
+                            visible: live || prop.outcome === 'WON',
                             onSelect: () => void handleDeleteProposal(prop),
                           },
                         ]}

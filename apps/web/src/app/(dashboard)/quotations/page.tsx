@@ -13,7 +13,9 @@ import { usePageHeader } from '@/hooks/usePageHeader';
 import { useConfig } from '@/hooks/queries';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { Tabs, type TabDef } from '@/components/ui/tabs';
-import { RotateCcw } from 'lucide-react';
+import { RotateCcw, Trash2 } from 'lucide-react';
+import { useConfirmStore } from '@/stores/confirm';
+import { ApiError } from '@/lib/api-v2';
 import toast from 'react-hot-toast';
 import { STAGE_LABEL } from '@flowzen/shared';
 
@@ -83,6 +85,37 @@ export default function ProposalsPage() {
   });
   const deleted: DeletedProposal[] = trashData?.success ? (trashData.proposals as DeletedProposal[]) : [];
   const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const confirm = useConfirmStore((st) => st.confirm);
+
+  /*
+   * Deleting one from here.
+   *
+   * Soft, like everywhere else — §16 — so it lands in the Deleted tab on this
+   * same screen and can be put back. The server refuses one that has been won
+   * or lost: those are outcomes the win rate has already counted, and a
+   * deletion would quietly rewrite what happened.
+   */
+  const removeProposal = async (p: any) => {
+    const ok = await confirm({
+      title: `Delete this proposal for ${p.company?.name ?? 'this client'}?`,
+      message:
+        'It comes off the pipeline board and out of the client\'s record. Its versions are kept, so it can be restored from the Deleted tab.',
+      confirmText: 'Delete it',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    setDeletingId(p.id);
+    try {
+      await api.proposals.remove(p.id);
+      toast.success('Proposal deleted');
+      await queryClient.invalidateQueries();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not delete this proposal');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const proposals: ProposalItem[] = data?.success ? data.proposals : [];
   const loading = isPending;
@@ -289,13 +322,14 @@ export default function ProposalsPage() {
                 <th className="eyebrow text-left">Sent</th>
                 <th className="eyebrow text-right">Waiting</th>
                 <th className="eyebrow text-left">Owner</th>
+                {canRestore && <th className="w-10" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {loading ? (
-                <TableRowsSkeleton cols={7} />
+                <TableRowsSkeleton cols={canRestore ? 8 : 7} />
               ) : shown.length === 0 ? (
-                <tr><td colSpan={7} className="px-5 py-16 text-center text-sm text-secondary">No proposals found.</td></tr>
+                <tr><td colSpan={canRestore ? 8 : 7} className="px-5 py-16 text-center text-sm text-secondary">No proposals found.</td></tr>
               ) : shown.map(p => {
                 const latestVersion = p.versions[0];
                 const v1 = p.versions[p.versions.length - 1];
@@ -341,6 +375,22 @@ export default function ProposalsPage() {
                       </span>
                     </td>
                     <td className="text-secondary">{p.owner?.name ?? '—'}</td>
+                    {/* Same permission the Deleted tab is gated on — whoever
+                        may put one back is whoever may take one away. */}
+                    {canRestore && (
+                      <td className="text-right">
+                        <button
+                          type="button"
+                          onClick={() => void removeProposal(p)}
+                          disabled={deletingId === p.id}
+                          aria-label={`Delete the proposal for ${p.company?.name ?? 'this client'}`}
+                          title="Delete proposal"
+                          className="rounded-lg p-1.5 text-secondary transition-colors hover:bg-danger-tint hover:text-danger disabled:opacity-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}

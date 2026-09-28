@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 import { app } from '../index.js';
 import { prisma } from '../lib/prisma.js';
@@ -150,9 +150,36 @@ describe('the audit trail', () => {
     (prisma.proposal.findFirst as any).mockResolvedValue({
       id: 'prop-1',
       stage: 'IN_NEGOTIATION',
-      company: { name: 'Carlton Hotels' },
+      companyId: 'co-1',
+      outcome: null,
+      company: { name: 'Carlton Hotels', status: 'PROSPECT' },
     });
     (prisma.proposal.update as any).mockResolvedValue({ id: 'prop-1' });
+
+    /*
+     * Losing a deal happens in one transaction now.
+     *
+     * It has to: marking the proposal lost and putting the company back to
+     * PROSPECT or PAST are one decision, and a half-applied version of it
+     * leaves a client nobody sold anything to. `mockDeep` leaves
+     * `$transaction` a no-op that never calls its callback, so without this
+     * the route runs none of its body and writes nothing — which is what this
+     * test was reading as "no activity row".
+     */
+    (prisma.$transaction as any).mockImplementation(async (fn: any) =>
+      fn({
+        proposal: { update: vi.fn(async () => ({ id: 'prop-1' })), count: vi.fn(async () => 0) },
+        retainer: { count: vi.fn(async () => 0) },
+        project: { count: vi.fn(async () => 0) },
+        company: { update: vi.fn(async () => ({})) },
+        activity: {
+          create: vi.fn(async ({ data }: any) => {
+            written.activity = data;
+            return {};
+          }),
+        },
+      }),
+    );
 
     const res = await request(app)
       .post('/api/proposals/prop-1/lose')

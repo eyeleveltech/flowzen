@@ -626,14 +626,20 @@ export default function PipelinePage() {
                                         icon: Trash2,
                                         tone: "danger",
                                         /*
-                                          Won and lost are refused by the server
-                                          — the win rate counts them, and a won
-                                          one has a client and real work built on
-                                          it. RowMenu draws no button at all when
-                                          nothing is visible, so a settled card
-                                          simply has no menu.
+                                          Lost is still refused — the win rate
+                                          counts it, and hiding a loss does not
+                                          make the number truer.
+
+                                          Won is offered, because the card most
+                                          often dragged here by mistake is a win,
+                                          and the only other remedy was to mark
+                                          it LOST — a deal that never happened,
+                                          on the losing side of the win rate.
+                                          The server refuses it if a retainer or
+                                          a project was built on it, and says
+                                          which.
                                         */
-                                        visible: card.stage !== "WON" && card.stage !== "LOST",
+                                        visible: card.stage !== "LOST",
                                         onSelect: () => void handleDeleteProposal(card),
                                       },
                                     ]}

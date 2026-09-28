@@ -34,7 +34,7 @@ const auth = () =>
     })}`,
   ] as const;
 
-let written: { proposal?: any; retainer?: any; cards?: any; activity?: any };
+let written: { proposal?: any; retainer?: any; company?: any; cards?: any; deletedCards?: any; activity?: any };
 
 beforeEach(() => {
   written = {};
@@ -153,9 +153,44 @@ describe('editing a proposal', () => {
 
 // ── Proposal delete ─────────────────────────────────────────────────────────
 
-const deleteProposal = (proposal: Record<string, unknown> | null = {}, proforma: unknown = null) => {
+/**
+ * @param built  What a won proposal produced. Deleting a win is allowed only
+ *               when this is empty — the work is what a win IS, and removing
+ *               the reason it exists would leave it pointing at nothing.
+ */
+const deleteProposal = (
+  proposal: Record<string, unknown> | null = {},
+  proforma: unknown = null,
+  built: { retainers?: any[]; projects?: any[] } = {},
+) => {
   (prisma.proposal.findFirst as any).mockResolvedValue(proposal === null ? null : { ...OPEN_PROPOSAL, ...proposal });
   (prisma.proforma.findFirst as any).mockResolvedValue(proforma);
+  (prisma.retainer.findMany as any).mockResolvedValue(built.retainers ?? []);
+  (prisma.project.findMany as any).mockResolvedValue(built.projects ?? []);
+
+  // Deleting a win moves the client's status with it, so the route does both
+  // in one transaction. `mockDeep` leaves `$transaction` a no-op that never
+  // calls its callback, which would mean the route wrote nothing at all.
+  (prisma.$transaction as any).mockImplementation(async (fn: any) =>
+    fn({
+      proposal: {
+        update: vi.fn(async ({ data }: any) => {
+          written.proposal = data;
+          return { id: 'prop-1', ...data };
+        }),
+        count: vi.fn(async () => 0),
+      },
+      retainer: { count: vi.fn(async () => 0) },
+      project: { count: vi.fn(async () => 0) },
+      company: {
+        update: vi.fn(async ({ data }: any) => {
+          written.company = data;
+          return {};
+        }),
+      },
+    }),
+  );
+
   return request(app)
     .delete('/api/proposals/prop-1')
     .set(...auth());
@@ -171,12 +206,32 @@ describe('deleting a proposal', () => {
     expect(written.activity.verb).toBe('proposal_deleted');
   });
 
-  it('refuses a won proposal', async () => {
-    // A client was graduated and a project or retainer seeded from it.
-    const res = await deleteProposal({ outcome: 'WON', stage: 'WON' });
+  it('refuses a won proposal that built something', async () => {
+    // The work is what the win IS. Deleting the reason it exists would leave a
+    // retainer pointing at nothing, so the refusal names what to deal with.
+    const res = await deleteProposal({ outcome: 'WON', stage: 'WON' }, null, {
+      retainers: [{ id: 'ret-1', status: 'ACTIVE' }],
+    });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/was won/i);
-    expect(prisma.proposal.update).not.toHaveBeenCalled();
+    expect(res.body.error).toMatch(/retainer came from this proposal/i);
+    expect(written.proposal).toBeUndefined();
+  });
+
+  it('deletes a won proposal that built nothing, and puts the client back', async () => {
+    /*
+     * The card dragged into Won by mistake, or the duplicate entered twice.
+     * Nothing was built on it, and the only other remedy was to mark it LOST —
+     * a deal that never happened, counted on the losing side of the win rate.
+     *
+     * §3: the company was a CLIENT because this was won. Take the win away and
+     * the status has to follow, or you are left with a client nobody sold
+     * anything to.
+     */
+    const res = await deleteProposal({ outcome: 'WON', stage: 'WON' });
+    expect(res.status).toBe(200);
+    expect(written.proposal.deletedAt).toBeInstanceOf(Date);
+    expect(written.company.status).toBe('PROSPECT');
+    expect(written.activity.payload.reversedAWin).toBe(true);
   });
 
   it('refuses a lost proposal', async () => {
@@ -279,6 +334,13 @@ const editRetainer = (body: Record<string, unknown>, retainer: Record<string, un
           written.cards = args;
           return { count: 1 };
         }),
+        // Moving the start date forward past an EMPTY month removes that
+        // month's card inside the same transaction — see the note on the
+        // route. A month with work on it refuses instead, before we get here.
+        deleteMany: vi.fn(async (args: any) => {
+          written.deletedCards = args;
+          return { count: 1 };
+        }),
       },
       activity: {
         create: vi.fn(async ({ data }: any) => {
@@ -351,15 +413,32 @@ describe('editing a retainer', () => {
     expect(written.retainer.renewalDate).toBeNull();
   });
 
-  it('refuses a start date later than the first month already worked', async () => {
-    (prisma.monthCard.findFirst as any).mockResolvedValue({ month: '2026-04' });
+  it('refuses a start date past a month that has been worked', async () => {
+    // Worked = anything on it. The rule is about disowning real work, not
+    // about the card existing.
+    (prisma.monthCard.findMany as any).mockResolvedValue([
+      { id: 'mc-1', month: '2026-04', invoiceId: null, _count: { tasks: 3, costs: 0, allocations: 0 } },
+    ]);
     const res = await editRetainer({ startDate: '2026-07-01' });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain('2026-04');
   });
 
-  it('accepts a start date that is not later than the first month', async () => {
-    (prisma.monthCard.findFirst as any).mockResolvedValue({ month: '2026-04' });
+  it('moves the start past an EMPTY month, taking its card with it', async () => {
+    // The commonest mistake here: a retainer entered today that begins next
+    // month. Creating it opened this month's card at the full fee; nothing has
+    // been done against it, so the date can move and the card goes.
+    (prisma.monthCard.findMany as any).mockResolvedValue([
+      { id: 'mc-1', month: '2026-04', invoiceId: null, _count: { tasks: 0, costs: 0, allocations: 0 } },
+    ]);
+    const res = await editRetainer({ startDate: '2026-07-01' });
+    expect(res.status).toBe(200);
+    expect(res.body.emptyMonthsRemoved).toBe(1);
+    expect(written.deletedCards.where.id.in).toEqual(['mc-1']);
+  });
+
+  it('accepts a start date with no earlier cards at all', async () => {
+    (prisma.monthCard.findMany as any).mockResolvedValue([]);
     const res = await editRetainer({ startDate: '2026-03-01' });
     expect(res.status).toBe(200);
     expect(written.retainer.startDate).toEqual(new Date('2026-03-01'));

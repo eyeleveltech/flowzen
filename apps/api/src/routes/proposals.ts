@@ -1151,15 +1151,63 @@ proposalsRouter.delete('/:id', requirePermission('pipeline.write'), async (req: 
       return;
     }
 
-    if (proposal.outcome !== null) {
+    if (proposal.outcome === ProposalOutcome.LOST) {
       res.status(400).json({
         success: false,
-        error:
-          proposal.outcome === ProposalOutcome.WON
-            ? 'This proposal was won — the client and the work that came from it are built on it. It cannot be deleted.'
-            : 'This proposal was lost. It stays, because the win rate counts it — hiding it would not make the number truer.',
+        error: 'This proposal was lost. It stays, because the win rate counts it — hiding it would not make the number truer.',
       });
       return;
+    }
+
+    /*
+     * ─── Deleting a deal that was won ───────────────────────────────────────
+     *
+     * This refused outright, and the refusal was aimed at the right thing: a
+     * won proposal is what BUILT the retainer or the project, and deleting the
+     * reason work exists leaves the work pointing at nothing.
+     *
+     * But it was drawn around the wrong case. The commonest won proposal
+     * anybody wants gone is one that was never really won — a card dragged
+     * into the wrong column, a duplicate entered twice. Nothing was built on
+     * it, and the only remedy the system offered was to mark it LOST, which
+     * puts a deal that never existed on the losing side of the win rate. That
+     * is a worse lie than deleting it.
+     *
+     * So: a win with work behind it still refuses, and now says which work.
+     * A win with nothing behind it can go.
+     */
+    const wasWon = proposal.outcome === ProposalOutcome.WON;
+    if (wasWon) {
+      const [retainers, projects] = await Promise.all([
+        prisma.retainer.findMany({
+          where: { organizationId: orgId, sourceProposalId: id },
+          select: { id: true, status: true },
+        }),
+        prisma.project.findMany({
+          where: { organizationId: orgId, sourceProposalId: id, deletedAt: null },
+          select: { id: true, name: true },
+        }),
+      ]);
+
+      if (retainers.length > 0 || projects.length > 0) {
+        // Stopped or delivered counts too: the work happened BECAUSE of this,
+        // and its history reads back through the deal that sold it.
+        const built = [
+          retainers.length > 0 ? 'a retainer' : null,
+          projects.length > 0
+            ? projects.length === 1
+              ? `the project “${projects[0].name}”`
+              : `${projects.length} projects`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' and ');
+        res.status(400).json({
+          success: false,
+          error: `${built.charAt(0).toUpperCase()}${built.slice(1)} came from this proposal, so it cannot be deleted. Mark it lost instead if the deal fell through.`,
+        });
+        return;
+      }
     }
 
     const proforma = await prisma.proforma.findFirst({
@@ -1174,7 +1222,35 @@ proposalsRouter.delete('/:id', requirePermission('pipeline.write'), async (req: 
       return;
     }
 
-    await prisma.proposal.update({ where: { id }, data: { deletedAt: new Date() } });
+    /*
+     * Deleting the win has to take the client status with it.
+     *
+     * §3: a company is a CLIENT because a proposal was won. Remove the only
+     * won proposal and leave the status alone and you have a client nobody
+     * sold anything to — which is exactly the inconsistency the audit found
+     * sitting in this database. Same derivation the lose route uses.
+     */
+    let companyStatusTo: CompanyStatus | null = null;
+    await prisma.$transaction(async (tx) => {
+      if (wasWon) {
+        const [activeRetainers, liveProjects, otherWins, everRetainers, everProjects] = await Promise.all([
+          tx.retainer.count({ where: { companyId: proposal.companyId, status: RetainerStatus.ACTIVE } }),
+          tx.project.count({ where: { companyId: proposal.companyId, status: ProjectStatus.LIVE, deletedAt: null } }),
+          tx.proposal.count({
+            where: { companyId: proposal.companyId, outcome: ProposalOutcome.WON, deletedAt: null, NOT: { id } },
+          }),
+          tx.retainer.count({ where: { companyId: proposal.companyId } }),
+          tx.project.count({ where: { companyId: proposal.companyId, deletedAt: null } }),
+        ]);
+
+        if (activeRetainers === 0 && liveProjects === 0 && otherWins === 0) {
+          companyStatusTo = everRetainers + everProjects > 0 ? CompanyStatus.PAST : CompanyStatus.PROSPECT;
+          await tx.company.update({ where: { id: proposal.companyId }, data: { status: companyStatusTo } });
+        }
+      }
+
+      await tx.proposal.update({ where: { id }, data: { deletedAt: new Date() } });
+    });
 
     await prisma.activity.create({
       data: {
@@ -1183,7 +1259,15 @@ proposalsRouter.delete('/:id', requirePermission('pipeline.write'), async (req: 
         entityId: id,
         actorId: req.user!.userId,
         verb: 'proposal_deleted',
-        payload: { companyName: proposal.company.name, stage: proposal.stage },
+        payload: {
+          companyName: proposal.company.name,
+          stage: proposal.stage,
+          // A deleted WIN is a different event from a deleted draft — the win
+          // rate moves — so the trail says so rather than leaving somebody to
+          // infer it from a stage.
+          ...(wasWon ? { reversedAWin: true } : {}),
+          ...(companyStatusTo ? { companyStatusFrom: 'CLIENT', companyStatusTo } : {}),
+        },
       },
     });
 
