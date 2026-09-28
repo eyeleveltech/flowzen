@@ -259,6 +259,133 @@ tasksRouter.get('/trash', requirePermission('work.own'), async (req: AuthRequest
 // Management hold and nobody else does, and it is the same switch that lets
 // them open Live work and a project.
 
+/**
+ * GET /api/tasks/targets — everything a task form has to offer.
+ *
+ * ─── Why this exists ────────────────────────────────────────────────────────
+ *
+ * The task forms built their pickers out of three endpoints: `/companies` and
+ * `/companies/:id`, both gated on `company.read`, and `/internal-projects`,
+ * gated on `work.all`. Nobody but Management holds all three — an EMPLOYEE
+ * holds `work.own` and nothing else, a HEAD has no `company.read`, BD and
+ * ACCOUNTS have no `work.all` — so on My Work everybody except Management met
+ * an empty Company list, an empty job list, or both, and could not write down
+ * a task at all.
+ *
+ * The permissions were not wrong. `company.read` opens the client book —
+ * owners, statuses, verticals, the pipeline behind it — and that is a
+ * commercial view an employee has no business in. What a task form needs is
+ * far smaller: the NAMES of things work can be filed against. So that is all
+ * this returns — ids and labels, no values, no owners, no statuses, nothing
+ * that could be totalled — and it is gated on `work.own`, because anybody who
+ * can hold a task can write one down.
+ *
+ * It is also one request where there were N+1: the forms used to fetch the
+ * company list, then fetch a whole company detail payload again every time the
+ * picker changed.
+ */
+tasksRouter.get('/targets', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const thisMonth = new Date().toISOString().slice(0, 7);
+
+    const [companies, internalProjects] = await Promise.all([
+      prisma.company.findMany({
+        // Somewhere work can actually be filed: a prospect has nothing to do
+        // for yet, and the server would refuse the task anyway.
+        where: {
+          organizationId: orgId,
+          OR: [
+            { retainers: { some: { status: 'ACTIVE' } } },
+            { projects: { some: { status: 'LIVE', deletedAt: null } } },
+          ],
+        },
+        orderBy: { name: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          retainers: {
+            where: { status: 'ACTIVE' },
+            select: {
+              id: true,
+              // The month being worked. A retainer task must sit on the month
+              // that pays for it, so a retainer with no open card has nothing
+              // to offer yet.
+              monthCards: { where: { month: thisMonth }, select: { id: true, month: true } },
+              projects: {
+                where: { status: 'ACTIVE' },
+                orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
+                select: { id: true, name: true },
+              },
+            },
+          },
+          projects: {
+            where: { status: 'LIVE', deletedAt: null },
+            orderBy: { name: 'asc' },
+            select: { id: true, name: true },
+          },
+        },
+      }),
+      prisma.internalProject.findMany({
+        where: { organizationId: orgId, status: 'ACTIVE' },
+        orderBy: [{ name: 'asc' }],
+        select: { id: true, name: true },
+      }),
+    ]);
+
+    /*
+     * The jobs, already flattened the way the picker shows them.
+     *
+     * A retainer contributes one option per piece of work inside it, not one
+     * for the retainer: "Retainer — 2026-09" is a month, and a month is not a
+     * job. The month rides along on the option so the task still lands on the
+     * card that bills it.
+     */
+    const shaped = companies
+      .map((c) => {
+        const jobs: Record<string, unknown>[] = [];
+
+        for (const r of c.retainers) {
+          const card = r.monthCards[0];
+          if (!card) continue;
+          if (r.projects.length === 0) {
+            jobs.push({
+              key: card.id,
+              label: `Retainer — ${card.month}`,
+              workType: 'RETAINER',
+              monthCardId: card.id,
+              month: card.month,
+            });
+            continue;
+          }
+          for (const rp of r.projects) {
+            jobs.push({
+              key: rp.id,
+              label: `Retainer — ${rp.name}`,
+              workType: 'RETAINER',
+              monthCardId: card.id,
+              retainerProjectId: rp.id,
+              month: card.month,
+            });
+          }
+        }
+
+        for (const pr of c.projects) {
+          jobs.push({ key: pr.id, label: `Project — ${pr.name}`, workType: 'PROJECT', projectId: pr.id });
+        }
+
+        return { id: c.id, name: c.name, jobs };
+      })
+      // A client whose only retainer has no open month yet would otherwise sit
+      // in the list offering nothing.
+      .filter((c) => c.jobs.length > 0);
+
+    res.json({ success: true, companies: shaped, internalProjects });
+  } catch (error) {
+    next(error);
+  }
+});
+
 tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;

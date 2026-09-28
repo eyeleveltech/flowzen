@@ -3,7 +3,8 @@
 /** Quickly handing a specific person a task, from the Team screen — the assignee isn't a field, it's why this opened. */
 
 import { useEffect, useState } from 'react';
-import { api, ApiError, type Company, type InternalProject } from '@/lib/api-v2';
+import { useQuery } from '@tanstack/react-query';
+import { api, ApiError } from '@/lib/api-v2';
 import { useTeamMembers } from '@/hooks/queries';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
@@ -50,10 +51,7 @@ export function AssignTaskModal({
   const [priority, setPriority] = useState('MEDIUM');
   const [description, setDescription] = useState('');
   const [scope, setScope] = useState<'INTERNAL' | 'CLIENT'>('INTERNAL');
-  const [companies, setCompanies] = useState<Company[]>([]);
   const [companyId, setCompanyId] = useState('');
-  const [loadingTargets, setLoadingTargets] = useState(false);
-  const [targets, setTargets] = useState<Target[]>([]);
   const [targetKey, setTargetKey] = useState('');
   /*
    * Which piece of the studio's own work, when this is not a client's.
@@ -63,7 +61,6 @@ export function AssignTaskModal({
    * "Office Wi-Fi vendor renewal" is not a programme — and forcing a bucket on
    * it would only breed empty ones.
    */
-  const [internalProjects, setInternalProjects] = useState<InternalProject[]>([]);
   const [internalProjectId, setInternalProjectId] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,83 +71,33 @@ export function AssignTaskModal({
     setAssignedById('');
   }, [me?.id]);
 
-  useEffect(() => {
-    if (scope !== 'CLIENT') return;
-    void api.companies.list().then((res) => setCompanies(res.companies)).catch(() => {});
-  }, [scope]);
+  /*
+   * One request for everything this form can offer.
+   *
+   * It used to be three — the company list, a whole company detail payload per
+   * pick, and the internal projects — across two permissions nobody but
+   * Management holds: `company.read` opens the client book, `work.all` is Head
+   * and Management. So an EMPLOYEE (who holds `work.own` and nothing else) met
+   * two empty dropdowns and could not write down a task at all, and a HEAD had
+   * no company list either.
+   *
+   * `/tasks/targets` answers with names and ids only — nothing with a value on
+   * it — which is why it can be gated on `work.own`: anybody who can hold a
+   * task can write one down.
+   */
+  const { data: targetData, isPending: loadingTargets } = useQuery({
+    queryKey: ['task-targets'],
+    queryFn: () => api.tasks.targets(),
+    staleTime: 60_000,
+  });
+  const companies: { id: string; name: string; jobs: Target[] }[] = targetData?.companies ?? [];
+  const internalProjects: { id: string; name: string }[] = targetData?.internalProjects ?? [];
+  const targets: Target[] = companies.find((c) => c.id === companyId)?.jobs ?? [];
 
-  // Only the open ones: a finished piece of work is not somewhere to put new
-  // work, and Settings is where a closed one is reopened.
+  // Changing the client clears the job under it — the old pick belongs to a
+  // company that is no longer selected.
   useEffect(() => {
-    if (scope !== 'INTERNAL') return;
-    void api.internalProjects
-      .list('ACTIVE')
-      .then((res) => setInternalProjects(res.projects))
-      .catch(() => {});
-  }, [scope]);
-
-  useEffect(() => {
-    setTargets([]);
     setTargetKey('');
-    if (scope !== 'CLIENT' || !companyId) return;
-    setLoadingTargets(true);
-    void api.companies
-      .get(companyId)
-      .then((res) => {
-        const company = (res as { company?: any }).company ?? res;
-        const list: Target[] = [];
-        for (const r of company.retainers ?? []) {
-          if (r.status !== 'ACTIVE') continue;
-          const currentMonth = (r.monthCards ?? [])[0];
-          if (!currentMonth) continue;
-          /*
-           * The retainer's projects, not the retainer.
-           *
-           * This offered "Retainer — 2026-09", which is a month, and a month
-           * is not a job: it says when the work is billed, never what it is
-           * for. Choosing it sent the month card alone, and the server filed
-           * the task under that retainer's default project — so a VOSO task
-           * meant for League Season Launch landed in Monthly Retainer Work,
-           * and this form had no way to say otherwise.
-           *
-           * The month is not dropped, it rides along on the option: a task
-           * still has to sit on the month that pays for it, which is what the
-           * line under the field says and what `tasks_month_card_needs_project`
-           * enforces at the database.
-           */
-          const parts = (r.projects ?? []).filter((p: any) => p.status !== 'DONE');
-          if (parts.length === 0) {
-            // Every retainer is created with a default project, so this is the
-            // old shape of the data rather than a case worth designing for —
-            // it files exactly as it did before.
-            list.push({
-              key: currentMonth.id,
-              label: `Retainer — ${currentMonth.month}`,
-              workType: 'RETAINER',
-              monthCardId: currentMonth.id,
-              month: currentMonth.month,
-            });
-            continue;
-          }
-          for (const p of parts) {
-            list.push({
-              key: p.id,
-              label: `Retainer — ${p.name}`,
-              workType: 'RETAINER',
-              monthCardId: currentMonth.id,
-              retainerProjectId: p.id,
-              month: currentMonth.month,
-            });
-          }
-        }
-        for (const p of company.projects ?? []) {
-          if (p.status !== 'LIVE') continue;
-          list.push({ key: p.id, label: `Project — ${p.name}`, workType: 'PROJECT', projectId: p.id });
-        }
-        setTargets(list);
-      })
-      .catch(() => {})
-      .finally(() => setLoadingTargets(false));
   }, [companyId, scope]);
 
   const selectedTarget = targets.find((t) => t.key === targetKey);

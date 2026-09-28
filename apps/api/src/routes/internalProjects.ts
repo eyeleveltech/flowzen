@@ -72,9 +72,21 @@ const withTasks = {
  * screen asks for everything, because a closed bucket still has to be findable
  * to be reopened.
  */
+/*
+ * Reading the list needs only `work.own`.
+ *
+ * It was `work.all`, which is Head and Management — so the required "Which
+ * work" picker on every task form came back empty for everybody else, and once
+ * that field was required they could not write down an internal task at all.
+ *
+ * A bucket is a name. There is no client on it, no value, no invoice, and no
+ * cost can point at one, so there is nothing here to protect: anybody who can
+ * hold a task can see what the studio's own work is called. MAKING and
+ * CHANGING them stays `work.all` — every route below this one.
+ */
 internalProjectsRouter.get(
   '/',
-  requirePermission('work.all'),
+  requirePermission('work.own'),
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const status = typeof req.query.status === 'string' ? req.query.status.toUpperCase() : null;

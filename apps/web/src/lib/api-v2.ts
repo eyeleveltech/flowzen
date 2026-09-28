@@ -1444,6 +1444,20 @@ export const api = {
         hasInternal: boolean;
         counts: { total: number; open: number; waiting: number; overdue: number; unassigned: number };
       }>(`/tasks/all?${new URLSearchParams(params)}`),
+    /**
+     * Everything a task form can offer, in one call.
+     *
+     * Names and ids only — nothing with a value on it — which is why it needs
+     * only `work.own`. The pickers used to be built from /companies and
+     * /internal-projects, whose permissions nobody but Management holds
+     * together, so everyone else met empty dropdowns.
+     */
+    targets: () =>
+      get<{
+        success: boolean;
+        companies: { id: string; name: string; jobs: any[] }[];
+        internalProjects: { id: string; name: string }[];
+      }>('/tasks/targets'),
     create: (body: Record<string, unknown>) =>
       post<{ success: boolean; task: any }>('/tasks', body),
     /** Title, assignee, due date, priority, notes — any subset. Status has its own route. */
