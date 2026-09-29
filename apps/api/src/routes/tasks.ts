@@ -184,11 +184,44 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
       };
     });
 
-    const today = formattedTasks.filter((t) => t.isToday);
-    const overdue = formattedTasks.filter((t) => t.isOverdue);
-    const thisWeek = formattedTasks.filter((t) => t.isThisWeek);
-    const later = formattedTasks.filter((t) => t.isLater);
-    const completed = formattedTasks.filter((t) => t.isDone);
+    /*
+     * The order this person has arranged their own desk into.
+     *
+     * Read off their own assignee rows — not the task, since three people on
+     * one task each have their own order. A separate query because Prisma
+     * cannot include the same relation twice, and TASK_PEOPLE already takes
+     * `assignees` for the list of names.
+     */
+    const places = await prisma.taskAssignee.findMany({
+      where: { userId, taskId: { in: allMyTasks.map((t) => t.id) } },
+      select: { taskId: true, sortOrder: true },
+    });
+    const placeOf = new Map(places.map((p) => [p.taskId, p.sortOrder]));
+    const placed = formattedTasks.map((t) => ({ ...t, sortOrder: placeOf.get(t.id) ?? null }));
+
+    /*
+     * Arranged tasks in the order given; anything not yet arranged FIRST.
+     *
+     * First, not last: a task that arrives after somebody has put their day in
+     * order is new work, and filing it under the list they already arranged is
+     * how it goes unseen until it is late. Among themselves the unarranged
+     * keep the query's order — due date, then newest — because the sort is
+     * stable and they compare equal.
+     */
+    const inTheirOrder = <T extends { sortOrder: number | null }>(list: T[]): T[] =>
+      [...list].sort((a, b) => {
+        if (a.sortOrder == null && b.sortOrder == null) return 0;
+        if (a.sortOrder == null) return -1;
+        if (b.sortOrder == null) return 1;
+        return a.sortOrder - b.sortOrder;
+      });
+
+    const today = inTheirOrder(placed.filter((t) => t.isToday));
+    const overdue = inTheirOrder(placed.filter((t) => t.isOverdue));
+    const thisWeek = inTheirOrder(placed.filter((t) => t.isThisWeek));
+    const later = inTheirOrder(placed.filter((t) => t.isLater));
+    // History, not a plan — it stays in the order it was finished.
+    const completed = placed.filter((t) => t.isDone);
 
     res.json({
       success: true,
@@ -224,6 +257,60 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
 // delete and restore routes already enforce: the person who created it, the
 // person it is assigned to, or a Head. Listing rows that would 403 on the
 // Restore button would be worse than not listing them.
+
+/**
+ * PUT /api/tasks/my/order — the order of one group on the caller's own desk.
+ *
+ * Sent as the whole group, top to bottom, after a drag. The whole group rather
+ * than "move X above Y" because that is what the screen holds, and replaying
+ * a single move against a list that changed underneath it is how two orders
+ * end up disagreeing.
+ *
+ * It only ever writes the caller's OWN assignee rows. A task somebody shares
+ * with two colleagues is theirs to place on their desk and theirs alone — and
+ * an id that is not on this person's desk is refused rather than skipped, so
+ * a stale screen cannot quietly half-apply.
+ */
+const orderSchema = z.object({
+  taskIds: z.array(z.string().min(1)).min(1, 'Nothing to arrange').max(500, 'Too many tasks at once'),
+});
+
+tasksRouter.put('/my/order', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const parsed = orderSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
+    const userId = req.user!.userId;
+    const ids = [...new Set(parsed.data.taskIds)];
+
+    const mine = await prisma.taskAssignee.findMany({
+      where: { userId, taskId: { in: ids }, task: { organizationId: req.user!.organizationId } },
+      select: { taskId: true },
+    });
+    if (mine.length !== ids.length) {
+      res.status(400).json({
+        success: false,
+        error: 'Some of those tasks are no longer on your list. Refresh and arrange them again.',
+      });
+      return;
+    }
+
+    await prisma.$transaction(
+      ids.map((taskId, index) =>
+        prisma.taskAssignee.update({
+          where: { taskId_userId: { taskId, userId } },
+          data: { sortOrder: index },
+        }),
+      ),
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
 
 tasksRouter.get('/trash', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
   try {

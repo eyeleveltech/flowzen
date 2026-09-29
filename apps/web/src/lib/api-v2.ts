@@ -1502,6 +1502,11 @@ export const api = {
       }>('/tasks/targets'),
     create: (body: Record<string, unknown>) =>
       post<{ success: boolean; task: any }>('/tasks', body),
+    /**
+     * The order of one group on the caller's own My Work, top to bottom.
+     * Only ever the caller's own desk — see PUT /tasks/my/order.
+     */
+    saveMyOrder: (taskIds: string[]) => put<{ success: boolean }>('/tasks/my/order', { taskIds }),
     /** Title, assignee, due date, priority, notes — any subset. Status has its own route. */
     update: (id: string, body: Record<string, unknown>) =>
       patch<{ success: boolean; task: any }>(`/tasks/${id}`, body),

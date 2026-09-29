@@ -13,7 +13,8 @@
  */
 
 import { Fragment, useState, useEffect, useCallback, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { DragDropContext, Droppable, Draggable, type BeforeCapture, type DropResult } from '@hello-pangea/dnd';
 import { plural } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { api, formatDate, ApiError } from '@/lib/api-v2';
@@ -30,7 +31,7 @@ import { PRIORITY_CONFIG, getPriorityDot, getPriorityLabel } from '@/lib/priorit
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
 import toast from 'react-hot-toast';
-import { CheckSquare, Plus, RotateCcw } from 'lucide-react';
+import { CheckSquare, Plus, RotateCcw, GripVertical } from 'lucide-react';
 import { personOptions } from '@/lib/people';
 import { useAuthStore } from '@/stores';
 import { TASK_TYPE_OPTIONS } from '@/lib/task-type';
@@ -111,6 +112,12 @@ const toDrawerTask = (t: TaskItem | null): DrawerTask | null =>
 type Buckets = { overdue: TaskItem[]; today: TaskItem[]; thisWeek: TaskItem[]; later: TaskItem[]; completed: TaskItem[] };
 const EMPTY_BUCKETS: Buckets = { overdue: [], today: [], thisWeek: [], later: [], completed: [] };
 
+/** The cells of one draggable row on the page, found by its task id. */
+const rowCells = (id: string) =>
+  Array.from(
+    document.querySelector<HTMLTableRowElement>(`tr[data-task-row="${CSS.escape(id)}"]`)?.cells ?? [],
+  );
+
 const STATUS_OPTIONS = [
   { value: 'TODO', label: 'To do' },
   { value: 'IN_PROGRESS', label: 'In progress' },
@@ -155,6 +162,81 @@ export default function MyWorkPage() {
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
   const buckets = (data?.success ? (data.tasks as Buckets) : EMPTY_BUCKETS);
+  const queryClient = useQueryClient();
+
+  /*
+   * A drag, within one group.
+   *
+   * Moved on screen first and saved second, so the row lands where it was
+   * dropped instead of snapping back for a round trip. If the save fails the
+   * list goes back to what the server has — a desk that silently disagrees
+   * with itself on the next reload is worse than a visible undo.
+   *
+   * Never across groups: the groups are WHEN things are due, and dragging a
+   * task from Overdue into Today would be a claim about its due date that
+   * nothing here makes. Each group is its own drop zone for that reason.
+   *
+   * "Later this week" is two server buckets shown as one, so it is arranged as
+   * one. "Done this week" is history, not a plan, and is not arrangeable.
+   */
+  /*
+   * A lifted row keeps its columns.
+   *
+   * While dragged, a row is lifted out of the table, and a row outside its
+   * table sizes each cell to its own text — the task, client, date and status
+   * bunch up against the left edge. Each cell is pinned to the width it had at
+   * rest just before it lifts, and let go again when it lands.
+   */
+  const onBeforeCapture = useCallback((before: BeforeCapture) => {
+    for (const cell of rowCells(before.draggableId)) cell.style.width = `${cell.getBoundingClientRect().width}px`;
+  }, []);
+
+  const onDragEnd = useCallback(
+    async (result: DropResult) => {
+      for (const cell of rowCells(result.draggableId)) cell.style.width = '';
+      const { source, destination } = result;
+      if (!destination || destination.droppableId !== source.droppableId) return;
+      if (destination.index === source.index) return;
+
+      const group = source.droppableId;
+      const current =
+        group === 'overdue'
+          ? buckets.overdue
+          : group === 'today'
+            ? buckets.today
+            : group === 'week'
+              ? [...buckets.thisWeek, ...buckets.later]
+              : null;
+      if (!current) return;
+
+      const list = [...current];
+      const [moved] = list.splice(source.index, 1);
+      list.splice(destination.index, 0, moved);
+
+      queryClient.setQueryData(['tasks', 'my'], (prev: any) => {
+        if (!prev?.tasks) return prev;
+        const tasks = { ...prev.tasks };
+        if (group === 'overdue') tasks.overdue = list;
+        if (group === 'today') tasks.today = list;
+        if (group === 'week') {
+          // One group on screen, two buckets underneath: each task goes back
+          // into the bucket it came from, in the arranged order.
+          const weekIds = new Set(prev.tasks.thisWeek.map((t: TaskItem) => t.id));
+          tasks.thisWeek = list.filter((t) => weekIds.has(t.id));
+          tasks.later = list.filter((t) => !weekIds.has(t.id));
+        }
+        return { ...prev, tasks };
+      });
+
+      try {
+        await api.tasks.saveMyOrder(list.map((t) => t.id));
+      } catch (e) {
+        toast.error(e instanceof ApiError ? e.message : 'Could not save that order');
+        void refetch();
+      }
+    },
+    [buckets, queryClient, refetch],
+  );
   const counts = data?.counts ?? { today: 0, overdue: 0, thisWeek: 0, later: 0, completed: 0 };
   const [busyId, setBusyId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -247,12 +329,20 @@ export default function MyWorkPage() {
    * Same columns and the same treatment as the task table on a retainer, so
    * one task looks like itself wherever you meet it.
    */
-  const row = (t: TaskItem) => {
+  /*
+   * A row, as its cells.
+   *
+   * Split from the <tr> so the same cells can sit in a plain row (Done this
+   * week, which is history) or a draggable one (everything still to do),
+   * without two copies of the row that drift apart.
+   */
+  const cells = (t: TaskItem, grip: React.ReactNode) => {
     const finished = t.status === 'DONE' || t.status === 'CANCELLED';
     const late = !finished && t.dueDate.slice(0, 10) < todayKey;
     const job = jobLabel(t);
     return (
-      <tr key={t.id} onClick={() => setSelected(t)} className="cursor-pointer transition-colors hover:bg-subtle">
+      <>
+        <td className="w-8 pr-0 text-secondary">{grip}</td>
         <td>
           {/*
             A button inside the row rather than a click handler alone: the row
@@ -304,9 +394,52 @@ export default function MyWorkPage() {
             disabled={busyId === t.id}
           />
         </td>
-      </tr>
+      </>
     );
   };
+
+  /** A finished task: history, so it does not move. */
+  const row = (t: TaskItem) => (
+    <tr key={t.id} onClick={() => setSelected(t)} className="cursor-pointer transition-colors hover:bg-subtle">
+      {cells(t, null)}
+    </tr>
+  );
+
+  /*
+   * A task still to do, which can be moved.
+   *
+   * Only the grip starts a drag. The row itself opens the task on a click and
+   * holds a status menu, and a whole-row drag handle turns every attempt to
+   * read or change something into an accidental move.
+   */
+  const dragRow = (t: TaskItem, index: number) => (
+    <Draggable key={t.id} draggableId={t.id} index={index}>
+      {(drag, snap) => (
+        <tr
+          ref={drag.innerRef}
+          {...drag.draggableProps}
+          data-task-row={t.id}
+          onClick={() => setSelected(t)}
+          className={`cursor-pointer transition-colors hover:bg-subtle ${
+            snap.isDragging ? 'bg-white shadow-card ring-1 ring-primary/20' : ''
+          }`}
+        >
+          {cells(
+            t,
+            <span
+              {...drag.dragHandleProps}
+              onClick={(e) => e.stopPropagation()}
+              aria-label={`Move ${t.title}`}
+              title="Drag to arrange"
+              className="flex h-7 w-6 cursor-grab items-center justify-center rounded hover:bg-subtle hover:text-primary active:cursor-grabbing"
+            >
+              <GripVertical className="h-4 w-4" />
+            </span>,
+          )}
+        </tr>
+      )}
+    </Draggable>
+  );
 
   /*
    * A bucket heading, as a row of the table rather than a bar above one — so
@@ -315,17 +448,42 @@ export default function MyWorkPage() {
    * that follow. It also keeps the 11px, since `.data-table td` sets a font
    * size and would otherwise beat `.eyebrow` on a `<td>`.
    */
-  const section = (label: string, items: TaskItem[]) =>
-    items.length > 0 && (
-      <Fragment key={label}>
-        <tr className="bg-surface">
-          <th colSpan={6} scope="colgroup" className="eyebrow border-y border-border text-left">
-            {label}
-          </th>
-        </tr>
-        {items.map(row)}
-      </Fragment>
+  /*
+   * One group.
+   *
+   * Arrangeable groups are their own <tbody> and their own drop zone, so a
+   * task can be moved within Overdue, within Today, within the rest of the
+   * week — and never between them, since the groups are WHEN things are due.
+   */
+  const heading = (label: string) => (
+    <tr className="bg-surface">
+      <th colSpan={7} scope="colgroup" className="eyebrow border-y border-border text-left">
+        {label}
+      </th>
+    </tr>
+  );
+  const section = (label: string, items: TaskItem[], arrange?: string) => {
+    if (items.length === 0) return null;
+    if (!arrange) {
+      return (
+        <tbody key={label} className="divide-y divide-border">
+          {heading(label)}
+          {items.map(row)}
+        </tbody>
+      );
+    }
+    return (
+      <Droppable key={label} droppableId={arrange}>
+        {(drop) => (
+          <tbody ref={drop.innerRef} {...drop.droppableProps} className="divide-y divide-border">
+            {heading(label)}
+            {items.map((t, i) => dragRow(t, i))}
+            {drop.placeholder}
+          </tbody>
+        )}
+      </Droppable>
     );
+  };
 
   return (
     <div className="page-shell">
@@ -391,6 +549,8 @@ export default function MyWorkPage() {
             <table className="w-full min-w-220 text-sm data-table">
               <thead>
                 <tr className="border-b border-border">
+                  {/* The grip column — the grip is its own label. */}
+                  <th className="w-8" aria-label="Arrange" />
                   <th className="eyebrow text-left">Task</th>
                   <th className="eyebrow text-left">For</th>
                   <th className="eyebrow text-left">Due</th>
@@ -399,12 +559,12 @@ export default function MyWorkPage() {
                   <th className="eyebrow text-left">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
-                {section('Overdue', buckets.overdue)}
-                {section('Due today', buckets.today)}
-                {section('Later this week', [...buckets.thisWeek, ...buckets.later])}
+              <DragDropContext onBeforeCapture={onBeforeCapture} onDragEnd={(r) => void onDragEnd(r)}>
+                {section('Overdue', buckets.overdue, 'overdue')}
+                {section('Due today', buckets.today, 'today')}
+                {section('Later this week', [...buckets.thisWeek, ...buckets.later], 'week')}
                 {section('Done this week', buckets.completed)}
-              </tbody>
+              </DragDropContext>
             </table>
           </div>
         )}

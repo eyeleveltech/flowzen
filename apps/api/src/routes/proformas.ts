@@ -53,6 +53,15 @@ proformasRouter.get('/', requirePermission('pipeline.read'), async (req: AuthReq
         include: {
           company: { select: { id: true, name: true, gstin: true, city: true } },
           invoice: { select: { id: true, number: true, status: true } },
+          /*
+           * What it asks to be paid FOR.
+           *
+           * A proforma comes from a proposal or from a project's billing
+           * milestone, and a list of them that cannot say which is a list of
+           * numbers with no way to tell the advance on a website build from
+           * the quote for a retainer.
+           */
+          milestone: { select: { id: true, label: true, project: { select: { id: true, name: true } } } },
         },
       }),
       prisma.proforma.count({ where }),

@@ -969,6 +969,17 @@ model TaskAssignee {
   taskId     String
   userId     String
   assignedAt DateTime @default(now())
+  /// Where this task sits on THIS person's My Work, within its group.
+  ///
+  /// On the join row, not the task, because the order is a person's and not
+  /// the task's: three people sharing a task can each put it somewhere
+  /// different on their own desk, and one arranging theirs must not rearrange
+  /// the other two.
+  ///
+  /// Null until they arrange it. Unarranged tasks sort to the TOP of their
+  /// group, so new work is seen rather than landing under a list somebody
+  /// already put in order.
+  sortOrder  Int?
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
   user User @relation("TaskAssignments", fields: [userId], references: [id], onDelete: Cascade)

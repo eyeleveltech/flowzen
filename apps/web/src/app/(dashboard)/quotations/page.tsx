@@ -13,7 +13,7 @@ import { usePageHeader } from '@/hooks/usePageHeader';
 import { useConfig } from '@/hooks/queries';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { Tabs, type TabDef } from '@/components/ui/tabs';
-import { RotateCcw, Trash2 } from 'lucide-react';
+import { RotateCcw, Trash2, Download } from 'lucide-react';
 import { useConfirmStore } from '@/stores/confirm';
 import { ApiError } from '@/lib/api-v2';
 import toast from 'react-hot-toast';
@@ -27,6 +27,38 @@ import { STAGE_LABEL } from '@flowzen/shared';
  * screen. Settings keeps the org-wide view for admins.
  */
 type ProposalFilter = 'LIVE' | 'CLOSED' | 'PROFORMAS' | 'DELETED';
+
+/** A proforma as the list sends it — see GET /proformas. */
+type ProformaRow = {
+  id: string;
+  number: string;
+  status: 'UNPAID' | 'PAID' | 'EXPIRED' | 'CANCELLED';
+  amount: number | string | null;
+  sourceType: 'PROPOSAL' | 'MONTH_CARD' | 'PROJECT';
+  raisedAt?: string | null;
+  createdAt: string;
+  company: { id: string; name: string };
+  milestone?: { id: string; label: string; project: { id: string; name: string } } | null;
+  invoice?: { id: string; number: string; status: string } | null;
+};
+
+/*
+ * Words, not enum values. It printed the raw status, and "UNPAID" in capitals
+ * next to "PAID" in capitals read as two shades of the same thing.
+ */
+const PROFORMA_LABEL: Record<string, string> = {
+  UNPAID: 'Unpaid',
+  PAID: 'Paid',
+  EXPIRED: 'Expired',
+  CANCELLED: 'Cancelled',
+};
+const PROFORMA_TONE: Record<string, string> = {
+  UNPAID: 'border-warning/40 bg-warning-tint text-warning-ink',
+  PAID: 'border-success/30 bg-success-tint text-success',
+  // Neither is money coming in, so neither wears a colour that says it is.
+  EXPIRED: 'border-border bg-subtle text-secondary',
+  CANCELLED: 'border-border bg-subtle text-secondary line-through',
+};
 
 interface ProposalItem {
   id: string;
@@ -144,7 +176,20 @@ export default function ProposalsPage() {
 
   const live = proposals.filter(p => !p.outcome);
   const closed = proposals.filter(p => p.outcome === 'WON' || p.outcome === 'LOST' || p.outcome === 'EXPIRED');
-  const proformas = proposals.flatMap(p => p.proformas.map(pf => ({ ...pf, proposal: p })));
+  /*
+   * Every proforma, from the proforma list — not from the proposals.
+   *
+   * This used to flatten the proformas nested under each proposal, which
+   * missed every one raised against a PROJECT MILESTONE: those belong to no
+   * proposal, so they never appeared here, and the "Proformas unpaid" tile
+   * counted without them. The export button on this same tab reads the real
+   * list, so the screen showed 3 and the file it exported had 4.
+   */
+  const { data: proformaData } = useQuery({
+    queryKey: ['proformas', 'all'],
+    queryFn: () => api.proformas.list(),
+  });
+  const proformas: ProformaRow[] = proformaData?.proformas ?? [];
 
   const liveValue = live.reduce((s, p) => s + Number(p.versions[0]?.value ?? 0), 0);
   // §8: "Discount given — version1.value − wonVersion.value." First ask
@@ -159,7 +204,10 @@ export default function ProposalsPage() {
       if (!v1 || !won) return s;
       return s + Math.max(0, Number(v1.value) - Number(won.value));
     }, 0);
-  const proformasUnpaid = proformas.filter(pf => pf.status === 'PENDING' || pf.status === 'UNPAID');
+  // UNPAID only. There is no PENDING status — this used to check for one — and
+  // an EXPIRED proforma is a request for money that lapsed, not money that is
+  // sitting there to be collected; it is shown in the list, marked, instead.
+  const proformasUnpaid = proformas.filter(pf => pf.status === 'UNPAID');
   const proformasUnpaidValue = proformasUnpaid.reduce((s, pf) => s + Number(pf.amount || 0), 0);
 
   const revised = live.filter(p => p.versions.length > 1);
@@ -288,24 +336,69 @@ export default function ProposalsPage() {
           <table className="w-full data-table">
             <thead>
               <tr className="border-b border-border">
-                <th className="eyebrow text-left">Company</th>
                 <th className="eyebrow text-left">Number</th>
+                <th className="eyebrow text-left">Company</th>
+                {/* What it asks to be paid for — a proposal, or one billing
+                    milestone of a project. Without this the list could not
+                    tell an advance on a build from a retainer quote. */}
+                <th className="eyebrow text-left">For</th>
+                <th className="eyebrow text-left">Raised</th>
                 <th className="eyebrow text-right">Amount</th>
                 <th className="eyebrow text-left">Status</th>
+                <th className="w-10" />
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {proformas.length === 0 ? (
-                <tr><td colSpan={4} className="px-5 py-12 text-center text-sm text-secondary">No proformas.</td></tr>
+                <tr><td colSpan={7} className="px-5 py-12 text-center text-sm text-secondary">No proformas.</td></tr>
               ) : proformas.map(pf => (
                 <tr key={pf.id} className="hover:bg-subtle transition-colors">
-                  <td className="font-semibold text-primary">{pf.proposal.company.name}</td>
-                  <td className="text-secondary">{pf.number}</td>
-                  <td className="font-semibold text-primary text-right">{formatMoney(pf.amount)}</td>
-                  <td className="">
-                    <span className={`text-micro font-medium px-2 py-0.5 rounded border ${
-                      pf.status === 'PAID' ? 'border-success/30 bg-success-tint text-success' : 'border-warning/40 bg-warning-tint text-warning-ink'
-                    }`}>{pf.status}</span>
+                  <td className="font-medium text-primary whitespace-nowrap">{pf.number}</td>
+                  <td>
+                    <Link
+                      href={`/companies/${pf.company.id}?tab=MONEY`}
+                      className="text-sm font-semibold text-primary hover:underline"
+                    >
+                      {pf.company.name}
+                    </Link>
+                  </td>
+                  <td className="text-secondary">
+                    {pf.milestone ? (
+                      <>
+                        {pf.milestone.project.name}
+                        <span className="block text-micro">{pf.milestone.label}</span>
+                      </>
+                    ) : pf.sourceType === 'MONTH_CARD' ? (
+                      'Retainer month'
+                    ) : (
+                      'Proposal'
+                    )}
+                  </td>
+                  <td className="text-secondary whitespace-nowrap">{formatDate(pf.raisedAt ?? pf.createdAt)}</td>
+                  <td className="font-semibold text-primary text-right whitespace-nowrap">
+                    {pf.amount == null ? '—' : formatMoney(pf.amount)}
+                  </td>
+                  <td>
+                    <span className={`text-micro font-medium px-2 py-0.5 rounded border ${PROFORMA_TONE[pf.status] ?? PROFORMA_TONE.UNPAID}`}>
+                      {PROFORMA_LABEL[pf.status] ?? pf.status}
+                    </span>
+                    {/* Once it has become a tax invoice, say which — that is
+                        the document the money is actually chased against. */}
+                    {pf.invoice && (
+                      <span className="block mt-0.5 text-micro text-secondary">→ {pf.invoice.number}</span>
+                    )}
+                  </td>
+                  <td className="text-right">
+                    {/* The document itself. A list of proformas you cannot
+                        open is a list of numbers to go looking for. */}
+                    <a
+                      href={api.proformas.pdfUrl(pf.id)}
+                      aria-label={`Download ${pf.number}`}
+                      title="Download PDF"
+                      className="inline-flex rounded-lg p-1.5 text-secondary transition-colors hover:bg-subtle hover:text-primary"
+                    >
+                      <Download className="h-4 w-4" />
+                    </a>
                   </td>
                 </tr>
               ))}
