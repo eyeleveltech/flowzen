@@ -89,6 +89,26 @@ beforeEach(() => {
   (prisma.organization.findUnique as any).mockResolvedValue(ORG);
   (prisma.organization.findFirst as any).mockResolvedValue(ORG);
   (prisma.activity.create as any).mockResolvedValue({});
+  /*
+   * The thread every question is now answered inside.
+   *
+   * Zen keeps the conversation server-side — it is what survives closing the
+   * panel, and it is what the question is answered WITH. `mockDeep` returns
+   * undefined for anything unmocked, so without these the route reads `.id`
+   * off nothing and the failure surfaces as a 500 that says nothing about
+   * threads.
+   */
+  (prisma.zenConversation.create as any).mockResolvedValue({ id: 'zen-thread-1' });
+  (prisma.zenConversation.findFirst as any).mockResolvedValue(null);
+  (prisma.zenConversation.update as any).mockResolvedValue({ id: 'zen-thread-1' });
+  (prisma.zenConversation.delete as any).mockResolvedValue({ id: 'zen-thread-1' });
+  (prisma.zenMessage.create as any).mockResolvedValue({ id: 'zen-msg-1' });
+  (prisma.zenMessage.count as any).mockResolvedValue(2);
+  // Nothing learned, so the prompt carries no memory block.
+  (prisma.zenMemory.findMany as any).mockResolvedValue([]);
+  (prisma.zenMemory.findFirst as any).mockResolvedValue(null);
+  (prisma.zenMemory.create as any).mockResolvedValue({ id: 'zen-mem-1' });
+  (prisma.zenMemory.count as any).mockResolvedValue(0);
   // Everything the context builder reads. An unmocked one returns undefined
   // and the builder throws before the provider is ever reached, which shows up as a
   // 500 and tells you nothing.

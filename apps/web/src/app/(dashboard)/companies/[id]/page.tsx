@@ -144,7 +144,20 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
    */
   const canDeletePermanently = pageConfig?.me.permissions?.includes('setup.admin') ?? false;
   const [removing, setRemoving] = useState(false);
+  /*
+   * Paid work needs a client. The server says so — a retainer or a project for
+   * somebody who has bought nothing is the contradiction §3 exists to stop.
+   */
   const canAddWork = canWrite && company?.status === 'CLIENT';
+  /*
+   * Sample work does not.
+   *
+   * It is the thing you make in ORDER to win them, so the commonest company to
+   * make one for is a prospect — and gating the button on CLIENT hid it from
+   * exactly that case. The server has allowed it since sample work existed;
+   * only the button was in the way.
+   */
+  const canAddSample = canWrite;
 
   // Add person modal
   const [isAddPersonOpen, setIsAddPersonOpen] = useState(false);
@@ -812,7 +825,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-micro text-white/80">{plural(sampleProjects.length, 'sample')}</span>
-                {canAddWork && (
+                {canAddSample && (
                   <Button
                     variant="secondary"
                     onClick={() => setCreatingSampleFor({ companyId: company.id, companyName: company.name })}
@@ -828,7 +841,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                   Nothing given away to {company.name} yet. A sample reel, a pilot design, a trial piece — record it
                   here and what it costs shows up against them.
                 </p>
-                {canAddWork && (
+                {canAddSample && (
                   <Button
                     variant="secondary"
                     className="mt-4"

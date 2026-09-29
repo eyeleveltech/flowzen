@@ -322,7 +322,10 @@ tasksRouter.get('/targets', requirePermission('work.own'), async (req: AuthReque
           projects: {
             where: { status: 'LIVE', deletedAt: null },
             orderBy: { name: 'asc' },
-            select: { id: true, name: true },
+            // Sample work is offered too — it is where real effort and real
+            // cost go, and tasks are how that gets recorded. It is labelled,
+            // so nobody files billable work against something unbilled.
+            select: { id: true, name: true, isSample: true },
           },
         },
       }),
@@ -371,7 +374,12 @@ tasksRouter.get('/targets', requirePermission('work.own'), async (req: AuthReque
         }
 
         for (const pr of c.projects) {
-          jobs.push({ key: pr.id, label: `Project — ${pr.name}`, workType: 'PROJECT', projectId: pr.id });
+          jobs.push({
+            key: pr.id,
+            label: pr.isSample ? `Sample — ${pr.name}` : `Project — ${pr.name}`,
+            workType: 'PROJECT',
+            projectId: pr.id,
+          });
         }
 
         return { id: c.id, name: c.name, jobs };

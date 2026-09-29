@@ -40,6 +40,7 @@ import { ErrorNote, Note } from '@/components/ui/empty-state';
 import { PageSkeleton } from '@/components/ui/skeleton-loaders';
 import { MailTab } from './components/MailTab';
 import { InternalWorkSection } from './components/InternalWorkSection';
+import { ZenMemorySection } from './components/ZenMemorySection';
 import { DocumentSettingsTab } from './components/DocumentSettingsTab';
 import { OnboardingTab } from './components/OnboardingTab';
 import { TrashTab } from './components/TrashTab';
@@ -693,6 +694,10 @@ export default function SettingsPage() {
                   )}
                 </div>
             </SectionCard>
+
+            {/* Beside the key that turns Zen on, because this is the other
+                half of trusting it: what it has picked up, in plain sight. */}
+            <ZenMemorySection />
 
             {canEdit && <SaveBar saving={saving} saved={saved} />}
           </form>

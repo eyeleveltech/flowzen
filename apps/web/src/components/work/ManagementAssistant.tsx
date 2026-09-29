@@ -26,9 +26,10 @@
  */
 
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
-import { Sparkles, CornerDownLeft, X, Mic, Square } from 'lucide-react';
+import { Sparkles, CornerDownLeft, X, Mic, Square, History, Plus, Trash2 } from 'lucide-react';
 import { api, ApiError, type TaskDraft } from '@/lib/api-v2';
 import { cn } from '@/lib/utils';
+import { useZenPageContext, describeContext } from '@/hooks/useZenPageContext';
 
 type Message = {
   id: number;
@@ -47,7 +48,17 @@ type Message = {
   proposed?: TaskDraft;
   /** Once pressed: the task exists, or the route refused and said why. */
   outcome?: { created: true } | { created: false; why: string };
+  /**
+   * The row this turn was stored as.
+   *
+   * Carried so that pressing Create can mark the draft acted on — otherwise
+   * reopening the thread tomorrow offers to create the same task again, and
+   * the second one looks just as convincing as the first.
+   */
+  storedId?: string;
 };
+
+type ThreadSummary = { id: string; title: string | null; updatedAt: string; _count: { messages: number } };
 
 const SUGGESTIONS = [
   'Which client is least profitable this month?',
@@ -55,6 +66,24 @@ const SUGGESTIONS = [
   'Which deals have gone quiet?',
   'Who is carrying the most late work?',
 ];
+
+/**
+ * What to offer on the screen they are actually on.
+ *
+ * A blank panel listing four questions about the whole business is the same
+ * panel everywhere, and it teaches nobody that Zen can see where they are
+ * standing. These say it by being answerable only here.
+ */
+const suggestionsFor = (here: string | null): string[] =>
+  here === 'this project'
+    ? ['Add a task here for Friday', 'What is left on this project?', 'What has it cost so far?']
+    : here === 'this retainer'
+      ? ['Add a task to this month', 'What is outstanding this month?', 'Has this month been invoiced?']
+      : here === 'this internal work'
+        ? ['Add a task here for next week', 'What is still open on this?']
+        : here === 'this client'
+          ? ['What work is running for them?', 'What do they owe us?', 'When did we last speak to them?']
+          : SUGGESTIONS;
 
 /**
  * What to say while Zen is looking something up.
@@ -116,16 +145,73 @@ export function ManagementAssistant({
   const [canDictate, setCanDictate] = useState(false);
   /** Which card is mid-create, so its button can say so and refuse a second click. */
   const [creating, setCreating] = useState<number | null>(null);
+  /*
+   * The thread this belongs to.
+   *
+   * The conversation used to live in this component and die with it — close
+   * the panel and the thread was gone, including the reasoning behind a task
+   * that was half arranged. The server keeps it now; this is the handle.
+   */
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [threads, setThreads] = useState<ThreadSummary[]>([]);
+  const [showThreads, setShowThreads] = useState(false);
+  const [loadingThread, setLoadingThread] = useState(false);
+
+  /*
+   * Where they are standing — a route and an id, never the page's data.
+   *
+   * It is what makes "add a task here" resolvable without naming the client
+   * out loud, which was the thing that made the panel slower than the form it
+   * was meant to replace.
+   */
+  const page = useZenPageContext();
+  const here = describeContext(page);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const nextId = useRef(1);
+  /** The live message list, for callbacks that must not re-create as it grows. */
+  const messagesRef = useRef<Message[]>([]);
   const recognition = useRef<SpeechRecognitionLike | null>(null);
 
   useEffect(() => setCanDictate(Boolean(getRecognition())), []);
   useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+  useEffect(() => {
     if (open) inputRef.current?.focus();
   }, [open]);
+
+  /*
+   * Open where you left off.
+   *
+   * The most recent thread, loaded in full, scrolled to the end. Not a fresh
+   * blank panel: a conversation you were half way through is the commonest
+   * reason to open this again, and starting over is the one thing that makes
+   * the history pointless.
+   */
+  useEffect(() => {
+    if (!open || !configured) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await api.assistant.threads();
+        if (cancelled) return;
+        setThreads(res.threads);
+        // Only when this panel has nothing in it — reopening mid-conversation
+        // must not throw away what is on screen.
+        if (res.threads.length > 0 && messages.length === 0 && !conversationId) {
+          await openThread(res.threads[0].id);
+        }
+      } catch {
+        // The panel works without its history; it just starts blank.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, configured]);
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages, busy]);
@@ -145,6 +231,60 @@ export function ManagementAssistant({
       setListening(false);
     }
   }, [open]);
+
+  /**
+   * A stored thread, back on screen as it was.
+   *
+   * The draft card comes back with it — kept on the message rather than
+   * re-derived from the prose, because a draft worked out again from a
+   * sentence is a draft that can come back different. `actedAt` is what stops
+   * a task being offered twice.
+   */
+  const openThread = useCallback(async (id: string) => {
+    setLoadingThread(true);
+    try {
+      const res = await api.assistant.thread(id);
+      setConversationId(res.thread.id);
+      setShowThreads(false);
+      setMessages(
+        res.thread.messages.map((m: any) => ({
+          id: nextId.current++,
+          from: m.role === 'USER' ? ('you' as const) : ('assistant' as const),
+          text: m.text,
+          at: new Date(m.createdAt),
+          storedId: m.id,
+          ...(m.draft ? { proposed: m.draft as TaskDraft } : {}),
+          ...(m.actedAt ? { outcome: { created: true as const } } : {}),
+        })),
+      );
+    } catch {
+      setConversationId(null);
+      setMessages([]);
+    } finally {
+      setLoadingThread(false);
+    }
+  }, []);
+
+  /** A blank one. The old thread stays where it is, in the list. */
+  const startFresh = useCallback(() => {
+    setConversationId(null);
+    setMessages([]);
+    setShowThreads(false);
+    inputRef.current?.focus();
+  }, []);
+
+  const removeThread = useCallback(
+    async (id: string) => {
+      try {
+        await api.assistant.removeThread(id);
+        setThreads((t) => t.filter((x) => x.id !== id));
+        if (id === conversationId) startFresh();
+      } catch {
+        // Nothing to say — the row simply stays.
+      }
+    },
+    [conversationId, startFresh],
+  );
 
   const say = (from: Message['from'], text: string, failed = false) =>
     setMessages((m) => [...m, { id: nextId.current++, from, text, at: new Date(), failed }]);
@@ -176,6 +316,13 @@ export function ManagementAssistant({
       try {
         await api.assistant.askStreaming(q, {
           history: priorTurns,
+          // Continues the thread when there is one; the server opens a new one
+          // and sends its id back when there is not.
+          ...(conversationId ? { conversationId } : {}),
+          page,
+          onThread: (id) => setConversationId(id),
+          onSaved: (storedId) =>
+            setMessages((m) => m.map((msg) => (msg.id === answerId ? { ...msg, storedId } : msg))),
           onTool: (name) => setLookingAt(LOOKING_AT[name] ?? 'having a look'),
           onDraft: (proposed) =>
             setMessages((m) => m.map((msg) => (msg.id === answerId ? { ...msg, proposed } : msg))),
@@ -194,9 +341,15 @@ export function ManagementAssistant({
         setBusy(false);
         setLookingAt(null);
         inputRef.current?.focus();
+        // The list's titles and order come off the server, so it is refreshed
+        // rather than patched — a first question also names the thread.
+        void api.assistant
+          .threads()
+          .then((r) => setThreads(r.threads))
+          .catch(() => {});
       }
     },
-    [busy, messages],
+    [busy, messages, conversationId, page],
   );
 
   /**
@@ -210,8 +363,19 @@ export function ManagementAssistant({
   const confirm = useCallback(async (id: number, body: TaskDraft['body']) => {
     setCreating(id);
     try {
-      await api.tasks.create(body);
+      const made = await api.tasks.create(body);
       setMessages((m) => m.map((msg) => (msg.id === id ? { ...msg, outcome: { created: true } } : msg)));
+      /*
+       * Written down as done.
+       *
+       * Without this the thread reopens tomorrow still offering to create the
+       * task, and a second one looks exactly as convincing as the first. The
+       * created id goes with it, so the record says what the draft became.
+       */
+      const stored = messagesRef.current.find((msg) => msg.id === id)?.storedId;
+      if (stored) {
+        void api.assistant.markActed(stored, (made as { task?: { id: string } })?.task?.id).catch(() => {});
+      }
     } catch (e) {
       // Shown on the card rather than as a new message: the refusal is about
       // this task, and reads as nonsense three bubbles further down.
@@ -274,18 +438,55 @@ export function ManagementAssistant({
           </span>
           <div className="min-w-0">
             <h2 className="text-sm font-semibold text-primary">Zen</h2>
-            <p className="text-micro text-secondary">
-              {busy ? (lookingAt ?? 'typing…') : configured ? 'ask me anything' : 'not switched on'}
+            {/* What it is doing, or what it can see. `here` is said out loud
+                rather than left implicit: a panel that silently knows which
+                project you are on is a panel that surprises you. */}
+            <p className="truncate text-micro text-secondary">
+              {busy
+                ? (lookingAt ?? 'typing…')
+                : !configured
+                  ? 'not switched on'
+                  : here
+                    ? `looking at ${here} with you`
+                    : 'ask me anything'}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="ml-auto rounded-lg p-1 text-secondary transition-colors hover:bg-subtle hover:text-primary"
-          >
-            <X className="h-4 w-4" />
-          </button>
+
+          <div className="ml-auto flex shrink-0 items-center gap-0.5">
+            {configured && (
+              <>
+                <button
+                  type="button"
+                  onClick={startFresh}
+                  aria-label="New conversation"
+                  title="New conversation"
+                  className="rounded-lg p-1.5 text-secondary transition-colors hover:bg-subtle hover:text-primary"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowThreads((v) => !v)}
+                  aria-label="Earlier conversations"
+                  title="Earlier conversations"
+                  className={cn(
+                    'rounded-lg p-1.5 transition-colors hover:bg-subtle hover:text-primary',
+                    showThreads ? 'bg-subtle text-primary' : 'text-secondary',
+                  )}
+                >
+                  <History className="h-4 w-4" />
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="rounded-lg p-1.5 text-secondary transition-colors hover:bg-subtle hover:text-primary"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </header>
 
         {!configured ? (
@@ -300,14 +501,64 @@ export function ManagementAssistant({
           </div>
         ) : (
           <>
-            <div className="flex-1 space-y-3 overflow-y-auto bg-subtle/30 px-4 py-4">
-              {messages.length === 0 && (
+            {/*
+              Earlier conversations.
+
+              Over the thread rather than beside it: the panel is one column on
+              a phone, and a sidebar at this width leaves neither half usable.
+            */}
+            {showThreads && (
+              <div className="flex-1 overflow-y-auto border-b border-border bg-white">
+                {threads.length === 0 ? (
+                  <p className="px-4 py-6 text-center text-xs text-secondary">
+                    Nothing yet. Conversations are kept as you have them.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-border">
+                    {threads.map((t) => (
+                      <li key={t.id} className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void openThread(t.id)}
+                          className={cn(
+                            'min-w-0 flex-1 px-4 py-3 text-left transition-colors hover:bg-subtle',
+                            t.id === conversationId && 'bg-subtle',
+                          )}
+                        >
+                          <p className="truncate text-sm text-primary">{t.title ?? 'Untitled'}</p>
+                          <p className="mt-0.5 text-micro text-secondary">
+                            {new Date(t.updatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                            {' · '}
+                            {Math.floor(t._count.messages / 2) || 1} exchange
+                            {Math.floor(t._count.messages / 2) === 1 ? '' : 's'}
+                          </p>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void removeThread(t.id)}
+                          aria-label={`Delete ${t.title ?? 'this conversation'}`}
+                          className="mr-2 shrink-0 rounded-lg p-1.5 text-secondary transition-colors hover:bg-danger-tint hover:text-danger"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            <div className={cn('flex-1 space-y-3 overflow-y-auto bg-subtle/30 px-4 py-4', showThreads && 'hidden')}>
+              {loadingThread && (
+                <p className="py-6 text-center text-xs text-secondary">Bringing that back…</p>
+              )}
+              {messages.length === 0 && !loadingThread && (
                 <div className="space-y-3 py-2">
                   <p className="text-center text-xs text-secondary">
                     Ask about the money, the pipeline, the work, or who is carrying it.
                   </p>
                   <div className="flex flex-col gap-2">
-                    {SUGGESTIONS.map((s) => (
+                    {suggestionsFor(here).map((s) => (
                       <button
                         key={s}
                         type="button"
@@ -319,7 +570,7 @@ export function ManagementAssistant({
                     ))}
                   </div>
                   <p className="pt-1 text-center text-micro text-secondary">
-                    Answers come from real figures, which are sent to Google to produce them.
+                    Answers come from real figures, which are sent to whichever AI is set in Settings to produce them.
                   </p>
                 </div>
               )}
