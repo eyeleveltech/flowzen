@@ -106,6 +106,8 @@ projectsRouter.get('/', requirePermission('work.all'), async (req: AuthRequest, 
         // Not money, so not masked: whether work was given away is a fact
         // about the work, and the list has to label it either way.
         isSample: p.isSample,
+        // A rate, not a figure, so it is not masked with the money.
+        gstPercent: p.gstPercent,
         actualCostTotal: canSeeFigures ? actualCostTotal : null,
         ...(canSeeFigures ? { profit, costRisk: risk } : {}),
         percentComplete: progress.percent,
@@ -433,6 +435,12 @@ const projectCreateSchema = z.object({
    * number on it is how a project ends up unbillable and nobody notices.
    */
   quotedValue: z.number().min(0, 'Quoted value cannot be negative').optional().default(0),
+  /**
+   * The GST rate charged on this. Kept BESIDE the value, never folded into it:
+   * the value is revenue, and GST charged to a client is collected for the
+   * government. Null is "not said", which is not the same as 0%.
+   */
+  gstPercent: z.number().int().min(0).max(28).optional().nullable(),
   /** Work done to win somebody, with nothing to invoice at the end of it. */
   isSample: z.boolean().optional().default(false),
   /*
@@ -462,7 +470,7 @@ projectsRouter.post('/', requirePermission('company.write'), async (req: AuthReq
     }
 
     const orgId = req.user!.organizationId;
-    const { companyId, name, quotedValue, isSample, startDate, endDate, ownerId, priority, description, milestones, sourceProposalId } = parsed.data;
+    const { companyId, name, quotedValue, gstPercent, isSample, startDate, endDate, ownerId, priority, description, milestones, sourceProposalId } = parsed.data;
 
     /*
      * Nought is allowed on any project, not only a sample.
@@ -570,6 +578,8 @@ projectsRouter.post('/', requirePermission('company.write'), async (req: AuthReq
           companyId,
           name: name.trim(),
           quotedValue,
+          // A sample is not billed, so it carries no rate to bill at.
+          gstPercent: isSample ? null : (gstPercent ?? null),
           isSample,
           startDate: new Date(start),
           endDate: new Date(end),
@@ -628,6 +638,12 @@ const projectEditSchema = z.object({
    * field could not see `isSample`, so the rule had to move to where it can.
    */
   quotedValue: z.number().min(0, 'Quoted value cannot be negative').optional(),
+  /**
+   * The GST rate charged on this. Kept BESIDE the value, never folded into it:
+   * the value is revenue, and GST charged to a client is collected for the
+   * government. Null is "not said", which is not the same as 0%.
+   */
+  gstPercent: z.number().int().min(0).max(28).optional().nullable(),
   startDate: z.string().min(1).optional(),
   endDate: z.string().min(1).optional(),
   ownerId: z.string().min(1).optional(),
@@ -663,7 +679,7 @@ projectsRouter.patch('/:id', requirePermission('company.write'), async (req: Aut
       return;
     }
 
-    const { name, quotedValue, startDate, endDate, ownerId, status, priority, description, isSample } = parsed.data;
+    const { name, quotedValue, gstPercent, startDate, endDate, ownerId, status, priority, description, isSample } = parsed.data;
 
     /*
      * ─── Switching between sample and paid ─────────────────────────────────
@@ -728,6 +744,13 @@ projectsRouter.patch('/:id', requirePermission('company.write'), async (req: Aut
         ...(priority !== undefined ? { priority } : {}),
         ...(description !== undefined ? { description: description || null } : {}),
         ...(isSample !== undefined ? { isSample } : {}),
+        // Turning something into a sample takes its rate with it — there is
+        // nothing to charge GST on — and otherwise the rate is what was sent.
+        ...(isSample === true
+          ? { gstPercent: null }
+          : gstPercent !== undefined
+            ? { gstPercent: gstPercent ?? null }
+            : {}),
       },
     });
 

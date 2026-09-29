@@ -43,6 +43,7 @@ import { NewProformaModal } from '@/components/clients/NewProformaModal';
 import { NewWorkTaskModal } from '@/components/work/NewWorkTaskModal';
 import { NewWorkCostModal } from '@/components/work/NewWorkCostModal';
 import { EditCostModal } from '@/components/work/EditCostModal';
+import { GstAmountFields } from '@/components/work/GstAmountFields';
 import { MilestoneInvoiceModal, type MilestoneForBilling } from '@/components/work/MilestoneInvoiceModal';
 import { PRIORITY_CONFIG, getPriorityDot, getPriorityBadge, getPriorityLabel } from '@/lib/priority';
 import { personOptions } from '@/lib/people';
@@ -108,6 +109,8 @@ type ProjectDetail = {
   quotedValue: string | number | null;
   /** Work given away — nothing quoted, nothing billed, costs still counted. */
   isSample?: boolean;
+  /** The GST charged on the quote, beside it. Null is "not said". */
+  gstPercent?: number | null;
   actualCostTotal: string | number | null;
   /** Absent without money.figures — the server does not send it. */
   profit?: {
@@ -602,10 +605,19 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             milestone table stating a different percentage that IS about money. */}
         {/* ₹0 reads as "we charged nothing and that is the deal"; "Sample
             work" reads as the decision it actually was. */}
+        {/*
+          The quote stays the revenue — before GST, which is what every figure
+          beside it is measured against. The client's total is the note, so
+          the two are never read as the same number.
+        */}
         <StatTile
           label={project.isSample ? 'Charged' : 'Quoted'}
           value={project.isSample ? 'Nothing — sample' : money(project.quotedValue)}
-          note={`${project.percentComplete}% of the work done`}
+          note={
+            !project.isSample && project.gstPercent && Number(project.quotedValue) > 0
+              ? `+${project.gstPercent}% GST = ${money(Number(project.quotedValue) * (1 + project.gstPercent / 100))} · ${project.percentComplete}% done`
+              : `${project.percentComplete}% of the work done`
+          }
         />
         {/*
           A number, including when the number is nought.
@@ -1287,6 +1299,8 @@ function EditProjectModal({
 }) {
   const [name, setName] = useState('');
   const [quotedValue, setQuotedValue] = useState('');
+  /** Beside the quote, never folded into it — see NewProjectModal. */
+  const [gstPercent, setGstPercent] = useState('');
   /*
    * Moving work between given away and charged for.
    *
@@ -1344,6 +1358,7 @@ function EditProjectModal({
     if (!project) return;
     setName(project.name);
     setQuotedValue(project.quotedValue != null ? String(Number(project.quotedValue)) : '');
+    setGstPercent(project.gstPercent != null ? String(project.gstPercent) : '');
     setStartDate(project.startDate.slice(0, 10));
     setEndDate(project.endDate.slice(0, 10));
     setOwnerId(project.ownerId);
@@ -1378,6 +1393,7 @@ function EditProjectModal({
         name: name.trim(),
         isSample,
         quotedValue: isSample ? 0 : quotedValue ? Number(quotedValue) : undefined,
+        gstPercent: isSample || !gstPercent ? null : Number(gstPercent),
         startDate,
         endDate,
         ownerId: ownerId || undefined,
@@ -1431,9 +1447,18 @@ function EditProjectModal({
       <form onSubmit={submit}>
         <ModalBody className="space-y-4">
           <Field label="Project name" value={name} onChange={setName} required />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Quoted value (₹)" value={quotedValue} onChange={setQuotedValue} type="number" required />
-          </div>
+          {!isSample && (
+            <GstAmountFields
+              mode="revenue"
+              label="Quoted value (₹)"
+              amount={quotedValue}
+              onAmountChange={setQuotedValue}
+              gstPercent={gstPercent}
+              onGstChange={setGstPercent}
+              required={false}
+              hint="Before GST. It can be nought."
+            />
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Start date" value={startDate} onChange={setStartDate} type="date" required />
             <Field label="Expected end" value={endDate} onChange={setEndDate} type="date" required />

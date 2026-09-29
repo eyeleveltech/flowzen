@@ -82,6 +82,8 @@ type Retainer = {
   companyId: string;
   company: { id: string; name: string; vertical: string; city: string };
   monthlyValue: string | number | null;
+  /** The GST on the fee, beside it. Null is "not said". */
+  gstPercent?: number | null;
   startDate: string;
   termMonths: number | null;
   renewalDate: string | null;
@@ -871,11 +873,18 @@ export default function RetainerMonthCardPage() {
               dense
               label="Fee"
               value={canEnterMoney ? money(revenue) : 'Hidden'}
+              /* The fee is the revenue, before GST. What the client is billed
+                 is said in the note, so the two cannot be read as one. */
               note={
                 canEnterMoney
-                  ? monthCard.invoice
-                    ? `invoiced ${date(monthCard.invoice.dueAt)}`
-                    : 'not invoiced yet'
+                  ? [
+                      retainer.gstPercent && revenue
+                        ? `+${retainer.gstPercent}% GST = ${money(Number(revenue) * (1 + retainer.gstPercent / 100))}`
+                        : null,
+                      monthCard.invoice ? `invoiced ${date(monthCard.invoice.dueAt)}` : 'not invoiced yet',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')
                   : 'needs the money figures permission'
               }
             />

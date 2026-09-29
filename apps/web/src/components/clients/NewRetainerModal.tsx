@@ -18,6 +18,7 @@ import { useTeamMembers } from '@/hooks/queries';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
+import { GstAmountFields } from '@/components/work/GstAmountFields';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { personOptions } from '@/lib/people';
 
@@ -59,6 +60,8 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill, deals = []
   const team = useTeamMembers();
   const [companyId, setCompanyId] = useState('');
   const [monthlyValue, setMonthlyValue] = useState('');
+  /** The GST on the monthly fee, beside it, never in it — see NewProjectModal. */
+  const [gstPercent, setGstPercent] = useState('18');
   const [startDate, setStartDate] = useState('');
   const [termMonths, setTermMonths] = useState('');
   const [firstProjectName, setFirstProjectName] = useState('');
@@ -78,6 +81,7 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill, deals = []
     if (!open) return;
     setCompanyId(prefill?.companyId ?? '');
     setMonthlyValue(prefill?.monthlyValue != null ? String(prefill.monthlyValue) : '');
+    setGstPercent('18');
     setStartDate(new Date().toISOString().slice(0, 10));
     setTermMonths('');
     setFirstProjectName('');
@@ -100,6 +104,7 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill, deals = []
       const res = await api.retainers.create({
         companyId,
         monthlyValue: Number(monthlyValue),
+        gstPercent: gstPercent ? Number(gstPercent) : null,
         startDate,
         termMonths: termMonths ? Number(termMonths) : undefined,
         ownerId: ownerId || undefined,
@@ -173,7 +178,16 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill, deals = []
               hint="Linking it carries the figure over and ties the work back to the deal that sold it."
             />
           )}
-          <Field label="Monthly value (₹)" value={monthlyValue} onChange={setMonthlyValue} type="number" required />
+          <GstAmountFields
+            mode="revenue"
+            label="Monthly value (₹)"
+            amount={monthlyValue}
+            onAmountChange={setMonthlyValue}
+            gstPercent={gstPercent}
+            onGstChange={setGstPercent}
+            required
+            hint="Before GST — what each month earns."
+          />
           {/* Optional, and the first thing you see on the retainer afterwards.
               Left blank it falls back to "Monthly Retainer Work" -- a name
               nobody chose, which is what this field exists to avoid. */}

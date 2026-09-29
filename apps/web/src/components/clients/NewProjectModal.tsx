@@ -23,6 +23,7 @@ import { Field, FieldSelect } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { PRIORITY_CONFIG } from '@/lib/priority';
 import { personOptions } from '@/lib/people';
+import { GstAmountFields } from '@/components/work/GstAmountFields';
 import type { UnfulfilledDeal } from '@/components/clients/NewRetainerModal';
 
 type Prefill = {
@@ -87,6 +88,16 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [],
   const [companyId, setCompanyId] = useState('');
   const [name, setName] = useState('');
   const [quotedValue, setQuotedValue] = useState('');
+  /*
+   * The GST charged on the quote, kept BESIDE it.
+   *
+   * 18 to start with, because that is the rate on services and the rate every
+   * proforma here already defaults to — a blank box would have been the wrong
+   * answer for nearly every project. The quote itself stays the figure before
+   * tax: GST charged to a client is collected for the government, and folding
+   * it in would inflate this project's margin by the rate.
+   */
+  const [gstPercent, setGstPercent] = useState('18');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [ownerId, setOwnerId] = useState('');
@@ -105,7 +116,8 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [],
    * and the billing split — go away rather than sitting there asking to be
    * filled in with nought.
    */
-  const [isSample, setIsSample] = useState(forceSample);
+  // Fixed by the screen that opened this — the Sample work card, or not.
+  const isSample = forceSample;
   const [customRows, setCustomRows] = useState<CustomRow[]>([blankRow(), blankRow()]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +131,7 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [],
     setCompanyId(prefill?.companyId ?? '');
     setName('');
     setQuotedValue(prefill?.quotedValue != null ? String(prefill.quotedValue) : '');
+    setGstPercent('18');
     setSourceProposalId(prefill?.sourceProposalId ?? '');
     setStartDate('');
     setEndDate('');
@@ -126,7 +139,6 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [],
     setPriority('MEDIUM');
     setDescription('');
     setBilling('STANDARD');
-    setIsSample(forceSample);
     setCustomRows([blankRow(), blankRow()]);
     setError(null);
     if (!prefill) {
@@ -229,6 +241,7 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [],
         companyId,
         name: name.trim(),
         quotedValue: isSample ? 0 : quoted,
+        gstPercent: isSample || !gstPercent ? null : Number(gstPercent),
         isSample,
         startDate,
         endDate,
@@ -299,38 +312,28 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [],
           <Field label="Project name" value={name} onChange={setName} required />
 
           {/*
-            Asked before the money, because it decides whether there is any —
-            unless the screen that opened this already answered it.
-          */}
-          {!forceSample && (
-          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-subtle/40 p-3">
-            <input
-              type="checkbox"
-              checked={isSample}
-              onChange={(e) => setIsSample(e.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
-            />
-            <span className="min-w-0">
-              <span className="block text-sm font-medium text-primary">This is sample work</span>
-              <span className="mt-0.5 block text-xs text-secondary">
-                Work given away — a sample, a pilot, a trial piece. Nothing is quoted and nothing is billed, but what it
-                costs is tracked, so you can see what winning this client took.
-              </span>
-            </span>
-          </label>
-          )}
+            No "this is sample work" tick here.
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            {!isSample && (
-              <Field
-                label="Quoted value (₹)"
-                value={quotedValue}
-                onChange={setQuotedValue}
-                type="number"
-                hint="Leave it blank if there is no price yet, or it is nought."
-              />
-            )}
-          </div>
+            There was one, and it duplicated the Sample work card's own button,
+            which opens this same form with the question already answered. Two
+            ways to make a sample — one of them a checkbox inside the form for
+            priced work — meant a sample could be started from the Projects
+            card and then sit in a list headed "one-off work, whole contract".
+            The card you press decides what you are making.
+          */}
+
+          {!isSample && (
+            <GstAmountFields
+              mode="revenue"
+              label="Quoted value (₹)"
+              amount={quotedValue}
+              onAmountChange={setQuotedValue}
+              gstPercent={gstPercent}
+              onGstChange={setGstPercent}
+              required={false}
+              hint="Before GST. Leave it blank if there is no price yet."
+            />
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               label="Start date"

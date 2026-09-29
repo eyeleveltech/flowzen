@@ -29,11 +29,14 @@ import { Button } from '@/components/ui/button';
 import { Field, FieldSelect, FieldCheckbox } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { personOptions } from '@/lib/people';
+import { GstAmountFields } from '@/components/work/GstAmountFields';
 import { formatDate, plural } from '@/lib/utils';
 
 type Retainer = {
   id: string;
   monthlyValue: string | number | null;
+  /** The GST on the fee, if one was recorded. Null is "not said". */
+  gstPercent?: number | null;
   startDate: string;
   termMonths: number | null;
   renewalDate: string | null;
@@ -60,6 +63,7 @@ export function EditRetainerModal({ retainer, companyName, openMonthLabel, onSav
     startDate: retainer.startDate?.slice(0, 10) ?? '',
     termMonths: retainer.termMonths != null ? String(retainer.termMonths) : '',
     ownerId: retainer.owner?.id ?? retainer.ownerId ?? '',
+    gstPercent: retainer.gstPercent != null ? String(retainer.gstPercent) : '',
   };
 
   const [monthlyValue, setMonthlyValue] = useState(original.monthlyValue);
@@ -67,13 +71,19 @@ export function EditRetainerModal({ retainer, companyName, openMonthLabel, onSav
   const [termMonths, setTermMonths] = useState(original.termMonths);
   const [ownerId, setOwnerId] = useState(original.ownerId);
   const [repriceOpenMonth, setRepriceOpenMonth] = useState(true);
+  const [gstPercent, setGstPercent] = useState(original.gstPercent);
+  // Its own flag: changing the rate is a real change, and it must not be
+  // mistaken for a change to the fee — that one asks about repricing the
+  // month, and a new rate on the same fee has nothing to reprice.
+  const gstChanged = gstPercent !== original.gstPercent;
 
   const rateChanged = monthlyValue !== original.monthlyValue && Number(monthlyValue) > 0;
   const changed =
     rateChanged ||
     startDate !== original.startDate ||
     termMonths !== original.termMonths ||
-    ownerId !== original.ownerId;
+    ownerId !== original.ownerId ||
+    gstChanged;
 
   const valueIsSound = Number(monthlyValue) > 0;
   const canSave = changed && valueIsSound && Boolean(startDate) && !busy;
@@ -95,6 +105,7 @@ export function EditRetainerModal({ retainer, companyName, openMonthLabel, onSav
     try {
       const res = await api.retainers.update(retainer.id, {
         ...(rateChanged ? { monthlyValue: Number(monthlyValue), repriceOpenMonth } : {}),
+        ...(gstChanged ? { gstPercent: gstPercent ? Number(gstPercent) : null } : {}),
         ...(startDate !== original.startDate ? { startDate } : {}),
         ...(termMonths !== original.termMonths ? { termMonths: termMonths ? Number(termMonths) : null } : {}),
         ...(ownerId !== original.ownerId ? { ownerId } : {}),
@@ -124,14 +135,20 @@ export function EditRetainerModal({ retainer, companyName, openMonthLabel, onSav
         <ScrollingModalBody className="space-y-4">
           {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
 
-          <Field
+          <GstAmountFields
+            mode="revenue"
             label="Monthly value (₹)"
-            value={monthlyValue}
-            onChange={setMonthlyValue}
-            type="number"
+            amount={monthlyValue}
+            onAmountChange={setMonthlyValue}
+            gstPercent={gstPercent}
+            onGstChange={setGstPercent}
             required
             disabled={busy}
-            error={monthlyValue !== '' && !valueIsSound ? 'A retainer has to be worth something.' : undefined}
+            hint={
+              monthlyValue !== '' && !valueIsSound
+                ? 'A retainer has to be worth something.'
+                : 'Before GST — what each month earns.'
+            }
           />
 
           {rateChanged && (

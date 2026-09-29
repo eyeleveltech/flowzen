@@ -53,6 +53,9 @@ export function GstAmountFields({
   onGstChange,
   disabled,
   label = 'Amount (₹)',
+  mode = 'cost',
+  required,
+  hint,
 }: {
   /** The figure on the bill, BEFORE tax. */
   amount: string;
@@ -61,6 +64,23 @@ export function GstAmountFields({
   onGstChange: (v: string) => void;
   disabled?: boolean;
   label?: string;
+  /**
+   * Which side of the ledger this figure is on, because GST means opposite
+   * things on each.
+   *
+   * `cost` — money going out. What left the account is the total, tax
+   * included, and that is what gets recorded.
+   *
+   * `revenue` — a quote or a retainer fee. The GST charged on it was never the
+   * studio's money: it is collected for the government and paid over. So the
+   * figure recorded is the one BEFORE tax, and the total is shown only as
+   * what the client will pay. Recording the total would inflate every margin
+   * in the app by the rate.
+   */
+  mode?: 'cost' | 'revenue';
+  /** Revenue is not always known yet — a quote can be logged unpriced. */
+  required?: boolean;
+  hint?: string;
 }) {
   const gross = grossFromBase(amount, gstPercent);
   const hasGst = Number(gstPercent) > 0 && Number(amount) > 0;
@@ -73,9 +93,9 @@ export function GstAmountFields({
           value={amount}
           onChange={onAmountChange}
           type="number"
-          required
+          required={required ?? mode === 'cost'}
           disabled={disabled}
-          hint="Before tax, as printed on the bill."
+          hint={hint ?? (mode === 'revenue' ? 'Before GST — what the work earns.' : 'Before tax, as printed on the bill.')}
         />
         <FieldSelect
           label="GST"
@@ -87,12 +107,15 @@ export function GstAmountFields({
         />
       </div>
 
-      {/* Said out loud, because this is the number that will be recorded and
-          the one somebody will later match against a bank statement. */}
+      {/* Said out loud — and for the two sides it says different things,
+          because the recorded figure is a different one. */}
       {hasGst && (
         <p className="rounded-xl border border-border bg-subtle/40 px-3 py-2 text-xs text-secondary">
           {formatMoney(Number(amount))} + {gstPercent}% GST ={' '}
-          <span className="font-semibold text-primary">{formatMoney(gross)}</span> — this is what gets recorded.
+          <span className="font-semibold text-primary">{formatMoney(gross)}</span>
+          {mode === 'revenue'
+            ? ` — what the client pays. ${formatMoney(Number(amount))} is the revenue; the GST is collected for the government.`
+            : ' — this is what gets recorded.'}
         </p>
       )}
     </div>

@@ -635,6 +635,14 @@ model Retainer {
   organizationId   String
   companyId        String
   monthlyValue     Decimal        @db.Decimal(12, 2)
+  /// The GST rate charged on this, when one has been said.
+  ///
+  /// Recorded BESIDE the value, not inside it. The value is revenue and GST
+  /// charged to a client never was — it is collected for the government and
+  /// paid over — so folding it in would inflate every margin by the rate. The
+  /// total the client pays is value × (1 + gstPercent/100), worked out when
+  /// shown. Null means nobody said, which is not the same as 0%.
+  gstPercent       Int?
   startDate        DateTime       @db.Date
   termMonths       Int?
   renewalDate      DateTime?      @db.Date
@@ -808,6 +816,14 @@ model Project {
   companyId        String
   name             String
   quotedValue      Decimal       @db.Decimal(12, 2)
+  /// The GST rate charged on this, when one has been said.
+  ///
+  /// Recorded BESIDE the value, not inside it. The value is revenue and GST
+  /// charged to a client never was — it is collected for the government and
+  /// paid over — so folding it in would inflate every margin by the rate. The
+  /// total the client pays is value × (1 + gstPercent/100), worked out when
+  /// shown. Null means nobody said, which is not the same as 0%.
+  gstPercent       Int?
   estimatedCost    Decimal?      @db.Decimal(12, 2)
   startDate        DateTime      @db.Date
   endDate          DateTime      @db.Date

@@ -247,6 +247,12 @@ retainersRouter.get('/', requirePermission('work.all'), async (req: AuthRequest,
 const retainerCreateSchema = z.object({
   companyId: z.string().min(1, 'Company is required'),
   monthlyValue: z.number().positive('Monthly value must be positive'),
+  /**
+   * The GST rate charged on this. Kept BESIDE the value, never folded into it:
+   * the value is revenue, and GST charged to a client is collected for the
+   * government. Null is "not said", which is not the same as 0%.
+   */
+  gstPercent: z.number().int().min(0).max(28).optional().nullable(),
   startDate: z.string().min(1, 'Start date is required'),
   termMonths: z.number().optional().nullable(),
   ownerId: z.string().optional(),
@@ -274,7 +280,7 @@ retainersRouter.post('/', requirePermission('company.write'), async (req: AuthRe
     }
 
     const orgId = req.user!.organizationId;
-    const { companyId, monthlyValue, startDate, termMonths, ownerId, firstProjectName, sourceProposalId } = parsed.data;
+    const { companyId, monthlyValue, gstPercent, startDate, termMonths, ownerId, firstProjectName, sourceProposalId } = parsed.data;
 
     /*
      * ─── The gate, and why it could not be the proposal alone ──────────────
@@ -355,6 +361,7 @@ retainersRouter.post('/', requirePermission('company.write'), async (req: AuthRe
         organizationId: orgId,
         companyId,
         monthlyValue,
+        gstPercent: gstPercent ?? null,
         startDate: new Date(startDate),
         termMonths: termMonths || null,
         renewalDate,
@@ -1221,6 +1228,12 @@ retainersRouter.post('/:id/stop', requirePermission('company.write'), async (req
 const retainerEditSchema = z
   .object({
     monthlyValue: z.number().positive('Monthly value must be positive').optional(),
+    /**
+     * The GST rate charged on this. Kept BESIDE the value, never folded into it:
+     * the value is revenue, and GST charged to a client is collected for the
+     * government. Null is "not said", which is not the same as 0%.
+     */
+    gstPercent: z.number().int().min(0).max(28).optional().nullable(),
     startDate: z.string().min(1).optional(),
     termMonths: z.number().int().positive().nullable().optional(),
     ownerId: z.string().min(1).optional(),
@@ -1239,6 +1252,10 @@ const retainerEditSchema = z
   .refine(
     (v) =>
       v.monthlyValue !== undefined ||
+      // A rate on its own is a real edit — the form sends only what changed,
+      // so without this, correcting the GST alone was refused as "Nothing to
+      // change".
+      v.gstPercent !== undefined ||
       v.startDate !== undefined ||
       v.termMonths !== undefined ||
       v.ownerId !== undefined,
@@ -1255,7 +1272,7 @@ retainersRouter.patch('/:id', requirePermission('company.write'), async (req: Au
 
     const orgId = req.user!.organizationId;
     const id = String(req.params.id);
-    const { monthlyValue, startDate, termMonths, ownerId, repriceOpenMonth } = parsed.data;
+    const { monthlyValue, gstPercent, startDate, termMonths, ownerId, repriceOpenMonth } = parsed.data;
 
     const existing = await prisma.retainer.findFirst({
       where: { id, organizationId: orgId },
@@ -1350,11 +1367,15 @@ retainersRouter.patch('/:id', requirePermission('company.write'), async (req: Au
     const startChanged = startDate !== undefined && nextStart.getTime() !== existing.startDate.getTime();
     const termChanged = termMonths !== undefined && (termMonths ?? null) !== (existing.termMonths ?? null);
     const ownerChanged = ownerId !== undefined && ownerId !== existing.ownerId;
+    // A rate change is a real change — it moves what the client is billed —
+    // so it counts toward "something was edited", and a save that resends the
+    // same rate still writes nothing.
+    const gstChanged = gstPercent !== undefined && (gstPercent ?? null) !== (existing.gstPercent ?? null);
 
     // Resending what is already there writes nothing — no row, no month-card
     // reprice, and no "edited" line in the client's activity feed for a save
     // that changed no figure.
-    if (!rateChanged && !startChanged && !termChanged && !ownerChanged) {
+    if (!rateChanged && !startChanged && !termChanged && !ownerChanged && !gstChanged) {
       const { company: _company, ...unchanged } = existing;
       res.json({ success: true, retainer: unchanged, repricedCards: 0 });
       return;
@@ -1365,6 +1386,7 @@ retainersRouter.patch('/:id', requirePermission('company.write'), async (req: Au
         where: { id },
         data: {
           ...(rateChanged ? { monthlyValue } : {}),
+          ...(gstChanged ? { gstPercent: gstPercent ?? null } : {}),
           ...(startChanged ? { startDate: nextStart } : {}),
           ...(termChanged ? { termMonths } : {}),
           ...(startChanged || termChanged ? { renewalDate: nextRenewal } : {}),
