@@ -716,16 +716,44 @@ export interface Profile {
   signIn: SignIn;
 }
 
-/** Who changed what. Read-only — an audit log something can edit is not one. */
+/**
+ * One line of the activity log, already put into words by the server
+ * (services/activityLog.ts): "{actor} {action} {subject}", then what changed.
+ */
 export interface AuditEntry {
   id: string;
+  at: string;
+  actor: { id: string; name: string } | null;
+  /** Who to name when no signed-in person did it. */
+  nobody: 'Flowzen' | 'Someone';
+  area: string;
   action: string;
+  subject: { label: string; context: string | null; href: string | null; gone: boolean } | null;
+  detail: string[];
   entityType: string;
-  entityId: string;
-  before: Record<string, unknown> | null;
-  after: Record<string, unknown> | null;
-  createdAt: string;
-  user: { id: string; name: string } | null;
+  verb: string;
+}
+
+export interface AuditPage {
+  success: boolean;
+  entries: AuditEntry[];
+  total: number;
+  page: number;
+  pages: number;
+  people: { id: string; name: string; active: boolean }[];
+  areas: { key: string; label: string }[];
+}
+
+export interface AuditFilters {
+  page?: number;
+  limit?: number;
+  /** A person's id, or `system`. */
+  actor?: string;
+  area?: string;
+  /** YYYY-MM-DD, in the organisation's own days. */
+  from?: string;
+  to?: string;
+  q?: string;
 }
 
 /**
@@ -1236,7 +1264,11 @@ export const api = {
      */
     testMail: (to?: string) => postFull<{ data: { to: string }; message?: string }>('/config/mail/test', { to }),
     /** Turning a module off hides its screens AND refuses its endpoints (§7.5). */
-    auditLog: () => get<AuditEntry[]>('/config/audit-log'),
+    auditLog: (filters: AuditFilters = {}) => {
+      const params = new URLSearchParams();
+      for (const [k, v] of Object.entries(filters)) if (v !== undefined && v !== '') params.set(k, String(v));
+      return get<AuditPage>(`/config/audit-log?${params}`);
+    },
   },
 
   companies: {
@@ -1511,19 +1543,11 @@ export const api = {
     update: (id: string, body: Record<string, unknown>) =>
       patch<{ success: boolean; task: any }>(`/tasks/${id}`, body),
     /**
-     * Soft delete — §16, nothing is hard deleted by a user. Refused with a 400
-     * once a task is finished, because its timing is already counted towards
-     * how long this kind of work takes.
+     * Delete — final, there is no restore for a task. Refused with a 400 once
+     * a task is finished, because its timing is already counted towards how
+     * long this kind of work takes.
      */
     remove: (id: string) => del<{ success: boolean }>(`/tasks/${id}`),
-    /** What makes the delete above a delete rather than a disappearance. */
-    restore: (id: string) => post<{ success: boolean; task: any }>(`/tasks/${id}/restore`),
-    /**
-     * Deleted tasks you could actually put back — yours, or everything with
-     * `work.all`. Without this the restore above was only reachable from a
-     * drawer you still had open.
-     */
-    trash: () => get<{ success: boolean; tasks: any[] }>('/tasks/trash'),
     updateStatus: (id: string, status: string) =>
       patch<{ success: boolean; task: any }>(`/tasks/${id}/status`, { status }),
     wait: (id: string, waitingOn: string) =>

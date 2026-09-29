@@ -5,15 +5,13 @@
  * delete with no way back into view is a hard delete with extra rows, so this
  * is that way back.
  *
- * It used to list three of the six things that soft-delete. Proposals,
- * assets and tasks all had a working restore route and nothing that listed
- * what had been deleted — for a task that meant the only way to reach restore
- * was to still have its drawer open from before you deleted it.
+ * Tasks are not here on purpose: deleting a task is final (see tasks.ts). Who
+ * deleted one, and when, is in Settings → Activity.
  *
  * ─── On permissions ─────────────────────────────────────────────────────────
  *
- * The five routes are not one tier. Projects, costs and assets are
- * setup.admin; proposals are pipeline.write; tasks are your own work. The old
+ * The routes are not one tier. Projects, costs and assets are setup.admin;
+ * proposals are pipeline.write; leads are company.write. The old
  * version fetched all of them and swallowed every failure into an empty array,
  * so somebody without setup.admin was told "Nothing in the trash" when the
  * truth was "you cannot see it" — the one answer a recovery screen must never
@@ -87,23 +85,6 @@ const SECTIONS: Section[] = [
         deletedAt: p.deletedAt,
       })),
     restore: (id) => api.projects.restore(id),
-  },
-  {
-    key: 'tasks',
-    heading: 'Tasks',
-    permission: '',
-    needs: '',
-    noun: 'Task',
-    load: async () =>
-      (await api.tasks.trash()).tasks.map((t: any) => ({
-        id: t.id,
-        title: t.title,
-        subtitle: [t.assignee?.name ?? 'Nobody', t.dueDate ? `due ${formatDate(t.dueDate)}` : null]
-          .filter(Boolean)
-          .join(' · '),
-        deletedAt: t.deletedAt,
-      })),
-    restore: (id) => api.tasks.restore(id),
   },
   {
     /*

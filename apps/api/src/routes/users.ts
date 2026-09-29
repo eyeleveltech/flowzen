@@ -2,13 +2,14 @@ import { Router, type Response } from 'express';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { prisma } from '../lib/prisma.js';
+import { changesBetween } from '../utils/activityDiff.js';
 import { emitToOrganization } from '../sse.js';
 import { authenticate, requirePermission, hasPermission, type AuthRequest } from '../middleware/auth.js';
 import { roleForPreset } from '../utils/roles.js';
 import { hashPassword } from '../utils/password.js';
 import { sendMail } from '../utils/mailer.js';
 import { logger } from '../utils/logger.js';
-import { RolePreset } from '@prisma/client';
+import { Prisma, RolePreset } from '@prisma/client';
 import { bookValue } from '../utils/assetValue.js';
 
 const PERMISSION_KEYS = [
@@ -415,7 +416,18 @@ usersRouter.patch('/:id', requirePermission('setup.admin'), async (req: AuthRequ
         entityId: id,
         actorId: req.user!.userId,
         verb: 'user_access_updated',
-        payload: { fields: Object.keys(parsed.data) },
+        payload: {
+          name: updated.name,
+          changed: changesBetween(existing, updated, [
+            'name',
+            'email',
+            'preset',
+            'permissions',
+            'monthlyCost',
+            'dept',
+            'active',
+          ]),
+        } as Prisma.InputJsonValue,
       },
     });
 

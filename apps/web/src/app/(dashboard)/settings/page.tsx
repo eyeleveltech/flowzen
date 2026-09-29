@@ -25,7 +25,6 @@ import {
   api,
   ApiError,
   formatDate,
-  type AuditEntry,
   type Member,
   type OrgConfig,
 } from '@/lib/api-v2';
@@ -44,6 +43,7 @@ import { ZenMemorySection } from './components/ZenMemorySection';
 import { DocumentSettingsTab } from './components/DocumentSettingsTab';
 import { OnboardingTab } from './components/OnboardingTab';
 import { TrashTab } from './components/TrashTab';
+import { ActivityTab } from './components/ActivityTab';
 import { AssetsTab } from './components/AssetsTab';
 
 /**
@@ -77,7 +77,7 @@ const GROUPS = [
     label: 'Records',
     tabs: [
       { key: 'trash', label: 'Trash', caption: 'Removed, not gone' },
-      { key: 'activity', label: 'Activity', caption: 'Who changed what' },
+      { key: 'activity', label: 'Activity', caption: 'Everything that happened' },
     ],
   },
 ] as const;
@@ -151,7 +151,6 @@ export default function SettingsPage() {
   const [config, setConfig] = useState<OrgConfig | null>(null);
   const [form, setForm] = useState<Form | null>(null);
   const [team, setTeam] = useState<Member[]>([]);
-  const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -217,10 +216,9 @@ export default function SettingsPage() {
         stageProbVerbalYes: String(o.stageProbabilities?.VERBAL_YES ?? 90),
       });
       setError(null);
-      // Both are admin-only, so a refusal is expected for anyone below and is
-      // not worth showing as an error.
+      // Admin-only, so a refusal is expected for anyone below and is not worth
+      // showing as an error. The activity log loads itself, when its tab opens.
       void api.users.list().then(setTeam).catch(() => {});
-      void api.config.auditLog().then(setAudit).catch(() => {});
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load settings');
     } finally {
@@ -869,38 +867,7 @@ export default function SettingsPage() {
 
         {tab === 'trash' && <TrashTab />}
 
-        {tab === 'activity' && (
-          <SectionCard
-            title="Who changed what"
-            description="The last hundred changes to people and money. Read-only — an audit log something can edit is not one."
-            bodyClassName=""
-          >
-            <>
-              {audit.length === 0 ? (
-                <p className="text-sm text-secondary">Nothing recorded yet.</p>
-              ) : (
-                <ol className="divide-y divide-border">
-                  {audit.map((entry) => (
-                    <li
-                      key={entry.id}
-                      className="flex flex-wrap items-baseline gap-2 py-2.5 first:pt-0"
-                    >
-                      <span className="text-sm text-body">
-                        {entry.action.replace(/_/g, ' ').toLowerCase()}
-                      </span>
-                      <span className="text-xs text-secondary">
-                        {entry.user?.name ?? 'System'} · {entry.entityType}
-                      </span>
-                      <span className="ml-auto text-xs text-secondary">
-                        {formatDate(entry.createdAt, tz, locale)}
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </>
-          </SectionCard>
-        )}
+        {tab === 'activity' && <ActivityTab tz={tz} locale={locale} />}
           </div>
         </div>
       </div>

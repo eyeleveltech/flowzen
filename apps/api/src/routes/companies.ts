@@ -1,10 +1,11 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { changesBetween } from '../utils/activityDiff.js';
 import { canReadActivityType, stripMoney } from '../utils/activityAccess.js';
 import { emitToOrganization } from '../sse.js';
 import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
-import { CompanyStatus, PersonRole, TaskWorkType, TaskStatus } from '@prisma/client';
+import { CompanyStatus, PersonRole, Prisma, TaskWorkType, TaskStatus } from '@prisma/client';
 import { DEFAULT_INDUSTRY, DEFAULT_LEAD_SOURCE } from '@flowzen/shared';
 import { checkForDuplicates, checkForImport } from '../services/duplicateCheck.js';
 import { resolveState } from '../services/documentModel.js';
@@ -1290,7 +1291,13 @@ companiesRouter.patch('/:id', requirePermission('company.write'), async (req: Au
         entityId: id,
         actorId: req.user!.userId,
         verb: 'company_updated',
-        payload: parsed.data as any,
+        payload: {
+          name: updated.name,
+          changed: changesBetween(company, updated, [
+            ...Object.keys(parsed.data),
+            ...(resolvedState ? ['stateName', 'stateCode'] : []),
+          ]),
+        } as Prisma.InputJsonValue,
       },
     });
 
@@ -1747,7 +1754,6 @@ companiesRouter.patch('/:id/people/:personId', requirePermission('company.write'
     // directly above.
     const person = await prisma.person.findFirst({
       where: { id: personId, companyId: id, company: { organizationId: orgId } },
-      select: { id: true },
     });
 
     if (!person) {
@@ -1772,7 +1778,11 @@ companiesRouter.patch('/:id/people/:personId', requirePermission('company.write'
         entityId: id,
         actorId: req.user!.userId,
         verb: 'person_updated',
-        payload: { personId, fields: Object.keys(parsed.data) },
+        payload: {
+          personId,
+          name: updated.name,
+          changed: changesBetween(person, updated, Object.keys(parsed.data)),
+        } as Prisma.InputJsonValue,
       },
     });
 

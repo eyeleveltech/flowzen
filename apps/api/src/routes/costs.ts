@@ -362,6 +362,20 @@ costsRouter.patch(
       }
 
       const cost = await prisma.cost.update({ where: { id: costId }, data: { confirmed: true } });
+
+      if (!existing.confirmed) {
+        await prisma.activity.create({
+          data: {
+            organizationId: orgId,
+            entityType: 'Cost',
+            entityId: costId,
+            actorId: req.user!.userId,
+            verb: 'cost_confirmed',
+            payload: { vendor: existing.vendor, category: existing.category, amount: Number(existing.amount) },
+          },
+        });
+      }
+
       res.json({ success: true, cost });
     } catch (e) {
       next(e);

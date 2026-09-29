@@ -3,12 +3,13 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
 import { rollActiveRetainers } from '../workers/monthCard.cron.js';
-import { CompanyStatus, RetainerStatus, RetainerProjectStatus } from '@prisma/client';
+import { CompanyStatus, Prisma, RetainerStatus, RetainerProjectStatus } from '@prisma/client';
 import { monthKey } from '../utils/retainerMonths.js';
 import { TASK_PEOPLE, withPeople } from './tasks.js';
 import { parsePagination } from '../utils/query.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
+import { changesBetween } from '../utils/activityDiff.js';
 
 export const retainersRouter = Router();
 
@@ -804,6 +805,20 @@ retainersRouter.patch('/:id/projects/:projectId', requirePermission('work.all'),
       },
       include: { owner: { select: { id: true, name: true, designation: true } }, _count: { select: { tasks: true } } },
     });
+
+    const changed = changesBetween(existing, project, ['name', 'startDate', 'endDate', 'ownerId', 'status', 'description']);
+    if (Object.keys(changed).length > 0) {
+      await prisma.activity.create({
+        data: {
+          organizationId: orgId,
+          entityType: 'Retainer',
+          entityId: existing.retainerId,
+          actorId: req.user!.userId,
+          verb: 'retainer_project_edited',
+          payload: { projectId: existing.id, name: project.name, changed } as Prisma.InputJsonValue,
+        },
+      });
+    }
 
     res.json({ success: true, project });
   } catch (error) {

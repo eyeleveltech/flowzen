@@ -217,7 +217,7 @@ export function TaskDrawer({
   const remove = async () => {
     const ok = await confirm({
       title: 'Delete this task?',
-      message: `"${task.title}" will be removed from this list. You can put it back from the message that appears.`,
+      message: `"${task.title}" will be deleted. This can't be undone.`,
       confirmText: 'Delete',
       variant: 'danger',
     });
@@ -227,32 +227,7 @@ export function TaskDrawer({
       await api.tasks.remove(task.id);
       onClose();
       onChanged();
-      // Undo lives here rather than behind a trash screen: the moment somebody
-      // wants a task back is the second after it goes, and §16 asks for a way
-      // back, not for a filing cabinet.
-      toast.success(
-        (t) => (
-          <span className="flex items-center gap-3">
-            Task deleted
-            <button
-              onClick={async () => {
-                toast.dismiss(t.id);
-                try {
-                  await api.tasks.restore(task.id);
-                  toast.success('Task restored');
-                  onChanged();
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : 'Could not restore that task');
-                }
-              }}
-              className="rounded-sm font-semibold text-primary underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-            >
-              Undo
-            </button>
-          </span>
-        ),
-        { duration: 8000 },
-      );
+      toast.success('Task deleted');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not delete that task');
     }

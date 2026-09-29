@@ -1,5 +1,6 @@
 import { Router, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { forgetWorkCalendar } from '../utils/workCalendar.js';
 import { buildSellerSnapshot, resolveState, sellerBlockGaps } from '../services/documentModel.js';
@@ -7,6 +8,7 @@ import { authenticate, requirePermission, hasPermission, type AuthRequest } from
 import { encryptSecret } from '../utils/crypto.js';
 import { resolveMailConfig, sendMail } from '../utils/mailer.js';
 import { AI_PROVIDER_IDS } from '../services/ai/index.js';
+import { AREAS, areaWhere, dayStartIn, describe, resolveSubjects } from '../services/activityLog.js';
 
 export const configRouter = Router();
 
@@ -590,41 +592,186 @@ configRouter.patch(
   },
 );
 
-// ── Who changed what ────────────────────────────────────────────────────────
+// ── Everything that happened ────────────────────────────────────────────────
 //
-// Settings' Activity tab. It had no route and its caller swallowed the 404, so
-// the tab read "Nothing recorded yet." however much had actually been recorded.
+// Settings' Activity tab: every row the product has written, readable.
+//
+// It showed the last hundred rows as a verb with its underscores swapped out —
+// "task deleted · Naif · Task" — which could not say WHICH task, or go back
+// further than a hundred rows, or answer "what did Naif do this week". The
+// rows always carried the answer; services/activityLog.ts reads it out.
 //
 // Read-only, and admin-only: an audit log something can edit is not one, and a
 // log of who touched money and people is not everybody's to read.
+
+const auditQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  /** A person's id, or `system` for what Flowzen did on its own. */
+  actor: z.string().trim().optional(),
+  area: z.string().trim().optional(),
+  from: z.string().trim().optional(),
+  to: z.string().trim().optional(),
+  q: z.string().trim().max(100).optional(),
+});
+
+/** A search term as a literal ILIKE pattern: its own % and _ are characters, not wildcards. */
+const likePattern = (q: string) => `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+
+/**
+ * The ids a search term reaches: the things named like it, the people named
+ * like it, and any row whose recorded details mention it.
+ *
+ * Names are matched on the tables themselves rather than on the log, because
+ * most rows record an id and not a name — a status change on a task says
+ * nothing about what the task was called.
+ */
+async function searchLog(orgId: string, q: string) {
+  const like = { contains: q, mode: 'insensitive' as const };
+  const take = 500;
+  const [tasks, companies, projects, internal, leads, assets, users, invoices, proformas, costs, payloadHits] =
+    await Promise.all([
+      prisma.task.findMany({ where: { organizationId: orgId, title: like, deletedAt: undefined }, select: { id: true }, take }),
+      prisma.company.findMany({ where: { organizationId: orgId, name: like }, select: { id: true }, take }),
+      prisma.project.findMany({ where: { organizationId: orgId, name: like, deletedAt: undefined }, select: { id: true }, take }),
+      prisma.internalProject.findMany({ where: { organizationId: orgId, name: like }, select: { id: true }, take }),
+      prisma.outreachEntry.findMany({ where: { organizationId: orgId, name: like, deletedAt: undefined }, select: { id: true }, take }),
+      prisma.asset.findMany({
+        where: { organizationId: orgId, deletedAt: undefined, OR: [{ name: like }, { tag: like }] },
+        select: { id: true },
+        take,
+      }),
+      prisma.user.findMany({ where: { organizationId: orgId, name: like }, select: { id: true }, take }),
+      prisma.invoice.findMany({ where: { organizationId: orgId, number: like }, select: { id: true }, take }),
+      prisma.proforma.findMany({ where: { organizationId: orgId, number: like }, select: { id: true }, take }),
+      prisma.cost.findMany({
+        where: { organizationId: orgId, deletedAt: undefined, OR: [{ vendor: like }, { category: like }] },
+        select: { id: true },
+        take,
+      }),
+      // The recorded details themselves: a deleted task's title, a question
+      // asked of Zen, the names in an import.
+      prisma.$queryRaw<{ id: string }[]>`
+        SELECT id FROM activities
+        WHERE "organizationId" = ${orgId}
+          AND payload::text ILIKE ${likePattern(q)}
+        ORDER BY at DESC
+        LIMIT 2000`,
+    ]);
+
+  // Proposals and retainers are named by their company.
+  const companyIds = companies.map((c) => c.id);
+  const [proposals, retainers] = companyIds.length
+    ? await Promise.all([
+        prisma.proposal.findMany({
+          where: { organizationId: orgId, companyId: { in: companyIds }, deletedAt: undefined },
+          select: { id: true },
+        }),
+        prisma.retainer.findMany({ where: { organizationId: orgId, companyId: { in: companyIds } }, select: { id: true } }),
+      ])
+    : [[], []];
+
+  return {
+    entityIds: [
+      ...tasks,
+      ...companies,
+      ...projects,
+      ...internal,
+      ...leads,
+      ...assets,
+      ...users,
+      ...invoices,
+      ...proformas,
+      ...costs,
+      ...proposals,
+      ...retainers,
+    ].map((r) => r.id),
+    actorIds: users.map((u) => u.id),
+    rowIds: payloadHits.map((r) => r.id),
+  };
+}
 
 configRouter.get(
   '/audit-log',
   requirePermission('setup.admin'),
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const entries = await prisma.activity.findMany({
-        where: { organizationId: req.user!.organizationId },
-        orderBy: { at: 'desc' },
-        take: 100,
-        include: { actor: { select: { id: true, name: true } } },
-      });
+      const parsed = auditQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+        return;
+      }
+      const { page, limit, actor, area, from, to, q } = parsed.data;
+      const orgId = req.user!.organizationId;
 
-      res.json(
-        entries.map((e) => ({
-          id: e.id,
-          action: e.verb,
-          entityType: e.entityType,
-          entityId: e.entityId,
-          // Activity records what a change WAS, not what it replaced — there is
-          // no before/after pair stored anywhere. Sending null is honest; the
-          // screen shows the verb, the actor and the date, and reads neither.
-          before: null,
-          after: (e.payload ?? null) as Record<string, unknown> | null,
-          createdAt: e.at.toISOString(),
-          user: e.actor,
-        })),
-      );
+      const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { timezone: true } });
+      const tz = org?.timezone || 'Asia/Kolkata';
+
+      const and: Prisma.ActivityWhereInput[] = [{ organizationId: orgId }];
+      if (actor === 'system') and.push({ actorId: null });
+      else if (actor) and.push({ actorId: actor });
+
+      if (area) {
+        const w = areaWhere(area);
+        if (!w) {
+          res.status(400).json({ success: false, error: 'There is no such area' });
+          return;
+        }
+        and.push(w);
+      }
+
+      const start = from ? dayStartIn(from, tz) : null;
+      const endDay = to ? dayStartIn(to, tz) : null;
+      if ((from && !start) || (to && !endDay)) {
+        res.status(400).json({ success: false, error: 'That date is not a date' });
+        return;
+      }
+      if (start || endDay) {
+        and.push({
+          at: {
+            ...(start ? { gte: start } : {}),
+            // Through the end of the "to" day, in the organisation's zone.
+            ...(endDay ? { lt: new Date(endDay.getTime() + 24 * 60 * 60 * 1000) } : {}),
+          },
+        });
+      }
+
+      if (q) {
+        const hits = await searchLog(orgId, q);
+        and.push({
+          OR: [{ entityId: { in: hits.entityIds } }, { actorId: { in: hits.actorIds } }, { id: { in: hits.rowIds } }],
+        });
+      }
+      const where: Prisma.ActivityWhereInput = { AND: and };
+
+      const [rows, total, team] = await Promise.all([
+        prisma.activity.findMany({
+          where,
+          orderBy: [{ at: 'desc' }, { id: 'desc' }],
+          skip: (page - 1) * limit,
+          take: limit,
+          include: { actor: { select: { id: true, name: true } } },
+        }),
+        prisma.activity.count({ where }),
+        prisma.user.findMany({
+          where: { organizationId: orgId },
+          select: { id: true, name: true, active: true },
+          orderBy: { name: 'asc' },
+        }),
+      ]);
+
+      const people = new Map(team.map((u) => [u.id, u.name]));
+      const subjects = await resolveSubjects(orgId, rows);
+
+      res.json({
+        success: true,
+        entries: rows.map((r) => describe(r, subjects, people)),
+        total,
+        page,
+        pages: Math.max(1, Math.ceil(total / limit)),
+        people: team,
+        areas: AREAS,
+      });
     } catch (e) {
       next(e);
     }

@@ -245,19 +245,6 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
   }
 });
 
-
-// ── Deleted tasks, and the way back ─────────────────────────────────────────
-//
-// `POST /:id/restore` has existed since soft delete did, but nothing listed
-// what had been deleted — so the only way to reach it was to still have the
-// task's own drawer open from before you deleted it. Close the tab and the row
-// was gone for good, which is the hard delete §16 says must not happen.
-//
-// Scoped to what the caller could actually restore, using the same rule the
-// delete and restore routes already enforce: the person who created it, the
-// person it is assigned to, or a Head. Listing rows that would 403 on the
-// Restore button would be worse than not listing them.
-
 /**
  * PUT /api/tasks/my/order — the order of one group on the caller's own desk.
  *
@@ -312,28 +299,6 @@ tasksRouter.put('/my/order', requirePermission('work.own'), async (req: AuthRequ
   }
 });
 
-tasksRouter.get('/trash', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
-  try {
-    const orgId = req.user!.organizationId;
-    const userId = req.user!.userId;
-    const seesEverything = (req.user!.permissions ?? []).includes('work.all');
-
-    const tasks = await prisma.task.findMany({
-      where: {
-        organizationId: orgId,
-        deletedAt: { not: null },
-        ...(seesEverything ? {} : { OR: [{ createdById: userId }, { assigneeId: userId }] }),
-      },
-      orderBy: { deletedAt: 'desc' },
-      take: 100,
-      include: TASK_PEOPLE,
-    });
-
-    res.json({ success: true, tasks: tasks.map(withPeople) });
-  } catch (error) {
-    next(error);
-  }
-});
 // ── Everything, for the people who run the work ─────────────────────────────
 //
 // `/my` answers "what am I doing", and every screen after it answers "what is
@@ -732,8 +697,7 @@ tasksRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, res
      * `work.own`, which every employee holds, and it returned EVERY task in the
      * agency to any of them. The screens all pass a filter, so nobody noticed —
      * but the endpoint is the boundary, not the screen that happens to call it.
-     * The same rule /trash has used since it was written: everything for
-     * `work.all`, your own otherwise.
+     * Everything for `work.all`, your own otherwise.
      */
     const seesEverything = (req.user!.permissions ?? []).includes('work.all');
 
@@ -1365,11 +1329,16 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
   }
 });
 
-// ── 3c. Delete a Task, and put it back ──────────────────────────────────────
+// ── 3c. Delete a Task ───────────────────────────────────────────────────────
 //
-// §16: "Soft delete only. Nothing is ever hard deleted by a user." So this
-// stamps `deletedAt`, every read of a Task filters it out, and `restore` below
-// is what stops a soft delete from being a hard delete with extra steps.
+// Final, from where anybody using Flowzen stands: there is no restore for a
+// task. It is a line of work, not a record anybody needs back, and a "Recently
+// deleted" list kept surfacing other people's deleted tasks on My Work. The
+// confirm dialog is the guard against a slip.
+//
+// The row itself stays — `deletedAt` is stamped and every read filters it out
+// — because the activity log names the task by its title and says who deleted
+// it, and a log that points at nothing reads as a hole.
 //
 // The guard is the project route's idea applied to a task. One nobody finished
 // carries no history — it is a typo or a duplicate and should simply go. A
@@ -1436,47 +1405,6 @@ tasksRouter.delete('/:id', requirePermission('work.own'), async (req: AuthReques
     });
 
     res.json({ success: true });
-  } catch (error) {
-    next(error);
-  }
-});
-
-tasksRouter.post('/:id/restore', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
-  try {
-    const orgId = req.user!.organizationId;
-    const id = String(req.params.id);
-
-    // Deliberately looks for a DELETED one — the point of this route is to
-    // find what every other query in this file is written to hide.
-    const task = await prisma.task.findFirst({
-      where: { id, organizationId: orgId, deletedAt: { not: null } },
-    });
-    if (!task) {
-      res.status(404).json({ success: false, error: 'Task not found' });
-      return;
-    }
-    if (!canRemove(req, task)) {
-      res.status(403).json({
-        success: false,
-        error: 'Only the person who created this task, the person it is assigned to, or a Head can restore it',
-      });
-      return;
-    }
-
-    const restored = await prisma.task.update({ where: { id }, data: { deletedAt: null } });
-
-    await prisma.activity.create({
-      data: {
-        organizationId: orgId,
-        entityType: 'Task',
-        entityId: id,
-        actorId: req.user!.userId,
-        verb: 'task_restored',
-        payload: { title: restored.title },
-      },
-    });
-
-    res.json({ success: true, task: restored });
   } catch (error) {
     next(error);
   }

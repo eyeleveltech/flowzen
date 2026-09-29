@@ -195,6 +195,72 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+/**
+ * Where a sign-in came from, for the activity log: the address and, roughly,
+ * the browser. Roughly on purpose — "Chrome on Windows" is what somebody
+ * reading the log can recognise as their own laptop or not; the full
+ * user-agent string is noise.
+ */
+const signInFrom = (req: { ip?: string; headers: Record<string, unknown> }) => {
+  const ua = String(req.headers['user-agent'] ?? '');
+  const browser = /Edg\//.test(ua)
+    ? 'Edge'
+    : /OPR\/|Opera/.test(ua)
+      ? 'Opera'
+      : /Chrome\//.test(ua)
+        ? 'Chrome'
+        : /Firefox\//.test(ua)
+          ? 'Firefox'
+          : /Safari\//.test(ua)
+            ? 'Safari'
+            : null;
+  const os = /Windows/.test(ua)
+    ? 'Windows'
+    : /iPhone|iPad/.test(ua)
+      ? 'iPhone'
+      : /Android/.test(ua)
+        ? 'Android'
+        : /Mac OS X/.test(ua)
+          ? 'Mac'
+          : /Linux/.test(ua)
+            ? 'Linux'
+            : null;
+  return {
+    ip: req.ip ?? null,
+    device: browser && os ? `${browser} on ${os}` : (browser ?? os),
+  };
+};
+
+/**
+ * Sign-ins go in the activity log — who got in, when, from where — and so do
+ * wrong passwords against a real account, which is the line somebody looks for
+ * when they wonder whether their account is being tried.
+ *
+ * Never allowed to stand between a person and signing in: a log write that
+ * fails is swallowed, not surfaced as a failed login.
+ */
+const logSignIn = async (
+  user: { id: string; organizationId: string },
+  verb: 'signed_in' | 'sign_in_failed' | 'invite_accepted',
+  req: { ip?: string; headers: Record<string, unknown> },
+) => {
+  try {
+    await prisma.activity.create({
+      data: {
+        organizationId: user.organizationId,
+        entityType: 'User',
+        entityId: user.id,
+        // A failed attempt is not something the account holder did.
+        actorId: verb === 'sign_in_failed' ? null : user.id,
+        verb,
+        payload: signInFrom(req),
+      },
+    });
+  } catch {
+    // The log is not the door.
+  }
+};
+
 authRouter.post('/login', authLimiter, async (req, res: Response, next) => {
   try {
     const parsed = loginSchema.safeParse(req.body);
@@ -216,12 +282,14 @@ authRouter.post('/login', authLimiter, async (req, res: Response, next) => {
 
     const validPassword = await comparePassword(password, user.passwordHash);
     if (!validPassword) {
+      await logSignIn(user, 'sign_in_failed', req);
       res.status(401).json({ success: false, error: 'Invalid credentials' });
       return;
     }
 
     const effectivePermissions = resolvePermissions(user.preset, user.permissions);
     const token = issueSession(res, user);
+    await logSignIn(user, 'signed_in', req);
 
     res.json({
       success: true,
@@ -286,6 +354,7 @@ authRouter.post('/accept-invite', authLimiter, async (req, res: Response, next) 
 
     const effectivePermissions = resolvePermissions(activated.preset, activated.permissions);
     const sessionToken = issueSession(res, activated);
+    await logSignIn(activated, 'invite_accepted', req);
 
     res.json({
       success: true,

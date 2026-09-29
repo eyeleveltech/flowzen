@@ -2,13 +2,14 @@ import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, type AuthRequest } from '../middleware/auth.js';
-import { CompanyStatus, OutreachStatus, ProposalKind, ProposalStage } from '@prisma/client';
+import { CompanyStatus, OutreachStatus, Prisma, ProposalKind, ProposalStage } from '@prisma/client';
 import { DEFAULT_LEAD_SOURCE } from '@flowzen/shared';
 import { parsePagination } from '../utils/query.js';
 import { toCsv, parseCsv } from '../utils/csv.js';
 import { matchIndustry, resolveLeadSource, industrySchema, leadSourceSchema } from '../utils/enums.js';
 import { sendCsv } from '../utils/csvResponse.js';
 import { checkForDuplicates } from '../services/duplicateCheck.js';
+import { changesBetween } from '../utils/activityDiff.js';
 
 export const outreachRouter = Router();
 
@@ -201,6 +202,17 @@ outreachRouter.post('/', requirePermission('company.write'), async (req: AuthReq
       },
     });
 
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'OutreachEntry',
+        entityId: entry.id,
+        actorId: req.user!.userId,
+        verb: 'outreach_added',
+        payload: { name: entry.name, source: entry.source, ownerId: entry.ownerId },
+      },
+    });
+
     res.status(201).json({ success: true, entry });
   } catch (error) {
     next(error);
@@ -296,6 +308,28 @@ outreachRouter.patch('/:id', requirePermission('company.write'), async (req: Aut
       },
       include: { owner: { select: { id: true, name: true, designation: true } } },
     });
+
+    const changed = changesBetween(existing, entry, [
+      'name',
+      'vertical',
+      'source',
+      'ownerId',
+      'contactPersonName',
+      'phone',
+      'email',
+    ]);
+    if (Object.keys(changed).length > 0) {
+      await prisma.activity.create({
+        data: {
+          organizationId: orgId,
+          entityType: 'OutreachEntry',
+          entityId: id,
+          actorId: req.user!.userId,
+          verb: 'outreach_edited',
+          payload: { name: entry.name, changed } as Prisma.InputJsonValue,
+        },
+      });
+    }
 
     res.json({ success: true, entry });
   } catch (error) {
@@ -833,9 +867,35 @@ outreachRouter.post('/import', requirePermission('company.write'), async (req: A
           source: r.source,
           ownerId: req.user!.userId,
           status: OutreachStatus.NOT_CONTACTED,
+          // Every row was REQUIRED to carry a phone or an email above, and then
+          // none of the three was written — the import checked for a way to
+          // reach the lead and threw it away.
+          contactPersonName: r.contactPersonName,
+          phone: r.phone,
+          email: r.email,
         })),
       });
       created = outcome.count;
+
+      // One line for the file, not one per name: an import of 300 leads is one
+      // thing somebody did.
+      if (created > 0) {
+        await prisma.activity.create({
+          data: {
+            organizationId: orgId,
+            entityType: 'Organization',
+            entityId: orgId,
+            actorId: req.user!.userId,
+            verb: 'outreach_imported',
+            payload: {
+              created,
+              skipped: results.filter((r) => r.action === 'SKIPPED').length,
+              invalid: results.filter((r) => r.action === 'INVALID').length,
+              names: toCreate.slice(0, 20).map((r) => r.name),
+            },
+          },
+        });
+      }
     }
 
     res.json({

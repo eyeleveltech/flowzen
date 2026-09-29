@@ -712,6 +712,19 @@ invoicesRouter.patch(
         },
       });
 
+      if (invoice.status !== updated.status) {
+        await prisma.activity.create({
+          data: {
+            organizationId: orgId,
+            entityType: 'Invoice',
+            entityId: id,
+            actorId: req.user!.userId,
+            verb: 'invoice_status_changed',
+            payload: { number: invoice.number, from: invoice.status, to: updated.status },
+          },
+        });
+      }
+
       res.json({ success: true, data: updated });
     } catch (e) {
       next(e);

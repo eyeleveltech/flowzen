@@ -31,7 +31,7 @@ import { PRIORITY_CONFIG, getPriorityDot, getPriorityLabel } from '@/lib/priorit
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
 import toast from 'react-hot-toast';
-import { CheckSquare, Plus, RotateCcw, GripVertical } from 'lucide-react';
+import { CheckSquare, Plus, GripVertical } from 'lucide-react';
 import { personOptions } from '@/lib/people';
 import { useAuthStore } from '@/stores';
 import { TASK_TYPE_OPTIONS } from '@/lib/task-type';
@@ -142,24 +142,6 @@ export default function MyWorkPage() {
     queryKey: ['tasks', 'my'],
     queryFn: () => api.tasks.my(),
   });
-
-  /*
-   * What you have deleted, and the way back.
-   *
-   * Restore has existed since soft delete did, but the only thing that offered
-   * it was the drawer of a task you were already looking at — and you cannot
-   * look at a deleted one. The org-wide list lives in Settings → Trash, which
-   * redirects anyone without setup.admin, so for the people who delete most of
-   * these tasks that screen does not exist. This is their copy: their own
-   * deleted tasks, scoped by the server to what they could actually put back.
-   */
-  const { data: trashData, refetch: refetchTrash } = useQuery({
-    queryKey: ['tasks', 'trash'],
-    queryFn: () => api.tasks.trash(),
-  });
-  const deletedTasks: { id: string; title: string; dueDate: string; deletedAt: string }[] =
-    trashData?.success ? trashData.tasks : [];
-  const [restoringId, setRestoringId] = useState<string | null>(null);
 
   const buckets = (data?.success ? (data.tasks as Buckets) : EMPTY_BUCKETS);
   const queryClient = useQueryClient();
@@ -569,44 +551,6 @@ export default function MyWorkPage() {
           </div>
         )}
       </Card>
-
-      {deletedTasks.length > 0 && (
-        <Card padding="none" className="mt-6">
-          <CardHeader>
-            <CardTitle>Recently deleted ({deletedTasks.length})</CardTitle>
-          </CardHeader>
-          <div className="divide-y divide-border">
-            {deletedTasks.map((t) => (
-              <div key={t.id} className="flex items-center justify-between p-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-primary truncate">{t.title}</p>
-                  <p className="text-xs text-secondary truncate">
-                    was due {formatDate(t.dueDate)} · deleted {formatDate(t.deletedAt)}
-                  </p>
-                </div>
-                <button
-                  onClick={async () => {
-                    setRestoringId(t.id);
-                    try {
-                      await api.tasks.restore(t.id);
-                      toast.success('Task restored');
-                      await Promise.all([load(), refetchTrash()]);
-                    } catch (e) {
-                      toast.error(e instanceof ApiError ? e.message : 'Could not restore that task');
-                    } finally {
-                      setRestoringId(null);
-                    }
-                  }}
-                  disabled={restoringId === t.id}
-                  className="shrink-0 flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-secondary hover:bg-subtle hover:text-primary transition-colors disabled:opacity-50"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" /> Restore
-                </button>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
 
       <NewTaskModal open={creating} onClose={() => setCreating(false)} onCreated={() => { setCreating(false); void load(); }} />
       <TaskDrawer

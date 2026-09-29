@@ -203,16 +203,11 @@ describe('deleting a task', () => {
     expect(prisma.task.update).not.toHaveBeenCalled();
   });
 
-  it('puts one back', async () => {
-    // A soft delete with no way back is a hard delete with extra steps.
-    (prisma.task.findFirst as any).mockResolvedValue({ ...OPEN_TASK, deletedAt: new Date() });
-
+  it('cannot be put back', async () => {
+    // Deleting a task is final — there is no restore route to reach.
     const res = await request(app).post('/api/tasks/task-1/restore').set(...auth('designer'));
-
-    expect(res.status).toBe(200);
-    expect((prisma.task.update as any).mock.calls.at(-1)[0].data).toEqual({ deletedAt: null });
-    // It looks for a DELETED row — the one thing every other query here hides.
-    expect((prisma.task.findFirst as any).mock.calls.at(-1)[0].where.deletedAt).toEqual({ not: null });
+    expect(res.status).toBe(404);
+    expect(prisma.task.update).not.toHaveBeenCalledWith(expect.objectContaining({ data: { deletedAt: null } }));
   });
 });
 

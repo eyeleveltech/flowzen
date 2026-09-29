@@ -1,6 +1,7 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { changesBetween } from '../utils/activityDiff.js';
 import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
 import { CompanyStatus, ProjectStatus, MilestoneStatus, Priority } from '@prisma/client';
 import { parsePagination } from '../utils/query.js';
@@ -765,7 +766,19 @@ projectsRouter.patch('/:id', requirePermission('company.write'), async (req: Aut
         actorId: req.user!.userId,
         verb: 'project_edited',
         payload: {
-          fields: Object.keys(parsed.data),
+          name: project.name,
+          changed: changesBetween(existing, project, [
+            'name',
+            'quotedValue',
+            'startDate',
+            'endDate',
+            'ownerId',
+            'status',
+            'priority',
+            'description',
+            'isSample',
+            'gstPercent',
+          ]),
           // Named, because a billing plan disappearing is exactly the kind of
           // thing somebody asks about later.
           ...(clearedMilestones > 0 ? { milestonesRemoved: clearedMilestones } : {}),
