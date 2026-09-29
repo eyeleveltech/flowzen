@@ -1475,7 +1475,7 @@ function EditProjectModal({
               )}
               {!isSample && project.isSample && (
                 <span className="mt-1.5 block text-xs font-medium text-warning-ink">
-                  Moving this off sample work needs a quoted value.
+                  It becomes ordinary work. Give it a value when there is one — it need not be now.
                 </span>
               )}
             </span>

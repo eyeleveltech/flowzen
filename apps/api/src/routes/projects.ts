@@ -464,12 +464,19 @@ projectsRouter.post('/', requirePermission('company.write'), async (req: AuthReq
     const orgId = req.user!.organizationId;
     const { companyId, name, quotedValue, isSample, startDate, endDate, ownerId, priority, description, milestones, sourceProposalId } = parsed.data;
 
-    // Paid work has a price. Only a sample may be worth nothing, and only a
-    // sample may skip having one.
-    if (!isSample && !(quotedValue > 0)) {
-      res.status(400).json({ success: false, error: 'Quoted value must be positive — or mark this as sample work.' });
-      return;
-    }
+    /*
+     * Nought is allowed on any project, not only a sample.
+     *
+     * This refused it, on the reasoning that paid work has a price. It does —
+     * but "nought" and "not settled yet" are both real states for a piece of
+     * one-off work, and refusing them only moved the problem: somebody types 1
+     * to get past the form and the figure is then wrong rather than absent.
+     *
+     * What a sample still says, that a ₹0 project does not, is that nothing
+     * will EVER be billed for it: no milestones, no proforma, no invoice, and
+     * kept out of work-in-flight. A ₹0 project is ordinary work that happens
+     * to be priced at nothing today.
+     */
     // Paid work is scheduled; a sample is just started. Both dates fall back to
     // today for a sample, so the row still sits somewhere on a timeline.
     if (!isSample && (!startDate || !endDate)) {
@@ -547,9 +554,10 @@ projectsRouter.post('/', requirePermission('company.write'), async (req: AuthReq
       }
     }
 
-    // Nothing to bill, so nothing to split. Without this a sample would be
-    // born with three ₹0 milestones, which reads as a billing plan.
-    const defaultMilestones = isSample ? [] : milestones || [
+    // Nothing to split when there is nothing to split. Without this a sample —
+    // or any project priced at nought — is born with three ₹0 milestones,
+    // which reads as a billing plan and is not one.
+    const defaultMilestones = isSample || !(quotedValue > 0) ? [] : milestones || [
       { label: 'Advance Payment', percent: 40, amount: quotedValue * 0.4 },
       { label: 'Phase 1 Sign-off', percent: 30, amount: quotedValue * 0.3 },
       { label: 'Final Delivery & Handover', percent: 30, amount: quotedValue * 0.3 },
@@ -611,7 +619,15 @@ projectsRouter.post('/', requirePermission('company.write'), async (req: AuthReq
 
 const projectEditSchema = z.object({
   name: z.string().min(1).optional(),
-  quotedValue: z.number().positive().optional(),
+  /*
+   * Nought is allowed here, and whether it is VALID is decided below.
+   *
+   * This said `.positive()`, which meant every edit of a sample project was
+   * refused with "Number must be greater than 0" — the form sends the value
+   * back as it stands, and a sample's value is nought by definition. The
+   * field could not see `isSample`, so the rule had to move to where it can.
+   */
+  quotedValue: z.number().min(0, 'Quoted value cannot be negative').optional(),
   startDate: z.string().min(1).optional(),
   endDate: z.string().min(1).optional(),
   ownerId: z.string().min(1).optional(),
@@ -663,6 +679,15 @@ projectsRouter.patch('/:id', requirePermission('company.write'), async (req: Aut
      *   exactly the unbillable project this release is trying to stamp out, so
      *   the value has to arrive in the same request.
      */
+    /*
+     * No price floor on an edit either.
+     *
+     * The schema said `.positive()`, which refused every edit of a sample —
+     * the form sends the value back as it stands and a sample's is nought — and
+     * it also refused taking a price back off a project that turned out to be
+     * free. Negative is still refused, in the schema, because that is the only
+     * figure here that cannot mean anything.
+     */
     let clearedMilestones = 0;
     if (isSample !== undefined && isSample !== existing.isSample) {
       if (isSample) {
@@ -688,15 +713,6 @@ projectsRouter.patch('/:id', requirePermission('company.write'), async (req: Aut
           return;
         }
         clearedMilestones = (await prisma.milestone.deleteMany({ where: { projectId: id } })).count;
-      } else {
-        const price = quotedValue ?? Number(existing.quotedValue);
-        if (!(price > 0)) {
-          res.status(400).json({
-            success: false,
-            error: 'Paid work needs a quoted value. Enter one to move this off sample work.',
-          });
-          return;
-        }
       }
     }
 

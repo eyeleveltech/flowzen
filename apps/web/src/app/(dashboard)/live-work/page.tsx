@@ -114,9 +114,10 @@ export default function LiveWorkPage() {
    * on a page of its own because "what is the studio working on" is one
    * question, and the answer was being given in two halves.
    */
-  const TABS: TabDef<'RETAINERS' | 'PROJECTS' | 'INTERNAL'>[] = [
+  const TABS: TabDef<'RETAINERS' | 'PROJECTS' | 'SAMPLE' | 'INTERNAL'>[] = [
     { key: 'RETAINERS', label: 'Retainers' },
     { key: 'PROJECTS', label: 'Projects' },
+    { key: 'SAMPLE', label: 'Sample' },
     { key: 'INTERNAL', label: 'Internal' },
   ];
   const [tab, setTab] = useTabState(TABS);
@@ -227,10 +228,34 @@ export default function LiveWorkPage() {
   const money = (n: number | string | null | undefined) => formatMoney(n, currency, locale);
   const monthLabel = new Date().toLocaleString('en-IN', { month: 'long' });
 
-  const liveProjects = allProjects.filter((p) => p.status === 'LIVE');
-  const projects = projectStatusFilter ? allProjects.filter((p) => p.status === projectStatusFilter) : allProjects;
+  /*
+   * Sold work and given-away work are never one list.
+   *
+   * They were: a sample sat in Projects with "Sample" where its value should
+   * be, and the header counted it as a project — so "4 projects" included one
+   * nobody is paying for. Every figure on this screen is about money coming
+   * in, and a row with none in a column of them is a row that gets added up by
+   * accident. Same rule as the client's Work tab, and as §8's refusal to sum
+   * retainer and one-time money.
+   */
+  const paidProjects = allProjects.filter((p) => !p.isSample);
+  const sampleProjects = allProjects.filter((p) => p.isSample);
+  const liveProjects = paidProjects.filter((p) => p.status === 'LIVE');
+  const liveSamples = sampleProjects.filter((p) => p.status === 'LIVE');
+  const projects = projectStatusFilter
+    ? paidProjects.filter((p) => p.status === projectStatusFilter)
+    : paidProjects;
+  const samples = projectStatusFilter
+    ? sampleProjects.filter((p) => p.status === projectStatusFilter)
+    : sampleProjects;
 
-  usePageHeader('Live work', `${retainers.length} retainer${retainers.length === 1 ? '' : 's'}, ${liveProjects.length} project${liveProjects.length === 1 ? '' : 's'}`);
+  // Samples are counted apart, and only when there are any — "3 projects, 0
+  // samples" makes a thing out of an absence.
+  usePageHeader(
+    'Live work',
+    `${retainers.length} retainer${retainers.length === 1 ? '' : 's'}, ${liveProjects.length} project${liveProjects.length === 1 ? '' : 's'}` +
+      (liveSamples.length > 0 ? `, ${liveSamples.length} sample${liveSamples.length === 1 ? '' : 's'}` : ''),
+  );
 
   const noContractCount = retainers.filter((r) => r.noFixedTermRisk).length;
   const flaggedProjects = liveProjects.filter((p) => p.alerts.length > 0);
@@ -380,8 +405,9 @@ export default function LiveWorkPage() {
         tabs={[
           { key: 'RETAINERS', label: 'Retainers', count: retainers.length },
           { key: 'PROJECTS', label: 'Projects', count: projects.length },
+          { key: 'SAMPLE', label: 'Sample', count: samples.length },
           { key: 'INTERNAL', label: 'Internal', count: internalProjects.length },
-        ] as TabDef<'RETAINERS' | 'PROJECTS' | 'INTERNAL'>[]}
+        ] as TabDef<'RETAINERS' | 'PROJECTS' | 'SAMPLE' | 'INTERNAL'>[]}
         active={tab}
         onChange={setTab}
       />
@@ -553,17 +579,9 @@ export default function LiveWorkPage() {
                             {getPriorityLabel(p.priority)}
                           </span>
                         </td>
-                        {/* "₹0" reads as a deal worth nothing; "Sample" reads
-                            as the decision it was. */}
-                        <td className="font-semibold text-primary text-right">
-                          {p.isSample ? (
-                            <span className="text-micro font-medium text-secondary">Sample</span>
-                          ) : canSeeFigures ? (
-                            money(quoted)
-                          ) : (
-                            '—'
-                          )}
-                        </td>
+                        {/* Always a figure now: samples have their own tab, so
+                            nothing in this column is unpriced. */}
+                        <td className="font-semibold text-primary text-right">{canSeeFigures ? money(quoted) : '—'}</td>
                         <td className="" style={{ width: 140 }}>
                           <Bar pct={donePct} tone={over ? 'warn' : donePct === 100 ? 'good' : 'default'} />
                           <div className="text-micro text-secondary mt-1">
@@ -589,6 +607,81 @@ export default function LiveWorkPage() {
             </div>
           </div>
         </>
+      )}
+
+      {tab === 'SAMPLE' && (
+        <div className="border border-border rounded-xl overflow-hidden mt-6">
+          <div className="overflow-x-auto">
+            <table className="w-full data-table">
+              <thead>
+                <tr className="border-b border-border bg-subtle">
+                  <th className="eyebrow text-left">Sample work</th>
+                  <th className="eyebrow text-left">For</th>
+                  <th className="eyebrow text-left">Owner</th>
+                  {/* No Quoted column. There is no quote — that is what makes
+                      it a sample — and an empty column invites a total. */}
+                  <th className="eyebrow text-right">Cost so far</th>
+                  <th className="eyebrow text-left">Progress</th>
+                  <th className="eyebrow text-left">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {samples.length === 0 && !loading && (
+                  <tr>
+                    <td colSpan={6} className="px-5 py-12 text-center text-sm text-secondary">
+                      Nothing given away. A sample reel, a pilot design, a trial piece — record it on the client and
+                      what it costs shows up here.
+                    </td>
+                  </tr>
+                )}
+                {samples.map((p) => {
+                  const spent = p.actualCostTotal != null ? Number(p.actualCostTotal) : null;
+                  const donePct =
+                    p.totalTasksCount > 0
+                      ? Math.round(((p.totalTasksCount - p.openTasksCount) / p.totalTasksCount) * 100)
+                      : 0;
+                  return (
+                    <tr
+                      key={p.id}
+                      className="hover:bg-subtle transition-colors cursor-pointer"
+                      onClick={() => router.push(`/projects/${p.id}`)}
+                    >
+                      <td>
+                        <Link
+                          href={`/projects/${p.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-sm font-semibold text-primary rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                        >
+                          {p.name}
+                        </Link>
+                      </td>
+                      <td className="text-secondary">{p.company.name}</td>
+                      <td className="text-secondary">{p.owner?.name ?? '—'}</td>
+                      {/* The only figure that exists on a sample, and the whole
+                          reason for recording one: what winning them cost. */}
+                      <td className="text-right font-semibold text-secondary">
+                        {!canSeeFigures ? '—' : p.profit?.costBasis === 'none' ? (
+                          <span className="font-normal text-secondary">not entered</span>
+                        ) : (
+                          money(spent)
+                        )}
+                      </td>
+                      <td style={{ width: 140 }}>
+                        <Bar pct={donePct} tone={donePct === 100 ? 'good' : 'default'} />
+                        <div className="text-micro text-secondary mt-1">{donePct}%</div>
+                      </td>
+                      <td>
+                        <Badge tone={p.status === 'LIVE' ? 'good' : p.status === 'DELIVERED' ? 'info' : 'neutral'}>
+                          {p.status === 'LIVE' ? 'Live' : p.status === 'DELIVERED' ? 'Delivered' : 'Cancelled'}
+                        </Badge>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       {tab === 'INTERNAL' && (

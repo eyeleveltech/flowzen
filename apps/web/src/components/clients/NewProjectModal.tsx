@@ -185,10 +185,17 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [],
    * The name stays because a row has to be findable, and five projects all
    * called the same thing are five rows nobody can tell apart.
    */
+  /*
+   * A price is not required, on any project.
+   *
+   * "Nought" and "not settled yet" are both real states for a piece of one-off
+   * work, and demanding a positive number only got somebody to type 1 to get
+   * past the form — after which the figure is wrong rather than absent.
+   */
   const canSave =
     Boolean(companyId) &&
     Boolean(name.trim()) &&
-    (isSample || (quoted > 0 && Boolean(startDate) && Boolean(endDate) && customValid));
+    (isSample || (Boolean(startDate) && Boolean(endDate) && customValid));
 
   const addRow = () => setCustomRows((prev) => [...prev, blankRow()]);
   const removeRow = (idx: number) => setCustomRows((prev) => prev.filter((_, i) => i !== idx));
@@ -315,7 +322,13 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [],
 
           <div className="grid gap-4 sm:grid-cols-2">
             {!isSample && (
-              <Field label="Quoted value (₹)" value={quotedValue} onChange={setQuotedValue} type="number" required />
+              <Field
+                label="Quoted value (₹)"
+                value={quotedValue}
+                onChange={setQuotedValue}
+                type="number"
+                hint="Leave it blank if there is no price yet, or it is nought."
+              />
             )}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
