@@ -43,6 +43,7 @@ import { Badge } from '@/components/ui/badge';
 import { getPriorityBadge, getPriorityLabel } from '@/lib/priority';
 import { plural } from '@/lib/utils';
 import { personLine, personOptions } from '@/lib/people';
+import { useTeamMembers } from '@/hooks/queries';
 
 export type DrawerTask = {
   id: string;
@@ -95,7 +96,7 @@ const dateValue = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : 
 export function TaskDrawer({
   task,
   statusOptions,
-  team,
+  team: teamProp,
   busy = false,
   onClose,
   onStatusChange,
@@ -103,7 +104,16 @@ export function TaskDrawer({
 }: {
   task: DrawerTask | null;
   statusOptions: { value: string; label: string }[];
-  /** Assignee choices. Omit to leave the assignee read-only — a screen with no roster should not offer a picker it cannot fill. */
+  /**
+   * Assignee choices, when the screen already has them.
+   *
+   * Optional now, and only an optimisation: the drawer fetches the roster
+   * itself when a screen does not pass one. It used to decide whether the
+   * assignee could be changed AT ALL, which meant reassigning worked on All
+   * tasks and nowhere else — not on My Work, not on a client, not inside a
+   * project. Who may reassign is a permission, not a property of the screen
+   * somebody happened to open the task from.
+   */
   team?: { id: string; name: string; dept?: string }[];
   busy?: boolean;
   onClose: () => void;
@@ -112,6 +122,13 @@ export function TaskDrawer({
   onChanged: () => void;
 }) {
   const confirm = useConfirmStore((s) => s.confirm);
+  /*
+   * The same list every creation form uses, cached by the query layer — so a
+   * screen that passes one saves a request and a screen that does not still
+   * gets a working picker.
+   */
+  const roster = useTeamMembers();
+  const people = teamProp ?? roster;
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -179,11 +196,13 @@ export function TaskDrawer({
         dueDate,
         priority,
         notes: notes.trim() || null,
-        ...(team && assignedById ? { assignedById } : {}),
+        ...(assignedById ? { assignedById } : {}),
         reviewerId: reviewerId || null,
         taskType: taskType || null,
         ...(task.workType === 'INTERNAL' ? { internalProjectId: internalProjectId || null } : {}),
-        ...(team && assigneeIds.length > 0 ? { assigneeIds } : {}),
+        // Sent whenever there is a set. The server refuses a reassignment from
+        // somebody who may not make one, which is the check that counts.
+        ...(assigneeIds.length > 0 ? { assigneeIds } : {}),
       });
       toast.success('Task updated');
       setEditing(false);
@@ -266,31 +285,29 @@ export function TaskDrawer({
             <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
               <Field label="Title" value={title} onChange={setTitle} required />
               {/*
-                The shared control, so the rule about who may assign to whom is
-                the same on the edit form as on the four creation forms.
+                Reassigning, and who may do it.
 
-                Two gates, doing different jobs. `team` decides whether this
-                SCREEN offers assignment at all — My Work passes none, so its
-                drawer has never shown these — and the field itself decides what
-                the viewer may do with it. Before, the offer was the only gate:
-                any caller that passed `team` handed an employee the whole
-                roster and a 403 on save.
+                One gate, not two. These used to be hidden unless the SCREEN
+                passed a roster, which meant a head could move a task on All
+                tasks and nowhere else — not from My Work, not from a client,
+                not inside a project. Who may hand work to somebody else is a
+                permission (`work.team` or `work.all` — heads and management),
+                and the field enforces it itself: anybody else sees their own
+                name and the reason, rather than a picker that refuses on save.
 
                 Several people, because several people do the work, and the
                 first is the lead — the one a person's load, the overload alerts
                 and "whose task is this" all resolve to.
               */}
-              {team && <AssigneeField label="Assigned to" value={assigneeIds} onChange={setAssigneeIds} />}
-              {team && <AssignedByField value={assignedById} onChange={setAssignedById} />}
-              {team && (
-                <FieldSelect
-                  label="Reviewer"
-                  value={reviewerId}
-                  onChange={setReviewerId}
-                  placeholder="Nobody reviews it"
-                  options={personOptions(team)}
-                />
-              )}
+              <AssigneeField label="Assigned to" value={assigneeIds} onChange={setAssigneeIds} />
+              <AssignedByField value={assignedById} onChange={setAssignedById} />
+              <FieldSelect
+                label="Reviewer"
+                value={reviewerId}
+                onChange={setReviewerId}
+                placeholder="Nobody reviews it"
+                options={personOptions(people)}
+              />
               <FieldSelect
                 label="Type of work"
                 value={taskType}

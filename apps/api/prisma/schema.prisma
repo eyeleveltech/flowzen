@@ -170,6 +170,8 @@ model Organization {
   projects         Project[]
   tasks            Task[]
   internalProjects InternalProject[]
+  zenConversations ZenConversation[]
+  zenMemories      ZenMemory[]
   costs            Cost[]
   invoices         Invoice[]
   alerts           Alert[]
@@ -224,6 +226,8 @@ model User {
   ownedOutreach        OutreachEntry[]    @relation("OutreachOwner")
   ownedRetainers       Retainer[]         @relation("RetainerOwner")
   ownedProjects        Project[]          @relation("ProjectOwner")
+  zenConversations     ZenConversation[]  @relation("ZenConversations")
+  zenMemories          ZenMemory[]        @relation("ZenMemories")
   assignedTasks        Task[]             @relation("TaskAssignee")
   createdTasks         Task[]             @relation("TaskCreator")
   handedOutTasks       Task[]             @relation("TaskAssignedBy")
@@ -1631,4 +1635,93 @@ model AssetMaintenance {
 
   @@index([assetId, sentAt])
   @@map("asset_maintenance")
+}
+
+// ── Zen ─────────────────────────────────────────────────────────────────────
+
+enum ZenRole {
+  USER
+  ASSISTANT
+}
+
+/// One thread of conversation with Zen.
+///
+/// The history used to live in the browser: it was sent up with every question
+/// and it died with the tab. Two things followed. Closing the panel lost the
+/// thread — including the reasoning behind a task that was half arranged — and
+/// every question re-sent the whole conversation, so the cost of asking grew
+/// with how long you had been talking.
+///
+/// Per person, because Zen answers as if it is talking to one: it names them,
+/// it reads their memory, and a shared thread would mean one person's half-
+/// finished task turning up in somebody else's panel.
+model ZenConversation {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  /// Taken from the first thing asked, so the list reads as questions rather
+  /// than as timestamps. Null until there is one.
+  title          String?
+  createdAt      DateTime @default(now())
+  /// When anything was last said. The list sorts by this, not by createdAt —
+  /// a thread you came back to yesterday belongs at the top.
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation("ZenConversations", fields: [userId], references: [id], onDelete: Cascade)
+  messages     ZenMessage[]
+
+  @@index([userId, updatedAt])
+  @@map("zen_conversations")
+}
+
+model ZenMessage {
+  id             String    @id @default(cuid())
+  conversationId String
+  role           ZenRole
+  text           String    @db.Text
+  /// The task Zen prepared on this turn, if it prepared one.
+  ///
+  /// Kept on the message rather than rebuilt from the text, so reopening a
+  /// conversation shows the same card it showed at the time — a draft
+  /// re-derived from prose is a draft that can come back different.
+  draft          Json?
+  /// When that draft was acted on. Set so a thread reopened tomorrow does not
+  /// offer to create the same task a second time.
+  actedAt        DateTime?
+  /// What the task became, once it was created.
+  createdTaskId  String?
+  createdAt      DateTime  @default(now())
+
+  conversation ZenConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("zen_messages")
+}
+
+/// Something Zen learned about how somebody works.
+///
+/// Deliberately narrow: preferences and corrections — who design work usually
+/// goes to, that a due date should be a date and not "next week", that the
+/// source is called Outsource now. NOT facts about clients or money. Those
+/// come from the tools, which read the database as it is this second; a
+/// remembered figure is a figure that goes stale and then contradicts the
+/// thing that fetched it.
+///
+/// Written as one short sentence each so a person can read the list back in
+/// Settings and delete any line of it.
+model ZenMemory {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  text           String   @db.Text
+  /// The conversation it was learned in, for "why does it think that".
+  sourceId       String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation("ZenMemories", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("zen_memories")
 }

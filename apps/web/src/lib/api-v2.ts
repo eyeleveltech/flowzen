@@ -1094,6 +1094,27 @@ export const api = {
           needsBaseUrl: boolean;
         }[];
       }>('/assistant/providers'),
+    /**
+     * Every conversation this person has had with Zen, newest first.
+     *
+     * Per person on the server — a thread belongs to whoever had it, and an id
+     * from somebody else reads as not found rather than as a refusal.
+     */
+    threads: () =>
+      get<{ success: boolean; threads: { id: string; title: string | null; updatedAt: string; _count: { messages: number } }[] }>(
+        '/assistant/threads',
+      ),
+    thread: (id: string) =>
+      get<{ success: boolean; thread: { id: string; title: string | null; messages: any[] } }>(`/assistant/threads/${id}`),
+    removeThread: (id: string) => del(`/assistant/threads/${id}`),
+    /** Marks a draft as acted on, so reopening does not offer to create it twice. */
+    markActed: (messageId: string, taskId?: string) =>
+      post(`/assistant/messages/${messageId}/acted`, taskId ? { taskId } : {}),
+    /** What Zen has learned about how you work — readable, and deletable. */
+    memory: () =>
+      get<{ success: boolean; memories: { id: string; text: string; createdAt: string }[] }>('/assistant/memory'),
+    forget: (id: string) => del(`/assistant/memory/${id}`),
+
     /** Asks about the month's money. The key lives on the server; this never sees it. */
     ask: (question: string, month?: string) =>
       post<{ success: boolean; answer: string; model: string; month: string }>('/assistant/ask', {
@@ -1113,6 +1134,18 @@ export const api = {
         history?: { from: 'you' | 'assistant'; text: string }[];
         month?: string;
         signal?: AbortSignal;
+        /** The thread to continue. Omitted starts a new one. */
+        conversationId?: string;
+        /**
+         * Where the asker is standing — ids and a route, never the page's own
+         * data. Zen resolves them with its own tools, so a screen cannot hand
+         * it something the person was not allowed to read.
+         */
+        page?: Record<string, string | undefined>;
+        /** The thread this landed in, sent before the first token. */
+        onThread?: (conversationId: string) => void;
+        /** The stored message id, once the exchange is saved. */
+        onSaved?: (messageId: string) => void;
         onPiece: (text: string) => void;
         /** What Zen went to look at, so the wait has a reason on screen. */
         onTool?: (name: string) => void;
@@ -1136,6 +1169,8 @@ export const api = {
           question,
           ...(opts.history ? { history: opts.history } : {}),
           ...(opts.month ? { month: opts.month } : {}),
+          ...(opts.conversationId ? { conversationId: opts.conversationId } : {}),
+          ...(opts.page ? { page: opts.page } : {}),
         }),
       });
       if (!res.ok || !res.body) {
@@ -1166,10 +1201,17 @@ export const api = {
             error?: string;
             name?: string;
             draft?: TaskDraft;
+            conversationId?: string;
+            messageId?: string;
           };
           if (name === 'piece' && data.text) opts.onPiece(data.text);
           if (name === 'tool' && data.name) opts.onTool?.(data.name);
           if (name === 'draft' && data.draft) opts.onDraft?.(data.draft);
+          // Sent before the first token, so the panel holds the thread even if
+          // the answer then fails — the next question continues it rather than
+          // opening another.
+          if (name === 'thread' && data.conversationId) opts.onThread?.(data.conversationId);
+          if (name === 'done' && data.messageId) opts.onSaved?.(data.messageId);
           if (name === 'error' && data.error) failure = data.error;
         }
       }

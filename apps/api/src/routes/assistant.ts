@@ -9,6 +9,8 @@ import {
   AssistantFailed,
 } from '../services/moneyAssistant.js';
 import { providerChoices } from '../services/ai/index.js';
+import { openThread, recordExchange, discardIfUnused } from '../services/zenThreads.js';
+import { prisma } from '../lib/prisma.js';
 
 /**
  * Asking about the business.
@@ -49,9 +51,38 @@ const askSchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}$/, 'Month should look like 2026-09')
     .optional(),
+  /**
+   * The thread this belongs to. Omitted starts a new one.
+   *
+   * The history above is now only a fallback for a client that has not been
+   * updated; when a thread id arrives, the server reads the conversation from
+   * its own table instead — which is both cheaper and the only version that
+   * survives closing the panel.
+   */
+  conversationId: z.string().min(1).optional(),
+  /**
+   * The screen they asked from.
+   *
+   * Ids and a route, never the page's data. Zen resolves them with its own
+   * tools, so what it can see stays governed by the tools rather than by
+   * whatever the browser happened to be holding — which also means a page
+   * cannot hand it something the asker was not allowed to read.
+   */
+  page: z
+    .object({
+      route: z.string().max(200).optional(),
+      projectId: z.string().max(40).optional(),
+      retainerId: z.string().max(40).optional(),
+      companyId: z.string().max(40).optional(),
+      monthCardId: z.string().max(40).optional(),
+      internalProjectId: z.string().max(40).optional(),
+    })
+    .optional(),
 });
 
 assistantRouter.post('/ask', requireManagement(), async (req: AuthRequest, res: Response, next) => {
+  /** Set once a thread is created, so a failure below can take it away again. */
+  let opened: string | null = null;
   try {
     const parsed = askSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -63,12 +94,40 @@ assistantRouter.post('/ask', requireManagement(), async (req: AuthRequest, res: 
     const month =
       parsed.data.month ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
+    /*
+     * The thread, opened before the question is asked.
+     *
+     * Its turns replace whatever the browser sent: the server's copy is the
+     * one that survived the tab closing, and the client's was only ever a
+     * convenience. `history` stays accepted for a client that has not caught
+     * up, and loses to the stored thread when both arrive.
+     */
+    const thread = await openThread({
+      organizationId: req.user!.organizationId,
+      userId: req.user!.userId,
+      conversationId: parsed.data.conversationId,
+      firstQuestion: parsed.data.question,
+    });
+    // A thread opened for a question that then failed is an empty row in the
+    // list; a run of them after a key expires reads as a broken feature.
+    opened = thread.isNew ? thread.id : null;
+
     const { answer, model, provider, used, draft } = await askMoneyAssistant({
       organizationId: req.user!.organizationId,
       userId: req.user!.userId,
       question: parsed.data.question,
       month,
-      history: parsed.data.history,
+      history: thread.turns.length > 0 ? thread.turns : parsed.data.history,
+      page: parsed.data.page,
+    });
+
+    // Written after the answer is known, so a question that failed does not
+    // leave half an exchange in the thread.
+    const { assistantMessageId } = await recordExchange({
+      conversationId: thread.id,
+      question: parsed.data.question,
+      answer,
+      draft,
     });
 
     // `used` says what Zen went and read to answer — useful in the panel and
@@ -76,7 +135,17 @@ assistantRouter.post('/ask', requireManagement(), async (req: AuthRequest, res: 
     //
     // `draft` is a task Zen has filled in and nothing more: no row exists, and
     // none will until the browser posts it to POST /tasks on a click.
-    res.json({ success: true, answer, model, provider, month, used, draft });
+    res.json({
+      success: true,
+      answer,
+      model,
+      provider,
+      month,
+      used,
+      draft,
+      conversationId: thread.id,
+      messageId: assistantMessageId,
+    });
   } catch (error) {
     /*
      * These two are the user's problem to fix, not a server fault — a missing
@@ -84,6 +153,7 @@ assistantRouter.post('/ask', requireManagement(), async (req: AuthRequest, res: 
      * through `next` would log a stack trace and return "something went wrong",
      * which is the one thing that does not help.
      */
+    if (opened) await discardIfUnused(opened);
     if (error instanceof AssistantNotConfigured) {
       res.status(409).json({ success: false, error: error.message, code: 'NO_KEY' });
       return;
@@ -93,6 +163,141 @@ assistantRouter.post('/ask', requireManagement(), async (req: AuthRequest, res: 
       return;
     }
     next(error);
+  }
+});
+
+/**
+ * ─── The threads ────────────────────────────────────────────────────────────
+ *
+ * Every one of these is confined to the caller. Zen answers as though it is
+ * talking to one person — it names them, it reads their memory — so a thread
+ * belongs to whoever had it, and an id from somebody else reads as not found.
+ */
+
+assistantRouter.get('/threads', requireManagement(), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const threads = await prisma.zenConversation.findMany({
+      where: { userId: req.user!.userId, organizationId: req.user!.organizationId },
+      // By when anything was last said, not when it began: a thread you came
+      // back to yesterday belongs at the top.
+      orderBy: { updatedAt: 'desc' },
+      take: 30,
+      select: {
+        id: true,
+        title: true,
+        updatedAt: true,
+        _count: { select: { messages: true } },
+      },
+    });
+    res.json({ success: true, threads });
+  } catch (e) {
+    next(e);
+  }
+});
+
+assistantRouter.get('/threads/:id', requireManagement(), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const thread = await prisma.zenConversation.findFirst({
+      where: { id: String(req.params.id), userId: req.user!.userId, organizationId: req.user!.organizationId },
+      select: {
+        id: true,
+        title: true,
+        messages: {
+          orderBy: { createdAt: 'asc' },
+          select: { id: true, role: true, text: true, draft: true, actedAt: true, createdTaskId: true, createdAt: true },
+        },
+      },
+    });
+    if (!thread) {
+      res.status(404).json({ success: false, error: 'Conversation not found' });
+      return;
+    }
+    res.json({ success: true, thread });
+  } catch (e) {
+    next(e);
+  }
+});
+
+assistantRouter.delete('/threads/:id', requireManagement(), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const owned = await prisma.zenConversation.findFirst({
+      where: { id: String(req.params.id), userId: req.user!.userId, organizationId: req.user!.organizationId },
+      select: { id: true },
+    });
+    if (!owned) {
+      res.status(404).json({ success: false, error: 'Conversation not found' });
+      return;
+    }
+    // A real delete. A conversation is not a business record — nothing is
+    // derived from it, no figure reads it — and §16 is about the rows the
+    // studio's numbers rest on.
+    await prisma.zenConversation.delete({ where: { id: owned.id } });
+    res.json({ success: true });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Marks the draft on a message as acted on, so reopening does not offer it twice. */
+assistantRouter.post('/messages/:id/acted', requireManagement(), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const taskId = typeof req.body?.taskId === 'string' ? req.body.taskId : null;
+    const message = await prisma.zenMessage.findFirst({
+      where: {
+        id: String(req.params.id),
+        conversation: { userId: req.user!.userId, organizationId: req.user!.organizationId },
+      },
+      select: { id: true },
+    });
+    if (!message) {
+      res.status(404).json({ success: false, error: 'Message not found' });
+      return;
+    }
+    await prisma.zenMessage.update({
+      where: { id: message.id },
+      data: { actedAt: new Date(), createdTaskId: taskId },
+    });
+    res.json({ success: true });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * ─── What Zen has learned ───────────────────────────────────────────────────
+ *
+ * Readable and deletable by the person it is about, which is the whole reason
+ * it is stored as one short sentence per row rather than as a model's private
+ * notes: a memory nobody can read is a memory nobody can correct.
+ */
+
+assistantRouter.get('/memory', requireManagement(), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const memories = await prisma.zenMemory.findMany({
+      where: { userId: req.user!.userId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, text: true, createdAt: true },
+    });
+    res.json({ success: true, memories });
+  } catch (e) {
+    next(e);
+  }
+});
+
+assistantRouter.delete('/memory/:id', requireManagement(), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const owned = await prisma.zenMemory.findFirst({
+      where: { id: String(req.params.id), userId: req.user!.userId },
+      select: { id: true },
+    });
+    if (!owned) {
+      res.status(404).json({ success: false, error: 'Not found' });
+      return;
+    }
+    await prisma.zenMemory.delete({ where: { id: owned.id } });
+    res.json({ success: true });
+  } catch (e) {
+    next(e);
   }
 });
 
@@ -167,27 +372,72 @@ assistantRouter.post('/stream', requireManagement(), async (req: AuthRequest, re
   const send = (event: string, data: unknown) =>
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 
+  /*
+   * The thread, on this path too.
+   *
+   * Only `/ask` was given one at first, and the panel streams — so the half
+   * that people actually use would have persisted nothing, and "I can close it
+   * and carry on" would have been true of a route nobody calls. Opened before
+   * the first token, because its history is what the question is answered
+   * with; written after the last one, because an answer that failed half way
+   * is not an exchange.
+   */
+  let thread: Awaited<ReturnType<typeof openThread>> | null = null;
+  let answered = '';
+  let drafted: unknown;
+
   try {
+    thread = await openThread({
+      organizationId: req.user!.organizationId,
+      userId: req.user!.userId,
+      conversationId: parsed.data.conversationId,
+      firstQuestion: parsed.data.question,
+    });
+    // Sent first so the panel can hold on to it even if the answer fails: the
+    // next question then continues the same thread rather than opening another.
+    send('thread', { conversationId: thread.id });
+
     for await (const event of streamMoneyAssistant({
       organizationId: req.user!.organizationId,
       userId: req.user!.userId,
       question: parsed.data.question,
       month,
-      history: parsed.data.history,
+      history: thread.turns.length > 0 ? thread.turns : parsed.data.history,
+      page: parsed.data.page,
     })) {
       // `tool` says what Zen went to look at. Sent through so a pause of a few
       // seconds has a reason on screen rather than looking like nothing is
       // happening — which is what a silent tool round looks like.
-      if (event.kind === 'text') send('piece', { text: event.text });
-      else if (event.kind === 'tool') send('tool', { name: event.name });
+      if (event.kind === 'text') {
+        answered += event.text;
+        send('piece', { text: event.text });
+      } else if (event.kind === 'tool') send('tool', { name: event.name });
       // A drafted task, for the panel to show as a card with a Create button.
       // Nothing has been written at this point and nothing will be until that
       // button is pressed — the browser then posts it to `POST /tasks` under
       // the asker's own session, which is where the real rules live.
-      else send('draft', { draft: event.draft });
+      else {
+        drafted = event.draft;
+        send('draft', { draft: event.draft });
+      }
     }
-    send('done', { month });
+
+    if (answered.trim()) {
+      const { assistantMessageId } = await recordExchange({
+        conversationId: thread.id,
+        question: parsed.data.question,
+        answer: answered,
+        draft: drafted,
+      });
+      send('done', { month, conversationId: thread.id, messageId: assistantMessageId });
+    } else {
+      // Nothing was said, so there is nothing to keep — and a thread opened for
+      // it would sit in the list as an empty row.
+      if (thread.isNew) await discardIfUnused(thread.id);
+      send('done', { month, conversationId: thread.id });
+    }
   } catch (error) {
+    if (thread?.isNew) await discardIfUnused(thread.id);
     const message =
       error instanceof AssistantNotConfigured || error instanceof AssistantFailed
         ? error.message

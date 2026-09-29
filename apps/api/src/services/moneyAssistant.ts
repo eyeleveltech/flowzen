@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js';
+import { recall, remember, describeWhereTheyAre, type PageContext } from './zenThreads.js';
 import {
   AssistantFailed,
   AssistantNotConfigured,
@@ -63,8 +64,35 @@ import {
 
 export { AssistantFailed, AssistantNotConfigured } from './ai/index.js';
 
-/** Everything Zen may call: nine ways to look, one way to propose. */
-const ALL_TOOLS = [...ZEN_TOOLS, ...ZEN_DRAFT_TOOLS];
+/**
+ * One more, so Zen can keep a preference.
+ *
+ * Deliberately the narrowest possible tool: one sentence, no key, no
+ * structure. It is for how somebody works — who design goes to, that they want
+ * a date rather than "next week" — and the description says so, because the
+ * failure mode is remembering a figure that then goes stale and contradicts
+ * the tool that fetched it.
+ */
+const REMEMBER_TOOL = {
+  name: 'rememberThis',
+  description:
+    'Remember one short thing about how this person works — a preference, a correction, how they like something done. ' +
+    'NOT facts about clients, money, dates or anything a lookup can answer: those change, and a remembered one would be wrong later. ' +
+    'Use it when they tell you a preference, not every time they mention something.',
+  parameters: {
+    type: 'object',
+    properties: {
+      fact: {
+        type: 'string',
+        description: 'One short sentence, written so it still makes sense months later. "Design work goes to Janani unless told otherwise."',
+      },
+    },
+    required: ['fact'],
+  },
+} as const;
+
+/** Everything Zen may call: nine ways to look, one way to propose, one to remember. */
+const ALL_TOOLS = [...ZEN_TOOLS, ...ZEN_DRAFT_TOOLS, REMEMBER_TOOL];
 
 /** How creative Zen is allowed to be about figures, and how much it may say. */
 const TEMPERATURE = 0.2;
@@ -85,6 +113,14 @@ async function runTool(
   organizationId: string,
   userId: string,
 ): Promise<{ result: unknown; draft?: TaskDraft }> {
+  if (name === 'rememberThis') {
+    const fact = String((args as { fact?: unknown }).fact ?? '').trim();
+    if (!fact) return { result: { remembered: false, why: 'Nothing to remember.' } };
+    await remember({ organizationId, userId, text: fact });
+    // Told back in words, so the model can say it out loud rather than
+    // silently filing something the person never agreed to.
+    return { result: { remembered: true, fact } };
+  }
   if (name !== 'draftTask') {
     return { result: await runZenTool(name, args, organizationId) };
   }
@@ -231,10 +267,42 @@ async function orientation(organizationId: string, month: string) {
 }
 
 /** What Zen is told about its job, now that it can go and look things up. */
-function toolSystemPrompt(orient: Awaited<ReturnType<typeof orientation>>, askerName: string): string {
+function toolSystemPrompt(
+  orient: Awaited<ReturnType<typeof orientation>>,
+  askerName: string,
+  where: string | null,
+  memories: string[],
+): string {
   return [
     'You are Zen, the assistant inside Flowzen, the app EyeLevel Growth Studio runs on.',
     `You are talking to ${askerName}, who runs the business. Be brief and specific: name the client, the person, the number.`,
+    '',
+    /*
+     * Where they are standing.
+     *
+     * A sentence, not a data dump: the panel sends a route and an id, and this
+     * turns it into the one fact that makes "add a task here" resolvable. What
+     * Zen can READ is still governed by its tools — the page's own data never
+     * comes up the wire.
+     */
+    ...(where ? ['WHERE THEY ARE RIGHT NOW:', where, ''] : []),
+    /*
+     * And how they work.
+     *
+     * Preferences and corrections only. Anything about clients or money comes
+     * from the tools, which read the database as it is this second — a
+     * remembered figure goes stale and then contradicts the thing that
+     * fetched it, which is worse than not remembering at all.
+     */
+    ...(memories.length > 0
+      ? [
+          'WHAT YOU HAVE LEARNED ABOUT HOW THEY WORK:',
+          ...memories.map((m) => `- ${m}`),
+          'Treat these as preferences, not as facts about the business. If one contradicts what a tool returns, the tool is right.',
+          '',
+        ]
+      : []),
+    'If they tell you how they like something done — who work usually goes to, how they want dates given, what they call something — call rememberThis with one short sentence. Do not remember figures, client details or anything a tool can look up.',
     '',
     'You can look things up. Call a function when the answer is not already below — for anything about a particular client, a task, an invoice, an asset, or a month other than the current one.',
     '',
@@ -322,6 +390,8 @@ export async function* streamMoneyAssistant(opts: {
   question: string;
   month: string;
   history?: PriorTurn[];
+  /** The screen they asked from — see `describeWhereTheyAre`. */
+  page?: PageContext;
 }): AsyncGenerator<
   | { kind: 'text'; text: string }
   | { kind: 'tool'; name: string }
@@ -329,14 +399,16 @@ export async function* streamMoneyAssistant(opts: {
   void,
   unknown
 > {
-  const [{ provider, apiKey, model, baseUrl }, asker, orient] = await Promise.all([
+  const [{ provider, apiKey, model, baseUrl }, asker, orient, where, memories] = await Promise.all([
     settingsFor(opts.organizationId),
     prisma.user.findUnique({ where: { id: opts.userId }, select: { name: true } }),
     orientation(opts.organizationId, opts.month),
+    describeWhereTheyAre(opts.page, opts.organizationId),
+    recall(opts.userId),
   ]);
 
   const turns = openingTurns(opts.history, opts.question);
-  const system = toolSystemPrompt(orient, asker?.name ?? 'somebody');
+  const system = toolSystemPrompt(orient, asker?.name ?? 'somebody', where, memories);
   const used: string[] = [];
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round += 1) {
@@ -403,15 +475,19 @@ export async function askMoneyAssistant(opts: {
   question: string;
   month: string;
   history?: PriorTurn[];
+  /** The screen they asked from — see `describeWhereTheyAre`. */
+  page?: PageContext;
 }): Promise<{ answer: string; model: string; provider: string; used: string[]; draft?: TaskDraft }> {
-  const [{ provider, apiKey, model, baseUrl }, asker, orient] = await Promise.all([
+  const [{ provider, apiKey, model, baseUrl }, asker, orient, where, memories] = await Promise.all([
     settingsFor(opts.organizationId),
     prisma.user.findUnique({ where: { id: opts.userId }, select: { name: true } }),
     orientation(opts.organizationId, opts.month),
+    describeWhereTheyAre(opts.page, opts.organizationId),
+    recall(opts.userId),
   ]);
 
   const turns = openingTurns(opts.history, opts.question);
-  const system = toolSystemPrompt(orient, asker?.name ?? 'somebody');
+  const system = toolSystemPrompt(orient, asker?.name ?? 'somebody', where, memories);
   const used: string[] = [];
 
   /*
