@@ -51,6 +51,8 @@ interface LiveRetainer {
   companyName: string;
   owner?: { id: string; name: string } | null;
   monthlyValue: number | string;
+  /** GST on the fee, beside it. Null is "not said". */
+  gstPercent?: number | null;
   status: string;
   termMonths: number | null;
   renewalDate?: string | null;
@@ -151,6 +153,7 @@ export default function LiveWorkPage() {
         companyName: r.company.name,
         owner: r.owner,
         monthlyValue: r.monthlyValue,
+        gstPercent: r.gstPercent ?? null,
         status: r.status,
         termMonths: r.termMonths,
         renewalDate: r.renewalDate,
@@ -447,7 +450,16 @@ export default function LiveWorkPage() {
                         </Link>
                       </td>
                       <td className="text-secondary">{r.owner?.name ?? '—'}</td>
-                      <td className="font-semibold text-primary text-right">{canSeeFigures ? money(r.monthlyValue) : '—'}</td>
+                      {/* The fee is the revenue; the rate is what the client
+                          pays on top, and says when nobody has set one. */}
+                      <td className="font-semibold text-primary text-right">
+                        {canSeeFigures ? money(r.monthlyValue) : '—'}
+                        {canSeeFigures && (
+                          <span className="block text-micro font-normal text-secondary">
+                            {r.gstPercent != null ? `+${r.gstPercent}% GST` : 'GST not set'}
+                          </span>
+                        )}
+                      </td>
                       <td className="">
                         {r.termMonths ? (
                           <span className="text-micro font-medium px-2 py-0.5 rounded border border-success/30 text-success bg-success-tint">

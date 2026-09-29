@@ -20,16 +20,19 @@
  */
 
 import { formatMoney } from '@/lib/api-v2';
-import { Field, FieldSelect } from '@/components/ui/field';
+import { Field } from '@/components/ui/field';
 
-/** The rates that exist. "None" is not 0% — it is a bill with no tax on it. */
-const GST_OPTIONS = [
-  { value: '', label: 'No GST' },
-  { value: '5', label: '5%' },
-  { value: '12', label: '12%' },
-  { value: '18', label: '18%' },
-  { value: '28', label: '28%' },
-];
+/*
+ * The rate is typed, not picked.
+ *
+ * It was a list — no GST, 5, 12, 18, 28 — which covered the common cases and
+ * refused everything else: a bill with cess on top, a vendor at 3%, anything
+ * fractional. The only way round a list is to pick the nearest wrong answer,
+ * and a wrong rate is worse than a blank one, because it looks deliberate.
+ *
+ * Blank still means "no GST said", which is not the same as 0.
+ */
+const GST_MAX = 100;
 
 /** Base and rate → what leaves the account. Rounded to the paisa, once. */
 export const grossFromBase = (base: string, gst: string): number => {
@@ -83,7 +86,20 @@ export function GstAmountFields({
   hint?: string;
 }) {
   const gross = grossFromBase(amount, gstPercent);
-  const hasGst = Number(gstPercent) > 0 && Number(amount) > 0;
+  const rate = Number(gstPercent);
+  // Said on the field, before save, rather than coming back as a 400 — the
+  // server enforces the same bounds.
+  const gstError =
+    gstPercent.trim() === ''
+      ? undefined
+      : !Number.isFinite(rate)
+        ? 'That is not a number'
+        : rate < 0
+          ? 'GST cannot be negative'
+          : rate > GST_MAX
+            ? 'A percentage, so 100 at most'
+            : undefined;
+  const hasGst = !gstError && rate > 0 && Number(amount) > 0;
 
   return (
     <div className="space-y-2">
@@ -97,13 +113,15 @@ export function GstAmountFields({
           disabled={disabled}
           hint={hint ?? (mode === 'revenue' ? 'Before GST — what the work earns.' : 'Before tax, as printed on the bill.')}
         />
-        <FieldSelect
-          label="GST"
+        <Field
+          label="GST (%)"
           value={gstPercent}
           onChange={onGstChange}
-          options={GST_OPTIONS}
+          type="number"
           disabled={disabled}
-          placeholder="No GST"
+          placeholder="e.g. 18"
+          error={gstError}
+          hint={gstError ? undefined : 'Blank if there is no GST on it.'}
         />
       </div>
 
@@ -111,7 +129,7 @@ export function GstAmountFields({
           because the recorded figure is a different one. */}
       {hasGst && (
         <p className="rounded-xl border border-border bg-subtle/40 px-3 py-2 text-xs text-secondary">
-          {formatMoney(Number(amount))} + {gstPercent}% GST ={' '}
+          {formatMoney(Number(amount))} + {rate}% GST ={' '}
           <span className="font-semibold text-primary">{formatMoney(gross)}</span>
           {mode === 'revenue'
             ? ` — what the client pays. ${formatMoney(Number(amount))} is the revenue; the GST is collected for the government.`

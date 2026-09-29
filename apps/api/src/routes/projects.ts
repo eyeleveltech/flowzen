@@ -107,7 +107,7 @@ projectsRouter.get('/', requirePermission('work.all'), async (req: AuthRequest, 
         // about the work, and the list has to label it either way.
         isSample: p.isSample,
         // A rate, not a figure, so it is not masked with the money.
-        gstPercent: p.gstPercent,
+        gstPercent: p.gstPercent == null ? null : Number(p.gstPercent),
         actualCostTotal: canSeeFigures ? actualCostTotal : null,
         ...(canSeeFigures ? { profit, costRisk: risk } : {}),
         percentComplete: progress.percent,
@@ -391,6 +391,9 @@ projectsRouter.get('/:id', requirePermission('work.all'), async (req: AuthReques
       project: {
         ...project,
         quotedValue: canSeeFigures ? project.quotedValue : null,
+        // A Decimal column, which serialises as a string; the screen does
+        // arithmetic on it, so it goes out as the number it is.
+        gstPercent: project.gstPercent == null ? null : Number(project.gstPercent),
         actualCostTotal: canSeeFigures ? actualCostTotal : null,
         // Absent, not nulled, without money.figures — the same rule the asset
         // register follows. How far through the work is stays visible to
@@ -440,7 +443,7 @@ const projectCreateSchema = z.object({
    * the value is revenue, and GST charged to a client is collected for the
    * government. Null is "not said", which is not the same as 0%.
    */
-  gstPercent: z.number().int().min(0).max(28).optional().nullable(),
+  gstPercent: z.number().min(0, 'GST cannot be negative').max(100, 'GST is a percentage — 100 at most').optional().nullable(),
   /** Work done to win somebody, with nothing to invoice at the end of it. */
   isSample: z.boolean().optional().default(false),
   /*
@@ -643,7 +646,7 @@ const projectEditSchema = z.object({
    * the value is revenue, and GST charged to a client is collected for the
    * government. Null is "not said", which is not the same as 0%.
    */
-  gstPercent: z.number().int().min(0).max(28).optional().nullable(),
+  gstPercent: z.number().min(0, 'GST cannot be negative').max(100, 'GST is a percentage — 100 at most').optional().nullable(),
   startDate: z.string().min(1).optional(),
   endDate: z.string().min(1).optional(),
   ownerId: z.string().min(1).optional(),

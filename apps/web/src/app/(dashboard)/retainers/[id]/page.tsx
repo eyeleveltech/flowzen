@@ -878,8 +878,8 @@ export default function RetainerMonthCardPage() {
               note={
                 canEnterMoney
                   ? [
-                      retainer.gstPercent && revenue
-                        ? `+${retainer.gstPercent}% GST = ${money(Number(revenue) * (1 + retainer.gstPercent / 100))}`
+                      retainer.gstPercent != null && revenue
+                        ? `+${retainer.gstPercent}% GST = ${money(Number(revenue) * (1 + Number(retainer.gstPercent) / 100))}`
                         : null,
                       monthCard.invoice ? `invoiced ${date(monthCard.invoice.dueAt)}` : 'not invoiced yet',
                     ]
@@ -888,6 +888,23 @@ export default function RetainerMonthCardPage() {
                   : 'needs the money figures permission'
               }
             />
+            {/*
+              Said, rather than left out.
+
+              Every retainer that existed before GST was recorded has no rate,
+              and a tile that simply omits the line reads as "this one has no
+              GST" — which is a claim, and almost certainly the wrong one. So
+              the gap is named, with the way to close it one click away.
+            */}
+            {canEnterMoney && retainer.gstPercent == null && retainer.status === 'ACTIVE' && (
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="col-span-full -mt-1 text-left text-micro text-warning-ink hover:underline"
+              >
+                No GST rate recorded for this retainer — set one
+              </button>
+            )}
             {/*
               A number, including when the number is nought — same as a
               one-time project's. "Nothing entered" is the same fact written as

@@ -99,7 +99,7 @@ costsRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction)
       amount: canSeeFigures ? Number(c.amount) : null,
       // A rate is not a figure — it says nothing about how much was spent, so
       // it is not masked with the money.
-      gstPercent: c.gstPercent,
+      gstPercent: c.gstPercent == null ? null : Number(c.gstPercent),
       incurredAt: c.incurredAt,
       committedNotPaid: c.committedNotPaid,
       paidBy: c.paidBy,
@@ -123,7 +123,7 @@ costsRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction)
         { label: 'Incurred', value: (c) => c.incurredAt.toISOString().slice(0, 10) },
         { label: 'Committed, not paid', value: (c) => (c.committedNotPaid ? 'Yes' : 'No') },
         { label: 'Company', value: (c) => c.paidBy },
-        { label: 'GST %', value: (c) => (c.gstPercent == null ? '' : c.gstPercent) },
+        { label: 'GST %', value: (c) => (c.gstPercent == null ? '' : Number(c.gstPercent)) },
         { label: 'Treatment', value: (c) => c.treatment },
         { label: 'Entered by', value: (c) => c.enteredBy.name },
         { label: 'Recurring', value: (c) => (c.recurring ? 'Yes' : 'No') },
@@ -174,7 +174,7 @@ const createCostSchema = z.object({
    *
    * Null means nobody said, which is not the same as 0%.
    */
-  gstPercent: z.number().int().min(0).max(28).optional().nullable(),
+  gstPercent: z.number().min(0, 'GST cannot be negative').max(100, 'GST is a percentage — 100 at most').optional().nullable(),
   treatment: z.nativeEnum(CostTreatment).default(CostTreatment.COMPANY_EXPENSE),
   recurring: z.boolean().default(false),
   notes: z.string().optional().nullable(),
@@ -389,7 +389,7 @@ const editCostSchema = z.object({
   incurredAt: z.string().optional(),
   committedNotPaid: z.boolean().optional(),
   paidBy: z.string().trim().min(1).max(80).optional(),
-  gstPercent: z.number().int().min(0).max(28).optional().nullable(),
+  gstPercent: z.number().min(0, 'GST cannot be negative').max(100, 'GST is a percentage — 100 at most').optional().nullable(),
   treatment: z.nativeEnum(CostTreatment).optional(),
   recurring: z.boolean().optional(),
   notes: z.string().optional().nullable(),

@@ -721,6 +721,11 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-primary">
                         {r.monthlyValue === null ? 'Hidden' : `${formatMoney(r.monthlyValue)}/mo`}
+                        {r.monthlyValue !== null && (
+                          <span className="ml-1.5 text-micro font-normal text-secondary">
+                            {r.gstPercent != null ? `+${Number(r.gstPercent)}% GST` : '· GST not set'}
+                          </span>
+                        )}
                       </p>
                       <p className="text-micro text-secondary mt-0.5">
                         Started {formatDate(r.startDate)}

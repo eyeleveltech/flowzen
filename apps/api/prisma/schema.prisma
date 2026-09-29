@@ -642,7 +642,7 @@ model Retainer {
   /// paid over — so folding it in would inflate every margin by the rate. The
   /// total the client pays is value × (1 + gstPercent/100), worked out when
   /// shown. Null means nobody said, which is not the same as 0%.
-  gstPercent       Int?
+  gstPercent       Decimal?       @db.Decimal(5, 2)
   startDate        DateTime       @db.Date
   termMonths       Int?
   renewalDate      DateTime?      @db.Date
@@ -823,7 +823,7 @@ model Project {
   /// paid over — so folding it in would inflate every margin by the rate. The
   /// total the client pays is value × (1 + gstPercent/100), worked out when
   /// shown. Null means nobody said, which is not the same as 0%.
-  gstPercent       Int?
+  gstPercent       Decimal?      @db.Decimal(5, 2)
   estimatedCost    Decimal?      @db.Decimal(12, 2)
   startDate        DateTime      @db.Date
   endDate          DateTime      @db.Date
@@ -1141,7 +1141,7 @@ model Cost {
   /// cost entered before this field existed carries. The base is
   /// `amount / (1 + gstPercent/100)`; it is derived rather than stored so the
   /// two figures can never drift apart.
-  gstPercent        Int?
+  gstPercent        Decimal?      @db.Decimal(5, 2)
   incurredAt        DateTime      @db.Date
   committedNotPaid  Boolean       @default(false)
   paidBy            String        @default("Company")

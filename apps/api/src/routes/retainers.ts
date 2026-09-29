@@ -190,6 +190,9 @@ retainersRouter.get('/', requirePermission('work.all'), async (req: AuthRequest,
         companyId: r.companyId,
         company: r.company,
         monthlyValue: canSeeFigures ? r.monthlyValue : null,
+        // A rate, not a figure, so it is not masked — and a Decimal, so it
+        // goes out as the number it is.
+        gstPercent: r.gstPercent == null ? null : Number(r.gstPercent),
         startDate: r.startDate,
         termMonths: r.termMonths,
         renewalDate: r.renewalDate,
@@ -252,7 +255,7 @@ const retainerCreateSchema = z.object({
    * the value is revenue, and GST charged to a client is collected for the
    * government. Null is "not said", which is not the same as 0%.
    */
-  gstPercent: z.number().int().min(0).max(28).optional().nullable(),
+  gstPercent: z.number().min(0, 'GST cannot be negative').max(100, 'GST is a percentage — 100 at most').optional().nullable(),
   startDate: z.string().min(1, 'Start date is required'),
   termMonths: z.number().optional().nullable(),
   ownerId: z.string().optional(),
@@ -501,6 +504,8 @@ retainersRouter.get('/:id', requirePermission('work.all'), async (req: AuthReque
         projects: retainer.projects.map(summariseProject),
         unfiled,
         monthlyValue: canSeeFigures ? retainer.monthlyValue : null,
+        // A Decimal, sent as the number it is — see the project route.
+        gstPercent: retainer.gstPercent == null ? null : Number(retainer.gstPercent),
       },
     });
   } catch (error) {
@@ -1233,7 +1238,7 @@ const retainerEditSchema = z
      * the value is revenue, and GST charged to a client is collected for the
      * government. Null is "not said", which is not the same as 0%.
      */
-    gstPercent: z.number().int().min(0).max(28).optional().nullable(),
+    gstPercent: z.number().min(0, 'GST cannot be negative').max(100, 'GST is a percentage — 100 at most').optional().nullable(),
     startDate: z.string().min(1).optional(),
     termMonths: z.number().int().positive().nullable().optional(),
     ownerId: z.string().min(1).optional(),
@@ -1370,7 +1375,9 @@ retainersRouter.patch('/:id', requirePermission('company.write'), async (req: Au
     // A rate change is a real change — it moves what the client is billed —
     // so it counts toward "something was edited", and a save that resends the
     // same rate still writes nothing.
-    const gstChanged = gstPercent !== undefined && (gstPercent ?? null) !== (existing.gstPercent ?? null);
+    const gstChanged =
+      gstPercent !== undefined &&
+      (gstPercent ?? null) !== (existing.gstPercent == null ? null : Number(existing.gstPercent));
 
     // Resending what is already there writes nothing — no row, no month-card
     // reprice, and no "edited" line in the client's activity feed for a save
