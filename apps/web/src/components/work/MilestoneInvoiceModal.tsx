@@ -156,12 +156,13 @@ export function MilestoneInvoiceModal({
               hint={invoicing ? undefined : 'A part payment is fine — the milestone waits until the invoice is settled.'}
             />
             <Field
-              label={invoicing ? 'Invoice date' : 'Received on'}
+              label={invoicing ? 'Invoice date' : 'Date the client paid'}
               value={raisedAt}
               onChange={setRaisedAt}
               type="date"
               required
               disabled={busy}
+              hint={invoicing ? undefined : 'The day the money reached you — change it if that was not today.'}
             />
           </div>
 

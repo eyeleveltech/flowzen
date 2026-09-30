@@ -71,7 +71,7 @@ type Milestone = {
   order: number;
   proformas?: { id: string; number: string; status: string }[];
   /** The invoice settling it, when one has been recorded. */
-  invoices?: { id: string; number: string; amount: string | number | null; status: string }[];
+  invoices?: { id: string; number: string; amount: string | number | null; status: string; paidAt?: string | null }[];
 };
 type Task = {
   id: string;
@@ -759,6 +759,13 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                         <td className="text-right">{money(m.amount)}</td>
                         <td className="">
                           <Badge tone={MSTATUS[m.status].tone}>{MSTATUS[m.status].label}</Badge>
+                          {/* When the client actually paid — the date entered
+                              with the payment, not the day it was recorded. */}
+                          {m.status === 'PAID' && m.invoices?.[0]?.paidAt && (
+                            <span className="mt-0.5 block text-micro text-secondary">
+                              on {date(m.invoices[0].paidAt)}
+                            </span>
+                          )}
                         </td>
                         {/*
                           A milestone can sit at "Proforma raised" with nothing
@@ -771,6 +778,9 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                         <td className="font-mono text-xs text-secondary">
                           {m.proformas?.[0]?.number ? (
                             m.proformas[0].number
+                          ) : m.invoices?.[0]?.number ? (
+                            // Invoiced straight from Tally, with no proforma first.
+                            m.invoices[0].number
                           ) : m.status === 'PENDING' ? (
                             '—'
                           ) : (

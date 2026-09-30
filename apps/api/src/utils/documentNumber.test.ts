@@ -15,6 +15,7 @@ const org = (over: Record<string, unknown> = {}) => {
   (prisma.organization.findUnique as any).mockResolvedValue({
     proformaPrefix: 'EL/PI',
     financialYearStart: 4,
+    timezone: 'Asia/Kolkata',
     ...over,
   });
 };
@@ -31,7 +32,27 @@ describe('nextDocumentNumber', () => {
   it('starts a fresh series at 001', async () => {
     org();
     issued('proforma', []);
-    expect(await nextDocumentNumber('org-1', 'PROFORMA')).toMatch(/^EL\/PI\/\d{2}-\d{2}\/001$/);
+    expect(await nextDocumentNumber('org-1', 'PROFORMA')).toMatch(/^EL\/PI\/\d{2}-\d{2}-\d{4}\/001$/);
+  });
+
+  it("dates a quotation with the day it is raised, in the organisation's own zone", async () => {
+    // 20:30 UTC on 30 September is already 1 October in Chennai.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-30T20:30:00Z'));
+    org();
+    issued('proforma', []);
+    expect(await nextDocumentNumber('org-1', 'PROFORMA')).toBe('EL/PI/01-10-2026/001');
+    vi.useRealTimers();
+  });
+
+  it('carries the quotation count on from the year-numbered ones before it', async () => {
+    // The format changed; the count did not start again.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-30T06:00:00Z'));
+    org();
+    issued('proforma', ['EL/PI/26-27/016', 'EL/PI/26-27/017', 'EL/PI/29-09-2026/018']);
+    expect(await nextDocumentNumber('org-1', 'PROFORMA')).toBe('EL/PI/30-09-2026/019');
+    vi.useRealTimers();
   });
 
   it('derives the invoice prefix from the proforma one, so an org configures one thing', async () => {
@@ -40,20 +61,21 @@ describe('nextDocumentNumber', () => {
     expect(await nextDocumentNumber('org-1', 'INVOICE')).toMatch(/^ACME\/INV\//);
   });
 
-  it('counts the financial year from April, not January', async () => {
+  it('keeps the financial year on a tax invoice, counted from April', async () => {
+    // GST allows an invoice number sixteen characters — a full date does not fit.
     vi.useFakeTimers();
 
     // March 2027 still belongs to the year that began in April 2026.
     vi.setSystemTime(new Date('2027-03-15T10:00:00Z'));
     org();
-    issued('proforma', []);
-    expect(await nextDocumentNumber('org-1', 'PROFORMA')).toBe('EL/PI/26-27/001');
+    issued('invoice', []);
+    expect(await nextDocumentNumber('org-1', 'INVOICE')).toBe('EL/INV/26-27/001');
 
     // April 2027 starts the next one.
     vi.setSystemTime(new Date('2027-04-01T10:00:00Z'));
     org();
-    issued('proforma', []);
-    expect(await nextDocumentNumber('org-1', 'PROFORMA')).toBe('EL/PI/27-28/001');
+    issued('invoice', []);
+    expect(await nextDocumentNumber('org-1', 'INVOICE')).toBe('EL/INV/27-28/001');
 
     vi.useRealTimers();
   });

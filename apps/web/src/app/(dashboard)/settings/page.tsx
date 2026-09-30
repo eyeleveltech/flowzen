@@ -733,11 +733,36 @@ export default function SettingsPage() {
 
             <SectionCard
               title="Numbering"
-              description="What every quotation and invoice is called, and where the count starts again."
+              description="What every quotation and invoice is called."
             >
-                <p className="font-mono text-xs text-secondary">
-                  {form.documentPrefix || 'XX'}/QT/2026-27/001
-                </p>
+                {/*
+                  What the next ones will actually look like — the rule lives in
+                  the API's documentNumber.ts. A quotation carries the day it was
+                  raised; a tax invoice keeps the financial year, because GST
+                  caps an invoice number at sixteen characters.
+                */}
+                {(() => {
+                  const prefix = (form.documentPrefix || 'EL/PI').replace(/\/$/, '');
+                  const invPrefix = /\/PI$/i.test(prefix) ? prefix.replace(/\/PI$/i, '/INV') : `${prefix}/INV`;
+                  const now = new Date();
+                  const dd = String(now.getDate()).padStart(2, '0');
+                  const mm = String(now.getMonth() + 1).padStart(2, '0');
+                  const start = Number(form.fiscalYearStart) || 4;
+                  const fyStart = now.getMonth() + 1 < start ? now.getFullYear() - 1 : now.getFullYear();
+                  const fy = `${String(fyStart).slice(-2)}-${String(fyStart + 1).slice(-2)}`;
+                  return (
+                    <dl className="grid gap-1 text-xs sm:grid-cols-[auto_1fr] sm:gap-x-4">
+                      <dt className="text-secondary">Quotation</dt>
+                      <dd className="font-mono text-primary">
+                        {prefix}/{dd}-{mm}-{now.getFullYear()}/001
+                      </dd>
+                      <dt className="text-secondary">Tax invoice</dt>
+                      <dd className="font-mono text-primary">
+                        {invPrefix}/{fy}/001
+                      </dd>
+                    </dl>
+                  );
+                })()}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field
                     label="Prefix"
@@ -752,6 +777,7 @@ export default function SettingsPage() {
                     onChange={(v) => set('fiscalYearStart', v)}
                     disabled={!canEdit}
                     options={MONTHS}
+                    hint="Tax invoice numbers count from 001 again from this month. Quotations keep one running count."
                   />
                 </div>
                 {/*

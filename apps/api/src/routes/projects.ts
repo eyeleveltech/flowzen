@@ -310,7 +310,9 @@ projectsRouter.get('/:id', requirePermission('work.all'), async (req: AuthReques
             // offer "record the payment" against the right document.
             invoices: {
               where: { status: { not: 'CANCELLED' } },
-              select: { id: true, number: true, amount: true, status: true },
+              // `paidAt` is the date the client paid — the one entered on the
+              // payment, not the day somebody got round to recording it.
+              select: { id: true, number: true, amount: true, status: true, paidAt: true },
               orderBy: { raisedAt: 'desc' },
               take: 1,
             },
@@ -380,6 +382,8 @@ projectsRouter.get('/:id', requirePermission('work.all'), async (req: AuthReques
     const maskedMilestones = project.milestones.map((m) => ({
       ...m,
       amount: canSeeFigures ? m.amount : null,
+      // The invoice riding on each milestone carries a figure too.
+      invoices: m.invoices.map((inv) => ({ ...inv, amount: canSeeFigures ? inv.amount : null })),
     }));
     const maskedInvoices = project.invoices.map((inv) => ({
       ...inv,

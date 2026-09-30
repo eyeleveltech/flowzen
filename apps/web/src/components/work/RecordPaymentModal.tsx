@@ -60,7 +60,14 @@ export function RecordPaymentModal({
           <Field label="Amount (₹)" value={amount} onChange={setAmount} type="number" required />
           <FieldSelect label="Mode" value={mode} onChange={setMode} required options={PAYMENT_MODES.map((m) => ({ value: m, label: m }))} />
           <Field label="Reference" value={reference} onChange={setReference} placeholder="UTR / cheque no. (optional)" />
-          <Field label="Received on" value={receivedAt} onChange={setReceivedAt} type="date" required />
+          <Field
+            label="Date the client paid"
+            value={receivedAt}
+            onChange={setReceivedAt}
+            type="date"
+            required
+            hint="The day the money reached you — change it if that was not today."
+          />
           {error && <ErrorNote>{error}</ErrorNote>}
         </ModalBody>
         <ModalFooter>
