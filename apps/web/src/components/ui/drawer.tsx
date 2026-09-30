@@ -1,12 +1,13 @@
 'use client';
 
-import React, { ReactNode, useEffect, useRef } from 'react';
+import React, { ReactNode, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useIsMobile } from '@/hooks/use-breakpoint';
 import { X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { Icon } from '@/components/ui/icon';
 import { cn } from '@/lib/utils';
+import { useConfirmStore } from '@/stores/confirm';
 
 interface DrawerProps {
   isOpen: boolean;
@@ -17,6 +18,16 @@ interface DrawerProps {
   className?: string;
   variant?: 'modal' | 'slideover';
   ariaLabel?: string;
+  /**
+   * Ask before throwing away what somebody has filled in.
+   *
+   * On for every form (Modal turns it on). A click on the dimmed page behind a
+   * form, Escape, or the close button shut it on the spot, and the half-written
+   * proposal or cost went with it — one stray click and the lot typed again.
+   * Once anything has been typed or picked, those three ask first. Cancel and
+   * Save inside the form are deliberate and close as they always did.
+   */
+  guardUnsaved?: boolean;
 }
 
 export function Drawer({
@@ -27,11 +38,71 @@ export function Drawer({
   children,
   className = '',
   variant = 'modal',
-  ariaLabel
+  ariaLabel,
+  guardUnsaved = false,
 }: DrawerProps) {
   const isMobile = useIsMobile();
   const panelRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  /*
+   * Has anything been filled in since it opened?
+   *
+   * Read off the events, not the form's state: this component cannot see
+   * forty-six forms' state, but every one of them raises an input or change
+   * event when typed in, and the custom pickers are clicks on an option,
+   * switch or radio. A ref, not state — nothing on screen changes with it.
+   */
+  const dirtyRef = useRef(false);
+  const askingRef = useRef(false);
+  useEffect(() => {
+    if (isOpen) dirtyRef.current = false;
+  }, [isOpen]);
+
+  const markDirty = () => {
+    dirtyRef.current = true;
+  };
+  const noticePick = (e: React.SyntheticEvent) => {
+    const target = e.target as HTMLElement | null;
+    if (target?.closest?.('[role="option"], [role="switch"], [role="radio"], [role="checkbox"], [aria-pressed]')) {
+      markDirty();
+    }
+  };
+
+  /** Every way of closing that is not the form's own Cancel or Save. */
+  const requestClose = useCallback(async () => {
+    if (!guardUnsaved || !dirtyRef.current) {
+      onClose();
+      return;
+    }
+    // Escape pressed again while the question is up answers the question.
+    if (askingRef.current) return;
+    askingRef.current = true;
+    try {
+      const discard = await useConfirmStore.getState().confirm({
+        title: 'Discard what you have filled in?',
+        message: 'This form has details that are not saved yet. Close it now and they are gone.',
+        confirmText: 'Discard',
+        cancelText: 'Keep editing',
+        variant: 'danger',
+      });
+      if (discard) onClose();
+    } finally {
+      askingRef.current = false;
+    }
+  }, [guardUnsaved, onClose]);
+
+  // A refresh or a closed tab loses the form just the same.
+  useEffect(() => {
+    if (!isOpen || !guardUnsaved) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      if (!dirtyRef.current) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [isOpen, guardUnsaved]);
 
   // Lock body scroll when open
   useEffect(() => {
@@ -48,13 +119,15 @@ export function Drawer({
   // Handle Escape key press
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
+      if (e.key !== 'Escape' || !isOpen) return;
+      // Escape in an open dropdown closes the dropdown, not the whole form.
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.('[role="listbox"], [aria-expanded="true"]')) return;
+      void requestClose();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, requestClose]);
 
   // Auto-focus + focus restore
   useEffect(() => {
@@ -93,6 +166,20 @@ export function Drawer({
 
   if (!isOpen && typeof document === 'undefined') return null;
 
+  /*
+   * `contents`, so the wrapper adds no box: the form inside stays a direct
+   * flex child of the panel and its footer stays pinned. React events bubble
+   * through portals, so a pick in a dropdown rendered on <body> still lands
+   * here.
+   */
+  const watched = guardUnsaved ? (
+    <div className="contents" onInputCapture={markDirty} onChangeCapture={markDirty} onClickCapture={noticePick}>
+      {children}
+    </div>
+  ) : (
+    children
+  );
+
   const content = (
     <AnimatePresence>
       {isOpen && (
@@ -102,7 +189,7 @@ export function Drawer({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
+            onClick={() => void requestClose()}
             className="fixed inset-0 z-200 bg-black/30 backdrop-blur-xs"
           />
 
@@ -128,13 +215,13 @@ export function Drawer({
                       <h2 className="text-base font-semibold text-primary">{title}</h2>
                       {description && <p className="text-xs text-secondary mt-0.5">{description}</p>}
                     </div>
-                    <button onClick={onClose} className="rounded-full p-1 hover:bg-subtle" aria-label="Close">
+                    <button type="button" onClick={() => void requestClose()} className="rounded-full p-1 hover:bg-subtle" aria-label="Close">
                       <Icon as={X} size="lg" className="text-secondary" />
                     </button>
                   </div>
                 )}
               </div>
-              <div className="flex-1 overflow-y-auto px-6 pb-8 pt-4">{children}</div>
+              <div className="flex-1 overflow-y-auto px-6 pb-8 pt-4">{watched}</div>
             </motion.div>
           ) : variant === 'slideover' ? (
             /* DESKTOP: Slideover Panel */
@@ -159,7 +246,7 @@ export function Drawer({
                     <h3 className="text-base font-semibold text-primary">{title}</h3>
                     <button
                       type="button"
-                      onClick={onClose}
+                      onClick={() => void requestClose()}
                       className="text-secondary hover:text-primary p-1.5 rounded-xl hover:bg-subtle transition-colors"
                       aria-label="Close"
                     >
@@ -196,7 +283,7 @@ export function Drawer({
                 reachable. It costs nothing when a body already scrolls itself,
                 because then the column exactly fills this box.
               */}
-              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{children}</div>
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{watched}</div>
             </motion.div>
           ) : (
             /* DESKTOP: Centered Modal */
@@ -219,12 +306,12 @@ export function Drawer({
                       <h2 className="text-base font-semibold text-primary">{title}</h2>
                       {description && <p className="text-xs text-secondary mt-0.5">{description}</p>}
                     </div>
-                    <button onClick={onClose} className="rounded-full p-1 hover:bg-subtle" aria-label="Close">
+                    <button type="button" onClick={() => void requestClose()} className="rounded-full p-1 hover:bg-subtle" aria-label="Close">
                       <Icon as={X} size="lg" className="text-secondary" />
                     </button>
                   </div>
                 )}
-                <div className={title ? "" : "p-6"}>{children}</div>
+                <div className={title ? "" : "p-6"}>{watched}</div>
               </motion.div>
             </div>
           )}

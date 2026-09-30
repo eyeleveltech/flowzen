@@ -18,6 +18,7 @@ import { useConfirmStore } from '@/stores/confirm';
 import { ApiError } from '@/lib/api-v2';
 import toast from 'react-hot-toast';
 import { STAGE_LABEL } from '@flowzen/shared';
+import { monthLabel } from '@/lib/retainerBilling';
 
 /**
  * `DELETED` is here rather than only in Settings → Trash because /settings
@@ -39,6 +40,8 @@ type ProformaRow = {
   createdAt: string;
   company: { id: string; name: string };
   milestone?: { id: string; label: string; project: { id: string; name: string } } | null;
+  /** The retainer month it bills, when it bills one. */
+  monthCard?: { id: string; month: string; retainerId: string } | null;
   invoice?: { id: string; number: string; status: string } | null;
 };
 
@@ -369,7 +372,10 @@ export default function ProposalsPage() {
                         <span className="block text-micro">{pf.milestone.label}</span>
                       </>
                     ) : pf.sourceType === 'MONTH_CARD' ? (
-                      'Retainer month'
+                      <>
+                        Retainer
+                        {pf.monthCard && <span className="block text-micro">{monthLabel(pf.monthCard.month)}</span>}
+                      </>
                     ) : (
                       'Proposal'
                     )}

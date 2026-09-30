@@ -1,32 +1,44 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
-import { authenticate, requirePermission, type AuthRequest } from '../middleware/auth.js';
-import { issueWithRetry } from '../utils/documentNumber.js';
-import { ProformaStatus, ProformaSourceType } from '@prisma/client';
+import { authenticate, requireAnyPermission, type AuthRequest } from '../middleware/auth.js';
+import { ProformaStatus } from '@prisma/client';
 import { parsePagination } from '../utils/query.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
 import { generateDocumentPdf } from '../services/documentPdf.js';
-import { buildDocumentSnapshot } from '../services/documentModel.js';
+import {
+  issueProforma,
+  monthCardRefusal,
+  monthName,
+  proformaCreateSchema,
+  ProformaRefusal,
+} from '../services/proformaIssue.js';
 import {
   documentEmailDefaults,
   documentEmailSchema,
   sendDocumentEmail,
 } from '../services/documentEmail.js';
-import {
-  documentFieldsSchema,
-  cleanCustomFields,
-  ORG_DOCUMENT_SELECT,
-} from '../utils/documentSchemas.js';
+import { buildDocumentSnapshot } from '../services/documentModel.js';
+import { documentFieldsSchema, cleanCustomFields, ORG_DOCUMENT_SELECT } from '../utils/documentSchemas.js';
 
 export const proformasRouter = Router();
 
 proformasRouter.use(authenticate);
 
+/*
+ * Who may touch a proforma: selling (`pipeline.*`), or Accounts
+ * (`money.figures`).
+ *
+ * It was pipeline only, which fitted when a proforma came off a proposal. But
+ * every retainer month is billed with one now, and billing is Accounts' job —
+ * who hold no pipeline switch, and so could not raise, download, send or
+ * cancel the one document their month-end is made of.
+ */
+
 // ── 1. List Proformas Register ──────────────────────────────────────────────
 
-proformasRouter.get('/', requirePermission('pipeline.read'), async (req: AuthRequest, res: Response, next) => {
+proformasRouter.get('/', requireAnyPermission('pipeline.read', 'money.figures'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
     const { status, companyId } = req.query;
@@ -67,6 +79,26 @@ proformasRouter.get('/', requirePermission('pipeline.read'), async (req: AuthReq
       prisma.proforma.count({ where }),
     ]);
 
+    /*
+     * And the retainer month, for the ones that bill one.
+     *
+     * `sourceId` is a polymorphic pointer rather than a relation, so it cannot
+     * be included; the months are looked up in one query and attached, so the
+     * register can say "Retainer · October 2026" instead of nothing.
+     */
+    const cardIds = proformas.filter((pf) => pf.sourceType === 'MONTH_CARD').map((pf) => pf.sourceId);
+    const cards = cardIds.length
+      ? await prisma.monthCard.findMany({
+          where: { id: { in: cardIds }, retainer: { organizationId: orgId } },
+          select: { id: true, month: true, retainerId: true },
+        })
+      : [];
+    const cardById = new Map(cards.map((c) => [c.id, c]));
+    const withMonths = proformas.map((pf) => ({
+      ...pf,
+      monthCard: pf.sourceType === 'MONTH_CARD' ? (cardById.get(pf.sourceId) ?? null) : null,
+    }));
+
     if (wantsCsv) {
       const csv = toCsv(proformas, [
         { label: 'Number', value: (pf) => pf.number },
@@ -83,7 +115,7 @@ proformasRouter.get('/', requirePermission('pipeline.read'), async (req: AuthReq
 
     res.json({
       success: true,
-      proformas,
+      proformas: withMonths,
       meta: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
     });
   } catch (error) {
@@ -92,43 +124,9 @@ proformasRouter.get('/', requirePermission('pipeline.read'), async (req: AuthReq
 });
 
 // ── 2. Generate Sequential Proforma ─────────────────────────────────────────
-
-const proformaCreateSchema = z.object({
-  companyId: z.string().min(1, 'Company is required'),
-  sourceType: z.nativeEnum(ProformaSourceType).default(ProformaSourceType.PROPOSAL),
-  sourceId: z.string().min(1, 'Source ID is required'),
-  /** Set when this proforma is raised against one specific project milestone rather than the project in general. */
-  milestoneId: z.string().optional(),
-  /**
-   * The pre-tax subtotal. Optional only because a caller sending line items
-   * has already said what it is; the refine below rejects a request that
-   * sends neither, rather than quietly raising a proforma for nothing.
-   */
-  amount: z.number().positive('Proforma amount must be positive').optional(),
-  /** Falls back to the org's own defaultProformaValidityDays when omitted — not a fixed number in code. */
-  validDays: z.number().min(1).optional(),
-  billingName: z.string().min(1, 'Billing name is required'),
-  billingContactName: z.string().optional().or(z.literal('')),
-  billingAddress: z.string().optional().or(z.literal('')),
-  gstin: z.string().optional().or(z.literal('')),
-  /** Off for e.g. an export invoice or a GST-exempt client — drops the tax rows on the PDF entirely. */
-  gstApplicable: z.boolean().default(true),
-  /** The rate used when gstApplicable is true. 18% is the standard agency-services rate, but not the only real one. */
-  gstRatePercent: z.number().min(0).max(28).default(18),
-  /** The line-item description printed on the document, e.g. "Social Media Management for the Month of August". */
-  description: z.string().optional().or(z.literal('')),
-  /** The client's own PO reference, when this proforma is being raised against one they've already issued. */
-  poNumber: z.string().optional().or(z.literal('')),
-  poDate: z.coerce.date().optional(),
-  /** SAC/HSN code for the single line item, e.g. "998382". */
-  sacCode: z.string().optional().or(z.literal('')),
-  terms: z.string().default('Advance payment request. Payment due within validity period. GST applicable as per statutory rates.'),
-  ...documentFieldsSchema,
-})
-  .refine((v) => v.lineItems !== undefined || v.amount !== undefined, {
-    message: 'A proforma needs either line items or an amount',
-    path: ['lineItems'],
-  });
+//
+// The schema and the work are in services/proformaIssue.ts, shared with the
+// retainer batch below.
 
 // ── 1b. Download Proforma PDF ───────────────────────────────────────────────
 //
@@ -136,7 +134,7 @@ const proformaCreateSchema = z.object({
 // to be able to hand this document to a client, and a proforma amount is a
 // deal value they're already entitled to see per §9.
 
-proformasRouter.get('/:id/pdf', requirePermission('pipeline.read'), async (req: AuthRequest, res: Response, next) => {
+proformasRouter.get('/:id/pdf', requireAnyPermission('pipeline.read', 'money.figures'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
     const id = String(req.params.id);
@@ -164,7 +162,7 @@ proformasRouter.get('/:id/pdf', requirePermission('pipeline.read'), async (req: 
 // the list response: every row would then carry every line of every document
 // to render a table that shows none of them.
 
-proformasRouter.get('/:id', requirePermission('pipeline.read'), async (req: AuthRequest, res: Response, next) => {
+proformasRouter.get('/:id', requireAnyPermission('pipeline.read', 'money.figures'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
     const proforma = await prisma.proforma.findFirst({
@@ -187,7 +185,7 @@ proformasRouter.get('/:id', requirePermission('pipeline.read'), async (req: Auth
 
 // ── 1d. Send it to the client (CR-02 §10) ───────────────────────────────────
 
-proformasRouter.get('/:id/email', requirePermission('pipeline.read'), async (req: AuthRequest, res: Response, next) => {
+proformasRouter.get('/:id/email', requireAnyPermission('pipeline.read', 'money.figures'), async (req: AuthRequest, res: Response, next) => {
   try {
     const defaults = await documentEmailDefaults('PROFORMA', String(req.params.id), req.user!.organizationId);
     res.json({ success: true, ...defaults });
@@ -196,7 +194,7 @@ proformasRouter.get('/:id/email', requirePermission('pipeline.read'), async (req
   }
 });
 
-proformasRouter.post('/:id/email', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
+proformasRouter.post('/:id/email', requireAnyPermission('pipeline.write', 'money.figures'), async (req: AuthRequest, res: Response, next) => {
   try {
     const parsed = documentEmailSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -222,198 +220,145 @@ proformasRouter.post('/:id/email', requirePermission('pipeline.write'), async (r
   }
 });
 
-proformasRouter.post('/', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
+proformasRouter.post('/', requireAnyPermission('pipeline.write', 'money.figures'), async (req: AuthRequest, res: Response, next) => {
   try {
     const parsed = proformaCreateSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ success: false, error: parsed.error.issues[0].message });
       return;
     }
+    const proforma = await issueProforma(req.user!.organizationId, req.user!.userId, parsed.data);
+    res.status(201).json({ success: true, proforma });
+  } catch (error) {
+    if (error instanceof ProformaRefusal) {
+      res.status(error.status).json({ success: false, error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
 
+// ── 2b. A month's proformas, for every retainer at once ──────────────────────
+//
+// The first of the month is one job — every retainer billed in advance wants
+// its proforma — and doing it one client at a time is how the fourth one gets
+// forgotten. Each month is raised exactly as the single form would raise it,
+// filled from what Flowzen already knows: the client's billing details, the
+// month's fee and the retainer's GST rate.
+//
+// Each month stands alone. One that cannot be raised — already invoiced,
+// already asked for, a GST rate a proforma cannot carry — is skipped and said
+// so, and the rest still go out. Stopping the lot over one would mean nobody
+// is billed because of somebody else's paperwork.
+
+const retainerBatchSchema = z.object({
+  monthCardIds: z.array(z.string().min(1)).min(1, 'Choose at least one month').max(200),
+});
+
+proformasRouter.post('/retainer-months', requireAnyPermission('pipeline.write', 'money.figures'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const parsed = retainerBatchSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
     const orgId = req.user!.organizationId;
-    const { companyId, sourceType, sourceId, milestoneId, amount, billingName, billingContactName, billingAddress, gstin, gstApplicable, gstRatePercent, description, poNumber, poDate, sacCode, terms, lineItems, customFields, placeOfSupply, billingStateName, billingStateCode, notes } = parsed.data;
+    const ids = [...new Set(parsed.data.monthCardIds)];
 
-    // A milestone can be billed once — the same guard `MSTATUS_NEXT` already
-    // enforces client-side (only a PENDING milestone offers "raise proforma"),
-    // repeated here because the client-side rule is a courtesy, not a control.
-    if (milestoneId) {
-      const milestone = await prisma.milestone.findFirst({
-        where: { id: milestoneId, project: { organizationId: orgId, companyId } },
-        include: { project: { select: { isSample: true, name: true } } },
-      });
-      if (!milestone) {
-        res.status(404).json({ success: false, error: 'Milestone not found for this company' });
-        return;
-      }
-      // Sample work is given away. A proforma is a request for money, so there
-      // is nothing for this one to ask for.
-      if (milestone.project.isSample) {
-        res.status(400).json({
-          success: false,
-          error: `${milestone.project.name} is sample work — there is nothing to bill against it. Move it off sample work first if it is being charged for.`,
-        });
-        return;
-      }
-      if (milestone.status !== 'PENDING') {
-        res.status(400).json({ success: false, error: 'This milestone already has a proforma raised against it' });
-        return;
-      }
-    }
-
-    // Fetched for the seller snapshot the document freezes onto itself,
-    // rather than just the validity default it used to read.
-    const org = await prisma.organization.findUnique({ where: { id: orgId }, select: ORG_DOCUMENT_SELECT });
-    if (!org) {
-      res.status(404).json({ success: false, error: 'Organisation not found' });
-      return;
-    }
-    const validDays = parsed.data.validDays ?? org.defaultProformaValidityDays ?? 30;
-
-    // The company was never checked against the caller's org here — a
-    // proforma in this organisation could be raised against another one's
-    // company. It is fetched anyway now, for the buyer state to default from.
-    const company = await prisma.company.findFirst({
-      where: { id: companyId, organizationId: orgId },
-      select: { billingAddress: true, gstin: true, stateName: true, stateCode: true },
-    });
-    if (!company) {
-      res.status(404).json({ success: false, error: 'Company not found' });
-      return;
-    }
-
-    // A proforma raised without line items is still a one-line document —
-    // exactly the one the old single-description form produced — so the same
-    // request that worked yesterday produces the same page today.
-    const lines = lineItems ?? [
-      {
-        particulars: description?.trim() || 'Retainer fee for the billing period.',
-        units: 1,
-        unitCost: amount!,
-        hsnSac: sacCode?.trim() || null,
-      },
-    ];
-
-    const snapshot = buildDocumentSnapshot({
-      org,
-      lineItems: lines,
-      gstApplicable,
-      gstRatePercent,
-      buyer: {
-        name: billingName,
-        contactName: billingContactName,
-        address: billingAddress || company.billingAddress,
-        gstin: gstin || company.gstin,
-        stateName: billingStateName ?? company.stateName,
-        stateCode: billingStateCode ?? company.stateCode,
-      },
-      placeOfSupply,
-      customFields: cleanCustomFields(customFields),
-    });
-
-    const raisedAt = new Date();
-    const validTill = new Date(Date.now() + validDays * 24 * 3600 * 1000);
-
-    // The number is read-highest-then-insert, so two people raising a proforma
-    // at the same moment compute the same one. The unique index on
-    // (organizationId, number) is what actually guarantees the series is never
-    // reused; `issueWithRetry` is what turns losing that race into the next
-    // number instead of a 500. Shared with invoices — one series, one rule.
-    const proforma = await issueWithRetry(orgId, 'PROFORMA', (nextNumber) =>
-      prisma.$transaction(async (tx) => {
-        const created = await tx.proforma.create({
-          data: {
-            organizationId: orgId,
-            number: nextNumber,
-            companyId,
-            sourceType,
-            sourceId,
-            milestoneId: milestoneId || null,
-            // Still the PRE-TAX subtotal, unchanged in meaning: the register,
-            // the forecast and the money screens all read this column, and
-            // `total` is added beside it rather than in place of it.
-            amount: snapshot.subtotal,
-            raisedAt,
-            validTill,
-            status: ProformaStatus.UNPAID,
-            gstApplicable,
-            gstRatePercent,
-            // Kept in step with line one so anything still reading the single
-            // description (the register CSV, the proposal trail) keeps working.
-            description: (lines[0]?.particulars ?? description)?.trim() || null,
-            sacCode: lines[0]?.hsnSac ?? (sacCode ? sacCode.trim() : null),
-            poNumber: poNumber ? poNumber.trim() : null,
-            poDate: poDate ?? null,
-            terms,
-            notes: notes || null,
-            billingName: snapshot.billingName,
-            billingContactName: snapshot.billingContactName,
-            billingAddress: snapshot.billingAddress,
-            gstin: snapshot.gstin,
-            billingStateName: snapshot.billingStateName,
-            billingStateCode: snapshot.billingStateCode,
-            placeOfSupplyState: snapshot.placeOfSupplyState,
-            placeOfSupplyCode: snapshot.placeOfSupplyCode,
-            supplyType: snapshot.supplyType,
-            sellerSnapshot: snapshot.sellerSnapshot,
-            customFields: snapshot.customFields,
-            subtotal: snapshot.subtotal,
-            cgstAmount: snapshot.cgstAmount,
-            sgstAmount: snapshot.sgstAmount,
-            igstAmount: snapshot.igstAmount,
-            roundOff: snapshot.roundOff,
-            total: snapshot.total,
-            amountInWords: snapshot.amountInWords,
-            lineItems: { create: snapshot.lines },
-          },
-        });
-
-        // If source is a proposal, auto update proposal stage to PROFORMA_ISSUED
-        let stageFrom: string | null = null;
-        if (sourceType === ProformaSourceType.PROPOSAL) {
-          // Read before the write: issuing the proforma is what moved the deal,
-          // and the trail should say where it moved FROM. Nothing recorded that,
-          // so the one stage change nobody performs by hand was also the one
-          // with no history.
-          const source = await tx.proposal.findUnique({ where: { id: sourceId }, select: { stage: true } });
-          stageFrom = source?.stage ?? null;
-          await tx.proposal.update({
-            where: { id: sourceId },
-            data: { stage: 'PROFORMA_ISSUED' },
-          });
-        }
-
-        // A milestone's status is derived from what's actually been raised
-        // against it, same principle as a proposal's stage — this is what
-        // turns "raise proforma" from a label flip into a real document.
-        if (milestoneId) {
-          await tx.milestone.update({
-            where: { id: milestoneId },
-            data: { status: 'PROFORMA_RAISED' },
-          });
-        }
-
-        await tx.activity.create({
-          data: {
-            organizationId: orgId,
-            entityType: 'Proforma',
-            entityId: created.id,
-            actorId: req.user!.userId,
-            verb: 'proforma_generated',
-            payload: {
-              number: nextNumber,
-              amount: snapshot.subtotal,
-              total: snapshot.total,
-              billingName,
-              ...(stageFrom ? { stageFrom, stageTo: 'PROFORMA_ISSUED' } : {}),
+    const [org, cards] = await Promise.all([
+      prisma.organization.findUnique({ where: { id: orgId }, select: { sacCodes: true } }),
+      prisma.monthCard.findMany({
+        where: { id: { in: ids }, retainer: { organizationId: orgId } },
+        select: {
+          id: true,
+          month: true,
+          revenue: true,
+          retainer: {
+            select: {
+              gstPercent: true,
+              company: {
+                select: {
+                  id: true,
+                  name: true,
+                  // Who pays: the contact marked Payer, if there is one.
+                  people: { where: { role: 'PAYER' }, select: { name: true }, take: 1 },
+                },
+              },
             },
           },
-        });
-
-        return created;
+        },
       }),
-    );
+    ]);
+    const sac = org?.sacCodes?.[0] ?? '';
 
-    res.status(201).json({ success: true, proforma });
+    const created: { monthCardId: string; proformaId: string; number: string; companyName: string }[] = [];
+    const skipped: { monthCardId: string; companyName: string; reason: string }[] = [];
+
+    for (const id of ids) {
+      const card = cards.find((c) => c.id === id);
+      if (!card) {
+        skipped.push({ monthCardId: id, companyName: '—', reason: 'That retainer month was not found' });
+        continue;
+      }
+      const company = card.retainer.company;
+      const fee = Number(card.revenue);
+      if (!(fee > 0)) {
+        skipped.push({ monthCardId: id, companyName: company.name, reason: 'The month has no fee to bill' });
+        continue;
+      }
+      /*
+       * The retainer's own GST rate. None recorded is taken as the standard
+       * 18% — the screen says so before anything is raised — and 0% is a
+       * client billed without GST. A proforma carries at most 28%.
+       */
+      const rate = card.retainer.gstPercent == null ? 18 : Number(card.retainer.gstPercent);
+      if (rate > 28) {
+        skipped.push({
+          monthCardId: id,
+          companyName: company.name,
+          reason: `The retainer's GST rate is ${rate}% — a proforma carries 28% at most. Raise it by hand.`,
+        });
+        continue;
+      }
+
+      const check = await monthCardRefusal(orgId, company.id, id);
+      if (check instanceof ProformaRefusal) {
+        skipped.push({ monthCardId: id, companyName: company.name, reason: check.message });
+        continue;
+      }
+
+      try {
+        // Through the same schema the form's request passes, so a batch proforma
+        // is held to exactly the rules a hand-raised one is.
+        const pf = await issueProforma(orgId, req.user!.userId, proformaCreateSchema.parse({
+          companyId: company.id,
+          sourceType: 'MONTH_CARD',
+          sourceId: id,
+          billingName: company.name,
+          billingContactName: company.people[0]?.name ?? '',
+          gstApplicable: rate > 0,
+          gstRatePercent: rate,
+          lineItems: [
+            {
+              particulars: `Retainer fee — ${monthName(card.month)}`,
+              units: 1,
+              unitCost: fee,
+              hsnSac: sac || null,
+            },
+          ],
+          terms: 'Advance payment request. Payment due within validity period. GST applicable as per statutory rates.',
+        }));
+        created.push({ monthCardId: id, proformaId: pf.id, number: pf.number, companyName: company.name });
+      } catch (e) {
+        if (e instanceof ProformaRefusal) {
+          skipped.push({ monthCardId: id, companyName: company.name, reason: e.message });
+          continue;
+        }
+        throw e;
+      }
+    }
+
+    res.status(created.length > 0 ? 201 : 200).json({ success: true, created, skipped });
   } catch (error) {
     next(error);
   }
@@ -421,7 +366,7 @@ proformasRouter.post('/', requirePermission('pipeline.write'), async (req: AuthR
 
 // ── 3. Update Proforma Status ───────────────────────────────────────────────
 
-proformasRouter.patch('/:id/status', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
+proformasRouter.patch('/:id/status', requireAnyPermission('pipeline.write', 'money.figures'), async (req: AuthRequest, res: Response, next) => {
   try {
     const { status } = req.body;
     if (!status || !['UNPAID', 'PAID', 'EXPIRED', 'CANCELLED'].includes(status)) {
@@ -516,7 +461,7 @@ const proformaEditSchema = z.object({
   ...documentFieldsSchema,
 });
 
-proformasRouter.patch('/:id', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
+proformasRouter.patch('/:id', requireAnyPermission('pipeline.write', 'money.figures'), async (req: AuthRequest, res: Response, next) => {
   try {
     const parsed = proformaEditSchema.safeParse(req.body);
     if (!parsed.success) {

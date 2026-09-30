@@ -185,6 +185,34 @@ export function requirePermission(permission: PermissionKey) {
 }
 
 /**
+ * Any one of several permissions.
+ *
+ * For the handful of things two different jobs genuinely both do. A proforma
+ * is the obvious one: selling raises it against a proposal (`pipeline.*`), and
+ * Accounts raises one against every retainer month (`money.figures`) — Accounts
+ * holds no pipeline switch, so a single gate left them unable to bill.
+ */
+export function requireAnyPermission(...permissions: PermissionKey[]) {
+  return function anyPermissionGate(req: AuthRequest, res: Response, next: NextFunction): void {
+    if (!req.user) {
+      res.status(401).json({ success: false, error: 'Authentication required' });
+      return;
+    }
+
+    if (!permissions.some((p) => hasPermission(req.user!, p))) {
+      res.status(403).json({
+        success: false,
+        error: 'Insufficient permissions',
+        detail: `This action requires one of: ${permissions.map((p) => `'${p}'`).join(', ')}.`,
+      });
+      return;
+    }
+
+    next();
+  };
+}
+
+/**
  * Legacy compatibility alias for existing role checks
  */
 export function requireRole(minRole: string) {

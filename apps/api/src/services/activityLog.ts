@@ -537,6 +537,13 @@ const FIELD: Record<string, string> = {
   address: 'Address',
   designation: 'Designation',
   role: 'Role',
+  // A proposal's version, corrected in place.
+  value: 'Value',
+  scopeSummary: 'Scope',
+  fileUrl: 'Document link',
+  sentAt: 'Sent on',
+  kind: 'Kind',
+  company: 'Company',
 };
 
 /** Fields whose values are people. */
@@ -569,7 +576,7 @@ function valueText(field: string, v: unknown, people: Map<string, string>): stri
   if (PERSON_FIELDS.has(field) && typeof v === 'string') return people.get(v) ?? 'someone no longer on the team';
   if (MONEY_FIELDS.has(field)) return inr(v) ?? String(v);
   if (field === 'active') return v ? 'Active' : 'Deactivated';
-  if (field === 'notes' || field === 'description') {
+  if (field === 'notes' || field === 'description' || field === 'scopeSummary') {
     if (typeof v === 'boolean') return v ? 'Written' : 'Empty';
     return `“${clip(String(v), 60)}”`;
   }

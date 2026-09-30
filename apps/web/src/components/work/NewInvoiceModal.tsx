@@ -17,6 +17,7 @@ import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
+import { monthLabel } from '@/lib/retainerBilling';
 
 type Target = { label: string; workType: 'RETAINER' | 'PROJECT'; monthCardId?: string; projectId?: string };
 
@@ -53,11 +54,24 @@ export function NewInvoiceModal({ onClose, onCreated }: Props) {
       .then((res) => {
         const company = (res as { company?: any }).company ?? res;
         const list: Target[] = [];
+        /*
+         * Every retainer month still without an invoice, oldest first.
+         *
+         * This offered only the first one it found, so with two months unbilled
+         * the second could not be invoiced until the first was — and skipped
+         * stopped retainers entirely, though a client who left still owes for
+         * the last month they had.
+         */
         for (const r of company.retainers ?? []) {
-          if (r.status !== 'ACTIVE') continue;
-          const openMonth = (r.monthCards ?? []).find((m: any) => !m.invoice);
-          if (openMonth) {
-            list.push({ label: `Retainer — ${openMonth.month}`, workType: 'RETAINER', monthCardId: openMonth.id });
+          const unbilled = [...(r.monthCards ?? [])]
+            .filter((m: any) => !m.invoice)
+            .sort((a: any, b: any) => (a.month < b.month ? -1 : 1));
+          for (const m of unbilled) {
+            list.push({
+              label: `Retainer — ${monthLabel(m.month)}${r.status !== 'ACTIVE' ? ' (ended)' : ''}`,
+              workType: 'RETAINER',
+              monthCardId: m.id,
+            });
           }
         }
         for (const p of company.projects ?? []) {

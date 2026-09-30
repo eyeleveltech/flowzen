@@ -30,6 +30,8 @@ import { Field, FieldSelect, FieldCheckbox } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { personOptions } from '@/lib/people';
 import { GstAmountFields } from '@/components/work/GstAmountFields';
+import { BILLING_OPTIONS } from '@/lib/retainerBilling';
+import type { RetainerBilling } from '@/lib/api-v2';
 import { formatDate, plural } from '@/lib/utils';
 
 type Retainer = {
@@ -37,6 +39,7 @@ type Retainer = {
   monthlyValue: string | number | null;
   /** The GST on the fee, if one was recorded. Null is "not said". */
   gstPercent?: number | null;
+  billing?: RetainerBilling;
   startDate: string;
   termMonths: number | null;
   renewalDate: string | null;
@@ -64,6 +67,7 @@ export function EditRetainerModal({ retainer, companyName, openMonthLabel, onSav
     termMonths: retainer.termMonths != null ? String(retainer.termMonths) : '',
     ownerId: retainer.owner?.id ?? retainer.ownerId ?? '',
     gstPercent: retainer.gstPercent != null ? String(retainer.gstPercent) : '',
+    billing: (retainer.billing ?? 'IN_ADVANCE') as RetainerBilling,
   };
 
   const [monthlyValue, setMonthlyValue] = useState(original.monthlyValue);
@@ -72,6 +76,7 @@ export function EditRetainerModal({ retainer, companyName, openMonthLabel, onSav
   const [ownerId, setOwnerId] = useState(original.ownerId);
   const [repriceOpenMonth, setRepriceOpenMonth] = useState(true);
   const [gstPercent, setGstPercent] = useState(original.gstPercent);
+  const [billing, setBilling] = useState<RetainerBilling>(original.billing);
   // Its own flag: changing the rate is a real change, and it must not be
   // mistaken for a change to the fee — that one asks about repricing the
   // month, and a new rate on the same fee has nothing to reprice.
@@ -83,7 +88,8 @@ export function EditRetainerModal({ retainer, companyName, openMonthLabel, onSav
     startDate !== original.startDate ||
     termMonths !== original.termMonths ||
     ownerId !== original.ownerId ||
-    gstChanged;
+    gstChanged ||
+    billing !== original.billing;
 
   const valueIsSound = Number(monthlyValue) > 0;
   const canSave = changed && valueIsSound && Boolean(startDate) && !busy;
@@ -109,6 +115,7 @@ export function EditRetainerModal({ retainer, companyName, openMonthLabel, onSav
         ...(startDate !== original.startDate ? { startDate } : {}),
         ...(termMonths !== original.termMonths ? { termMonths: termMonths ? Number(termMonths) : null } : {}),
         ...(ownerId !== original.ownerId ? { ownerId } : {}),
+        ...(billing !== original.billing ? { billing } : {}),
       });
       // What actually moved, from the server — not what the form asked for.
       toast.success(
@@ -149,6 +156,14 @@ export function EditRetainerModal({ retainer, companyName, openMonthLabel, onSav
                 ? 'A retainer has to be worth something.'
                 : 'Before GST — what each month earns.'
             }
+          />
+          <FieldSelect
+            label="Bills"
+            disabled={busy}
+            value={billing}
+            onChange={(v) => setBilling(v as RetainerBilling)}
+            options={BILLING_OPTIONS}
+            hint="In advance: the proforma goes out on the 1st, before the work. After: once the month is over."
           />
 
           {rateChanged && (

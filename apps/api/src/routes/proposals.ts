@@ -1,6 +1,7 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { changesBetween } from '../utils/activityDiff.js';
 import { authenticate, requirePermission, type AuthRequest } from '../middleware/auth.js';
 import {
   ProposalKind,
@@ -9,6 +10,7 @@ import {
   CompanyStatus,
   RetainerStatus,
   ProjectStatus,
+  Prisma,
 } from '@prisma/client';
 import { parsePagination } from '../utils/query.js';
 import { toCsv } from '../utils/csv.js';
@@ -1003,24 +1005,37 @@ proposalsRouter.post('/:id/lose', requirePermission('pipeline.write'), async (re
 
 // ── 8. Edit a Proposal ──────────────────────────────────────────────────────
 //
-// Only the two things that are a property of the deal rather than a record of
-// what happened to it.
+// Everything about it, in one form.
 //
-// `companyId` is deliberately not editable. Moving a proposal to another
-// company moves its value between two clients' pipelines, and if it has been
-// won it already graduated the first company to CLIENT — an edit here would
-// leave that behind with no proposal explaining it. Raise it against the right
-// company instead; that is what delete below is for.
+// This used to allow the owner and the kind and nothing else — the figure was
+// a version, a version was immutable, and a re-price was v(N+1). That is still
+// the right way to RE-QUOTE, and "Add version" still does it. But it left no
+// way to CORRECT one: ₹50,000 typed as ₹5,00,000, the wrong deck linked, the
+// scope pasted from another client. The only route was a new version, which
+// then counted the typo as a discount "given away in negotiation".
 //
-// The numbers are not editable either, by design: a version is immutable and a
-// re-price is v(N+1) (§11.1). POST /:id/versions is the edit for money.
+// So the version fields here correct the version in place — the winning one
+// if the deal is won, otherwise the latest — and the activity log keeps what
+// they were before, which is the trail the immutability was there to protect.
+//
+// The company moves only while the deal is still open and nothing has gone to
+// the client against it. A won deal has already made its company a client and
+// built work there; a proforma is a document the first company holds.
 
 const proposalEditSchema = z
   .object({
     ownerId: z.string().min(1).optional(),
     kind: z.nativeEnum(ProposalKind).optional(),
+    companyId: z.string().min(1).optional(),
+    value: z.number().min(0, 'The value cannot be negative').optional(),
+    scopeSummary: z.string().max(5000).optional(),
+    fileUrl: z.string().trim().max(2000).nullable().optional(),
+    sentAt: z
+      .string()
+      .refine((v) => !Number.isNaN(Date.parse(v)), 'That date is not a real date')
+      .optional(),
   })
-  .refine((v) => v.ownerId !== undefined || v.kind !== undefined, {
+  .refine((v) => Object.values(v).some((x) => x !== undefined), {
     message: 'Nothing to change',
   });
 
@@ -1034,19 +1049,50 @@ proposalsRouter.patch('/:id', requirePermission('pipeline.write'), async (req: A
 
     const orgId = req.user!.organizationId;
     const id = String(req.params.id);
-    const { ownerId, kind } = parsed.data;
+    const { ownerId, kind, companyId, value, scopeSummary, fileUrl, sentAt } = parsed.data;
 
     const existing = await prisma.proposal.findFirst({
       where: { id, organizationId: orgId, deletedAt: null },
-      include: { company: { select: { name: true } } },
+      include: {
+        company: { select: { id: true, name: true } },
+        versions: { orderBy: { n: 'desc' }, take: 1 },
+        wonVersion: true,
+      },
     });
     if (!existing) {
       res.status(404).json({ success: false, error: 'Proposal not found' });
       return;
     }
 
+    // The version being corrected: the one that won, or the one on the table.
+    const version = existing.wonVersion ?? existing.versions[0] ?? null;
+
     const ownerChanged = ownerId !== undefined && ownerId !== existing.ownerId;
     const kindChanged = kind !== undefined && kind !== existing.kind;
+    const companyChanged = companyId !== undefined && companyId !== existing.companyId;
+
+    const nextSentAt = sentAt !== undefined ? new Date(sentAt) : undefined;
+    const versionData = {
+      ...(value !== undefined && version && Number(version.value) !== value ? { value } : {}),
+      ...(scopeSummary !== undefined && version && scopeSummary.trim() !== version.scopeSummary
+        ? { scopeSummary: scopeSummary.trim() }
+        : {}),
+      ...(fileUrl !== undefined && version && (fileUrl || null) !== version.fileUrl ? { fileUrl: fileUrl || null } : {}),
+      ...(nextSentAt && version && nextSentAt.toISOString().slice(0, 10) !== version.sentAt.toISOString().slice(0, 10)
+        ? { sentAt: nextSentAt }
+        : {}),
+    };
+    const versionChanged = Object.keys(versionData).length > 0;
+
+    const askedForVersion =
+      value !== undefined || scopeSummary !== undefined || fileUrl !== undefined || sentAt !== undefined;
+    if (askedForVersion && !version) {
+      res.status(400).json({
+        success: false,
+        error: 'Nothing has been quoted on this deal yet. Write the proposal first, then its figures can be corrected.',
+      });
+      return;
+    }
 
     /*
      * Resending the values a proposal already has must not write the row.
@@ -1057,8 +1103,8 @@ proposalsRouter.patch('/:id', requirePermission('pipeline.write'), async (req: A
      * has touched in three weeks would come back looking freshly worked —
      * which is the one thing those two numbers exist to prevent.
      */
-    if (!ownerChanged && !kindChanged) {
-      const { company: _company, ...unchanged } = existing;
+    if (!ownerChanged && !kindChanged && !companyChanged && !versionChanged) {
+      const { company: _company, versions: _versions, wonVersion: _won, ...unchanged } = existing;
       res.json({ success: true, proposal: unchanged });
       return;
     }
@@ -1074,6 +1120,38 @@ proposalsRouter.patch('/:id', requirePermission('pipeline.write'), async (req: A
       return;
     }
 
+    let newCompany: { id: string; name: string } | null = null;
+    if (companyChanged) {
+      if (existing.outcome !== null) {
+        res.status(400).json({
+          success: false,
+          error:
+            existing.outcome === 'WON'
+              ? 'This deal is won — it made its company a client and built work there, so it stays with that company.'
+              : 'This deal is closed, so it stays with the company it was lost with.',
+        });
+        return;
+      }
+      const proformas = await prisma.proforma.count({
+        where: { sourceType: 'PROPOSAL', sourceId: id, status: { not: 'CANCELLED' } },
+      });
+      if (proformas > 0) {
+        res.status(400).json({
+          success: false,
+          error: 'A proforma has gone out against this deal, addressed to this company. Cancel it first to move the deal.',
+        });
+        return;
+      }
+      newCompany = await prisma.company.findFirst({
+        where: { id: companyId, organizationId: orgId },
+        select: { id: true, name: true },
+      });
+      if (!newCompany) {
+        res.status(404).json({ success: false, error: 'That company is not in Flowzen' });
+        return;
+      }
+    }
+
     if (ownerChanged) {
       const owner = await prisma.user.findFirst({
         where: { id: ownerId, organizationId: orgId, active: true },
@@ -1085,27 +1163,48 @@ proposalsRouter.patch('/:id', requirePermission('pipeline.write'), async (req: A
       }
     }
 
-    const updated = await prisma.proposal.update({
-      where: { id },
-      data: {
-        ...(ownerChanged ? { ownerId } : {}),
-        ...(kindChanged ? { kind } : {}),
-      },
-    });
+    const updated = await prisma.$transaction(async (tx) => {
+      const proposal =
+        ownerChanged || kindChanged || companyChanged
+          ? await tx.proposal.update({
+              where: { id },
+              data: {
+                ...(ownerChanged ? { ownerId } : {}),
+                ...(kindChanged ? { kind } : {}),
+                ...(companyChanged ? { companyId } : {}),
+              },
+            })
+          : await tx.proposal.findUniqueOrThrow({ where: { id } });
 
-    await prisma.activity.create({
-      data: {
-        organizationId: orgId,
-        entityType: 'Proposal',
-        entityId: id,
-        actorId: req.user!.userId,
-        verb: 'proposal_edited',
-        payload: {
-          companyName: existing.company.name,
-          ...(ownerChanged ? { ownerFrom: existing.ownerId, ownerTo: ownerId } : {}),
-          ...(kindChanged ? { kindFrom: existing.kind, kindTo: kind } : {}),
+      const correctedVersion =
+        versionChanged && version
+          ? await tx.proposalVersion.update({ where: { id: version.id }, data: versionData })
+          : version;
+
+      const changed = {
+        ...changesBetween(existing, proposal, ['ownerId', 'kind']),
+        ...(companyChanged && newCompany ? { company: { from: existing.company.name, to: newCompany.name } } : {}),
+        ...(versionChanged && version && correctedVersion
+          ? changesBetween(version, correctedVersion, ['value', 'scopeSummary', 'fileUrl', 'sentAt'])
+          : {}),
+      };
+
+      await tx.activity.create({
+        data: {
+          organizationId: orgId,
+          entityType: 'Proposal',
+          entityId: id,
+          actorId: req.user!.userId,
+          verb: 'proposal_edited',
+          payload: {
+            companyName: newCompany?.name ?? existing.company.name,
+            ...(version ? { versionN: version.n } : {}),
+            changed,
+          } as Prisma.InputJsonValue,
         },
-      },
+      });
+
+      return proposal;
     });
 
     res.json({ success: true, proposal: updated });

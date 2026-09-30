@@ -57,6 +57,8 @@ const card = (id: string, month: string, over: Partial<{ tasks: number; costs: n
 });
 
 beforeEach(() => {
+  // No proforma out against any month unless a test says so.
+  (prisma.proforma.findMany as any).mockResolvedValue([]);
   (prisma.user.findUnique as any).mockResolvedValue({
     id: 'usr-bd',
     organizationId: 'org-1',
@@ -158,6 +160,17 @@ describe('the month you are part way through', () => {
     const res = await stop();
     expect(res.body.removedMonths).toEqual([]);
     expect(res.body.closedMonths).toEqual(['2026-09']);
+  });
+
+  it('never removes one a proforma has gone out for', async () => {
+    // Billed in advance, the proforma goes out on the 1st — before any task or
+    // cost. The client holds that document; the month cannot vanish under it.
+    (prisma.monthCard.findMany as any).mockResolvedValue([card('mc-1', '2026-09')]);
+    (prisma.proforma.findMany as any).mockResolvedValue([{ sourceId: 'mc-1' }]);
+    const res = await stop();
+    expect(res.body.removedMonths).toEqual([]);
+    expect(res.body.closedMonths).toEqual(['2026-09']);
+    expect(prisma.monthCard.deleteMany).not.toHaveBeenCalled();
   });
 });
 

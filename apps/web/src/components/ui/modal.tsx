@@ -54,6 +54,8 @@ export function Modal({
       variant={isMobile ? 'modal' : 'slideover'}
       // Ignored on mobile, where the sheet is full width by design.
       className={isMobile ? undefined : WIDTH[size]}
+      // Every dialog here is a form: ask before a stray click throws it away.
+      guardUnsaved
     >
       {children}
     </Drawer>

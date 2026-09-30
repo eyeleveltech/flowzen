@@ -716,6 +716,73 @@ export interface Profile {
   signIn: SignIn;
 }
 
+/** When a retainer's months are billed. */
+export type RetainerBilling = 'IN_ADVANCE' | 'IN_ARREARS';
+
+/**
+ * Where a retainer month's billing has got to, and so what comes next.
+ *
+ * PROFORMA nothing asked for yet · INVOICE proforma out, tax invoice next ·
+ * PAYMENT invoiced, waiting for the money · DONE paid · NOT_YET billed after
+ * the month and the month is still running.
+ */
+export type BillingStep = 'PROFORMA' | 'INVOICE' | 'PAYMENT' | 'DONE' | 'NOT_YET';
+
+export interface BillingProforma {
+  id: string;
+  number: string;
+  status: 'UNPAID' | 'PAID' | 'EXPIRED' | 'CANCELLED';
+  /** Before GST. */
+  amount: number;
+  /** With GST. */
+  total: number;
+  raisedAt: string;
+  validTill: string;
+}
+
+export interface BillingInvoice {
+  id: string;
+  number: string;
+  status: string;
+  amount: number;
+  raisedAt?: string;
+  dueAt: string;
+  /** Received so far. */
+  paid: number;
+}
+
+export interface RetainerBillingRow {
+  monthCardId: string;
+  month: string;
+  /** Before the month asked for — still owed. */
+  earlier: boolean;
+  retainerId: string;
+  retainerStopped: boolean;
+  companyId: string;
+  companyName: string;
+  billing: RetainerBilling;
+  fee: number;
+  gstPercent: number | null;
+  proforma: BillingProforma | null;
+  invoice: BillingInvoice | null;
+  step: BillingStep;
+}
+
+export interface RetainerBillingResponse {
+  success: boolean;
+  month: string;
+  thisMonth: string;
+  rows: RetainerBillingRow[];
+  summary: {
+    toRaise: number;
+    awaitingInvoice: number;
+    awaitingPayment: number;
+    done: number;
+    notYet: number;
+    outstanding: number;
+  };
+}
+
 /**
  * One line of the activity log, already put into words by the server
  * (services/activityLog.ts): "{actor} {action} {subject}", then what changed.
@@ -1437,11 +1504,23 @@ export const api = {
     lose: (id: string, lostReason: string) =>
       post<{ success: boolean; proposal: any }>(`/proposals/${id}/lose`, { lostReason }),
     /**
-     * Owner, and retainer↔project while the deal is still open. Not the
-     * company — moving a proposal shifts its value between two clients'
-     * pipelines — and not the money, which is what a new version is for.
+     * Everything about a proposal. The figures (value, scope, link, sent date)
+     * correct the winning version, or the latest, in place — a re-quote is
+     * still a new version. Kind and company are refused once the deal is
+     * closed, and the company once a proforma has gone out against it.
      */
-    update: (id: string, body: { ownerId?: string; kind?: 'RETAINER' | 'PROJECT' }) =>
+    update: (
+      id: string,
+      body: {
+        ownerId?: string;
+        kind?: 'RETAINER' | 'PROJECT';
+        companyId?: string;
+        value?: number;
+        scopeSummary?: string;
+        fileUrl?: string | null;
+        sentAt?: string;
+      },
+    ) =>
       patch<{ success: boolean; proposal: any }>(`/proposals/${id}`, body),
     /**
      * Soft delete — §16. Only one nothing has happened to yet: the server
@@ -1459,6 +1538,17 @@ export const api = {
       post<{ success: boolean; proforma: any }>('/proformas', body),
     updateStatus: (id: string, status: string) =>
       patch<{ success: boolean; proforma: any }>(`/proformas/${id}/status`, { status }),
+    /**
+     * One proforma per retainer month, raised together — filled from the
+     * client's billing details, the month's fee and the retainer's GST rate.
+     * A month that cannot be raised is skipped and says why; the rest go out.
+     */
+    raiseForRetainerMonths: (monthCardIds: string[]) =>
+      post<{
+        success: boolean;
+        created: { monthCardId: string; proformaId: string; number: string; companyName: string }[];
+        skipped: { monthCardId: string; companyName: string; reason: string }[];
+      }>('/proformas/retainer-months', { monthCardIds }),
     /** Only while the proforma is still UNPAID — the server refuses it otherwise. */
     update: (id: string, body: Record<string, unknown>) =>
       patch<{ success: boolean; proforma: any }>(`/proformas/${id}`, body),
@@ -1516,6 +1606,11 @@ export const api = {
         clients: { id: string; name: string }[];
         /** Whether anything has no client at all, so "Internal" is worth offering. */
         hasInternal: boolean;
+        /**
+         * Every project with work in it — one-off (`P:`), inside a retainer
+         * (`RP:`) or internal (`IP:`) — with the client it is for.
+         */
+        projects: { value: string; name: string; client: string; companyId: string | null }[];
         counts: { total: number; open: number; waiting: number; overdue: number; unassigned: number };
       }>(`/tasks/all?${new URLSearchParams(params)}`),
     /**
@@ -1817,6 +1912,12 @@ export const api = {
     }>(`/search?q=${encodeURIComponent(q)}`),
 
   invoices: {
+    /**
+     * Every retainer's month and where its billing has got to — the month
+     * asked for (this one by default) plus any earlier month still unpaid.
+     */
+    retainerBilling: (month?: string) =>
+      get<RetainerBillingResponse>(`/invoices/retainer-billing${month ? `?month=${month}` : ''}`),
     /**
      * Retainer months carrying no invoice — the billing work list.
      *

@@ -60,10 +60,12 @@ import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
 import { NewWorkTaskModal } from '@/components/work/NewWorkTaskModal';
 import { RetainerProjectModal } from '@/components/work/RetainerProjectModal';
 import { EditRetainerModal } from '@/components/work/EditRetainerModal';
-import type { RetainerProject } from '@/lib/api-v2';
+import type { RetainerBilling, RetainerProject } from '@/lib/api-v2';
 import { NewWorkCostModal } from '@/components/work/NewWorkCostModal';
 import { EditCostModal } from '@/components/work/EditCostModal';
 import { RecordPaymentModal } from '@/components/work/RecordPaymentModal';
+import { RetainerBillingStrip, type BillingSubject } from '@/components/work/RetainerBilling';
+import { billingStepFor } from '@/lib/retainerBilling';
 import { getPriorityDot, getPriorityLabel } from '@/lib/priority';
 
 type RStatus = 'ACTIVE' | 'STOPPED';
@@ -84,6 +86,7 @@ type Retainer = {
   monthlyValue: string | number | null;
   /** The GST on the fee, beside it. Null is "not said". */
   gstPercent?: number | null;
+  billing?: RetainerBilling;
   startDate: string;
   termMonths: number | null;
   renewalDate: string | null;
@@ -162,6 +165,17 @@ type MonthCard = {
   costs: Cost[];
   allocations: Allocation[];
   invoice: Invoice | null;
+  /** Raised for this month, newest first, cancelled ones included. */
+  proformas?: {
+    id: string;
+    number: string;
+    status: 'UNPAID' | 'PAID' | 'EXPIRED' | 'CANCELLED';
+    amount: string | number | null;
+    total: string | number | null;
+    raisedAt: string;
+    validTill: string;
+    invoiceId: string | null;
+  }[];
 };
 
 /**
@@ -257,7 +271,6 @@ export default function RetainerMonthCardPage() {
   const [addingCost, setAddingCost] = useState(false);
   /** The cost row being corrected, if any. */
   const [editingCost, setEditingCost] = useState<Cost | null>(null);
-  const [enteringInvoice, setEnteringInvoice] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [editing, setEditing] = useState(false);
   const [recordingPayment, setRecordingPayment] = useState(false);
@@ -464,6 +477,52 @@ export default function RetainerMonthCardPage() {
     return monthCard.month === monthKeyOf(retainer.startDate) ? 'with-retainer' : 'unknown';
   })();
   const tasks = monthCard?.tasks ?? [];
+
+  /*
+   * This month's billing: Proforma → Invoice → Paid.
+   *
+   * Only for somebody who can see the fee — every step is a figure. The
+   * newest proforma that was not cancelled is the one that stands.
+   */
+  const billingSubject: BillingSubject | null = (() => {
+    if (!monthCard || !canEnterMoney) return null;
+    const pf = (monthCard.proformas ?? []).find((x) => x.status !== 'CANCELLED') ?? null;
+    const proforma = pf
+      ? {
+          id: pf.id,
+          number: pf.number,
+          status: pf.status,
+          amount: Number(pf.amount ?? 0),
+          total: Number(pf.total ?? pf.amount ?? 0),
+          raisedAt: pf.raisedAt,
+          validTill: pf.validTill,
+        }
+      : null;
+    const inv = monthCard.invoice;
+    const invoice = inv
+      ? {
+          id: inv.id,
+          number: inv.number,
+          status: inv.status,
+          amount: Number(inv.amount ?? 0),
+          dueAt: inv.dueAt,
+          paid: inv.payments.reduce((a, x) => a + Number(x.amount ?? 0), 0),
+        }
+      : null;
+    const billing = retainer.billing ?? 'IN_ADVANCE';
+    return {
+      monthCardId: monthCard.id,
+      month: monthCard.month,
+      companyId: retainer.companyId,
+      companyName: retainer.company.name,
+      billing,
+      fee: Number(monthCard.revenue ?? 0),
+      gstPercent: retainer.gstPercent ?? null,
+      proforma,
+      invoice,
+      step: billingStepFor({ billing, month: monthCard.month, monthOpen: monthCard.status === 'OPEN', proforma, invoice }),
+    };
+  })();
 
   /**
    * The month's tasks, under the piece of work each is part of.
@@ -793,11 +852,6 @@ export default function RetainerMonthCardPage() {
               Print costs
             </Button>
           )}
-          {canEnterMoney && monthCard && !monthCard.invoice && !monthClosed && (
-            <Button size="sm" variant="secondary" icon={ReceiptText} onClick={() => setEnteringInvoice(true)}>
-              Enter invoice
-            </Button>
-          )}
           {/*
             The way back in. Offering nothing at all would only mean a cost
             that genuinely belongs to August never gets recorded, and the
@@ -961,6 +1015,8 @@ export default function RetainerMonthCardPage() {
             spent before any work appears. Onboarding text earns a permanent
             slot only while it is still telling you something.
           */}
+          {billingSubject && <RetainerBillingStrip subject={billingSubject} onChanged={() => void loadMonthCard()} />}
+
           {!canEnterMoney && (
             <div className="mb-5 rounded-xl border border-dashed border-line bg-subtle/40 px-4 py-3.5 text-xs text-secondary">
               <b className="mb-0.5 block font-semibold text-body">Cost and profit are hidden</b>
@@ -1163,7 +1219,10 @@ export default function RetainerMonthCardPage() {
             <Card padding="none">
               <CardBody>
                 {!monthCard.invoice ? (
-                  <EmptyState title="No invoice entered yet" hint="Once accounts raise it in Tally, enter the number, date and amount here to mirror it." />
+                  <EmptyState
+                    title="No invoice entered yet"
+                    hint="Raise the proforma or enter the Tally invoice from the billing strip above."
+                  />
                 ) : (
                   <div className="space-y-4">
                     {/*
@@ -1322,19 +1381,6 @@ export default function RetainerMonthCardPage() {
         that row would be a dash on every task.
       */}
 
-      {enteringInvoice && monthCard && (
-        <EnterInvoiceModal
-          companyId={retainer.companyId}
-          monthCardId={monthCard.id}
-          defaultAmount={revenue ?? 0}
-          onClose={() => setEnteringInvoice(false)}
-          onCreated={() => {
-            setEnteringInvoice(false);
-            void loadMonthCard();
-          }}
-        />
-      )}
-
       {recordingPayment && monthCard?.invoice && (
         <RecordPaymentModal
           invoiceId={monthCard.invoice.id}
@@ -1349,77 +1395,6 @@ export default function RetainerMonthCardPage() {
     </>
   );
 }
-
-function EnterInvoiceModal({
-  companyId,
-  monthCardId,
-  defaultAmount,
-  onClose,
-  onCreated,
-}: {
-  companyId: string;
-  monthCardId: string;
-  defaultAmount: number;
-  onClose: () => void;
-  onCreated: () => void;
-}) {
-  const [number, setNumber] = useState('');
-  const [amount, setAmount] = useState(defaultAmount > 0 ? String(defaultAmount) : '');
-  const [raisedAt, setRaisedAt] = useState(new Date().toISOString().slice(0, 10));
-  const [dueAt, setDueAt] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const canSave = Boolean(number.trim()) && Number(amount) > 0 && Boolean(raisedAt);
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canSave) return;
-    setSaving(true);
-    setError(null);
-    try {
-      await api.invoices.create({
-        companyId,
-        monthCardId,
-        workType: 'RETAINER',
-        amount: Number(amount),
-        raisedAt,
-        dueAt: dueAt || undefined,
-        customNumber: number.trim(),
-      });
-      onCreated();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not enter this invoice');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Modal open onClose={onClose} title="Enter invoice" description="Mirrors the tax invoice already raised in Tally — this doesn't issue anything.">
-      <form onSubmit={submit}>
-        <ModalBody className="space-y-4">
-          <Field label="Invoice number (from Tally)" value={number} onChange={setNumber} required placeholder="e.g. INV-2026-0142" />
-          <Field label="Amount (₹)" value={amount} onChange={setAmount} type="number" required />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Raised on" value={raisedAt} onChange={setRaisedAt} type="date" required />
-            <Field label="Due date" value={dueAt} onChange={setDueAt} type="date" hint="Defaults to 15 days from raised" />
-          </div>
-          {error && <ErrorNote>{error}</ErrorNote>}
-        </ModalBody>
-        <ModalFooter>
-          <Button type="button" variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" loading={saving} disabled={!canSave}>
-            Enter invoice
-          </Button>
-        </ModalFooter>
-      </form>
-    </Modal>
-  );
-}
-
 
 /**
  * Ending a retainer.

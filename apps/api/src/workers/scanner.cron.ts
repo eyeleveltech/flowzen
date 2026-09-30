@@ -540,6 +540,47 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
     });
   }
 
+  // 18b. RULE: RETAINER_PROFORMA_NOT_RAISED — billed in advance, the 3rd of
+  // the month, and this month has not been asked for yet.
+  //
+  // An in-advance retainer is paid before the work, so the proforma is the
+  // month's first job. Two days' grace for the 1st landing on a weekend; after
+  // that the month is being worked for nothing on the record. Months billed
+  // after they end are MONTH_CARD_NOT_INVOICED's business, above.
+  if (now.getDate() >= 3) {
+    const monthNow = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const cards = await prisma.monthCard.findMany({
+      where: {
+        month: monthNow,
+        invoiceId: null,
+        retainer: { organizationId, status: 'ACTIVE', billing: 'IN_ADVANCE' },
+      },
+      include: { retainer: { include: { company: true } } },
+    });
+    if (cards.length > 0) {
+      const asked = await prisma.proforma.findMany({
+        where: {
+          organizationId,
+          sourceType: 'MONTH_CARD',
+          sourceId: { in: cards.map((c) => c.id) },
+          status: { in: ['UNPAID', 'PAID'] },
+        },
+        select: { sourceId: true },
+      });
+      const done = new Set(asked.map((a) => a.sourceId));
+      for (const mc of cards) {
+        if (done.has(mc.id)) continue;
+        alerts.push({
+          rule: 'RETAINER_PROFORMA_NOT_RAISED',
+          severity: AlertSeverity.MED,
+          entityType: 'MonthCard',
+          entityId: mc.id,
+          message: `${mc.retainer.company.name} is billed in advance and ${mc.month}'s proforma has not been raised.`,
+        });
+      }
+    }
+  }
+
   // ── 19-22. The asset rules ────────────────────────────────────────────────
   //
   // These ride the scanner that already runs; no new cron process. Overdue

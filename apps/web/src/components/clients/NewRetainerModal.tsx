@@ -19,6 +19,8 @@ import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { GstAmountFields } from '@/components/work/GstAmountFields';
+import { BILLING_OPTIONS } from '@/lib/retainerBilling';
+import type { RetainerBilling } from '@/lib/api-v2';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { personOptions } from '@/lib/people';
 
@@ -62,6 +64,7 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill, deals = []
   const [monthlyValue, setMonthlyValue] = useState('');
   /** The GST on the monthly fee, beside it, never in it — see NewProjectModal. */
   const [gstPercent, setGstPercent] = useState('18');
+  const [billing, setBilling] = useState<RetainerBilling>('IN_ADVANCE');
   const [startDate, setStartDate] = useState('');
   const [termMonths, setTermMonths] = useState('');
   const [firstProjectName, setFirstProjectName] = useState('');
@@ -82,6 +85,7 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill, deals = []
     setCompanyId(prefill?.companyId ?? '');
     setMonthlyValue(prefill?.monthlyValue != null ? String(prefill.monthlyValue) : '');
     setGstPercent('18');
+    setBilling('IN_ADVANCE');
     setStartDate(new Date().toISOString().slice(0, 10));
     setTermMonths('');
     setFirstProjectName('');
@@ -105,6 +109,7 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill, deals = []
         companyId,
         monthlyValue: Number(monthlyValue),
         gstPercent: gstPercent ? Number(gstPercent) : null,
+        billing,
         startDate,
         termMonths: termMonths ? Number(termMonths) : undefined,
         ownerId: ownerId || undefined,
@@ -187,6 +192,13 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill, deals = []
             onGstChange={setGstPercent}
             required
             hint="Before GST — what each month earns."
+          />
+          <FieldSelect
+            label="Bills"
+            value={billing}
+            onChange={(v) => setBilling(v as RetainerBilling)}
+            options={BILLING_OPTIONS}
+            hint="In advance: the proforma goes out on the 1st, before the work. After: once the month is over."
           />
           {/* Optional, and the first thing you see on the retainer afterwards.
               Left blank it falls back to "Monthly Retainer Work" -- a name

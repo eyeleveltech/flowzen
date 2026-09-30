@@ -85,7 +85,7 @@ export function NewTaskPanel({ isOpen, onClose, onSuccess, projectId, projectNam
   };
 
   return (
-    <Drawer isOpen={isOpen} onClose={onClose} variant="slideover" title="New task">
+    <Drawer isOpen={isOpen} onClose={onClose} variant="slideover" title="New task" guardUnsaved>
       <form onSubmit={handleSubmit} className="flex h-full flex-col bg-white">
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
           <div>

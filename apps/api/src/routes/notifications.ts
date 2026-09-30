@@ -65,6 +65,8 @@ export const RULE_PERMISSION: Record<string, PermissionKey | undefined> = {
   INVOICE_OVERDUE: 'money.status',
   INVOICE_AGING_60: 'money.status',
   MONTH_CARD_NOT_INVOICED: 'money.status',
+  // Billing the month is Accounts' job, so it reaches them.
+  RETAINER_PROFORMA_NOT_RAISED: 'money.status',
 
   // Selling.
   PROPOSAL_STALLED: 'pipeline.read',
@@ -182,8 +184,10 @@ const rawLinkFor = (entityType: string, entityId: string): string | null => {
     case 'Proposal':
     case 'Proforma':
       return '/quotations';
+    // A retainer month's alerts are all about billing it, and the billing
+    // board is where that is done — and the one screen Accounts can open.
     case 'MonthCard':
-      return '/live-work';
+      return '/money?tab=billing';
     case 'Organization':
       return '/allocations';
     default:

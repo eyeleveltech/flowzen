@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
 import { rollActiveRetainers } from '../workers/monthCard.cron.js';
-import { CompanyStatus, Prisma, RetainerStatus, RetainerProjectStatus } from '@prisma/client';
+import { CompanyStatus, Prisma, RetainerBilling, RetainerStatus, RetainerProjectStatus } from '@prisma/client';
 import { monthKey } from '../utils/retainerMonths.js';
 import { TASK_PEOPLE, withPeople } from './tasks.js';
 import { parsePagination } from '../utils/query.js';
@@ -27,6 +27,23 @@ const allocationCost = (allocations: { percent: number; user: { monthlyCost: unk
 // criteria, literally. Retainers only: a one-time project has no monthly
 // revenue recognition schedule in this model, so mixing it into a month's
 // P&L would be a made-up number, not a derived one.
+
+/**
+ * The months, of these, that a proforma still stands against.
+ *
+ * A month the client has been asked to pay for is not an empty month, even
+ * with no task or cost on it yet — an in-advance proforma goes out on the 1st,
+ * before any work. Removing the card would leave the document pointing at
+ * nothing and the client holding a bill for a month that no longer exists.
+ */
+async function monthsWithProforma(cardIds: string[]): Promise<Set<string>> {
+  if (cardIds.length === 0) return new Set();
+  const rows = await prisma.proforma.findMany({
+    where: { sourceType: 'MONTH_CARD', sourceId: { in: cardIds }, status: { in: ['UNPAID', 'PAID'] } },
+    select: { sourceId: true },
+  });
+  return new Set(rows.map((r) => r.sourceId));
+}
 
 retainersRouter.get('/profitability', requirePermission('money.figures'), async (req: AuthRequest, res: Response, next) => {
   try {
@@ -194,6 +211,7 @@ retainersRouter.get('/', requirePermission('work.all'), async (req: AuthRequest,
         // A rate, not a figure, so it is not masked — and a Decimal, so it
         // goes out as the number it is.
         gstPercent: r.gstPercent == null ? null : Number(r.gstPercent),
+        billing: r.billing,
         startDate: r.startDate,
         termMonths: r.termMonths,
         renewalDate: r.renewalDate,
@@ -257,6 +275,8 @@ const retainerCreateSchema = z.object({
    * government. Null is "not said", which is not the same as 0%.
    */
   gstPercent: z.number().min(0, 'GST cannot be negative').max(100, 'GST is a percentage — 100 at most').optional().nullable(),
+  /** When each month is billed. In advance unless said otherwise. */
+  billing: z.nativeEnum(RetainerBilling).optional(),
   startDate: z.string().min(1, 'Start date is required'),
   termMonths: z.number().optional().nullable(),
   ownerId: z.string().optional(),
@@ -284,7 +304,7 @@ retainersRouter.post('/', requirePermission('company.write'), async (req: AuthRe
     }
 
     const orgId = req.user!.organizationId;
-    const { companyId, monthlyValue, gstPercent, startDate, termMonths, ownerId, firstProjectName, sourceProposalId } = parsed.data;
+    const { companyId, monthlyValue, gstPercent, billing, startDate, termMonths, ownerId, firstProjectName, sourceProposalId } = parsed.data;
 
     /*
      * ─── The gate, and why it could not be the proposal alone ──────────────
@@ -366,6 +386,7 @@ retainersRouter.post('/', requirePermission('company.write'), async (req: AuthRe
         companyId,
         monthlyValue,
         gstPercent: gstPercent ?? null,
+        ...(billing ? { billing } : {}),
         startDate: new Date(startDate),
         termMonths: termMonths || null,
         renewalDate,
@@ -971,6 +992,26 @@ retainersRouter.get('/:id/month-cards/:month', requirePermission('work.all'), as
       return;
     }
 
+    /*
+     * The proformas raised for this month, newest first, cancelled ones
+     * included — the billing strip shows the one that stands, and the history
+     * is there for "what did we send them".
+     */
+    const proformas = await prisma.proforma.findMany({
+      where: { organizationId: orgId, sourceType: 'MONTH_CARD', sourceId: monthCard.id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        number: true,
+        status: true,
+        amount: true,
+        total: true,
+        raisedAt: true,
+        validTill: true,
+        invoiceId: true,
+      },
+    });
+
     // Direct (Cost rows) plus people cost (allocations) — brief §8.
     const directCostsTotal =
       monthCard.costs.reduce((acc, c) => acc + Number(c.amount), 0) + allocationCost(monthCard.allocations);
@@ -1020,6 +1061,11 @@ retainersRouter.get('/:id/month-cards/:month', requirePermission('work.all'), as
         costBasis,
         costs: maskedCosts,
         invoice: maskedInvoice,
+        proformas: proformas.map((pf) => ({
+          ...pf,
+          amount: canSeeFigures ? pf.amount : null,
+          total: canSeeFigures ? pf.total : null,
+        })),
         allocations: maskedAllocations,
         retainer: {
           ...monthCard.retainer,
@@ -1172,7 +1218,10 @@ retainersRouter.post('/:id/stop', requirePermission('company.write'), async (req
       include: { _count: { select: { tasks: true, costs: true } } },
     });
 
-    const empty = openCards.filter((c) => c._count.tasks === 0 && c._count.costs === 0 && !c.invoiceId);
+    const billed = await monthsWithProforma(openCards.map((c) => c.id));
+    const empty = openCards.filter(
+      (c) => c._count.tasks === 0 && c._count.costs === 0 && !c.invoiceId && !billed.has(c.id),
+    );
     const worked = openCards.filter((c) => !empty.some((e) => e.id === c.id));
 
     const stopped = await prisma.$transaction(async (tx) => {
@@ -1254,6 +1303,7 @@ const retainerEditSchema = z
      * government. Null is "not said", which is not the same as 0%.
      */
     gstPercent: z.number().min(0, 'GST cannot be negative').max(100, 'GST is a percentage — 100 at most').optional().nullable(),
+    billing: z.nativeEnum(RetainerBilling).optional(),
     startDate: z.string().min(1).optional(),
     termMonths: z.number().int().positive().nullable().optional(),
     ownerId: z.string().min(1).optional(),
@@ -1276,6 +1326,7 @@ const retainerEditSchema = z
       // so without this, correcting the GST alone was refused as "Nothing to
       // change".
       v.gstPercent !== undefined ||
+      v.billing !== undefined ||
       v.startDate !== undefined ||
       v.termMonths !== undefined ||
       v.ownerId !== undefined,
@@ -1292,7 +1343,7 @@ retainersRouter.patch('/:id', requirePermission('company.write'), async (req: Au
 
     const orgId = req.user!.organizationId;
     const id = String(req.params.id);
-    const { monthlyValue, gstPercent, startDate, termMonths, ownerId, repriceOpenMonth } = parsed.data;
+    const { monthlyValue, gstPercent, billing, startDate, termMonths, ownerId, repriceOpenMonth } = parsed.data;
 
     const existing = await prisma.retainer.findFirst({
       where: { id, organizationId: orgId },
@@ -1359,15 +1410,18 @@ retainersRouter.patch('/:id', requirePermission('company.write'), async (req: Au
         include: { _count: { select: { tasks: true, costs: true, allocations: true } } },
       });
 
+      // A proforma sent for the month is a document the client holds.
+      const billed = await monthsWithProforma(before.map((c) => c.id));
       const worked = before.filter(
-        (c) => c._count.tasks > 0 || c._count.costs > 0 || c._count.allocations > 0 || c.invoiceId !== null,
+        (c) =>
+          c._count.tasks > 0 || c._count.costs > 0 || c._count.allocations > 0 || c.invoiceId !== null || billed.has(c.id),
       );
       if (worked.length > 0) {
         res.status(400).json({
           success: false,
           error:
             `${worked.map((c) => c.month).join(', ')} ${worked.length === 1 ? 'has' : 'have'} work against ` +
-            `${worked.length === 1 ? 'it' : 'them'} — tasks, costs or an invoice — so the start date cannot move past ` +
+            `${worked.length === 1 ? 'it' : 'them'} — tasks, costs, a proforma or an invoice — so the start date cannot move past ` +
             `${worked.length === 1 ? 'that month' : 'those months'}.`,
         });
         return;
@@ -1397,7 +1451,9 @@ retainersRouter.patch('/:id', requirePermission('company.write'), async (req: Au
     // Resending what is already there writes nothing — no row, no month-card
     // reprice, and no "edited" line in the client's activity feed for a save
     // that changed no figure.
-    if (!rateChanged && !startChanged && !termChanged && !ownerChanged && !gstChanged) {
+    const billingChanged = billing !== undefined && billing !== existing.billing;
+
+    if (!rateChanged && !startChanged && !termChanged && !ownerChanged && !gstChanged && !billingChanged) {
       const { company: _company, ...unchanged } = existing;
       res.json({ success: true, retainer: unchanged, repricedCards: 0 });
       return;
@@ -1409,6 +1465,7 @@ retainersRouter.patch('/:id', requirePermission('company.write'), async (req: Au
         data: {
           ...(rateChanged ? { monthlyValue } : {}),
           ...(gstChanged ? { gstPercent: gstPercent ?? null } : {}),
+          ...(billingChanged ? { billing } : {}),
           ...(startChanged ? { startDate: nextStart } : {}),
           ...(termChanged ? { termMonths } : {}),
           ...(startChanged || termChanged ? { renewalDate: nextRenewal } : {}),
@@ -1457,6 +1514,7 @@ retainersRouter.patch('/:id', requirePermission('company.write'), async (req: Au
               : {}),
             ...(termChanged ? { termMonthsFrom: existing.termMonths, termMonthsTo: termMonths } : {}),
             ...(ownerChanged ? { ownerFrom: existing.ownerId, ownerTo: ownerId } : {}),
+            ...(billingChanged ? { changed: { billing: { from: existing.billing, to: billing } } } : {}),
           },
         },
       });

@@ -34,10 +34,20 @@ const auth = () =>
     })}`,
   ] as const;
 
-let written: { proposal?: any; retainer?: any; company?: any; cards?: any; deletedCards?: any; activity?: any };
+let written: {
+  proposal?: any;
+  version?: any;
+  retainer?: any;
+  company?: any;
+  cards?: any;
+  deletedCards?: any;
+  activity?: any;
+};
 
 beforeEach(() => {
   written = {};
+  // No proforma out against any month unless a test says so.
+  (prisma.proforma.findMany as any).mockResolvedValue([]);
   (prisma.user.findUnique as any).mockResolvedValue({
     id: ADMIN.id,
     organizationId: 'org-1',
@@ -60,6 +70,16 @@ beforeEach(() => {
 
 // ── Proposal edit ───────────────────────────────────────────────────────────
 
+const V2 = {
+  id: 'ver-2',
+  proposalId: 'prop-1',
+  n: 2,
+  value: 50000,
+  scopeSummary: 'Reels and statics',
+  fileUrl: null,
+  sentAt: new Date('2026-09-01T00:00:00Z'),
+};
+
 const OPEN_PROPOSAL = {
   id: 'prop-1',
   organizationId: 'org-1',
@@ -69,12 +89,21 @@ const OPEN_PROPOSAL = {
   stage: 'PROPOSAL_SENT',
   outcome: null,
   deletedAt: null,
-  company: { name: 'Carlton Hotels' },
+  company: { id: 'co-1', name: 'Carlton Hotels' },
+  versions: [V2],
+  wonVersion: null,
 };
 
 const editProposal = (body: Record<string, unknown>, proposal: Record<string, unknown> | null = {}) => {
   (prisma.proposal.findFirst as any).mockResolvedValue(proposal === null ? null : { ...OPEN_PROPOSAL, ...proposal });
   (prisma.user.findFirst as any).mockResolvedValue({ id: 'usr-new' });
+  // The edit writes the proposal, its version and the log together.
+  (prisma.$transaction as any).mockImplementation((fn: any) => fn(prisma));
+  (prisma.proposal.findUniqueOrThrow as any).mockResolvedValue({ ...OPEN_PROPOSAL, ...(proposal ?? {}) });
+  (prisma.proposalVersion.update as any).mockImplementation(async ({ data }: any) => {
+    written.version = data;
+    return { ...V2, ...data };
+  });
   return request(app)
     .patch('/api/proposals/prop-1')
     .set(...auth())
@@ -82,12 +111,11 @@ const editProposal = (body: Record<string, unknown>, proposal: Record<string, un
 };
 
 describe('editing a proposal', () => {
-  it('reassigns the owner', async () => {
+  it('reassigns the owner, and the log says from whom to whom', async () => {
     const res = await editProposal({ ownerId: 'usr-new' });
     expect(res.status).toBe(200);
     expect(written.proposal.ownerId).toBe('usr-new');
-    expect(written.activity.payload.ownerFrom).toBe('usr-old');
-    expect(written.activity.payload.ownerTo).toBe('usr-new');
+    expect(written.activity.payload.changed.ownerId).toEqual({ from: 'usr-old', to: 'usr-new' });
   });
 
   it('refuses an owner who is not on the team', async () => {
@@ -116,11 +144,80 @@ describe('editing a proposal', () => {
     expect(prisma.proposal.update).not.toHaveBeenCalled();
   });
 
-  it('does not write the company, whatever is sent', async () => {
-    const res = await editProposal({ ownerId: 'usr-new', companyId: 'co-somebody-else' });
+  // ── The figures ──
+
+  it('corrects the value of the version on the table, in place', async () => {
+    // A typo is not a re-quote: no v3, and the log keeps what it said before.
+    const res = await editProposal({ value: 5000 });
     expect(res.status).toBe(200);
-    expect(written.proposal).not.toHaveProperty('companyId');
+    expect((prisma.proposalVersion.update as any).mock.calls[0][0].where).toEqual({ id: 'ver-2' });
+    expect(written.version).toEqual({ value: 5000 });
+    expect(prisma.proposalVersion.create).not.toHaveBeenCalled();
+    expect(written.activity.payload.changed.value).toEqual({ from: 50000, to: 5000 });
+    expect(written.activity.payload.versionN).toBe(2);
   });
+
+  it('corrects scope, link and sent date together', async () => {
+    const res = await editProposal({
+      scopeSummary: 'Reels, statics and a monthly report',
+      fileUrl: 'https://drive.example/deck.pdf',
+      sentAt: '2026-09-03',
+    });
+    expect(res.status).toBe(200);
+    expect(written.version.scopeSummary).toBe('Reels, statics and a monthly report');
+    expect(written.version.fileUrl).toBe('https://drive.example/deck.pdf');
+    expect(written.version.sentAt.toISOString().slice(0, 10)).toBe('2026-09-03');
+  });
+
+  it('corrects the winning version of a won deal, not a later one', async () => {
+    const won = { ...V2, id: 'ver-1', n: 1, value: 40000 };
+    const res = await editProposal({ value: 45000 }, { outcome: 'WON', stage: 'WON', wonVersion: won });
+    expect(res.status).toBe(200);
+    expect((prisma.proposalVersion.update as any).mock.calls[0][0].where).toEqual({ id: 'ver-1' });
+  });
+
+  it('refuses figures on a deal nothing has been quoted on', async () => {
+    const res = await editProposal({ value: 1000 }, { versions: [], wonVersion: null, stage: 'PROSPECT' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/nothing has been quoted/i);
+    expect(prisma.proposalVersion.update).not.toHaveBeenCalled();
+  });
+
+  // ── The company ──
+
+  it('moves an open deal to another company', async () => {
+    (prisma.proforma.count as any).mockResolvedValue(0);
+    (prisma.company.findFirst as any).mockResolvedValue({ id: 'co-2', name: 'Carlton Wellness' });
+    const res = await editProposal({ companyId: 'co-2' });
+    expect(res.status).toBe(200);
+    expect(written.proposal.companyId).toBe('co-2');
+    expect(written.activity.payload.changed.company).toEqual({ from: 'Carlton Hotels', to: 'Carlton Wellness' });
+  });
+
+  it('keeps a won deal with the company it made a client', async () => {
+    const res = await editProposal({ companyId: 'co-2' }, { outcome: 'WON', stage: 'WON' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/won/i);
+    expect(prisma.proposal.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses to move a deal a proforma has gone out against', async () => {
+    (prisma.proforma.count as any).mockResolvedValue(1);
+    const res = await editProposal({ companyId: 'co-2' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/proforma/i);
+    expect(prisma.proposal.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses a company from outside the organisation', async () => {
+    (prisma.proforma.count as any).mockResolvedValue(0);
+    (prisma.company.findFirst as any).mockResolvedValue(null);
+    const res = await editProposal({ companyId: 'co-elsewhere' });
+    expect(res.status).toBe(404);
+    expect(prisma.proposal.update).not.toHaveBeenCalled();
+  });
+
+  // ── Nothing to do ──
 
   it('rejects a request that changes nothing', async () => {
     const res = await editProposal({});
@@ -132,9 +229,16 @@ describe('editing a proposal', () => {
     // `updatedAt` is "days in this stage" on the pipeline board and "no
     // activity in N days" in the daily brief. A save that changed nothing
     // would reset that clock and make a stalled deal look freshly worked.
-    const res = await editProposal({ ownerId: OPEN_PROPOSAL.ownerId, kind: OPEN_PROPOSAL.kind });
+    const res = await editProposal({
+      ownerId: OPEN_PROPOSAL.ownerId,
+      kind: OPEN_PROPOSAL.kind,
+      value: 50000,
+      scopeSummary: 'Reels and statics',
+      sentAt: '2026-09-01',
+    });
     expect(res.status).toBe(200);
     expect(prisma.proposal.update).not.toHaveBeenCalled();
+    expect(prisma.proposalVersion.update).not.toHaveBeenCalled();
     expect(prisma.activity.create).not.toHaveBeenCalled();
   });
 

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, type AuthRequest, hasPermission, requirePermission } from '../middleware/auth.js';
 import { issueWithRetry } from '../utils/documentNumber.js';
-import { InvoiceStatus, MilestoneStatus, MonthCardStatus, TaskWorkType } from '@prisma/client';
+import { InvoiceStatus, MilestoneStatus, MonthCardStatus, RetainerBilling, TaskWorkType } from '@prisma/client';
 import { parsePagination } from '../utils/query.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
@@ -178,6 +178,176 @@ invoicesRouter.get('/', requirePermission('money.status'), async (req: AuthReque
  * One still running is the forward view, and showing it is what makes this a
  * work list rather than a rebuke.
  */
+/**
+ * GET /api/invoices/retainer-billing?month=2026-10 — every retainer's month,
+ * and where its billing has got to.
+ *
+ * One row per retainer month: the month asked for, plus any earlier month
+ * that is still not paid — a month does not stop being owed because the
+ * calendar moved on. Each row says which of the three steps is next:
+ *
+ *   PROFORMA  nothing has been asked for yet
+ *   INVOICE   the proforma is out; the tax invoice comes once it is paid
+ *   PAYMENT   invoiced; waiting for the money
+ *   DONE      paid
+ *   NOT_YET   billed after the month, and the month is still running
+ *
+ * Money.figures, like every other screen that shows a client's fee.
+ */
+invoicesRouter.get('/retainer-billing', requirePermission('money.figures'), async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const now = new Date();
+    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const asked = typeof req.query.month === 'string' ? req.query.month : '';
+    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(asked) ? asked : thisMonth;
+
+    const cards = await prisma.monthCard.findMany({
+      where: {
+        retainer: { organizationId: orgId },
+        OR: [
+          { month },
+          {
+            month: { lt: month },
+            OR: [{ invoiceId: null }, { invoice: { is: { status: { notIn: [InvoiceStatus.PAID, InvoiceStatus.CANCELLED] } } } }],
+          },
+        ],
+      },
+      include: {
+        retainer: {
+          select: {
+            id: true,
+            billing: true,
+            gstPercent: true,
+            status: true,
+            company: { select: { id: true, name: true } },
+          },
+        },
+        invoice: {
+          select: {
+            id: true,
+            number: true,
+            status: true,
+            amount: true,
+            raisedAt: true,
+            dueAt: true,
+            payments: { select: { amount: true } },
+          },
+        },
+      },
+      orderBy: [{ month: 'asc' }],
+      take: 500,
+    });
+
+    // The proformas behind them, newest first — the latest one that has not
+    // been cancelled is the one that stands.
+    const proformas = cards.length
+      ? await prisma.proforma.findMany({
+          where: {
+            organizationId: orgId,
+            sourceType: 'MONTH_CARD',
+            sourceId: { in: cards.map((c) => c.id) },
+            status: { not: 'CANCELLED' },
+          },
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            number: true,
+            status: true,
+            amount: true,
+            total: true,
+            raisedAt: true,
+            validTill: true,
+            sourceId: true,
+            invoiceId: true,
+          },
+        })
+      : [];
+    const proformaFor = new Map<string, (typeof proformas)[number]>();
+    for (const pf of proformas) if (!proformaFor.has(pf.sourceId)) proformaFor.set(pf.sourceId, pf);
+
+    const rows = cards
+      .map((c) => {
+        const pf = proformaFor.get(c.id) ?? null;
+        const inv = c.invoice;
+        const paid = inv ? inv.payments.reduce((a, p) => a + Number(p.amount), 0) : 0;
+        const advance = c.retainer.billing === RetainerBilling.IN_ADVANCE;
+        const running = c.month >= thisMonth && c.status === MonthCardStatus.OPEN;
+        const liveProforma = pf && (pf.status === 'UNPAID' || pf.status === 'PAID');
+
+        const step = inv
+          ? inv.status === InvoiceStatus.PAID
+            ? 'DONE'
+            : 'PAYMENT'
+          : liveProforma
+            ? 'INVOICE'
+            : !advance && running
+              ? 'NOT_YET'
+              : 'PROFORMA';
+
+        return {
+          monthCardId: c.id,
+          month: c.month,
+          earlier: c.month < month,
+          retainerId: c.retainer.id,
+          retainerStopped: c.retainer.status === 'STOPPED',
+          companyId: c.retainer.company.id,
+          companyName: c.retainer.company.name,
+          billing: c.retainer.billing,
+          fee: Number(c.revenue),
+          gstPercent: c.retainer.gstPercent == null ? null : Number(c.retainer.gstPercent),
+          proforma: pf
+            ? {
+                id: pf.id,
+                number: pf.number,
+                status: pf.status,
+                amount: Number(pf.amount),
+                total: pf.total == null ? Number(pf.amount) : Number(pf.total),
+                raisedAt: pf.raisedAt,
+                validTill: pf.validTill,
+              }
+            : null,
+          invoice: inv
+            ? {
+                id: inv.id,
+                number: inv.number,
+                status: inv.status,
+                amount: Number(inv.amount),
+                raisedAt: inv.raisedAt,
+                dueAt: inv.dueAt,
+                paid,
+              }
+            : null,
+          step,
+        };
+      })
+      .sort((a, b) => (a.month === b.month ? a.companyName.localeCompare(b.companyName) : a.month < b.month ? -1 : 1));
+
+    const count = (step: string) => rows.filter((r) => r.step === step).length;
+    res.json({
+      success: true,
+      month,
+      thisMonth,
+      rows,
+      summary: {
+        toRaise: count('PROFORMA'),
+        awaitingInvoice: count('INVOICE'),
+        awaitingPayment: count('PAYMENT'),
+        done: count('DONE'),
+        notYet: count('NOT_YET'),
+        // What is still to come in, across every row: the fee for months not
+        // yet invoiced, what is left on the ones that are.
+        outstanding: rows.reduce(
+          (a, r) => a + (r.step === 'DONE' || r.step === 'NOT_YET' ? 0 : r.invoice ? Math.max(0, r.invoice.amount - r.invoice.paid) : r.fee),
+          0,
+        ),
+      },
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
 invoicesRouter.get('/awaiting', requirePermission('money.figures'), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const orgId = req.user!.organizationId;
@@ -192,7 +362,14 @@ invoicesRouter.get('/awaiting', requirePermission('money.figures'), async (req: 
      * to fetch. A month that has ended, or a card closed early because the
      * retainer was stopped part way through.
      */
-    const isDue = { OR: [{ status: MonthCardStatus.CLOSED }, { month: { lt: thisMonth } }] };
+    const isDue = {
+      OR: [
+        { status: MonthCardStatus.CLOSED },
+        { month: { lt: thisMonth } },
+        // Billed in advance: this month is owed from the 1st.
+        { month: thisMonth, retainer: { billing: RetainerBilling.IN_ADVANCE } },
+      ],
+    };
 
     const cards = await prisma.monthCard.findMany({
       where: base,
@@ -214,7 +391,10 @@ invoicesRouter.get('/awaiting', requirePermission('money.figures'), async (req: 
       closedAt: c.closedAt,
       // The month is over, or somebody closed the card early by ending the
       // retainer. Either way the work is done and the money is owed.
-      due: c.status === 'CLOSED' || c.month < thisMonth,
+      due:
+        c.status === 'CLOSED' ||
+        c.month < thisMonth ||
+        (c.month === thisMonth && c.retainer.billing === RetainerBilling.IN_ADVANCE),
       retainerStopped: c.retainer.status === 'STOPPED',
     }));
 
@@ -383,10 +563,10 @@ invoicesRouter.post(
         workId,
         projectId,
         proformaId,
-        monthCardId,
         milestoneId,
         customNumber,
       } = parsed.data;
+      let { monthCardId } = parsed.data;
 
       // Verify company belongs to org
       const company = await prisma.company.findFirst({
@@ -430,11 +610,32 @@ invoicesRouter.post(
       if (proformaId) {
         const proforma = await prisma.proforma.findFirst({
           where: { id: proformaId, organizationId: orgId, companyId },
-          select: { id: true },
+          select: { id: true, number: true, status: true, invoiceId: true, sourceType: true, sourceId: true },
         });
         if (!proforma) {
           res.status(404).json({ success: false, error: 'Proforma not found for this company' });
           return;
+        }
+        // One invoice per proforma — a second is a duplicate, not a correction.
+        if (proforma.invoiceId) {
+          res.status(400).json({ success: false, error: `Proforma ${proforma.number} already has its invoice.` });
+          return;
+        }
+        if (proforma.status === 'CANCELLED') {
+          res.status(400).json({ success: false, error: `Proforma ${proforma.number} was cancelled — there is nothing to invoice.` });
+          return;
+        }
+        /*
+         * A retainer month's proforma carries its month, so the invoice raised
+         * from it does too — the same inheritance a milestone gets below. Named
+         * outright and different is a mistake worth stopping.
+         */
+        if (proforma.sourceType === 'MONTH_CARD') {
+          if (monthCardId && monthCardId !== proforma.sourceId) {
+            res.status(400).json({ success: false, error: 'That proforma bills a different month.' });
+            return;
+          }
+          monthCardId = proforma.sourceId;
         }
       }
 
@@ -518,7 +719,7 @@ invoicesRouter.post(
               amount,
               raisedAt: raisedDate,
               dueAt: dueDate,
-              workType: workType as TaskWorkType | undefined,
+              workType: (workType ?? (monthCardId ? TaskWorkType.MONTH_CARD : undefined)) as TaskWorkType | undefined,
               workId: workId || undefined,
               projectId: projectId || undefined,
               proformaId: proformaId || undefined,
@@ -530,6 +731,12 @@ invoicesRouter.post(
 
           if (monthCard) {
             await tx.monthCard.update({ where: { id: monthCard.id }, data: { invoiceId: created.id } });
+          }
+
+          // The proforma learns its invoice. It only ever pointed the other way,
+          // so the register's Invoice column stayed empty for every one converted.
+          if (proformaId) {
+            await tx.proforma.update({ where: { id: proformaId }, data: { invoiceId: created.id } });
           }
 
           // Derived, not typed: the milestone is Invoiced BECAUSE this exists.
@@ -640,6 +847,15 @@ invoicesRouter.post(
           await prisma.milestone.update({
             where: { id: invoice.milestoneId },
             data: { status: MilestoneStatus.PAID },
+          });
+        }
+
+        // And the proforma that asked for it. Paid was a status nothing ever
+        // set, so every proforma read Unpaid for ever, settled or not.
+        if (invoice.proformaId) {
+          await prisma.proforma.updateMany({
+            where: { id: invoice.proformaId, organizationId: orgId, status: { not: 'CANCELLED' } },
+            data: { status: 'PAID' },
           });
         }
       }

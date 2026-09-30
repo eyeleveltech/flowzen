@@ -10,6 +10,9 @@
  * raised → invoice entered → payment marked." The milestone moves from
  * Pending to Proforma raised.
  *
+ * And from a retainer month: the month's fee, asked for — at the start of the
+ * month for a retainer billed in advance, at its end for one billed after.
+ *
  * Both stage flips happen server-side, keyed off `source` below — this
  * component is just that click.
  *
@@ -45,7 +48,10 @@ import {
   type CustomFieldDraft,
 } from '@/components/documents/DocumentFields';
 
-type Source = { type: 'PROPOSAL'; proposalId: string } | { type: 'MILESTONE'; projectId: string; milestoneId: string };
+type Source =
+  | { type: 'PROPOSAL'; proposalId: string }
+  | { type: 'MILESTONE'; projectId: string; milestoneId: string }
+  | { type: 'MONTH_CARD'; monthCardId: string; monthLabel: string };
 
 type Props = {
   companyId: string;
@@ -53,11 +59,25 @@ type Props = {
   source: Source;
   defaultAmount: number;
   defaultDescription?: string;
+  /**
+   * The rate to start from. A retainer carries its own; null there means
+   * nobody said, which starts at the standard 18%.
+   */
+  defaultGstPercent?: number | null;
   onConfirm: () => void;
   onCancel: () => void;
 };
 
-export function NewProformaModal({ companyId, companyName, source, defaultAmount, defaultDescription, onConfirm, onCancel }: Props) {
+export function NewProformaModal({
+  companyId,
+  companyName,
+  source,
+  defaultAmount,
+  defaultDescription,
+  defaultGstPercent,
+  onConfirm,
+  onCancel,
+}: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { data: config } = useConfig();
@@ -81,8 +101,10 @@ export function NewProformaModal({ companyId, companyName, source, defaultAmount
   const [buyerStateCode, setBuyerStateCode] = useState('');
   const [placeOfSupplyCode, setPlaceOfSupplyCode] = useState('');
   const [placeTouched, setPlaceTouched] = useState(false);
-  const [gstApplicable, setGstApplicable] = useState(true);
-  const [gstRatePercent, setGstRatePercent] = useState('18');
+  const [gstApplicable, setGstApplicable] = useState(defaultGstPercent !== 0);
+  const [gstRatePercent, setGstRatePercent] = useState(
+    defaultGstPercent != null && defaultGstPercent > 0 ? String(defaultGstPercent) : '18',
+  );
   const [notes, setNotes] = useState('');
   const [terms, setTerms] = useState(
     'Advance payment request. Payment due within validity period. GST applicable as per statutory rates.',
@@ -127,8 +149,13 @@ export function NewProformaModal({ companyId, companyName, source, defaultAmount
     try {
       await api.proformas.create({
         companyId,
-        sourceType: source.type === 'PROPOSAL' ? 'PROPOSAL' : 'PROJECT',
-        sourceId: source.type === 'PROPOSAL' ? source.proposalId : source.projectId,
+        sourceType: source.type === 'MILESTONE' ? 'PROJECT' : source.type,
+        sourceId:
+          source.type === 'PROPOSAL'
+            ? source.proposalId
+            : source.type === 'MONTH_CARD'
+              ? source.monthCardId
+              : source.projectId,
         milestoneId: source.type === 'MILESTONE' ? source.milestoneId : undefined,
         lineItems: toLineItemPayload(lines),
         billingName: billingName.trim(),
@@ -155,7 +182,11 @@ export function NewProformaModal({ companyId, companyName, source, defaultAmount
   };
 
   const stageHint =
-    source.type === 'PROPOSAL' ? 'Stage becomes Proforma issued.' : 'This milestone moves to Proforma raised.';
+    source.type === 'PROPOSAL'
+      ? 'Stage becomes Proforma issued.'
+      : source.type === 'MONTH_CARD'
+        ? `${companyName} — ${source.monthLabel}. The tax invoice follows once it is paid.`
+        : 'This milestone moves to Proforma raised.';
 
   return (
     <Modal open title="Raise proforma" description={stageHint} onClose={onCancel} size="lg">

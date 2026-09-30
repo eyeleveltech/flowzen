@@ -630,6 +630,15 @@ enum RetainerStatus {
   STOPPED
 }
 
+/// When a retainer's month is billed.
+enum RetainerBilling {
+  /// At the start of the month — the proforma goes out on the 1st and the fee
+  /// is paid before the work.
+  IN_ADVANCE
+  /// Once the month is over — billed for work already done.
+  IN_ARREARS
+}
+
 model Retainer {
   id               String         @id @default(cuid())
   organizationId   String
@@ -643,6 +652,10 @@ model Retainer {
   /// total the client pays is value × (1 + gstPercent/100), worked out when
   /// shown. Null means nobody said, which is not the same as 0%.
   gstPercent       Decimal?       @db.Decimal(5, 2)
+  /// When each month is billed: at its start, before the work (the usual), or
+  /// once it is over. Decides when a month is ready for its proforma and when
+  /// the missing-proforma alert fires.
+  billing          RetainerBilling @default(IN_ADVANCE)
   startDate        DateTime       @db.Date
   termMonths       Int?
   renewalDate      DateTime?      @db.Date

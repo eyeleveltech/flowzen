@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api, apiGet, formatMoney } from '@/lib/api-v2';
 import { usePageHeader } from '@/hooks/usePageHeader';
+import { useCreateFlag } from '@/hooks/useCreateFlag';
 import { NewInternalProjectModal } from '@/components/work/NewInternalProjectModal';
 import { getPriorityBadge, getPriorityLabel } from '@/lib/priority';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
@@ -214,15 +215,8 @@ export default function LiveWorkPage() {
   // Quick Create's "New project" lands here with ?create=true — same pattern
   // as /companies and /my-work's own handling. It opens the internal form now,
   // because that is the only kind of project this screen starts.
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    // The tab itself is the hook's business now; this is only the create flag.
-    if (params.get('create') === 'true') {
-      setCreatingProject(true);
-      router.replace('/live-work?tab=internal');
-    }
-  }, [router]);
+  // The tab itself is the tab hook's business; this is only the create flag.
+  useCreateFlag(() => setCreatingProject(true), '/live-work?tab=internal');
 
   const currency = config?.organization.currency ?? 'INR';
   const locale = config?.organization.locale ?? 'en-IN';

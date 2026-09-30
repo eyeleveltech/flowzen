@@ -105,6 +105,7 @@ export default function AllWorkPage() {
   const [depts, setDepts] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<string[]>(['UNFINISHED']);
   const [clients, setClients] = useState<string[]>([]);
+  const [projects, setProjects] = useState<string[]>([]);
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [q, setQ] = useState('');
   const [openTask, setOpenTask] = useState<Task | null>(null);
@@ -122,11 +123,12 @@ export default function AllWorkPage() {
     if (assigneeIds.length > 0) p.assigneeId = assigneeIds.join(',');
     if (depts.length > 0) p.dept = depts.join(',');
     if (clients.length > 0) p.companyId = clients.join(',');
+    if (projects.length > 0) p.project = projects.join(',');
     if (statuses.length > 0) p.status = statuses.join(',');
     if (overdueOnly) p.overdue = '1';
     if (q.trim()) p.q = q.trim();
     return p;
-  }, [assigneeIds, depts, clients, statuses, overdueOnly, q]);
+  }, [assigneeIds, depts, clients, projects, statuses, overdueOnly, q]);
 
   const { data, isPending, error, refetch } = useQuery({
     queryKey: ['all-work', params],
@@ -139,10 +141,28 @@ export default function AllWorkPage() {
 
   usePageHeader('All tasks', `${counts.total} shown`);
 
+  /*
+   * The projects on offer, narrowed to the clients already picked.
+   *
+   * "Carlton Wellness" then "which of their projects" is the usual order, and
+   * a list of every project in the agency under a client filter is forty rows
+   * to scroll for three. Anything already ticked stays, so narrowing the
+   * client never silently hides a project the list is still filtered on.
+   */
+  const projectOptions = useMemo(() => {
+    const all = (data?.projects ?? []) as { value: string; name: string; client: string; companyId: string | null }[];
+    const inClients = (o: (typeof all)[number]) =>
+      clients.length === 0 ||
+      (o.companyId ? clients.includes(o.companyId) : clients.includes('INTERNAL')) ||
+      projects.includes(o.value);
+    return all.filter(inClients).map((o) => ({ value: o.value, label: o.name, sublabel: o.client }));
+  }, [data?.projects, clients, projects]);
+
   const filtered =
     assigneeIds.length > 0 ||
     depts.length > 0 ||
     clients.length > 0 ||
+    projects.length > 0 ||
     overdueOnly ||
     q.trim().length > 0 ||
     !(statuses.length === 1 && statuses[0] === 'UNFINISHED');
@@ -234,6 +254,16 @@ export default function AllWorkPage() {
                   label: c.name,
                 })),
               ]}
+            />
+          </div>
+          <div className="w-52">
+            <span className="eyebrow mb-1.25 block">Project</span>
+            <MultiSelect
+              ariaLabel="Filter by project"
+              value={projects}
+              onChange={setProjects}
+              placeholder="Any project"
+              options={projectOptions}
             />
           </div>
           <div className="w-44">

@@ -6,7 +6,7 @@ import { TableRowsSkeleton } from '@/components/ui/skeleton-loaders';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { plural } from '@/lib/utils';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api, apiGet, fileUrl, formatMoney, type ProjectProfitRow, type ProjectProfitTotals } from '@/lib/api-v2';
@@ -14,6 +14,7 @@ import { NewInvoiceModal } from '@/components/work/NewInvoiceModal';
 import { NewCostModal } from '@/components/work/NewCostModal';
 import { RecordPaymentModal } from '@/components/work/RecordPaymentModal';
 import { InvoiceDocumentModal } from '@/components/work/InvoiceDocumentModal';
+import { RetainerBillingBoard, retainerBillingKey } from '@/components/work/RetainerBillingBoard';
 import { SendDocumentModal } from '@/components/documents/SendDocumentModal';
 import { SellerGapsNote } from '@/components/documents/SellerGapsNote';
 import { useConfig } from '@/hooks/queries';
@@ -57,25 +58,7 @@ interface CostRow {
   project?: { company: { name: string }; name: string } | null;
 }
 
-/** "2026-09" is a key. This is the label. */
-const monthName = (m: string) => {
-  const [y, mm] = m.split('-').map(Number);
-  return new Date(y, mm - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
-};
-
-type MoneyTab = 'INVOICES' | 'TO_INVOICE' | 'COSTS' | 'PROFIT';
-
-type AwaitingRow = {
-  id: string;
-  month: string;
-  companyId: string;
-  companyName: string;
-  revenue: number;
-  status: string;
-  closedAt: string | null;
-  due: boolean;
-  retainerStopped: boolean;
-};
+type MoneyTab = 'INVOICES' | 'BILLING' | 'COSTS' | 'PROFIT';
 
 interface ProfitRow {
   companyId: string;
@@ -100,7 +83,12 @@ export default function MoneyPage() {
   /** A failed load, said out loud instead of only in the console. */
   const queryClient = useQueryClient();
   const router = useRouter();
-  const [tab, setTab] = useState<MoneyTab>('INVOICES');
+  /*
+   * `?tab=billing` opens straight on retainer billing — it is where a retainer
+   * month's alerts send Accounts.
+   */
+  const searchParams = useSearchParams();
+  const [tab, setTab] = useState<MoneyTab>(searchParams.get('tab') === 'billing' ? 'BILLING' : 'INVOICES');
   // The one-off half of "did we make money on that job". Held apart from the
   // retainer figures, and never added to them — brief §8.
   type ProjectProfit = {
@@ -131,16 +119,23 @@ export default function MoneyPage() {
       // resolves straight to that array, not the envelope, so `res` here
       // already IS the invoice list.
       const res = await apiGet<Invoice[]>('/invoices');
-      // The step before an invoice exists: retainer months carrying none.
-      // Loaded with the list rather than on tab click, because the count sits
-      // on the tab and a count that appears only after you look is no use.
-      const waiting = await api.invoices.awaiting().catch(() => null);
-      return { invoices: Array.isArray(res) ? res : [], toInvoice: waiting?.rows ?? [] };
+      return { invoices: Array.isArray(res) ? res : [] };
     },
   });
 
   const invoices: Invoice[] = invoiceData?.invoices ?? [];
-  const toInvoice: AwaitingRow[] = invoiceData?.toInvoice ?? [];
+  /*
+   * Retainer months with something to do — loaded with the page rather than
+   * on tab click, because the count sits on the tab and a count that appears
+   * only after you look is no use. Same cache as the board itself.
+   */
+  const { data: billingData } = useQuery({
+    queryKey: retainerBillingKey(''),
+    queryFn: () => api.invoices.retainerBilling(),
+  });
+  const billingToDo = (billingData?.rows ?? []).filter(
+    (r) => r.step === 'PROFORMA' || r.step === 'INVOICE' || r.step === 'PAYMENT',
+  ).length;
   const loadError =
     loadQueryError instanceof Error ? loadQueryError.message : loadQueryError ? 'Could not load the money screen' : null;
 
@@ -323,7 +318,7 @@ export default function MoneyPage() {
       <Tabs
         tabs={[
           { key: 'INVOICES', label: 'Invoices', count: invoices.length },
-          { key: 'TO_INVOICE', label: 'To invoice', count: toInvoice.filter((r) => r.due).length },
+          { key: 'BILLING', label: 'Retainer billing', count: billingToDo },
           { key: 'COSTS', label: 'Costs' },
           { key: 'PROFIT', label: 'Profit & Costs' },
         ] as TabDef<MoneyTab>[]}
@@ -457,71 +452,14 @@ export default function MoneyPage() {
       )}
 
       {/*
-        The billing work list.
+        Retainer billing: every retainer's month, Proforma → Invoice → Paid.
 
         Raising the invoices is one person's job, and that person holds
-        `money.figures` and not `work.all` — so /live-work, /retainers/:id and
-        /projects/:id all bounce her to My Work, and she had no way to see which
-        months were waiting for one. The alert that would have told her,
-        MONTH_CARD_NOT_INVOICED, lands on one of those same screens. So the list
-        lives here, where the invoice is actually raised.
-
-        Both halves are shown. What is owed now is the job; what is still
-        running is the forward view, and leaving it out would make this a
-        rebuke rather than a work list.
+        `money.figures` and not `work.all` — so /live-work and /retainers/:id
+        bounce her. The board lives here, where she can reach it; the month's
+        alerts link straight to it.
       */}
-      {tab === 'TO_INVOICE' && (
-        <div className="overflow-hidden rounded-xl border border-border">
-          <div className="overflow-x-auto">
-            <table className="w-full data-table">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="eyebrow text-left">Client</th>
-                  <th className="eyebrow text-left">Month</th>
-                  <th className="eyebrow text-right">Fee</th>
-                  <th className="eyebrow text-left">State</th>
-                  <th className="eyebrow"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {loading ? (
-                  <TableRowsSkeleton cols={5} />
-                ) : toInvoice.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-5 py-16 text-center text-sm text-secondary">
-                      Every retainer month has an invoice against it.
-                    </td>
-                  </tr>
-                ) : (
-                  toInvoice.map((r) => (
-                    <tr key={r.id} className="transition-colors hover:bg-subtle">
-                      <td className="font-medium text-primary">{r.companyName}</td>
-                      <td className="whitespace-nowrap text-secondary">{monthName(r.month)}</td>
-                      <td className="text-right tabular-nums text-primary">{formatMoney(r.revenue)}</td>
-                      <td>
-                        {r.due ? (
-                          <Badge tone="warn">
-                            {r.retainerStopped ? 'Retainer ended — still owed' : 'Ready to invoice'}
-                          </Badge>
-                        ) : (
-                          <Badge tone="neutral">Month still running</Badge>
-                        )}
-                      </td>
-                      <td className="text-right">
-                        {r.due && (
-                          <Button size="sm" variant="secondary" onClick={() => setCreatingInvoice(true)}>
-                            Raise invoice
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      {tab === 'BILLING' && <RetainerBillingBoard />}
 
       {tab === 'COSTS' && (
         <div className="border border-border rounded-xl overflow-hidden">

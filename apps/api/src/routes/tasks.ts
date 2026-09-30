@@ -97,6 +97,9 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
         // An internal task has no client to be labelled by, so without this
         // every one of them reads as nothing at all on this screen.
         internalProject: { select: { id: true, name: true } },
+        // A follow-up hangs off the client directly — no project, no month —
+        // and read as "Internal" until this was included.
+        company: { select: { name: true } },
         ...TASK_PEOPLE,
       },
     });
@@ -112,7 +115,8 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
     const calendar = await loadWorkCalendar(orgId);
 
     const formattedTasks = allMyTasks.map((t) => {
-      const clientName = t.monthCard?.retainer.company.name || t.project?.company.name || 'Internal';
+      const clientName =
+        t.monthCard?.retainer.company.name || t.project?.company.name || t.company?.name || 'Internal';
       const workingHours = workingMinutesOn(calendar, t.assignedAt, t.completedAt || now, t.waitingTotalMinutes);
       const typeMedianMinutes = medianByGroup.get(taskTypeGroupKey(t)) ?? null;
 
@@ -449,7 +453,7 @@ tasksRouter.get('/targets', requirePermission('work.own'), async (req: AuthReque
 tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const { assigneeId, dept, status, overdue, q, companyId } = req.query;
+    const { assigneeId, dept, status, overdue, q, companyId, project } = req.query;
     const wantsCsv = req.query.format === 'csv';
 
     /*
@@ -495,9 +499,34 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
       if (named.length > 0) {
         or.push({ project: { companyId: { in: named } } });
         or.push({ monthCard: { retainer: { companyId: { in: named } } } });
+        // A follow-up belongs to its client without a project or a month.
+        or.push({ companyId: { in: named } });
       }
-      if (clients.includes('INTERNAL')) or.push({ AND: [{ projectId: null }, { monthCardId: null }] });
+      if (clients.includes('INTERNAL')) {
+        or.push({ AND: [{ projectId: null }, { monthCardId: null }, { companyId: null }] });
+      }
       and.push({ OR: or });
+    }
+
+    /*
+     * Projects, of all three kinds, in one list.
+     *
+     * A task sits in a one-off project, in a project inside a retainer, or in
+     * an internal project — three columns — and "the website redo and the
+     * Carlton reels" is one question whichever kinds they are. Each value says
+     * which column it is: `P:` a project, `RP:` a retainer's project, `IP:` an
+     * internal one.
+     */
+    const projects = list(project);
+    if (projects.length > 0) {
+      const of = (prefix: string) =>
+        projects.filter((v) => v.startsWith(prefix)).map((v) => v.slice(prefix.length)).filter(Boolean);
+      const or: any[] = [];
+      if (of('P:').length) or.push({ projectId: { in: of('P:') } });
+      if (of('RP:').length) or.push({ retainerProjectId: { in: of('RP:') } });
+      if (of('IP:').length) or.push({ internalProjectId: { in: of('IP:') } });
+      // Nothing recognisable asked for: match nothing, rather than everything.
+      and.push(or.length > 0 ? { OR: or } : { id: { in: [] } });
     }
 
     /*
@@ -552,6 +581,7 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
          * the same row.
          */
         internalProject: { select: { id: true, name: true } },
+        company: { select: { id: true, name: true } },
         ...TASK_PEOPLE,
       },
     });
@@ -594,8 +624,8 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
         creator: t.creator,
         reviewer: t.reviewer,
         // What it is for, in the words the rest of the app uses.
-        clientName: t.monthCard?.retainer.company.name || t.project?.company.name || 'Internal',
-        companyId: t.monthCard?.retainer.companyId || t.project?.companyId || null,
+        clientName: t.monthCard?.retainer.company.name || t.project?.company.name || t.company?.name || 'Internal',
+        companyId: t.monthCard?.retainer.companyId || t.project?.companyId || t.companyId || null,
         projectId: t.projectId,
         // Whichever kind of project it is — a one-off, or a stream of work
         // inside a retainer.
@@ -640,29 +670,89 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
      * one option in it and there would be no way to get to a second without
      * clearing first — the same fault the team screen's department filter had.
      */
-    const [projectClients, retainerClients, internalCount] = await Promise.all([
-      prisma.project.findMany({
-        where: { organizationId: orgId, tasks: { some: { deletedAt: null } } },
-        select: { company: { select: { id: true, name: true } } },
-      }),
-      prisma.monthCard.findMany({
-        where: { retainer: { organizationId: orgId }, tasks: { some: { deletedAt: null } } },
-        select: { retainer: { select: { company: { select: { id: true, name: true } } } } },
-      }),
-      prisma.task.count({
-        where: { organizationId: orgId, deletedAt: null, projectId: null, monthCardId: null },
-      }),
-    ]);
+    const withTasks = { some: { deletedAt: null } };
+    const [projectClients, retainerClients, followUpClients, internalCount, retainerProjects, internalProjects] =
+      await Promise.all([
+        /*
+         * Projects still running, and any finished one that still has tasks.
+         *
+         * Only projects with tasks were offered, so a project set up this
+         * morning — internal ones especially, which start empty — could not
+         * be found in the list at all, and picking its client showed "No
+         * results". A live project with nothing in it is still a project
+         * somebody is about to fill; a delivered one with no tasks is not
+         * worth a row.
+         */
+        prisma.project.findMany({
+          where: { organizationId: orgId, OR: [{ status: 'LIVE' }, { tasks: withTasks }] },
+          select: {
+            id: true,
+            name: true,
+            isSample: true,
+            company: { select: { id: true, name: true } },
+            _count: { select: { tasks: { where: { deletedAt: null } } } },
+          },
+        }).then((rows) => rows.map((r) => ({ ...r, hasTasks: r._count.tasks > 0 }))),
+        prisma.monthCard.findMany({
+          where: { retainer: { organizationId: orgId }, tasks: withTasks },
+          select: { retainer: { select: { company: { select: { id: true, name: true } } } } },
+        }),
+        prisma.company.findMany({
+          where: { organizationId: orgId, tasks: withTasks },
+          select: { id: true, name: true },
+        }),
+        prisma.task.count({
+          where: { organizationId: orgId, deletedAt: null, projectId: null, monthCardId: null, companyId: null },
+        }),
+        prisma.retainerProject.findMany({
+          where: {
+            retainer: { organizationId: orgId },
+            OR: [{ status: 'ACTIVE', retainer: { status: 'ACTIVE' } }, { tasks: withTasks }],
+          },
+          select: { id: true, name: true, retainer: { select: { company: { select: { id: true, name: true } } } } },
+        }),
+        prisma.internalProject.findMany({
+          where: { organizationId: orgId, OR: [{ status: 'ACTIVE' }, { tasks: withTasks }] },
+          select: { id: true, name: true },
+        }),
+      ]);
 
     const byId = new Map<string, string>();
-    for (const pr of projectClients) byId.set(pr.company.id, pr.company.name);
+    for (const pr of projectClients.filter((x) => x.hasTasks)) byId.set(pr.company.id, pr.company.name);
     for (const mc of retainerClients) byId.set(mc.retainer.company.id, mc.retainer.company.name);
+    for (const c of followUpClients) byId.set(c.id, c.name);
+
+    /*
+     * Every project that has work in it, whatever kind, with the client it is
+     * for — so the screen can narrow this list to the clients already chosen.
+     */
+    const projectOptions = [
+      ...projectClients.map((pr) => ({
+        value: `P:${pr.id}`,
+        name: pr.isSample ? `${pr.name} (sample)` : pr.name,
+        client: pr.company.name,
+        companyId: pr.company.id as string | null,
+      })),
+      ...retainerProjects.map((rp) => ({
+        value: `RP:${rp.id}`,
+        name: rp.name,
+        client: rp.retainer.company.name,
+        companyId: rp.retainer.company.id as string | null,
+      })),
+      ...internalProjects.map((ip) => ({
+        value: `IP:${ip.id}`,
+        name: ip.name,
+        client: 'Internal',
+        companyId: null as string | null,
+      })),
+    ].sort((a, b) => a.client.localeCompare(b.client) || a.name.localeCompare(b.name));
 
     res.json({
       success: true,
       tasks: rows,
       clients: Array.from(byId, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
       hasInternal: internalCount > 0,
+      projects: projectOptions,
       counts: {
         total: rows.length,
         // Open is "not finished with", not a single status: TODO and

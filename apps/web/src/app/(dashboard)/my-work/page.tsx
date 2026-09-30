@@ -16,7 +16,6 @@ import { Fragment, useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DragDropContext, Droppable, Draggable, type BeforeCapture, type DropResult } from '@hello-pangea/dnd';
 import { plural } from '@/lib/utils';
-import { useRouter } from 'next/navigation';
 import { api, formatDate, ApiError } from '@/lib/api-v2';
 import { useTeamMembers } from '@/hooks/queries';
 import { Button } from '@/components/ui/button';
@@ -27,6 +26,7 @@ import { Field, FieldSelect } from '@/components/ui/field';
 import { AssigneeField, AssignedByField, useMayAssignOthers } from '@/components/work/AssigneeField';
 import { EmptyState, ErrorNote } from '@/components/ui/empty-state';
 import { usePageHeader } from '@/hooks/usePageHeader';
+import { useCreateFlag } from '@/hooks/useCreateFlag';
 import { PRIORITY_CONFIG, getPriorityDot, getPriorityLabel } from '@/lib/priority';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
@@ -127,7 +127,6 @@ const STATUS_OPTIONS = [
 ];
 
 export default function MyWorkPage() {
-  const router = useRouter();
   /**
    * Server data lives in the query cache, not in component state.
    *
@@ -254,15 +253,9 @@ export default function MyWorkPage() {
     await refetch();
   }, [refetch]);
 
-  // Quick Create's "New task" has nowhere else to land — there is no
-  // freestanding /tasks screen, a task always opens from wherever it lives.
-  // This mirrors /companies' own ?create=true handling.
-  useEffect(() => {
-    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('create') === 'true') {
-      setCreating(true);
-      router.replace('/my-work');
-    }
-  }, [router]);
+  // Quick Create's "New task" lands here — including when you are already
+  // here, which is the case the old mount-only check missed.
+  useCreateFlag(() => setCreating(true), '/my-work');
 
   const changeStatus = async (task: TaskItem, next: TStatus) => {
     if (next === task.status) return;

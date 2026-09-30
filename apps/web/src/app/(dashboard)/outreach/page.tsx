@@ -24,6 +24,7 @@ import { Pencil, Send, Building2, CalendarClock, Trash2 } from 'lucide-react';
 import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
 import { Search, X } from 'lucide-react';
 import { usePageHeader } from '@/hooks/usePageHeader';
+import { useCreateFlag } from '@/hooks/useCreateFlag';
 import { personOptions } from '@/lib/people';
 
 /**
@@ -160,12 +161,7 @@ export default function OutreachPage() {
    * /my-work and /live-work use. Replaced out of the URL straight away, so a
    * refresh or a back button does not reopen the form.
    */
-  useEffect(() => {
-    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('create') === 'true') {
-      setAddOpen(true);
-      router.replace('/outreach');
-    }
-  }, [router]);
+  useCreateFlag(() => setAddOpen(true), '/outreach');
   const [newName, setNewName] = useState('');
   const [newContactName, setNewContactName] = useState('');
   const [newPhone, setNewPhone] = useState('');
