@@ -30,6 +30,24 @@ const SIZE: Record<Size, string> = {
   md: 'px-4 py-2.5 text-sm gap-2',
 };
 
+/**
+ * The button's look, for the rare control that has to be a link instead.
+ *
+ * A WhatsApp share has to be a real `<a target="_blank">` the person clicks —
+ * a `window.open` after an API call is treated as a popup and blocked — and it
+ * should still look like the button next to it.
+ */
+export function buttonClass(variant: Variant = 'secondary', size: Size = 'md', fullWidth = false): string {
+  return cn(
+    'inline-flex items-center justify-center rounded-button font-semibold transition-colors duration-150 motion-reduce:transition-none',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1',
+    'disabled:cursor-not-allowed disabled:opacity-40',
+    VARIANT[variant],
+    SIZE[size],
+    fullWidth && 'w-full',
+  );
+}
+
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   size?: Size;
@@ -46,15 +64,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     <button
       ref={ref}
       disabled={disabled || loading}
-      className={cn(
-        'inline-flex items-center justify-center rounded-button font-semibold transition-colors duration-150 motion-reduce:transition-none',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1',
-        'disabled:cursor-not-allowed disabled:opacity-40',
-        VARIANT[variant],
-        SIZE[size],
-        fullWidth && 'w-full',
-        className,
-      )}
+      className={cn(buttonClass(variant, size, fullWidth), className)}
       {...props}
     >
       {loading ? (

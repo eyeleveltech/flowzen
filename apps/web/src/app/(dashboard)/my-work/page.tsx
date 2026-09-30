@@ -27,18 +27,25 @@ import { AssigneeField, AssignedByField, useMayAssignOthers } from '@/components
 import { EmptyState, ErrorNote } from '@/components/ui/empty-state';
 import { usePageHeader } from '@/hooks/usePageHeader';
 import { useCreateFlag } from '@/hooks/useCreateFlag';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { ApprovalQueue } from '@/components/work/ApprovalQueue';
+import { ApprovalDrawer } from '@/components/work/ApprovalDrawer';
+import { StuckApproval } from '@/components/work/Approval';
+import { statusChoices } from '@/components/retainers/task-shared';
+import { Badge } from '@/components/ui/badge';
+import type { LastReview } from '@/lib/api-v2';
 import { PRIORITY_CONFIG, getPriorityDot, getPriorityLabel } from '@/lib/priority';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
 import toast from 'react-hot-toast';
 import { CheckSquare, Plus, GripVertical } from 'lucide-react';
-import { personOptions } from '@/lib/people';
+import { NeedsApprovalField } from '@/components/work/NeedsApprovalField';
 import { useAuthStore } from '@/stores';
 import { TASK_TYPE_OPTIONS } from '@/lib/task-type';
 
 const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label }));
 
-type TStatus = 'TODO' | 'IN_PROGRESS' | 'ON_HOLD' | 'DONE' | 'CANCELLED';
+type TStatus = 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'ON_HOLD' | 'DONE' | 'CANCELLED';
 
 type Person = { id: string; name: string; designation: string | null };
 
@@ -68,6 +75,12 @@ interface TaskItem {
   workingMinutes: number;
   typeMedianMinutes: number | null;
   typeMedianText: string | null;
+  /** Needs an approver's sign-off before it is done. */
+  needsApproval?: boolean;
+  /** The last round of approval — what "Changes requested" and its feedback come from. */
+  lastReview?: LastReview | null;
+  /** How long the waiting round has waited, in working time. */
+  reviewWaitingText?: string | null;
 }
 
 /** "2026-09" is a key. This is the label. */
@@ -109,8 +122,16 @@ const jobLabel = (t: TaskItem) => retainerLabel(t) ?? t.projectName ?? null;
 const toDrawerTask = (t: TaskItem | null): DrawerTask | null =>
   t && { ...t, workLabel: retainerLabel(t) };
 
-type Buckets = { overdue: TaskItem[]; today: TaskItem[]; thisWeek: TaskItem[]; later: TaskItem[]; completed: TaskItem[] };
-const EMPTY_BUCKETS: Buckets = { overdue: [], today: [], thisWeek: [], later: [], completed: [] };
+type Buckets = {
+  overdue: TaskItem[];
+  today: TaskItem[];
+  thisWeek: TaskItem[];
+  later: TaskItem[];
+  /** Sent for approval, waiting on an approver — out of this person's hands. */
+  inReview: TaskItem[];
+  completed: TaskItem[];
+};
+const EMPTY_BUCKETS: Buckets = { overdue: [], today: [], thisWeek: [], later: [], inReview: [], completed: [] };
 
 /** The cells of one draggable row on the page, found by its task id. */
 const rowCells = (id: string) =>
@@ -142,7 +163,7 @@ export default function MyWorkPage() {
     queryFn: () => api.tasks.my(),
   });
 
-  const buckets = (data?.success ? (data.tasks as Buckets) : EMPTY_BUCKETS);
+  const buckets: Buckets = data?.success ? { ...EMPTY_BUCKETS, ...(data.tasks as Partial<Buckets>) } : EMPTY_BUCKETS;
   const queryClient = useQueryClient();
 
   /*
@@ -218,10 +239,54 @@ export default function MyWorkPage() {
     },
     [buckets, queryClient, refetch],
   );
-  const counts = data?.counts ?? { today: 0, overdue: 0, thisWeek: 0, later: 0, completed: 0 };
+  const counts = { today: 0, overdue: 0, thisWeek: 0, later: 0, inReview: 0, completed: 0, ...(data?.counts ?? {}) };
   const [busyId, setBusyId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<TaskItem | null>(null);
+
+  /*
+   * /my-work?task=… — the WhatsApp approval link.
+   *
+   * A task on this person's own list opens in the usual drawer. Anything else
+   * — which is every approval, since approvers are not on the work — opens
+   * the approval drawer, drawn from the task's review history. Closing either
+   * takes the id back out of the address, so a refresh does not reopen it.
+   */
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const taskParam = searchParams.get('task');
+  const [approvalTaskId, setApprovalTaskId] = useState<string | null>(null);
+  const everyTask = useMemo(
+    () => [
+      ...buckets.overdue,
+      ...buckets.today,
+      ...buckets.thisWeek,
+      ...buckets.later,
+      ...buckets.inReview,
+      ...buckets.completed,
+    ],
+    [buckets],
+  );
+  useEffect(() => {
+    if (!taskParam || isPending) return;
+    const mine = everyTask.find((t) => t.id === taskParam);
+    if (mine) setSelected(mine);
+    else setApprovalTaskId(taskParam);
+    // Only when the link or the list arrives, not on every re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskParam, isPending]);
+  const forgetTaskParam = () => {
+    if (taskParam) router.replace('/my-work');
+  };
+
+  // The open task follows the list: after an edit, an approval sent or a
+  // decision, the drawer shows the task as it is now, not as it was clicked.
+  useEffect(() => {
+    if (!selected) return;
+    const fresh = everyTask.find((t) => t.id === selected.id);
+    if (fresh && fresh !== selected) setSelected(fresh);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [everyTask]);
 
   // Derived from the tasks above rather than stored beside them — three more
   // pieces of state that could go stale against the list they describe.
@@ -287,7 +352,7 @@ export default function MyWorkPage() {
   const now = new Date();
   const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   usePageHeader('My Work', todayStr);
-  const total = counts.today + counts.overdue + counts.thisWeek + counts.later + counts.completed;
+  const total = counts.today + counts.overdue + counts.thisWeek + counts.later + counts.inReview + counts.completed;
 
   if (isPending) return null;
 
@@ -313,8 +378,12 @@ export default function MyWorkPage() {
    */
   const cells = (t: TaskItem, grip: React.ReactNode) => {
     const finished = t.status === 'DONE' || t.status === 'CANCELLED';
-    const late = !finished && t.dueDate.slice(0, 10) < todayKey;
+    // Waiting on an approver is not this person's lateness.
+    const late = !finished && t.status !== 'IN_REVIEW' && t.dueDate.slice(0, 10) < todayKey;
     const job = jobLabel(t);
+    // Sent back, and not yet sent again: the feedback is the work.
+    const sentBack =
+      t.lastReview?.decision === 'CHANGES_REQUESTED' && (t.status === 'TODO' || t.status === 'IN_PROGRESS');
     return (
       <>
         <td className="w-8 pr-0 text-secondary">{grip}</td>
@@ -335,6 +404,30 @@ export default function MyWorkPage() {
             <p className="mt-0.5 text-micro text-secondary">
               waiting on {t.waitingOn === 'CLIENT' ? 'the client' : 'someone else'}
             </p>
+          )}
+          {t.status === 'IN_REVIEW' && t.lastReview && (
+            <p className="mt-0.5 text-micro text-secondary">
+              round {t.lastReview.round} · sent {formatDate(t.lastReview.submittedAt)}
+            </p>
+          )}
+          {/* Past the reminder time with no answer: say so, and offer the nudge. */}
+          {t.status === 'IN_REVIEW' && t.lastReview && !t.lastReview.decision && t.lastReview.remindedAt && (
+            <StuckApproval
+              taskId={t.id}
+              title={t.title}
+              clientName={t.clientName}
+              projectName={t.projectName ?? null}
+              waited={t.reviewWaitingText ?? null}
+              escalatedTo={t.lastReview.escalatedAt ? (t.lastReview.escalatedTo ?? []) : null}
+            />
+          )}
+          {sentBack && (
+            <div className="mt-1 max-w-md">
+              <Badge tone="warn">Changes requested</Badge>
+              {t.lastReview?.feedback && (
+                <p className="mt-0.5 line-clamp-2 text-micro text-body">“{t.lastReview.feedback}”</p>
+              )}
+            </div>
           )}
         </td>
         {/* Who it is for, over which job of theirs it belongs to — the second
@@ -363,7 +456,7 @@ export default function MyWorkPage() {
           <Select
             value={t.status}
             onChange={(v) => void changeStatus(t, v as TStatus)}
-            options={STATUS_OPTIONS}
+            options={statusChoices(STATUS_OPTIONS, t)}
             ariaLabel={`Status for ${t.title}`}
             buttonClassName="px-2.5 py-1.5 text-xs w-32"
             disabled={busyId === t.id}
@@ -462,6 +555,9 @@ export default function MyWorkPage() {
 
   return (
     <div className="page-shell">
+      {/* Only for approvers, and only when something is waiting. */}
+      <ApprovalQueue onOpen={(id) => setApprovalTaskId(id)} />
+
       <StatRow className="mb-8">
         <StatTile label="Due Today" value={counts.today} note={`${onHoldCount} on hold`} />
         {/*
@@ -538,6 +634,8 @@ export default function MyWorkPage() {
                 {section('Overdue', buckets.overdue, 'overdue')}
                 {section('Due today', buckets.today, 'today')}
                 {section('Later this week', [...buckets.thisWeek, ...buckets.later], 'week')}
+                {/* Below the active work: open, but the approver's move. */}
+                {section('Waiting for approval', buckets.inReview)}
                 {section('Done this week', buckets.completed)}
               </DragDropContext>
             </table>
@@ -550,8 +648,19 @@ export default function MyWorkPage() {
         task={toDrawerTask(selected)}
         statusOptions={STATUS_OPTIONS}
         busy={busyId === selected?.id}
-        onClose={() => setSelected(null)}
+        onClose={() => {
+          setSelected(null);
+          forgetTaskParam();
+        }}
         onStatusChange={(t, next) => void changeStatus(t as unknown as TaskItem, next as TStatus)}
+        onChanged={load}
+      />
+      <ApprovalDrawer
+        taskId={approvalTaskId}
+        onClose={() => {
+          setApprovalTaskId(null);
+          forgetTaskParam();
+        }}
         onChanged={load}
       />
     </div>
@@ -592,11 +701,11 @@ function NewTaskModal({ open, onClose, onCreated }: { open: boolean; onClose: ()
    * worth asking for, because "somebody should check this" is a thing you know
    * when you write the task down, whoever is doing it.
    */
-  const [reviewerId, setReviewerId] = useState('');
   /** Empty means "me" — the server's own default, so this stays a self-task until somebody says otherwise. */
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [assignedById, setAssignedById] = useState('');
   const [taskType, setTaskType] = useState('');
+  const [needsApproval, setNeedsApproval] = useState(false);
   const team = useTeamMembers();
   /** Decides the dialog's own name: a head opening it is not writing a task for themselves. */
   const { may: mayAssignOthers } = useMayAssignOthers();
@@ -623,6 +732,7 @@ function NewTaskModal({ open, onClose, onCreated }: { open: boolean; onClose: ()
     if (open) {
       setTitle(''); setDueDate(''); setPriority('MEDIUM'); setDescription('');
       setScope('INTERNAL'); setCompanyId(''); setTargetKey(''); setError(null);
+      setTaskType(''); setNeedsApproval(false);
       // Nobody, until somebody says otherwise — see tasks.ts on why this
     // field means nothing when it is filled in by default.
     setAssignedById('');
@@ -681,11 +791,11 @@ function NewTaskModal({ open, onClose, onCreated }: { open: boolean; onClose: ()
         projectId: scope === 'CLIENT' ? selectedTarget?.projectId : undefined,
         dueDate,
         priority,
-        reviewerId: reviewerId || undefined,
         // Empty means "me", which is what the server already defaults to.
         assigneeIds: assigneeIds.length > 0 ? assigneeIds : undefined,
         assignedById: assignedById || undefined,
         taskType: taskType || undefined,
+        needsApproval,
         notes: description.trim() || undefined,
       });
       onCreated();
@@ -788,16 +898,7 @@ function NewTaskModal({ open, onClose, onCreated }: { open: boolean; onClose: ()
             <Field label="Due date" type="date" value={dueDate} onChange={setDueDate} required />
             <FieldSelect label="Priority" value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <AssignedByField value={assignedById} onChange={setAssignedById} />
-            <FieldSelect
-              label="Reviewer"
-              value={reviewerId}
-              onChange={setReviewerId}
-              placeholder="Nobody reviews it"
-              options={personOptions(team)}
-            />
-          </div>
+          <AssignedByField value={assignedById} onChange={setAssignedById} />
           <FieldSelect
             label="Type of work"
             value={taskType}
@@ -805,6 +906,7 @@ function NewTaskModal({ open, onClose, onCreated }: { open: boolean; onClose: ()
             placeholder="Not set"
             options={TASK_TYPE_OPTIONS}
           />
+          <NeedsApprovalField taskType={taskType} value={needsApproval} onChange={setNeedsApproval} />
           <Field label="Description" value={description} onChange={setDescription} textarea rows={3} />
           {error && <ErrorNote>{error}</ErrorNote>}
         </ModalBody>

@@ -161,26 +161,35 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users            User[]
-  companies        Company[]
-  outreachEntries  OutreachEntry[]
-  proposals        Proposal[]
-  proformas        Proforma[]
-  retainers        Retainer[]
-  projects         Project[]
-  tasks            Task[]
-  internalProjects InternalProject[]
-  zenConversations ZenConversation[]
-  zenMemories      ZenMemory[]
-  costs            Cost[]
-  invoices         Invoice[]
-  alerts           Alert[]
-  activities       Activity[]
-  assets           Asset[]
+  users                      User[]
+  companies                  Company[]
+  outreachEntries            OutreachEntry[]
+  proposals                  Proposal[]
+  proformas                  Proforma[]
+  retainers                  Retainer[]
+  projects                   Project[]
+  tasks                      Task[]
+  internalProjects           InternalProject[]
+  zenConversations           ZenConversation[]
+  zenMemories                ZenMemory[]
+  costs                      Cost[]
+  invoices                   Invoice[]
+  alerts                     Alert[]
+  activities                 Activity[]
+  assets                     Asset[]
+  taskReviews                TaskReview[]
+  taskApprovers              TaskApprover[]
+  approvalEscalationContacts ApprovalEscalationContact[]
 
   /// "EL" -> EL/CAM/001. The stickers get printed once, so this is a setting
   /// rather than a constant, but changing it does not renumber what exists.
   assetTagPrefix String @default("EL")
+
+  /// Working minutes a task can wait on an approver before the approvers are
+  /// reminded (bell + email), and before it escalates to the type's escalation
+  /// people. One pair for the whole organisation; Settings → Approvals.
+  approvalRemindMinutes   Int @default(120)
+  approvalEscalateMinutes Int @default(240)
 
   @@map("organizations")
 }
@@ -218,32 +227,36 @@ model User {
   createdAt            DateTime   @default(now())
   updatedAt            DateTime   @updatedAt
 
-  organization         Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  ownedCompanies       Company[]          @relation("CompanyOwner")
-  retainerProjects     RetainerProject[]  @relation("RetainerProjectOwner")
-  internalProjects     InternalProject[]  @relation("InternalProjectOwner")
-  ownedProposals       Proposal[]         @relation("ProposalOwner")
-  ownedOutreach        OutreachEntry[]    @relation("OutreachOwner")
-  ownedRetainers       Retainer[]         @relation("RetainerOwner")
-  ownedProjects        Project[]          @relation("ProjectOwner")
-  zenConversations     ZenConversation[]  @relation("ZenConversations")
-  zenMemories          ZenMemory[]        @relation("ZenMemories")
-  assignedTasks        Task[]             @relation("TaskAssignee")
-  createdTasks         Task[]             @relation("TaskCreator")
-  handedOutTasks       Task[]             @relation("TaskAssignedBy")
-  reviewingTasks       Task[]             @relation("TaskReviewer")
-  taskAssignments      TaskAssignee[]     @relation("TaskAssignments")
-  enteredCosts         Cost[]             @relation("CostEnteredBy")
-  allocations          PeopleAllocation[] @relation("UserAllocations")
-  confirmedAllocations PeopleAllocation[] @relation("AllocationConfirmedBy")
-  acknowledgedAlerts   Alert[]            @relation("AlertAcknowledgedBy")
+  organization         Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ownedCompanies       Company[]                   @relation("CompanyOwner")
+  retainerProjects     RetainerProject[]           @relation("RetainerProjectOwner")
+  internalProjects     InternalProject[]           @relation("InternalProjectOwner")
+  ownedProposals       Proposal[]                  @relation("ProposalOwner")
+  ownedOutreach        OutreachEntry[]             @relation("OutreachOwner")
+  ownedRetainers       Retainer[]                  @relation("RetainerOwner")
+  ownedProjects        Project[]                   @relation("ProjectOwner")
+  zenConversations     ZenConversation[]           @relation("ZenConversations")
+  zenMemories          ZenMemory[]                 @relation("ZenMemories")
+  assignedTasks        Task[]                      @relation("TaskAssignee")
+  createdTasks         Task[]                      @relation("TaskCreator")
+  handedOutTasks       Task[]                      @relation("TaskAssignedBy")
+  reviewingTasks       Task[]                      @relation("TaskReviewer")
+  taskAssignments      TaskAssignee[]              @relation("TaskAssignments")
+  enteredCosts         Cost[]                      @relation("CostEnteredBy")
+  allocations          PeopleAllocation[]          @relation("UserAllocations")
+  confirmedAllocations PeopleAllocation[]          @relation("AllocationConfirmedBy")
+  acknowledgedAlerts   Alert[]                     @relation("AlertAcknowledgedBy")
   alertReads           AlertRead[]
-  activities           Activity[]         @relation("ActorActivity")
-  heldAssets           Asset[]            @relation("AssetHolder")
-  assetMovements       AssetMovement[]    @relation("AssetMovementHolder")
-  issuedMovements      AssetMovement[]    @relation("AssetMovementIssuer")
-  receivedMovements    AssetMovement[]    @relation("AssetMovementReceiver")
-  createdMaintenance   AssetMaintenance[] @relation("MaintenanceCreator")
+  activities           Activity[]                  @relation("ActorActivity")
+  heldAssets           Asset[]                     @relation("AssetHolder")
+  assetMovements       AssetMovement[]             @relation("AssetMovementHolder")
+  issuedMovements      AssetMovement[]             @relation("AssetMovementIssuer")
+  receivedMovements    AssetMovement[]             @relation("AssetMovementReceiver")
+  createdMaintenance   AssetMaintenance[]          @relation("MaintenanceCreator")
+  submittedReviews     TaskReview[]                @relation("TaskReviewSubmittedBy")
+  decidedReviews       TaskReview[]                @relation("TaskReviewDecidedBy")
+  approverFor          TaskApprover[]              @relation("TaskApproverFor")
+  escalationFor        ApprovalEscalationContact[] @relation("ApprovalEscalationFor")
 
   @@index([organizationId, active])
   @@map("users")
@@ -640,10 +653,10 @@ enum RetainerBilling {
 }
 
 model Retainer {
-  id               String         @id @default(cuid())
+  id               String          @id @default(cuid())
   organizationId   String
   companyId        String
-  monthlyValue     Decimal        @db.Decimal(12, 2)
+  monthlyValue     Decimal         @db.Decimal(12, 2)
   /// The GST rate charged on this, when one has been said.
   ///
   /// Recorded BESIDE the value, not inside it. The value is revenue and GST
@@ -651,23 +664,23 @@ model Retainer {
   /// paid over — so folding it in would inflate every margin by the rate. The
   /// total the client pays is value × (1 + gstPercent/100), worked out when
   /// shown. Null means nobody said, which is not the same as 0%.
-  gstPercent       Decimal?       @db.Decimal(5, 2)
+  gstPercent       Decimal?        @db.Decimal(5, 2)
   /// When each month is billed: at its start, before the work (the usual), or
   /// once it is over. Decides when a month is ready for its proforma and when
   /// the missing-proforma alert fires.
   billing          RetainerBilling @default(IN_ADVANCE)
-  startDate        DateTime       @db.Date
+  startDate        DateTime        @db.Date
   termMonths       Int?
-  renewalDate      DateTime?      @db.Date
+  renewalDate      DateTime?       @db.Date
   ownerId          String
-  status           RetainerStatus @default(ACTIVE)
+  status           RetainerStatus  @default(ACTIVE)
   stoppedAt        DateTime?
   stopReason       String?
   /// Set when this retainer is created from a won proposal (§11.1 step 11) —
   /// same handoff pattern as Project.sourceProposalId.
   sourceProposalId String?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
   organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   company      Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -961,9 +974,89 @@ enum TaskType {
 enum TaskStatus {
   TODO
   IN_PROGRESS
+  /// Sent for approval and waiting on an approver. Open work, but not the
+  /// assignee's active work: not counted in their load, their aging or their
+  /// overdue. Only "Send for approval" puts a task here, and only Approve,
+  /// Request changes or Cancel take it out.
+  IN_REVIEW
   ON_HOLD
   DONE
   CANCELLED
+}
+
+enum ReviewDecision {
+  APPROVED
+  CHANGES_REQUESTED
+}
+
+/// One row per "Send for approval": round 1, 2, 3… A null decision means it
+/// is still waiting.
+///
+/// A round is decided once, by one approver — Approve closes the task, Request
+/// changes sends it back to In progress with written feedback, and the next
+/// submission is the next round.
+model TaskReview {
+  id             String          @id @default(cuid())
+  organizationId String
+  taskId         String
+  round          Int
+  submittedById  String
+  submittedAt    DateTime        @default(now())
+  /// Where the work is — a Drive or video link. Links only; uploads were
+  /// withdrawn deliberately.
+  link           String?
+  note           String?         @db.Text
+  decision       ReviewDecision?
+  decidedById    String?
+  decidedAt      DateTime?
+  /// Required when the decision is CHANGES_REQUESTED.
+  feedback       String?         @db.Text
+  /// When the approvers were reminded about this round, and when it escalated.
+  /// Each is stamped once — the chaser claims the round by setting it, so a
+  /// restart or two overlapping ticks can never send twice.
+  remindedAt     DateTime?
+  escalatedAt    DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  task         Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  submittedBy  User         @relation("TaskReviewSubmittedBy", fields: [submittedById], references: [id])
+  decidedBy    User?        @relation("TaskReviewDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@unique([taskId, round])
+  @@index([organizationId, decidedAt])
+  @@map("task_reviews")
+}
+
+/// Who can approve which kind of task. Any one of them is enough.
+model TaskApprover {
+  id             String   @id @default(cuid())
+  organizationId String
+  taskType       TaskType
+  userId         String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation("TaskApproverFor", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, taskType, userId])
+  @@map("task_approvers")
+}
+
+/// Who a stuck approval escalates to, per task type (Akmal for Video). Once a
+/// round is escalated they can decide it too. A table of its own so none of
+/// the approver queries change.
+model ApprovalEscalationContact {
+  id             String   @id @default(cuid())
+  organizationId String
+  taskType       TaskType
+  userId         String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation("ApprovalEscalationFor", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, taskType, userId])
+  @@map("approval_escalation_contacts")
 }
 
 /// Everybody working on a task, the lead included.
@@ -1084,6 +1177,12 @@ model Task {
   waitingTotalMinutes Int        @default(0)
   reopenCount         Int        @default(0)
   notes               String?    @db.Text
+  /// Whether this task needs an approver's sign-off before it is done.
+  ///
+  /// Ticked by whoever creates it, off by default. When set, the task can only
+  /// reach DONE through Approve — PATCH /status refuses it — and approval goes
+  /// to the approvers set for its `taskType` in Settings → Approvals.
+  needsApproval       Boolean    @default(false)
   // §16: soft delete only, nothing hard deleted by a user. A task entered by
   // mistake leaves; a task somebody worked stays and gets Cancelled instead,
   // because the aging medians, the allocation cron and "done this week" all
@@ -1110,6 +1209,7 @@ model Task {
   /// SetNull for the same reason as the retainer one: closing down a bucket
   /// must not take the work that was done under it.
   internalProject InternalProject? @relation(fields: [internalProjectId], references: [id], onDelete: SetNull)
+  reviews         TaskReview[]
 
   @@index([organizationId, assigneeId, status])
   @@index([dueDate, status])

@@ -420,9 +420,9 @@ projectsRouter.get('/:id', requirePermission('work.all'), async (req: AuthReques
 // ── 3. Create Project with Milestones ────────────────────────────────────────
 
 const milestoneInputSchema = z.object({
-  label: z.string().min(1),
-  percent: z.number().positive(),
-  amount: z.number().positive(),
+  label: z.string().min(1, 'Every milestone needs a name.'),
+  percent: z.number().positive('Every milestone needs a share of the quote above 0%.'),
+  amount: z.number().positive('Every milestone needs an amount above ₹0 — set the quoted value first.'),
 });
 
 /*

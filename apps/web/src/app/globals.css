@@ -71,6 +71,15 @@
   --color-info: #2f6b7a;
   --color-info-tint: #eef4f6;
 
+  /* ── Waiting on an approver ─────────────────────────────────────────────
+     A task sent for approval is open work that is out of its assignee's
+     hands — not active (info), not stalled on the client (warning), not done
+     (success). It gets its own note so "In review" can be picked out of a
+     list at a glance: a muted plum, at the same weight as --color-info so the
+     two read as siblings. 7.2:1 on white, 6.6:1 on its own tint. */
+  --color-review: #5a4a7d;
+  --color-review-tint: #f3f0f8;
+
   /* ── Warning, dark enough to read ───────────────────────────────────────
      --color-warning is the brand gold and belongs on dots, borders and
      fills. As TEXT it measures 3.05:1 on white and 2.78:1 on its own tint,

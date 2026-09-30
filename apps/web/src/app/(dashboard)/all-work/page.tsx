@@ -47,13 +47,14 @@ const STATUS_OPTIONS = [
    *
    * Due-date order with everything included opened the screen on work
    * delivered in June. What a head of department came to see is what is still
-   * owed, which spans To do, In progress and On hold — the server reads this
-   * one value as all three, and it can be ticked alongside Done, which is how
+   * owed, which spans To do, In progress, In review and On hold — the server
+   * reads this one value as all four, and it can be ticked alongside Done, which is how
    * "everything except cancelled" gets asked for.
    */
   { value: 'UNFINISHED', label: 'Unfinished' },
   { value: 'TODO', label: 'To do' },
   { value: 'IN_PROGRESS', label: 'In progress' },
+  { value: 'IN_REVIEW', label: 'In review' },
   { value: 'ON_HOLD', label: 'On hold' },
   { value: 'DONE', label: 'Done' },
   { value: 'CANCELLED', label: 'Cancelled' },
@@ -65,6 +66,7 @@ const DRAWER_STATUS_OPTIONS = STATUS_OPTIONS.filter((o) => o.value && o.value !=
 const STATUS_TONE: Record<string, string> = {
   TODO: 'border-border text-secondary',
   IN_PROGRESS: 'border-info/30 text-info bg-info-tint',
+  IN_REVIEW: 'border-review/30 text-review bg-review-tint',
   ON_HOLD: 'border-warning/30 text-warning-ink bg-warning-tint',
   DONE: 'border-success/30 text-success bg-success-tint',
   CANCELLED: 'border-border text-secondary',

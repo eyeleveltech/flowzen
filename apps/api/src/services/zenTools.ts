@@ -84,7 +84,7 @@ export const ZEN_TOOLS = [
         client: { type: 'string' },
         person: { type: 'string', description: 'A team member\'s name.' },
         month: { type: 'string', description: 'As 2026-09.' },
-        status: { type: 'string', enum: ['OPEN', 'LATE', 'DONE', 'ON_HOLD', 'CANCELLED'] },
+        status: { type: 'string', enum: ['OPEN', 'LATE', 'DONE', 'ON_HOLD', 'IN_REVIEW', 'CANCELLED'] },
         limit: { type: 'number' },
       },
     },
@@ -328,9 +328,11 @@ export async function runZenTool(
           ...(status === 'OPEN' ? { status: { in: ['TODO', 'IN_PROGRESS'] as never } } : {}),
           ...(status === 'DONE' ? { status: 'DONE' as never } : {}),
           ...(status === 'ON_HOLD' ? { status: 'ON_HOLD' as never } : {}),
+          // Sent for approval, waiting on an approver.
+          ...(status === 'IN_REVIEW' ? { status: 'IN_REVIEW' as never } : {}),
           ...(status === 'CANCELLED' ? { status: 'CANCELLED' as never } : {}),
           ...(status === 'LATE'
-            ? { status: { notIn: ['DONE', 'CANCELLED'] as never }, dueDate: { lt: new Date(today) } }
+            ? { status: { notIn: ['DONE', 'CANCELLED', 'IN_REVIEW'] as never }, dueDate: { lt: new Date(today) } }
             : {}),
         },
         select: {

@@ -2,6 +2,7 @@ import { Router, type Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
 import { loadWorkCalendar, workingMinutesOn } from '../utils/workCalendar.js';
+import { LAST_REVIEW } from '../services/taskApprovals.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
 
@@ -84,10 +85,10 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
 
     const formatted = members.map((m) => {
       const mine = m.taskAssignments.map((a) => a.task);
-      const openTasks = mine.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED');
-      const overdueTasks = mine.filter(
-        (t) => t.status !== 'DONE' && t.status !== 'CANCELLED' && new Date(t.dueDate).toISOString().slice(0, 10) < todayStr,
-      );
+      // Waiting on an approver is open work, but not this person's to do — it
+      // is not their load, and not their overdue.
+      const openTasks = mine.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED' && t.status !== 'IN_REVIEW');
+      const overdueTasks = openTasks.filter((t) => new Date(t.dueDate).toISOString().slice(0, 10) < todayStr);
       const waitingTasks = mine.filter((t) => t.status === 'ON_HOLD');
       const completedTasks = mine.filter((t) => t.status === 'DONE');
 
@@ -234,6 +235,8 @@ teamRouter.get('/:id', requirePermission('work.team'), async (req: AuthRequest, 
                 completedAt: true,
                 waitingOn: true,
                 waitingTotalMinutes: true,
+                needsApproval: true,
+                reviews: LAST_REVIEW,
                 assignedBy: { select: { id: true, name: true } },
                 creator: { select: { id: true, name: true } },
                 reviewer: { select: { id: true, name: true } },
@@ -267,7 +270,8 @@ teamRouter.get('/:id', requirePermission('work.team'), async (req: AuthRequest, 
     const todayStr = now.toISOString().slice(0, 10);
     const tasks = member.taskAssignments.map((a) => a.task);
 
-    const open = tasks.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED');
+    // In review is open, but it is the approver's move, not this person's.
+    const open = tasks.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED' && t.status !== 'IN_REVIEW');
     const overdue = open.filter((t) => t.dueDate.toISOString().slice(0, 10) < todayStr);
     const waiting = tasks.filter((t) => t.status === 'ON_HOLD');
     const done = tasks.filter((t) => t.status === 'DONE');
@@ -310,6 +314,8 @@ teamRouter.get('/:id', requirePermission('work.team'), async (req: AuthRequest, 
         taskType: t.taskType,
         dueDate: t.dueDate,
         waitingOn: t.waitingOn,
+        needsApproval: t.needsApproval,
+        lastReview: t.reviews[0] ?? null,
         // The person who asked for it, not the person who typed it in.
         // `creator` is the fallback for rows written before the two were
         // separate columns, which the backfill has already made equal.

@@ -73,6 +73,7 @@ const GROUPS: { key: string; title: string; hint: string }[] = [
   { key: 'IN_PROGRESS', title: 'Doing now', hint: 'Started and not finished' },
   { key: 'TODO', title: 'To do', hint: 'Not started — the part that can move to somebody else' },
   { key: 'ON_HOLD', title: 'Waiting', hint: 'Blocked on someone else, so not this person’s delay' },
+  { key: 'IN_REVIEW', title: 'Waiting for approval', hint: 'Sent for sign-off — with the approvers now, not this person' },
 ];
 
 export function MemberDrawer({ memberId, onClose }: { memberId: string | null; onClose: () => void }) {

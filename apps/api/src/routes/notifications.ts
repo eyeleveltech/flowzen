@@ -1,7 +1,10 @@
 import { Router, type Response, type NextFunction } from 'express';
+import { TaskStatus, type Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, hasPermission, type AuthRequest } from '../middleware/auth.js';
 import type { PermissionKey } from '@flowzen/shared';
+import { approverFor, escalateFor } from '../services/taskApprovals.js';
+import { CHASER_RULES } from '../workers/approvalChaser.cron.js';
 
 /**
  * The bell.
@@ -105,6 +108,49 @@ export const RULE_PERMISSION: Record<string, PermissionKey | undefined> = {
  * about first.
  */
 export const MINE_REGARDLESS = ['TASK_OVERDUE', 'TASK_AGING', 'TASK_WAITING_HOLD'] as const;
+
+/**
+ * The approval chaser's alerts this person should see.
+ *
+ * Not in RULE_PERMISSION on purpose: the audience is people, not a
+ * permission. A reminder reaches the task type's approvers; an escalation
+ * reaches them and the type's escalation people. Only while the task is still
+ * in review, and never about work the person is on — the editor already sees
+ * the state on their own My Work, and nobody approves their own task.
+ *
+ * The bell, "Mark all read", reading one, and the 8am digest all decide a
+ * person's alerts through this — one rule, not a copy in each place.
+ */
+export async function approvalAlertClauses(orgId: string, userId: string): Promise<Prisma.AlertWhereInput[]> {
+  const [types, escalationTypes] = await Promise.all([approverFor(orgId, userId), escalateFor(orgId, userId)]);
+  if (types.length === 0 && escalationTypes.length === 0) return [];
+
+  const waiting = (taskTypes: typeof types) =>
+    taskTypes.length === 0
+      ? Promise.resolve([] as string[])
+      : prisma.task
+          .findMany({
+            where: {
+              organizationId: orgId,
+              deletedAt: null,
+              status: TaskStatus.IN_REVIEW,
+              taskType: { in: taskTypes },
+              NOT: { assignees: { some: { userId } } },
+            },
+            select: { id: true },
+          })
+          .then((rows) => rows.map((t) => t.id));
+  const [approverTaskIds, escalationTaskIds] = await Promise.all([waiting(types), waiting(escalationTypes)]);
+
+  return [
+    ...(approverTaskIds.length > 0
+      ? [{ rule: { in: [...CHASER_RULES] }, entityType: 'Task', entityId: { in: approverTaskIds } }]
+      : []),
+    ...(escalationTaskIds.length > 0
+      ? [{ rule: 'APPROVAL_ESCALATED', entityType: 'Task', entityId: { in: escalationTaskIds } }]
+      : []),
+  ];
+}
 
 /**
  * What corner of the business a notification is about.
@@ -211,7 +257,14 @@ const rawLinkFor = (entityType: string, entityId: string): string | null => {
  * argues for: "`null` means the row is not a link, which is honest and better
  * than a dead one."
  */
-const linkFor = (entityType: string, entityId: string, user: AuthRequest['user']): string | null => {
+const linkFor = (
+  entityType: string,
+  entityId: string,
+  user: AuthRequest['user'],
+  rule?: string,
+): string | null => {
+  // A stuck approval opens the task itself, where Approve is.
+  if (rule && (CHASER_RULES as readonly string[]).includes(rule)) return `/my-work?task=${entityId}`;
   const href = rawLinkFor(entityType, entityId);
   if (!href || !user) return href;
   const base = '/' + href.split('/')[1];
@@ -258,16 +311,17 @@ notificationsRouter.get('/', async (req: AuthRequest, res: Response, next: NextF
       myTaskIds.length > 0
         ? [{ rule: { in: [...missingTaskRules] }, entityType: 'Task', entityId: { in: myTaskIds } }]
         : [];
+    const approvals = await approvalAlertClauses(orgId, userId);
 
-    if (allowedRules.length === 0 && mine.length === 0) {
+    if (allowedRules.length === 0 && mine.length === 0 && approvals.length === 0) {
       res.json({ success: true, notifications: [], unreadCount: 0, total: 0 });
       return;
     }
 
-    const where = {
+    const where: Prisma.AlertWhereInput = {
       organizationId: orgId,
       resolvedAt: null,
-      OR: [{ rule: { in: allowedRules } }, ...mine],
+      OR: [{ rule: { in: allowedRules } }, ...mine, ...approvals],
     };
 
     const [alerts, total, myReads] = await Promise.all([
@@ -292,7 +346,7 @@ notificationsRouter.get('/', async (req: AuthRequest, res: Response, next: NextF
       severity: a.severity,
       /** "Money", "Tasks", "Pipeline" — what this is about, at a glance. */
       source: SOURCE[a.entityType] ?? 'Other',
-      link: linkFor(a.entityType, a.entityId, req.user),
+      link: linkFor(a.entityType, a.entityId, req.user, a.rule),
       read: readIds.has(a.id),
       createdAt: a.createdAt,
     }));
@@ -327,11 +381,13 @@ notificationsRouter.patch('/read-all', async (req: AuthRequest, res: Response, n
       return needed === undefined || hasPermission(req.user!, needed);
     });
 
+    const approvals = await approvalAlertClauses(orgId, userId);
+
     const unread = await prisma.alert.findMany({
       where: {
         organizationId: orgId,
         resolvedAt: null,
-        rule: { in: allowedRules },
+        OR: [{ rule: { in: allowedRules } }, ...approvals],
         reads: { none: { userId } },
       },
       select: { id: true },
@@ -369,7 +425,13 @@ notificationsRouter.patch('/:id/read', async (req: AuthRequest, res: Response, n
     }
 
     const needed = RULE_PERMISSION[alert.rule];
-    const readable = alert.rule in RULE_PERMISSION && (needed === undefined || hasPermission(req.user!, needed));
+    let readable = alert.rule in RULE_PERMISSION && (needed === undefined || hasPermission(req.user!, needed));
+    // An approval alert is theirs when it reached them — the same clauses the bell used.
+    if (!readable && (CHASER_RULES as readonly string[]).includes(alert.rule)) {
+      const approvals = await approvalAlertClauses(orgId, userId);
+      readable =
+        approvals.length > 0 && (await prisma.alert.count({ where: { id: alert.id, OR: approvals } })) > 0;
+    }
     if (!readable) {
       res.status(403).json({ success: false, error: 'Insufficient permissions' });
       return;

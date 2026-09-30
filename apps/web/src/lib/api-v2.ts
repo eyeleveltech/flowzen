@@ -10,6 +10,7 @@
  * invoice off by a paisa is a dispute.
  */
 
+import { loginHref } from './next-path';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
 /**
@@ -85,7 +86,9 @@ async function request<T>(
       } catch {
         // Private mode, or storage disabled. The redirect below still stands.
       }
-      window.location.href = '/login';
+      // With the page it came from, so signing in goes back there — an
+      // approver's WhatsApp link survives an expired session.
+      window.location.href = loginHref();
       // Never settle. The page is navigating away, so resolving would render a
       // half-loaded screen and rejecting would surface "Authentication required"
       // as an unhandled rejection during a redirect that is working correctly.
@@ -295,8 +298,124 @@ export interface OrgConfig {
   sources: { id: string; name: string }[];
   services: { id: string; name: string; defaultRate: string | null; unit: string | null }[];
   /** `permissions` is the real, granular gate (work.own/company.write/etc). `role` is a coarser mapping onto the legacy Role ladder for screens that only need a threshold check. */
-  me: { userId: string; preset?: string; permissions?: string[] };
+  me: {
+    userId: string;
+    preset?: string;
+    permissions?: string[];
+    /** The task types this person approves. Empty for almost everybody. */
+    approverFor?: string[];
+    /** The task types whose stuck approvals escalate to this person. */
+    escalateFor?: string[];
+  };
   documentSettings?: DocumentSettings;
+}
+
+// ── Task approvals ──────────────────────────────────────────────────────────
+
+export type ReviewDecision = 'APPROVED' | 'CHANGES_REQUESTED';
+
+/** The last round of a task's approval, as task lists carry it. */
+export interface LastReview {
+  round: number;
+  decision: ReviewDecision | null;
+  feedback: string | null;
+  decidedAt: string | null;
+  submittedAt: string;
+  /** The approvers were reminded — the reminder time passed with no answer. */
+  remindedAt?: string | null;
+  /** It escalated; `escalatedTo` names who to. */
+  escalatedAt?: string | null;
+  escalatedTo?: PersonRef[];
+}
+
+type PersonRef = { id: string; name: string };
+
+/** One round: who sent it and what with, and how it was decided. */
+export interface TaskReviewRound {
+  id: string;
+  round: number;
+  submittedBy: PersonRef;
+  submittedAt: string;
+  link: string | null;
+  note: string | null;
+  decision: ReviewDecision | null;
+  decidedBy: PersonRef | null;
+  decidedAt: string | null;
+  feedback: string | null;
+  remindedAt: string | null;
+  escalatedAt: string | null;
+}
+
+/** GET /tasks/:id/reviews — a task's rounds, and what the viewer can do. */
+export interface TaskReviewsResponse {
+  success: boolean;
+  task: {
+    id: string;
+    title: string;
+    status: string;
+    taskType: string | null;
+    taskTypeLabel: string | null;
+    needsApproval: boolean;
+    priority: string;
+    dueDate: string;
+    clientName: string;
+    projectName: string | null;
+    assignees: PersonRef[];
+    creator: PersonRef | null;
+  };
+  reviews: TaskReviewRound[];
+  /** Who the waiting round escalated to — empty until it has. */
+  escalatedTo: PersonRef[];
+  viewer: {
+    isApprover: boolean;
+    /** An escalation person for this type — can decide once it has escalated. */
+    isEscalation: boolean;
+    canApprove: boolean;
+    approveRefusal: string | null;
+    canSubmit: boolean;
+  };
+  waitingMinutes: number | null;
+  waitingText: string | null;
+}
+
+/** One task waiting for the caller's approval. */
+export interface ApprovalItem {
+  id: string;
+  title: string;
+  taskType: string | null;
+  taskTypeLabel: string | null;
+  priority: string;
+  dueDate: string;
+  clientName: string;
+  projectName: string | null;
+  assignees: PersonRef[];
+  creator: PersonRef | null;
+  review: {
+    id: string;
+    round: number;
+    link: string | null;
+    note: string | null;
+    submittedAt: string;
+    submittedBy: PersonRef;
+    remindedAt: string | null;
+    escalatedAt: string | null;
+  };
+  /** In the queue because it escalated to them, not because they approve the type. */
+  asEscalation: boolean;
+  waitingMinutes: number;
+  waitingText: string;
+}
+
+/** Settings → Approvals: who approves each task type. */
+export type ApproversByType = Record<string, PersonRef[]>;
+
+/** Settings → Approvals, whole: the lists per type, and the org's two timings (working minutes). */
+export interface ApprovalSettings {
+  success: boolean;
+  approvers: ApproversByType;
+  escalation: ApproversByType;
+  remindMinutes: number;
+  escalateMinutes: number;
 }
 
 /** What a proforma or invoice PDF puts on itself — the letterhead a business actually has, not fixed values baked into a template. */
@@ -1331,6 +1450,20 @@ export const api = {
      */
     testMail: (to?: string) => postFull<{ data: { to: string }; message?: string }>('/config/mail/test', { to }),
     /** Turning a module off hides its screens AND refuses its endpoints (§7.5). */
+    /** Who approves each task type. Every signed-in person can read it. */
+    approvers: () => get<ApprovalSettings>('/config/approvers'),
+    /** Replace one type's approvers. Admins only. */
+    /** One type's lists — the approvers, and who it escalates to when that is given too. */
+    saveApprovers: (taskType: string, userIds: string[], escalationUserIds?: string[]) =>
+      put<{ success: boolean; taskType: string; approvers: PersonRef[]; escalation?: PersonRef[] }>(
+        '/config/approvers',
+        { taskType, userIds, ...(escalationUserIds ? { escalationUserIds } : {}) },
+      ),
+    saveApprovalTimings: (remindMinutes: number, escalateMinutes: number) =>
+      put<{ success: boolean; remindMinutes: number; escalateMinutes: number }>('/config/approvers', {
+        remindMinutes,
+        escalateMinutes,
+      }),
     auditLog: (filters: AuditFilters = {}) => {
       const params = new URLSearchParams();
       for (const [k, v] of Object.entries(filters)) if (v !== undefined && v !== '') params.set(k, String(v));
@@ -1649,6 +1782,22 @@ export const api = {
       post<{ success: boolean; task: any }>(`/tasks/${id}/wait`, { waitingOn }),
     resume: (id: string) =>
       post<{ success: boolean; task: any }>(`/tasks/${id}/resume`),
+    /** Send a task for approval: opens the next round and moves it to In review. */
+    submitReview: (id: string, body: { link?: string; note?: string }) =>
+      post<{ success: boolean; status: string; review: TaskReviewRound }>(`/tasks/${id}/submit-review`, body),
+    /** Approve the open round — the task is done. */
+    approve: (id: string) =>
+      post<{ success: boolean; decision: ReviewDecision; round: number; status: string }>(`/tasks/${id}/approve`, {}),
+    /** Send it back with feedback — the task returns to In progress. */
+    requestChanges: (id: string, feedback: string) =>
+      post<{ success: boolean; decision: ReviewDecision; round: number; status: string }>(
+        `/tasks/${id}/request-changes`,
+        { feedback },
+      ),
+    /** Everything waiting for the caller's approval, oldest first. Empty for non-approvers. */
+    approvals: () => get<{ success: boolean; items: ApprovalItem[] }>('/tasks/approvals'),
+    /** One task's approval rounds, and what the caller can do about it. */
+    reviews: (id: string) => get<TaskReviewsResponse>(`/tasks/${id}/reviews`),
   },
 
   retainers: {

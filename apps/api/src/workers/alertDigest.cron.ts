@@ -1,7 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import { sendMail } from '../utils/mailer.js';
 import { logger } from '../utils/logger.js';
-import { RULE_PERMISSION, MINE_REGARDLESS } from '../routes/notifications.js';
+import { RULE_PERMISSION, MINE_REGARDLESS, approvalAlertClauses } from '../routes/notifications.js';
 import { resolvePermissions } from '../middleware/auth.js';
 
 /**
@@ -38,6 +38,7 @@ const istDayKey = (at: Date): string => new Date(at.getTime() + IST_OFFSET_MS).t
 
 const SEVERITY_LABEL: Record<string, string> = {
   HIGH: 'Needs attention',
+  MED: 'Worth a look',
   MEDIUM: 'Worth a look',
   LOW: 'For information',
 };
@@ -79,11 +80,13 @@ export async function alertsForUser(
     myTaskIds.length > 0
       ? [{ rule: { in: [...missingTaskRules] }, entityType: 'Task', entityId: { in: myTaskIds } }]
       : [];
+  // Approvals waiting on them — the bell's own clauses.
+  const approvals = await approvalAlertClauses(organizationId, user.userId);
 
-  if (allowedRules.length === 0 && mine.length === 0) return [];
+  if (allowedRules.length === 0 && mine.length === 0 && approvals.length === 0) return [];
 
   return prisma.alert.findMany({
-    where: { organizationId, resolvedAt: null, OR: [{ rule: { in: allowedRules } }, ...mine] },
+    where: { organizationId, resolvedAt: null, OR: [{ rule: { in: allowedRules } }, ...mine, ...approvals] },
     orderBy: [{ severity: 'asc' }, { createdAt: 'desc' }],
     take: 40,
     select: { id: true, rule: true, message: true, severity: true, entityType: true },

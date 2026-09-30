@@ -87,7 +87,10 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [],
   const team = useTeamMembers();
   const [companyId, setCompanyId] = useState('');
   const [name, setName] = useState('');
-  const [quotedValue, setQuotedValue] = useState('');
+  // Starts at 0: a project can be created before its price is agreed.
+  const [quotedValue, setQuotedValue] = useState('0');
+  // Typing over the 0 gives "050000"; keep it "50000".
+  const changeQuote = (v: string) => setQuotedValue(v.replace(/^0+(?=\d)/, ''));
   /*
    * The GST charged on the quote, kept BESIDE it.
    *
@@ -130,7 +133,7 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [],
     if (!open) return;
     setCompanyId(prefill?.companyId ?? '');
     setName('');
-    setQuotedValue(prefill?.quotedValue != null ? String(prefill.quotedValue) : '');
+    setQuotedValue(prefill?.quotedValue != null ? String(prefill.quotedValue) : '0');
     setGstPercent('18');
     setSourceProposalId(prefill?.sourceProposalId ?? '');
     setStartDate('');
@@ -186,6 +189,17 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [],
     billing !== 'CUSTOM' || (customFilled.length > 0 && amountsMatch && !anyTooSmall);
 
   /*
+   * No price yet, no split.
+   *
+   * The form said "leave it blank if there is no price yet" and then sent a
+   * 40/30/30 split of ₹0 anyway, which the server refused with "Number must be
+   * greater than 0" — so a project without a price could not be created at
+   * all. With no quote nothing is split; the milestones are added on the
+   * project once the price is agreed.
+   */
+  const splits = !isSample && quoted > 0;
+
+  /*
    * A sample asks for one thing: what to call it.
    *
    * Everything else a project needs exists to bill or to schedule it, and a
@@ -207,7 +221,21 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [],
   const canSave =
     Boolean(companyId) &&
     Boolean(name.trim()) &&
-    (isSample || (Boolean(startDate) && Boolean(endDate) && customValid));
+    (isSample || (Boolean(startDate) && Boolean(endDate) && (!splits || customValid)));
+
+  /*
+   * Why "Create project" is greyed out, in words. It used to just sit there
+   * disabled, and the only way to find the missing field was to look for it.
+   */
+  const missing = !companyId
+    ? 'Choose the company.'
+    : !name.trim()
+      ? 'Give the project a name.'
+      : !isSample && (!startDate || !endDate)
+        ? 'Add a start date and an expected end.'
+        : splits && !customValid
+          ? 'The milestones have to add up to the quoted value.'
+          : null;
 
   const addRow = () => setCustomRows((prev) => [...prev, blankRow()]);
   const removeRow = (idx: number) => setCustomRows((prev) => prev.filter((_, i) => i !== idx));
@@ -224,10 +252,13 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [],
         return { label: r.label.trim(), percent: Number(r.percent), amount: Number(r.amount) };
       });
     }
+    // The last part takes the rounding, so the three add up to the quote exactly.
+    const advance = Math.round(quoted * 0.4);
+    const phase = Math.round(quoted * 0.3);
     return [
-      { label: 'Advance Payment', percent: 40, amount: Math.round(quoted * 0.4) },
-      { label: 'Phase 1 Sign-off', percent: 30, amount: Math.round(quoted * 0.3) },
-      { label: 'Final Delivery & Handover', percent: 30, amount: Math.round(quoted * 0.3) },
+      { label: 'Advance Payment', percent: 40, amount: advance },
+      { label: 'Phase 1 Sign-off', percent: 30, amount: phase },
+      { label: 'Final Delivery & Handover', percent: 30, amount: quoted - advance - phase },
     ];
   };
 
@@ -248,8 +279,8 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [],
         ownerId: ownerId || undefined,
         priority,
         description: description.trim() || undefined,
-        // Nothing to bill, so no split. Sending one would be refused anyway.
-        milestones: isSample ? undefined : milestonesForBilling(),
+        // Nothing to bill (a sample) or nothing to split yet (no price): no milestones.
+        milestones: splits ? milestonesForBilling() : undefined,
         sourceProposalId: prefill?.sourceProposalId ?? sourceProposalId ?? undefined,
       });
       const created = (res as { project?: { id: string } }).project;
@@ -327,11 +358,11 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [],
               mode="revenue"
               label="Quoted value (₹)"
               amount={quotedValue}
-              onAmountChange={setQuotedValue}
+              onAmountChange={changeQuote}
               gstPercent={gstPercent}
               onGstChange={setGstPercent}
               required={false}
-              hint="Before GST. Leave it blank if there is no price yet."
+              hint="Before GST. Leave it at 0 if there is no price yet."
             />
           )}
           <div className="grid gap-4 sm:grid-cols-2">
@@ -364,11 +395,17 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [],
           </div>
           <Field label="Description" value={description} onChange={setDescription} textarea rows={3} />
 
-          {!isSample && (
+          {splits && (
             <FieldSelect label="Billing" value={billing} onChange={(v) => setBilling(v as Billing)} options={BILLING_OPTIONS} />
           )}
+          {!isSample && !splits && (
+            <p className="rounded-xl border border-border bg-subtle/40 px-3 py-2.5 text-xs text-secondary">
+              No price yet, so nothing is split for billing. Once the price is agreed, set the quoted value on the
+              project and add its milestones there.
+            </p>
+          )}
 
-          {!isSample && billing !== 'CUSTOM' && quoted > 0 && (
+          {splits && billing !== 'CUSTOM' && (
             <div className="rounded-xl border border-border bg-subtle/40 p-3 text-xs text-secondary space-y-1">
               {milestonesForBilling().map((m) => (
                 <div key={m.label} className="flex justify-between">
@@ -379,7 +416,7 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [],
             </div>
           )}
 
-          {!isSample && billing === 'CUSTOM' && (
+          {splits && billing === 'CUSTOM' && (
             <div className="space-y-2">
               {customRows.map((row, idx) => {
                 return (
@@ -440,6 +477,7 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [],
           )}
 
           {error && <ErrorNote>{error}</ErrorNote>}
+          {!error && missing && <p className="text-right text-xs text-secondary">{missing}</p>}
         </ModalBody>
         <ModalFooter>
           <Button type="button" variant="ghost" onClick={onClose}>

@@ -25,6 +25,7 @@ import {
   canSee,
 } from '@/config/navigation';
 import { ChevronLeft, LogOut } from 'lucide-react';
+import { useApprovalQueue } from '@/lib/approvals';
 
 export function Sidebar({ isMobile }: { isMobile?: boolean }) {
   const shouldReduceMotion = useReducedMotion();
@@ -34,6 +35,10 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
 
   const { sidebarCollapsed, toggleCollapse, mobileSidebarOpen } = useUIStore();
   const { user, logout } = useAuthStore();
+  // Work waiting for this person's approval — a count on My Work, not a new
+  // item. Only approvers ask; for everybody else this stays empty.
+  const { data: waiting = [] } = useApprovalQueue();
+  const approvals = waiting.length;
 
   // Nothing is rendered from the user until the session has been read from
   // storage — rendering the ladder against an empty role first would flash the
@@ -53,7 +58,9 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
         key={item.href}
         href={item.href}
         title={collapsed ? item.label : undefined}
-        aria-label={item.label}
+        aria-label={
+          item.href === '/my-work' && approvals > 0 ? `${item.label}, ${approvals} waiting for your approval` : item.label
+        }
         aria-current={active ? 'page' : undefined}
       >
         <div
@@ -82,6 +89,17 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
               </motion.span>
             )}
           </AnimatePresence>
+          {item.href === '/my-work' && approvals > 0 && (
+            <span
+              aria-hidden
+              className={cn(
+                'rounded-full bg-review-tint px-1.5 text-micro font-bold leading-5 text-review tabular-nums',
+                collapsed ? 'absolute right-1 top-1 min-w-4 px-1 text-center leading-4' : 'ml-auto min-w-5 text-center',
+              )}
+            >
+              {approvals}
+            </span>
+          )}
           {active && (
             <motion.div
               layoutId="sidebar-indicator"

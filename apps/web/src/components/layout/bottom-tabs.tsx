@@ -16,6 +16,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useAuthStore } from '@/stores';
 import { NAV_ITEMS, BOTTOM_NAV_ITEMS, NavItem, canSee } from '@/config/navigation';
 import { MoreHorizontal, LogOut, X } from 'lucide-react';
+import { useApprovalQueue } from '@/lib/approvals';
 
 export function BottomTabs() {
   const shouldReduceMotion = useReducedMotion();
@@ -23,6 +24,9 @@ export function BottomTabs() {
   const { user, logout } = useAuthStore();
   const [showMore, setShowMore] = useState(false);
   const [mounted, setMounted] = useState(false);
+  // Waiting for this person's approval — a count on the My Work tab.
+  const { data: waiting = [] } = useApprovalQueue();
+  const approvals = waiting.length;
   useEffect(() => { setMounted(true); }, []);
 
   // The same permission switches the API enforces — so a tab is offered only
@@ -126,7 +130,18 @@ export function BottomTabs() {
                 key={tab.href}
                 href={tab.href}
                 className="flex flex-1 flex-col items-center gap-0.5 py-1 relative"
+                aria-label={
+                  tab.href === '/my-work' && approvals > 0 ? `${tab.label}, ${approvals} waiting for your approval` : undefined
+                }
               >
+                {tab.href === '/my-work' && approvals > 0 && (
+                  <span
+                    aria-hidden
+                    className="absolute left-1/2 top-0 ml-1.5 min-w-4 rounded-full bg-review px-1 text-center text-micro font-bold leading-4 text-white tabular-nums"
+                  >
+                    {approvals}
+                  </span>
+                )}
                 {isActive && (
                   <motion.div
                     layoutId="bottom-tab-indicator"

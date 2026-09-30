@@ -72,6 +72,9 @@ const ORG = {
 };
 
 beforeEach(() => {
+  // GET /config asks what each person approves; nothing, here.
+  (prisma.taskApprover.findMany as any).mockResolvedValue([]);
+  (prisma.approvalEscalationContact.findMany as any).mockResolvedValue([]);
   (prisma.user.findUnique as any).mockImplementation(async ({ where }: any) => {
     const who = [MANAGEMENT, DESIGNER, ACCOUNTS].find((p) => p.id === where.id);
     if (!who) return null;

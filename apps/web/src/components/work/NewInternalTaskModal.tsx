@@ -22,7 +22,7 @@ import { ErrorNote } from '@/components/ui/empty-state';
 import { AssigneeField, AssignedByField } from '@/components/work/AssigneeField';
 import { PRIORITY_CONFIG } from '@/lib/priority';
 import { TASK_TYPE_OPTIONS } from '@/lib/task-type';
-import { personOptions } from '@/lib/people';
+import { NeedsApprovalField } from '@/components/work/NeedsApprovalField';
 import { useTeamMembers } from '@/hooks/queries';
 
 const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label }));
@@ -42,8 +42,8 @@ export function NewInternalTaskModal({
   const [title, setTitle] = useState('');
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [assignedById, setAssignedById] = useState('');
-  const [reviewerId, setReviewerId] = useState('');
   const [taskType, setTaskType] = useState('');
+  const [needsApproval, setNeedsApproval] = useState(false);
   const [priority, setPriority] = useState('MEDIUM');
   const [dueDate, setDueDate] = useState('');
   const [description, setDescription] = useState('');
@@ -65,8 +65,8 @@ export function NewInternalTaskModal({
         assigneeIds,
         assigneeId: assigneeIds[0],
         assignedById: assignedById || undefined,
-        reviewerId: reviewerId || undefined,
         taskType: taskType || undefined,
+        needsApproval,
         dueDate,
         priority,
         notes: description.trim() || undefined,
@@ -99,24 +99,15 @@ export function NewInternalTaskModal({
           <AssigneeField value={assigneeIds} onChange={setAssigneeIds} />
           <AssignedByField value={assignedById} onChange={setAssignedById} />
 
-          <div className="grid grid-cols-2 gap-4">
-            <FieldSelect
-              label="Reviewer"
-              value={reviewerId}
-              onChange={setReviewerId}
-              placeholder="Nobody reviews it"
-              options={personOptions(team)}
-              disabled={saving}
-            />
-            <FieldSelect
-              label="Type of work"
-              value={taskType}
-              onChange={setTaskType}
-              placeholder="Not set"
-              options={TASK_TYPE_OPTIONS}
-              disabled={saving}
-            />
-          </div>
+          <FieldSelect
+            label="Type of work"
+            value={taskType}
+            onChange={setTaskType}
+            placeholder="Not set"
+            options={TASK_TYPE_OPTIONS}
+            disabled={saving}
+          />
+          <NeedsApprovalField taskType={taskType} value={needsApproval} onChange={setNeedsApproval} disabled={saving} />
 
           <div className="grid grid-cols-2 gap-4">
             <Field label="Due date" type="date" value={dueDate} onChange={setDueDate} required disabled={saving} />

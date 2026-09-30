@@ -14,6 +14,7 @@ import { useNotificationStore } from '@/stores/useNotificationStore';
 import { X, Bell } from 'lucide-react';
 import { Icon } from '@/components/ui/icon';
 import { useIsMobile } from '@/hooks/use-breakpoint';
+import { loginHref } from '@/lib/next-path';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -37,7 +38,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     const userStr = localStorage.getItem('flowzen-user');
     if (!userStr && !isAuthenticated) {
-      router.push('/login');
+      // Carry the address, so a signed-out approver who tapped a WhatsApp link
+      // lands back on that task after signing in.
+      router.push(loginHref());
     }
   }, [isAuthenticated, router]);
 

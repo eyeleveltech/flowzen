@@ -300,7 +300,8 @@ export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 
 export type TaskWorkType = 'MONTH_CARD' | 'PROJECT' | 'INTERNAL';
 /**
- * The five states a task is actually in.
+ * The six states a task is actually in. IN_REVIEW is "sent for approval,
+ * waiting on an approver" — open work, but not the assignee's active work.
  *
  * This said `'OPEN' | 'WAITING' | 'DONE'` — a vocabulary the database stopped
  * speaking. Prisma's enum is TODO / IN_PROGRESS / ON_HOLD / DONE / CANCELLED,
@@ -312,7 +313,10 @@ export type TaskWorkType = 'MONTH_CARD' | 'PROJECT' | 'INTERNAL';
  * trust it would have written code against a task state the API can never
  * return.
  */
-export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'ON_HOLD' | 'DONE' | 'CANCELLED';
+export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'ON_HOLD' | 'DONE' | 'CANCELLED';
+
+/** How an approver decided one round of a task's review. */
+export type ReviewDecision = 'APPROVED' | 'CHANGES_REQUESTED';
 export type WaitingOn = 'CLIENT' | 'ANOTHER_PERSON';
 
 export interface Task {

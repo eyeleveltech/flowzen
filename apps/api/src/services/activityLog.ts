@@ -362,6 +362,9 @@ const ACTION: Record<string, string> = {
   'Task.task_status_changed': 'changed the status of',
   'Task.task_waiting': 'put on hold',
   'Task.task_resumed': 'took off hold',
+  'Task.task_submitted_for_approval': 'sent for approval',
+  'Task.task_approved': 'approved',
+  'Task.task_changes_requested': 'requested changes on',
 
   // Clients, leads, the pipeline
   'Company.created': 'added the company',
@@ -466,10 +469,16 @@ const ACTION: Record<string, string> = {
   'Organization.allocations_confirmed': 'confirmed the time split',
   'Organization.monday_brief_mailed': 'mailed the Monday brief',
   'Organization.assistant_asked': 'asked Zen',
+  'Organization.approvers_updated': 'changed the approvers',
+  'Organization.approval_escalation_updated': 'changed who approvals escalate to',
+  'Organization.approval_timings_updated': 'changed the approval reminder times',
 };
 
 /** Rows whose sentence is complete without naming the subject. */
 const NO_SUBJECT = new Set([
+  'Organization.approvers_updated',
+  'Organization.approval_escalation_updated',
+  'Organization.approval_timings_updated',
   'Organization.organisation_updated',
   'Organization.document_settings_updated',
   'Organization.mail_settings_updated',
@@ -537,6 +546,7 @@ const FIELD: Record<string, string> = {
   address: 'Address',
   designation: 'Designation',
   role: 'Role',
+  needsApproval: 'Needs approval',
   // A proposal's version, corrected in place.
   value: 'Value',
   scopeSummary: 'Scope',
@@ -552,7 +562,12 @@ const MONEY_FIELDS = new Set(['quotedValue', 'monthlyCost', 'amount', 'value', '
 /** Said once, not repeated: the code rides along with the state's name. */
 const QUIET_FIELDS = new Set(['stateCode']);
 
-const ENUM_WORD: Record<string, string> = { TODO: 'To do', ON_HOLD: 'On hold', IN_PROGRESS: 'In progress' };
+const ENUM_WORD: Record<string, string> = {
+  TODO: 'To do',
+  ON_HOLD: 'On hold',
+  IN_PROGRESS: 'In progress',
+  IN_REVIEW: 'In review',
+};
 
 const inr = (v: unknown) => {
   const n = typeof v === 'string' ? Number(v) : v;
@@ -704,6 +719,20 @@ export function detailLines(
         .join(' · '),
     );
     if (names.length) lines.push(clip(names.join(', '), 160));
+  }
+
+  // Approval: which round, what was sent, and what came back.
+  if (verb === 'task_submitted_for_approval' || verb === 'task_approved' || verb === 'task_changes_requested') {
+    if (typeof p.round === 'number') lines.unshift(`Round ${p.round}`);
+    if (str(p.link)) lines.push(String(p.link));
+    if (str(p.feedback)) lines.push(`“${clip(String(p.feedback), 200)}”`);
+  }
+  if ((verb === 'approvers_updated' || verb === 'approval_escalation_updated') && str(p.taskType)) {
+    const names = Array.isArray(p.names) ? (p.names as string[]) : [];
+    lines.push(`${p.taskType}: ${names.length ? names.join(', ') : 'nobody'}`);
+  }
+  if (verb === 'approval_timings_updated' && str(p.remind)) {
+    lines.push(`Remind after ${p.remind} · escalate after ${str(p.escalate)}`);
   }
 
   // Sign-ins: where from.

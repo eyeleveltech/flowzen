@@ -212,7 +212,7 @@ function Row({ e, time }: { e: AuditEntry; time: string }) {
 
       <span
         aria-hidden
-        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
+        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-micro font-semibold ${
           failed ? 'bg-danger-tint text-danger' : e.actor ? 'bg-primary/10 text-primary' : 'bg-subtle text-secondary'
         }`}
       >

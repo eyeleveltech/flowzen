@@ -44,6 +44,7 @@ import { DocumentSettingsTab } from './components/DocumentSettingsTab';
 import { OnboardingTab } from './components/OnboardingTab';
 import { TrashTab } from './components/TrashTab';
 import { ActivityTab } from './components/ActivityTab';
+import { ApprovalsTab } from './components/ApprovalsTab';
 import { AssetsTab } from './components/AssetsTab';
 
 /**
@@ -69,6 +70,7 @@ const GROUPS = [
     label: 'People & kit',
     tabs: [
       { key: 'team', label: 'Team', caption: 'Who is here' },
+      { key: 'approvals', label: 'Approvals', caption: 'Who signs off each type' },
       { key: 'assets', label: 'Assets', caption: 'Tags and depreciation' },
       { key: 'onboarding', label: 'Onboarding', caption: 'What a new client needs' },
     ],
@@ -892,6 +894,8 @@ export default function SettingsPage() {
         )}
 
         {tab === 'trash' && <TrashTab />}
+
+        {tab === 'approvals' && <ApprovalsTab canEdit={canEdit} />}
 
         {tab === 'activity' && <ActivityTab tz={tz} locale={locale} />}
           </div>

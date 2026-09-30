@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import { emitToOrganization } from '../sse.js';
+import { CHASER_RULES } from './approvalChaser.cron.js';
 import { AlertSeverity, TaskWorkType, TaskStatus } from '@prisma/client';
 import { logger } from '../utils/logger.js';
 import { jobProfit, percentComplete, costRisk } from '../utils/jobProfit.js';
@@ -160,12 +161,13 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
     }
   }
 
-  // 5. RULE: TASK_OVERDUE
+  // 5. RULE: TASK_OVERDUE — never for work waiting on an approver. A video
+  // late because nobody has approved it is not the editor's overdue.
   const overdueTasks = await prisma.task.findMany({
     where: {
       organizationId,
       deletedAt: null,
-      status: { notIn: ['DONE', 'CANCELLED'] },
+      status: { notIn: ['DONE', 'CANCELLED', 'IN_REVIEW'] },
       dueDate: { lt: now },
     },
     include: { assignee: true },
@@ -774,8 +776,10 @@ export async function runAgencyHealthScanner(): Promise<number> {
         }
       }
 
+      // Everything open that this scan evaluates — not the approval chaser's
+      // alerts, which it never evaluates and would otherwise close within the hour.
       const openAlerts = await prisma.alert.findMany({
-        where: { organizationId: org.id, resolvedAt: null },
+        where: { organizationId: org.id, resolvedAt: null, rule: { notIn: CHASER_RULES } },
         select: { id: true, rule: true, entityType: true, entityId: true },
       });
       const toResolve = openAlerts

@@ -40,6 +40,7 @@ import { startAllocationScheduler } from './workers/allocation.cron.js';
 import { startRecurringCostScheduler } from './workers/recurringCost.cron.js';
 import { startMondayBriefScheduler } from './workers/brief.cron.js';
 import { startAlertDigestScheduler } from './workers/alertDigest.cron.js';
+import { startApprovalChaser } from './workers/approvalChaser.cron.js';
 
 const app = express();
 
@@ -142,6 +143,10 @@ startMondayBriefScheduler();
 // §16: "In app first. Email digest for alerts." The in-app half existed; an
 // alert only reached somebody who happened to open the app.
 startAlertDigestScheduler();
+
+// Chase work waiting for approval: a reminder, then an escalation, in working
+// time — so a video sent for sign-off does not wait for somebody to remember.
+startApprovalChaser();
 
 app.use((_req, res) => {
   res.status(404).json({ success: false, error: 'Not found' });

@@ -66,6 +66,9 @@ const ALERTS = [
 const MY_TASK_IDS = ['t-mine'];
 
 beforeEach(() => {
+  // Nobody approves anything here, so no approval alerts reach anyone.
+  (prisma.taskApprover.findMany as any).mockResolvedValue([]);
+  (prisma.approvalEscalationContact.findMany as any).mockResolvedValue([]);
   (prisma.user.findUnique as any).mockImplementation(async ({ where }: any) => {
     const p = Object.entries(PEOPLE).find(([, v]) => v.id === where.id)?.[1];
     if (!p) return null;

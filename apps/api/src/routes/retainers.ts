@@ -6,6 +6,7 @@ import { rollActiveRetainers } from '../workers/monthCard.cron.js';
 import { CompanyStatus, Prisma, RetainerBilling, RetainerStatus, RetainerProjectStatus } from '@prisma/client';
 import { monthKey } from '../utils/retainerMonths.js';
 import { TASK_PEOPLE, withPeople } from './tasks.js';
+import { LAST_REVIEW } from '../services/taskApprovals.js';
 import { parsePagination } from '../utils/query.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
@@ -967,6 +968,7 @@ retainersRouter.get('/:id/month-cards/:month', requirePermission('work.all'), as
             // What this task is FOR, as opposed to which month it is
             // billed in. The month's list groups by it.
             retainerProject: { select: { id: true, name: true, status: true } },
+            reviews: LAST_REVIEW,
           },
           orderBy: { dueDate: 'asc' },
         },
@@ -1055,7 +1057,11 @@ retainersRouter.get('/:id/month-cards/:month', requirePermission('work.all'), as
         ...monthCard,
         // Flattened, so the wire carries people rather than join rows — the
         // same shape /tasks hands back.
-        tasks: monthCard.tasks.map((t) => ({ ...t, assignees: t.assignees.map((a) => a.user) })),
+        tasks: monthCard.tasks.map(({ reviews, ...t }) => ({
+          ...t,
+          assignees: t.assignees.map((a) => a.user),
+          lastReview: reviews[0] ?? null,
+        })),
         revenue: canSeeFigures ? monthCard.revenue : null,
         directCostsTotal: canSeeFigures ? directCostsTotal : null,
         costBasis,

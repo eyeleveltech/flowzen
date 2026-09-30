@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import { api, ApiError } from '@/lib/api-v2';
 import { useAuthStore } from '@/stores';
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { safeNextPath } from '@/lib/next-path';
 import { Zap, Eye, EyeOff } from 'lucide-react';
 import { Icon } from '@/components/ui/icon';
 
@@ -39,10 +40,12 @@ export default function LoginPage() {
     try {
       const data = await api.auth.login(email, password);
       setAuth(data.user as never);
-      // Today. There is no picker any more, because there is nothing to pick —
-      // the sidebar lists everything at once (§3.1) — and Today is the one
-      // screen every role and every organisation has.
-      router.push('/my-work');
+      /*
+       * Back to where they were headed — a WhatsApp approval link, usually —
+       * or My Work, the one screen every role has. Read from the address at
+       * the moment of signing in, and only ever a path on this site.
+       */
+      router.push(safeNextPath(new URLSearchParams(window.location.search).get('next')));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not sign you in');
     } finally {

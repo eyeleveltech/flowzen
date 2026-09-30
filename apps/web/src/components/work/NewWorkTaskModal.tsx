@@ -19,7 +19,7 @@ import { AssigneeField, AssignedByField } from '@/components/work/AssigneeField'
 import { TASK_TYPE_OPTIONS } from '@/lib/task-type';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { PRIORITY_CONFIG } from '@/lib/priority';
-import { personOptions } from '@/lib/people';
+import { NeedsApprovalField } from '@/components/work/NeedsApprovalField';
 import { useAuthStore } from '@/stores';
 
 const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label }));
@@ -67,8 +67,8 @@ export function NewWorkTaskModal({
   const [title, setTitle] = useState('');
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [assignedById, setAssignedById] = useState('');
-  const [reviewerId, setReviewerId] = useState('');
   const [taskType, setTaskType] = useState('');
+  const [needsApproval, setNeedsApproval] = useState(false);
   const [priority, setPriority] = useState('MEDIUM');
   const [description, setDescription] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -87,8 +87,8 @@ export function NewWorkTaskModal({
     // Nobody, until somebody says otherwise — see tasks.ts on why this
     // field means nothing when it is filled in by default.
     setAssignedById('');
-    setReviewerId('');
     setTaskType('');
+    setNeedsApproval(false);
     setPriority('MEDIUM');
     setDescription('');
     setDueDate('');
@@ -164,8 +164,8 @@ export function NewWorkTaskModal({
         // what the server already defaults to.
         assigneeIds: assigneeIds.length > 0 ? assigneeIds : undefined,
         assignedById: assignedById || undefined,
-        reviewerId: reviewerId || undefined,
         taskType: taskType || undefined,
+        needsApproval,
         dueDate,
         priority,
         notes: description.trim() || undefined,
@@ -245,25 +245,17 @@ export function NewWorkTaskModal({
           <AssigneeField value={assigneeIds} onChange={setAssigneeIds} />
           <AssignedByField value={assignedById} onChange={setAssignedById} />
           <div className="grid grid-cols-2 gap-4">
-            <FieldSelect
-              label="Reviewer"
-              value={reviewerId}
-              onChange={setReviewerId}
-              placeholder="Nobody reviews it"
-              options={personOptions(team)}
-            />
+            <Field label="Due date" type="date" value={dueDate} onChange={setDueDate} required />
             <FieldSelect label="Priority" value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Due date" type="date" value={dueDate} onChange={setDueDate} required />
-            <FieldSelect
-              label="Type of work"
-              value={taskType}
-              onChange={setTaskType}
-              placeholder="Not set"
-              options={TASK_TYPE_OPTIONS}
-            />
-          </div>
+          <FieldSelect
+            label="Type of work"
+            value={taskType}
+            onChange={setTaskType}
+            placeholder="Not set"
+            options={TASK_TYPE_OPTIONS}
+          />
+          <NeedsApprovalField taskType={taskType} value={needsApproval} onChange={setNeedsApproval} />
           <Field label="Description" value={description} onChange={setDescription} textarea rows={3} />
           {error && <ErrorNote>{error}</ErrorNote>}
         </ModalBody>

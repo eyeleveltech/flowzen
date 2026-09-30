@@ -22,6 +22,8 @@ export const STATUS_COLORS: Record<string, { bg: string; text: string; dot: stri
   PLANNING: { bg: 'bg-slate-50', text: 'text-slate-700', dot: 'bg-slate-400' },
   IN_PROGRESS: { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500' },
   REVIEW: { bg: 'bg-purple-50', text: 'text-purple-700', dot: 'bg-purple-500' },
+  // A task sent for approval — same family as REVIEW above.
+  IN_REVIEW: { bg: 'bg-purple-50', text: 'text-purple-700', dot: 'bg-purple-500' },
   ON_HOLD: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
   CANCELLED: { bg: 'bg-rose-50', text: 'text-rose-700', dot: 'bg-rose-500' },
 
@@ -77,6 +79,7 @@ export const STATUS_LABELS: Record<string, string> = {
   PLANNING: 'Planning',
   IN_PROGRESS: 'In Progress',
   REVIEW: 'Review',
+  IN_REVIEW: 'In review',
   APPROVED: 'Approved',
   ON_HOLD: 'On Hold',
   CANCELLED: 'Cancelled',

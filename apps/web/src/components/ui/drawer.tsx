@@ -195,7 +195,16 @@ export function Drawer({
 
           {isMobile ? (
             /* MOBILE: Bottom Sheet */
+            /*
+              Each layout keyed, so switching between them starts a fresh
+              element. `useIsMobile` settles a moment after the first render; a
+              drawer opened straight away (a /my-work?task=… link) rendered as
+              the slideover first, then switched to the sheet — and React reused
+              the same motion element, keeping the slideover's starting x of
+              100%. The sheet sat one screen-width off to the right.
+            */
             <motion.div
+              key="sheet"
               ref={panelRef}
               onKeyDown={handleKeyDown}
               initial={{ y: '100%' }}
@@ -226,6 +235,7 @@ export function Drawer({
           ) : variant === 'slideover' ? (
             /* DESKTOP: Slideover Panel */
             <motion.div
+              key="slideover"
               ref={panelRef}
               onKeyDown={handleKeyDown}
               initial={{ x: '100%' }}
@@ -287,7 +297,7 @@ export function Drawer({
             </motion.div>
           ) : (
             /* DESKTOP: Centered Modal */
-            <div className="fixed inset-0 z-201 flex items-center justify-center p-4 pointer-events-none">
+            <div key="modal" className="fixed inset-0 z-201 flex items-center justify-center p-4 pointer-events-none">
               <motion.div
                 ref={panelRef}
                 onKeyDown={handleKeyDown}

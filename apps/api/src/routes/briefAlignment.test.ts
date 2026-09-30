@@ -40,6 +40,9 @@ const auth = () =>
 let written: { activity?: any; org?: any };
 
 beforeEach(() => {
+  // Nobody approves anything here, so no approval alerts reach anyone.
+  (prisma.taskApprover.findMany as any).mockResolvedValue([]);
+  (prisma.approvalEscalationContact.findMany as any).mockResolvedValue([]);
   written = {};
   (prisma.user.findUnique as any).mockResolvedValue({
     id: ADMIN.id,

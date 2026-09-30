@@ -40,6 +40,7 @@ const STATUS_OPTIONS = [
 const STATUS_LABEL: Record<string, string> = {
   TODO: 'To do',
   IN_PROGRESS: 'In progress',
+  IN_REVIEW: 'In review',
   ON_HOLD: 'On hold',
   DONE: 'Done',
   CANCELLED: 'Cancelled',
