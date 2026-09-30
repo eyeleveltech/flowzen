@@ -3,12 +3,12 @@
 /**
  * "Needs approval" — the one tick every task form shares.
  *
- * It only works when the task has a type and that type has at least one
- * approver in Settings → Approvals; a task waiting on a list of nobody would
- * wait for ever. Otherwise it is shown disabled with the reason, rather than
- * hidden: somebody looking for it should find out where it is switched on.
+ * No type of work needed. The same approvers cover all work, so a task ticked
+ * with no type is filed as Other and goes to them. It is disabled only when
+ * nobody is set to approve at all — a task waiting on a list of nobody would
+ * wait for ever — and then says where that is set, rather than hiding.
  *
- * Unticks itself when the type changes to one nobody approves, so a form never
+ * Unticks itself if the type changes to one nobody approves, so a form never
  * sends a tick the server would refuse.
  */
 
@@ -32,8 +32,9 @@ export function NeedsApprovalField({
   lockedReason?: string;
 }) {
   const { data: approvers, isPending } = useApprovers();
-  const pool = taskType ? (approvers?.[taskType] ?? []) : [];
-  const available = Boolean(taskType) && pool.length > 0;
+  // No type picked: it will be filed as Other, so Other's approvers are the ones.
+  const pool = approvers?.[taskType || 'OTHER'] ?? [];
+  const available = pool.length > 0;
 
   // A new type nobody approves takes the tick away with it.
   useEffect(() => {
@@ -42,13 +43,13 @@ export function NeedsApprovalField({
 
   const hint = lockedReason
     ? lockedReason
-    : !taskType
-      ? 'Pick a type of work first — approval goes to that type’s approvers.'
-      : isPending
-        ? 'Checking who approves this type…'
-        : available
-          ? `Only Done once one of ${pool.map((p) => p.name).join(', ')} approves it.`
-          : `No approvers set for ${taskTypeLabel(taskType) ?? taskType}. Set them in Settings → Approvals.`;
+    : isPending
+      ? 'Checking who approves…'
+      : available
+        ? `Only Done once one of ${pool.map((p) => p.name).join(', ')} approves it.`
+        : taskType
+          ? `Nobody approves ${taskTypeLabel(taskType) ?? taskType} work. Set the approvers in Settings → Approvals.`
+          : 'Nobody is set to approve work yet. Set the approvers in Settings → Approvals.';
 
   return (
     <FieldCheckbox

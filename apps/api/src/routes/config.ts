@@ -658,6 +658,12 @@ configRouter.get('/approvers', async (req: AuthRequest, res: Response, next: Nex
 const approversSchema = z
   .object({
     taskType: z.nativeEnum(TaskType).optional(),
+    /**
+     * One list for all work: the same approvers (and escalation people) on
+     * every task type at once — what Settings → Approvals saves. `taskType`
+     * still saves a single type.
+     */
+    allTypes: z.boolean().optional(),
     userIds: z.array(z.string().min(1)).max(50).optional(),
     escalationUserIds: z.array(z.string().min(1)).max(50).optional(),
     remindMinutes: z.number().int().optional(),
@@ -665,11 +671,12 @@ const approversSchema = z
   })
   .superRefine((v, ctx) => {
     const timings = v.remindMinutes !== undefined || v.escalateMinutes !== undefined;
-    if (!v.taskType && !timings) {
+    const lists = Boolean(v.taskType || v.allTypes);
+    if (!lists && !timings) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Nothing to save.' });
       return;
     }
-    if (v.taskType && !v.userIds && !v.escalationUserIds) {
+    if (lists && !v.userIds && !v.escalationUserIds) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Pick the approvers or the escalation people.' });
     }
     if (!timings) return;
@@ -697,7 +704,7 @@ configRouter.put(
         return;
       }
       const orgId = req.user!.organizationId;
-      const { taskType, remindMinutes, escalateMinutes } = parsed.data;
+      const { taskType, allTypes, remindMinutes, escalateMinutes } = parsed.data;
       const activity = (verb: string, payload: Record<string, unknown>) =>
         prisma.activity.create({
           data: { organizationId: orgId, entityType: 'Organization', entityId: orgId, actorId: req.user!.userId, verb, payload },
@@ -715,10 +722,13 @@ configRouter.put(
         });
       }
 
-      if (!taskType) {
+      if (!taskType && !allTypes) {
         res.json({ success: true, remindMinutes, escalateMinutes });
         return;
       }
+      // Every type at once, or the one asked for.
+      const types: TaskType[] = allTypes ? Object.values(TaskType) : [taskType!];
+      const scopeLabel = allTypes ? 'All work' : TASK_TYPE_LABEL[taskType!];
 
       const approverIds = parsed.data.userIds ? [...new Set(parsed.data.userIds)] : null;
       const escalationIds = parsed.data.escalationUserIds ? [...new Set(parsed.data.escalationUserIds)] : null;
@@ -737,13 +747,16 @@ configRouter.put(
       const listOf = (ids: string[]) =>
         ids.map((id) => ({ id, name: nameOf.get(id)! })).sort((a, b) => a.name.localeCompare(b.name));
 
-      // Replace the type's lists: whoever is not named goes, whoever is stays.
+      // Replace the lists: whoever is not named goes, whoever is stays — on
+      // every type in scope, together.
       await prisma.$transaction([
         ...(approverIds
           ? [
-              prisma.taskApprover.deleteMany({ where: { organizationId: orgId, taskType, userId: { notIn: approverIds } } }),
+              prisma.taskApprover.deleteMany({
+                where: { organizationId: orgId, taskType: { in: types }, userId: { notIn: approverIds } },
+              }),
               prisma.taskApprover.createMany({
-                data: approverIds.map((userId) => ({ organizationId: orgId, taskType, userId })),
+                data: types.flatMap((t) => approverIds.map((userId) => ({ organizationId: orgId, taskType: t, userId }))),
                 skipDuplicates: true,
               }),
             ]
@@ -751,10 +764,10 @@ configRouter.put(
         ...(escalationIds
           ? [
               prisma.approvalEscalationContact.deleteMany({
-                where: { organizationId: orgId, taskType, userId: { notIn: escalationIds } },
+                where: { organizationId: orgId, taskType: { in: types }, userId: { notIn: escalationIds } },
               }),
               prisma.approvalEscalationContact.createMany({
-                data: escalationIds.map((userId) => ({ organizationId: orgId, taskType, userId })),
+                data: types.flatMap((t) => escalationIds.map((userId) => ({ organizationId: orgId, taskType: t, userId }))),
                 skipDuplicates: true,
               }),
             ]
@@ -762,21 +775,18 @@ configRouter.put(
       ]);
 
       if (approverIds) {
-        await activity('approvers_updated', {
-          taskType: TASK_TYPE_LABEL[taskType],
-          names: listOf(approverIds).map((p) => p.name),
-        });
+        await activity('approvers_updated', { taskType: scopeLabel, names: listOf(approverIds).map((p) => p.name) });
       }
       if (escalationIds) {
         await activity('approval_escalation_updated', {
-          taskType: TASK_TYPE_LABEL[taskType],
+          taskType: scopeLabel,
           names: listOf(escalationIds).map((p) => p.name),
         });
       }
 
       res.json({
         success: true,
-        taskType,
+        taskType: allTypes ? 'ALL' : taskType,
         ...(approverIds ? { approvers: listOf(approverIds) } : {}),
         ...(escalationIds ? { escalation: listOf(escalationIds) } : {}),
       });

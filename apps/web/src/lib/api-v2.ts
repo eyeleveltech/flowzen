@@ -409,6 +409,53 @@ export interface ApprovalItem {
 /** Settings → Approvals: who approves each task type. */
 export type ApproversByType = Record<string, PersonRef[]>;
 
+/** Team → Approvals: where approvals get stuck. Minutes are working minutes. */
+export interface ApprovalsReport {
+  success: boolean;
+  period: { from: string; to: string; days: 7 | 30 };
+  /** Decided within this is on time — the org's reminder time. */
+  onTimeMinutes: number;
+  byType: {
+    /** The first of `taskTypes` — types sharing one approver list are one card. */
+    taskType: string;
+    taskTypes: string[];
+    /** Every task type shares this list — the card is "All work". */
+    allWork: boolean;
+    approvers: PersonRef[];
+    submitted: number;
+    decided: number;
+    approved: number;
+    changesRequested: number;
+    medianDecisionMinutes: number | null;
+    onTime: number;
+    escalated: number;
+    waitingNow: number;
+    oldestWaitingMinutes: number | null;
+    anyEscalated: boolean;
+  }[];
+  byPerson: {
+    user: PersonRef;
+    taskTypes: string[];
+    approved: number;
+    changesRequested: number;
+    medianDecisionMinutes: number | null;
+    afterEscalation: number;
+  }[];
+  waitingNow: {
+    taskId: string;
+    title: string;
+    clientName: string;
+    taskType: string;
+    round: number;
+    /** Which video it is — context, never counted. */
+    editorName: string;
+    submittedAt: string;
+    waitingMinutes: number;
+    remindedAt: string | null;
+    escalatedAt: string | null;
+  }[];
+}
+
 /** Settings → Approvals, whole: the lists per type, and the org's two timings (working minutes). */
 export interface ApprovalSettings {
   success: boolean;
@@ -1459,6 +1506,9 @@ export const api = {
         '/config/approvers',
         { taskType, userIds, ...(escalationUserIds ? { escalationUserIds } : {}) },
       ),
+    /** One list for all work: the same approvers and escalation people on every task type. */
+    saveAllApprovers: (userIds: string[], escalationUserIds: string[]) =>
+      put<{ success: boolean }>('/config/approvers', { allTypes: true, userIds, escalationUserIds }),
     saveApprovalTimings: (remindMinutes: number, escalateMinutes: number) =>
       put<{ success: boolean; remindMinutes: number; escalateMinutes: number }>('/config/approvers', {
         remindMinutes,
@@ -1963,6 +2013,8 @@ export const api = {
   },
 
   team: {
+    /** The Approvals tab: the last 7 or 30 days, and what is waiting right now. */
+    approvalsReport: (days: 7 | 30) => get<ApprovalsReport>(`/team/approvals-report?days=${days}`),
     capacity: (params: Record<string, string> = {}) =>
       get<{ success: boolean; departments: string[]; members: any[] }>(`/team/capacity?${new URLSearchParams(params)}`),
     /** Name + id only, for an owner picker — gated on nothing but being logged in, unlike capacity. */
@@ -2065,8 +2117,14 @@ export const api = {
      * Every retainer's month and where its billing has got to — the month
      * asked for (this one by default) plus any earlier month still unpaid.
      */
-    retainerBilling: (month?: string) =>
-      get<RetainerBillingResponse>(`/invoices/retainer-billing${month ? `?month=${month}` : ''}`),
+    retainerBilling: (month?: string, retainerId?: string) => {
+      const q = new URLSearchParams();
+      if (month) q.set('month', month);
+      // Every month of one retainer, for its own page.
+      if (retainerId) q.set('retainerId', retainerId);
+      const qs = q.toString();
+      return get<RetainerBillingResponse>(`/invoices/retainer-billing${qs ? `?${qs}` : ''}`);
+    },
     /**
      * Retainer months carrying no invoice — the billing work list.
      *

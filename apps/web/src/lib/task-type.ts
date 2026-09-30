@@ -17,6 +17,7 @@ export const TASK_TYPE_OPTIONS = [
   { value: 'BUSINESS_DEVELOPMENT', label: 'Business Development' },
   { value: 'ACCOUNTS', label: 'Accounts' },
   { value: 'MANAGEMENT', label: 'Management' },
+  { value: 'OTHER', label: 'Other' },
 ];
 
 /** Null for an unset type, so a caller can decide whether to show the row at all. */

@@ -201,18 +201,26 @@ invoicesRouter.get('/retainer-billing', requirePermission('money.figures'), asyn
     const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const asked = typeof req.query.month === 'string' ? req.query.month : '';
     const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(asked) ? asked : thisMonth;
+    /*
+     * One retainer, every month — the retainer page's Billing tab. The same
+     * rows and steps as the board, so the two can never disagree about where a
+     * month has got to.
+     */
+    const retainerId = typeof req.query.retainerId === 'string' && req.query.retainerId ? req.query.retainerId : null;
 
     const cards = await prisma.monthCard.findMany({
-      where: {
-        retainer: { organizationId: orgId },
-        OR: [
-          { month },
-          {
-            month: { lt: month },
-            OR: [{ invoiceId: null }, { invoice: { is: { status: { notIn: [InvoiceStatus.PAID, InvoiceStatus.CANCELLED] } } } }],
+      where: retainerId
+        ? { retainer: { organizationId: orgId, id: retainerId } }
+        : {
+            retainer: { organizationId: orgId },
+            OR: [
+              { month },
+              {
+                month: { lt: month },
+                OR: [{ invoiceId: null }, { invoice: { is: { status: { notIn: [InvoiceStatus.PAID, InvoiceStatus.CANCELLED] } } } }],
+              },
+            ],
           },
-        ],
-      },
       include: {
         retainer: {
           select: {
@@ -288,7 +296,9 @@ invoicesRouter.get('/retainer-billing', requirePermission('money.figures'), asyn
         return {
           monthCardId: c.id,
           month: c.month,
-          earlier: c.month < month,
+          // On the board: before the month asked for. For one retainer: a
+          // month that has passed and is still not paid.
+          earlier: retainerId ? c.month < thisMonth && step !== 'DONE' && step !== 'NOT_YET' : c.month < month,
           retainerId: c.retainer.id,
           retainerStopped: c.retainer.status === 'STOPPED',
           companyId: c.retainer.company.id,
@@ -321,7 +331,12 @@ invoicesRouter.get('/retainer-billing', requirePermission('money.figures'), asyn
           step,
         };
       })
-      .sort((a, b) => (a.month === b.month ? a.companyName.localeCompare(b.companyName) : a.month < b.month ? -1 : 1));
+      .sort((a, b) =>
+        a.month === b.month
+          ? a.companyName.localeCompare(b.companyName)
+          : // One retainer's history reads newest first; the board, oldest owed first.
+            (a.month < b.month ? -1 : 1) * (retainerId ? -1 : 1),
+      );
 
     const count = (step: string) => rows.filter((r) => r.step === step).length;
     res.json({

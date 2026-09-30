@@ -24,6 +24,8 @@ import { presetLabel } from '@/lib/people';
 import { KeyRound, Package, Pencil, Plus, ShieldCheck, UserMinus } from 'lucide-react';
 import { EditMemberModal } from '@/components/work/EditMemberModal';
 import { useConfig } from '@/hooks/queries';
+import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
+import { ApprovalsReport } from '@/components/work/ApprovalsReport';
 
 interface TeamMember {
   id: string;
@@ -69,6 +71,18 @@ export default function MembersPage() {
   // and holding the row would mean rendering yesterday's counts beside today's
   // task list.
   const [openMemberId, setOpenMemberId] = useState<string | null>(null);
+
+  /*
+   * Two views of the team. Team is the delivery table below, unchanged;
+   * Approvals is where approvals get stuck (Plan 3). `?tab=approvals` links
+   * straight to it. The whole screen already needs `work.team`, which is the
+   * report's own gate, so there is nothing further to hide.
+   */
+  const tabs: TabDef<'team' | 'approvals'>[] = [
+    { key: 'team', label: 'Team' },
+    { key: 'approvals', label: 'Approvals' },
+  ];
+  const [tab, setTab] = useTabState(tabs);
 
   /**
    * Team capacity, cached per department filter.
@@ -119,10 +133,16 @@ export default function MembersPage() {
    * while showing all fourteen people from seven departments — Priya simply
    * sorts first.
    */
-  usePageHeader('Team', deptFilter === 'ALL' ? 'All departments' : deptFilter);
+  usePageHeader('Team', tab === 'approvals' ? 'Approvals' : deptFilter === 'ALL' ? 'All departments' : deptFilter);
 
   return (
     <div className="page-shell">
+      <Tabs className="mb-6" tabs={tabs} active={tab} onChange={setTab} />
+
+      {tab === 'approvals' && <ApprovalsReport />}
+
+      {tab === 'team' && (
+      <>
       {loadError && (
         <div className="mb-6">
           {/*
@@ -361,6 +381,8 @@ export default function MembersPage() {
       </div>
 
       <MemberDrawer memberId={openMemberId} onClose={() => setOpenMemberId(null)} />
+      </>
+      )}
 
       {assigningTo && (
         <AssignTaskModal

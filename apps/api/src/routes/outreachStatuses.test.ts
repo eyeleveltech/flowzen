@@ -329,18 +329,13 @@ describe('a lead must be reachable', () => {
 });
 
 /**
- * Promoting a lead puts it on the pipeline board.
+ * Promoting a lead makes a company, and nothing on the pipeline.
  *
- * It used to create a company and stop, so a lead you had met and were about
- * to quote appeared nowhere on the board — the pipeline began when somebody
- * wrote the proposal, which is after the part that needs chasing.
- *
- * The stage it lands in is deliberately not the TALKING stage that was removed.
- * TALKING was created automatically for every company, so the board filled with
- * empty proposals nobody asked for, which could not be advanced and had to be
- * deleted by hand. This happens only on a deliberate promote.
+ * It used to drop an empty proposal at Prospect as well — no version, no
+ * value, kind guessed — and every one had to be deleted by hand. The pipeline
+ * starts when somebody writes the proposal.
  */
-describe('promotion reaches the pipeline', () => {
+describe('promotion', () => {
   const promote = (body: Record<string, unknown> = {}) =>
     request(app).post('/api/outreach/lead-1/promote').set(...auth()).send({ city: 'Chennai', ...body });
 
@@ -349,36 +344,16 @@ describe('promotion reaches the pipeline', () => {
     (prisma.outreachEntry.findFirst as any).mockResolvedValue(lead({ status: OutreachStatus.INTERESTED }));
   });
 
-  it('creates the deal at Prospect, against the new company', async () => {
+  it('makes the company and no proposal — the pipeline starts when one is written', async () => {
+    // It used to drop an empty deal at Prospect that had to be deleted by hand.
     const res = await promote({});
     expect(res.status).toBe(201);
-    expect(written.proposal).toMatchObject({
-      stage: 'PROSPECT',
-      companyId: 'co-new',
-    });
+    expect(written.proposal).toBeUndefined();
+    expect(prisma.proposal.create).not.toHaveBeenCalled();
   });
 
-  it('gives it no version, so it carries no value', async () => {
-    // A promoted lead has no quote. The deal weights at zero until a proposal
-    // is written against it, which is what moving it to Proposal Sent does —
-    // the whole reason the stage that came before this one had to go.
-    await promote({});
-    expect(written.proposal.versions).toBeUndefined();
-  });
-
-  it('defaults to a retainer, and takes the kind when one is given', async () => {
-    // Outreach has no field for retainer-or-project, so it cannot carry
-    // forward; the studio's work is mostly retainers.
-    await promote({});
-    expect(written.proposal.kind).toBe('RETAINER');
-
-    await promote({ kind: 'PROJECT' });
-    expect(written.proposal.kind).toBe('PROJECT');
-  });
-
-  it('puts it with whoever owns the company', async () => {
+  it('puts the company with whoever is named as owner', async () => {
     await promote({ ownerId: 'usr-other' });
-    expect(written.proposal.ownerId).toBe('usr-other');
     expect(written.company.ownerId).toBe('usr-other');
   });
 });

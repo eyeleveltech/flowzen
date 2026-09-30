@@ -273,3 +273,24 @@ describe("the approver's queue", () => {
     });
   });
 });
+
+// ── No type of work needed ──────────────────────────────────────────────────
+
+describe('needs approval without a type', () => {
+  it('is allowed, and is filed as Other — the same approvers cover all work', async () => {
+    const { approvalFlagRefusal, approvalType } = await import('../services/taskApprovals.js');
+    expect(approvalType(null)).toBe('OTHER');
+    expect(approvalType('VIDEO' as any)).toBe('VIDEO');
+    // Somebody approves (the default mock): no refusal, and the pool asked for is Other's.
+    expect(await approvalFlagRefusal('org-1', null, true)).toBeNull();
+    expect((prisma.taskApprover.findMany as any).mock.calls.at(-1)[0].where.taskType).toBe('OTHER');
+  });
+
+  it('is refused only when nobody approves at all', async () => {
+    const { approvalFlagRefusal } = await import('../services/taskApprovals.js');
+    (prisma.taskApprover.findMany as any).mockResolvedValue([]);
+    expect(await approvalFlagRefusal('org-1', null, true)).toBe(
+      'Nobody is set to approve work yet. Set the approvers in Settings → Approvals.',
+    );
+  });
+});

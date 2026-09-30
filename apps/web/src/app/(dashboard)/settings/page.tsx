@@ -70,7 +70,7 @@ const GROUPS = [
     label: 'People & kit',
     tabs: [
       { key: 'team', label: 'Team', caption: 'Who is here' },
-      { key: 'approvals', label: 'Approvals', caption: 'Who signs off each type' },
+      { key: 'approvals', label: 'Approvals', caption: 'Who signs off work' },
       { key: 'assets', label: 'Assets', caption: 'Tags and depreciation' },
       { key: 'onboarding', label: 'Onboarding', caption: 'What a new client needs' },
     ],

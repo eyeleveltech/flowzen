@@ -969,6 +969,9 @@ enum TaskType {
   BUSINESS_DEVELOPMENT
   ACCOUNTS
   MANAGEMENT
+  /// Work that is none of the above. Also what a task needing approval is
+  /// filed under when nobody picked a type — approval no longer asks for one.
+  OTHER
 }
 
 enum TaskStatus {

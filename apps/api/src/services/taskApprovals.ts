@@ -22,7 +22,18 @@ export const TASK_TYPE_LABEL: Record<TaskType, string> = {
   BUSINESS_DEVELOPMENT: 'Business Development',
   ACCOUNTS: 'Accounts',
   MANAGEMENT: 'Management',
+  OTHER: 'Other',
 };
+
+/**
+ * The type a task needing approval is filed under.
+ *
+ * Approval used to demand a type first ("Pick a task type first"). The same
+ * approvers now cover all work, so the type is no longer the question —
+ * a task ticked for approval with no type is filed as Other and goes to the
+ * same people.
+ */
+export const approvalType = (taskType: TaskType | null | undefined): TaskType => taskType ?? TaskType.OTHER;
 
 /**
  * Who can approve this type of task — active people only.
@@ -107,12 +118,10 @@ export async function approvalFlagRefusal(
   needsApproval: boolean,
 ): Promise<string | null> {
   if (!needsApproval) return null;
-  if (!taskType) {
-    return 'Pick a task type first — approval goes to the approvers set for that type.';
-  }
-  const pool = await approverIds(orgId, taskType);
+  const type = approvalType(taskType);
+  const pool = await approverIds(orgId, type);
   if (pool.length === 0) {
-    return `No approvers set for ${TASK_TYPE_LABEL[taskType]}. Set them in Settings → Approvals.`;
+    return 'Nobody is set to approve work yet. Set the approvers in Settings → Approvals.';
   }
   return null;
 }

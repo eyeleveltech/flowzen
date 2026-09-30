@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
 import { loadWorkCalendar, workingMinutesOn } from '../utils/workCalendar.js';
 import { LAST_REVIEW } from '../services/taskApprovals.js';
+import { composeApprovalsReport } from '../services/approvalsReport.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
 
@@ -199,6 +200,30 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
 // carry both, and a task with neither is internal. Resolving both here rather
 // than in the browser keeps the two shapes from leaking into the UI as a pair
 // of optional fields nobody remembers to handle.
+
+// ── Approvals report ────────────────────────────────────────────────────────
+//
+// The Team screen's Approvals tab: where approvals get stuck. Heads and
+// management — `work.team`, the screen's own gate. The last 7 days by default,
+// or 30; the "waiting now" list is live whatever the period. Declared before
+// `/:id` so the path is not read as somebody's id.
+
+teamRouter.get('/approvals-report', requirePermission('work.team'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const raw = req.query.days;
+    const days = raw === undefined ? 7 : Number(raw);
+    if (days !== 7 && days !== 30) {
+      res.status(400).json({ success: false, error: 'Choose the last 7 or the last 30 days.' });
+      return;
+    }
+    const to = new Date();
+    const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
+    const report = await composeApprovalsReport(req.user!.organizationId, { from, to }, to);
+    res.json({ success: true, ...report, period: { ...report.period, days } });
+  } catch (error) {
+    next(error);
+  }
+});
 
 teamRouter.get('/:id', requirePermission('work.team'), async (req: AuthRequest, res: Response, next) => {
   try {

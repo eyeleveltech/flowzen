@@ -8,6 +8,7 @@
  * nobody finds it again.
  */
 
+import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function Table({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -37,6 +38,52 @@ export function TH({
 }) {
   return (
     <th className={cn('px-4 py-2.5 font-medium', numeric && 'text-right', className)}>{children}</th>
+  );
+}
+
+export type SortDir = 'asc' | 'desc';
+
+/**
+ * A column header you can click to sort by.
+ *
+ * The first click sorts ascending, the next descending. The arrow says which
+ * column the list is sorted by and which way; the faint double arrow on the
+ * others says they can be. `aria-sort` tells a screen reader the same thing.
+ */
+export function SortableTH<K extends string>({
+  label,
+  column,
+  sort,
+  onSort,
+  align = 'left',
+}: {
+  label: string;
+  column: K;
+  sort: { key: K; dir: SortDir };
+  onSort: (column: K) => void;
+  align?: 'left' | 'right';
+}) {
+  const active = sort.key === column;
+  const Icon = !active ? ChevronsUpDown : sort.dir === 'asc' ? ArrowUp : ArrowDown;
+  return (
+    <th
+      className={cn('eyebrow', align === 'right' ? 'text-right' : 'text-left')}
+      aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(column)}
+        title={`Sort by ${label.toLowerCase()}`}
+        className={cn(
+          'eyebrow inline-flex items-center gap-1 rounded-sm outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/40',
+          active && 'text-primary',
+          align === 'right' && 'flex-row-reverse',
+        )}
+      >
+        {label}
+        <Icon className={cn('h-3 w-3 shrink-0', !active && 'opacity-40')} aria-hidden="true" />
+      </button>
+    </th>
   );
 }
 

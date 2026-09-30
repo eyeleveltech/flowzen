@@ -9,6 +9,7 @@ import { defaultProjectId } from '../services/retainerProjects.js';
 import { TaskStatus, TaskWorkType, WaitingOn, Priority, TaskType, ReviewDecision } from '@prisma/client';
 import {
   approvalFlagRefusal,
+  approvalType,
   approveRefusal,
   approverFor,
   approverIds,
@@ -642,11 +643,34 @@ tasksRouter.get('/targets', requirePermission('work.own'), async (req: AuthReque
   }
 });
 
+/**
+ * The columns All tasks can be sorted by, and the order statuses sort in: the
+ * order work moves through, not the alphabet.
+ */
+const ALL_SORTS = ['assigned', 'task', 'for', 'who', 'due', 'status', 'elapsed'] as const;
+type AllSort = (typeof ALL_SORTS)[number];
+const STATUS_SORT_ORDER: string[] = [
+  TaskStatus.TODO,
+  TaskStatus.IN_PROGRESS,
+  TaskStatus.IN_REVIEW,
+  TaskStatus.ON_HOLD,
+  TaskStatus.DONE,
+  TaskStatus.CANCELLED,
+];
+
 tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
     const { assigneeId, dept, status, overdue, q, companyId, project } = req.query;
     const wantsCsv = req.query.format === 'csv';
+    /*
+     * Which column the list is sorted by — due date, oldest first, unless a
+     * header was clicked. Sorted here rather than in the browser because the
+     * list is capped: the database has to hand back the RIGHT 500, and the CSV
+     * has to come out in the order on screen.
+     */
+    const sortBy: AllSort = ALL_SORTS.includes(req.query.sort as AllSort) ? (req.query.sort as AllSort) : 'due';
+    const sortDir: 'asc' | 'desc' = req.query.dir === 'desc' ? 'desc' : 'asc';
 
     /*
      * Filters that stack rather than overwrite each other.
@@ -754,8 +778,15 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
     const tasks = await prisma.task.findMany({
       where,
       // Oldest due first: the point of the screen is what is late, and a list
-      // that opens on next month's work buries it.
-      orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
+      // that opens on next month's work buries it. A column the database holds
+      // is sorted by it here, so the cap keeps the right rows; the worked-out
+      // ones (client, person, status order, elapsed) are sorted below.
+      orderBy:
+        sortBy === 'assigned'
+          ? [{ assignedAt: sortDir }, { dueDate: 'asc' }]
+          : sortBy === 'task'
+            ? [{ title: sortDir }, { dueDate: 'asc' }]
+            : [{ dueDate: sortBy === 'due' ? sortDir : 'asc' }, { createdAt: 'desc' }],
       take: wantsCsv ? 5000 : 500,
       include: {
         monthCard: { include: { retainer: { include: { company: true } } } },
@@ -846,7 +877,40 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
     // Applied after formatting, because "overdue" is a question about the
     // calendar and the status together rather than a column to filter on.
     const withEscalation = await withEscalatedTo(orgId, formatted);
-    const rows = overdue === '1' || overdue === 'true' ? withEscalation.filter((t) => t.isOverdue) : withEscalation;
+    const filteredRows = overdue === '1' || overdue === 'true' ? withEscalation.filter((t) => t.isOverdue) : withEscalation;
+
+    // The clicked column, then due date and title so equal rows keep a steady
+    // order. Blanks (nobody on it, never assigned) go last either way.
+    const sortValue = (t: (typeof filteredRows)[number]): string | number | null => {
+      switch (sortBy) {
+        case 'assigned':
+          return t.assignedAt ? new Date(t.assignedAt).getTime() : null;
+        case 'task':
+          return t.title.toLowerCase();
+        case 'for':
+          return `${t.clientName} ${t.projectName ?? ''}`.toLowerCase();
+        case 'who':
+          return t.assignees[0]?.name.toLowerCase() ?? null;
+        case 'status':
+          return STATUS_SORT_ORDER.indexOf(t.status);
+        case 'elapsed':
+          return t.workingMinutes;
+        default:
+          return new Date(t.dueDate).getTime();
+      }
+    };
+    const sign = sortDir === 'desc' ? -1 : 1;
+    const rows = [...filteredRows].sort((a, b) => {
+      const va = sortValue(a);
+      const vb = sortValue(b);
+      if (va !== vb) {
+        if (va == null) return 1;
+        if (vb == null) return -1;
+        const byColumn = typeof va === 'string' ? va.localeCompare(String(vb)) : va - (vb as number);
+        if (byColumn !== 0) return byColumn * sign;
+      }
+      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime() || a.title.localeCompare(b.title);
+    });
 
     if (wantsCsv) {
       const csv = toCsv(rows, [
@@ -1183,7 +1247,8 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
     const { title, workType, workId, monthCardId, projectId, retainerProjectId, internalProjectId, companyId, assigneeId, assigneeIds, assignedById, reviewerId, taskType, needsApproval, dueDate, priority, notes } =
       parsed.data;
 
-    // Approval needs a type, and the type needs somebody to approve it.
+    // Approval needs somebody to approve it. No type picked is fine: the task
+    // is filed as Other, which has the same approvers as all work.
     const approvalRefused = await approvalFlagRefusal(orgId, taskType, needsApproval ?? false);
     if (approvalRefused) {
       res.status(400).json({ success: false, error: approvalRefused });
@@ -1363,7 +1428,7 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
          */
         assignedById: assignedById || null,
         reviewerId: reviewerId || null,
-        taskType: taskType ?? null,
+        taskType: needsApproval ? approvalType(taskType) : (taskType ?? null),
         needsApproval: needsApproval ?? false,
         dueDate: new Date(dueDate),
         assignedAt: new Date(),
@@ -1489,7 +1554,9 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
       return;
     }
     const nextNeedsApproval = needsApproval ?? existing.needsApproval;
-    const nextType = taskType !== undefined ? taskType : existing.taskType;
+    // Needing approval with no type picked is filed as Other.
+    const pickedType = taskType !== undefined ? taskType : existing.taskType;
+    const nextType = nextNeedsApproval ? approvalType(pickedType) : pickedType;
     if (nextNeedsApproval && (typeChanging || approvalChanging)) {
       const refused = await approvalFlagRefusal(orgId, nextType, true);
       if (refused) {
@@ -1608,7 +1675,7 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
         ...(nextPeople ? { assigneeId: nextPeople[0] } : {}),
         ...(assignedById !== undefined ? { assignedById } : {}),
         ...(reviewerId !== undefined ? { reviewerId } : {}),
-        ...(taskType !== undefined ? { taskType } : {}),
+        ...(taskType !== undefined || nextType !== existing.taskType ? { taskType: nextType } : {}),
         ...(needsApproval !== undefined ? { needsApproval } : {}),
         ...(dueDate !== undefined ? { dueDate: new Date(dueDate) } : {}),
         ...(priority !== undefined ? { priority } : {}),

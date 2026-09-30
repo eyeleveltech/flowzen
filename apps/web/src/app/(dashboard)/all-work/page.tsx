@@ -24,7 +24,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { api, fileUrl, formatDate } from '@/lib/api-v2';
 import { useConfig, useTeamMembers } from '@/hooks/queries';
@@ -37,6 +37,7 @@ import { Button } from '@/components/ui/button';
 import { ExportCsvButton } from '@/components/ui/export-csv-button';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { TableRowsSkeleton } from '@/components/ui/skeleton-loaders';
+import { SortableTH, type SortDir } from '@/components/ui/table';
 import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
 import { getInitials, getAvatarColor } from '@/lib/utils';
 import { personOption } from '@/lib/people';
@@ -71,6 +72,10 @@ const STATUS_TONE: Record<string, string> = {
   DONE: 'border-success/30 text-success bg-success-tint',
   CANCELLED: 'border-border text-secondary',
 };
+
+/** The columns a click on the header sorts by — the server's names for them. */
+type SortKey = 'assigned' | 'task' | 'for' | 'who' | 'due' | 'status' | 'elapsed';
+const DEFAULT_SORT: { key: SortKey; dir: SortDir } = { key: 'due', dir: 'asc' };
 
 type Task = {
   id: string;
@@ -111,6 +116,11 @@ export default function AllWorkPage() {
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [q, setQ] = useState('');
   const [openTask, setOpenTask] = useState<Task | null>(null);
+  // Due date, oldest first, until a header is clicked. Clicking the same
+  // header again flips it.
+  const [sort, setSort] = useState(DEFAULT_SORT);
+  const sortBy = (key: SortKey) =>
+    setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }));
 
   /*
    * The filters ARE the query key.
@@ -129,13 +139,20 @@ export default function AllWorkPage() {
     if (statuses.length > 0) p.status = statuses.join(',');
     if (overdueOnly) p.overdue = '1';
     if (q.trim()) p.q = q.trim();
+    if (sort.key !== DEFAULT_SORT.key || sort.dir !== DEFAULT_SORT.dir) {
+      p.sort = sort.key;
+      p.dir = sort.dir;
+    }
     return p;
-  }, [assigneeIds, depts, clients, projects, statuses, overdueOnly, q]);
+  }, [assigneeIds, depts, clients, projects, statuses, overdueOnly, q, sort]);
 
-  const { data, isPending, error, refetch } = useQuery({
+  const { data, isPending, isPlaceholderData, error, refetch } = useQuery({
     queryKey: ['all-work', params],
     queryFn: () => api.tasks.all(params),
     staleTime: 30_000,
+    // The rows stay on screen while a new sort or filter loads, rather than
+    // blanking to a skeleton on every click.
+    placeholderData: keepPreviousData,
   });
 
   const tasks = (data?.tasks ?? []) as Task[];
@@ -293,17 +310,17 @@ export default function AllWorkPage() {
           <table className="w-full data-table">
             <thead>
               <tr className="border-b border-border bg-subtle">
-                <th className="eyebrow text-left">Assigned</th>
-                <th className="eyebrow text-left">Task</th>
-                <th className="eyebrow text-left">For</th>
-                <th className="eyebrow text-left">Who</th>
-                <th className="eyebrow text-left">Due</th>
-                <th className="eyebrow text-left">Status</th>
-                <th className="eyebrow text-right">Elapsed</th>
+                <SortableTH label="Assigned" column="assigned" sort={sort} onSort={sortBy} />
+                <SortableTH label="Task" column="task" sort={sort} onSort={sortBy} />
+                <SortableTH label="For" column="for" sort={sort} onSort={sortBy} />
+                <SortableTH label="Who" column="who" sort={sort} onSort={sortBy} />
+                <SortableTH label="Due" column="due" sort={sort} onSort={sortBy} />
+                <SortableTH label="Status" column="status" sort={sort} onSort={sortBy} />
+                <SortableTH label="Elapsed" column="elapsed" sort={sort} onSort={sortBy} align="right" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
-              {isPending && <TableRowsSkeleton rows={6} cols={6} />}
+            <tbody className={`divide-y divide-border transition-opacity ${isPlaceholderData ? 'opacity-60' : ''}`}>
+              {isPending && <TableRowsSkeleton rows={6} cols={7} />}
               {!isPending && tasks.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-5 py-12 text-center text-sm text-secondary">

@@ -194,6 +194,81 @@ export function RetainerBillingBoard() {
   );
 }
 
+/**
+ * One retainer's billing, every month — its page's Billing tab.
+ *
+ * The board is the month across every client; this is the client across every
+ * month, so "has Carlton paid for August?" is answered on Carlton's retainer
+ * without going to Money and paging back. Same rows, same buttons, newest
+ * month first.
+ */
+export function RetainerBillingHistory({ retainerId, onChanged }: { retainerId: string; onChanged?: () => void }) {
+  const queryClient = useQueryClient();
+  const { data, isPending, error, refetch } = useQuery({
+    queryKey: ['retainer-billing', 'retainer', retainerId],
+    queryFn: () => api.invoices.retainerBilling(undefined, retainerId),
+  });
+  const rows = data?.rows ?? [];
+  const summary = data?.summary;
+
+  const changed = () => {
+    void refetch();
+    void queryClient.invalidateQueries({ queryKey: ['invoices'] });
+    void queryClient.invalidateQueries({ queryKey: ['retainer-billing'] });
+    onChanged?.();
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-secondary">
+          {rows[0] ? BILLING_LABEL[rows[0].billing] : 'Every month of this retainer'} · Proforma → Invoice → Paid
+        </p>
+        {summary && (
+          <p className="text-xs text-secondary">
+            <b className="text-primary">{summary.toRaise}</b> to raise ·{' '}
+            <b className="text-primary">{summary.awaitingInvoice}</b> waiting on the client ·{' '}
+            <b className="text-primary">{summary.awaitingPayment}</b> invoiced, unpaid ·{' '}
+            <b className="text-primary">{money(summary.outstanding)}</b> still to come in
+          </p>
+        )}
+      </div>
+
+      {error && <ErrorNote onDismiss={() => void refetch()}>{error instanceof Error ? error.message : 'Could not load billing'}</ErrorNote>}
+
+      <div className="overflow-hidden rounded-xl border border-border">
+        <div className="overflow-x-auto">
+          <table className="data-table w-full">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="eyebrow text-left">Month</th>
+                <th className="eyebrow text-right">Fee</th>
+                <th className="eyebrow text-left">Proforma</th>
+                <th className="eyebrow text-left">Invoice</th>
+                <th className="eyebrow text-right">Received</th>
+                <th className="eyebrow" aria-label="Next step" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {isPending ? (
+                <TableRowsSkeleton cols={6} />
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-14 text-center text-sm text-secondary">
+                    No months yet — the first one is created on the retainer's start date.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((r) => <BoardRow key={r.monthCardId} r={r} onChanged={changed} showClient={false} />)
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function GroupHeading({ label }: { label: string }) {
   return (
     <tr className="bg-surface">
@@ -212,24 +287,35 @@ const PF_TONE: Record<string, 'good' | 'warn' | 'bad' | 'neutral'> = {
 };
 const PF_WORD: Record<string, string> = { UNPAID: 'Unpaid', PAID: 'Paid', EXPIRED: 'Expired', CANCELLED: 'Cancelled' };
 
-function BoardRow({ r, onChanged }: { r: RetainerBillingRow; onChanged: () => void }) {
+function BoardRow({
+  r,
+  onChanged,
+  showClient = true,
+}: {
+  r: RetainerBillingRow;
+  onChanged: () => void;
+  /** Off on a retainer's own page, where every row is the same client. */
+  showClient?: boolean;
+}) {
   const overdue =
     r.invoice && r.invoice.status !== 'PAID' && r.invoice.status !== 'CANCELLED' && new Date(r.invoice.dueAt) < new Date();
 
   return (
     <tr className="transition-colors hover:bg-subtle">
-      <td>
-        <Link
-          href={`/companies/${r.companyId}?tab=MONEY`}
-          className="font-medium text-primary underline-offset-2 hover:underline"
-        >
-          {r.companyName}
-        </Link>
-        <span className="block text-micro text-secondary">
-          {BILLING_LABEL[r.billing]}
-          {r.retainerStopped ? ' · retainer ended' : ''}
-        </span>
-      </td>
+      {showClient && (
+        <td>
+          <Link
+            href={`/companies/${r.companyId}?tab=MONEY`}
+            className="font-medium text-primary underline-offset-2 hover:underline"
+          >
+            {r.companyName}
+          </Link>
+          <span className="block text-micro text-secondary">
+            {BILLING_LABEL[r.billing]}
+            {r.retainerStopped ? ' · retainer ended' : ''}
+          </span>
+        </td>
+      )}
       <td className="whitespace-nowrap text-secondary">
         {monthLabel(r.month)}
         {r.earlier && <span className="block text-micro font-medium text-warning-ink">still owed</span>}

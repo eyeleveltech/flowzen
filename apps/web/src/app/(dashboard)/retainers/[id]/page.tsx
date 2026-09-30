@@ -65,6 +65,7 @@ import { NewWorkCostModal } from '@/components/work/NewWorkCostModal';
 import { EditCostModal } from '@/components/work/EditCostModal';
 import { RecordPaymentModal } from '@/components/work/RecordPaymentModal';
 import { RetainerBillingStrip, type BillingSubject } from '@/components/work/RetainerBilling';
+import { RetainerBillingHistory } from '@/components/work/RetainerBillingBoard';
 import { billingStepFor } from '@/lib/retainerBilling';
 import { getPriorityDot, getPriorityLabel } from '@/lib/priority';
 
@@ -241,7 +242,7 @@ export default function RetainerMonthCardPage() {
    * costs on this month card" is a link somebody can send. The month was
    * already addressable; the tab was not.
    */
-  const tabs: TabDef<'projects' | 'costs' | 'allocations' | 'invoice'>[] = [
+  const tabs: TabDef<'projects' | 'costs' | 'allocations' | 'invoice' | 'billing'>[] = [
     /*
      * Projects first, and they are how you reach the work.
      *
@@ -265,6 +266,16 @@ export default function RetainerMonthCardPage() {
     },
     { key: 'allocations', label: 'Allocations', count: monthCard?.allocations.length ?? 0 },
     { key: 'invoice', label: 'Invoice' },
+    /*
+     * Every month's billing at once — proforma, invoice, paid — with the same
+     * buttons as Money → Retainer billing. The other tabs are one month; this
+     * one is the whole retainer, so the month pill does not scope it.
+     */
+    {
+      key: 'billing',
+      label: 'Billing',
+      visible: (config?.me.permissions ?? []).includes('money.figures'),
+    },
   ];
   const [tab, setTab] = useTabState(tabs);
   const [addingTask, setAddingTask] = useState(false);
@@ -1041,13 +1052,17 @@ export default function RetainerMonthCardPage() {
 
       {tab === 'projects' && ProjectsPanel()}
 
+      {tab === 'billing' && (
+        <RetainerBillingHistory retainerId={retainer.id} onChanged={() => void loadMonthCard()} />
+      )}
+
       {/*
         Costs, allocations and the invoice belong to ONE month — they are the
         billing side, and the month pill in the header is what scopes them.
         Projects do not: a campaign runs across months, so its panel is
         outside this guard and works on a month with no card at all.
       */}
-      {tab !== 'projects' &&
+      {tab !== 'projects' && tab !== 'billing' &&
         (loadingMonth ? (
           <PageSkeleton />
         ) : !monthCard ? (
