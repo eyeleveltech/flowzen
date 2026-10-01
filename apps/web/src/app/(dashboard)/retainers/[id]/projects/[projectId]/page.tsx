@@ -141,7 +141,7 @@ export default function RetainerProjectPage() {
   /** Every task in view, carrying the month it is billed on. */
   const scoped = projectMonths
     .filter((g) => allMonths || g.month === month)
-    .flatMap((g) => g.tasks.map((task) => ({ task, month: g.month, closed: g.status === 'CLOSED' })));
+    .flatMap((g) => g.tasks.map((task) => ({ task, month: g.month })));
 
   const lateCount = scoped.filter((r) => isTaskLate(r.task, todayStr)).length;
 
@@ -266,8 +266,8 @@ export default function RetainerProjectPage() {
             variant="secondary"
             icon={Plus}
             onClick={() => setAddingTask(true)}
-            disabled={!monthCardId || monthClosed}
-            title={monthClosed ? `${monthLabel(month)} is closed` : undefined}
+            // A closed month still takes tasks; only its costs are locked.
+            disabled={!monthCardId}
           >
             Task
           </Button>
@@ -395,7 +395,7 @@ export default function RetainerProjectPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {visible.map(({ task: t, month: m, closed }) => {
+                  {visible.map(({ task: t, month: m }) => {
                     const late = isTaskLate(t, todayStr);
                     return (
                       <tr
@@ -458,7 +458,7 @@ export default function RetainerProjectPage() {
                           <Select
                             aria-label={`Status for ${t.title}`}
                             value={t.status}
-                            disabled={closed || busyId === t.id}
+                            disabled={busyId === t.id}
                             onChange={(v) => void changeStatus(t, v as TaskStatusValue)}
                             options={statusChoices(TASK_STATUS_OPTIONS, t)}
                           />

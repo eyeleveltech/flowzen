@@ -12,8 +12,10 @@ import { prisma } from '../lib/prisma.js';
  * rewrote a number that had already been reported, with no trace on the screen
  * that showed it.
  *
- * This is the one place that answers "may I still write to this month?", so
- * the costs routes and the task routes cannot drift apart on it.
+ * This is the one place that answers "may I still write to this month?" for
+ * money: the costs routes use it. Tasks used to as well and no longer do — a
+ * task carries no figure, and locking it only stopped late work being
+ * finished (see the task create route).
  *
  * Reopening is deliberately a separate, deliberate act (POST
  * /retainers/:id/month-cards/:month/reopen) rather than something that happens

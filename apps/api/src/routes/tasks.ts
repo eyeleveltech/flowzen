@@ -4,7 +4,6 @@ import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, hasPermission, type AuthRequest } from '../middleware/auth.js';
 import { loadWorkCalendar, workingMinutesOn } from '../utils/workCalendar.js';
 import { computeTaskTypeMedians, taskTypeGroupKey } from '../utils/taskTypeMedian.js';
-import { monthCardRefusal } from '../utils/monthCardOpen.js';
 import { defaultProjectId } from '../services/retainerProjects.js';
 import { TaskStatus, TaskWorkType, WaitingOn, Priority, TaskType, ReviewDecision } from '@prisma/client';
 import {
@@ -1286,13 +1285,16 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
 
     const resolvedMonthCardId = monthCardId || (workType === 'MONTH_CARD' ? workId : null);
 
-    // A closed month has had its profit reported; adding work to it now moves
-    // a figure somebody has already acted on.
-    const monthClosed = await monthCardRefusal(resolvedMonthCardId, 'Adding a task to it');
-    if (monthClosed) {
-      res.status(400).json({ success: false, error: monthClosed });
-      return;
-    }
+    /*
+     * A closed month does not lock its tasks.
+     *
+     * It did: adding, editing, finishing, deleting or sending a task for
+     * approval on a closed month was refused ("September 2026 is closed…"),
+     * so work that ran past the 1st — a video still being approved, a task
+     * somebody forgot to tick — could not be touched without reopening the
+     * month. A task carries no money; the month's profit is its fee and its
+     * costs, and the cost routes keep their lock.
+     */
 
     /*
      * A task's project and its month card have to belong to the same retainer.
@@ -1523,12 +1525,6 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
     const existing = await prisma.task.findFirst({ where: { id, organizationId: orgId, deletedAt: null } });
     if (!existing) {
       res.status(404).json({ success: false, error: 'Task not found' });
-      return;
-    }
-
-    const monthClosed = await monthCardRefusal(existing.monthCardId, 'Editing a task on it');
-    if (monthClosed) {
-      res.status(400).json({ success: false, error: monthClosed });
       return;
     }
 
@@ -1804,12 +1800,6 @@ tasksRouter.delete('/:id', requirePermission('work.own'), async (req: AuthReques
       return;
     }
 
-    const monthClosed = await monthCardRefusal(task.monthCardId, 'Removing a task from it');
-    if (monthClosed) {
-      res.status(400).json({ success: false, error: monthClosed });
-      return;
-    }
-
     if (task.completedAt || task.status === TaskStatus.DONE || task.status === TaskStatus.CANCELLED) {
       res.status(400).json({
         success: false,
@@ -1863,15 +1853,6 @@ tasksRouter.patch('/:id/status', requirePermission('work.own'), async (req: Auth
     const task = await prisma.task.findFirst({ where: { id, organizationId: orgId, deletedAt: null } });
     if (!task) {
       res.status(404).json({ success: false, error: 'Task not found' });
-      return;
-    }
-
-    // Reopening a finished task on a closed month is the sharpest version of
-    // the problem: it moves that month's "tasks done" after the fact and bumps
-    // the rework count the aging rules read.
-    const monthClosed = await monthCardRefusal(task.monthCardId, 'Changing a task on it');
-    if (monthClosed) {
-      res.status(400).json({ success: false, error: monthClosed });
       return;
     }
 
@@ -2100,11 +2081,6 @@ tasksRouter.post('/:id/submit-review', requirePermission('work.own'), async (req
       res.status(404).json({ success: false, error: 'Task not found' });
       return;
     }
-    const monthClosed = await monthCardRefusal(task.monthCardId, 'Changing a task on it');
-    if (monthClosed) {
-      res.status(400).json({ success: false, error: monthClosed });
-      return;
-    }
     if (!task.needsApproval) {
       res.status(400).json({ success: false, error: "This task doesn't need approval — mark it Done instead." });
       return;
@@ -2198,11 +2174,6 @@ async function decideReview(
   const task = await loadForApproval(orgId, id);
   if (!task) {
     res.status(404).json({ success: false, error: 'Task not found' });
-    return;
-  }
-  const monthClosed = await monthCardRefusal(task.monthCardId, 'Changing a task on it');
-  if (monthClosed) {
-    res.status(400).json({ success: false, error: monthClosed });
     return;
   }
 

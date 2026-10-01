@@ -90,7 +90,15 @@ describe('a closed month is a reported month', () => {
     expect(res.status).toBe(201);
   });
 
-  it('refuses a task added to it', async () => {
+  /*
+   * Tasks are not locked by a closed month.
+   *
+   * They were: a video still waiting on approval on the 1st, or a task
+   * somebody forgot to tick, could not be touched once the month closed. A
+   * task carries no money — the month's profit is its fee and its costs, and
+   * the cost refusal above stays.
+   */
+  it('does not refuse a task added to it', async () => {
     (prisma.user.findMany as any).mockResolvedValue([{ id: ADMIN.id }]);
     const res = await request(app)
       .post('/api/tasks')
@@ -102,16 +110,10 @@ describe('a closed month is a reported month', () => {
         dueDate: '2026-08-30',
       });
 
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/closed/i);
-    expect(prisma.task.create).not.toHaveBeenCalled();
+    expect(res.body.error ?? '').not.toMatch(/is closed/i);
   });
 
-  it('refuses reopening a task finished in it', async () => {
-    /*
-     * The sharpest version: reopening moves that month's "tasks done" after
-     * the fact AND bumps `reopenCount`, which the aging rules read as rework.
-     */
+  it('does not refuse changing a task on it', async () => {
     (prisma.task.findFirst as any).mockResolvedValue({
       id: 'task-1',
       organizationId: 'org-1',
@@ -126,9 +128,7 @@ describe('a closed month is a reported month', () => {
       .set(...auth())
       .send({ status: 'TODO' });
 
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/closed/i);
-    expect(prisma.task.update).not.toHaveBeenCalled();
+    expect(res.body.error ?? '').not.toMatch(/is closed/i);
   });
 
   it('can be reopened deliberately, with the reason on the record', async () => {

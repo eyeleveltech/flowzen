@@ -827,8 +827,9 @@ export default function RetainerMonthCardPage() {
               variant="secondary"
               icon={Plus}
               onClick={() => setAddingTask(true)}
-              disabled={!monthCard || monthClosed}
-              title={monthClosed ? `${monthLabel(month)} is closed` : undefined}
+              // A closed month still takes tasks — work runs past the 1st.
+              // Only costs are locked, because only costs move its profit.
+              disabled={!monthCard}
             >
               Task
           </Button>
