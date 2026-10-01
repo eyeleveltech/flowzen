@@ -51,6 +51,17 @@ export function httpFailure(opts: {
    * status. It names the parameter, not the data; the raw body never is.
    */
   if (status === 400) {
+    /*
+     * Anthropic's personal "user" keys (sk-ant-usr-…) are refused for every
+     * call — listing models and answering alike — with a note about workspaces
+     * that means nothing to the person in Settings. What they need is the
+     * other kind of key, so say which.
+     */
+    if (/not scoped to a workspace/i.test(body)) {
+      return new AssistantFailed(
+        `${label} won't take this kind of key. Use a standard API key — on console.anthropic.com it is under API keys and starts with sk-ant-api.`,
+      );
+    }
     if (/api.?key|credential|unauthor/i.test(body)) {
       return new AssistantFailed(`${label} refused that key. Check it in Settings → Zen.`);
     }

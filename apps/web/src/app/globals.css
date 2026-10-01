@@ -431,3 +431,283 @@
   .no-print { display: none !important; }
   @page { margin: 14mm; }
 }
+/*
+ * The calendar, drawn the way Google Calendar draws its own.
+ *
+ * Outside every @layer on purpose: FullCalendar injects its stylesheet
+ * unlayered, and an unlayered rule beats a layered one whatever its
+ * specificity — so these would lose to the stock look from inside @layer.
+ *
+ * Google's own palette, so it reads as the calendar everybody already knows:
+ * each layer is one of Google's event colours (`--gc`), items are solid
+ * colour with white words, today is the blue circle, the now-line is red.
+ * Overdue is Tomato on any layer; done is faded; a meeting you are not on is
+ * outlined; Google busy time is grey and striped.
+ */
+.gc {
+  --gc-blue: #1a73e8;
+  --gc-blue-tint: #e8f0fe;
+  --gc-line: #dadce0;
+  --gc-text: #3c4043;
+  --gc-muted: #70757a;
+  --gc-hover: #f1f3f4;
+  --gc-red: #ea4335;
+  --gc-off: #f8f9fa;
+  color: var(--gc-text);
+}
+
+/* Google's event colours, one per layer. */
+.gc-c-mine { --gc: #039be5; }      /* Peacock */
+.gc-c-events { --gc: #3f51b5; }    /* Blueberry */
+.gc-c-google { --gc: #616161; }    /* Graphite */
+.gc-c-team { --gc: #7986cb; }      /* Lavender */
+.gc-c-money { --gc: #f4511e; }     /* Tangerine */
+.gc-c-sales { --gc: #8e24aa; }     /* Grape */
+.gc-c-work { --gc: #33b679; }      /* Sage */
+.gc-c-equipment { --gc: #e67c73; } /* Flamingo */
+.gc-c-holidays { --gc: #0b8043; }  /* Basil */
+.gc-c-overdue { --gc: #d50000; }   /* Tomato */
+
+/* ── The chrome around the grid ── */
+.gc-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--gc-line);
+  border-radius: 9999px;
+  background: #fff;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--gc-text);
+  transition: background-color 120ms;
+}
+.gc-pill:hover { background: var(--gc-hover); }
+.gc-icon-btn {
+  display: inline-grid;
+  place-items: center;
+  border-radius: 9999px;
+  color: var(--gc-muted);
+  transition: background-color 120ms;
+}
+.gc-icon-btn:hover { background: var(--gc-hover); color: var(--gc-text); }
+.gc-pill:focus-visible,
+.gc-icon-btn:focus-visible,
+.gc-create:focus-visible,
+.gc-fab:focus-visible,
+.gc-menu-item:focus-visible { outline: 2px solid var(--gc-blue); outline-offset: 2px; }
+/* Create: flat and outlined, like Today — no shadow. */
+.gc-create {
+  border: 1px solid var(--gc-line);
+  transition: background-color 120ms;
+}
+.gc-create:hover { background: var(--gc-hover); }
+/* The phone's floating + keeps its lift: it sits over the calendar. */
+.gc-fab {
+  box-shadow: 0 1px 2px 0 rgb(60 64 67 / 0.3), 0 1px 3px 1px rgb(60 64 67 / 0.15);
+  transition: box-shadow 120ms, background-color 120ms;
+}
+.gc-fab:hover {
+  background: #f6fafe;
+  box-shadow: 0 1px 3px 0 rgb(60 64 67 / 0.3), 0 4px 8px 3px rgb(60 64 67 / 0.15);
+}
+.gc-create svg:first-child,
+.gc-fab svg { color: var(--gc-blue); }
+.gc-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  padding: 8px 16px;
+  font-size: 0.875rem;
+  color: var(--gc-text);
+  text-align: left;
+}
+.gc-menu-item:hover { background: var(--gc-hover); }
+.gc-menu-item-on { background: var(--gc-blue-tint); }
+.gc-spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  border: 2px solid var(--gc-line);
+  border-top-color: var(--gc-blue);
+  animation: gc-spin 0.8s linear infinite;
+}
+@keyframes gc-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .gc-spinner { animation: none; } }
+
+/* A layer's checkbox: its colour, filled when on. */
+.gc-check {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border: 2px solid var(--gc);
+  border-radius: 3px;
+  color: #fff;
+}
+.gc-check svg { opacity: 0; }
+.peer:checked + .gc-check { background: var(--gc); }
+.peer:checked + .gc-check svg { opacity: 1; }
+.peer:focus-visible + .gc-check { outline: 2px solid var(--gc-blue); outline-offset: 2px; }
+.gc-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--gc);
+}
+
+/* The little month. */
+.gc-mini-wd { color: var(--gc-muted); }
+.gc-mini-day { color: var(--gc-text); }
+.gc-mini-day:hover { background: var(--gc-hover); }
+.gc-mini-out { color: var(--gc-muted); }
+.gc-mini-shown { background: var(--gc-blue-tint); color: #185abc; }
+.gc-mini-today,
+.gc-mini-today:hover { background: var(--gc-blue); color: #fff; font-weight: 600; }
+
+/* ── The grid ── */
+.gc-surface {
+  background: #fff;
+  border-radius: 8px;
+}
+.gc .fc {
+  --fc-border-color: var(--gc-line);
+  --fc-page-bg-color: #fff;
+  --fc-neutral-bg-color: #fff;
+  --fc-neutral-text-color: var(--gc-muted);
+  --fc-today-bg-color: transparent;
+  --fc-highlight-color: var(--gc-blue-tint);
+  --fc-list-event-hover-bg-color: var(--gc-hover);
+  --fc-now-indicator-color: var(--gc-red);
+  --fc-event-border-color: transparent;
+  font-size: 0.75rem;
+}
+.gc .fc .fc-scrollgrid { border-color: transparent; }
+.gc .fc th { border-right-color: transparent; }
+.gc .fc .fc-col-header-cell { border-left-color: transparent; }
+
+/* Week: "MON" over a big date, today's in the blue circle. */
+.gc-dh { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0 10px; }
+.gc-dh-wd { font-size: 11px; font-weight: 500; letter-spacing: 0.8px; color: var(--gc-muted); }
+.gc-dh-num {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 9999px;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--gc-text);
+}
+.gc-dh-today .gc-dh-wd { color: var(--gc-blue); }
+.gc-dh-today .gc-dh-num { background: var(--gc-blue); color: #fff; }
+.gc .fc .fc-col-header-cell-cushion { padding: 6px 0; }
+.gc .fc .fc-dayGridMonth-view .fc-col-header-cell-cushion { padding-top: 8px; }
+
+/* Hours: only the hour lines, "10 AM" sitting on them; GMT+05:30 in the corner. */
+.gc .fc .fc-timegrid-slot { height: 24px; }
+.gc .fc .fc-timegrid-slot-minor { border-top-style: none; }
+.gc .fc .fc-timegrid-slot-label { border: none; vertical-align: top; }
+.gc .fc .fc-timegrid-slot-label-cushion {
+  position: relative;
+  top: -8px;
+  padding: 0 8px 0 0;
+  font-size: 10px;
+  color: var(--gc-muted);
+}
+.gc .fc .fc-timegrid-axis-cushion { font-size: 10px; color: var(--gc-muted); }
+.gc .fc .fc-timegrid-axis { vertical-align: middle; }
+
+/* Now: Google's red line with its dot. */
+.gc .fc .fc-timegrid-now-indicator-line { border-width: 2px 0 0; border-color: var(--gc-red); }
+.gc .fc .fc-timegrid-now-indicator-line::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: -7px;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: var(--gc-red);
+}
+.gc .fc .fc-timegrid-now-indicator-arrow { display: none; }
+
+/* Month: the number small and centred, today's circled. */
+.gc .fc .fc-daygrid-day-top { justify-content: center; }
+.gc .fc .fc-daygrid-day-number { padding: 4px 0 2px; }
+.gc-daynum {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gc-text);
+}
+.gc .fc .fc-day-other .gc-daynum { color: var(--gc-muted); }
+.gc-daynum-today { background: var(--gc-blue); color: #fff !important; }
+.gc .fc .fc-daygrid-more-link { margin-left: 4px; font-weight: 500; color: var(--gc-text); }
+.gc .fc .fc-daygrid-more-link:hover { background: var(--gc-hover); }
+
+/* Days off: the weekdays nobody works and the holidays in Settings. */
+.gc .fc .gc-off-day { background: var(--gc-off); }
+
+/* ── Items ── */
+.gc .fc .gc-ev {
+  border: 1px solid var(--gc);
+  border-radius: 4px;
+  background: var(--gc);
+  cursor: pointer;
+}
+.gc .fc .gc-ev,
+.gc .fc .gc-ev .fc-event-main { color: #fff; }
+.gc .fc .fc-timegrid-event.gc-ev { box-shadow: 0 0 0 1px #fff; }
+.gc .fc .fc-h-event.gc-ev { padding: 0 6px; }
+.gc-ev-body { padding: 1px 2px; line-height: 16px; overflow: hidden; }
+.gc-ev-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.gc-ev-body .gc-ev-title { white-space: normal; }
+.gc-ev-time { opacity: 0.92; }
+
+/* A meeting I am not on: white, outlined in its colour. */
+.gc .fc .gc-ev.gc-outline,
+.gc .fc .gc-ev.gc-outline .fc-event-main { background: #fff; color: var(--gc); }
+
+/* Google busy time: grey and striped — taken, but not a thing in Flowzen. */
+.gc .fc .gc-ev.gc-busy {
+  border-color: transparent;
+  background: repeating-linear-gradient(135deg, #f1f3f4 0 6px, #e3e5e8 6px 12px);
+}
+.gc .fc .gc-ev.gc-busy .fc-event-main { color: var(--gc-text); }
+
+/* Done: faded, struck through. */
+.gc .fc .gc-ev.gc-done { opacity: 0.5; }
+.gc .fc .gc-ev.gc-done .gc-ev-title { text-decoration: line-through; }
+
+/* Month, a timed item: a dot, the time, the title — no fill, as Google does. */
+.gc .fc .fc-daygrid-dot-event.gc-ev { border-color: transparent; background: transparent; }
+.gc .fc .fc-daygrid-dot-event.gc-ev:hover { background: var(--gc-hover); }
+.gc-ev-dotrow { display: flex; align-items: center; gap: 4px; min-width: 0; padding: 0 2px; color: var(--gc-text); }
+.gc-ev-dot { width: 8px; height: 8px; flex-shrink: 0; border-radius: 9999px; background: var(--gc); }
+.gc-ev-dotrow .gc-ev-time { color: var(--gc-muted); white-space: nowrap; }
+
+/* Schedule: a day per heading, a coloured dot per item. */
+.gc .fc .fc-list { border-color: transparent; }
+.gc .fc .fc-list-day-cushion { background: #fff; padding: 14px 12px 6px; text-align: left; }
+.gc .fc .fc-list-day-text { font-size: 0.8125rem; font-weight: 500; color: var(--gc-text); }
+.gc .fc .fc-list-event { cursor: pointer; }
+.gc .fc .fc-list-event td { border-color: transparent; padding-top: 7px; padding-bottom: 7px; font-size: 0.8125rem; }
+.gc .fc .fc-list-event-time { color: var(--gc-muted); }
+.gc .fc .fc-list-event-dot { border-color: var(--gc); border-width: 6px; }
+.gc .fc .fc-list-event-title .gc-ev-title { font-weight: 400; color: var(--gc-text); }
+.gc .fc .fc-list-empty { background: #fff; color: var(--gc-muted); }
+.gc .fc .fc-list-table .gc-ev,
+.gc .fc .fc-list-table .gc-ev .fc-event-main { background: transparent; color: var(--gc-text); }
+
+@media (max-width: 640px) {
+  .gc-dh-num { width: 32px; height: 32px; font-size: 18px; }
+  .gc-dh-wd { font-size: 10px; letter-spacing: 0.4px; }
+}

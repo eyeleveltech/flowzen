@@ -265,7 +265,8 @@ describe("the approver's queue", () => {
     (prisma.taskApprover.findMany as any).mockResolvedValue([{ taskType: 'VIDEO' }]);
     (prisma.task.findMany as any).mockResolvedValue([]);
     await request(app).get('/api/tasks/approvals').set(...as(APPROVER));
-    const where = (prisma.task.findMany as any).mock.calls[0][0].where;
+    // Two queries now: what is waiting, and what was sent back.
+    const where = (prisma.task.findMany as any).mock.calls.find((c: any[]) => c[0].where.status === 'IN_REVIEW')[0].where;
     expect(where).toMatchObject({
       status: 'IN_REVIEW',
       OR: [{ taskType: { in: ['VIDEO'] } }],
@@ -292,5 +293,66 @@ describe('needs approval without a type', () => {
     expect(await approvalFlagRefusal('org-1', null, true)).toBe(
       'Nobody is set to approve work yet. Set the approvers in Settings → Approvals.',
     );
+  });
+});
+
+// ── Add my changes ──────────────────────────────────────────────────────────
+
+describe('adding changes to a round somebody sent back', () => {
+  /** Back with the editor: round 1 sent back by the first approver. */
+  const sentBack = (over: Record<string, unknown> = {}) =>
+    task({
+      status: 'IN_PROGRESS',
+      reviews: [openRound({ decision: 'CHANGES_REQUESTED', decidedBy: { id: APPROVER, name: 'Approver' }, feedback: 'Logo too low' })],
+      ...over,
+    });
+
+  it('lets another approver add theirs, with their name on it', async () => {
+    (prisma.task.findFirst as any).mockResolvedValue(sentBack());
+    (prisma.taskReviewNote.create as any).mockImplementation(async ({ data }: any) => ({
+      id: 'note-1',
+      feedback: data.feedback,
+      createdAt: new Date(),
+      author: { id: data.authorId, name: 'Other approver' },
+    }));
+    const res = await request(app)
+      .post('/api/tasks/task-1/add-changes')
+      .set(...as(OTHER_APPROVER))
+      .send({ feedback: 'Music is too loud at the start' });
+
+    expect(res.status).toBe(201);
+    expect((prisma.taskReviewNote.create as any).mock.calls[0][0].data).toMatchObject({
+      reviewId: 'rev-1',
+      authorId: OTHER_APPROVER,
+      feedback: 'Music is too loud at the start',
+    });
+    // Adding changes decides nothing: the task stays with the editor.
+    expect(prisma.task.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('needs something written', async () => {
+    const res = await request(app).post('/api/tasks/task-1/add-changes').set(...as(OTHER_APPROVER)).send({ feedback: ' ' });
+    expect(res.status).toBe(400);
+  });
+
+  it('refuses once the editor has sent it again — the new round is the one to answer', async () => {
+    (prisma.task.findFirst as any).mockResolvedValue(task({ status: 'IN_REVIEW', reviews: [openRound({ round: 2 })] }));
+    const res = await request(app).post('/api/tasks/task-1/add-changes').set(...as(OTHER_APPROVER)).send({ feedback: 'x' });
+    expect(res.status).toBe(400);
+    expect(prisma.taskReviewNote.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses somebody who does not approve this work', async () => {
+    (prisma.task.findFirst as any).mockResolvedValue(sentBack());
+    const res = await request(app).post('/api/tasks/task-1/add-changes').set(...as('usr-stranger')).send({ feedback: 'x' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/approvers can add changes/);
+  });
+
+  it('refuses the editor sending their own work back', async () => {
+    (prisma.task.findFirst as any).mockResolvedValue(sentBack({ assignees: [{ userId: OTHER_APPROVER }] }));
+    const res = await request(app).post('/api/tasks/task-1/add-changes').set(...as(OTHER_APPROVER)).send({ feedback: 'x' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/on this task/);
   });
 });

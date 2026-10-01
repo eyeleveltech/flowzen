@@ -1,7 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import { sendMail } from '../utils/mailer.js';
 import { logger } from '../utils/logger.js';
-import { RULE_PERMISSION, MINE_REGARDLESS, approvalAlertClauses } from '../routes/notifications.js';
+import { RULE_PERMISSION, MINE_REGARDLESS, peopleAlertClauses } from '../routes/notifications.js';
 import { resolvePermissions } from '../middleware/auth.js';
 
 /**
@@ -80,8 +80,9 @@ export async function alertsForUser(
     myTaskIds.length > 0
       ? [{ rule: { in: [...missingTaskRules] }, entityType: 'Task', entityId: { in: myTaskIds } }]
       : [];
-  // Approvals waiting on them — the bell's own clauses.
-  const approvals = await approvalAlertClauses(organizationId, user.userId);
+  // Approvals waiting on them, and today's events they are on — the bell's
+  // own clauses.
+  const approvals = await peopleAlertClauses(organizationId, user.userId);
 
   if (allowedRules.length === 0 && mine.length === 0 && approvals.length === 0) return [];
 

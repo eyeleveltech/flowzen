@@ -1,3 +1,4 @@
+import { googleConfigured } from '../services/googleCalendar.js';
 import { Router, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { TaskType, type Prisma } from '@prisma/client';
@@ -116,6 +117,9 @@ configRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
               workingHoursEnd: org.workingHoursEnd,
               workingDays: org.workingDays,
               holidays: org.holidays,
+              // Settings → Integrations, offered only when the server has Google keys.
+              googleCalendarConfigured: googleConfigured(),
+              googleCalendarEnabled: org.googleCalendarEnabled,
             }
           : {}),
       },
@@ -249,6 +253,8 @@ const orgUpdateSchema = z.object({
    * which the edit form shows rather than silently changing.
    */
   departments: z.array(z.string().trim().min(1).max(60)).max(40).optional(),
+  /** Settings → Integrations: people may connect Google Calendar. */
+  googleCalendarEnabled: z.boolean().optional(),
   aiApiKey: z.string().trim().max(200).optional(),
   aiProvider: z.enum(AI_PROVIDER_IDS).optional(),
   aiModel: z.string().trim().min(1).max(100).optional(),
@@ -328,6 +334,7 @@ configRouter.patch('/', requirePermission('setup.admin'), async (req: AuthReques
         ...(data.aiProvider !== undefined ? { aiProvider: data.aiProvider } : {}),
         ...(data.aiModel !== undefined ? { aiModel: data.aiModel } : {}),
         ...(data.aiBaseUrl !== undefined ? { aiBaseUrl: data.aiBaseUrl || null } : {}),
+        ...(data.googleCalendarEnabled !== undefined ? { googleCalendarEnabled: data.googleCalendarEnabled } : {}),
         ...(data.stageProbProposalSent !== undefined ? { stageProbProposalSent: data.stageProbProposalSent } : {}),
         ...(data.stageProbInNegotiation !== undefined ? { stageProbInNegotiation: data.stageProbInNegotiation } : {}),
         ...(data.stageProbProformaIssued !== undefined ? { stageProbProformaIssued: data.stageProbProformaIssued } : {}),

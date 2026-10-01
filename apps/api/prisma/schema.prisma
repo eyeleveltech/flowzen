@@ -64,6 +64,9 @@ model Organization {
   /// working time and every elapsed figure was overstated. ISO "YYYY-MM-DD"
   /// dates, because a public holiday is a specific day, not a weekday rule.
   holidays           String[] @default([])
+  /// Settings → Integrations: lets people connect Google Calendar. Off until
+  /// an admin turns it on, and only offered when the server has Google keys.
+  googleCalendarEnabled Boolean @default(false)
   /// The departments a person can belong to.
   ///
   /// A setting rather than a hardcoded list, because every agency divides
@@ -180,6 +183,11 @@ model Organization {
   taskReviews                TaskReview[]
   taskApprovers              TaskApprover[]
   approvalEscalationContacts ApprovalEscalationContact[]
+  taskRepeats                TaskRepeat[]
+  calendarEvents             CalendarEvent[]
+  assetReservations          AssetReservation[]
+  googleCalendarConnections  GoogleCalendarConnection[]
+  externalBusyBlocks         ExternalBusyBlock[]
 
   /// "EL" -> EL/CAM/001. The stickers get printed once, so this is a setting
   /// rather than a constant, but changing it does not renumber what exists.
@@ -257,6 +265,14 @@ model User {
   decidedReviews       TaskReview[]                @relation("TaskReviewDecidedBy")
   approverFor          TaskApprover[]              @relation("TaskApproverFor")
   escalationFor        ApprovalEscalationContact[] @relation("ApprovalEscalationFor")
+  reviewNotes          TaskReviewNote[]            @relation("TaskReviewNoteAuthor")
+  taskRepeatsCreated   TaskRepeat[]                @relation("TaskRepeatCreatedBy")
+  calendarEventsCreated CalendarEvent[]         @relation("CalendarEventCreatedBy")
+  calendarEventsOn     CalendarEventAttendee[]
+  assetReservationsMade AssetReservation[]      @relation("AssetReservationCreatedBy")
+  googleCalendarConnection GoogleCalendarConnection?
+  externalBusyBlocks   ExternalBusyBlock[]
+  googleEventLinks     GoogleEventLink[]
 
   @@index([organizationId, active])
   @@map("users")
@@ -314,6 +330,7 @@ model Company {
   /// Tasks ABOUT this client that are not work on their retainer or project
   /// — chasing them, mostly. See `Task.companyId`.
   tasks         Task[]         @relation("CompanyTasks")
+  calendarEvents CalendarEvent[]
 
   @@unique([organizationId, name])
   @@index([organizationId, status])
@@ -340,6 +357,7 @@ model Person {
   updatedAt DateTime   @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  calendarEvents CalendarEventContact[]
 
   @@index([companyId, active])
   @@map("people")
@@ -687,6 +705,7 @@ model Retainer {
   owner        User              @relation("RetainerOwner", fields: [ownerId], references: [id])
   monthCards   MonthCard[]
   projects     RetainerProject[]
+  calendarEvents CalendarEvent[]
 
   /// One retainer per deal — see the note on Project.
   @@unique([sourceProposalId])
@@ -887,6 +906,7 @@ model Project {
   allocations    PeopleAllocation[]
   invoices       Invoice[]
   assetMovements AssetMovement[]
+  calendarEvents CalendarEvent[]
 
   /// One project per deal.
   ///
@@ -1020,10 +1040,12 @@ model TaskReview {
   remindedAt     DateTime?
   escalatedAt    DateTime?
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  task         Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  submittedBy  User         @relation("TaskReviewSubmittedBy", fields: [submittedById], references: [id])
-  decidedBy    User?        @relation("TaskReviewDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  task         Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  submittedBy  User             @relation("TaskReviewSubmittedBy", fields: [submittedById], references: [id])
+  decidedBy    User?            @relation("TaskReviewDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  /// Changes other approvers added after this round was sent back.
+  notes        TaskReviewNote[]
 
   @@unique([taskId, round])
   @@index([organizationId, decidedAt])
@@ -1043,6 +1065,64 @@ model TaskApprover {
 
   @@unique([organizationId, taskType, userId])
   @@map("task_approvers")
+}
+
+/// How often a repeating task comes back.
+enum RepeatFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+/// A repeating task's rule — and only the rule.
+///
+/// The work is copied from the latest task in the series (its title, notes,
+/// people, type, priority, time, approval and link), so renaming this week's
+/// copy renames the next. There is no template screen: retainer templates were
+/// removed because a second place where work is defined drifts (see
+/// workers/monthCard.cron.ts). Repeating is one setting on a real task.
+///
+/// `weekday` and `dayOfMonth` are stored, not re-read from each copy: a copy
+/// moved off a holiday (Thursday → Friday) must not move every copy after it.
+model TaskRepeat {
+  id             String          @id @default(cuid())
+  organizationId String
+  frequency      RepeatFrequency
+  /// WEEKLY: 0 = Sunday … 6 = Saturday, from the due date when the repeat was set.
+  weekday        Int?
+  /// MONTHLY: 1 … 31, from the due date when the repeat was set.
+  dayOfMonth     Int?
+  stoppedAt      DateTime?
+  stoppedReason  String?
+  createdById    String
+  createdAt      DateTime        @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation("TaskRepeatCreatedBy", fields: [createdById], references: [id])
+  tasks        Task[]
+
+  @@index([organizationId, stoppedAt])
+  @@map("task_repeats")
+}
+
+/// A change another approver added to a round somebody sent back.
+///
+/// One approver is enough to approve, but when one requests changes the rest
+/// may have their own — and they used to have no way to say so in Flowzen once
+/// the round was decided. While the task is back with the editor, any approver
+/// can add theirs here; the editor sees every note, each with its author.
+model TaskReviewNote {
+  id        String   @id @default(cuid())
+  reviewId  String
+  authorId  String
+  feedback  String   @db.Text
+  createdAt DateTime @default(now())
+
+  review TaskReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  author User       @relation("TaskReviewNoteAuthor", fields: [authorId], references: [id])
+
+  @@index([reviewId])
+  @@map("task_review_notes")
 }
 
 /// Who a stuck approval escalates to, per task type (Akmal for Video). Once a
@@ -1170,6 +1250,9 @@ model Task {
   reviewerId        String?
   taskType          TaskType?
   dueDate           DateTime     @db.Date
+  /// Optional time on the due date, "17:30" (24h, office time). Empty for most
+  /// tasks — a date is the deadline; the time is for the ones that need it.
+  dueTime           String?
 
   assignedAt          DateTime   @default(now())
   completedAt         DateTime?
@@ -1213,6 +1296,10 @@ model Task {
   /// must not take the work that was done under it.
   internalProject InternalProject? @relation(fields: [internalProjectId], references: [id], onDelete: SetNull)
   reviews         TaskReview[]
+  /// The repeat this task is a copy in, if it repeats. The rule lives there;
+  /// the work itself is copied from the latest task in the series.
+  repeatId        String?
+  repeat          TaskRepeat?      @relation(fields: [repeatId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, assigneeId, status])
   @@index([dueDate, status])
@@ -1221,6 +1308,8 @@ model Task {
   @@index([retainerProjectId])
   @@index([internalProjectId])
   @@index([companyId, status])
+  /// One copy per date: a second run of the job cannot make two.
+  @@unique([repeatId, dueDate])
   @@map("tasks")
 }
 
@@ -1700,6 +1789,7 @@ model Asset {
   currentHolder User?              @relation("AssetHolder", fields: [currentHolderId], references: [id], onDelete: SetNull)
   movements     AssetMovement[]
   maintenance   AssetMaintenance[]
+  reservations  AssetReservation[]
 
   @@unique([organizationId, tag])
   @@index([organizationId, status])
@@ -1867,4 +1957,174 @@ model ZenMemory {
 
   @@index([userId, createdAt])
   @@map("zen_memories")
+}
+
+// ── Calendar events: meetings, shoots, and the gear they reserve ────────────
+
+enum EventKind {
+  MEETING
+  SHOOT
+  OTHER
+}
+
+/// A meeting, a shoot or anything else with a time and people on it. Seen by
+/// the whole team; edited by whoever booked it or `work.team`. Soft-deleted,
+/// which releases its gear (see routes/calendar.ts).
+model CalendarEvent {
+  id             String    @id @default(cuid())
+  organizationId String
+  kind           EventKind
+  title          String
+  /// A moment. An all-day event runs from the studio's midnight on its first
+  /// day to the midnight after its last.
+  startsAt       DateTime
+  endsAt         DateTime
+  allDay         Boolean   @default(false)
+  location       String?
+  notes          String?   @db.Text
+  companyId      String?
+  projectId      String?
+  retainerId     String?
+  createdById    String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company      Company?                @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  project      Project?                @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  retainer     Retainer?               @relation(fields: [retainerId], references: [id], onDelete: SetNull)
+  createdBy    User                    @relation("CalendarEventCreatedBy", fields: [createdById], references: [id])
+  attendees    CalendarEventAttendee[]
+  contacts     CalendarEventContact[]
+  reservations AssetReservation[]
+  googleLinks  GoogleEventLink[]
+
+  @@index([organizationId, startsAt])
+  @@map("calendar_events")
+}
+
+model CalendarEventAttendee {
+  id      String @id @default(cuid())
+  eventId String
+  userId  String
+
+  event CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([userId])
+  @@map("calendar_event_attendees")
+}
+
+/// Client people on an event, for reference only. Never notified.
+model CalendarEventContact {
+  id       String @id @default(cuid())
+  eventId  String
+  personId String
+
+  event  CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  person Person        @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, personId])
+  @@map("calendar_event_contacts")
+}
+
+/// Gear planned for a shoot. A plan, not a checkout — taking it out is still
+/// an AssetMovement BOOKING. Past ones stay as history.
+model AssetReservation {
+  id             String   @id @default(cuid())
+  organizationId String
+  assetId        String
+  eventId        String
+  startsAt       DateTime
+  endsAt         DateTime
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  asset        Asset         @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  event        CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdBy    User          @relation("AssetReservationCreatedBy", fields: [createdById], references: [id])
+
+  @@unique([eventId, assetId])
+  @@index([assetId, startsAt, endsAt])
+  @@map("asset_reservations")
+}
+
+// ── Google Calendar: optional, per person ───────────────────────────────────
+
+enum GoogleConnectionStatus {
+  ACTIVE
+  NEEDS_RECONNECT
+}
+
+/// One person's link to their Google Calendar. The refresh token is stored
+/// encrypted (utils/crypto) and never leaves the server.
+model GoogleCalendarConnection {
+  id                    String                 @id @default(cuid())
+  organizationId        String
+  userId                String                 @unique
+  googleEmail           String
+  refreshTokenEncrypted String
+  /// The "Flowzen" calendar Flowzen made in their Google account.
+  flowzenCalendarId     String?
+  syncToken             String?
+  status                GoogleConnectionStatus @default(ACTIVE)
+  lastSyncedAt          DateTime?
+  lastError             String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("google_calendar_connections")
+}
+
+/// A Google event, kept only as busy time. `title` is shown to its owner only.
+model ExternalBusyBlock {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  googleEventId  String
+  title          String?
+  startsAt       DateTime
+  endsAt         DateTime
+  allDay         Boolean  @default(false)
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, googleEventId])
+  @@index([organizationId, startsAt])
+  @@map("external_busy_blocks")
+}
+
+enum GooglePushState {
+  PENDING_UPSERT
+  PENDING_DELETE
+  SYNCED
+  FAILED
+}
+
+/// One Flowzen event in one person's Google "Flowzen" calendar, plus its push
+/// state — which is also the retry queue.
+model GoogleEventLink {
+  id            String          @id @default(cuid())
+  eventId       String
+  userId        String
+  googleEventId String?
+  state         GooglePushState @default(PENDING_UPSERT)
+  attempts      Int             @default(0)
+  lastError     String?
+  updatedAt     DateTime        @updatedAt
+
+  event CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([state])
+  @@map("google_event_links")
 }

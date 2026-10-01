@@ -17,33 +17,30 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DragDropContext, Droppable, Draggable, type BeforeCapture, type DropResult } from '@hello-pangea/dnd';
 import { plural } from '@/lib/utils';
 import { api, formatDate, ApiError } from '@/lib/api-v2';
-import { useTeamMembers } from '@/hooks/queries';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
-import { Field, FieldSelect } from '@/components/ui/field';
-import { AssigneeField, AssignedByField, useMayAssignOthers } from '@/components/work/AssigneeField';
-import { EmptyState, ErrorNote } from '@/components/ui/empty-state';
+import { EmptyState } from '@/components/ui/empty-state';
 import { usePageHeader } from '@/hooks/usePageHeader';
 import { useCreateFlag } from '@/hooks/useCreateFlag';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ApprovalQueue } from '@/components/work/ApprovalQueue';
 import { ApprovalDrawer } from '@/components/work/ApprovalDrawer';
 import { StuckApproval } from '@/components/work/Approval';
+import { InlineDueDate } from '@/components/work/InlineDueDate';
+import { changeTaskStatus } from '@/lib/task-status';
 import { statusChoices } from '@/components/retainers/task-shared';
 import { Badge } from '@/components/ui/badge';
 import type { LastReview } from '@/lib/api-v2';
-import { PRIORITY_CONFIG, getPriorityDot, getPriorityLabel } from '@/lib/priority';
+import { getPriorityDot, getPriorityLabel } from '@/lib/priority';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
 import toast from 'react-hot-toast';
 import { CheckSquare, Plus, GripVertical } from 'lucide-react';
-import { NeedsApprovalField } from '@/components/work/NeedsApprovalField';
-import { useAuthStore } from '@/stores';
-import { TASK_TYPE_OPTIONS } from '@/lib/task-type';
+import type { TaskRepeatInfo } from '@/lib/repeat';
+import { RepeatMark } from '@/components/work/RepeatMark';
+import { NewTaskModal } from '@/components/work/NewTaskModal';
 
-const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label }));
 
 type TStatus = 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'ON_HOLD' | 'DONE' | 'CANCELLED';
 
@@ -57,6 +54,8 @@ interface TaskItem {
   waitingOn?: 'CLIENT' | 'ANOTHER_PERSON' | null;
   waitingSince?: string | null;
   dueDate: string;
+  /** Optional, "17:30" — shown after the date. */
+  dueTime?: string | null;
   assignedAt: string;
   completedAt?: string | null;
   reopenCount: number;
@@ -81,6 +80,8 @@ interface TaskItem {
   lastReview?: LastReview | null;
   /** How long the waiting round has waited, in working time. */
   reviewWaitingText?: string | null;
+  /** The repeat, if it is a copy in one — the small mark beside the title. */
+  repeat?: TaskRepeatInfo | null;
 }
 
 /** "2026-09" is a key. This is the label. */
@@ -326,17 +327,8 @@ export default function MyWorkPage() {
     if (next === task.status) return;
     setBusyId(task.id);
     try {
-      if (next === 'ON_HOLD') {
-        await api.tasks.wait(task.id, 'CLIENT');
-      } else if (task.status === 'ON_HOLD') {
-        // /resume is the only route that closes out waitingSince and folds
-        // it into waitingTotalMinutes — always go through it first, then
-        // layer the real target status on top if it's not just "resume".
-        await api.tasks.resume(task.id);
-        if (next !== 'IN_PROGRESS') await api.tasks.updateStatus(task.id, next);
-      } else {
-        await api.tasks.updateStatus(task.id, next);
-      }
+      // On hold goes through /wait and /resume, so the wait is timed.
+      await changeTaskStatus(task, next);
       await load();
       setSelected((s) => (s && s.id === task.id ? { ...s, status: next } : s));
     } catch (e) {
@@ -399,7 +391,7 @@ export default function MyWorkPage() {
             className={`rounded-sm text-left font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${finished ? 'text-secondary line-through' : 'text-primary'}`}
           >
             {t.title}
-          </button>
+          </button> <RepeatMark repeat={t.repeat} />
           {t.status === 'ON_HOLD' && t.waitingOn && (
             <p className="mt-0.5 text-micro text-secondary">
               waiting on {t.waitingOn === 'CLIENT' ? 'the client' : 'someone else'}
@@ -421,14 +413,29 @@ export default function MyWorkPage() {
               escalatedTo={t.lastReview.escalatedAt ? (t.lastReview.escalatedTo ?? []) : null}
             />
           )}
-          {sentBack && (
-            <div className="mt-1 max-w-md">
-              <Badge tone="warn">Changes requested</Badge>
-              {t.lastReview?.feedback && (
-                <p className="mt-0.5 line-clamp-2 text-micro text-body">“{t.lastReview.feedback}”</p>
-              )}
-            </div>
-          )}
+          {sentBack && (() => {
+            // Everybody's changes, not only the first approver's — the others
+            // can add theirs while it is with you.
+            const changes = [
+              ...(t.lastReview?.feedback ? [{ who: t.lastReview.decidedBy?.name, text: t.lastReview.feedback }] : []),
+              ...(t.lastReview?.notes ?? []).map((n) => ({ who: n.author.name, text: n.feedback })),
+            ];
+            return (
+              <div className="mt-1 max-w-md">
+                <Badge tone="warn">
+                  Changes requested{changes.length > 1 ? ` · ${changes.length}` : ''}
+                </Badge>
+                {changes.slice(0, 2).map((c, i) => (
+                  <p key={i} className="mt-0.5 line-clamp-2 text-micro text-body">
+                    “{c.text}”{c.who && <span className="text-secondary"> — {c.who}</span>}
+                  </p>
+                ))}
+                {changes.length > 2 && (
+                  <p className="mt-0.5 text-micro text-secondary">+{changes.length - 2} more — open the task to see them all</p>
+                )}
+              </div>
+            );
+          })()}
         </td>
         {/* Who it is for, over which job of theirs it belongs to — the second
             was on no screen this side of the drawer until now. */}
@@ -436,8 +443,16 @@ export default function MyWorkPage() {
           <p className="text-body">{t.clientName}</p>
           {job && <p className="text-micro text-secondary">{job}</p>}
         </td>
-        <td className={`whitespace-nowrap ${late ? 'font-semibold text-danger' : 'text-secondary'}`}>
-          {formatDate(t.dueDate)}
+        {/* Click the date to move it — no need to open the task. */}
+        <td className="whitespace-nowrap">
+          <InlineDueDate
+            taskId={t.id}
+            title={t.title}
+            value={t.dueDate}
+            time={t.dueTime}
+            disabled={finished}
+            className={late ? 'font-semibold text-danger' : 'text-secondary'}
+          />
         </td>
         <td>
           <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-secondary">
@@ -468,7 +483,7 @@ export default function MyWorkPage() {
 
   /** A finished task: history, so it does not move. */
   const row = (t: TaskItem) => (
-    <tr key={t.id} onClick={() => setSelected(t)} className="cursor-pointer transition-colors hover:bg-subtle">
+    <tr key={t.id} onClick={() => setSelected(t)} className="group/row cursor-pointer transition-colors hover:bg-subtle">
       {cells(t, null)}
     </tr>
   );
@@ -488,7 +503,7 @@ export default function MyWorkPage() {
           {...drag.draggableProps}
           data-task-row={t.id}
           onClick={() => setSelected(t)}
-          className={`cursor-pointer transition-colors hover:bg-subtle ${
+          className={`group/row cursor-pointer transition-colors hover:bg-subtle ${
             snap.isDragging ? 'bg-white shadow-card ring-1 ring-primary/20' : ''
           }`}
         >
@@ -664,257 +679,5 @@ export default function MyWorkPage() {
         onChanged={load}
       />
     </div>
-  );
-}
-
-/**
- * One thing a task can be filed against.
- *
- * A retainer option is a piece of work INSIDE the retainer, not the retainer's
- * month — see the note in the loader below. `key` is what the dropdown stores,
- * and it is the retainer project or the one-time project, both unique.
- */
-type Target = {
-  key: string;
-  label: string;
-  workType: 'RETAINER' | 'PROJECT';
-  monthCardId?: string;
-  retainerProjectId?: string;
-  projectId?: string;
-  /** Which month a retainer option bills into, for the line under the field. */
-  month?: string;
-};
-
-function NewTaskModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
-  const me = useAuthStore((s) => s.user);
-  const [title, setTitle] = useState('');
-  const [dueDate, setDueDate] = useState('');
-  const [priority, setPriority] = useState('MEDIUM');
-  const [description, setDescription] = useState('');
-  /*
-   * This form kept its own fields and never got the ones the other two task
-   * forms grew — a reviewer and a kind of work — so a task raised from My Work
-   * came out different from an identical task raised anywhere else.
-   *
-   * There is deliberately no assignee picker: the dialog is called "Task for
-   * myself" and the server already defaults to the caller. A reviewer is still
-   * worth asking for, because "somebody should check this" is a thing you know
-   * when you write the task down, whoever is doing it.
-   */
-  /** Empty means "me" — the server's own default, so this stays a self-task until somebody says otherwise. */
-  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
-  const [assignedById, setAssignedById] = useState('');
-  const [taskType, setTaskType] = useState('');
-  const [needsApproval, setNeedsApproval] = useState(false);
-  const team = useTeamMembers();
-  /** Decides the dialog's own name: a head opening it is not writing a task for themselves. */
-  const { may: mayAssignOthers } = useMayAssignOthers();
-
-  useEffect(() => {
-    if (!open) return;
-  }, [open]);
-  const [scope, setScope] = useState<'INTERNAL' | 'CLIENT'>('INTERNAL');
-  const [companyId, setCompanyId] = useState('');
-  const [targetKey, setTargetKey] = useState('');
-  /*
-   * Which piece of the studio's own work, when this is not a client's.
-   *
-   * Optional on purpose. A retainer task must name a project because the
-   * database insists; most internal work genuinely belongs to nothing —
-   * "Office Wi-Fi vendor renewal" is not a programme — and forcing a bucket on
-   * it would only breed empty ones.
-   */
-  const [internalProjectId, setInternalProjectId] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (open) {
-      setTitle(''); setDueDate(''); setPriority('MEDIUM'); setDescription('');
-      setScope('INTERNAL'); setCompanyId(''); setTargetKey(''); setError(null);
-      setTaskType(''); setNeedsApproval(false);
-      // Nobody, until somebody says otherwise — see tasks.ts on why this
-    // field means nothing when it is filled in by default.
-    setAssignedById('');
-    }
-  }, [open, me?.id]);
-
-  /*
-   * One request for everything this form can offer.
-   *
-   * It used to be three — the company list, a whole company detail payload per
-   * pick, and the internal projects — across two permissions nobody but
-   * Management holds: `company.read` opens the client book, `work.all` is Head
-   * and Management. So an EMPLOYEE (who holds `work.own` and nothing else) met
-   * two empty dropdowns and could not write down a task at all, and a HEAD had
-   * no company list either.
-   *
-   * `/tasks/targets` answers with names and ids only — nothing with a value on
-   * it — which is why it can be gated on `work.own`: anybody who can hold a
-   * task can write one down.
-   */
-  const { data: targetData, isPending: loadingTargets } = useQuery({
-    queryKey: ['task-targets'],
-    queryFn: () => api.tasks.targets(),
-    staleTime: 60_000,
-  });
-  const companies = targetData?.companies ?? [];
-  const internalProjects = targetData?.internalProjects ?? [];
-  const targets: Target[] = companies.find((c) => c.id === companyId)?.jobs ?? [];
-
-  // Changing the client clears the job under it — the old pick belongs to a
-  // company that is no longer selected.
-  useEffect(() => {
-    setTargetKey('');
-  }, [companyId, scope]);
-
-  const selectedTarget = targets.find((t) => t.key === targetKey);
-  const canSave =
-    Boolean(title.trim()) &&
-    Boolean(dueDate) &&
-    (scope === 'INTERNAL' ? Boolean(internalProjectId) : Boolean(selectedTarget));
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canSave) return;
-    setSaving(true);
-    setError(null);
-    try {
-      await api.tasks.create({
-        title: title.trim(),
-        workType: scope === 'INTERNAL' ? 'INTERNAL' : selectedTarget?.workType === 'RETAINER' ? 'MONTH_CARD' : 'PROJECT',
-        monthCardId: scope === 'CLIENT' ? selectedTarget?.monthCardId : undefined,
-        // What the work is for, alongside the month that bills it. Omitted for
-        // a one-time project, which is its own answer to both questions.
-        retainerProjectId: scope === 'CLIENT' ? selectedTarget?.retainerProjectId : undefined,
-        internalProjectId: scope === 'INTERNAL' ? internalProjectId || undefined : undefined,
-        projectId: scope === 'CLIENT' ? selectedTarget?.projectId : undefined,
-        dueDate,
-        priority,
-        // Empty means "me", which is what the server already defaults to.
-        assigneeIds: assigneeIds.length > 0 ? assigneeIds : undefined,
-        assignedById: assignedById || undefined,
-        taskType: taskType || undefined,
-        needsApproval,
-        notes: description.trim() || undefined,
-      });
-      onCreated();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not create the task');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Modal open={open} onClose={onClose} title={mayAssignOthers ? 'New task' : 'Task for myself'}>
-      <form onSubmit={submit}>
-        <ModalBody className="space-y-4">
-          <Field label="What needs doing?" value={title} onChange={setTitle} required />
-
-          <FieldSelect
-            label="Belongs to"
-            value={scope}
-            onChange={(v) => setScope(v as 'INTERNAL' | 'CLIENT')}
-            required
-            options={[
-              { value: 'INTERNAL', label: 'Internal — no client' },
-              { value: 'CLIENT', label: 'A client’s work' },
-            ]}
-          />
-
-          {/*
-            Which piece of the studio's own work, before anything else.
-
-            This was optional at first, on the reasoning that plenty of internal
-            work belongs to nothing in particular. In practice an optional field
-            is a skipped field, and the flat list of internal tasks it existed to
-            fix stayed flat. So the answer comes first and the task follows.
-
-            With none created yet it says so and points at where they are made,
-            rather than showing a required dropdown with nothing in it.
-          */}
-          {scope === 'INTERNAL' &&
-            (internalProjects.length > 0 ? (
-              <FieldSelect
-                label="Which work"
-                value={internalProjectId}
-                onChange={setInternalProjectId}
-                required
-                placeholder="Choose…"
-                options={internalProjects.map((p) => ({ value: p.id, label: p.name }))}
-                hint="The studio's own work — a hiring round, the website, compliance."
-              />
-            ) : (
-              <p className="rounded-xl border border-border bg-subtle/40 px-3 py-2.5 text-xs text-secondary">
-                There is no internal work to file this under yet. Add one on{' '}
-                <a href="/live-work?tab=internal" className="font-medium text-primary hover:underline">
-                  Live work → Internal
-                </a>{' '}
-                first.
-              </p>
-            ))}
-
-          {scope === 'CLIENT' && (
-            <>
-              <FieldSelect
-                label="Company"
-                value={companyId}
-                onChange={setCompanyId}
-                required
-                placeholder="Choose a company…"
-                options={companies.map((c) => ({ value: c.id, label: c.name }))}
-              />
-              <FieldSelect
-                label="Which job"
-                value={targetKey}
-                onChange={setTargetKey}
-                required
-                disabled={!companyId || loadingTargets}
-                placeholder={!companyId ? 'Choose a company first' : loadingTargets ? 'Loading…' : targets.length === 0 ? 'Nothing live' : 'Choose…'}
-                options={targets.map((t) => ({ value: t.key, label: t.label }))}
-                hint={selectedTarget?.month ? `Billed on the ${selectedTarget.month} month card.` : undefined}
-              />
-            </>
-          )}
-
-          {/*
-            Who it is for.
-
-            This dialog had no assignee control at all, on the reasoning that
-            it is called "Task for myself" and the server defaults to the
-            caller. That was fine when nobody could assign to anybody from
-            anywhere, and wrong once they could: a head opening it saw a
-            picker for who ASKED for the work and none for who DOES it, which
-            reads backwards — and left them navigating to a project page to do
-            the obvious thing.
-
-            The shared field settles it per person. Somebody who may only
-            manage their own work still sees their own name and no picker, so
-            the dialog keeps its original behaviour for them.
-          */}
-          <AssigneeField value={assigneeIds} onChange={setAssigneeIds} />
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Due date" type="date" value={dueDate} onChange={setDueDate} required />
-            <FieldSelect label="Priority" value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} />
-          </div>
-          <AssignedByField value={assignedById} onChange={setAssignedById} />
-          <FieldSelect
-            label="Type of work"
-            value={taskType}
-            onChange={setTaskType}
-            placeholder="Not set"
-            options={TASK_TYPE_OPTIONS}
-          />
-          <NeedsApprovalField taskType={taskType} value={needsApproval} onChange={setNeedsApproval} />
-          <Field label="Description" value={description} onChange={setDescription} textarea rows={3} />
-          {error && <ErrorNote>{error}</ErrorNote>}
-        </ModalBody>
-        <ModalFooter>
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" variant="primary" loading={saving} disabled={!canSave}>Add task</Button>
-        </ModalFooter>
-      </form>
-    </Modal>
   );
 }

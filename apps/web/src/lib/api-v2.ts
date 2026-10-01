@@ -11,6 +11,7 @@
  */
 
 import { loginHref } from './next-path';
+import { announceTaskWrite } from './task-sync';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
 /**
@@ -109,6 +110,9 @@ async function request<T>(
       payload.detail,
     );
   }
+
+  // A task changed: every screen showing one is told (lib/task-sync).
+  if ((options.method ?? 'GET') !== 'GET' && endpoint.startsWith('/tasks')) announceTaskWrite();
 
   return (payload.data !== undefined ? payload.data : payload) as T;
 }
@@ -260,6 +264,9 @@ export interface OrgConfig {
     workingHoursEnd?: string;
     workingDays?: number[];
     holidays?: string[];
+    /** Settings → Integrations (setup.admin): the server has Google keys, and the switch. */
+    googleCalendarConfigured?: boolean;
+    googleCalendarEnabled?: boolean;
     /**
      * The departments a person can belong to.
      *
@@ -326,9 +333,21 @@ export interface LastReview {
   /** It escalated; `escalatedTo` names who to. */
   escalatedAt?: string | null;
   escalatedTo?: PersonRef[];
+  /** Who decided it. */
+  decidedBy?: PersonRef | null;
+  /** Changes other approvers added after it was sent back. */
+  notes?: ReviewNote[];
 }
 
-type PersonRef = { id: string; name: string };
+/** A change another approver added to a round somebody sent back. */
+export interface ReviewNote {
+  id?: string;
+  feedback: string;
+  createdAt: string;
+  author: PersonRef;
+}
+
+export type PersonRef = { id: string; name: string };
 
 /** One round: who sent it and what with, and how it was decided. */
 export interface TaskReviewRound {
@@ -342,6 +361,8 @@ export interface TaskReviewRound {
   decidedBy: PersonRef | null;
   decidedAt: string | null;
   feedback: string | null;
+  /** The other approvers' changes, when it was sent back. */
+  notes?: ReviewNote[];
   remindedAt: string | null;
   escalatedAt: string | null;
 }
@@ -358,6 +379,7 @@ export interface TaskReviewsResponse {
     needsApproval: boolean;
     priority: string;
     dueDate: string;
+    dueTime?: string | null;
     clientName: string;
     projectName: string | null;
     assignees: PersonRef[];
@@ -373,6 +395,8 @@ export interface TaskReviewsResponse {
     canApprove: boolean;
     approveRefusal: string | null;
     canSubmit: boolean;
+    /** Sent back, and this approver can add their own changes to it. */
+    canAddChanges?: boolean;
   };
   waitingMinutes: number | null;
   waitingText: string | null;
@@ -404,6 +428,26 @@ export interface ApprovalItem {
   asEscalation: boolean;
   waitingMinutes: number;
   waitingText: string;
+}
+
+/** A task somebody sent back, still with the editor — where the other approvers add theirs. */
+export interface SentBackItem {
+  id: string;
+  title: string;
+  taskType: string | null;
+  taskTypeLabel: string | null;
+  clientName: string;
+  projectName: string | null;
+  assignees: PersonRef[];
+  review: {
+    id: string;
+    round: number;
+    link: string | null;
+    decidedBy: PersonRef | null;
+    decidedAt: string | null;
+    feedback: string | null;
+    notes: ReviewNote[];
+  };
 }
 
 /** Settings → Approvals: who approves each task type. */
@@ -440,6 +484,8 @@ export interface ApprovalsReport {
     changesRequested: number;
     medianDecisionMinutes: number | null;
     afterEscalation: number;
+    /** Changes added to rounds somebody else sent back. */
+    changesAdded?: number;
   }[];
   waitingNow: {
     taskId: string;
@@ -807,6 +853,7 @@ export interface MemberTask {
   status: string;
   priority: string;
   dueDate: string | null;
+  dueTime?: string | null;
   taskType?: string | null;
   project: { id: string; name: string; company: { id?: string; name: string } | null } | null;
 }
@@ -1229,6 +1276,20 @@ export interface AssetDetail extends AssetListItem {
   openMovement: (AssetMovementRow & { daysOverdue: number }) | null;
   movements: AssetMovementRow[];
   maintenance: AssetMaintenanceRow[];
+  /** Shoots it is planned for, coming up. A plan, not a checkout. */
+  reservations?: AssetReservationRow[];
+}
+
+export interface AssetReservationRow {
+  id: string;
+  eventId: string;
+  title: string;
+  kind: CalendarEventKind;
+  startsAt: string;
+  endsAt: string;
+  /** "Fri 9 Oct 10:00–14:00" on the studio's clock. */
+  when: string;
+  people: { id: string; name: string }[];
 }
 
 export interface AssetSummary {
@@ -1845,7 +1906,10 @@ export const api = {
         { feedback },
       ),
     /** Everything waiting for the caller's approval, oldest first. Empty for non-approvers. */
-    approvals: () => get<{ success: boolean; items: ApprovalItem[] }>('/tasks/approvals'),
+    approvals: () => get<{ success: boolean; items: ApprovalItem[]; sentBack?: SentBackItem[] }>('/tasks/approvals'),
+    /** Another approver's changes, on a round somebody already sent back. */
+    addChanges: (id: string, feedback: string) =>
+      post<{ success: boolean; note: ReviewNote }>(`/tasks/${id}/add-changes`, { feedback }),
     /** One task's approval rounds, and what the caller can do about it. */
     reviews: (id: string) => get<TaskReviewsResponse>(`/tasks/${id}/reviews`),
   },
@@ -2228,7 +2292,9 @@ export const api = {
     remove: (id: string) => del<{ success: boolean }>(`/assets/${id}`),
     retire: (id: string, body: Record<string, unknown>) => post<AssetListItem>(`/assets/${id}/retire`, body),
     assign: (id: string, body: Record<string, unknown>) => post(`/assets/${id}/assign`, body),
-    checkout: (id: string, body: Record<string, unknown>) => post(`/assets/${id}/checkout`, body),
+    /** `warnings`: somebody else's shoot the due-back date runs into. Never a refusal. */
+    checkout: (id: string, body: Record<string, unknown>) =>
+      post<{ success: boolean; warnings?: string[] }>(`/assets/${id}/checkout`, body),
     checkin: (id: string, body: Record<string, unknown>) => post(`/assets/${id}/return`, body),
     transfer: (id: string, body: Record<string, unknown>) => post(`/assets/${id}/transfer`, body),
     maintenance: (id: string, body: Record<string, unknown>) => post(`/assets/${id}/maintenance`, body),
@@ -2248,6 +2314,164 @@ export const api = {
     markAllRead: () => patch('/notifications/read-all'),
   },
 
+  /** Your own Google Calendar connection — optional, and only ever yours. */
+  google: {
+    status: () =>
+      get<{
+        success: boolean;
+        /** The server has keys and an admin switched it on. */
+        enabled: boolean;
+        connected: boolean;
+        googleEmail: string | null;
+        status: 'ACTIVE' | 'NEEDS_RECONNECT' | null;
+        lastSyncedAt: string | null;
+      }>('/google/status'),
+    /** Google's consent is a page, so this is where the browser goes — not a fetch. */
+    connectUrl: () => `${API_URL}/google/connect`,
+    disconnect: () => post<{ success: boolean }>('/google/disconnect'),
+  },
+
+  calendar: {
+    /** At most 62 days at a time; layers this person cannot see come back empty. */
+    get: (params: { from: string; to: string; layers: string[]; person?: string; dept?: string }) => {
+      const q = new URLSearchParams({ from: params.from, to: params.to, layers: params.layers.join(',') });
+      if (params.person) q.set('person', params.person);
+      if (params.dept) q.set('dept', params.dept);
+      return get<CalendarResponse>(`/calendar?${q}`);
+    },
+    /** What the event form offers: clients (projects, retainers, contacts) and pickable gear. */
+    eventOptions: () => get<CalendarEventOptions>('/calendar/event-options'),
+    /** Warnings for a window, saving nothing — the live box in the form. */
+    clashes: (body: {
+      startsAt: string;
+      endsAt: string;
+      allDay: boolean;
+      assetIds: string[];
+      attendeeIds: string[];
+      excludeEventId?: string | null;
+    }) => post<{ success: boolean; clashes: CalendarClash[] }>('/calendar/clashes', body),
+    event: (id: string) => get<CalendarEventResponse>(`/calendar/events/${id}`),
+    createEvent: (body: CalendarEventInput) =>
+      post<{ success: boolean; event: { id: string }; clashes: CalendarClash[] }>('/calendar/events', body),
+    updateEvent: (id: string, body: Partial<CalendarEventInput>) =>
+      patch<{ success: boolean; event: { id: string }; clashes: CalendarClash[] }>(`/calendar/events/${id}`, body),
+    deleteEvent: (id: string) => del<{ success: boolean }>(`/calendar/events/${id}`),
+  },
+
+};
+
+export type CalendarLayer = 'mine' | 'team' | 'events' | 'google' | 'money' | 'sales' | 'work' | 'equipment' | 'holidays';
+
+/** One dated thing on the calendar — see routes/calendar.ts on the API. */
+export type CalendarItem = {
+  id: string;
+  layer: CalendarLayer;
+  kind: string;
+  title: string;
+  /** The organisation's calendar day, YYYY-MM-DD. */
+  date: string;
+  /** HH:MM, only when the record has one. */
+  time?: string;
+  allDay: boolean;
+  link: string | null;
+  draggable: boolean;
+  overdue?: boolean;
+  done?: boolean;
+  taskId?: string;
+  dueTime?: string | null;
+  /** Meetings and shoots: where it ends (all-day: the day after, exclusive). */
+  endDate?: string;
+  endTime?: string;
+  eventId?: string;
+  eventKind?: CalendarEventKind;
+  /** The viewer is one of its people. */
+  isMine?: boolean;
+  bookedBy?: string;
+  location?: string | null;
+};
+
+export type CalendarEventKind = 'MEETING' | 'SHOOT' | 'OTHER';
+
+/** What the event form sends. Times are the studio's wall clock; all day, the end is the last day. */
+export type CalendarEventInput = {
+  kind: CalendarEventKind;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  allDay: boolean;
+  location?: string | null;
+  notes?: string | null;
+  attendeeIds: string[];
+  companyId?: string | null;
+  projectId?: string | null;
+  retainerId?: string | null;
+  contactIds: string[];
+  assetIds: string[];
+};
+
+/** Something in the way. A warning — never a refusal. */
+export type CalendarClash = {
+  kind: 'reserved' | 'out' | 'assigned' | 'repair' | 'person';
+  subject: string;
+  message: string;
+  assetId?: string;
+  userId?: string;
+};
+
+export type CalendarEventOptions = {
+  success: boolean;
+  companies: {
+    id: string;
+    name: string;
+    /** PROSPECT, CLIENT or PAST — a meeting can be with any of them. */
+    status: string;
+    projects: { id: string; name: string }[];
+    retainers: { id: string; name: string }[];
+    contacts: { id: string; name: string }[];
+  }[];
+  assets: { id: string; tag: string; name: string; status: string }[];
+};
+
+export type CalendarEventDetail = {
+  id: string;
+  kind: CalendarEventKind;
+  title: string;
+  allDay: boolean;
+  startsAt: string;
+  endsAt: string;
+  when: string;
+  location: string | null;
+  notes: string | null;
+  company: { id: string; name: string; status: string } | null;
+  project: { id: string; name: string } | null;
+  retainer: { id: string; name: string } | null;
+  createdBy: { id: string; name: string };
+  attendees: { id: string; name: string }[];
+  /** Phone and email only for people who can open the client book. */
+  contacts: { id: string; name: string; phone?: string | null; email?: string | null }[];
+  gear: { assetId: string; tag: string; name: string; status: string; statusLine: string; checkoutHref: string | null }[];
+  isPast: boolean;
+};
+
+export type CalendarEventResponse = {
+  success: boolean;
+  event: CalendarEventDetail;
+  clashes: CalendarClash[];
+  history: { at: string; text: string }[];
+  canEdit: boolean;
+};
+
+export type CalendarResponse = {
+  success: boolean;
+  items: CalendarItem[];
+  /** The layers this person may see at all. */
+  available: CalendarLayer[];
+  /** 0 = Sunday … 6 = Saturday. */
+  workingDays: number[];
+  timezone: string;
+  today: string;
+  /** The caller's own Google connection has stopped working. */
+  googleNeedsReconnect?: boolean;
 };
 
 // ── Formatting ───────────────────────────────────────────────────────────────

@@ -55,7 +55,7 @@ const SIGN_IN_VERBS = [
 const CLIENT_ORG_VERBS = ['outreach_imported'];
 const PEOPLE_ORG_VERBS = ['allocations_confirmed'];
 
-const WORK_TYPES = ['Project', 'Retainer', 'MonthCard', 'InternalProject'];
+const WORK_TYPES = ['Project', 'Retainer', 'MonthCard', 'InternalProject', 'CalendarEvent'];
 const MONEY_TYPES = ['Invoice', 'Proforma', 'Cost'];
 const CLIENT_TYPES = ['Company', 'Proposal', 'OutreachEntry'];
 
@@ -333,6 +333,22 @@ export async function resolveSubjects(orgId: string, rows: Row[]): Promise<Map<s
   }
   if (org) put('Organization', org.id, { label: org.name, context: null, href: '/settings', gone: false });
 
+  // Meetings and shoots: named by their title, opened in the calendar's drawer.
+  if (ids('CalendarEvent').length) {
+    const events = await prisma.calendarEvent.findMany({
+      where: { id: { in: ids('CalendarEvent') }, organizationId: orgId, deletedAt: undefined },
+      select: { id: true, title: true, deletedAt: true, company: { select: { name: true } } },
+    });
+    for (const e of events) {
+      put('CalendarEvent', e.id, {
+        label: e.title,
+        context: e.company?.name ?? null,
+        href: e.deletedAt ? null : `/calendar?event=${e.id}`,
+        gone: Boolean(e.deletedAt),
+      });
+    }
+  }
+
   // Anything not found — hard-deleted, or from before its table existed.
   for (const r of rows) {
     const key = `${r.entityType}:${r.entityId}`;
@@ -365,6 +381,9 @@ const ACTION: Record<string, string> = {
   'Task.task_submitted_for_approval': 'sent for approval',
   'Task.task_approved': 'approved',
   'Task.task_changes_requested': 'requested changes on',
+  'Task.task_changes_added': 'added changes to',
+  // The repeat job made the next copy; nobody did it by hand.
+  'Task.task_repeated': 'made the next repeat of',
 
   // Clients, leads, the pipeline
   'Company.created': 'added the company',
@@ -436,6 +455,13 @@ const ACTION: Record<string, string> = {
   'Cost.recurring_cost_rolled': 'carried a recurring cost into the new month:',
 
   // Assets
+  // Meetings and shoots
+  'CalendarEvent.event_created': 'booked',
+  'CalendarEvent.event_moved': 'moved',
+  'CalendarEvent.event_people_changed': 'changed who is on',
+  'CalendarEvent.event_edited': 'edited',
+  'CalendarEvent.event_deleted': 'cancelled',
+
   'Asset.asset.created': 'added the asset',
   'Asset.asset.updated': 'edited the asset',
   'Asset.asset.deleted': 'deleted the asset',
@@ -513,6 +539,8 @@ const FIELD: Record<string, string> = {
   title: 'Title',
   name: 'Name',
   dueDate: 'Due date',
+  dueTime: 'Due time',
+  repeat: 'Repeat',
   assignee: 'Assigned to',
   assigneeId: 'Assigned to',
   assigneeIds: 'People on it',
@@ -652,7 +680,14 @@ export function detailLines(
   if (verb.startsWith('milestone_') && str(p.label)) lines.push(String(p.label));
 
   // A move from one state to another.
-  if (verb !== 'document_emailed' && entityType !== 'Asset' && str(p.from) && str(p.to)) {
+  // Meetings and shoots: when it moved to, and who joined or left.
+  if (entityType === 'CalendarEvent') {
+    if (verb === 'event_moved' && str(p.from) && str(p.to)) lines.push(`${p.from} → ${p.to}`);
+    if (verb === 'event_created' && str(p.when)) lines.push(String(p.when));
+    if (Array.isArray(p.added) && p.added.length) lines.push(`Added ${valueText('assigneeIds', p.added, people)}`);
+    if (Array.isArray(p.removed) && p.removed.length) lines.push(`Removed ${valueText('assigneeIds', p.removed, people)}`);
+  }
+  if (verb !== 'document_emailed' && entityType !== 'Asset' && entityType !== 'CalendarEvent' && str(p.from) && str(p.to)) {
     lines.push(`${enumWord(String(p.from))} → ${enumWord(String(p.to))}`);
   }
   const stageFrom = str(p.stageFrom) ?? str(p.lostFromStage);
@@ -722,7 +757,12 @@ export function detailLines(
   }
 
   // Approval: which round, what was sent, and what came back.
-  if (verb === 'task_submitted_for_approval' || verb === 'task_approved' || verb === 'task_changes_requested') {
+  if (
+    verb === 'task_submitted_for_approval' ||
+    verb === 'task_approved' ||
+    verb === 'task_changes_requested' ||
+    verb === 'task_changes_added'
+  ) {
     if (typeof p.round === 'number') lines.unshift(`Round ${p.round}`);
     if (str(p.link)) lines.push(String(p.link));
     if (str(p.feedback)) lines.push(`“${clip(String(p.feedback), 200)}”`);

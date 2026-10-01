@@ -3,8 +3,8 @@ import { PrismaClient } from '@prisma/client';
 /**
  * ─── Soft delete, once, instead of 139 times ────────────────────────────────
  *
- * Six models here never really delete: OutreachEntry, Proposal, Project, Task,
- * Cost and Asset all stamp `deletedAt` and stay. §16 — nothing is hard deleted
+ * Seven models here never really delete: OutreachEntry, Proposal, Project,
+ * Task, Cost, Asset and CalendarEvent all stamp `deletedAt` and stay. §16 — nothing is hard deleted
  * by a user — because the aging medians, the allocation cron, "done this week"
  * and the audit trail all read history a real delete would rewrite underneath
  * them.
@@ -46,7 +46,7 @@ import { PrismaClient } from '@prisma/client';
  * this would mean a behaviour change and a 139-site edit landing together with
  * no way to tell which one broke something.
  */
-const SOFT_DELETED = ['outreachEntry', 'proposal', 'project', 'task', 'cost', 'asset'] as const;
+const SOFT_DELETED = ['outreachEntry', 'proposal', 'project', 'task', 'cost', 'asset', 'calendarEvent'] as const;
 
 /** Reads only. A write names its own rows, and `update` on a deleted row is
  *  how `restore` puts one back. */

@@ -6,6 +6,7 @@ import { rollActiveRetainers } from '../workers/monthCard.cron.js';
 import { CompanyStatus, Prisma, RetainerBilling, RetainerStatus, RetainerProjectStatus } from '@prisma/client';
 import { monthKey } from '../utils/retainerMonths.js';
 import { TASK_PEOPLE, withPeople } from './tasks.js';
+import { withRepeatNext } from '../services/taskRepeat.js';
 import { LAST_REVIEW } from '../services/taskApprovals.js';
 import { parsePagination } from '../utils/query.js';
 import { toCsv } from '../utils/csv.js';
@@ -706,14 +707,16 @@ retainersRouter.get(
        * a second request per group.
        */
       const byMonth = new Map<string, { month: string; status: string; tasks: unknown[] }>();
-      for (const t of tasks) {
+      // People flattened, and each repeat's next date (services/taskRepeat).
+      const flat = await withRepeatNext(orgId, tasks.map((t) => withPeople(t)));
+      for (const t of flat) {
         const key = t.monthCard?.month ?? 'unfiled';
         const group = byMonth.get(key) ?? {
           month: key,
           status: t.monthCard?.status ?? 'OPEN',
           tasks: [],
         };
-        group.tasks.push(withPeople(t));
+        group.tasks.push(t);
         byMonth.set(key, group);
       }
 

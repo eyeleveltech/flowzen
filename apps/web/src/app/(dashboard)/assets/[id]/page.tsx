@@ -18,12 +18,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { plural } from '@/lib/utils';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, ArrowLeftRight, LogIn, LogOut, Package, Trash2, Wrench } from 'lucide-react';
 import {
   api,
-  ApiError,
   type AssetAccess,
   type AssetDetail,
   type AssetMovementRow,
@@ -66,7 +65,8 @@ export default function AssetDetailPage() {
   const [asset, setAsset] = useState<AssetDetail | null>(null);
   const [access, setAccess] = useState<AssetAccess>({ canManage: false, canSeeFigures: false });
   const [loading, setLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
+  /** Why the item did not load — a 404 is "isn't here", anything else "couldn't load". */
+  const [loadFailure, setLoadFailure] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
 
@@ -76,9 +76,10 @@ export default function AssetDetailPage() {
       setAsset(res.data);
       setAccess(res.access);
       setError(null);
+      setLoadFailure(null);
     } catch (e) {
-      if (e instanceof ApiError && e.status === 404) setNotFound(true);
-      else setError(e instanceof Error ? e.message : 'Could not load this item');
+      // Any failure but a 404 used to leave the page on "Loading…" for good.
+      setLoadFailure(e);
     } finally {
       setLoading(false);
     }
@@ -88,21 +89,33 @@ export default function AssetDetailPage() {
     void load();
   }, [load]);
 
+  /*
+   * "Check out" from a shoot on the calendar lands here with ?checkout=1: the
+   * same checkout as the button, opened for you — never done for you.
+   */
+  const searchParams = useSearchParams();
+  const wantsCheckout = searchParams.get('checkout') === '1';
+  useEffect(() => {
+    if (!wantsCheckout || !asset || !access.canManage) return;
+    if (asset.status === 'IN_STOCK' && !asset.openMovement) setDialog({ kind: 'issue', mode: 'CHECKOUT' });
+    router.replace(`/assets/${id}`, { scroll: false });
+  }, [wantsCheckout, asset, access.canManage, id, router]);
+
   usePageHeader(asset?.name ?? 'Asset', asset?.tag ?? '');
 
-  if (notFound) {
-    return (
-      <NotFoundPanel
-        title="No such item"
-        message="It may have been removed from the register."
-        backHref="/assets"
-        backLabel="Back to the register"
-      />
-    );
+  if (loading) {
+    return <p className="px-5 py-16 text-center text-sm text-secondary">Loading…</p>;
   }
 
-  if (loading || !asset) {
-    return <p className="px-5 py-16 text-center text-sm text-secondary">Loading…</p>;
+  if (!asset) {
+    return (
+      <NotFoundPanel
+        thing="asset"
+        error={loadFailure}
+        back={{ href: '/assets', label: 'Back to Assets' }}
+        onRetry={load}
+      />
+    );
   }
 
   const isClosed = ['RETIRED', 'SOLD', 'LOST'].includes(asset.status);
@@ -226,6 +239,31 @@ export default function AssetDetailPage() {
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
+          {/* Shoots it is planned for. A plan, not a checkout. */}
+          {(asset.reservations?.length ?? 0) > 0 && (
+            <Card padding="none">
+              <CardHeader>
+                <CardTitle>Upcoming reservations</CardTitle>
+                <span className="eyebrow">{asset.reservations!.length}</span>
+              </CardHeader>
+              <CardBody>
+                <ul className="space-y-3">
+                  {asset.reservations!.map((r) => (
+                    <li key={r.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
+                      <Link href={`/calendar?event=${r.eventId}`} className="text-sm font-medium text-primary hover:underline">
+                        {r.title}
+                      </Link>
+                      <span className="text-xs text-secondary">
+                        {r.when}
+                        {r.people.length > 0 && ` · ${r.people.map((p) => p.name).join(', ')}`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </CardBody>
+            </Card>
+          )}
+
           {/* The chain of custody — the reason this page exists. */}
           <Card padding="none">
             <CardHeader>
@@ -364,6 +402,7 @@ export default function AssetDetailPage() {
           mode={dialog.mode}
           assetId={asset.id}
           assetLabel={label}
+          reservations={asset.reservations ?? []}
           onClose={() => setDialog(null)}
           onDone={() => {
             setDialog(null);

@@ -1,3 +1,6 @@
+import { TASK_PEOPLE } from '../services/taskPeople.js';
+import { createTaskRecord } from '../services/taskCreate.js';
+import { dayOf, ruleFromDueDate, withRepeatNext } from '../services/taskRepeat.js';
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
@@ -5,17 +8,17 @@ import { authenticate, requirePermission, hasPermission, type AuthRequest } from
 import { loadWorkCalendar, workingMinutesOn } from '../utils/workCalendar.js';
 import { computeTaskTypeMedians, taskTypeGroupKey } from '../utils/taskTypeMedian.js';
 import { defaultProjectId } from '../services/retainerProjects.js';
-import { TaskStatus, TaskWorkType, WaitingOn, Priority, TaskType, ReviewDecision } from '@prisma/client';
+import { TaskStatus, TaskWorkType, WaitingOn, Priority, TaskType, ReviewDecision, RepeatFrequency } from '@prisma/client';
 import {
   approvalFlagRefusal,
   approvalType,
   approveRefusal,
+  addChangesRefusal,
   approverFor,
   approverIds,
   elapsedEnd,
   escalateFor,
   escalationNamesByType,
-  LAST_REVIEW,
   TASK_TYPE_LABEL,
   type LastReview,
 } from '../services/taskApprovals.js';
@@ -58,36 +61,7 @@ import { sendCsv } from '../utils/csvResponse.js';
 
 export const tasksRouter = Router();
 
-/**
- * The people on a task, in one shape wherever a task is read.
- *
- * `assignee` is the lead and `assignees` is everybody, the lead included, so a
- * caller can render "Janani +2" without joining two lists itself.
- *
- * `assignedBy` and `creator` are two different people asked two different
- * questions: who wanted this done, and who typed it in. They are usually the
- * same, which is why one column pretended to be both for so long — but a
- * manager writing up what a Head asked for in a meeting is exactly the case
- * the product exists to record, and it was the one it got wrong.
- */
-export const TASK_PEOPLE = {
-  assignee: { select: { id: true, name: true, designation: true, dept: true } },
-  assignedBy: { select: { id: true, name: true, designation: true } },
-  creator: { select: { id: true, name: true, designation: true } },
-  reviewer: { select: { id: true, name: true, designation: true } },
-  assignees: {
-    orderBy: { assignedAt: 'asc' as const },
-    select: { user: { select: { id: true, name: true, designation: true, dept: true } } },
-  },
-  /*
-   * The last round of approval, when a task has had one.
-   *
-   * Carried with the people because every list that shows a task needs it the
-   * same way: "Changes requested" and the feedback, or how long it has been
-   * waiting on an approver. `withPeople` turns it into `lastReview`.
-   */
-  reviews: LAST_REVIEW,
-} as const;
+export { TASK_PEOPLE } from '../services/taskPeople.js';
 
 /**
  * Flattens the join rows, so the wire carries people rather than link records.
@@ -199,6 +173,7 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
         waitingSince: t.waitingSince,
         waitingTotalMinutes: t.waitingTotalMinutes,
         dueDate: t.dueDate,
+        dueTime: t.dueTime,
         assignedAt: t.assignedAt,
         completedAt: t.completedAt,
         reopenCount: t.reopenCount,
@@ -238,6 +213,8 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
         typeMedianMinutes,
         typeMedianText: typeMedianMinutes != null ? formatWorkingMinutes(typeMedianMinutes) : null,
         needsApproval: t.needsApproval,
+        // The repeat, if it is a copy in one; `nextDue` is added below.
+        repeat: t.repeat,
         lastReview,
         // How long the waiting round has waited, in working time — what
         // "No answer for 2h 10m" reads on the editor's row.
@@ -267,7 +244,7 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
       select: { taskId: true, sortOrder: true },
     });
     const placeOf = new Map(places.map((p) => [p.taskId, p.sortOrder]));
-    const placed = (await withEscalatedTo(orgId, formattedTasks)).map((t) => ({
+    const placed = (await withRepeatNext(orgId, await withEscalatedTo(orgId, formattedTasks))).map((t) => ({
       ...t,
       sortOrder: placeOf.get(t.id) ?? null,
     }));
@@ -358,7 +335,15 @@ function placeOf(t: {
 const REVIEW_PEOPLE = {
   submittedBy: { select: { id: true, name: true } },
   decidedBy: { select: { id: true, name: true } },
+  // Changes the other approvers added after it was sent back.
+  notes: {
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, feedback: true, createdAt: true, author: { select: { id: true, name: true } } },
+  },
 } as const;
+
+/** How long a sent-back task stays in the other approvers' "add your changes" list. */
+const SENT_BACK_DAYS = 7;
 
 tasksRouter.get('/approvals', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
   try {
@@ -367,9 +352,56 @@ tasksRouter.get('/approvals', requirePermission('work.own'), async (req: AuthReq
 
     const [types, escalationTypes] = await Promise.all([approverFor(orgId, me), escalateFor(orgId, me)]);
     if (types.length === 0 && escalationTypes.length === 0) {
-      res.json({ success: true, items: [] });
+      res.json({ success: true, items: [], sentBack: [] });
       return;
     }
+
+    /*
+     * Sent back, and still with the editor — where the other approvers add
+     * their changes. One approver is enough to approve, but a request for
+     * changes should not be the last word of the first person to open it. For
+     * a week after it was sent back, or until the editor sends it again.
+     */
+    const since = new Date(Date.now() - SENT_BACK_DAYS * 24 * 60 * 60 * 1000);
+    const sentBackTasks = await prisma.task.findMany({
+      where: {
+        organizationId: orgId,
+        deletedAt: null,
+        needsApproval: true,
+        status: { in: [TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.ON_HOLD] },
+        taskType: { in: [...new Set([...types, ...escalationTypes])] },
+        NOT: { assignees: { some: { userId: me } } },
+        reviews: { some: { decision: ReviewDecision.CHANGES_REQUESTED, decidedAt: { gte: since } } },
+      },
+      include: {
+        ...TASK_PLACE,
+        ...TASK_PEOPLE,
+        reviews: { orderBy: { round: 'desc' }, take: 1, include: REVIEW_PEOPLE },
+      },
+    });
+    const sentBack = sentBackTasks
+      .filter((t) => t.reviews[0]?.decision === ReviewDecision.CHANGES_REQUESTED)
+      .map((t) => {
+        const r = t.reviews[0];
+        return {
+          id: t.id,
+          title: t.title,
+          taskType: t.taskType,
+          taskTypeLabel: t.taskType ? TASK_TYPE_LABEL[t.taskType] : null,
+          ...placeOf(t),
+          assignees: t.assignees.map((a) => a.user),
+          review: {
+            id: r.id,
+            round: r.round,
+            link: r.link,
+            decidedBy: r.decidedBy,
+            decidedAt: r.decidedAt,
+            feedback: r.feedback,
+            notes: r.notes,
+          },
+        };
+      })
+      .sort((a, b) => (b.review.decidedAt?.getTime() ?? 0) - (a.review.decidedAt?.getTime() ?? 0));
 
     const tasks = await prisma.task.findMany({
       where: {
@@ -414,6 +446,7 @@ tasksRouter.get('/approvals', requirePermission('work.own'), async (req: AuthReq
           taskTypeLabel: t.taskType ? TASK_TYPE_LABEL[t.taskType] : null,
           priority: t.priority,
           dueDate: t.dueDate,
+          dueTime: t.dueTime,
           ...placeOf(t),
           assignees: t.assignees.map((a) => a.user),
           creator: t.creator,
@@ -435,7 +468,7 @@ tasksRouter.get('/approvals', requirePermission('work.own'), async (req: AuthReq
       })
       .sort((a, b) => a.review.submittedAt.getTime() - b.review.submittedAt.getTime());
 
-    res.json({ success: true, items });
+    res.json({ success: true, items, sentBack });
   } catch (error) {
     next(error);
   }
@@ -843,6 +876,7 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
         waitingOn: t.waitingOn,
         waitingSince: t.waitingSince,
         dueDate: t.dueDate,
+        dueTime: t.dueTime,
         assignedAt: t.assignedAt,
         completedAt: t.completedAt,
         reopenCount: t.reopenCount,
@@ -867,6 +901,8 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
         workingHoursText: workingHours.formatted,
         workingMinutes: workingHours.totalMinutes,
         needsApproval: t.needsApproval,
+        // The repeat, if it is a copy in one; `nextDue` is added below.
+        repeat: t.repeat,
         lastReview,
         isOverdue: !notTheirs && dueStr < today,
         isToday: !notTheirs && dueStr === today,
@@ -875,7 +911,7 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
 
     // Applied after formatting, because "overdue" is a question about the
     // calendar and the status together rather than a column to filter on.
-    const withEscalation = await withEscalatedTo(orgId, formatted);
+    const withEscalation = await withRepeatNext(orgId, await withEscalatedTo(orgId, formatted));
     const filteredRows = overdue === '1' || overdue === 'true' ? withEscalation.filter((t) => t.isOverdue) : withEscalation;
 
     // The clicked column, then due date and title so equal rows keep a steady
@@ -921,6 +957,7 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
         { label: 'Status', value: (t) => t.status },
         { label: 'Assigned on', value: (t) => t.assignedAt.toISOString().slice(0, 10) },
         { label: 'Due', value: (t) => t.dueDate.toISOString().slice(0, 10) },
+        { label: 'Due time', value: (t) => t.dueTime ?? '' },
         { label: 'Overdue', value: (t) => (t.isOverdue ? 'yes' : '') },
         { label: 'Elapsed', value: (t) => t.workingHoursText },
       ]);
@@ -1096,7 +1133,7 @@ tasksRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, res
       };
     });
 
-    const listed = await withEscalatedTo(orgId, formatted);
+    const listed = await withRepeatNext(orgId, await withEscalatedTo(orgId, formatted));
 
     if (wantsCsv) {
       const csv = toCsv(listed, [
@@ -1129,6 +1166,19 @@ tasksRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, res
 
 // ── 3. Create Task ──────────────────────────────────────────────────────────
 
+/**
+ * The optional due time: "17:30", 24-hour, office time. An empty string clears
+ * it, which is what a cleared time field sends.
+ */
+const dueTimeSchema = z.preprocess(
+  (v) => (v === '' ? null : v),
+  z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Give the due time as hours and minutes, like 17:30.')
+    .nullable()
+    .optional(),
+);
+
 const taskCreateSchema = z.object({
   title: z.string().min(1, 'Task title is required'),
   workType: z.nativeEnum(TaskWorkType).default(TaskWorkType.INTERNAL),
@@ -1157,8 +1207,14 @@ const taskCreateSchema = z.object({
   /** Needs an approver's sign-off before it is done. Off unless ticked. */
   needsApproval: z.boolean().optional(),
   dueDate: z.string().min(1, 'Due date is required'),
+  dueTime: dueTimeSchema,
   priority: z.nativeEnum(Priority).optional(),
   notes: z.string().optional().nullable(),
+  /**
+   * Repeat it: just the word. The weekday or day of the month comes from the
+   * due date (services/taskRepeat). Null or absent is "doesn't repeat".
+   */
+  repeat: z.nativeEnum(RepeatFrequency).nullable().optional(),
 });
 
 /**
@@ -1243,7 +1299,7 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
     }
 
     const orgId = req.user!.organizationId;
-    const { title, workType, workId, monthCardId, projectId, retainerProjectId, internalProjectId, companyId, assigneeId, assigneeIds, assignedById, reviewerId, taskType, needsApproval, dueDate, priority, notes } =
+    const { title, workType, workId, monthCardId, projectId, retainerProjectId, internalProjectId, companyId, assigneeId, assigneeIds, assignedById, reviewerId, taskType, needsApproval, dueDate, dueTime, priority, notes, repeat } =
       parsed.data;
 
     // Approval needs somebody to approve it. No type picked is fine: the task
@@ -1399,74 +1455,51 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
       }
     }
 
-    const task = await prisma.task.create({
-      data: {
-        organizationId: orgId,
-        title: title.trim(),
-        workType,
-        workId: workId || null,
-        monthCardId: resolvedMonthCardId,
-        projectId: projectId || (workType === 'PROJECT' ? workId : null),
-        retainerProjectId: resolvedProjectId,
-        internalProjectId: internalProjectId || null,
-        companyId: companyId || null,
-        assigneeId: people[0],
-        // Who typed it, and who asked for it. The first is never chosen — it
-        // is what `canRemove` reads — and the second falls back to it, so a
-        // form that does not offer the field behaves exactly as before.
+    /*
+     * Written through the shared create (services/taskCreate) — the repeat
+     * job makes its copies with the same function, so a copy is a task like
+     * any other. A repeating task gets its rule first, in the same
+     * transaction, with the day taken from the due date.
+     *
+     * "Assigned by" is nobody unless somebody was named; `createdById` always
+     * records who typed it, and the drawer falls back to it.
+     */
+    const task = await prisma.$transaction(async (tx) => {
+      const series = repeat
+        ? await tx.taskRepeat.create({
+            data: {
+              organizationId: orgId,
+              ...ruleFromDueDate(repeat, dayOf(new Date(dueDate))),
+              createdById: req.user!.userId,
+            },
+          })
+        : null;
+      return createTaskRecord(tx, {
+        orgId,
         createdById: req.user!.userId,
-        /*
-         * Nobody, unless somebody was named.
-         *
-         * This defaulted to the caller, so every task you wrote for yourself
-         * recorded you as having handed it to yourself. "Assigned by" is for
-         * the case where somebody ELSE asked -- a Head passing design work
-         * down -- and filling it in by default made that signal meaningless,
-         * because every task carried it.
-         *
-         * `createdById` still records who typed it, always, so nothing is
-         * lost: the task drawer falls back to the creator when nobody handed
-         * the work over.
-         */
-        assignedById: assignedById || null,
-        reviewerId: reviewerId || null,
-        taskType: needsApproval ? approvalType(taskType) : (taskType ?? null),
-        needsApproval: needsApproval ?? false,
-        dueDate: new Date(dueDate),
-        assignedAt: new Date(),
-        status: TaskStatus.TODO,
-        priority: priority ?? Priority.MEDIUM,
-        notes: notes || null,
-        assignees: { create: people.map((userId) => ({ userId })) },
-      },
-      /*
-       * The people, on the way back out.
-       *
-       * This returned the bare row, so a caller that had just assigned a task
-       * to three people got back a task that could not say who it was for or
-       * who asked — and had to fetch it again to show either. Same shape as
-       * every other task endpoint, so a form can render the reply it already
-       * has.
-       */
-      include: TASK_PEOPLE,
-    });
-
-    await prisma.activity.create({
-      data: {
-        organizationId: orgId,
-        entityType: 'Task',
-        entityId: task.id,
         actorId: req.user!.userId,
-        verb: 'task_created',
-        payload: {
-          title: task.title,
-          workType: task.workType,
-          assigneeIds: people,
-          ...(task.needsApproval ? { needsApproval: true } : {}),
-        },
-      },
+        title,
+        workType,
+        workId,
+        monthCardId: resolvedMonthCardId,
+        projectId,
+        retainerProjectId: resolvedProjectId,
+        internalProjectId,
+        companyId,
+        people,
+        assignedById,
+        reviewerId,
+        taskType,
+        needsApproval,
+        dueDate: new Date(dueDate),
+        dueTime,
+        priority,
+        notes,
+        repeatId: series?.id ?? null,
+      });
     });
 
+    // The people on the way back out, in the same shape as every task endpoint.
     res.status(201).json({ success: true, task: withPeople(task) });
   } catch (error) {
     next(error);
@@ -1496,8 +1529,11 @@ const taskEditSchema = z
     taskType: z.nativeEnum(TaskType).nullable().optional(),
     needsApproval: z.boolean().optional(),
     dueDate: z.string().min(1).optional(),
+    dueTime: dueTimeSchema,
     priority: z.nativeEnum(Priority).optional(),
     notes: z.string().max(4000).nullable().optional(),
+    /** Start, change or (null) stop the repeat — see the edit route. */
+    repeat: z.nativeEnum(RepeatFrequency).nullable().optional(),
     /** Move it to a different piece of retainer work, or null to ungroup it. */
     retainerProjectId: z.string().min(1).nullable().optional(),
     /**
@@ -1528,7 +1564,7 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
       return;
     }
 
-    const { title, assigneeId, assigneeIds, assignedById, reviewerId, taskType, needsApproval, dueDate, priority, notes } =
+    const { title, assigneeId, assigneeIds, assignedById, reviewerId, taskType, needsApproval, dueDate, dueTime, priority, notes, repeat } =
       parsed.data;
 
     /*
@@ -1674,6 +1710,7 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
         ...(taskType !== undefined || nextType !== existing.taskType ? { taskType: nextType } : {}),
         ...(needsApproval !== undefined ? { needsApproval } : {}),
         ...(dueDate !== undefined ? { dueDate: new Date(dueDate) } : {}),
+        ...(dueTime !== undefined ? { dueTime } : {}),
         ...(priority !== undefined ? { priority } : {}),
         ...(notes !== undefined ? { notes } : {}),
         ...(parsed.data.retainerProjectId !== undefined
@@ -1721,6 +1758,9 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
     if (needsApproval !== undefined && task.needsApproval !== existing.needsApproval) {
       changed.needsApproval = { from: existing.needsApproval, to: task.needsApproval };
     }
+    if (dueTime !== undefined && task.dueTime !== existing.dueTime) {
+      changed.dueTime = { from: existing.dueTime, to: task.dueTime };
+    }
     if (dueDate !== undefined && task.dueDate.getTime() !== existing.dueDate.getTime()) {
       changed.dueDate = {
         from: existing.dueDate.toISOString().slice(0, 10),
@@ -1732,6 +1772,42 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
     }
     if (notes !== undefined && task.notes !== existing.notes) {
       changed.notes = { from: Boolean(existing.notes), to: Boolean(task.notes) };
+    }
+
+    /*
+     * The repeat. Anyone who can edit the task can change or stop it.
+     *
+     *   · a value on a task with no live repeat starts one;
+     *   · a different value changes the rule — future copies use it, and the
+     *     day of the task's current due date;
+     *   · null stops it, saying who. Copies already made are never touched.
+     *
+     * The same value again changes nothing: the stored day is kept, so a copy
+     * that was moved off a holiday does not move every copy after it.
+     */
+    if (repeat !== undefined) {
+      const current = existing.repeatId
+        ? await prisma.taskRepeat.findUnique({ where: { id: existing.repeatId } })
+        : null;
+      const live = current && !current.stoppedAt ? current : null;
+      const dueDay = dayOf(task.dueDate);
+      if (repeat === null && live) {
+        const me = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { name: true } });
+        await prisma.taskRepeat.update({
+          where: { id: live.id },
+          data: { stoppedAt: new Date(), stoppedReason: `Stopped by ${me?.name ?? 'someone'}` },
+        });
+        changed.repeat = { from: live.frequency, to: null };
+      } else if (repeat && !live) {
+        const series = await prisma.taskRepeat.create({
+          data: { organizationId: orgId, ...ruleFromDueDate(repeat, dueDay), createdById: req.user!.userId },
+        });
+        await prisma.task.update({ where: { id }, data: { repeatId: series.id } });
+        changed.repeat = { from: null, to: repeat };
+      } else if (repeat && live && live.frequency !== repeat) {
+        await prisma.taskRepeat.update({ where: { id: live.id }, data: ruleFromDueDate(repeat, dueDay) });
+        changed.repeat = { from: live.frequency, to: repeat };
+      }
     }
 
     if (Object.keys(changed).length > 0) {
@@ -2290,6 +2366,73 @@ tasksRouter.post('/:id/request-changes', requirePermission('work.own'), async (r
   }
 });
 
+const addChangesSchema = z.object({
+  feedback: z
+    .string()
+    .trim()
+    .min(1, 'Say what needs changing — the editor works from this.')
+    .max(2000, 'Keep the changes under 2000 characters'),
+});
+
+/**
+ * POST /api/tasks/:id/add-changes — another approver's changes, on a round
+ * somebody already sent back.
+ *
+ * One approver is enough to approve. But the first to press Request changes
+ * used to close the round for everybody, so the other approvers' notes went
+ * to WhatsApp or nowhere. While the task is back with the editor, any of them
+ * can add theirs; the editor gets one list, each note with its author.
+ */
+tasksRouter.post('/:id/add-changes', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const parsed = addChangesSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+    const me = req.user!.userId;
+
+    const task = await loadForApproval(orgId, id);
+    if (!task) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+    const latest = task.reviews[0];
+    const refused = await addChangesRefusal(
+      orgId,
+      me,
+      { taskType: task.taskType, status: task.status, assigneeIds: task.assignees.map((a) => a.userId) },
+      latest,
+    );
+    if (refused) {
+      res.status(400).json({ success: false, error: refused });
+      return;
+    }
+
+    const note = await prisma.taskReviewNote.create({
+      data: { reviewId: latest.id, authorId: me, feedback: parsed.data.feedback },
+      select: { id: true, feedback: true, createdAt: true, author: { select: { id: true, name: true } } },
+    });
+
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'Task',
+        entityId: id,
+        actorId: me,
+        verb: 'task_changes_added',
+        payload: { title: task.title, round: latest.round, feedback: parsed.data.feedback },
+      },
+    });
+
+    res.status(201).json({ success: true, note });
+  } catch (error) {
+    next(error);
+  }
+});
+
 /**
  * GET /api/tasks/:id/reviews — one task's approval rounds, and what the
  * person looking can do about it.
@@ -2357,6 +2500,7 @@ tasksRouter.get('/:id/reviews', requirePermission('work.own'), async (req: AuthR
         needsApproval: task.needsApproval,
         priority: task.priority,
         dueDate: task.dueDate,
+        dueTime: task.dueTime,
         ...placeOf(task),
         assignees: task.assignees.map((a) => a.user),
         creator: task.creator,
@@ -2372,6 +2516,7 @@ tasksRouter.get('/:id/reviews', requirePermission('work.own'), async (req: AuthR
         decidedBy: r.decidedBy,
         decidedAt: r.decidedAt,
         feedback: r.feedback,
+        notes: r.notes,
         remindedAt: r.remindedAt,
         escalatedAt: r.escalatedAt,
       })),
@@ -2387,6 +2532,15 @@ tasksRouter.get('/:id/reviews', requirePermission('work.own'), async (req: AuthR
           task.needsApproval &&
           (task.status === TaskStatus.TODO || task.status === TaskStatus.IN_PROGRESS) &&
           (onIt || task.createdById === me),
+        // Sent back, and this approver can add their own changes to it.
+        canAddChanges:
+          (isApprover || isEscalation) &&
+          (await addChangesRefusal(
+            orgId,
+            me,
+            { taskType: task.taskType, status: task.status, assigneeIds },
+            task.reviews[task.reviews.length - 1],
+          )) == null,
       },
       waitingMinutes,
       waitingText: waitingMinutes != null ? formatWorkingMinutes(waitingMinutes) : null,

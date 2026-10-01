@@ -12,6 +12,9 @@
  *                         decide it, and every round so far.
  *   · `StuckApproval`   — the editor's side once nobody has answered: how
  *                         long, who it escalated to, and a nudge to the group.
+ *   · `ChangeList` / `AddChanges` — everything the approvers asked for on a
+ *                         round that was sent back, each with its author, and
+ *                         the form the other approvers add theirs with.
  *
  * Approvers mostly open these on their phone from a WhatsApp link, so every
  * control stacks full width at phone size and only sits in a row from `sm` up.
@@ -20,8 +23,8 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, ExternalLink, MessageCircle, RotateCcw, Send } from 'lucide-react';
-import { api, ApiError, type TaskReviewRound, type TaskReviewsResponse } from '@/lib/api-v2';
+import { Check, Copy, ExternalLink, MessageCircle, Plus, RotateCcw, Send } from 'lucide-react';
+import { api, ApiError, type PersonRef, type ReviewNote, type TaskReviewRound, type TaskReviewsResponse } from '@/lib/api-v2';
 import { Button, buttonClass } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Field } from '@/components/ui/field';
@@ -143,6 +146,106 @@ export function StuckApproval({
         <MessageCircle className="h-3.5 w-3.5" strokeWidth={1.75} />
         Remind on WhatsApp
       </a>
+    </div>
+  );
+}
+
+// ── Sent back: every change, and adding yours ───────────────────────────────
+
+/**
+ * Everything asked for on a round that was sent back: the first approver's
+ * feedback, then whatever the others added — each with who said it, so the
+ * editor knows whom to ask.
+ */
+export function ChangeList({
+  decidedBy,
+  feedback,
+  notes = [],
+  small = false,
+}: {
+  decidedBy: PersonRef | null | undefined;
+  feedback: string | null | undefined;
+  notes?: ReviewNote[];
+  small?: boolean;
+}) {
+  const items = [
+    ...(feedback ? [{ key: 'first', who: decidedBy?.name ?? 'An approver', text: feedback }] : []),
+    ...notes.map((n, i) => ({ key: n.id ?? `n${i}`, who: n.author.name, text: n.feedback })),
+  ];
+  if (items.length === 0) return null;
+  return (
+    <ul className={cn('space-y-1.5', small ? 'text-xs' : 'text-sm')}>
+      {items.map((it) => (
+        <li key={it.key} className="text-body">
+          <span className="whitespace-pre-wrap">“{it.text}”</span>
+          <span className="text-secondary"> — {it.who}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * "Add my changes": another approver's notes on a round somebody already sent
+ * back. It decides nothing — the task stays with the editor — it only makes
+ * sure the editor fixes everything in one go.
+ */
+export function AddChanges({ taskId, onAdded }: { taskId: string; onAdded: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const add = async () => {
+    if (!text.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.tasks.addChanges(taskId, text.trim());
+      toast.success('Your changes are on the list for the editor');
+      setText('');
+      setOpen(false);
+      onAdded();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not add your changes');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <Button variant="secondary" size="sm" icon={Plus} onClick={() => setOpen(true)} className="w-full sm:w-auto">
+        Add my changes
+      </Button>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
+      <Field
+        label="Your changes"
+        value={text}
+        onChange={setText}
+        textarea
+        rows={3}
+        placeholder="What else needs changing? The editor gets it with the rest."
+      />
+      <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+        <Button variant="ghost" size="sm" onClick={() => setOpen(false)} disabled={busy} className="w-full sm:w-auto">
+          Cancel
+        </Button>
+        <Button
+          variant="primary"
+          size="sm"
+          loading={busy}
+          disabled={busy || !text.trim()}
+          onClick={() => void add()}
+          className="w-full sm:w-auto"
+        >
+          Add to the list
+        </Button>
+      </div>
     </div>
   );
 }
@@ -418,8 +521,12 @@ export function ApprovalSection({ taskId, onChanged }: { taskId: string; onChang
               ? `Approved by ${last.decidedBy?.name ?? 'an approver'} at ${whenDecided(last.decidedAt)}`
               : `Changes requested by ${last.decidedBy?.name ?? 'an approver'} · ${whenDecided(last.decidedAt)}`}
           </p>
-          {last.decision === 'CHANGES_REQUESTED' && last.feedback && (
-            <p className="mt-1 whitespace-pre-wrap text-body">“{last.feedback}”</p>
+          {last.decision === 'CHANGES_REQUESTED' && (
+            <div className="mt-2 space-y-3">
+              <ChangeList decidedBy={last.decidedBy} feedback={last.feedback} notes={last.notes} />
+              {/* The other approvers add theirs while it is with the editor. */}
+              {viewer.canAddChanges && <AddChanges taskId={taskId} onAdded={refreshAll} />}
+            </div>
           )}
         </div>
       )}
@@ -478,7 +585,11 @@ export function ApprovalSection({ taskId, onChanged }: { taskId: string; onChang
               </p>
               {r.link && <OpenLink href={r.link} small />}
               {r.note && <p className="mt-1 whitespace-pre-wrap text-xs text-body">Note: {r.note}</p>}
-              {r.feedback && <p className="mt-1 whitespace-pre-wrap text-xs text-body">Feedback: “{r.feedback}”</p>}
+              {(r.feedback || (r.notes?.length ?? 0) > 0) && (
+                <div className="mt-1.5">
+                  <ChangeList decidedBy={r.decidedBy} feedback={r.feedback} notes={r.notes} small />
+                </div>
+              )}
             </li>
             ))}
         </ol>

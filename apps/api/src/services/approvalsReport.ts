@@ -73,6 +73,15 @@ export async function composeApprovalsReport(orgId: string, range: { from: Date;
     return { period: { from, to }, onTimeMinutes, byType: [], byPerson: [], waitingNow: [] };
   }
 
+  // Changes approvers added to rounds somebody else sent back, in the period.
+  const added = await prisma.taskReviewNote.findMany({
+    where: {
+      createdAt: { gte: from, lte: to },
+      review: { organizationId: orgId, task: { deletedAt: null, taskType: { in: types } } },
+    },
+    select: { author: { select: { id: true, name: true } } },
+  });
+
   const [rounds, open] = await Promise.all([
     // Anything that happened in the period: sent, decided or escalated in it.
     prisma.taskReview.findMany({
@@ -203,6 +212,7 @@ export async function composeApprovalsReport(orgId: string, range: { from: Date;
   };
   for (const r of approverRows) add(r.user, r.taskType);
   for (const d of decided) if (d.by) add(d.by);
+  for (const n of added) add(n.author);
   // An escalation contact's types, for whoever is listed.
   for (const r of escalationRows) if (people.has(r.user.id)) people.get(r.user.id)!.taskTypes.add(r.taskType);
 
@@ -216,6 +226,8 @@ export async function composeApprovalsReport(orgId: string, range: { from: Date;
         changesRequested: theirs.filter((d) => d.decision === 'CHANGES_REQUESTED').length,
         medianDecisionMinutes: median(theirs.map((d) => d.minutes)),
         afterEscalation: theirs.filter((d) => d.afterEscalation).length,
+        // Changes they added to a round somebody else sent back.
+        changesAdded: added.filter((n) => n.author.id === user.id).length,
       };
     })
     // Most decided first, so the zeros sink to the bottom where they show.

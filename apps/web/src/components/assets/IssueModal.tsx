@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { api, ApiError } from '@/lib/api-v2';
+import { api, ApiError, type AssetReservationRow } from '@/lib/api-v2';
 import { Modal, ScrollingModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
@@ -50,6 +50,7 @@ export function IssueModal({
   mode,
   assetId,
   assetLabel,
+  reservations = [],
   onClose,
   onDone,
 }: {
@@ -57,6 +58,8 @@ export function IssueModal({
   mode: IssueMode;
   assetId: string;
   assetLabel: string;
+  /** Shoots it is reserved for, coming up — to warn a checkout that runs into one. */
+  reservations?: AssetReservationRow[];
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -121,12 +124,38 @@ export function IssueModal({
 
   const copy = COPY[mode];
 
+  /*
+   * Out until a date that runs into somebody else's shoot. Said, never
+   * refused: whoever is checking it out may know the shoot moved. Taking it
+   * out FOR that shoot — the person is on it — is no clash at all.
+   */
+  const dueEnd = dueAt ? new Date(`${dueAt}T23:59:59`) : null;
+  const inTheWay =
+    mode === 'CHECKOUT' && dueEnd
+      ? reservations.filter(
+          (r) =>
+            new Date(r.startsAt) < dueEnd &&
+            new Date(r.endsAt) > new Date() &&
+            !r.people.some((p) => p.id === userId),
+        )
+      : [];
+
   return (
     <Modal open={open} onClose={onClose} title={copy.title} description={assetLabel}>
       <form onSubmit={submit} className="flex h-full flex-col">
         <ScrollingModalBody>
           {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
           <Note>{copy.hint}</Note>
+          {inTheWay.length > 0 && (
+            <div role="status" className="rounded-card border border-warning/30 bg-warning-tint px-4 py-3 text-xs text-warning-ink">
+              {inTheWay.map((r) => (
+                <p key={r.id}>
+                  Reserved for <span className="font-semibold">{r.title}</span>, {r.when}
+                  {r.people.length > 0 ? ` (${r.people.map((p) => p.name).join(', ')})` : ''}
+                </p>
+              ))}
+            </div>
+          )}
 
           <FieldSelect
             label="Who is taking it"

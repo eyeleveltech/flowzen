@@ -34,6 +34,8 @@ import { usersRouter } from './routes/users.js';
 import { profileRouter } from './routes/profile.js';
 import { searchRouter } from './routes/search.js';
 import { assetsRouter } from './routes/assets.js';
+import { calendarRouter } from './routes/calendar.js';
+import { googleRouter } from './routes/google.js';
 import { startAgencyHealthScanner } from './workers/scanner.cron.js';
 import { startMonthCardScheduler } from './workers/monthCard.cron.js';
 import { startAllocationScheduler } from './workers/allocation.cron.js';
@@ -41,6 +43,9 @@ import { startRecurringCostScheduler } from './workers/recurringCost.cron.js';
 import { startMondayBriefScheduler } from './workers/brief.cron.js';
 import { startAlertDigestScheduler } from './workers/alertDigest.cron.js';
 import { startApprovalChaser } from './workers/approvalChaser.cron.js';
+import { startTaskRepeatScheduler } from './workers/taskRepeat.cron.js';
+import { startEventReminders } from './workers/eventReminder.cron.js';
+import { startGoogleCalendarWorker } from './workers/googleCalendar.cron.js';
 
 const app = express();
 
@@ -120,6 +125,8 @@ app.use('/api/costs', costsRouter);
 app.use('/api/allocations', allocationsRouter);
 app.use('/api/internal-projects', internalProjectsRouter);
 app.use('/api/assets', assetsRouter);
+app.use('/api/calendar', calendarRouter);
+app.use('/api/google', googleRouter);
 
 // Start background health rules scanner
 startAgencyHealthScanner();
@@ -147,6 +154,10 @@ startAlertDigestScheduler();
 // Chase work waiting for approval: a reminder, then an escalation, in working
 // time — so a video sent for sign-off does not wait for somebody to remember.
 startApprovalChaser();
+// Repeating tasks: the next copy of each, hourly.
+startTaskRepeatScheduler();
+startEventReminders();
+startGoogleCalendarWorker();
 
 app.use((_req, res) => {
   res.status(404).json({ success: false, error: 'Not found' });

@@ -22,6 +22,7 @@ import { InternalProjectStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, type AuthRequest } from '../middleware/auth.js';
 import { TASK_PEOPLE, withPeople } from './tasks.js';
+import { withRepeatNext } from '../services/taskRepeat.js';
 
 export const internalProjectsRouter = Router();
 
@@ -143,12 +144,15 @@ internalProjectsRouter.get(
         success: true,
         project: {
           ...project,
-          tasks: project.tasks.map((t) => ({
-            ...withPeople(t),
-            // The same flag every other task list computes, so a row reads the
-            // same here as it does on My Work.
-            isOverdue: t.status !== 'DONE' && t.status !== 'CANCELLED' && t.dueDate.toISOString().slice(0, 10) < today,
-          })),
+          tasks: await withRepeatNext(
+            req.user!.organizationId,
+            project.tasks.map((t) => ({
+              ...withPeople(t),
+              // The same flag every other task list computes, so a row reads the
+              // same here as it does on My Work.
+              isOverdue: t.status !== 'DONE' && t.status !== 'CANCELLED' && t.dueDate.toISOString().slice(0, 10) < today,
+            })),
+          ),
           taskCounts: {
             total: counted.length,
             done,

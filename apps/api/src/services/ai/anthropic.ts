@@ -1,4 +1,5 @@
 import { httpFailure, sseLines, unreachable } from './errors.js';
+import { refusedTemperature, sendsTemperature } from './temperature.js';
 import type { AiProvider, AiReply, AiRequest, AiStream, AiToolCall, AiTurn } from './types.js';
 
 /**
@@ -73,7 +74,8 @@ const base = (req: AiRequest) => req.baseUrl || anthropic.defaultBaseUrl;
 const bodyFor = (req: AiRequest, stream: boolean) => ({
   model: req.model,
   max_tokens: req.maxOutputTokens,
-  temperature: req.temperature,
+  // Left out for a model that has refused it — see ./temperature.
+  ...(sendsTemperature(LABEL, req.model) ? { temperature: req.temperature } : {}),
   system: req.system,
   messages: messagesFrom(req.turns),
   ...(req.tools.length
@@ -95,21 +97,30 @@ const headers = (apiKey: string) => ({
 });
 
 async function post(req: AiRequest, stream: boolean): Promise<Response> {
-  let res: Response;
-  try {
-    res = await fetch(`${base(req)}/v1/messages`, {
-      method: 'POST',
-      headers: headers(req.apiKey),
-      body: JSON.stringify(bodyFor(req, stream)),
-    });
-  } catch {
-    throw unreachable(LABEL);
-  }
+  const send = async () => {
+    try {
+      return await fetch(`${base(req)}/v1/messages`, {
+        method: 'POST',
+        headers: headers(req.apiKey),
+        body: JSON.stringify(bodyFor(req, stream)),
+      });
+    } catch {
+      throw unreachable(LABEL);
+    }
+  };
+  let res = await send();
   if (!res.ok) {
+    let body = await res.text().catch(() => '');
+    // Once more without `temperature`, for a model that no longer takes it.
+    if (refusedTemperature(LABEL, req.model, res.status, body)) {
+      res = await send();
+      if (res.ok) return res;
+      body = await res.text().catch(() => '');
+    }
     throw httpFailure({
       label: LABEL,
       status: res.status,
-      body: await res.text().catch(() => ''),
+      body,
       model: req.model,
       organizationId: stream ? 'stream' : 'ask',
     });

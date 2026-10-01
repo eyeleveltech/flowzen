@@ -17,17 +17,21 @@ import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Plus } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { api, ApiError, formatDate } from '@/lib/api-v2';
 import { useConfig, useTeamMembers } from '@/hooks/queries';
 import { usePageHeader } from '@/hooks/usePageHeader';
 import { Card, CardBody } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
-import { EmptyState, ErrorNote } from '@/components/ui/empty-state';
+import { EmptyState } from '@/components/ui/empty-state';
+import { NotFoundPanel } from '@/components/ui/not-found-panel';
 import { NewInternalTaskModal } from '@/components/work/NewInternalTaskModal';
 import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
 import { getPriorityBadge, getPriorityLabel } from '@/lib/priority';
+import { withDueTime } from '@/lib/due-time';
+import { RepeatMark } from '@/components/work/RepeatMark';
+import { useConfirmStore } from '@/stores/confirm';
 
 const STATUS_OPTIONS = [
   { value: 'TODO', label: 'To do' },
@@ -52,12 +56,13 @@ export default function InternalProjectPage() {
   const queryClient = useQueryClient();
   const { data: config } = useConfig();
   const team = useTeamMembers();
+  const confirm = useConfirmStore((st) => st.confirm);
 
   const [adding, setAdding] = useState(false);
   const [selected, setSelected] = useState<any>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const { data, isPending, error } = useQuery({
+  const { data, isPending, error, refetch } = useQuery({
     queryKey: ['internal-project', id],
     queryFn: () => api.internalProjects.get(id),
   });
@@ -88,11 +93,51 @@ export default function InternalProjectPage() {
     }
   };
 
-  if (error) {
+  /** Close it, or open it again. Its tasks stay where they are. */
+  const setProjectStatus = async (status: 'ACTIVE' | 'DONE') => {
+    if (!project) return;
+    try {
+      await api.internalProjects.update(project.id, { status });
+      toast.success(status === 'DONE' ? `${project.name} marked done` : `${project.name} reopened`);
+      reload();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not change that');
+    }
+  };
+
+  /**
+   * Only an empty one, and the server enforces it too — anything that has held
+   * work is marked done instead, so the record of where that work sat survives.
+   */
+  const removeProject = async () => {
+    if (!project) return;
+    const ok = await confirm({
+      title: `Delete ${project.name}?`,
+      message: 'Nothing has been filed under it, so nothing is lost.',
+      confirmText: 'Delete',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await api.internalProjects.remove(project.id);
+      toast.success(`${project.name} deleted`);
+      void queryClient.invalidateQueries({ queryKey: ['internal-projects'] });
+      router.push('/live-work?tab=internal');
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not delete that');
+    }
+  };
+
+  // Nothing to show once the load has settled. A background refresh that
+  // fails keeps the page it already has.
+  if (!isPending && !project) {
     return (
-      <div className="page-shell">
-        <ErrorNote>{error instanceof Error ? error.message : 'Could not load this'}</ErrorNote>
-      </div>
+      <NotFoundPanel
+        thing="internal project"
+        error={error}
+        back={{ href: '/live-work?tab=internal', label: 'Back to Internal work' }}
+        onRetry={() => refetch()}
+      />
     );
   }
 
@@ -125,14 +170,36 @@ export default function InternalProjectPage() {
                 {project.owner ? `Owned by ${project.owner.name}` : 'No owner named'}
               </p>
             </div>
-            {canWrite && project.status === 'ACTIVE' && (
-              <button
-                type="button"
-                onClick={() => setAdding(true)}
-                className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
-              >
-                <Plus className="h-4 w-4" /> New task
-              </button>
+            {canWrite && (
+              <div className="flex shrink-0 items-center gap-2">
+                {project.taskCounts.total === 0 && (
+                  <button
+                    type="button"
+                    onClick={() => void removeProject()}
+                    aria-label={`Delete ${project.name}`}
+                    title="Delete"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-secondary transition-colors hover:bg-danger-tint hover:text-danger"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void setProjectStatus(project.status === 'DONE' ? 'ACTIVE' : 'DONE')}
+                  className="flex h-8 items-center rounded-lg border border-border px-3 text-sm font-medium text-body transition-colors hover:bg-subtle"
+                >
+                  {project.status === 'DONE' ? 'Reopen' : 'Mark done'}
+                </button>
+                {project.status === 'ACTIVE' && (
+                  <button
+                    type="button"
+                    onClick={() => setAdding(true)}
+                    className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
+                  >
+                    <Plus className="h-4 w-4" /> New task
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -175,7 +242,9 @@ export default function InternalProjectPage() {
                           className="cursor-pointer transition-colors hover:bg-subtle"
                           onClick={() => setSelected(t)}
                         >
-                          <td className="font-medium text-primary">{t.title}</td>
+                          <td className="font-medium text-primary">
+                            {t.title} <RepeatMark repeat={t.repeat} />
+                          </td>
                           <td className="text-secondary">
                             {t.assignee?.name ?? '—'}
                             {t.assignee?.designation && (
@@ -191,7 +260,7 @@ export default function InternalProjectPage() {
                           </td>
                           {/* Late is said on the row it applies to, not only counted in a tile. */}
                           <td className={t.isOverdue ? 'font-semibold text-danger' : 'text-secondary'}>
-                            {date(t.dueDate)}
+                            {withDueTime(date(t.dueDate), t.dueTime)}
                           </td>
                           <td className="text-secondary">{STATUS_LABEL[t.status] ?? t.status}</td>
                         </tr>
@@ -218,7 +287,13 @@ export default function InternalProjectPage() {
       )}
 
       <TaskDrawer
-        task={selected as DrawerTask | null}
+        // The task as the project has it now — a status change or an edit made
+        // in the drawer shows in it as soon as the project refetches.
+        task={
+          (selected
+            ? ((project?.tasks ?? []).find((t: any) => t.id === selected.id) ?? selected)
+            : null) as DrawerTask | null
+        }
         statusOptions={STATUS_OPTIONS}
         busy={busyId === selected?.id}
         onClose={() => setSelected(null)}

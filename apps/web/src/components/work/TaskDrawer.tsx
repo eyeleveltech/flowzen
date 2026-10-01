@@ -48,6 +48,10 @@ import { NeedsApprovalField } from '@/components/work/NeedsApprovalField';
 import { ApprovalSection } from '@/components/work/Approval';
 import { statusChoices } from '@/components/retainers/task-shared';
 import type { LastReview } from '@/lib/api-v2';
+import { withDueTime } from '@/lib/due-time';
+import { DueTimeField } from '@/components/work/DueTimeField';
+import { Repeat as RepeatIcon } from 'lucide-react';
+import { isRepeating, repeatOptions, repeatRuleLabel, REPEAT_HINT, type TaskRepeatInfo } from '@/lib/repeat';
 
 export type DrawerTask = {
   id: string;
@@ -59,6 +63,10 @@ export type DrawerTask = {
   internalProjectId?: string | null;
   priority: string;
   dueDate: string;
+  /** Optional, "17:30". */
+  dueTime?: string | null;
+  /** The repeat this task is a copy in, if it repeats. */
+  repeat?: TaskRepeatInfo | null;
   assignedAt?: string | null;
   completedAt?: string | null;
   notes?: string | null;
@@ -102,7 +110,7 @@ const PRIORITY_OPTIONS = [
 const dateValue = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : '');
 
 export function TaskDrawer({
-  task,
+  task: taskProp,
   statusOptions,
   team: teamProp,
   busy = false,
@@ -146,6 +154,8 @@ export function TaskDrawer({
   const [taskType, setTaskType] = useState('');
   const [needsApproval, setNeedsApproval] = useState(false);
   const [dueDate, setDueDate] = useState('');
+  const [dueTime, setDueTime] = useState('');
+  const [repeat, setRepeat] = useState('');
   const [priority, setPriority] = useState('MEDIUM');
   const [notes, setNotes] = useState('');
   /*
@@ -158,36 +168,51 @@ export function TaskDrawer({
    */
   const [internalProjects, setInternalProjects] = useState<InternalProject[]>([]);
   const [internalProjectId, setInternalProjectId] = useState('');
+  /*
+   * What was just saved, shown at once.
+   *
+   * The drawer showed the task it was handed, and a save only told the screen
+   * to refetch — so until that came back (or, on a screen holding the row it
+   * was clicked from, until the drawer was closed and reopened) it showed the
+   * old title, date and people. The saved values sit on top of the task until
+   * the screen hands over a fresh one.
+   */
+  const [saved, setSaved] = useState<Partial<DrawerTask> | null>(null);
 
   // Reset to the task in front of you whenever it changes, including when the
   // drawer is closed and reopened on a different row — otherwise the form
   // keeps the last task's title and offers to save it onto this one.
   useEffect(() => {
     setEditing(false);
-    setTitle(task?.title ?? '');
+    // A fresh task from the screen replaces anything shown from the last save.
+    setSaved(null);
+    setTitle(taskProp?.title ?? '');
     // Falls back to the lead when a caller has not sent the whole set, so a
     // screen that only knows one person still opens a usable form.
-    setAssigneeIds(task?.assignees?.map((a) => a.id) ?? (task?.assignee ? [task.assignee.id] : []));
-    setAssignedById(task?.assignedBy?.id ?? task?.creator?.id ?? '');
-    setTaskType(task?.taskType ?? '');
-    setNeedsApproval(Boolean(task?.needsApproval));
-    setDueDate(dateValue(task?.dueDate));
-    setPriority(task?.priority ?? 'MEDIUM');
-    setNotes(task?.notes ?? '');
-    setInternalProjectId(task?.internalProjectId ?? '');
-  }, [task]);
+    setAssigneeIds(taskProp?.assignees?.map((a) => a.id) ?? (taskProp?.assignee ? [taskProp.assignee.id] : []));
+    setAssignedById(taskProp?.assignedBy?.id ?? taskProp?.creator?.id ?? '');
+    setTaskType(taskProp?.taskType ?? '');
+    setNeedsApproval(Boolean(taskProp?.needsApproval));
+    setDueDate(dateValue(taskProp?.dueDate));
+    setDueTime(taskProp?.dueTime ?? '');
+    setRepeat(isRepeating(taskProp?.repeat) ? taskProp!.repeat!.frequency : '');
+    setPriority(taskProp?.priority ?? 'MEDIUM');
+    setNotes(taskProp?.notes ?? '');
+    setInternalProjectId(taskProp?.internalProjectId ?? '');
+  }, [taskProp]);
 
   // Only for an internal task, and only the open buckets. Nothing else has a
   // use for this list, and asking for it on every task would be a request per
   // row opened.
   useEffect(() => {
-    if (task?.workType !== 'INTERNAL') return;
+    if (taskProp?.workType !== 'INTERNAL') return;
     void api.internalProjects
       .list('ACTIVE')
       .then((res) => setInternalProjects(res.projects))
       .catch(() => {});
-  }, [task?.workType]);
+  }, [taskProp?.workType]);
 
+  const task: DrawerTask | null = taskProp && saved ? { ...taskProp, ...saved } : taskProp;
   if (!task) return null;
 
   const finished = task.status === 'DONE' || task.status === 'CANCELLED';
@@ -199,9 +224,13 @@ export function TaskDrawer({
     }
     setSaving(true);
     try {
-      await api.tasks.update(task.id, {
+      const res = await api.tasks.update(task.id, {
         title: title.trim(),
         dueDate,
+        // Always sent, so emptying the field clears the time.
+        dueTime: dueTime || null,
+        // Start, change or stop the repeat — only when it was changed here.
+        ...(repeat !== (isRepeating(task.repeat) ? task.repeat.frequency : '') ? { repeat: repeat || null } : {}),
         priority,
         notes: notes.trim() || null,
         ...(assignedById ? { assignedById } : {}),
@@ -214,6 +243,25 @@ export function TaskDrawer({
         // somebody who may not make one, which is the check that counts.
         ...(assigneeIds.length > 0 ? { assigneeIds } : {}),
       });
+      // Shown at once; the screen's refetch replaces it with the real row.
+      const person = (id: string) => {
+        const p = people.find((x) => x.id === id);
+        return p ? { id: p.id, name: p.name } : null;
+      };
+      const team = assigneeIds.map(person).filter((p): p is { id: string; name: string } => Boolean(p));
+      const row = (res as { task?: Partial<DrawerTask> } | undefined)?.task;
+      setSaved({
+        title: title.trim(),
+        dueDate: row?.dueDate ?? dueDate,
+        dueTime: dueTime || null,
+        priority,
+        notes: notes.trim() || null,
+        taskType: row?.taskType ?? (taskType || null),
+        needsApproval: row?.needsApproval ?? needsApproval,
+        ...(task.workType === 'INTERNAL' ? { internalProjectId: internalProjectId || null } : {}),
+        ...(team.length > 0 ? { assignees: team, assignee: team[0] } : {}),
+        ...(assignedById && person(assignedById) ? { assignedBy: person(assignedById) } : {}),
+      });
       toast.success('Task updated');
       setEditing(false);
       onChanged();
@@ -221,6 +269,24 @@ export function TaskDrawer({
       toast.error(e instanceof Error ? e.message : 'Could not save that');
     } finally {
       setSaving(false);
+    }
+  };
+
+  /** Stop the repeat. Copies already made stay; the next is not made. */
+  const stopRepeating = async () => {
+    const ok = await confirm({
+      title: 'Stop repeating this task?',
+      message: 'No more copies will be made. The ones already made stay as they are.',
+      confirmText: 'Stop repeating',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await api.tasks.update(task.id, { repeat: null });
+      toast.success('Repeat stopped');
+      onChanged();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not stop the repeat');
     }
   };
 
@@ -316,8 +382,23 @@ export function TaskDrawer({
               )}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Due date" type="date" value={dueDate} onChange={setDueDate} required />
+                <DueTimeField value={dueTime} onChange={setDueTime} hint="Optional" />
                 <FieldSelect label="Priority" value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} />
               </div>
+              <FieldSelect
+                label="Repeat"
+                value={repeat}
+                onChange={setRepeat}
+                // Worded from the due date — except the repeat it already has,
+                // which keeps its own day (a copy moved off a holiday does not
+                // move the rest).
+                options={repeatOptions(dueDate).map((o) =>
+                  isRepeating(task.repeat) && o.value === task.repeat.frequency
+                    ? { ...o, label: repeatRuleLabel(task.repeat) }
+                    : o,
+                )}
+                hint={repeat ? REPEAT_HINT : undefined}
+              />
               <Field
                 label="Notes"
                 value={notes}
@@ -387,7 +468,40 @@ export function TaskDrawer({
                   {task.reviewer && <Row label="Reviewed by" value={personLine(task.reviewer)} />}
                   {taskTypeLabel(task.taskType) && <Row label="Type of work" value={taskTypeLabel(task.taskType)} />}
                   {task.assignedAt && <Row label="Assigned on" value={formatDate(task.assignedAt)} />}
-                  <Row label="Due" value={formatDate(task.dueDate)} />
+                  <Row label="Due" value={withDueTime(formatDate(task.dueDate), task.dueTime)} />
+                  {task.repeat && (
+                    <Row
+                      label="Repeats"
+                      value={
+                        task.repeat.stoppedAt ? (
+                          <span className="text-secondary">
+                            Repeat stopped on {formatDate(task.repeat.stoppedAt)}
+                            {task.repeat.stoppedReason ? ` — ${task.repeat.stoppedReason}.` : '.'}
+                          </span>
+                        ) : (
+                          <span className="inline-flex flex-wrap items-center justify-end gap-x-2 gap-y-1">
+                            <span className="inline-flex items-center gap-1.5">
+                              <RepeatIcon className="h-3.5 w-3.5 shrink-0 text-secondary" strokeWidth={1.75} aria-hidden="true" />
+                              {repeatRuleLabel(task.repeat)}
+                              {' · Next copy: '}
+                              {task.repeat.frequency === 'DAILY' && !finished
+                                ? 'once this one is done'
+                                : task.repeat.nextDue
+                                  ? formatDate(task.repeat.nextDue)
+                                  : '—'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => void stopRepeating()}
+                              className="rounded-sm text-xs font-semibold text-primary underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/40"
+                            >
+                              Stop repeating
+                            </button>
+                          </span>
+                        )
+                      }
+                    />
+                  )}
                   <Row
                     label="Priority"
                     value={

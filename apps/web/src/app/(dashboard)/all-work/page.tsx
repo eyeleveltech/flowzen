@@ -38,9 +38,16 @@ import { ExportCsvButton } from '@/components/ui/export-csv-button';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { TableRowsSkeleton } from '@/components/ui/skeleton-loaders';
 import { SortableTH, type SortDir } from '@/components/ui/table';
+import { Select } from '@/components/ui/select';
+import { InlineDueDate } from '@/components/work/InlineDueDate';
+import { statusChoices } from '@/components/retainers/task-shared';
+import { changeTaskStatus } from '@/lib/task-status';
+import toast from 'react-hot-toast';
 import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
 import { getInitials, getAvatarColor } from '@/lib/utils';
 import { personOption } from '@/lib/people';
+import { RepeatMark } from '@/components/work/RepeatMark';
+import type { TaskRepeatInfo } from '@/lib/repeat';
 
 const STATUS_OPTIONS = [
   /*
@@ -83,6 +90,8 @@ type Task = {
   status: string;
   priority: string;
   dueDate: string;
+  /** Optional, "17:30" — shown after the date. */
+  dueTime?: string | null;
   assignees: { id: string; name: string; designation?: string | null }[];
   assignedAt: string | null;
   clientName: string | null;
@@ -94,6 +103,10 @@ type Task = {
   workingHoursText: string | null;
   isOverdue: boolean;
   isToday: boolean;
+  /** Approval-flagged work reaches Done through Approve, not the menu. */
+  needsApproval?: boolean;
+  /** The repeat, if it is a copy in one — the small mark beside the title. */
+  repeat?: TaskRepeatInfo | null;
 };
 
 export default function AllWorkPage() {
@@ -116,6 +129,8 @@ export default function AllWorkPage() {
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [q, setQ] = useState('');
   const [openTask, setOpenTask] = useState<Task | null>(null);
+  /** The row whose status is being changed — its menu waits for the answer. */
+  const [busyId, setBusyId] = useState<string | null>(null);
   // Due date, oldest first, until a header is clicked. Clicking the same
   // header again flips it.
   const [sort, setSort] = useState(DEFAULT_SORT);
@@ -156,6 +171,21 @@ export default function AllWorkPage() {
   });
 
   const tasks = (data?.tasks ?? []) as Task[];
+
+  // Right on the row, or from the drawer — the same call either way.
+  const setStatus = async (t: { id: string; status: string }, next: string) => {
+    if (next === t.status) return;
+    setBusyId(t.id);
+    try {
+      await changeTaskStatus(t, next);
+      toast.success(`Moved to ${STATUS_OPTIONS.find((o) => o.value === next)?.label ?? next}`);
+      void refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not change the status');
+    } finally {
+      setBusyId(null);
+    }
+  };
   const counts = data?.counts ?? { total: 0, open: 0, waiting: 0, overdue: 0, unassigned: 0 };
 
   usePageHeader('All tasks', `${counts.total} shown`);
@@ -186,16 +216,19 @@ export default function AllWorkPage() {
     q.trim().length > 0 ||
     !(statuses.length === 1 && statuses[0] === 'UNFINISHED');
 
-  const drawerTask: DrawerTask | null = openTask
+  // The row as the list has it now, not as it was clicked — an edit or a
+  // status change shows in the open drawer as soon as the list refetches.
+  const current = openTask ? (tasks.find((t) => t.id === openTask.id) ?? openTask) : null;
+  const drawerTask: DrawerTask | null = current
     ? {
-        ...openTask,
-        assignee: openTask.assignees[0] ?? null,
-        clientHref: openTask.companyId ? `/companies/${openTask.companyId}` : null,
-        workLabel: openTask.projectName ?? (openTask.monthCardMonth ? `Retainer · ${openTask.monthCardMonth}` : null),
-        workHref: openTask.projectId
-          ? `/projects/${openTask.projectId}`
-          : openTask.retainerId
-            ? `/retainers/${openTask.retainerId}`
+        ...current,
+        assignee: current.assignees[0] ?? null,
+        clientHref: current.companyId ? `/companies/${current.companyId}` : null,
+        workLabel: current.projectName ?? (current.monthCardMonth ? `Retainer · ${current.monthCardMonth}` : null),
+        workHref: current.projectId
+          ? `/projects/${current.projectId}`
+          : current.retainerId
+            ? `/retainers/${current.retainerId}`
             : null,
       }
     : null;
@@ -331,7 +364,7 @@ export default function AllWorkPage() {
               {tasks.map((t) => (
                 <tr
                   key={t.id}
-                  className="cursor-pointer transition-colors hover:bg-subtle"
+                  className="group/row cursor-pointer transition-colors hover:bg-subtle"
                   onClick={() => setOpenTask(t)}
                 >
                   {/* When it landed on their plate, first: read down the
@@ -348,7 +381,8 @@ export default function AllWorkPage() {
                       className="rounded-sm text-left text-sm font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/40"
                     >
                       {t.title}
-                    </button>
+                    </button>{' '}
+                    <RepeatMark repeat={t.repeat} />
                   </td>
                   <td className="text-secondary">
                     {t.companyId ? (
@@ -402,15 +436,28 @@ export default function AllWorkPage() {
                       </div>
                     )}
                   </td>
+                  {/* Click the date to move it, or pick a status, without opening the task. */}
                   <td className={t.isOverdue ? 'font-semibold text-danger' : t.isToday ? 'font-semibold text-primary' : 'text-secondary'}>
-                    {formatDate(t.dueDate, config?.organization.timezone, config?.organization.locale)}
+                    <InlineDueDate
+                      taskId={t.id}
+                      title={t.title}
+                      value={t.dueDate}
+                      time={t.dueTime}
+                      disabled={t.status === 'DONE' || t.status === 'CANCELLED'}
+                      format={(v) => formatDate(v, config?.organization.timezone, config?.organization.locale)}
+                    />
                     {t.isOverdue && <span className="block text-micro">overdue</span>}
                     {t.isToday && <span className="block text-micro">today</span>}
                   </td>
-                  <td>
-                    <span className={`rounded border px-2 py-0.5 text-micro font-medium ${STATUS_TONE[t.status] ?? 'border-border text-secondary'}`}>
-                      {STATUS_OPTIONS.find((o) => o.value === t.status)?.label ?? t.status}
-                    </span>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <Select
+                      value={t.status}
+                      onChange={(v) => void setStatus(t, v)}
+                      options={statusChoices(DRAWER_STATUS_OPTIONS, t)}
+                      ariaLabel={`Status for ${t.title}`}
+                      buttonClassName={`px-2.5 py-1.5 text-xs w-32 ${STATUS_TONE[t.status] ?? ''}`}
+                      disabled={busyId === t.id}
+                    />
                   </td>
                   <td className="text-right text-secondary">{t.workingHoursText ?? '—'}</td>
                 </tr>
@@ -426,9 +473,8 @@ export default function AllWorkPage() {
         team={team}
         onClose={() => setOpenTask(null)}
         onStatusChange={async (t, next) => {
-          await api.tasks.updateStatus(t.id, next);
+          await setStatus(t, next);
           setOpenTask(null);
-          void refetch();
         }}
         onChanged={() => void refetch()}
       />

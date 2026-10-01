@@ -1,3 +1,4 @@
+import { refusedTemperature, sendsTemperature } from './temperature.js';
 import { httpFailure, sseLines, unreachable } from './errors.js';
 import type {
   AiProvider,
@@ -134,7 +135,8 @@ function make(opts: {
           })),
         }
       : {}),
-    temperature: req.temperature,
+    // Left out for a model that has refused it — see ./temperature.
+    ...(sendsTemperature(label, req.model) ? { temperature: req.temperature } : {}),
     /*
      * `max_completion_tokens` against OpenAI, `max_tokens` against a compatible
      * server. OpenAI renamed it and its current models reject the old name;
@@ -147,21 +149,30 @@ function make(opts: {
   });
 
   const post = async (req: AiRequest, stream: boolean) => {
-    let res: Response;
-    try {
-      res = await fetch(`${base(req)}/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${req.apiKey}` },
-        body: JSON.stringify(bodyFor(req, stream)),
-      });
-    } catch {
-      throw unreachable(label);
-    }
+    const send = async () => {
+      try {
+        return await fetch(`${base(req)}/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${req.apiKey}` },
+          body: JSON.stringify(bodyFor(req, stream)),
+        });
+      } catch {
+        throw unreachable(label);
+      }
+    };
+    let res = await send();
     if (!res.ok) {
+      let body = await res.text().catch(() => '');
+      // Once more without `temperature`, for a model that no longer takes it.
+      if (refusedTemperature(label, req.model, res.status, body)) {
+        res = await send();
+        if (res.ok) return res;
+        body = await res.text().catch(() => '');
+      }
       throw httpFailure({
         label,
         status: res.status,
-        body: await res.text().catch(() => ''),
+        body,
         model: req.model,
         organizationId: stream ? 'stream' : 'ask',
       });

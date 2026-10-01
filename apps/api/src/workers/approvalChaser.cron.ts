@@ -1,3 +1,4 @@
+import { CHASER_RULES } from '../services/alertRules.js';
 import { AlertSeverity, type TaskType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../utils/logger.js';
@@ -39,12 +40,10 @@ import { approverIds, escalationIds, minutesLabel, TASK_TYPE_LABEL } from '../se
  */
 
 /**
- * The rules this worker owns.
- *
- * The hourly health scanner resolves every open alert it did not evaluate
- * itself — it must leave these alone, or it would close them within the hour.
+ * The rules this worker owns — kept with the other workers' rules in
+ * services/alertRules, which the hourly scanner reads so it leaves them alone.
  */
-export const CHASER_RULES = ['APPROVAL_REMINDER', 'APPROVAL_ESCALATED'];
+export { CHASER_RULES };
 
 type OpenRound = Awaited<ReturnType<typeof loadOpenRounds>>[number];
 

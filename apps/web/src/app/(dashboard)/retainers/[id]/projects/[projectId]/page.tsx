@@ -38,6 +38,7 @@ import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { EmptyState } from '@/components/ui/empty-state';
+import { NotFoundPanel } from '@/components/ui/not-found-panel';
 import { PageSkeleton } from '@/components/ui/skeleton-loaders';
 import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
 import { NewWorkTaskModal } from '@/components/work/NewWorkTaskModal';
@@ -57,6 +58,8 @@ import {
   type RetainerTask,
   type TaskStatusValue,
 } from '@/components/retainers/task-shared';
+import { withDueTime } from '@/lib/due-time';
+import { RepeatMark } from '@/components/work/RepeatMark';
 
 export default function RetainerProjectPage() {
   const { id, projectId } = useParams<{ id: string; projectId: string }>();
@@ -73,7 +76,8 @@ export default function RetainerProjectPage() {
   const [companyId, setCompanyId] = useState('');
   const [projects, setProjects] = useState<RetainerProject[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  /** Why the project did not load — a 404 is "isn't here", anything else "couldn't load". */
+  const [loadFailure, setLoadFailure] = useState<unknown>(null);
 
   /** The month this page is on. Its own — nothing else on the screen has one. */
   const [month, setMonth] = useState(currentMonth());
@@ -101,10 +105,10 @@ export default function RetainerProjectPage() {
       setCompanyName((retainer as any).retainer?.company?.name ?? '');
       setCompanyId((retainer as any).retainer?.companyId ?? (retainer as any).retainer?.company?.id ?? '');
       setProjects((retainer as any).retainer?.projects ?? []);
-      setError(null);
+      setLoadFailure(null);
       nudgeWorkCaches();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load this project');
+      setLoadFailure(e);
     } finally {
       setLoading(false);
     }
@@ -220,11 +224,13 @@ export default function RetainerProjectPage() {
   };
 
   if (loading) return <PageSkeleton />;
-  if (error || !project) {
+  if (loadFailure || !project) {
     return (
-      <EmptyState
-        title="This project is not here"
-        hint={error ?? 'It may have been removed. Its tasks, if it had any, are on the retainer.'}
+      <NotFoundPanel
+        thing="project"
+        error={loadFailure}
+        back={{ href: `/retainers/${id}`, label: 'Back to the retainer' }}
+        onRetry={load}
       />
     );
   }
@@ -418,7 +424,8 @@ export default function RetainerProjectPage() {
                             )}
                           >
                             {t.title}
-                          </button>
+                          </button>{' '}
+                          <RepeatMark repeat={t.repeat} />
                           {t.status === 'ON_HOLD' && t.waitingOn && (
                             <p className="mt-0.5 text-micro text-secondary">
                               waiting on {t.waitingOn === 'CLIENT' ? 'the client' : 'someone else'}
@@ -446,7 +453,7 @@ export default function RetainerProjectPage() {
                             late ? 'font-semibold text-danger' : 'text-secondary',
                           )}
                         >
-                          {formatDate(t.dueDate)}
+                          {withDueTime(formatDate(t.dueDate), t.dueTime)}
                         </td>
                         <td className="whitespace-nowrap">
                           <span className="inline-flex items-center gap-1.5 text-secondary">

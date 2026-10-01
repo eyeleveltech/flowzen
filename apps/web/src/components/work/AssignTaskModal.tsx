@@ -13,6 +13,7 @@ import { ErrorNote } from '@/components/ui/empty-state';
 import { PRIORITY_CONFIG } from '@/lib/priority';
 import { personOptions } from '@/lib/people';
 import { useAuthStore } from '@/stores';
+import { DueTimeField } from '@/components/work/DueTimeField';
 
 const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label }));
 
@@ -48,6 +49,8 @@ export function AssignTaskModal({
   const [assignedById, setAssignedById] = useState('');
   const team = useTeamMembers();
   const [dueDate, setDueDate] = useState('');
+  // Optional; empty means any time that day.
+  const [dueTime, setDueTime] = useState('');
   const [priority, setPriority] = useState('MEDIUM');
   const [description, setDescription] = useState('');
   const [scope, setScope] = useState<'INTERNAL' | 'CLIENT'>('INTERNAL');
@@ -115,6 +118,7 @@ export function AssignTaskModal({
       await api.tasks.create({
         title: title.trim(),
         dueDate,
+        dueTime: dueTime || undefined,
         assigneeId: person.id,
         workType: scope === 'INTERNAL' ? 'INTERNAL' : selectedTarget?.workType === 'RETAINER' ? 'MONTH_CARD' : 'PROJECT',
         monthCardId: scope === 'CLIENT' ? selectedTarget?.monthCardId : undefined,
@@ -219,6 +223,7 @@ export function AssignTaskModal({
 
           <div className="grid grid-cols-2 gap-4">
             <Field label="Due date" type="date" value={dueDate} onChange={setDueDate} required />
+            <DueTimeField value={dueTime} onChange={setDueTime} />
             <FieldSelect label="Priority" value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} />
           </div>
           <Field label="Description" value={description} onChange={setDescription} textarea rows={3} />

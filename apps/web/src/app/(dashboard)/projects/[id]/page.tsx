@@ -31,6 +31,7 @@ import { Card, CardHeader, CardTitle, CardBody } from '@/components/ui/card';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { EmptyState, ErrorNote } from '@/components/ui/empty-state';
+import { NotFoundPanel } from '@/components/ui/not-found-panel';
 import { ActivityFeed, type FeedItem } from '@/components/activities/ActivityFeed';
 import { PageSkeleton } from '@/components/ui/skeleton-loaders';
 import { StatTile } from '@/components/ui/stat-tile';
@@ -48,6 +49,9 @@ import { MilestoneInvoiceModal, type MilestoneForBilling } from '@/components/wo
 import { statusChoices } from '@/components/retainers/task-shared';
 import { PRIORITY_CONFIG, getPriorityDot, getPriorityBadge, getPriorityLabel } from '@/lib/priority';
 import { personOptions } from '@/lib/people';
+import { withDueTime } from '@/lib/due-time';
+import { RepeatMark } from '@/components/work/RepeatMark';
+import type { TaskRepeatInfo } from '@/lib/repeat';
 
 const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label }));
 
@@ -80,6 +84,9 @@ type Task = {
   status: TStatus;
   priority: string;
   dueDate: string;
+  dueTime?: string | null;
+  /** The repeat, if it is a copy in one — the small mark beside the title. */
+  repeat?: TaskRepeatInfo | null;
   assignedAt: string;
   completedAt: string | null;
   waitingOn: 'CLIENT' | 'ANOTHER_PERSON' | null;
@@ -195,6 +202,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const team = useTeamMembers();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Why the project did not load — a 404 is "isn't here", anything else "couldn't load". */
+  const [loadFailure, setLoadFailure] = useState<unknown>(null);
   /*
    * One list, read by both the row that draws the tabs and the hook that
    * decides which is open, so a tab cannot be shown without being selectable.
@@ -262,8 +271,10 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       setTasks((tRes.tasks ?? []) as Task[]);
       setConfig(cfg);
       setError(null);
+      setLoadFailure(null);
       nudgeWorkCaches();
     } catch (e) {
+      setLoadFailure(e);
       setError(e instanceof Error ? e.message : 'Could not load this project');
     } finally {
       setLoading(false);
@@ -299,14 +310,11 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
   if (!project) {
     return (
-      <EmptyState
-        title="That project does not exist"
-        hint={error ?? undefined}
-        action={
-          <Link href="/live-work?tab=PROJECTS">
-            <Button>Back to projects</Button>
-          </Link>
-        }
+      <NotFoundPanel
+        thing="project"
+        error={loadFailure}
+        back={{ href: '/live-work?tab=projects', label: 'Back to Projects' }}
+        onRetry={load}
       />
     );
   }
@@ -968,7 +976,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                               }`}
                             >
                               {t.title}
-                            </span>
+                            </span>{' '}
+                            <RepeatMark repeat={t.repeat} />
                             {t.status === 'ON_HOLD' && t.waitingOn && (
                               <p className="mt-0.5 text-micro text-secondary">
                                 waiting on {t.waitingOn === 'CLIENT' ? 'the client' : 'someone else'}
@@ -995,7 +1004,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                               late ? 'font-semibold text-danger' : 'text-secondary'
                             }`}
                           >
-                            {date(t.dueDate)}
+                            {withDueTime(date(t.dueDate), t.dueTime)}
                           </td>
                           <td className="whitespace-nowrap">
                             <span className="inline-flex items-center gap-1.5 text-secondary">

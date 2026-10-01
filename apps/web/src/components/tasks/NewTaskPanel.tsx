@@ -21,6 +21,7 @@ import { useTeamMembers } from '@/hooks/queries';
 import { PRIORITY_CONFIG } from '@/lib/priority';
 import { personOptions } from '@/lib/people';
 import { useAuthStore } from '@/stores';
+import { DueTimeField } from '@/components/work/DueTimeField';
 
 interface NewTaskPanelProps {
   isOpen: boolean;
@@ -40,6 +41,8 @@ export function NewTaskPanel({ isOpen, onClose, onSuccess, projectId, projectNam
   const [priority, setPriority] = useState('MEDIUM');
   const [description, setDescription] = useState('');
   const [dueDate, setDueDate] = useState('');
+  // Optional; empty means any time that day.
+  const [dueTime, setDueTime] = useState('');
   const team = useTeamMembers();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +57,7 @@ export function NewTaskPanel({ isOpen, onClose, onSuccess, projectId, projectNam
     setPriority('MEDIUM');
     setDescription('');
     setDueDate('');
+    setDueTime('');
     setError(null);
   }, [isOpen, me?.id]);
 
@@ -72,6 +76,7 @@ export function NewTaskPanel({ isOpen, onClose, onSuccess, projectId, projectNam
         assigneeIds: assigneeIds.length > 0 ? assigneeIds : undefined,
         assignedById: assignedById || undefined,
         dueDate,
+        dueTime: dueTime || undefined,
         priority,
         notes: description.trim() || undefined,
       });
@@ -106,6 +111,7 @@ export function NewTaskPanel({ isOpen, onClose, onSuccess, projectId, projectNam
 
           <div className="grid grid-cols-2 gap-4">
             <Field label="Due date" type="date" value={dueDate} onChange={setDueDate} required />
+            <DueTimeField value={dueTime} onChange={setDueTime} />
             {/* Who wanted it done — not always the person typing it up, and
                 not something an employee may claim about somebody else. The
                 shared field decides whether to render at all. */}

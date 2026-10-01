@@ -340,3 +340,27 @@ describe('choosing a provider', () => {
     expect(providerFor(null).id).toBe('GEMINI');
   });
 });
+
+describe('a model that no longer takes temperature', () => {
+  it('is asked again without it, and never sent it after that', async () => {
+    const refusal = () =>
+      new Response(
+        JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: '`temperature` is deprecated for this model.' } }),
+        { status: 400 },
+      );
+    const ok = () => json({ content: [{ type: 'text', text: 'ok' }] });
+    const fetchMock = vi.fn().mockResolvedValueOnce(refusal()).mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok());
+    vi.stubGlobal('fetch', fetchMock);
+    const bodyOf = (call: number) => JSON.parse((fetchMock.mock.calls[call] as [string, RequestInit])[1].body as string);
+
+    const reply = await anthropic.complete(req({ model: 'claude-no-temperature' }));
+    expect(reply.text).toBe('ok');
+    expect(bodyOf(0).temperature).toBe(0.2);
+    expect(bodyOf(1)).not.toHaveProperty('temperature');
+
+    // Remembered: the next question goes out without it, in one request.
+    await anthropic.complete(req({ model: 'claude-no-temperature' }));
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(bodyOf(2)).not.toHaveProperty('temperature');
+  });
+});

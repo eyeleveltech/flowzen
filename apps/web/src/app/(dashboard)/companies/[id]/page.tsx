@@ -58,6 +58,9 @@ import { EditContactModal } from '@/components/clients/EditContactModal';
 import { NewRetainerModal } from '@/components/clients/NewRetainerModal';
 import { ScheduleFollowUpModal } from '@/components/clients/ScheduleFollowUpModal';
 import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
+import { withDueTime } from '@/lib/due-time';
+import { RepeatMark } from '@/components/work/RepeatMark';
+import { NotFoundPanel } from '@/components/ui/not-found-panel';
 
 export default function CompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -70,6 +73,8 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
 
   const [company, setCompany] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  /** Why the company did not load — a 404 is "isn't here", anything else "couldn't load". */
+  const [loadFailure, setLoadFailure] = useState<unknown>(null);
   const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'WORK' | 'PROPOSALS' | 'MONEY' | 'AUDIT'>(
     ['OVERVIEW', 'WORK', 'PROPOSALS', 'MONEY', 'AUDIT'].includes(initialTab) ? (initialTab as any) : 'OVERVIEW',
   );
@@ -177,9 +182,10 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
       } else {
         setCompany(res);
       }
+      setLoadFailure(null);
       nudgeWorkCaches();
     } catch (err) {
-      console.error('Failed to load company detail:', err);
+      setLoadFailure(err);
     } finally {
       setLoading(false);
     }
@@ -318,14 +324,12 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
 
   if (!company) {
     return (
-      <div className="page-shell py-20 text-center">
-        <Building2 className="w-12 h-12 text-muted mx-auto mb-3" />
-        <h2 className="text-lg font-semibold text-primary">Company Not Found</h2>
-        <p className="text-sm text-secondary mt-1">This client record does not exist or has been removed.</p>
-        <Link href="/companies" className="mt-4 inline-block text-sm text-primary font-medium underline">
-          Back to Directory
-        </Link>
-      </div>
+      <NotFoundPanel
+        thing="company"
+        error={loadFailure}
+        back={{ href: '/companies', label: 'Back to Companies' }}
+        onRetry={fetchDetail}
+      />
     );
   }
 
@@ -930,14 +934,14 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                     >
                       <div className="min-w-0">
                         <p className={`text-sm font-semibold ${t.status === 'DONE' ? 'text-secondary' : 'text-primary'}`}>
-                          {t.title}
+                          {t.title} <RepeatMark repeat={t.repeat} />
                         </p>
                         <p className="text-micro text-secondary mt-0.5">
                           {t.status === 'DONE' && t.completedAt
                             ? `Done ${formatDate(t.completedAt)}`
                             : /* Late is said on the row it applies to. */
                               <span className={overdue ? 'font-semibold text-danger' : undefined}>
-                                Due {due ? formatDate(due.toISOString()) : '—'}
+                                Due {due ? withDueTime(formatDate(due.toISOString()), t.dueTime) : '—'}
                               </span>}
                           {t.assignee?.name ? ` · ${t.assignee.name}` : ''}
                         </p>
@@ -1594,7 +1598,13 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
 
       {/* The same drawer every other task list opens. */}
       <TaskDrawer
-        task={openFollowUp as DrawerTask | null}
+        // The follow-up as the company has it now, so an edit shows in the
+        // open drawer once the company refetches.
+        task={
+          (openFollowUp
+            ? ((company.tasks ?? []).find((t: any) => t.id === openFollowUp.id) ?? openFollowUp)
+            : null) as DrawerTask | null
+        }
         statusOptions={[
           { value: 'TODO', label: 'To do' },
           { value: 'IN_PROGRESS', label: 'In progress' },

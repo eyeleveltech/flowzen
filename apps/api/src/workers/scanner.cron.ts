@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import { emitToOrganization } from '../sse.js';
-import { CHASER_RULES } from './approvalChaser.cron.js';
+import { EXTERNAL_RULES } from '../services/alertRules.js';
 import { AlertSeverity, TaskWorkType, TaskStatus } from '@prisma/client';
 import { logger } from '../utils/logger.js';
 import { jobProfit, percentComplete, costRisk } from '../utils/jobProfit.js';
@@ -776,10 +776,11 @@ export async function runAgencyHealthScanner(): Promise<number> {
         }
       }
 
-      // Everything open that this scan evaluates — not the approval chaser's
-      // alerts, which it never evaluates and would otherwise close within the hour.
+      // Everything open that this scan evaluates — not the rules other workers
+      // own (the approval chaser's, the calendar's), which it never evaluates
+      // and would otherwise close within the hour.
       const openAlerts = await prisma.alert.findMany({
-        where: { organizationId: org.id, resolvedAt: null, rule: { notIn: CHASER_RULES } },
+        where: { organizationId: org.id, resolvedAt: null, rule: { notIn: EXTERNAL_RULES } },
         select: { id: true, rule: true, entityType: true, entityId: true },
       });
       const toResolve = openAlerts

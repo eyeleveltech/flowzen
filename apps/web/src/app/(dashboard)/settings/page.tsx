@@ -38,12 +38,12 @@ import { Toggle } from '@/components/ui/toggle';
 import { ErrorNote, Note } from '@/components/ui/empty-state';
 import { PageSkeleton } from '@/components/ui/skeleton-loaders';
 import { MailTab } from './components/MailTab';
-import { InternalWorkSection } from './components/InternalWorkSection';
 import { ZenMemorySection } from './components/ZenMemorySection';
 import { DocumentSettingsTab } from './components/DocumentSettingsTab';
 import { OnboardingTab } from './components/OnboardingTab';
 import { TrashTab } from './components/TrashTab';
 import { ActivityTab } from './components/ActivityTab';
+import { IntegrationsTab } from './components/IntegrationsTab';
 import { ApprovalsTab } from './components/ApprovalsTab';
 import { AssetsTab } from './components/AssetsTab';
 
@@ -64,6 +64,7 @@ const GROUPS = [
       { key: 'documents', label: 'Tax & numbering', caption: 'GST, prefixes, currency' },
       { key: 'proforma', label: 'Documents & billing', caption: 'What a document says' },
       { key: 'email', label: 'Email', caption: 'How it is sent' },
+      { key: 'integrations', label: 'Integrations', caption: 'Google Calendar' },
     ],
   },
   {
@@ -176,6 +177,13 @@ export default function SettingsPage() {
     { id: string; label: string; defaultModel: string; defaultBaseUrl: string; needsBaseUrl: boolean }[]
   >([]);
   const [modelsError, setModelsError] = useState<string | null>(null);
+  /*
+   * Counts saves that carried a new key. The list belongs to the key, and
+   * replacing a refused key with a working one changes neither of the other
+   * things the list is keyed on — so without this the Model field stayed a
+   * text box until the page was reloaded.
+   */
+  const [keySaves, setKeySaves] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -259,6 +267,7 @@ export default function SettingsPage() {
       return;
     }
     let cancelled = false;
+    setModelsError(null);
     void api.assistant
       .models()
       .then((r) => {
@@ -271,7 +280,7 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [config?.organization.aiConfigured, config?.organization.aiProvider]);
+  }, [config?.organization.aiConfigured, config?.organization.aiProvider, keySaves]);
 
   const canEdit = Boolean(config?.me.permissions?.includes('setup.admin'));
   const chosen = providers.find((p) => p.id === form?.aiProvider);
@@ -330,6 +339,7 @@ export default function SettingsPage() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
       await load();
+      if (form.aiApiKey.trim()) setKeySaves((n) => n + 1);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save');
     } finally {
@@ -378,7 +388,10 @@ export default function SettingsPage() {
             {GROUPS.map((group) => (
               <div key={group.label} className="flex shrink-0 gap-1.5 lg:flex-col lg:gap-0.5">
                 <p className="eyebrow hidden px-2 pb-1 lg:block">{group.label}</p>
-                {group.tabs.map((t) => {
+                {group.tabs
+                  // Integrations only when the server has the Google keys to offer.
+                  .filter((t) => t.key !== 'integrations' || config?.organization.googleCalendarConfigured)
+                  .map((t) => {
                   const on = tab === t.key;
                   return (
                     <button
@@ -562,13 +575,6 @@ export default function SettingsPage() {
               />
             </SectionCard>
 
-            {/*
-              Beside Departments because it is the same kind of thing: an
-              org-level list that exists to organise work, with no client and no
-              money anywhere near it.
-            */}
-            <InternalWorkSection canEdit={canEdit} />
-
             <SectionCard
               title="Stage probabilities"
               description={
@@ -686,7 +692,7 @@ export default function SettingsPage() {
                       placeholder={chosen?.defaultModel || 'Name the model'}
                       hint={
                         modelsError
-                          ? `Could not list models (${modelsError}). Type one if you know it.`
+                          ? `Couldn't list models: ${modelsError} Once a working key is saved, this becomes a list to choose from.`
                           : 'Save a key and this becomes a list of what that key can call.'
                       }
                       disabled={!canEdit}
@@ -896,6 +902,14 @@ export default function SettingsPage() {
         {tab === 'trash' && <TrashTab />}
 
         {tab === 'approvals' && <ApprovalsTab canEdit={canEdit} />}
+
+        {tab === 'integrations' && config.organization.googleCalendarConfigured && (
+          <IntegrationsTab
+            enabled={Boolean(config.organization.googleCalendarEnabled)}
+            canEdit={canEdit}
+            onChanged={() => void load()}
+          />
+        )}
 
         {tab === 'activity' && <ActivityTab tz={tz} locale={locale} />}
           </div>

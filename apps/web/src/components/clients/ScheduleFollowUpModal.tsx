@@ -25,6 +25,7 @@ import { ErrorNote } from '@/components/ui/empty-state';
 import { useTeamMembers } from '@/hooks/queries';
 import { personOptions } from '@/lib/people';
 import { useAuthStore } from '@/stores';
+import { DueTimeField } from '@/components/work/DueTimeField';
 
 /** A week out — the commonest answer, and a date box that starts empty is a
  *  date box somebody has to think about before they can type anything. */
@@ -43,6 +44,8 @@ export function ScheduleFollowUpModal({
   const team = useTeamMembers();
 
   const [dueDate, setDueDate] = useState(inAWeek());
+  // Optional; empty means any time that day.
+  const [dueTime, setDueTime] = useState('');
   const [note, setNote] = useState('');
   // Whoever owns the client, because they are the one with the history.
   const [assigneeId, setAssigneeId] = useState(company.ownerId ?? me?.id ?? '');
@@ -64,6 +67,7 @@ export function ScheduleFollowUpModal({
         assigneeId,
         assigneeIds: [assigneeId],
         dueDate,
+        dueTime: dueTime || undefined,
         notes: note.trim() || undefined,
       });
       toast.success('Follow-up scheduled');
@@ -89,6 +93,7 @@ export function ScheduleFollowUpModal({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Follow up on" value={dueDate} onChange={setDueDate} type="date" required disabled={busy} />
+            <DueTimeField label="Time" value={dueTime} onChange={setDueTime} hint="Optional" disabled={busy} />
             <FieldSelect
               label="Who"
               value={assigneeId}

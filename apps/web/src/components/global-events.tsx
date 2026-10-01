@@ -30,6 +30,7 @@ import { getSSE } from '@/lib/sse';
 import { qk } from '@/hooks/queries';
 import { useNotificationStore } from '@/stores/useNotificationStore';
 import type { AppNotification } from '@/lib/api-v2';
+import { onTaskWrite, TASK_VIEW_KEYS } from '@/lib/task-sync';
 
 export function GlobalEvents() {
   const queryClient = useQueryClient();
@@ -81,6 +82,18 @@ export function GlobalEvents() {
       sse.off('lead:updated', handleLeadChanged);
     };
   }, [queryClient, showToast]);
+
+  /*
+   * A task saved anywhere refreshes every list a task shows up in — the one on
+   * screen at once, the rest when next opened. See lib/task-sync.
+   */
+  useEffect(
+    () =>
+      onTaskWrite(() => {
+        for (const queryKey of TASK_VIEW_KEYS) void queryClient.invalidateQueries({ queryKey: [...queryKey] });
+      }),
+    [queryClient],
+  );
 
   return null;
 }

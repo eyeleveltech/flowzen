@@ -1,3 +1,4 @@
+import type { TaskRepeatInfo } from '@/lib/repeat';
 /**
  * The pieces the retainer screen and the project screen both need.
  *
@@ -81,6 +82,10 @@ export type RetainerTask = {
   status: TaskStatusValue;
   priority: string;
   dueDate: string;
+  /** Optional, "17:30" — shown after the date. */
+  dueTime?: string | null;
+  /** The repeat, if it is a copy in one — the small mark beside the title. */
+  repeat?: TaskRepeatInfo | null;
   assignedAt: string;
   completedAt: string | null;
   notes: string | null;

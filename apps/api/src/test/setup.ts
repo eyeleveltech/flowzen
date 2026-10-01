@@ -22,4 +22,11 @@ vi.mock('../lib/prisma.js', () => ({
 beforeEach(() => {
   // Reset the mock before every test to ensure isolated state
   mockReset(prisma);
+  /*
+   * Nobody is on any calendar event unless a test says so. Every bell and
+   * digest asks this (the event alerts' audience is the event's people), and
+   * an unmocked findMany answers undefined — which would fail every existing
+   * bell test for a table none of them is about.
+   */
+  (prisma.calendarEventAttendee.findMany as any).mockResolvedValue([]);
 });

@@ -24,6 +24,8 @@ import { PRIORITY_CONFIG } from '@/lib/priority';
 import { TASK_TYPE_OPTIONS } from '@/lib/task-type';
 import { NeedsApprovalField } from '@/components/work/NeedsApprovalField';
 import { useTeamMembers } from '@/hooks/queries';
+import { DueTimeField } from '@/components/work/DueTimeField';
+import { repeatOptions, REPEAT_HINT } from '@/lib/repeat';
 
 const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label }));
 
@@ -46,6 +48,10 @@ export function NewInternalTaskModal({
   const [needsApproval, setNeedsApproval] = useState(false);
   const [priority, setPriority] = useState('MEDIUM');
   const [dueDate, setDueDate] = useState('');
+  // Optional; empty means any time that day.
+  const [dueTime, setDueTime] = useState('');
+  // Doesn't repeat, unless chosen. The day comes from the due date.
+  const [repeat, setRepeat] = useState('');
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +74,8 @@ export function NewInternalTaskModal({
         taskType: taskType || undefined,
         needsApproval,
         dueDate,
+        dueTime: dueTime || undefined,
+        repeat: repeat || undefined,
         priority,
         notes: description.trim() || undefined,
       });
@@ -75,6 +83,8 @@ export function NewInternalTaskModal({
       setTitle('');
       setAssigneeIds([]);
       setDueDate('');
+    setDueTime('');
+    setRepeat('');
       setDescription('');
       onCreated();
     } catch (err) {
@@ -111,8 +121,17 @@ export function NewInternalTaskModal({
 
           <div className="grid grid-cols-2 gap-4">
             <Field label="Due date" type="date" value={dueDate} onChange={setDueDate} required disabled={saving} />
+            <DueTimeField value={dueTime} onChange={setDueTime} disabled={saving} />
             <FieldSelect label="Priority" value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} disabled={saving} />
           </div>
+          <FieldSelect
+            label="Repeat"
+            value={repeat}
+            onChange={setRepeat}
+            options={repeatOptions(dueDate)}
+            hint={repeat ? REPEAT_HINT : undefined}
+            disabled={saving}
+          />
 
           <Field
             label="Description"

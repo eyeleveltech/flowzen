@@ -95,6 +95,8 @@ beforeEach(() => {
     [ANAND, BALA, CHITRA].map((user) => ({ taskType: 'VIDEO', user })),
   );
   (prisma.approvalEscalationContact.findMany as any).mockResolvedValue([{ taskType: 'VIDEO', user: AKMAL }]);
+  // Changes added to rounds somebody else sent back: none, unless a test says.
+  (prisma.taskReviewNote.findMany as any).mockResolvedValue([]);
   (prisma.taskReview.findMany as any).mockImplementation(async ({ where }: any) =>
     where.decision === null ? OPEN : ROUNDS,
   );
@@ -160,6 +162,13 @@ describe('composeApprovalsReport', () => {
       expect(args.where.organizationId).toBe(ORG);
       expect(args.where.task).toMatchObject({ deletedAt: null, taskType: { in: ['VIDEO'] } });
     }
+  });
+
+  it('counts the changes an approver added to a round somebody else sent back', async () => {
+    (prisma.taskReviewNote.findMany as any).mockResolvedValue([{ author: CHITRA }, { author: CHITRA }]);
+    const report = await composeApprovalsReport(ORG, { from: FROM, to: NOW }, NOW);
+    const chitra = report.byPerson.find((p) => p.user.name === 'Chitra');
+    expect(chitra).toMatchObject({ approved: 0, changesRequested: 0, changesAdded: 2 });
   });
 
   it('makes one "all work" card when every type has the same approvers', async () => {

@@ -130,6 +130,9 @@ beforeEach(() => {
   // The tab counts, which the list now takes from the register rather than
   // from the rows it just filtered. One camera, in stock.
   (prisma.asset.groupBy as any).mockResolvedValue([{ status: 'IN_STOCK', _count: 1 }]);
+  // Nothing reserved for a shoot unless a test says so (calendar events).
+  (prisma.assetReservation.findMany as any).mockResolvedValue([]);
+  (prisma.organization.findUnique as any).mockResolvedValue({ timezone: 'Asia/Kolkata' });
 });
 
 describe('reading the catalogue', () => {

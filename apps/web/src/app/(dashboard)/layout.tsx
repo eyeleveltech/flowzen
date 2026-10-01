@@ -10,6 +10,7 @@ import { Sidebar } from '@/components/layout/sidebar';
 import { TopNav } from '@/components/layout/top-nav';
 import { BottomTabs } from '@/components/layout/bottom-tabs';
 import { CommandPaletteMount } from '@/components/layout/command-palette-mount';
+import { NoAccess } from '@/components/layout/no-access';
 import { useNotificationStore } from '@/stores/useNotificationStore';
 import { X, Bell } from 'lucide-react';
 import { Icon } from '@/components/ui/icon';
@@ -48,7 +49,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
    * The one guard on a typed or bookmarked URL.
    *
    * The sidebar leaves out what this person cannot open, so this only fires on
-   * a URL they typed or kept. They land on Today, which everybody has.
+   * a URL they typed or kept. They are told so, on that same address — it used
+   * to bounce them to My Work without a word, which made a link somebody had
+   * sent them look broken rather than locked.
    *
    * It used to ask whether the ORGANISATION had a "module", and returned early
    * unless `user.enabledModules` was set — a field the API stopped sending, so
@@ -86,10 +89,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const refused = known && Boolean(needs) && !canSee({ needs }, user!.permissions);
   const waiting = Boolean(needs) && !known;
 
-  useEffect(() => {
-    if (refused) router.replace('/my-work');
-  }, [refused, router]);
-
   // Close mobile sidebar when route changes
   useEffect(() => {
     setMobileSidebarOpen(false);
@@ -107,7 +106,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       >
         <TopNav isMobile={isMobile} />
         <div className={`px-4 sm:px-6 lg:px-8 py-8 w-full max-w-400 mx-auto ${isMobile ? 'pb-24' : ''}`}>
-          {refused || waiting ? null : children}
+          {refused ? <NoAccess pathname={pathname} /> : waiting ? null : children}
         </div>
       </motion.main>
 

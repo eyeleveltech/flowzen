@@ -35,6 +35,7 @@ import { ErrorNote, Note } from '@/components/ui/empty-state';
 import { PageSkeleton } from '@/components/ui/skeleton-loaders';
 import { getInitials, getAvatarColor } from '@/lib/utils';
 import { HeldAssets } from '@/components/assets/HeldAssets';
+import { GoogleCalendarCard } from '@/components/profile/GoogleCalendarCard';
 import { presetLabel } from '@/lib/people';
 
 export default function ProfilePage() {
@@ -151,6 +152,9 @@ export default function ProfilePage() {
         {/* The company kit logged out to you. Absent entirely when you hold
             nothing, rather than an empty card everybody learns to scroll past. */}
         {profile && <HeldAssets userId={profile.id} />}
+
+        {/* Optional, and only when the organisation has it switched on. */}
+        <GoogleCalendarCard />
 
         {/* ── What cannot be changed here, and why ────────────────────────── */}
         <Card padding="none">

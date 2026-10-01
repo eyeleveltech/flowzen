@@ -320,7 +320,11 @@ projectsRouter.get('/:id', requirePermission('work.all'), async (req: AuthReques
         },
         tasks: {
           where: { deletedAt: null },
-          include: { assignee: { select: { id: true, name: true, designation: true, dept: true } } },
+          include: {
+            assignee: { select: { id: true, name: true, designation: true, dept: true } },
+            // The small repeat mark on the project's task list.
+            repeat: { select: { id: true, frequency: true, weekday: true, dayOfMonth: true, stoppedAt: true, stoppedReason: true } },
+          },
           orderBy: { dueDate: 'asc' },
         },
         costs: {

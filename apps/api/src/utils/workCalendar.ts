@@ -99,3 +99,41 @@ export function workingMinutesOn(
     calendar.holidays,
   );
 }
+
+// ── Calendar days ───────────────────────────────────────────────────────────
+//
+// Plain "YYYY-MM-DD" keys, read as calendar days with no time and no zone — the
+// shape a due date is stored in (@db.Date) and a holiday is listed in. Kept
+// off the clock on purpose: shifting a date by a timezone is how a Thursday
+// becomes a Wednesday.
+
+/** The weekday of a calendar day: 0 = Sunday … 6 = Saturday. */
+export function weekdayOf(day: string): number {
+  return new Date(`${day}T00:00:00Z`).getUTCDay();
+}
+
+/** A calendar day `n` days on (or back, for a negative `n`). */
+export function addDays(day: string, n: number): string {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Today, as a calendar day where the organisation is — not where the server is. */
+export function todayIn(timezone: string, now: Date = new Date()): string {
+  // en-CA formats as YYYY-MM-DD.
+  return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+}
+
+/** Open for work: one of the working days of the week, and not a holiday. */
+export function isWorkingDay(calendar: WorkCalendar, day: string): boolean {
+  return calendar.workingDays.includes(weekdayOf(day)) && !calendar.holidays.includes(day);
+}
+
+/** The day itself if it is a working day, otherwise the next one that is. */
+export function nextWorkingDay(calendar: WorkCalendar, day: string): string {
+  let d = day;
+  // A year of days off would be a broken calendar, not a long holiday.
+  for (let i = 0; i < 366 && !isWorkingDay(calendar, d); i++) d = addDays(d, 1);
+  return d;
+}

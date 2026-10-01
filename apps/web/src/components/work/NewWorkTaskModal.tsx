@@ -21,6 +21,8 @@ import { ErrorNote } from '@/components/ui/empty-state';
 import { PRIORITY_CONFIG } from '@/lib/priority';
 import { NeedsApprovalField } from '@/components/work/NeedsApprovalField';
 import { useAuthStore } from '@/stores';
+import { DueTimeField } from '@/components/work/DueTimeField';
+import { repeatOptions, REPEAT_HINT } from '@/lib/repeat';
 
 const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label }));
 
@@ -72,6 +74,10 @@ export function NewWorkTaskModal({
   const [priority, setPriority] = useState('MEDIUM');
   const [description, setDescription] = useState('');
   const [dueDate, setDueDate] = useState('');
+  // Optional; empty means any time that day.
+  const [dueTime, setDueTime] = useState('');
+  // Doesn't repeat, unless chosen. The day comes from the due date.
+  const [repeat, setRepeat] = useState('');
   const [workOptions, setWorkOptions] = useState<WorkOption[]>([]);
   const [selectedKey, setSelectedKey] = useState('');
   const [retainerProjectId, setRetainerProjectId] = useState('');
@@ -92,6 +98,8 @@ export function NewWorkTaskModal({
     setPriority('MEDIUM');
     setDescription('');
     setDueDate('');
+    setDueTime('');
+    setRepeat('');
     setSelectedKey(targetKey(defaultTarget));
     setRetainerProjectId(defaultRetainerProjectId ?? '');
     setError(null);
@@ -167,6 +175,8 @@ export function NewWorkTaskModal({
         taskType: taskType || undefined,
         needsApproval,
         dueDate,
+        dueTime: dueTime || undefined,
+        repeat: repeat || undefined,
         priority,
         notes: description.trim() || undefined,
       });
@@ -246,8 +256,16 @@ export function NewWorkTaskModal({
           <AssignedByField value={assignedById} onChange={setAssignedById} />
           <div className="grid grid-cols-2 gap-4">
             <Field label="Due date" type="date" value={dueDate} onChange={setDueDate} required />
+            <DueTimeField value={dueTime} onChange={setDueTime} />
             <FieldSelect label="Priority" value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} />
           </div>
+          <FieldSelect
+            label="Repeat"
+            value={repeat}
+            onChange={setRepeat}
+            options={repeatOptions(dueDate)}
+            hint={repeat ? REPEAT_HINT : undefined}
+          />
           <FieldSelect
             label="Type of work"
             value={taskType}

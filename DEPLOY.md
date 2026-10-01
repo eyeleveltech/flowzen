@@ -38,3 +38,35 @@ docker compose up -d api
 - One-time only (already done): ./scripts/db-baseline.sh — never run again.
 - Manual backup anytime:
   docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB"' | gzip > ~/manual-backup-$(date +%F-%H%M).sql.gz
+
+## Google Calendar connection (one-time setup, optional)
+People can connect their own company Google Calendar from Profile. It needs a Google
+Cloud project owned by the company Workspace. Personal Gmail accounts are not supported.
+
+1. In the Workspace-owned Google Cloud console (console.cloud.google.com), create a
+   project and enable the **Google Calendar API**.
+2. **OAuth consent screen**:
+   - User type: **Internal** (no Google app review, no 7-day token expiry)
+   - App name: Flowzen
+   - Scopes, exactly these three:
+     - `openid` and `email`
+     - `https://www.googleapis.com/auth/calendar.events.readonly`
+     - `https://www.googleapis.com/auth/calendar.app.created`
+3. **Credentials** → Create credentials → OAuth client ID → type **Web application**,
+   with these authorised redirect URIs:
+   - `https://<production domain>/api/google/callback`
+   - `http://localhost:4000/api/google/callback` (or whatever the local API port is)
+4. **Server env** — add to `/var/www/flowzen/.env`, then Scenario A (rebuild and restart):
+   ```
+   GOOGLE_CLIENT_ID=...
+   GOOGLE_CLIENT_SECRET=...
+   GOOGLE_REDIRECT_URI=https://<production domain>/api/google/callback
+   ```
+5. If the Workspace restricts third-party apps: Google Admin console → Security →
+   API controls → mark the Flowzen client ID as **Trusted**.
+6. In Flowzen: **Settings → Integrations** → switch **Google Calendar connection** on.
+   The tab only appears once the server has all three keys.
+
+Then each person connects from **Profile → Google Calendar**. Disconnecting there revokes
+Flowzen's access, deletes what Flowzen stored, and deletes the "Flowzen" calendar from
+their Google.

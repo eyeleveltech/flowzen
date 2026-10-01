@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Search } from 'lucide-react';
@@ -31,9 +31,13 @@ export interface SelectProps {
   ariaLabel?: string; // accessible name for the control (use when there's a visible label nearby)
   buttonClassName?: string; // override trigger styling (e.g. compact padding in a dense table)
   leadingIcon?: React.ReactNode; // optional icon or visual indicator on the left of trigger
+  hideChevron?: boolean; // a trigger that reads as plain text — a time in a table row
+  scrollTo?: string; // open the list here when nothing is chosen — a long list of times opens at 9:00 am, not midnight
 }
 
-export function Select({ id, value, onChange, options, placeholder = 'Select...', className = '', disabled = false, required = false, rounded = 'rounded-xl', ariaLabel, buttonClassName, leadingIcon }: SelectProps) {
+export function Select({ id, value, onChange, options, placeholder = 'Select...', className = '', disabled = false, required = false, rounded = 'rounded-xl', ariaLabel, buttonClassName, leadingIcon, hideChevron = false, scrollTo }: SelectProps) {
+  // Ties this list's options to it, so opening can scroll to one of them.
+  const listId = useId();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
@@ -108,6 +112,16 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
   // exists, otherwise focus the selected/first option for keyboard navigation.
   useEffect(() => {
     if (!isOpen) return;
+    // Open on the chosen option (or `scrollTo`), not at the top of a long list.
+    const anchor = value || scrollTo;
+    if (anchor) {
+      requestAnimationFrame(() => {
+        const el = document.querySelector(
+          `[data-select-list="${CSS.escape(listId)}"][data-select-value="${CSS.escape(anchor)}"]`,
+        ) as HTMLElement | null;
+        el?.scrollIntoView({ block: 'center' });
+      });
+    }
     if (showSearch && !isMobile) {
       searchInputRef.current?.focus({ preventScroll: true });
       return;
@@ -169,7 +183,9 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
             {selectedOption ? selectedOption.label : placeholder}
           </span>
         </span>
-        <ChevronDown className={`h-4 w-4 shrink-0 text-secondary transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+        {!hideChevron && (
+          <ChevronDown className={`h-4 w-4 shrink-0 text-secondary transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+        )}
       </button>
 
       {/*
@@ -210,6 +226,8 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
             {filteredOptions.map((option) => (
               <button
                 key={option.value}
+                data-select-list={listId}
+                data-select-value={option.value}
                 onClick={() => {
                   onChange(option.value);
                   setSearchQuery('');
@@ -262,7 +280,9 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                   }}
                 >
                   {showSearch && (
-                    <div className="sticky top-0 z-10 -mx-1.5 -mt-1.5 mb-1 border-b border-subtle bg-white px-1.5 pt-1.5 pb-1.5">
+                    // `-top-1.5`, not `top-0`: the list's own padding sits above a sticky
+                    // header, and a scrolled list showed its options through that gap.
+                    <div className="sticky -top-1.5 z-10 -mx-1.5 -mt-1.5 mb-1 border-b border-subtle bg-white px-1.5 pt-1.5 pb-1.5">
                       <div className="relative">
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-secondary" aria-hidden="true" />
                         <input
@@ -301,6 +321,8 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                   {filteredOptions.map((option) => (
                     <button
                       key={option.value}
+                      data-select-list={listId}
+                      data-select-value={option.value}
                       role="option"
                       aria-selected={value === option.value}
                       type="button"

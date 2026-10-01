@@ -139,6 +139,7 @@ export function FieldSelect({
   ariaLabel,
   buttonClassName,
   leadingIcon,
+  scrollTo,
 }: FieldSelectProps) {
   const generatedId = useId();
   const fieldId = id || generatedId;
@@ -160,6 +161,7 @@ export function FieldSelect({
         ariaLabel={ariaLabel || label}
         buttonClassName={buttonClassName}
         leadingIcon={leadingIcon}
+        scrollTo={scrollTo}
       />
       {error && (
         <p id={`${fieldId}-error`} aria-live="polite" className="mt-1 text-micro text-danger">

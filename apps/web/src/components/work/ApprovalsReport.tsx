@@ -264,8 +264,8 @@ function Approvers({ rows }: { rows: Report['byPerson'] }) {
               <li key={p.user.id} className="space-y-1 px-5 py-3">
                 <p className="font-medium text-primary">{p.user.name}</p>
                 <p className="text-xs text-secondary">
-                  {p.approved} approved · {p.changesRequested} sent back · typical {duration(p.medianDecisionMinutes)} ·{' '}
-                  {p.afterEscalation} after escalation
+                  {p.approved} approved · {p.changesRequested} sent back · {p.changesAdded ?? 0} changes added · typical{' '}
+                  {duration(p.medianDecisionMinutes)} · {p.afterEscalation} after escalation
                 </p>
               </li>
             ))}
@@ -277,6 +277,9 @@ function Approvers({ rows }: { rows: Report['byPerson'] }) {
                   <th className="eyebrow text-left">Person</th>
                   <th className="eyebrow text-right">Approved</th>
                   <th className="eyebrow text-right">Sent back</th>
+                  <th className="eyebrow text-right" title="Changes added to work somebody else sent back">
+                    Changes added
+                  </th>
                   <th className="eyebrow text-right">Typical time</th>
                   <th className="eyebrow text-right">After escalation</th>
                 </tr>
@@ -296,6 +299,7 @@ function Approvers({ rows }: { rows: Report['byPerson'] }) {
                     </td>
                     <td className="text-right tabular-nums text-body">{p.approved}</td>
                     <td className="text-right tabular-nums text-body">{p.changesRequested}</td>
+                    <td className="text-right tabular-nums text-body">{p.changesAdded ?? 0}</td>
                     <td className="text-right tabular-nums text-body">{duration(p.medianDecisionMinutes)}</td>
                     <td className="text-right tabular-nums text-body">{p.afterEscalation}</td>
                   </tr>

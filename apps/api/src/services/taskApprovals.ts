@@ -177,6 +177,12 @@ export const LAST_REVIEW = {
     submittedAt: true,
     remindedAt: true,
     escalatedAt: true,
+    decidedBy: { select: { id: true, name: true } },
+    // The other approvers' changes, when it was sent back.
+    notes: {
+      orderBy: { createdAt: 'asc' as const },
+      select: { feedback: true, createdAt: true, author: { select: { id: true, name: true } } },
+    },
   },
 };
 
@@ -190,7 +196,40 @@ export type LastReview = {
   remindedAt: Date | null;
   /** It escalated to the type's escalation people. */
   escalatedAt: Date | null;
+  /** Who decided it. */
+  decidedBy: { id: string; name: string } | null;
+  /** Changes other approvers added after it was sent back. */
+  notes: { feedback: string; createdAt: Date; author: { id: string; name: string } }[];
 };
+
+/**
+ * Whether this person may add their changes to a round somebody sent back,
+ * and if not why not. Null when they may.
+ *
+ * Any approver for the type, or its escalation people; never somebody on the
+ * task. Only while the task is back with the editor: once it is sent again the
+ * new round is the one to answer, and once it is finished there is nothing to
+ * change.
+ */
+export async function addChangesRefusal(
+  orgId: string,
+  userId: string,
+  task: { taskType: TaskType | null; status: string; assigneeIds: string[] },
+  latest: { decision: string | null } | null | undefined,
+): Promise<string | null> {
+  if (!latest || latest.decision !== 'CHANGES_REQUESTED') {
+    return 'This task has not been sent back, so there are no changes to add to.';
+  }
+  if (task.status === 'IN_REVIEW') return "It has been sent again — answer the new version instead.";
+  if (task.status === 'DONE' || task.status === 'CANCELLED') return 'This task is finished.';
+  const type = approvalType(task.taskType);
+  const [pool, escalation] = await Promise.all([approverIds(orgId, type), escalationIds(orgId, type)]);
+  if (!pool.includes(userId) && !escalation.includes(userId)) {
+    return `Only the ${TASK_TYPE_LABEL[type]} approvers can add changes to this.`;
+  }
+  if (task.assigneeIds.includes(userId)) return "You're on this task, so you can't send it back.";
+  return null;
+}
 
 /**
  * Where a task's elapsed clock stops right now.

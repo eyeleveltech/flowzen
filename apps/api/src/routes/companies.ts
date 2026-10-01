@@ -13,6 +13,7 @@ import { parsePagination } from '../utils/query.js';
 import { toCsv, parseCsv } from '../utils/csv.js';
 import { matchEnumValue, resolveIndustry, resolveLeadSource, industrySchema, leadSourceSchema } from '../utils/enums.js';
 import { sendCsv } from '../utils/csvResponse.js';
+import { withRepeatNext } from '../services/taskRepeat.js';
 
 export const companiesRouter = Router();
 
@@ -342,9 +343,12 @@ companiesRouter.get('/:id', requirePermission('company.read'), async (req: AuthR
             title: true,
             status: true,
             dueDate: true,
+            dueTime: true,
             completedAt: true,
             notes: true,
             assignee: { select: { id: true, name: true } },
+            // The small repeat mark, and the drawer's "Next copy".
+            repeat: { select: { id: true, frequency: true, weekday: true, dayOfMonth: true, stoppedAt: true, stoppedReason: true } },
           },
         },
       },
@@ -479,6 +483,7 @@ companiesRouter.get('/:id', requirePermission('company.read'), async (req: AuthR
       success: true,
       company: {
         ...company,
+        tasks: await withRepeatNext(orgId, company.tasks),
         invoices: sanitizedInvoices,
         retainers: sanitizedRetainers,
         projects: sanitizedProjects,

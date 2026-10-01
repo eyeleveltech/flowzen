@@ -16,6 +16,7 @@ import { Drawer } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ApprovalSection } from '@/components/work/Approval';
+import { withDueTime } from '@/lib/due-time';
 
 export function ApprovalDrawer({
   taskId,
@@ -58,7 +59,7 @@ export function ApprovalDrawer({
                   <dl className="divide-y divide-border text-sm">
                     {task.taskTypeLabel && <Row label="Type of work" value={task.taskTypeLabel} />}
                     <Row label="By" value={task.assignees.map((a) => a.name).join(', ') || '—'} />
-                    <Row label="Due" value={formatDate(task.dueDate)} />
+                    <Row label="Due" value={withDueTime(formatDate(task.dueDate), task.dueTime)} />
                   </dl>
                 </Card>
                 <ApprovalSection taskId={taskId} onChanged={onChanged} />

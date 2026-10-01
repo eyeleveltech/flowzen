@@ -34,6 +34,9 @@ import { Card } from '@/components/ui/card';
 import { getPriorityBadge, getPriorityLabel } from '@/lib/priority';
 import { presetLabel } from '@/lib/people';
 import { getInitials, getAvatarColor, plural } from '@/lib/utils';
+import { withDueTime } from '@/lib/due-time';
+import { RepeatMark } from '@/components/work/RepeatMark';
+import type { TaskRepeatInfo } from '@/lib/repeat';
 
 type Work = {
   kind: 'PROJECT' | 'RETAINER' | 'INTERNAL';
@@ -48,6 +51,9 @@ type MemberTask = {
   status: string;
   priority: string;
   dueDate: string;
+  dueTime?: string | null;
+  /** The repeat, if it is a copy in one — the small mark beside the title. */
+  repeat?: TaskRepeatInfo | null;
   waitingOn: string | null;
   overdue: boolean;
   work: Work;
@@ -233,7 +239,9 @@ function TaskRow({ task, muted = false }: { task: MemberTask; muted?: boolean })
   const body = (
     <>
       <div className="flex items-start justify-between gap-3">
-        <p className={`text-sm font-medium ${muted ? 'text-secondary line-through' : 'text-primary'}`}>{task.title}</p>
+        <p className={`text-sm font-medium ${muted ? 'text-secondary line-through' : 'text-primary'}`}>
+          {task.title} <RepeatMark repeat={task.repeat} />
+        </p>
         <span
           className={`shrink-0 rounded-full border px-2 py-0.5 text-micro font-semibold tracking-[0.03em] ${getPriorityBadge(task.priority)}`}
         >
@@ -248,7 +256,7 @@ function TaskRow({ task, muted = false }: { task: MemberTask; muted?: boolean })
         <span className="font-medium text-body">{task.work.label}</span>
         {task.work.clientName && ` · ${task.work.clientName}`}
         {' · due '}
-        <span className={task.overdue ? 'font-semibold text-danger' : undefined}>{formatDate(task.dueDate)}</span>
+        <span className={task.overdue ? 'font-semibold text-danger' : undefined}>{withDueTime(formatDate(task.dueDate), task.dueTime)}</span>
         {task.status === 'ON_HOLD' &&
           task.waitingOn &&
           ` · waiting on ${task.waitingOn === 'CLIENT' ? 'the client' : 'someone else'}`}

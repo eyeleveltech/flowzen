@@ -61,10 +61,29 @@ export function useApprovalQueue() {
   const escalateFor = useEscalateFor();
   return useQuery({
     queryKey: APPROVAL_QUEUE_KEY,
-    queryFn: async () => (await api.tasks.approvals()).items,
+    queryFn: () => api.tasks.approvals(),
     enabled: approverFor.length > 0 || escalateFor.length > 0,
     refetchInterval: 2 * 60 * 1000,
     staleTime: 30 * 1000,
+    select: (r) => r.items,
+  });
+}
+
+/**
+ * Sent back by somebody, still with the editor — where the other approvers
+ * add their own changes. The same request as the queue, so one fetch serves
+ * both; not counted in the My Work badge, because nothing is waiting on them.
+ */
+export function useSentBack() {
+  const approverFor = useApproverFor();
+  const escalateFor = useEscalateFor();
+  return useQuery({
+    queryKey: APPROVAL_QUEUE_KEY,
+    queryFn: () => api.tasks.approvals(),
+    enabled: approverFor.length > 0 || escalateFor.length > 0,
+    refetchInterval: 2 * 60 * 1000,
+    staleTime: 30 * 1000,
+    select: (r) => r.sentBack ?? [],
   });
 }
 

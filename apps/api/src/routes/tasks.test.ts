@@ -57,6 +57,8 @@ const OPEN_TASK = {
 };
 
 beforeEach(() => {
+  // Creating a task writes it (and a repeat, when it has one) in one transaction.
+  (prisma.$transaction as any).mockImplementation((fn: any) => fn(prisma));
   (prisma.user.findUnique as any).mockImplementation(async ({ where }: any) => {
     const p = Object.entries(PEOPLE).find(([, v]) => v.id === where.id)?.[1];
     if (!p) return null;

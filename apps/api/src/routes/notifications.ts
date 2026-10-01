@@ -4,7 +4,8 @@ import { prisma } from '../lib/prisma.js';
 import { authenticate, hasPermission, type AuthRequest } from '../middleware/auth.js';
 import type { PermissionKey } from '@flowzen/shared';
 import { approverFor, escalateFor } from '../services/taskApprovals.js';
-import { CHASER_RULES } from '../workers/approvalChaser.cron.js';
+import { CHASER_RULES, EVENT_RULES } from '../services/alertRules.js';
+import { linkForUser, taskLink } from '../utils/recordLink.js';
 
 /**
  * The bell.
@@ -153,6 +154,31 @@ export async function approvalAlertClauses(orgId: string, userId: string): Promi
 }
 
 /**
+ * The calendar's alerts this person should see: the morning-of reminder and
+ * "booked / moved / cancelled", for events they are on.
+ *
+ * Like the approval clauses, not a permission: the audience is the event's
+ * people. Somebody taken off an event stops seeing its alerts; a cancelled
+ * event keeps its people, so its "Cancelled" row still reaches them. Only
+ * recent events are looked at — older alerts are resolved by the worker.
+ */
+export async function eventAlertClauses(orgId: string, userId: string, now = new Date()): Promise<Prisma.AlertWhereInput[]> {
+  const since = new Date(now.getTime() - 3 * 86_400_000);
+  const rows = await prisma.calendarEventAttendee.findMany({
+    where: { userId, event: { organizationId: orgId, endsAt: { gte: since } } },
+    select: { eventId: true },
+  });
+  if (rows.length === 0) return [];
+  return [{ rule: { in: EVENT_RULES }, entityType: 'CalendarEvent', entityId: { in: rows.map((r) => r.eventId) } }];
+}
+
+/** Everything reaching a person by who they are rather than what they may see. */
+export async function peopleAlertClauses(orgId: string, userId: string): Promise<Prisma.AlertWhereInput[]> {
+  const [approvals, events] = await Promise.all([approvalAlertClauses(orgId, userId), eventAlertClauses(orgId, userId)]);
+  return [...approvals, ...events];
+}
+
+/**
  * What corner of the business a notification is about.
  *
  * The rows said what had happened and never what KIND of thing it was, so a
@@ -176,86 +202,18 @@ const SOURCE: Record<string, string> = {
   MonthCard: 'Money',
   Asset: 'Assets',
   Organization: 'Time split',
+  CalendarEvent: 'Calendar',
 };
 
+/** Where a row opens: utils/recordLink, shared with the calendar. */
 /**
- * Where a notification actually goes.
- *
- * The link used to be built as `/${entityType.toLowerCase()}s/${entityId}`,
- * which produced a real page for exactly two of the eight entity types in use.
- * `Company` became `/companys/…`; Task, Proforma, User, Proposal and Invoice
- * have no detail page at all. Thirty-six of the forty-four open alerts led to
- * a hard 404 — verified by following each one.
- *
- * So: a record with a page opens that record, and a record without one opens
- * the screen where you can actually deal with it. `null` means the row is not
- * a link, which is honest and better than a dead one.
- */
-/**
- * What each landing screen asks for, so a row is only a link when it opens.
- *
- * Mirrors config/navigation.ts on the web and the route guards behind it.
- * `null` means the screen is open to anybody signed in.
- */
-const SCREEN_PERMISSION: Record<string, PermissionKey | null> = {
-  '/my-work': null,
-  '/assets': null,
-  '/members': 'work.team',
-  '/companies': 'company.read',
-  '/quotations': 'pipeline.read',
-  '/live-work': 'work.all',
-  '/projects': 'work.all',
-  '/retainers': 'work.all',
-  '/money': 'money.figures',
-  '/allocations': 'cost.enter',
-};
-
-const rawLinkFor = (entityType: string, entityId: string): string | null => {
-  switch (entityType) {
-    case 'Project':
-      return `/projects/${entityId}`;
-    case 'Retainer':
-      return `/retainers/${entityId}`;
-    case 'Company':
-      return `/companies/${entityId}`;
-    case 'Asset':
-      return `/assets/${entityId}`;
-    // No page of their own — the list that holds them is the useful landing.
-    case 'Task':
-      return '/my-work';
-    case 'User':
-      return '/members';
-    case 'Invoice':
-      return '/money';
-    case 'Proposal':
-    case 'Proforma':
-      return '/quotations';
-    // A retainer month's alerts are all about billing it, and the billing
-    // board is where that is done — and the one screen Accounts can open.
-    case 'MonthCard':
-      return '/money?tab=billing';
-    case 'Organization':
-      return '/allocations';
-    default:
-      return null;
-  }
-};
-
-/**
- * The link, but only if this person can follow it.
+ * The link, but only if this person can follow it (see utils/recordLink).
  *
  * Three rules told somebody about something and then sent them nowhere: a Head
  * and a BD both receive INVOICE_OVERDUE, which lands on /money and needs
  * `money.figures` neither of them has; Accounts receives PROJECT_OVER_ESTIMATE,
- * which lands on a project page behind `work.all`. From October, when the month
- * roll starts closing cards, MONTH_CARD_NOT_INVOICED joins them — pointing the
- * one person whose job is invoicing at /live-work, which she cannot open.
- *
- * The rule map above decides what a person is TOLD. It never asked whether
- * they could reach where it was sending them. When they cannot, the row keeps
- * its sentence and loses its link, which the switch's own comment already
- * argues for: "`null` means the row is not a link, which is honest and better
- * than a dead one."
+ * which lands on a project page behind `work.all`. The rule map decides what a
+ * person is TOLD; this decides whether the row is also a way there.
  */
 const linkFor = (
   entityType: string,
@@ -264,13 +222,8 @@ const linkFor = (
   rule?: string,
 ): string | null => {
   // A stuck approval opens the task itself, where Approve is.
-  if (rule && (CHASER_RULES as readonly string[]).includes(rule)) return `/my-work?task=${entityId}`;
-  const href = rawLinkFor(entityType, entityId);
-  if (!href || !user) return href;
-  const base = '/' + href.split('/')[1];
-  const needed = SCREEN_PERMISSION[base];
-  if (needed && !hasPermission(user, needed)) return null;
-  return href;
+  if (rule && (CHASER_RULES as readonly string[]).includes(rule)) return taskLink(entityId);
+  return linkForUser(entityType, entityId, user);
 };
 
 /** How many alerts the bell carries. More than a glance, less than a report. */
@@ -311,7 +264,7 @@ notificationsRouter.get('/', async (req: AuthRequest, res: Response, next: NextF
       myTaskIds.length > 0
         ? [{ rule: { in: [...missingTaskRules] }, entityType: 'Task', entityId: { in: myTaskIds } }]
         : [];
-    const approvals = await approvalAlertClauses(orgId, userId);
+    const approvals = await peopleAlertClauses(orgId, userId);
 
     if (allowedRules.length === 0 && mine.length === 0 && approvals.length === 0) {
       res.json({ success: true, notifications: [], unreadCount: 0, total: 0 });
@@ -381,7 +334,7 @@ notificationsRouter.patch('/read-all', async (req: AuthRequest, res: Response, n
       return needed === undefined || hasPermission(req.user!, needed);
     });
 
-    const approvals = await approvalAlertClauses(orgId, userId);
+    const approvals = await peopleAlertClauses(orgId, userId);
 
     const unread = await prisma.alert.findMany({
       where: {
@@ -426,9 +379,10 @@ notificationsRouter.patch('/:id/read', async (req: AuthRequest, res: Response, n
 
     const needed = RULE_PERMISSION[alert.rule];
     let readable = alert.rule in RULE_PERMISSION && (needed === undefined || hasPermission(req.user!, needed));
-    // An approval alert is theirs when it reached them — the same clauses the bell used.
-    if (!readable && (CHASER_RULES as readonly string[]).includes(alert.rule)) {
-      const approvals = await approvalAlertClauses(orgId, userId);
+    // An approval or calendar alert is theirs when it reached them — the same
+    // clauses the bell used.
+    if (!readable && [...CHASER_RULES, ...EVENT_RULES].includes(alert.rule)) {
+      const approvals = await peopleAlertClauses(orgId, userId);
       readable =
         approvals.length > 0 && (await prisma.alert.count({ where: { id: alert.id, OR: approvals } })) > 0;
     }

@@ -1,5 +1,6 @@
 import {
   CheckSquare,
+  CalendarDays,
   Columns,
   ListChecks,
   Globe,
@@ -86,6 +87,9 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       // Everybody has their own work, so this names no permission at all.
       { label: 'My Work', href: '/my-work', icon: CheckSquare, isPrimaryMobile: true },
+      // Everybody's too: what is on when, read through the same permissions as
+      // each item's own screen, so it needs nothing of its own.
+      { label: 'Calendar', href: '/calendar', icon: CalendarDays, isPrimaryMobile: true },
       { label: 'Team', href: '/members', icon: Columns, needs: 'work.team', isPrimaryMobile: true },
       /*
        * Everything anybody is carrying. `work.all` is Head and Management —
@@ -207,3 +211,12 @@ const UNLISTED_ROUTES: { prefix: string; needs: PermissionKey }[] = [
 export const permissionForPath = (pathname: string): PermissionKey | undefined =>
   NAV_ITEMS.find((item) => pathname === item.href || pathname.startsWith(item.href + '/'))?.needs ??
   UNLISTED_ROUTES.find((r) => pathname === r.prefix || pathname.startsWith(r.prefix + '/'))?.needs;
+
+/**
+ * What the sidebar calls the screen at this address — "Money" for /money and
+ * anything under it — for the message that says somebody cannot open it.
+ * Undefined for a screen the sidebar does not list (a project, a retainer).
+ */
+export const screenNameForPath = (pathname: string): string | undefined =>
+  [...NAV_ITEMS, ...BOTTOM_NAV_ITEMS].find((item) => pathname === item.href || pathname.startsWith(item.href + '/'))
+    ?.label;

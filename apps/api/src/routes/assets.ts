@@ -1,6 +1,7 @@
 import { Router, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { whenLabel } from '../utils/zonedTime.js';
 import {
   authenticate,
   hasPermission,
@@ -422,11 +423,14 @@ assetsRouter.get('/out-now', async (req: AuthRequest, res: Response, next: NextF
 /**
  * GET /api/assets/availability?from=&to= — what is free in a window.
  *
- * An OPEN booking always blocks, whatever the window asked about. There is no
- * advance-reservation model here — a booking is opened at the moment gear
- * physically leaves the office — so "is anything out on this?" and "is it in
- * the cupboard?" are the same question, and the honest answer to both is no
- * while it has not come back.
+ * An OPEN booking always blocks, whatever the window asked about: a booking
+ * (an AssetMovement BOOKING) is opened at the moment gear physically leaves
+ * the office, so while it has not come back the honest answer is no.
+ *
+ * Gear can also be RESERVED ahead, for a shoot on the calendar
+ * (AssetReservation). A reservation is a plan, not a checkout — nothing leaves
+ * until somebody checks it out as usual — but gear reserved for an event in
+ * the window is not free either, and says what for (`reservedFor`).
  *
  * The overdue case is the one that matters and the one an overlap test gets
  * wrong. A camera due back yesterday and still out does not overlap next
@@ -469,12 +473,27 @@ assetsRouter.get('/availability', async (req: AuthRequest, res: Response, next: 
       clash.set(b.assetId, { until: b.dueAt, holder: b.user });
     }
 
+    // Reserved for an event in the window — the first one, which is the one to talk to.
+    const reservations = await prisma.assetReservation.findMany({
+      where: { organizationId: orgId, startsAt: { lt: to }, endsAt: { gt: from }, event: { deletedAt: null } },
+      orderBy: { startsAt: 'asc' },
+      select: { assetId: true, startsAt: true, endsAt: true, event: { select: { id: true, title: true } } },
+    });
+    const reservedFor = new Map<string, { eventId: string; title: string; startsAt: Date; endsAt: Date }>();
+    for (const r of reservations) {
+      if (!reservedFor.has(r.assetId)) {
+        reservedFor.set(r.assetId, { eventId: r.event.id, title: r.event.title, startsAt: r.startsAt, endsAt: r.endsAt });
+      }
+    }
+
     const canSeeFigures = hasPermission(req.user!, 'money.figures');
     const data = bookable.map((a) => {
       const busy = clash.get(a.id);
+      const reserved = reservedFor.get(a.id) ?? null;
       return {
         ...present(a, canSeeFigures),
-        available: !busy,
+        available: !busy && !reserved,
+        reservedFor: reserved,
         busyUntil: busy?.until ?? null,
         busyWith: busy?.holder ?? null,
         // True when it is due back before the window opens — "probably fine,
@@ -934,6 +953,28 @@ assetsRouter.get('/:id', async (req: AuthRequest, res: Response, next: NextFunct
 
     const now = new Date();
     const open = asset.movements.find((m) => m.returnedAt === null) ?? null;
+    const timezone =
+      (await prisma.organization.findUnique({ where: { id: orgId }, select: { timezone: true } }))?.timezone ||
+      'Asia/Kolkata';
+    const upcoming = await prisma.assetReservation.findMany({
+      where: { assetId: asset.id, endsAt: { gte: now }, event: { deletedAt: null } },
+      orderBy: { startsAt: 'asc' },
+      take: 20,
+      select: {
+        id: true,
+        startsAt: true,
+        endsAt: true,
+        event: {
+          select: {
+            id: true,
+            title: true,
+            kind: true,
+            allDay: true,
+            attendees: { select: { user: { select: { id: true, name: true } } } },
+          },
+        },
+      },
+    });
 
     res.json({
       success: true,
@@ -946,6 +987,17 @@ assetsRouter.get('/:id', async (req: AuthRequest, res: Response, next: NextFunct
         maintenance: asset.maintenance.map((m) => ({
           ...m,
           amount: canSeeFigures ? (m.amount === null ? null : Number(m.amount)) : undefined,
+        })),
+        // Shoots it is planned for. A plan, not a checkout.
+        reservations: upcoming.map((r) => ({
+          id: r.id,
+          eventId: r.event.id,
+          title: r.event.title,
+          kind: r.event.kind,
+          startsAt: r.startsAt,
+          endsAt: r.endsAt,
+          when: whenLabel(r.startsAt, r.endsAt, r.event.allDay, timezone),
+          people: r.event.attendees.map((a) => a.user),
         })),
       },
       access: { canManage: hasPermission(req.user!, 'asset.manage'), canSeeFigures },
@@ -1217,7 +1269,29 @@ assetsRouter.post(
         to: parsed.data.userId,
         dueAt,
       });
-      res.status(201).json({ success: true, data: { movement } });
+      /*
+       * Out until a date that runs into somebody else's shoot. Said, never
+       * refused — the checkout has happened, and the people on that shoot are
+       * the ones to talk to. "Somebody else's" is an event the person taking
+       * it is not on: taking it out FOR the shoot it is reserved for is fine.
+       */
+      const timezone =
+        (await prisma.organization.findUnique({ where: { id: req.user!.organizationId }, select: { timezone: true } }))
+          ?.timezone || 'Asia/Kolkata';
+      const clashing = await prisma.assetReservation.findMany({
+        where: {
+          assetId: asset.id,
+          startsAt: { lt: dueAt },
+          endsAt: { gt: new Date() },
+          event: { deletedAt: null, attendees: { none: { userId: parsed.data.userId } } },
+        },
+        orderBy: { startsAt: 'asc' },
+        select: { event: { select: { title: true, startsAt: true, endsAt: true, allDay: true } } },
+      });
+      const warnings = clashing.map(
+        (r) => `Reserved for ${r.event.title}, ${whenLabel(r.event.startsAt, r.event.endsAt, r.event.allDay, timezone)}`,
+      );
+      res.status(201).json({ success: true, data: { movement }, warnings });
     } catch (e) {
       sendMovementError(e, res, next);
     }

@@ -53,6 +53,7 @@ import { plural } from '@/lib/utils';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { EmptyState, ErrorNote } from '@/components/ui/empty-state';
+import { NotFoundPanel } from '@/components/ui/not-found-panel';
 import { PageSkeleton } from '@/components/ui/skeleton-loaders';
 import { StatTile } from '@/components/ui/stat-tile';
 import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
@@ -231,6 +232,8 @@ export default function RetainerMonthCardPage() {
   const [config, setConfig] = useState<OrgConfig | null>(null);
   const team = useTeamMembers();
   const [loadingRetainer, setLoadingRetainer] = useState(true);
+  /** Why the retainer did not load — a 404 is "isn't here", anything else "couldn't load". */
+  const [loadFailure, setLoadFailure] = useState<unknown>(null);
   const [loadingMonth, setLoadingMonth] = useState(true);
   const [error, setError] = useState<string | null>(null);
   /*
@@ -382,7 +385,9 @@ export default function RetainerMonthCardPage() {
       setRetainer(rRes.retainer as Retainer);
       setConfig(cfg);
       setError(null);
+      setLoadFailure(null);
     } catch (e) {
+      setLoadFailure(e);
       setError(e instanceof Error ? e.message : 'Could not load this retainer');
     } finally {
       setLoadingRetainer(false);
@@ -426,14 +431,11 @@ export default function RetainerMonthCardPage() {
 
   if (!retainer) {
     return (
-      <EmptyState
-        title="That retainer does not exist"
-        hint={error ?? undefined}
-        action={
-          <Link href="/live-work">
-            <Button>Back to Live work</Button>
-          </Link>
-        }
+      <NotFoundPanel
+        thing="retainer"
+        error={loadFailure}
+        back={{ href: '/live-work?tab=retainers', label: 'Back to Retainers' }}
+        onRetry={loadRetainer}
       />
     );
   }
