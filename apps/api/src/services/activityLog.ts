@@ -42,7 +42,7 @@ export const AREAS = [
 export type Area = (typeof AREAS)[number]['key'];
 
 /** Account-security events, wherever they are filed. */
-const SIGN_IN_VERBS = [
+export const SIGN_IN_VERBS = [
   'signed_in',
   'sign_in_failed',
   'invite_accepted',
@@ -71,7 +71,11 @@ export function areaWhere(area: string): Prisma.ActivityWhereInput | null {
       return { OR: [{ entityType: { in: CLIENT_TYPES } }, { verb: { in: CLIENT_ORG_VERBS } }] };
     case 'people':
       return {
-        OR: [{ entityType: 'User', verb: { notIn: SIGN_IN_VERBS } }, { verb: { in: PEOPLE_ORG_VERBS } }],
+        OR: [
+          { entityType: 'User', verb: { notIn: SIGN_IN_VERBS } },
+          { entityType: 'Department' },
+          { verb: { in: PEOPLE_ORG_VERBS } },
+        ],
       };
     case 'signins':
       return { verb: { in: SIGN_IN_VERBS } };
@@ -92,7 +96,7 @@ export function areaOf(entityType: string, verb: string): Area {
   if (WORK_TYPES.includes(entityType)) return 'work';
   if (MONEY_TYPES.includes(entityType)) return 'money';
   if (CLIENT_TYPES.includes(entityType)) return 'clients';
-  if (entityType === 'User') return 'people';
+  if (entityType === 'User' || entityType === 'Department') return 'people';
   if (entityType === 'Asset') return 'assets';
   return 'settings';
 }
@@ -333,6 +337,17 @@ export async function resolveSubjects(orgId: string, rows: Row[]): Promise<Map<s
   }
   if (org) put('Organization', org.id, { label: org.name, context: null, href: '/settings', gone: false });
 
+  // Departments: by their name now, archived ones included.
+  if (ids('Department').length) {
+    const departments = await prisma.department.findMany({
+      where: { id: { in: ids('Department') }, organizationId: orgId },
+      select: { id: true, name: true, archivedAt: true },
+    });
+    for (const d of departments) {
+      put('Department', d.id, { label: d.name, context: d.archivedAt ? 'Archived' : 'Department', href: '/settings', gone: false });
+    }
+  }
+
   // Meetings and shoots: named by their title, opened in the calendar's drawer.
   if (ids('CalendarEvent').length) {
     const events = await prisma.calendarEvent.findMany({
@@ -487,6 +502,16 @@ const ACTION: Record<string, string> = {
   'User.password_reset': 'reset the password of',
   'User.password_reset_requested': 'asked for a password reset for',
   'User.password_reset_link_issued': 'issued a password reset link for',
+
+  // Departments
+  'Department.department_created': 'added the department',
+  'Department.department_renamed': 'renamed the department',
+  'Department.department_head_changed': 'changed the head of',
+  'Department.department_reordered': 'moved in the department list',
+  'Department.department_people_moved': 'moved people into',
+  'Department.department_merged': 'merged the department',
+  'Department.department_archived': 'archived the department',
+  'Department.department_restored': 'restored the department',
 
   // The organisation
   'Organization.organisation_updated': 'changed the organisation settings',
@@ -687,7 +712,26 @@ export function detailLines(
     if (Array.isArray(p.added) && p.added.length) lines.push(`Added ${valueText('assigneeIds', p.added, people)}`);
     if (Array.isArray(p.removed) && p.removed.length) lines.push(`Removed ${valueText('assigneeIds', p.removed, people)}`);
   }
-  if (verb !== 'document_emailed' && entityType !== 'Asset' && entityType !== 'CalendarEvent' && str(p.from) && str(p.to)) {
+  if (entityType === 'Department') {
+    if (verb === 'department_renamed' && str(p.from) && str(p.to)) lines.push(`“${p.from}” → “${p.to}”`);
+    if (verb === 'department_head_changed') {
+      const who = (id: unknown) => (typeof id === 'string' && id ? people.get(id) ?? 'someone no longer on the team' : 'no head');
+      lines.push(`Head: ${who(p.headFrom)} → ${who(p.headTo)}`);
+    }
+    if (verb === 'department_people_moved' && Array.isArray(p.userIds)) lines.push(valueText('assigneeIds', p.userIds, people));
+    if (verb === 'department_merged' && str(p.into)) {
+      const n = typeof p.moved === 'number' ? p.moved : 0;
+      lines.push(`Into ${p.into} · ${n} ${n === 1 ? 'person' : 'people'} moved`);
+    }
+  }
+  if (
+    verb !== 'document_emailed' &&
+    entityType !== 'Asset' &&
+    entityType !== 'CalendarEvent' &&
+    entityType !== 'Department' &&
+    str(p.from) &&
+    str(p.to)
+  ) {
     lines.push(`${enumWord(String(p.from))} → ${enumWord(String(p.to))}`);
   }
   const stageFrom = str(p.stageFrom) ?? str(p.lostFromStage);

@@ -133,13 +133,19 @@ authRouter.post('/register', authLimiter, async (req, res: Response, next) => {
       },
     });
 
+    // Everybody is in a department, starting with the person who registered.
+    const management = await prisma.department.create({
+      data: { organizationId: org.id, name: 'Management', sortOrder: 0 },
+    });
+
     const adminUser = await prisma.user.create({
       data: {
         organizationId: org.id,
         name: name.trim(),
         email: cleanEmail,
         passwordHash,
-        dept: 'Management',
+        departmentId: management.id,
+        dept: management.name,
         preset: 'MANAGEMENT',
         monthlyCost: 0,
         permissions: [

@@ -246,39 +246,6 @@ describe('Phase 4: Financials & Intelligence Engine', () => {
     expect(forecastRes.body.forecast[0].status).toBe('SURPLUS');
   });
 
-  it('6. Verifies Monday Morning Intelligence Briefing 4-quadrant calculation', async () => {
-    (prisma.retainer.findMany as any).mockResolvedValue([
-      {
-        id: 'ret-1',
-        monthlyValue: 200000,
-        renewalDate: new Date(Date.now() + 20 * 24 * 3600 * 1000), // expires in 20 days (<45 days)
-        company: { id: 'c-1', name: 'Expiring Client', website: 'https://exp.com' },
-        monthCards: [],
-      },
-    ]);
-
-    (prisma.proposal.findMany as any).mockResolvedValue([
-      {
-        id: 'prop-1',
-        stage: 'VERBAL_YES',
-        updatedAt: new Date(),
-        company: { id: 'c-2', name: 'Verbal Client' },
-        owner: { id: 'u-1', name: 'BD Lead' },
-        versions: [{ value: 150000 }],
-      },
-    ]);
-
-    (prisma.invoice.findMany as any).mockResolvedValue([]);
-    (prisma.user.findMany as any).mockResolvedValue([]);
-
-    const briefRes = await request(app)
-      .get('/api/brief/monday')
-      .set('Authorization', `Bearer ${adminToken}`);
-
-    expect(briefRes.status).toBe(200);
-    expect(briefRes.body.success).toBe(true);
-    expect(briefRes.body.quadrants.contractRisks.count).toBe(1);
-    expect(briefRes.body.quadrants.contractRisks.items[0].companyName).toBe('Expiring Client');
-    expect(briefRes.body.quadrants.pipelineMomentum.verbalYesCount).toBe(1);
-  });
+  // 6. The Monday brief's four quadrants are gone: the redesigned brief (last
+  // week, needs action, coming up, risks, team) is tested in brief.test.ts.
 });

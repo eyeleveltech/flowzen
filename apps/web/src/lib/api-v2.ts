@@ -1469,6 +1469,10 @@ export const api = {
         /** The stored message id, once the exchange is saved. */
         onSaved?: (messageId: string) => void;
         onPiece: (text: string) => void;
+        /** A muted line under the answer — it hit the length ceiling and was cut short. */
+        onNote?: (text: string) => void;
+        /** Everything said so far is replaced by this — Zen declined the question. */
+        onReplace?: (text: string) => void;
         /** What Zen went to look at, so the wait has a reason on screen. */
         onTool?: (name: string) => void;
         /**
@@ -1527,6 +1531,8 @@ export const api = {
             messageId?: string;
           };
           if (name === 'piece' && data.text) opts.onPiece(data.text);
+          if (name === 'note' && data.text) opts.onNote?.(data.text);
+          if (name === 'replace' && data.text) opts.onReplace?.(data.text);
           if (name === 'tool' && data.name) opts.onTool?.(data.name);
           if (name === 'draft' && data.draft) opts.onDraft?.(data.draft);
           // Sent before the first token, so the panel holds the thread even if
@@ -2080,12 +2086,12 @@ export const api = {
     /** The Approvals tab: the last 7 or 30 days, and what is waiting right now. */
     approvalsReport: (days: 7 | 30) => get<ApprovalsReport>(`/team/approvals-report?days=${days}`),
     capacity: (params: Record<string, string> = {}) =>
-      get<{ success: boolean; departments: string[]; members: any[] }>(`/team/capacity?${new URLSearchParams(params)}`),
+      get<{ success: boolean; departments: Department[]; members: any[] }>(`/team/capacity?${new URLSearchParams(params)}`),
     /** Name + id only, for an owner picker — gated on nothing but being logged in, unlike capacity. */
     members: () =>
       get<{
         success: boolean;
-        members: { id: string; name: string; designation: string | null; dept: string }[];
+        members: { id: string; name: string; designation: string | null; dept: string; departmentId: string | null }[];
       }>('/team/members'),
     /**
      * One person with the work actually on them — every task, and the project
@@ -2118,7 +2124,7 @@ export const api = {
      * that hid it on the assumption delivery worked would leave an admin unable
      * to invite anybody the first time a mail server refused a connection.
      */
-    invite: (body: { name: string; email: string; dept: string; preset: string }) =>
+    invite: (body: { name: string; email: string; departmentId: string; preset: string }) =>
       postFull<{
         data: {
           user: { id: string; name: string; email: string; dept: string; preset: string; active: boolean };
@@ -2144,7 +2150,7 @@ export const api = {
         preset?: string;
         permissions?: string[];
         monthlyCost?: number;
-        dept?: string;
+        departmentId?: string;
         active?: boolean;
         force?: boolean;
       },
@@ -2314,6 +2320,48 @@ export const api = {
     markAllRead: () => patch('/notifications/read-all'),
   },
 
+  /**
+   * Departments, as records (Departments Plan 1). Anybody can read the list;
+   * only `setup.admin` changes it. Never deleted — merged or archived.
+   */
+  departments: {
+    list: (opts: { includeArchived?: boolean; withPeople?: boolean } = {}) => {
+      const q = new URLSearchParams();
+      if (opts.includeArchived) q.set('includeArchived', '1');
+      if (opts.withPeople) q.set('withPeople', '1');
+      return get<{ success: boolean; departments: Department[]; unplaced?: DepartmentPerson[] }>(
+        `/departments${q.size ? `?${q}` : ''}`,
+      );
+    },
+    create: (name: string) => post<{ success: boolean; department: { id: string; name: string } }>('/departments', { name }),
+    update: (id: string, body: { name?: string; headId?: string | null; sortOrder?: number }) =>
+      patch(`/departments/${id}`, body),
+    merge: (id: string, intoId: string) => post<{ success: boolean; moved: number }>(`/departments/${id}/merge`, { intoId }),
+    archive: (id: string) => post<{ success: boolean }>(`/departments/${id}/archive`),
+    restore: (id: string) => post<{ success: boolean }>(`/departments/${id}/restore`),
+    movePeople: (userIds: string[], departmentId: string) =>
+      post<{ success: boolean; moved: number }>('/departments/move-people', { userIds, departmentId }),
+  },
+
+  /** The Monday brief: last week, what needs action, what is coming, the risks, the team. */
+  brief: {
+    /** The current brief, or — with a Monday — that past week's scoreboard and summary. */
+    monday: (week?: string) => get<MondayBrief>(`/brief/monday${week ? `?week=${week}` : ''}`),
+    /** What is behind one number on the scoreboard, for that number's week. */
+    details: (metric: BriefMetric, week: string) =>
+      get<BriefDetails>(`/brief/monday/details?metric=${metric}&week=${week}`),
+    /** Write this week's summary again. Refused (429) within ten minutes of the last one. */
+    writeSummary: () => post<{ success: boolean; summary: NonNullable<MondayBrief['summary']> }>('/brief/monday/summary'),
+  },
+
+  /** Who is using Flowzen. */
+  usage: {
+    /** "I am looking at this screen" — fire and forget; the server keeps only the screen's name. */
+    view: (path: string) => post<void>('/usage/view', { path }),
+    /** Management only. */
+    summary: (days: 7 | 30) => get<UsageSummary>(`/usage/summary?days=${days}`),
+  },
+
   /** Your own Google Calendar connection — optional, and only ever yours. */
   google: {
     status: () =>
@@ -2333,10 +2381,10 @@ export const api = {
 
   calendar: {
     /** At most 62 days at a time; layers this person cannot see come back empty. */
-    get: (params: { from: string; to: string; layers: string[]; person?: string; dept?: string }) => {
+    get: (params: { from: string; to: string; layers: string[]; person?: string; departmentId?: string }) => {
       const q = new URLSearchParams({ from: params.from, to: params.to, layers: params.layers.join(',') });
       if (params.person) q.set('person', params.person);
-      if (params.dept) q.set('dept', params.dept);
+      if (params.departmentId) q.set('departmentId', params.departmentId);
       return get<CalendarResponse>(`/calendar?${q}`);
     },
     /** What the event form offers: clients (projects, retainers, contacts) and pickable gear. */
@@ -2358,6 +2406,172 @@ export const api = {
     deleteEvent: (id: string) => del<{ success: boolean }>(`/calendar/events/${id}`),
   },
 
+};
+
+/** GET /usage/summary — see services/usageSummary on the API. */
+/** One open alert, as a row on the brief: client, what, amount, who to ask. */
+export type BriefAlertRow = {
+  alertId: string;
+  rule: string;
+  title: string;
+  clientName: string | null;
+  amount?: number;
+  ownerName?: string;
+  flaggedDaysAgo: number;
+  severity: 'HIGH' | 'MED' | 'LOW';
+  /** Null when the reader cannot open the screen it would lead to. */
+  link: string | null;
+};
+
+type WeekPair<T> = { last: T; before: T };
+
+export type TrendPoint = { weekStart: string; value: number | null };
+
+export type BriefTeamRow = {
+  /** Null for people not yet placed in a department. */
+  departmentId: string | null;
+  dept: string;
+  active: number;
+  overdue: number;
+  dueThisWeek: number;
+  doneLastWeek: number;
+  waitingOnClient: number;
+  inReview: number;
+  overAllocatedPeople: number;
+  /** The same open work split so no task is counted twice — what the stacked bar draws. */
+  segments: { overdue: number; onTrack: number; inReview: number; waitingOnClient: number };
+};
+
+export type BriefComingUp = {
+  events: {
+    id: string;
+    kind: 'SHOOT' | 'MEETING';
+    title: string;
+    when: string;
+    startsAt: string;
+    endsAt: string;
+    location: string | null;
+    clientName: string | null;
+    people: string[];
+    link: string | null;
+  }[];
+  invoicesDue: { id: string; clientName: string; number: string; balance: number; dueAt: string; link: string | null }[];
+  projectsEnding: { id: string; name: string; clientName: string; ownerName: string; endDate: string; link: string | null }[];
+  renewals: {
+    alertId: string;
+    clientName: string;
+    renewalDate: string | null;
+    monthlyValue: number;
+    ownerName?: string;
+    link: string | null;
+  }[];
+};
+
+/**
+ * The Monday brief. On a past week only the scoreboard, its trends and that
+ * week's summary are given — the rest describes now, and comes back null.
+ */
+export type MondayBrief = {
+  success: boolean;
+  generatedAt: string;
+  timezone: string;
+  currency: string;
+  weeks: {
+    last: { from: string; to: string };
+    before: { from: string; to: string };
+    weekStart: string;
+    today?: string;
+    comingUntil?: string;
+    /** This week, Monday to Sunday, for the timeline. */
+    days?: { day: string; working: boolean }[];
+  };
+  /** Which week is shown, and how far the switcher may go. */
+  week: { shown: string; current: boolean; latest: string; earliest: string };
+  scoreboard: {
+    cashCollected: WeekPair<number>;
+    invoiced: WeekPair<{ amount: number; count: number }>;
+    dealsWon: WeekPair<{ count: number; value: number }>;
+    proposalsSent: WeekPair<number>;
+    tasksDone: WeekPair<{ count: number; onTime: number }>;
+    approvals: {
+      group: string;
+      last: { decided: number; medianDecisionMinutes: number | null; onTime: number; escalated: number };
+      before: { decided: number; medianDecisionMinutes: number | null; onTime: number; escalated: number } | null;
+    }[];
+  };
+  /** Each figure for the 8 weeks ending at the shown one. */
+  trends: {
+    cashCollected: TrendPoint[];
+    invoiced: TrendPoint[];
+    dealsWon: TrendPoint[];
+    proposalsSent: TrendPoint[];
+    tasksDone: TrendPoint[];
+    approvals: { group: string; points: TrendPoint[] }[];
+  };
+  needsAction: { group: string; items: BriefAlertRow[] }[] | null;
+  risks: { group: string; items: BriefAlertRow[] }[] | null;
+  comingUp: BriefComingUp | null;
+  team: BriefTeamRow[] | null;
+  summary: { text: string; generatedAt: string; model: string | null } | null;
+  aiConfigured: boolean;
+  /** Management only, current week only. */
+  notUsingFlowzen: {
+    title: string;
+    from: string;
+    to: string;
+    people: { id: string; name: string; lastActiveAt: string | null; lastActive: string | null }[];
+    line: string;
+  } | null;
+};
+
+export type BriefMetric = 'cash' | 'invoiced' | 'deals' | 'proposals' | 'tasks';
+
+export type BriefDetails = {
+  success: boolean;
+  metric: BriefMetric;
+  week: { from: string; to: string };
+  more: boolean;
+  rows: (
+    | { id: string; date: string; clientName: string; number: string; amount: number; link: string | null }
+    | { id: string; date: string | null; clientName: string; value: number; ownerName?: string; version?: number; link: string | null }
+    | { departmentId: string | null; dept: string; done: number; onTime: number }
+  )[];
+  /** Tasks only: the tile's own number, each task counted once. */
+  total?: { done: number; onTime: number };
+};
+
+/** A department: what every person points at, by id. */
+export type Department = {
+  id: string;
+  name: string;
+  headId: string | null;
+  headName: string | null;
+  sortOrder: number;
+  archived: boolean;
+  /** Active people in it. */
+  peopleCount: number;
+  /** With `withPeople`: who is in it. */
+  people?: DepartmentPerson[];
+};
+export type DepartmentPerson = { id: string; name: string; designation: string | null; preset: string };
+
+export type UsageSummary = {
+  success: boolean;
+  days: number;
+  period: { from: string; to: string; workingDays: number };
+  today: string;
+  activeToday: number;
+  activeInPeriod: number;
+  totalPeople: number;
+  perDay: { day: string; activePeople: number }[];
+  people: {
+    user: { id: string; name: string; dept: string; departmentId: string | null };
+    lastActiveAt: string | null;
+    daysActive: number;
+    changes: number;
+    topScreens: string[];
+    inactiveWorkingDays: number | null;
+  }[];
 };
 
 export type CalendarLayer = 'mine' | 'team' | 'events' | 'google' | 'money' | 'sales' | 'work' | 'equipment' | 'holidays';

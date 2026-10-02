@@ -67,15 +67,9 @@ model Organization {
   /// Settings → Integrations: lets people connect Google Calendar. Off until
   /// an admin turns it on, and only offered when the server has Google keys.
   googleCalendarEnabled Boolean @default(false)
-  /// The departments a person can belong to.
-  ///
-  /// A setting rather than a hardcoded list, because every agency divides
-  /// itself differently and this one has already changed its mind once —
-  /// `User.dept` is free text today, so the same team is spread across
-  /// "Video & Production" and "Video/Production" with nothing to stop it.
-  ///
-  /// Seeded from the departments already in use, so nobody's existing value is
-  /// orphaned the day this becomes a dropdown.
+  /// The old free-text list of departments. Replaced by `Department` rows
+  /// (Departments Plan 1): nothing writes it any more, /config builds its
+  /// `departments` from the rows for any old reader, and it goes in Plan 4.
   departments        String[] @default([])
 
   // Organisation identity — Settings' own "Organisation" tab has always
@@ -188,6 +182,9 @@ model Organization {
   assetReservations          AssetReservation[]
   googleCalendarConnections  GoogleCalendarConnection[]
   externalBusyBlocks         ExternalBusyBlock[]
+  usageDays                  UsageDay[]
+  weeklyBriefs               WeeklyBrief[]
+  departmentRecords          Department[]
 
   /// "EL" -> EL/CAM/001. The stickers get printed once, so this is a setting
   /// rather than a constant, but changing it does not renumber what exists.
@@ -208,7 +205,17 @@ model User {
   name                 String
   email                String     @unique
   passwordHash         String
-  dept                 String // Design, Video, Marketing, Dev, BD, Art, Accounts
+  /// The department's NAME, kept in step with `department` on every save so
+  /// anything still reading text sees something sensible. The record is
+  /// `departmentId`; this column goes in Departments Plan 4.
+  dept                 String
+  /// Which department this person is in — exactly one. Null only for somebody
+  /// not yet placed, who shows under "No department" in Settings → Departments.
+  departmentId         String?
+  department           Department?  @relation("DepartmentMembers", fields: [departmentId], references: [id], onDelete: SetNull)
+  /// The departments this person heads. Being a head is the department's
+  /// `headId`; what they may DO is still their preset.
+  headOf               Department[] @relation("DepartmentHead")
   /// Own-account detail, editable only from /profile. Nobody promotes
   /// themselves, so `preset` is deliberately absent from that screen — these
   /// two are the whole of what a person may change about their own record.
@@ -273,6 +280,7 @@ model User {
   googleCalendarConnection GoogleCalendarConnection?
   externalBusyBlocks   ExternalBusyBlock[]
   googleEventLinks     GoogleEventLink[]
+  usageDays                UsageDay[]
 
   @@index([organizationId, active])
   @@map("users")
@@ -2127,4 +2135,73 @@ model GoogleEventLink {
   @@unique([eventId, userId])
   @@index([state])
   @@map("google_event_links")
+}
+
+// ── Usage: who is using Flowzen ─────────────────────────────────────────────
+
+/// One row per person, per org-local day, per screen. A summary only — which
+/// screens were opened, how often, first and last time — never clicks, typing,
+/// time on screen, record ids or search text. Kept 90 days, then deleted.
+/// Seen by Management only (routes/usage.ts).
+model UsageDay {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  /// The organisation's calendar day.
+  day            DateTime @db.Date
+  /// A screen key from services/usageScreens — "my-work", "client-page", "money-billing".
+  screen         String
+  views          Int      @default(1)
+  firstAt        DateTime
+  lastAt         DateTime
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, day, screen])
+  @@index([organizationId, day])
+  @@map("usage_days")
+}
+
+/// One per org per week. It holds the AI summary so the screen doesn't call the model on every load,
+/// and so the email and the screen show the same words.
+model WeeklyBrief {
+  id             String   @id @default(cuid())
+  organizationId String
+  /// The Monday this brief is FOR (it describes the week before it).
+  weekStart      DateTime @db.Date
+  summary        String?  @db.Text
+  summaryModel   String?
+  /// The exact numbers the summary was written from.
+  summaryInput   Json?
+  generatedAt    DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, weekStart])
+  @@map("weekly_briefs")
+}
+
+/// A department: a real record every person points to, so a rename happens
+/// once and shows everywhere. One head (a person whose preset is HEAD or
+/// MANAGEMENT). Never deleted — merged or archived, so history keeps its name.
+model Department {
+  id             String    @id @default(cuid())
+  organizationId String
+  /// Trimmed, and unique in the organisation ignoring case (checked in code;
+  /// the index below is the exact-case backstop).
+  name           String
+  headId         String?
+  sortOrder      Int       @default(0)
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  head         User?        @relation("DepartmentHead", fields: [headId], references: [id], onDelete: SetNull)
+  members      User[]       @relation("DepartmentMembers")
+
+  @@unique([organizationId, name])
+  @@index([organizationId, archivedAt])
+  @@map("departments")
 }

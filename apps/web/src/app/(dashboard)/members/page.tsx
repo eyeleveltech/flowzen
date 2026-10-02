@@ -23,7 +23,7 @@ import { Badge } from '@/components/ui/badge';
 import { presetLabel } from '@/lib/people';
 import { KeyRound, Package, Pencil, Plus, ShieldCheck, UserMinus } from 'lucide-react';
 import { EditMemberModal } from '@/components/work/EditMemberModal';
-import { useConfig } from '@/hooks/queries';
+import { useDepartments } from '@/hooks/queries';
 import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
 import { ApprovalsReport } from '@/components/work/ApprovalsReport';
 
@@ -34,6 +34,8 @@ interface TeamMember {
   designation?: string | null;
   email: string;
   dept?: string | null;
+  /** Their department's id — what the filter and the grouping use. Null until placed. */
+  departmentId?: string | null;
   /** What the app lets them do. Not a job title, and not theirs to change. */
   preset?: string | null;
   permissions?: string[];
@@ -54,11 +56,12 @@ export default function MembersPage() {
    * the product that promised something it could not do.
    */
   const canInvite = useAuthStore((s) => s.user?.permissions?.includes('setup.admin') ?? false);
-  // The departments the edit form offers — a setting, not a hardcoded list.
-  const { data: pageConfig } = useConfig();
-  const departments = pageConfig?.organization.departments ?? [];
-  /** A failed load, said out loud instead of only in the console. */
+  // The one list of departments every screen uses, in Settings' order.
+  const { departments } = useDepartments();
+  /** By id — a name with "&" or a comma in it filters as well as any other. */
   const [deptFilter, setDeptFilter] = useState('ALL');
+  /** The delivery table as one list, or grouped under each department and its head. */
+  const [grouped, setGrouped] = useState(false);
   const queryClient = useQueryClient();
   const [assigningTo, setAssigningTo] = useState<TeamMember | null>(null);
   const [inviting, setInviting] = useState(false);
@@ -93,12 +96,34 @@ export default function MembersPage() {
   const { data, isPending, error } = useQuery({
     queryKey: ['team', 'capacity', deptFilter],
     placeholderData: keepPreviousData,
-    queryFn: () => api.team.capacity(deptFilter !== 'ALL' ? { dept: deptFilter } : {}),
+    queryFn: () => api.team.capacity(deptFilter !== 'ALL' ? { departmentId: deptFilter } : {}),
   });
 
   const members: TeamMember[] = data?.success ? data.members : [];
-  const depts: string[] = data?.success ? data.departments : [];
   const loading = isPending;
+  const filterName = departments.find((d) => d.id === deptFilter)?.name ?? 'All departments';
+  // Teams that actually have somebody in them — not every department on the list.
+  const teamsWithPeople = new Set(members.map((m) => m.departmentId).filter(Boolean)).size;
+
+  /*
+   * Grouped: one block per department in Settings' order, headed by its head,
+   * then anybody not yet placed. Only departments with people in view.
+   */
+  const groups = [
+    ...departments
+      .map((d) => ({ id: d.id, name: d.name, headName: d.headName, rows: members.filter((m) => m.departmentId === d.id) }))
+      .filter((g) => g.rows.length > 0),
+    ...(members.some((m) => !m.departmentId || !departments.some((d) => d.id === m.departmentId))
+      ? [
+          {
+            id: 'none',
+            name: 'No department',
+            headName: null,
+            rows: members.filter((m) => !m.departmentId || !departments.some((d) => d.id === m.departmentId)),
+          },
+        ]
+      : []),
+  ];
   const loadError = error instanceof Error ? error.message : error ? 'Could not load the team' : null;
 
   /** What the invite / access / deactivate flows call after they change something. */
@@ -133,7 +158,7 @@ export default function MembersPage() {
    * while showing all fourteen people from seven departments — Priya simply
    * sorts first.
    */
-  usePageHeader('Team', tab === 'approvals' ? 'Approvals' : deptFilter === 'ALL' ? 'All departments' : deptFilter);
+  usePageHeader('Team', tab === 'approvals' ? 'Approvals' : filterName);
 
   return (
     <div className="page-shell">
@@ -155,7 +180,23 @@ export default function MembersPage() {
       )}
       {/* Header */}
       <div className="flex flex-wrap items-center justify-end gap-2 mb-8">
-          {depts.length > 0 && (
+          <div className="flex rounded-lg border border-border bg-white p-0.5 text-sm" role="group" aria-label="How to show the team">
+            {[
+              { on: !grouped, label: 'List', set: false },
+              { on: grouped, label: 'By department', set: true },
+            ].map((v) => (
+              <button
+                key={v.label}
+                type="button"
+                aria-pressed={v.on}
+                onClick={() => setGrouped(v.set)}
+                className={`rounded-md px-2.5 py-1 ${v.on ? 'bg-primary/5 font-medium text-primary' : 'text-secondary hover:text-primary'}`}
+              >
+                {v.label}
+              </button>
+            ))}
+          </div>
+          {departments.length > 0 && (
             <select
               aria-label="Filter the team by department"
               value={deptFilter}
@@ -163,10 +204,13 @@ export default function MembersPage() {
               className="border border-border rounded-lg px-3 py-1.5 text-sm text-body outline-none focus:border-primary bg-white"
             >
               <option value="ALL">All departments</option>
-              {depts.map(d => <option key={d} value={d}>{d}</option>)}
+              {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           )}
-          <ExportCsvButton href={fileUrl(`/team/capacity?format=csv${deptFilter !== 'ALL' ? `&dept=${deptFilter}` : ''}`)} />
+          {/* By id, and encoded: "Video & Production" used to cut the link at the "&" and export nobody. */}
+          <ExportCsvButton
+            href={fileUrl(`/team/capacity?format=csv${deptFilter !== 'ALL' ? `&departmentId=${encodeURIComponent(deptFilter)}` : ''}`)}
+          />
           {canInvite && (
             <button
               className="flex items-center gap-1.5 bg-primary text-white text-sm font-semibold px-4 h-8 rounded-lg hover:bg-primary/90 transition-colors"
@@ -181,7 +225,7 @@ export default function MembersPage() {
         <StatTile
           label="People"
           value={members.length}
-          note={`across ${depts.length} team${depts.length !== 1 ? 's' : ''}`}
+          note={`across ${teamsWithPeople} team${teamsWithPeople !== 1 ? 's' : ''}`}
         />
         <StatTile label="Open Tasks" value={totalOpen} note="this week" />
         <StatTile
@@ -235,7 +279,21 @@ export default function MembersPage() {
               <TableRowsSkeleton cols={6} />
             ) : members.length === 0 ? (
               <tr><td colSpan={6} className="px-5 py-16 text-center text-sm text-secondary">No team members found.</td></tr>
-            ) : members.map(m => (
+            ) : (grouped ? groups : [{ id: 'all', name: '', headName: null, rows: members }]).flatMap((g) => [
+              ...(grouped
+                ? [
+                    <tr key={`group-${g.id}`} className="bg-subtle/60">
+                      <td colSpan={6} className="px-5 py-2">
+                        <span className="text-sm font-semibold text-primary">{g.name}</span>
+                        <span className="ml-2 text-xs text-secondary">
+                          {g.headName ? `Head: ${g.headName}` : g.id === 'none' ? 'Not placed yet' : 'No head yet'} · {g.rows.length}{' '}
+                          {g.rows.length === 1 ? 'person' : 'people'}
+                        </span>
+                      </td>
+                    </tr>,
+                  ]
+                : []),
+              ...g.rows.map(m => (
               <tr
                 key={m.id}
                 onClick={() => setOpenMemberId(m.id)}
@@ -374,7 +432,8 @@ export default function MembersPage() {
                   </div>
                 </td>
               </tr>
-            ))}
+              )),
+            ])}
           </tbody>
         </table>
         </div>
@@ -413,7 +472,6 @@ export default function MembersPage() {
       {editingDetailsFor && (
         <EditMemberModal
           member={editingDetailsFor}
-          departments={departments}
           onCancel={() => setEditingDetailsFor(null)}
           onConfirm={() => {
             setEditingDetailsFor(null);

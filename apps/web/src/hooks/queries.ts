@@ -20,7 +20,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { api, type OrgConfig } from '@/lib/api-v2';
+import { api, type Department, type OrgConfig } from '@/lib/api-v2';
 
 /** Query keys, in one place, so an invalidation elsewhere can find them. */
 export const qk = {
@@ -31,6 +31,7 @@ export const qk = {
   retainers: (status?: string) => ['retainers', status ?? 'all'] as const,
   projects: (status?: string) => ['projects', status ?? 'all'] as const,
   team: ['team'] as const,
+  departments: ['departments'] as const,
 };
 
 /**
@@ -74,4 +75,21 @@ export function useTeamMembers() {
     gcTime: 60 * 60 * 1000,
   });
   return (data?.members ?? []) as TeamMemberOption[];
+}
+
+/**
+ * The organisation's departments, in their order — the ONE list every screen
+ * offers and filters by (Members, All work, Calendar, the brief, Usage, the
+ * invite and edit forms). Before this each screen built its own: from
+ * Settings, from people's text, or from both, and they disagreed.
+ *
+ * Active departments only; group and filter by `id`, never by name.
+ */
+export function useDepartments() {
+  const { data, isPending } = useQuery({
+    queryKey: qk.departments,
+    queryFn: () => api.departments.list(),
+    staleTime: 10 * 60 * 1000,
+  });
+  return { departments: (data?.departments ?? []) as Department[], loading: isPending };
 }

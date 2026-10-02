@@ -112,7 +112,7 @@ assistantRouter.post('/ask', requireManagement(), async (req: AuthRequest, res: 
     // list; a run of them after a key expires reads as a broken feature.
     opened = thread.isNew ? thread.id : null;
 
-    const { answer, model, provider, used, draft } = await askMoneyAssistant({
+    const { answer, model, provider, used, draft, note } = await askMoneyAssistant({
       organizationId: req.user!.organizationId,
       userId: req.user!.userId,
       question: parsed.data.question,
@@ -143,6 +143,8 @@ assistantRouter.post('/ask', requireManagement(), async (req: AuthRequest, res: 
       month,
       used,
       draft,
+      // "(Answer cut short.)" when it hit the token ceiling — for showing muted.
+      ...(note ? { note } : {}),
       conversationId: thread.id,
       messageId: assistantMessageId,
     });
@@ -412,6 +414,15 @@ assistantRouter.post('/stream', requireManagement(), async (req: AuthRequest, re
         answered += event.text;
         send('piece', { text: event.text });
       } else if (event.kind === 'tool') send('tool', { name: event.name });
+      // The model declined: what it had said goes, and this stands in for it —
+      // in the panel and in the thread.
+      else if (event.kind === 'replace') {
+        answered = event.text;
+        send('replace', { text: event.text });
+      }
+      // Cut short at the token ceiling: a muted line under what did come back.
+      // Not part of the answer, so it is not stored with it.
+      else if (event.kind === 'note') send('note', { text: event.text });
       // A drafted task, for the panel to show as a card with a Create button.
       // Nothing has been written at this point and nothing will be until that
       // button is pressed — the browser then posts it to `POST /tasks` under

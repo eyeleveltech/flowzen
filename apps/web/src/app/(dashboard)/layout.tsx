@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api-v2';
 import { useAuthStore, useUIStore } from '@/stores';
@@ -88,6 +88,39 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const known = Boolean(user?.permissions);
   const refused = known && Boolean(needs) && !canSee({ needs }, user!.permissions);
   const waiting = Boolean(needs) && !known;
+
+  /*
+   * Who is using Flowzen (routes/usage.ts): the screen a person opens, sent
+   * when the route changes — Money's tab counts as a route — and only while
+   * the tab is visible. The bell and background refreshes never send this, so
+   * a tab left open overnight records nothing. Coming back to a tab hidden
+   * for over ten minutes counts as opening the screen again. Fire and forget:
+   * it can never slow or break the page. Everybody is told on their Profile.
+   */
+  const searchParams = useSearchParams();
+  const tab = searchParams.get('tab');
+  const signedIn = Boolean(user?.id);
+  const showing = signedIn && !refused && !waiting;
+  useEffect(() => {
+    if (!showing || document.visibilityState !== 'visible') return;
+    void api.usage.view(window.location.pathname + window.location.search).catch(() => {});
+  }, [pathname, tab, showing]);
+  useEffect(() => {
+    if (!showing) return;
+    let hiddenAt: number | null = document.visibilityState === 'hidden' ? Date.now() : null;
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+      } else {
+        if (hiddenAt !== null && Date.now() - hiddenAt > 10 * 60_000) {
+          void api.usage.view(window.location.pathname + window.location.search).catch(() => {});
+        }
+        hiddenAt = null;
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [showing]);
 
   // Close mobile sidebar when route changes
   useEffect(() => {

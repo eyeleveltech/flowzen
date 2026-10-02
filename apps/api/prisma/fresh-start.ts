@@ -196,13 +196,19 @@ async function main() {
     },
   });
 
+  // Everybody is in a department, starting with the administrator.
+  const management = await prisma.department.create({
+    data: { organizationId: org.id, name: 'Management', sortOrder: 0 },
+  });
+
   const admin = await prisma.user.create({
     data: {
       organizationId: org.id,
       name: adminName,
       email: adminEmail,
       passwordHash: await bcrypt.hash(adminPassword, 10),
-      dept: 'Management',
+      departmentId: management.id,
+      dept: management.name,
       designation: 'Management',
       // A real figure belongs here, but this account exists to let somebody in,
       // not to be a payroll row. Set it from /members once the team is added.

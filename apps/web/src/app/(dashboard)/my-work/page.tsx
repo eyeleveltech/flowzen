@@ -40,6 +40,7 @@ import { CheckSquare, Plus, GripVertical } from 'lucide-react';
 import type { TaskRepeatInfo } from '@/lib/repeat';
 import { RepeatMark } from '@/components/work/RepeatMark';
 import { NewTaskModal } from '@/components/work/NewTaskModal';
+import { taskTypeLabel } from '@/lib/task-type';
 
 
 type TStatus = 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'ON_HOLD' | 'DONE' | 'CANCELLED';
@@ -437,6 +438,7 @@ export default function MyWorkPage() {
             );
           })()}
         </td>
+        <td className="whitespace-nowrap text-secondary">{taskTypeLabel(t.taskType) ?? '—'}</td>
         {/* Who it is for, over which job of theirs it belongs to — the second
             was on no screen this side of the drawer until now. */}
         <td>
@@ -540,7 +542,7 @@ export default function MyWorkPage() {
    */
   const heading = (label: string) => (
     <tr className="bg-surface">
-      <th colSpan={7} scope="colgroup" className="eyebrow border-y border-border text-left">
+      <th colSpan={8} scope="colgroup" className="eyebrow border-y border-border text-left">
         {label}
       </th>
     </tr>
@@ -638,6 +640,7 @@ export default function MyWorkPage() {
                   {/* The grip column — the grip is its own label. */}
                   <th className="w-8" aria-label="Arrange" />
                   <th className="eyebrow text-left">Task</th>
+                  <th className="eyebrow text-left">Type of work</th>
                   <th className="eyebrow text-left">For</th>
                   <th className="eyebrow text-left">Due</th>
                   <th className="eyebrow text-left">Priority</th>

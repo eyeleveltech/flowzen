@@ -135,6 +135,7 @@ describe('Phase 1: RBAC Permissions & Authorization Gates', () => {
     // has no workspace in it. Said explicitly here rather than relying on an
     // unmocked count, which returns undefined and slides past the gate.
     (prisma.organization.count as any).mockResolvedValue(0);
+    (prisma.department.create as any).mockResolvedValue({ id: 'dept-mgmt', name: 'Management' });
 
     const res = await request(app).post('/api/auth/register').send({
       name: 'Test Owner',
@@ -149,6 +150,14 @@ describe('Phase 1: RBAC Permissions & Authorization Gates', () => {
     expect(res.body.user.email).toBe(randomEmail);
     expect(res.body.user.preset).toBe('MANAGEMENT');
     expect(res.body.user.organization.name).toBe('Acme Test Agency');
+
+    // The new workspace starts with a Management department, and its admin in it.
+    expect((prisma.department.create as any).mock.calls[0][0].data).toEqual({
+      organizationId: 'org-test-1',
+      name: 'Management',
+      sortOrder: 0,
+    });
+    expect((prisma.user.create as any).mock.calls[0][0].data).toMatchObject({ departmentId: 'dept-mgmt', dept: 'Management' });
   });
 
   it('refuses a second workspace on a deployment that already has one', async () => {

@@ -20,9 +20,15 @@ configRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
   try {
     const orgId = req.user!.organizationId;
 
-    const org = await prisma.organization.findUnique({
-      where: { id: orgId },
-    });
+    const [org, departmentNames] = await Promise.all([
+      prisma.organization.findUnique({ where: { id: orgId } }),
+      // For any reader still on the old list of names; the records are /departments.
+      prisma.department.findMany({
+        where: { organizationId: orgId, archivedAt: null },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+        select: { name: true },
+      }),
+    ]);
 
     if (!org) {
       res.status(404).json({ success: false, error: 'Organization not found' });
@@ -80,7 +86,8 @@ configRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
          * department and the edit form offers them, so any screen showing a
          * team needs the list.
          */
-        departments: org.departments,
+        // Built from the department records until Plan 4 drops the old column.
+        departments: departmentNames.map((d) => d.name),
         aiConfigured: Boolean(org.aiApiKey),
         aiProvider: org.aiProvider,
         aiModel: org.aiModel,
@@ -244,15 +251,10 @@ const orgUpdateSchema = z.object({
    * than taken as a string, so a typo cannot leave Zen pointed at nothing.
    */
   /*
-   * Departments, as a whole list rather than one at a time.
-   *
-   * Trimmed, de-duplicated and sorted on the way in, because this is a text
-   * box somebody types into and "Design " and "design" are the same team. A
-   * department already assigned to somebody is NOT protected here — removing
-   * one leaves their record carrying a value the dropdown no longer offers,
-   * which the edit form shows rather than silently changing.
+   * Departments are not edited here any more: they are records, changed in
+   * Settings → Departments (routes/departments.ts). A `departments` list sent
+   * by an old screen is ignored, not written.
    */
-  departments: z.array(z.string().trim().min(1).max(60)).max(40).optional(),
   /** Settings → Integrations: people may connect Google Calendar. */
   googleCalendarEnabled: z.boolean().optional(),
   aiApiKey: z.string().trim().max(200).optional(),
@@ -327,9 +329,6 @@ configRouter.patch('/', requirePermission('setup.admin'), async (req: AuthReques
          * between null and an empty string is the difference between "no key"
          * and "a key the provider will reject".
          */
-        ...(data.departments !== undefined
-          ? { departments: [...new Set(data.departments.map((d) => d.trim()).filter(Boolean))].sort() }
-          : {}),
         ...(data.aiApiKey !== undefined ? { aiApiKey: data.aiApiKey || null } : {}),
         ...(data.aiProvider !== undefined ? { aiProvider: data.aiProvider } : {}),
         ...(data.aiModel !== undefined ? { aiModel: data.aiModel } : {}),

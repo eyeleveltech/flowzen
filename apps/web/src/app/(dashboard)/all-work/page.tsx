@@ -27,7 +27,7 @@ import { useMemo, useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { api, fileUrl, formatDate } from '@/lib/api-v2';
-import { useConfig, useTeamMembers } from '@/hooks/queries';
+import { useConfig, useDepartments, useTeamMembers } from '@/hooks/queries';
 import { usePageHeader } from '@/hooks/usePageHeader';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { Card } from '@/components/ui/card';
@@ -48,6 +48,7 @@ import { getInitials, getAvatarColor } from '@/lib/utils';
 import { personOption } from '@/lib/people';
 import { RepeatMark } from '@/components/work/RepeatMark';
 import type { TaskRepeatInfo } from '@/lib/repeat';
+import { TASK_TYPE_OPTIONS, taskTypeLabel } from '@/lib/task-type';
 
 const STATUS_OPTIONS = [
   /*
@@ -81,7 +82,7 @@ const STATUS_TONE: Record<string, string> = {
 };
 
 /** The columns a click on the header sorts by — the server's names for them. */
-type SortKey = 'assigned' | 'task' | 'for' | 'who' | 'due' | 'status' | 'elapsed';
+type SortKey = 'assigned' | 'task' | 'type' | 'for' | 'who' | 'due' | 'status' | 'elapsed';
 const DEFAULT_SORT: { key: SortKey; dir: SortDir } = { key: 'due', dir: 'asc' };
 
 type Task = {
@@ -89,6 +90,8 @@ type Task = {
   title: string;
   status: string;
   priority: string;
+  /** Type of work — Design, Video… — or null when nobody gave it one. */
+  taskType?: string | null;
   dueDate: string;
   /** Optional, "17:30" — shown after the date. */
   dueTime?: string | null;
@@ -112,7 +115,8 @@ type Task = {
 export default function AllWorkPage() {
   const { data: config } = useConfig();
   const team = useTeamMembers();
-  const departments = config?.organization.departments ?? [];
+  // The one department list, in Settings' order; filtered by id.
+  const { departments } = useDepartments();
 
   /*
    * Lists, not single values.
@@ -126,6 +130,7 @@ export default function AllWorkPage() {
   const [statuses, setStatuses] = useState<string[]>(['UNFINISHED']);
   const [clients, setClients] = useState<string[]>([]);
   const [projects, setProjects] = useState<string[]>([]);
+  const [types, setTypes] = useState<string[]>([]);
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [q, setQ] = useState('');
   const [openTask, setOpenTask] = useState<Task | null>(null);
@@ -148,10 +153,12 @@ export default function AllWorkPage() {
   const params = useMemo(() => {
     const p: Record<string, string> = {};
     if (assigneeIds.length > 0) p.assigneeId = assigneeIds.join(',');
-    if (depts.length > 0) p.dept = depts.join(',');
+    // Ids, so a name with a comma in it is still one department.
+    if (depts.length > 0) p.departmentId = depts.join(',');
     if (clients.length > 0) p.companyId = clients.join(',');
     if (projects.length > 0) p.project = projects.join(',');
     if (statuses.length > 0) p.status = statuses.join(',');
+    if (types.length > 0) p.taskType = types.join(',');
     if (overdueOnly) p.overdue = '1';
     if (q.trim()) p.q = q.trim();
     if (sort.key !== DEFAULT_SORT.key || sort.dir !== DEFAULT_SORT.dir) {
@@ -159,7 +166,7 @@ export default function AllWorkPage() {
       p.dir = sort.dir;
     }
     return p;
-  }, [assigneeIds, depts, clients, projects, statuses, overdueOnly, q, sort]);
+  }, [assigneeIds, depts, clients, projects, statuses, types, overdueOnly, q, sort]);
 
   const { data, isPending, isPlaceholderData, error, refetch } = useQuery({
     queryKey: ['all-work', params],
@@ -212,6 +219,7 @@ export default function AllWorkPage() {
     depts.length > 0 ||
     clients.length > 0 ||
     projects.length > 0 ||
+    types.length > 0 ||
     overdueOnly ||
     q.trim().length > 0 ||
     !(statuses.length === 1 && statuses[0] === 'UNFINISHED');
@@ -273,16 +281,15 @@ export default function AllWorkPage() {
           <div className="w-48">
             <span className="eyebrow mb-1.25 block">Department</span>
             {/*
-              The organisation's list, edited in Settings — the same source the
-              member edit form and the invite form read, so a department added
-              there can be filtered by here without anybody being moved first.
+              The department records, edited in Settings → Departments — the
+              same list every screen offers, chosen by id.
             */}
             <MultiSelect
               ariaLabel="Filter by department"
               value={depts}
               onChange={setDepts}
               placeholder="Any department"
-              options={departments.map((d) => ({ value: d, label: d }))}
+              options={departments.map((d) => ({ value: d.id, label: d.name }))}
             />
           </div>
           <div className="w-48">
@@ -318,6 +325,16 @@ export default function AllWorkPage() {
               options={projectOptions}
             />
           </div>
+          <div className="w-48">
+            <span className="eyebrow mb-1.25 block">Type of work</span>
+            <MultiSelect
+              ariaLabel="Filter by type of work"
+              value={types}
+              onChange={setTypes}
+              placeholder="Any type"
+              options={[...TASK_TYPE_OPTIONS, { value: 'NONE', label: 'Not set' }]}
+            />
+          </div>
           <div className="w-44">
             <span className="eyebrow mb-1.25 block">Status</span>
             <MultiSelect
@@ -345,6 +362,7 @@ export default function AllWorkPage() {
               <tr className="border-b border-border bg-subtle">
                 <SortableTH label="Assigned" column="assigned" sort={sort} onSort={sortBy} />
                 <SortableTH label="Task" column="task" sort={sort} onSort={sortBy} />
+                <SortableTH label="Type of work" column="type" sort={sort} onSort={sortBy} />
                 <SortableTH label="For" column="for" sort={sort} onSort={sortBy} />
                 <SortableTH label="Who" column="who" sort={sort} onSort={sortBy} />
                 <SortableTH label="Due" column="due" sort={sort} onSort={sortBy} />
@@ -353,10 +371,10 @@ export default function AllWorkPage() {
               </tr>
             </thead>
             <tbody className={`divide-y divide-border transition-opacity ${isPlaceholderData ? 'opacity-60' : ''}`}>
-              {isPending && <TableRowsSkeleton rows={6} cols={7} />}
+              {isPending && <TableRowsSkeleton rows={6} cols={8} />}
               {!isPending && tasks.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-5 py-12 text-center text-sm text-secondary">
+                  <td colSpan={8} className="px-5 py-12 text-center text-sm text-secondary">
                     {filtered ? 'Nothing matches those filters.' : 'No work on anybody’s plate.'}
                   </td>
                 </tr>
@@ -384,6 +402,7 @@ export default function AllWorkPage() {
                     </button>{' '}
                     <RepeatMark repeat={t.repeat} />
                   </td>
+                  <td className="whitespace-nowrap text-secondary">{taskTypeLabel(t.taskType) ?? '—'}</td>
                   <td className="text-secondary">
                     {t.companyId ? (
                       <Link

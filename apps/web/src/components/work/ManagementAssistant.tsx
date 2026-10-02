@@ -38,6 +38,8 @@ type Message = {
   at: Date;
   /** Set on an assistant turn that failed, so it reads as a problem not an answer. */
   failed?: boolean;
+  /** A muted line under the answer: "(Answer cut short.)" */
+  note?: string;
   /**
    * A task Zen has filled in, shown under the answer as a card to check.
    *
@@ -330,6 +332,9 @@ export function ManagementAssistant({
             setMessages((m) =>
               m.map((msg) => (msg.id === answerId ? { ...msg, text: msg.text + piece } : msg)),
             ),
+          onNote: (note) => setMessages((m) => m.map((msg) => (msg.id === answerId ? { ...msg, note } : msg))),
+          // Declined: what it had started to say is not an answer, so it goes.
+          onReplace: (text) => setMessages((m) => m.map((msg) => (msg.id === answerId ? { ...msg, text } : msg))),
         });
       } catch (e) {
         const message =
@@ -599,6 +604,7 @@ export function ManagementAssistant({
                     {m.text}
                   </div>
                   )}
+                  {m.note && <p className="px-1 text-micro text-secondary">{m.note}</p>}
                   {/*
                     * What Zen filled in, before it is anything.
                     *

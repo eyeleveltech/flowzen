@@ -44,7 +44,7 @@ type ToolCallDelta = {
 
 type Message = {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content?: string | null;
+  content?: string | null | { type: 'text'; text: string }[];
   tool_call_id?: string;
   tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[];
 };
@@ -58,11 +58,23 @@ type Message = {
  */
 const idFor = (name: string, id: string | undefined, at: number) => id ?? `call_${at}_${name}`;
 
-function messagesFrom(system: string, turns: AiTurn[]): Message[] {
+function messagesFrom(system: string, turns: AiTurn[], context?: string): Message[] {
   const out: Message[] = [{ role: 'system', content: system }];
+  const newest = turns.map((t) => t.role).lastIndexOf('user');
   turns.forEach((turn, at) => {
     if (turn.role === 'user') {
-      out.push({ role: 'user', content: turn.text });
+      // The per-request context, as its own part ahead of the newest question.
+      out.push(
+        at === newest && context
+          ? {
+              role: 'user',
+              content: [
+                { type: 'text', text: context },
+                { type: 'text', text: turn.text },
+              ],
+            }
+          : { role: 'user', content: turn.text },
+      );
       return;
     }
     if (turn.role === 'tool') {
@@ -75,6 +87,8 @@ function messagesFrom(system: string, turns: AiTurn[]): Message[] {
           content: JSON.stringify(r.result),
         });
       }
+      // A tool message carries only its result, so a line after them is the user's.
+      if (turn.followUp) out.push({ role: 'user', content: turn.followUp });
       return;
     }
     out.push({
@@ -126,13 +140,15 @@ function make(opts: {
 
   const bodyFor = (req: AiRequest, stream: boolean) => ({
     model: req.model,
-    messages: messagesFrom(req.system, req.turns),
+    messages: messagesFrom(req.system, req.turns, req.context),
     ...(req.tools.length
       ? {
           tools: req.tools.map((t) => ({
             type: 'function',
             function: { name: t.name, description: t.description, parameters: t.parameters },
           })),
+          // The last round: the tools stay declared, but the model has to answer.
+          ...(req.toolChoice === 'none' ? { tool_choice: 'none' } : {}),
         }
       : {}),
     // Left out for a model that has refused it — see ./temperature.
@@ -239,6 +255,7 @@ function make(opts: {
         // Keyed by the `index` the protocol sends, because that is the only
         // thing tying a fragment to the call it belongs to.
         const building = new Map<number, { id?: string; name: string; args: string }>();
+        let text = '';
 
         for await (const payload of sseLines(res.body)) {
           let parsed: {
@@ -251,7 +268,10 @@ function make(opts: {
           }
           const delta = parsed.choices?.[0]?.delta;
           if (!delta) continue;
-          if (delta.content) yield { text: delta.content };
+          if (delta.content) {
+            text += delta.content;
+            yield { text: delta.content };
+          }
 
           for (const piece of delta.tool_calls ?? []) {
             const at = piece.index ?? 0;
@@ -266,11 +286,14 @@ function make(opts: {
           }
         }
 
-        return [...building.entries()]
-          .sort(([a], [b]) => a - b)
-          .map(([, c]) => c)
-          .filter((c) => c.name)
-          .map<AiToolCall>((c) => ({ name: c.name, args: parseArgs(c.args), id: c.id }));
+        return {
+          text: text.trim(),
+          calls: [...building.entries()]
+            .sort(([a], [b]) => a - b)
+            .map(([, c]) => c)
+            .filter((c) => c.name)
+            .map<AiToolCall>((c) => ({ name: c.name, args: parseArgs(c.args), id: c.id })),
+        };
       })();
     },
   };

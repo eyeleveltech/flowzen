@@ -21,41 +21,38 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { api, ApiError } from '@/lib/api-v2';
+import { useDepartments } from '@/hooks/queries';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
 
-type Member = { id: string; name: string; email?: string | null; dept?: string | null };
+type Member = { id: string; name: string; email?: string | null; departmentId?: string | null };
 
 export function EditMemberModal({
   member,
-  departments,
   onConfirm,
   onCancel,
 }: {
   member: Member;
-  departments: string[];
   onConfirm: () => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(member.name ?? '');
   const [email, setEmail] = useState(member.email ?? '');
-  const [dept, setDept] = useState(member.dept ?? '');
+  const [departmentId, setDepartmentId] = useState(member.departmentId ?? '');
+  // The department records, by id — a rename in Settings shows here at once.
+  const { departments } = useDepartments();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   /*
-   * Whatever they are on now stays selectable, even if Settings no longer
-   * offers it. Dropping it from the list would silently reassign them the
-   * moment somebody edited their name.
+   * Required: everybody is in a department. Somebody not yet placed starts on
+   * "Choose a department…" and cannot be saved until they are.
    */
-  const options = (dept && !departments.includes(dept) ? [dept, ...departments] : departments).map((d) => ({
-    value: d,
-    label: d,
-  }));
+  const options = departments.map((d) => ({ value: d.id, label: d.name }));
 
-  const canSave = Boolean(name.trim()) && Boolean(email.trim()) && Boolean(dept) && !busy;
+  const canSave = Boolean(name.trim()) && Boolean(email.trim()) && Boolean(departmentId) && !busy;
 
   const save = async () => {
     if (!canSave) return;
@@ -65,7 +62,7 @@ export function EditMemberModal({
       await api.users.update(member.id, {
         name: name.trim(),
         email: email.trim(),
-        dept,
+        departmentId,
       } as never);
       toast.success(`${name.trim()} updated`);
       onConfirm();
@@ -99,8 +96,8 @@ export function EditMemberModal({
           />
           <FieldSelect
             label="Department"
-            value={dept}
-            onChange={setDept}
+            value={departmentId}
+            onChange={setDepartmentId}
             options={[{ value: '', label: 'Choose a department…' }, ...options]}
             disabled={busy}
             required

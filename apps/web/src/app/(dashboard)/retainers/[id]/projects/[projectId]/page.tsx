@@ -60,6 +60,7 @@ import {
 } from '@/components/retainers/task-shared';
 import { withDueTime } from '@/lib/due-time';
 import { RepeatMark } from '@/components/work/RepeatMark';
+import { taskTypeLabel } from '@/lib/task-type';
 
 export default function RetainerProjectPage() {
   const { id, projectId } = useParams<{ id: string; projectId: string }>();
@@ -392,6 +393,7 @@ export default function RetainerProjectPage() {
                 <thead>
                   <tr className="border-b border-border">
                     <th className="eyebrow text-left">Task</th>
+                    <th className="eyebrow text-left">Type of work</th>
                     {allMonths && <th className="eyebrow text-left">Month</th>}
                     <th className="eyebrow text-left">Assigned to</th>
                     <th className="eyebrow text-left">Assigned</th>
@@ -432,6 +434,7 @@ export default function RetainerProjectPage() {
                             </p>
                           )}
                         </td>
+                        <td className="whitespace-nowrap text-secondary">{taskTypeLabel(t.taskType) ?? '—'}</td>
                         {allMonths && (
                           <td className="whitespace-nowrap text-secondary">{monthLabel(m)}</td>
                         )}

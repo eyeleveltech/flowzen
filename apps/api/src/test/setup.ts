@@ -29,4 +29,10 @@ beforeEach(() => {
    * bell test for a table none of them is about.
    */
   (prisma.calendarEventAttendee.findMany as any).mockResolvedValue([]);
+  /*
+   * No departments unless a test says so. GET /config lists their names for
+   * old readers, the team screen and the brief group by them — and every test
+   * that touches those would otherwise fail on a table it is not about.
+   */
+  (prisma.department.findMany as any).mockResolvedValue([]);
 });

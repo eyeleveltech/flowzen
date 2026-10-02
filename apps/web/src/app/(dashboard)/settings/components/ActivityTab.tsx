@@ -40,8 +40,17 @@ const dayKeyIn = (iso: string, tz: string) =>
     new Date(iso),
   );
 
-export function ActivityTab({ tz, locale }: { tz: string; locale: string }) {
-  const [person, setPerson] = useState('');
+export function ActivityTab({
+  tz,
+  locale,
+  initialPerson = '',
+}: {
+  tz: string;
+  locale: string;
+  /** Opened from Settings → Usage: already narrowed to that person. */
+  initialPerson?: string;
+}) {
+  const [person, setPerson] = useState(initialPerson);
   const [area, setArea] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');

@@ -10,6 +10,8 @@ export type {
   AiProviderId,
   AiReply,
   AiRequest,
+  AiStop,
+  AiUsage,
   AiTool,
   AiToolCall,
   AiToolResult,

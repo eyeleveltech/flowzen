@@ -107,7 +107,8 @@ const querySchema = z.object({
   to: z.string().regex(DAY, 'Give to as YYYY-MM-DD.'),
   layers: z.string().optional(),
   person: z.string().optional(),
-  dept: z.string().optional(),
+  /** A department's id — the team layer narrowed to the people in it. */
+  departmentId: z.string().optional(),
 });
 
 /** A `@db.Date` column as the day it is. */
@@ -123,7 +124,7 @@ calendarRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, 
       res.status(400).json({ success: false, error: parsed.error.issues[0].message });
       return;
     }
-    const { from, to, person, dept } = parsed.data;
+    const { from, to, person, departmentId } = parsed.data;
     const span = (asDate(to).getTime() - asDate(from).getTime()) / 86_400_000 + 1;
     if (Number.isNaN(span) || span < 1) {
       res.status(400).json({ success: false, error: 'The end date comes before the start.' });
@@ -208,7 +209,7 @@ calendarRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, 
               ...taskBase,
               AND: [
                 ...(person ? [{ assignees: { some: { userId: person } } }] : []),
-                ...(dept ? [{ assignees: { some: { user: { dept } } } }] : []),
+                ...(departmentId ? [{ assignees: { some: { user: { departmentId } } } }] : []),
                 // Shown once: with My tasks on, your own are already there.
                 ...(layers.has('mine') ? [{ NOT: { assignees: { some: { userId: me } } } }] : []),
               ],

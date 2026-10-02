@@ -4,6 +4,8 @@ import { app } from '../index.js';
 import { prisma } from '../lib/prisma.js';
 import { signJwt } from '../utils/jwt.js';
 import { RolePreset } from '@prisma/client';
+import { anthropic } from '../services/ai/anthropic.js';
+import type { AiReply, AiRequest } from '../services/ai/index.js';
 
 /**
  * The money assistant, and the two things that matter about it.
@@ -297,7 +299,11 @@ describe('what goes to the provider', () => {
     expect(contents).toHaveLength(3);
     expect(contents[0]).toMatchObject({ role: 'user' });
     expect(contents[1]).toMatchObject({ role: 'model' });
-    expect(contents[2].parts[0].text).toBe('Why?');
+    // The question is the last part; this question's context goes ahead of it.
+    expect(contents[2].parts.at(-1).text).toBe('Why?');
+    expect(contents[2].parts[0].text).toContain('WHAT YOU ALREADY KNOW');
+    // Earlier questions go back as they were said, without a context of their own.
+    expect(contents[0].parts).toHaveLength(1);
     vi.unstubAllGlobals();
   });
 
@@ -350,11 +356,19 @@ describe('what goes to the provider', () => {
       .set(...auth(MANAGEMENT))
       .send({ question: 'who are our clients' });
 
-    const prompt = bodyOf(fetchMock).systemInstruction.parts[0].text;
-    const known = JSON.parse(prompt.slice(prompt.indexOf('{'), prompt.lastIndexOf('}') + 1));
+    // With the question, not in the system prompt — which stays the same for
+    // every question so a provider can cache it.
+    const body = bodyOf(fetchMock);
+    const context = body.contents.at(-1).parts[0].text;
+    const known = JSON.parse(context.slice(context.indexOf('{'), context.lastIndexOf('}') + 1));
     expect(known.clients).toContain('Da One (CLIENT)');
     expect(known.team).toContain('Janani — Design');
     expect(known.thisMonthTotals).toBeDefined();
+    expect(context).toContain('You are talking to Somebody');
+    const rules = body.systemInstruction.parts[0].text;
+    expect(rules).not.toContain('Da One');
+    expect(rules).not.toContain('Somebody');
+    expect(rules).not.toContain(known.today);
     vi.unstubAllGlobals();
   });
 
@@ -416,7 +430,151 @@ describe('what goes to the provider', () => {
     expect(res.status).toBe(200);
     // Four rounds of tools, then one more that has to answer with what it has.
     expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(5);
+    // That last one still declares the tools, but may not call them.
+    const sent = (n: number) =>
+      JSON.parse((fetchMock.mock.calls[n] as unknown as [string, RequestInit])[1].body as string);
+    expect(sent(4).toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+    expect(sent(4).tools[0].functionDeclarations.length).toBeGreaterThan(0);
+    expect(sent(3).toolConfig).toBeUndefined();
     vi.unstubAllGlobals();
+  });
+});
+
+/**
+ * The loop around a model that thinks, declines and runs out of room.
+ *
+ * Anthropic's adapter is stood in for here — its own translation is tested in
+ * services/ai/adapters.test.ts. What is checked is what the loop does with a
+ * reply: send the model's own content back with the tool results, take the
+ * last round's answer instead of a "let me check", and say so when the model
+ * declines or is cut short.
+ */
+describe('a model that thinks before it looks', () => {
+  const ON_ANTHROPIC = { ...ORG, aiProvider: 'ANTHROPIC', aiApiKey: 'sk-ant-api-secret', aiModel: 'claude-opus-5-5' };
+  beforeEach(() => {
+    (prisma.organization.findUnique as any).mockResolvedValue(ON_ANTHROPIC);
+    (prisma.organization.findFirst as any).mockResolvedValue(ON_ANTHROPIC);
+  });
+
+  const lookup = (raw: unknown): AiReply => ({
+    text: '',
+    calls: [{ name: 'searchClients', args: {}, id: 'toolu_1' }],
+    raw,
+    stop: 'end',
+    usage: { input: 10, output: 5, cacheRead: 0, cacheCreation: 0 },
+  });
+
+  it('sends its thinking back unchanged with the results, under fixed rules', async () => {
+    const thought = [
+      { type: 'thinking', thinking: '', signature: 'sig-abc' },
+      { type: 'tool_use', id: 'toolu_1', name: 'searchClients', input: {} },
+    ];
+    const seen: AiRequest[] = [];
+    const complete = vi
+      .spyOn(anthropic, 'complete')
+      .mockImplementationOnce(async (r) => {
+        seen.push(structuredClone(r));
+        return lookup(thought);
+      })
+      .mockImplementationOnce(async (r) => {
+        seen.push(structuredClone(r));
+        return { text: 'One client: Da One.', calls: [], stop: 'end' };
+      });
+
+    const res = await request(app)
+      .post('/api/assistant/ask')
+      .set(...auth(MANAGEMENT))
+      .send({ question: 'who are our clients' });
+    complete.mockRestore();
+
+    expect(res.status).toBe(200);
+    expect(res.body.answer).toBe('One client: Da One.');
+    const replayed = seen[1].turns.find((t) => t.role === 'assistant');
+    expect(replayed).toMatchObject({ role: 'assistant', raw: thought });
+    // The same rules and context on both rounds, so the second reads the first's cache.
+    expect(seen[1].system).toBe(seen[0].system);
+    expect(seen[1].context).toBe(seen[0].context);
+    expect(seen[0].system).not.toContain('Da One');
+    expect(seen[0].context).toContain('Da One (CLIENT)');
+  });
+
+  it('answers on the last round instead of asking for a sixth lookup', async () => {
+    const seen: AiRequest[] = [];
+    const complete = vi.spyOn(anthropic, 'complete').mockImplementation(async (r) => {
+      // A copy: the loop keeps appending to the same turns array.
+      seen.push(structuredClone(r));
+      return r.toolChoice === 'none'
+        ? { text: 'From what I have: Da One.', calls: [], stop: 'end' }
+        : lookup([{ type: 'tool_use', id: 'toolu_1', name: 'searchClients', input: {} }]);
+    });
+
+    const res = await request(app)
+      .post('/api/assistant/ask')
+      .set(...auth(MANAGEMENT))
+      .send({ question: 'everything about everyone' });
+    complete.mockRestore();
+
+    expect(seen.map((r) => r.toolChoice)).toEqual(['auto', 'auto', 'auto', 'auto', 'none']);
+    // Told so with the last results, too — tool_choice alone let a model end its turn with nothing.
+    expect(seen[4].turns.at(-1)).toMatchObject({ role: 'tool', followUp: expect.stringContaining('last lookup') });
+    expect(seen[3].turns.at(-1)).not.toHaveProperty('followUp');
+    // The tools are still declared on that last round — dropping them would throw the cache away.
+    expect(seen[4].tools.length).toBe(seen[0].tools.length);
+    expect(res.body.answer).toBe('From what I have: Da One.');
+  });
+
+  it('says it cannot help when the model declines, and runs nothing', async () => {
+    const complete = vi.spyOn(anthropic, 'complete').mockResolvedValueOnce({ text: '', calls: [], stop: 'refusal' });
+
+    const res = await request(app)
+      .post('/api/assistant/ask')
+      .set(...auth(MANAGEMENT))
+      .send({ question: 'something it will not do' });
+    complete.mockRestore();
+
+    expect(res.body.answer).toBe("Zen can't help with that one.");
+    expect(res.body.used).toEqual([]);
+  });
+
+  it('keeps what came back when it is cut short, with a note', async () => {
+    const complete = vi
+      .spyOn(anthropic, 'complete')
+      .mockResolvedValueOnce({ text: 'Da One owes the most, then', calls: [], stop: 'max_tokens' });
+
+    const res = await request(app).post('/api/assistant/ask').set(...auth(MANAGEMENT)).send({ question: 'who owes us' });
+    complete.mockRestore();
+
+    expect(res.body.answer).toBe('Da One owes the most, then');
+    expect(res.body.note).toBe('(Answer cut short.)');
+  });
+
+  it('streams the same: a note when cut short, a replacement when declined', async () => {
+    const reply = (r: AiReply, text: string) =>
+      (async function* () {
+        yield { text };
+        return r;
+      })();
+
+    let stream = vi
+      .spyOn(anthropic, 'stream')
+      .mockReturnValueOnce(reply({ text: 'Da One', calls: [], stop: 'max_tokens' }, 'Da One'));
+    let res = await request(app).post('/api/assistant/stream').set(...auth(MANAGEMENT)).send({ question: 'who owes us' });
+    stream.mockRestore();
+    expect(res.text).toContain('event: piece');
+    expect(res.text).toContain('event: note\ndata: {"text":"(Answer cut short.)"}');
+
+    stream = vi
+      .spyOn(anthropic, 'stream')
+      .mockReturnValueOnce(reply({ text: '', calls: [], stop: 'refusal' }, 'I will start'));
+    res = await request(app)
+      .post('/api/assistant/stream')
+      .set(...auth(MANAGEMENT))
+      .send({ question: 'something it will not do' });
+    stream.mockRestore();
+    expect(res.text).toContain('event: replace\ndata: {"text":"Zen can\'t help with that one."}');
+    // And that is what the thread keeps, not the half-sentence before it.
+    expect(JSON.stringify((prisma.zenMessage.create as any).mock.calls)).toContain("Zen can't help with that one.");
+    expect(JSON.stringify((prisma.zenMessage.create as any).mock.calls)).not.toContain('I will start');
   });
 });
 

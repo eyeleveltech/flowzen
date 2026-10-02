@@ -19,22 +19,32 @@ type GeminiPart = {
   functionResponse?: { name: string; response: { result: unknown } };
 };
 
-/** The conversation, as Gemini reads one. */
-function contentsFrom(turns: AiTurn[]) {
-  return turns.map((turn) => {
-    if (turn.role === 'user') return { role: 'user', parts: [{ text: turn.text }] };
+/**
+ * The conversation, as Gemini reads one.
+ *
+ * The per-request context goes in the newest user turn as its own part, ahead
+ * of the question — the same place every adapter puts it.
+ */
+function contentsFrom(turns: AiTurn[], context?: string) {
+  const newest = turns.map((t) => t.role).lastIndexOf('user');
+  return turns.map((turn, at) => {
+    if (turn.role === 'user') {
+      return {
+        role: 'user',
+        parts: at === newest && context ? [{ text: context }, { text: turn.text }] : [{ text: turn.text }],
+      };
+    }
     if (turn.role === 'tool') {
       /*
        * A tool result is a USER turn here, which reads oddly but is what the
        * API wants: the function's output is something being handed TO the
        * model, and Gemini has no third role for it.
        */
-      return {
-        role: 'user',
-        parts: turn.results.map((r) => ({
-          functionResponse: { name: r.name, response: { result: r.result } },
-        })),
-      };
+      const parts: GeminiPart[] = turn.results.map((r) => ({
+        functionResponse: { name: r.name, response: { result: r.result } },
+      }));
+      if (turn.followUp) parts.push({ text: turn.followUp });
+      return { role: 'user', parts };
     }
     const parts: GeminiPart[] = [];
     if (turn.text) parts.push({ text: turn.text });
@@ -45,8 +55,12 @@ function contentsFrom(turns: AiTurn[]) {
 
 const bodyFor = (req: AiRequest) => ({
   systemInstruction: { parts: [{ text: req.system }] },
-  contents: contentsFrom(req.turns),
+  contents: contentsFrom(req.turns, req.context),
   ...(req.tools.length ? { tools: [{ functionDeclarations: req.tools }] } : {}),
+  // The last round: the tools stay declared, but the model has to answer.
+  ...(req.tools.length && req.toolChoice === 'none'
+    ? { toolConfig: { functionCallingConfig: { mode: 'NONE' } } }
+    : {}),
   generationConfig: { temperature: req.temperature, maxOutputTokens: req.maxOutputTokens },
 });
 
@@ -156,6 +170,7 @@ export const gemini: AiProvider = {
       }
 
       const calls: AiToolCall[] = [];
+      let text = '';
       for await (const payload of sseLines(res.body)) {
         let parsed: unknown;
         try {
@@ -167,10 +182,13 @@ export const gemini: AiProvider = {
         }
         for (const part of partsOf(parsed)) {
           if (part.functionCall) calls.push(callOf(part));
-          else if (part.text) yield { text: part.text };
+          else if (part.text) {
+            text += part.text;
+            yield { text: part.text };
+          }
         }
       }
-      return calls;
+      return { text: text.trim(), calls };
     })();
   },
 };

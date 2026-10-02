@@ -67,7 +67,9 @@ export function SortableTH<K extends string>({
   const Icon = !active ? ChevronsUpDown : sort.dir === 'asc' ? ArrowUp : ArrowDown;
   return (
     <th
-      className={cn('eyebrow', align === 'right' ? 'text-right' : 'text-left')}
+      // One line: a two-word heading ("Type of work") wrapping made the row
+      // of headings uneven.
+      className={cn('eyebrow whitespace-nowrap', align === 'right' ? 'text-right' : 'text-left')}
       aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
     >
       <button

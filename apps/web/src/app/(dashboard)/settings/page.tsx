@@ -43,6 +43,8 @@ import { DocumentSettingsTab } from './components/DocumentSettingsTab';
 import { OnboardingTab } from './components/OnboardingTab';
 import { TrashTab } from './components/TrashTab';
 import { ActivityTab } from './components/ActivityTab';
+import { DepartmentsTab } from './components/DepartmentsTab';
+import { UsageTab } from './components/UsageTab';
 import { IntegrationsTab } from './components/IntegrationsTab';
 import { ApprovalsTab } from './components/ApprovalsTab';
 import { AssetsTab } from './components/AssetsTab';
@@ -71,6 +73,7 @@ const GROUPS = [
     label: 'People & kit',
     tabs: [
       { key: 'team', label: 'Team', caption: 'Who is here' },
+      { key: 'departments', label: 'Departments', caption: 'Teams, heads, who is in each' },
       { key: 'approvals', label: 'Approvals', caption: 'Who signs off work' },
       { key: 'assets', label: 'Assets', caption: 'Tags and depreciation' },
       { key: 'onboarding', label: 'Onboarding', caption: 'What a new client needs' },
@@ -81,6 +84,7 @@ const GROUPS = [
     tabs: [
       { key: 'trash', label: 'Trash', caption: 'Removed, not gone' },
       { key: 'activity', label: 'Activity', caption: 'Everything that happened' },
+      { key: 'usage', label: 'Usage', caption: 'Who is using Flowzen' },
     ],
   },
 ] as const;
@@ -136,7 +140,6 @@ type Form = {
    * holds the list itself and adds to it one row at a time.
    */
   holidays: string[];
-  departments: string[];
   aiProvider: string;
   /** Typed to replace what is stored; blank means "leave it alone". */
   aiApiKey: string;
@@ -151,6 +154,8 @@ type Form = {
 export default function SettingsPage() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<TabKey>('organisation');
+  /** Set when a person is clicked on the Usage tab: the Activity tab opens filtered to them. */
+  const [activityPerson, setActivityPerson] = useState('');
   const [config, setConfig] = useState<OrgConfig | null>(null);
   const [form, setForm] = useState<Form | null>(null);
   const [team, setTeam] = useState<Member[]>([]);
@@ -213,7 +218,6 @@ export default function SettingsPage() {
         workingHoursEnd: o.workingHoursEnd ?? '19:00',
         workingDays: o.workingDays ?? [1, 2, 3, 4, 5, 6],
         holidays: o.holidays ?? [],
-        departments: o.departments ?? [],
         aiProvider: o.aiProvider ?? 'GEMINI',
         // Never prefilled: the server does not send it back, and an empty
         // box that saves as "keep what you have" is the honest shape.
@@ -316,7 +320,6 @@ export default function SettingsPage() {
         // Already a list, and already trimmed and de-duplicated by the control
         // that collected it. The server sorts and de-duplicates again — it
         // cannot assume a browser sent it.
-        departments: form.departments,
         holidays: form.holidays,
         /*
          * Only sent when something was typed. An untouched field is blank, and
@@ -391,13 +394,18 @@ export default function SettingsPage() {
                 {group.tabs
                   // Integrations only when the server has the Google keys to offer.
                   .filter((t) => t.key !== 'integrations' || config?.organization.googleCalendarConfigured)
+                  // Who is using Flowzen is for management only — the server refuses everybody else too.
+                  .filter((t) => t.key !== 'usage' || config?.me.preset === 'MANAGEMENT')
                   .map((t) => {
                   const on = tab === t.key;
                   return (
                     <button
                       key={t.key}
                       type="button"
-                      onClick={() => setTab(t.key)}
+                      onClick={() => {
+                        setTab(t.key);
+                        setActivityPerson('');
+                      }}
                       aria-current={on ? 'page' : undefined}
                       className={`shrink-0 rounded-xl px-3 py-2 text-left text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/40 ${
                         on
@@ -549,30 +557,6 @@ export default function SettingsPage() {
                   format={(d) => formatDate(d, tz, locale)}
                   hint="A day here is not counted as working time, the same way a Sunday is not."
                 />
-            </SectionCard>
-
-            {/*
-              Its own section, not a field at the bottom of the working
-              calendar. A department is not a working-time setting — it is read
-              by the team list, the capacity view and the member edit form, and
-              it was only here because this was the card that happened to be
-              open when it was added.
-            */}
-            <SectionCard
-              title="Departments"
-              description="The teams people belong to. Added one at a time, because the same team spelled two ways is two teams: this list is what the team screen groups by and the only thing the member edit form offers."
-            >
-              <ListField
-                label="Departments"
-                hideLabel
-                values={form.departments}
-                onChange={(v) => set('departments', v)}
-                addLabel="Add a department"
-                placeholder="e.g. Video / Production"
-                disabled={!canEdit}
-                empty="No departments yet. Add the ones you actually have."
-                hint="Removing one does not move anybody already in it — they keep the department they were given until somebody edits them."
-              />
             </SectionCard>
 
             <SectionCard
@@ -903,6 +887,8 @@ export default function SettingsPage() {
 
         {tab === 'approvals' && <ApprovalsTab canEdit={canEdit} />}
 
+        {tab === 'departments' && <DepartmentsTab canEdit={canEdit} />}
+
         {tab === 'integrations' && config.organization.googleCalendarConfigured && (
           <IntegrationsTab
             enabled={Boolean(config.organization.googleCalendarEnabled)}
@@ -911,7 +897,20 @@ export default function SettingsPage() {
           />
         )}
 
-        {tab === 'activity' && <ActivityTab tz={tz} locale={locale} />}
+        {tab === 'activity' && (
+          <ActivityTab key={activityPerson} tz={tz} locale={locale} initialPerson={activityPerson} />
+        )}
+
+        {tab === 'usage' && config.me.preset === 'MANAGEMENT' && (
+          <UsageTab
+            tz={tz}
+            locale={locale}
+            onOpenPerson={(id) => {
+              setActivityPerson(id);
+              setTab('activity');
+            }}
+          />
+        )}
           </div>
         </div>
       </div>

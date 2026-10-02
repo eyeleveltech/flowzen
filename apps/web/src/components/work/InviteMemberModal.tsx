@@ -14,14 +14,14 @@
  * It was a text box with "e.g. Design" under it, which is how the same team
  * came to exist as "Video & Production" and "Video / Production" — and this is
  * the form that creates people, so it was the one writing the new spellings.
- * It offers the organisation's list now, the same list Settings holds and the
- * member edit form offers. A brand-new org has no list yet, so the box comes
- * back for that case rather than blocking the first invitation.
+ * Now it is a required pick from the department records (Settings →
+ * Departments), sent by id. Every workspace starts with Management, so there
+ * is always at least one to choose.
  */
 
 import { useState } from 'react';
 import { api, ApiError } from '@/lib/api-v2';
-import { useConfig } from '@/hooks/queries';
+import { useDepartments } from '@/hooks/queries';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
@@ -38,17 +38,16 @@ const PRESET_OPTIONS = [
 export function InviteMemberModal({ onClose, onInvited }: { onClose: () => void; onInvited: () => void }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [dept, setDept] = useState('');
-  // The organisation's list, edited in Settings — see ListField there.
-  const { data: config } = useConfig();
-  const departments = config?.organization.departments ?? [];
+  const [departmentId, setDepartmentId] = useState('');
+  // The same list every screen uses, edited in Settings → Departments.
+  const { departments } = useDepartments();
   const [preset, setPreset] = useState('EMPLOYEE');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
   const [emailed, setEmailed] = useState(false);
 
-  const canSave = Boolean(name.trim()) && Boolean(email.trim()) && Boolean(dept.trim());
+  const canSave = Boolean(name.trim()) && Boolean(email.trim()) && Boolean(departmentId);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,7 +55,7 @@ export function InviteMemberModal({ onClose, onInvited }: { onClose: () => void;
     setSaving(true);
     setError(null);
     try {
-      const res = await api.users.invite({ name: name.trim(), email: email.trim(), dept: dept.trim(), preset });
+      const res = await api.users.invite({ name: name.trim(), email: email.trim(), departmentId, preset });
       setLink(res.data.inviteLink);
       setEmailed(res.data.emailed);
     } catch (err) {
@@ -103,24 +102,14 @@ export function InviteMemberModal({ onClose, onInvited }: { onClose: () => void;
         <ModalBody className="space-y-4">
           <Field label="Name" value={name} onChange={setName} required />
           <Field label="Email" value={email} onChange={setEmail} type="email" required />
-          {departments.length > 0 ? (
-            <FieldSelect
-              label="Department"
-              value={dept}
-              onChange={setDept}
-              required
-              options={[{ value: '', label: 'Choose a department…' }, ...departments.map((d) => ({ value: d, label: d }))]}
-            />
-          ) : (
-            <Field
-              label="Department"
-              value={dept}
-              onChange={setDept}
-              required
-              placeholder="e.g. Design"
-              hint="No departments are set up yet. Add them under Settings → Organisation and this becomes a list."
-            />
-          )}
+          <FieldSelect
+            label="Department"
+            value={departmentId}
+            onChange={setDepartmentId}
+            required
+            options={[{ value: '', label: 'Choose a department…' }, ...departments.map((d) => ({ value: d.id, label: d.name }))]}
+            hint="Missing one? Add it in Settings → Departments."
+          />
           <FieldSelect label="Access preset" value={preset} onChange={setPreset} required options={PRESET_OPTIONS} />
           {error && <ErrorNote>{error}</ErrorNote>}
         </ModalBody>

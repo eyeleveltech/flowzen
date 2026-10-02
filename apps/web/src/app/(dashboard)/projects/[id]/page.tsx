@@ -52,6 +52,7 @@ import { personOptions } from '@/lib/people';
 import { withDueTime } from '@/lib/due-time';
 import { RepeatMark } from '@/components/work/RepeatMark';
 import type { TaskRepeatInfo } from '@/lib/repeat';
+import { taskTypeLabel } from '@/lib/task-type';
 
 const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label }));
 
@@ -83,6 +84,7 @@ type Task = {
   title: string;
   status: TStatus;
   priority: string;
+  taskType?: string | null;
   dueDate: string;
   dueTime?: string | null;
   /** The repeat, if it is a copy in one — the small mark beside the title. */
@@ -952,6 +954,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                   <thead>
                     <tr className="border-b border-border">
                       <th className="eyebrow text-left">Task</th>
+                      <th className="eyebrow text-left">Type of work</th>
                       <th className="eyebrow text-left">Assigned to</th>
                       <th className="eyebrow text-left">Assigned</th>
                       <th className="eyebrow text-left">Due</th>
@@ -984,6 +987,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                               </p>
                             )}
                           </td>
+                          <td className="whitespace-nowrap text-secondary">{taskTypeLabel(t.taskType) ?? '—'}</td>
                           <td>
                             <p className="text-body">
                               {t.assignee?.name ?? 'Unassigned'}

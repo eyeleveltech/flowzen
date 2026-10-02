@@ -122,6 +122,11 @@ export default function ProfilePage() {
                   <p className="truncate text-xs text-secondary">{profile?.email}</p>
                 </div>
               </div>
+              {/* Said to everybody, plainly: what is recorded, who sees it, how long it is kept. */}
+              <p className="text-xs text-secondary">
+                Flowzen records which screens you open each day and when you were last active. Management can see a
+                summary. It&apos;s kept for 90 days.
+              </p>
 
               <Field label="Name" value={name} onChange={setName} required />
 

@@ -32,6 +32,7 @@ import { getPriorityBadge, getPriorityLabel } from '@/lib/priority';
 import { withDueTime } from '@/lib/due-time';
 import { RepeatMark } from '@/components/work/RepeatMark';
 import { useConfirmStore } from '@/stores/confirm';
+import { taskTypeLabel } from '@/lib/task-type';
 
 const STATUS_OPTIONS = [
   { value: 'TODO', label: 'To do' },
@@ -229,6 +230,7 @@ export default function InternalProjectPage() {
                     <thead>
                       <tr className="border-b border-border bg-subtle">
                         <th className="eyebrow text-left">Task</th>
+                        <th className="eyebrow text-left">Type of work</th>
                         <th className="eyebrow text-left">Who</th>
                         <th className="eyebrow text-left">Priority</th>
                         <th className="eyebrow text-left">Due</th>
@@ -245,6 +247,7 @@ export default function InternalProjectPage() {
                           <td className="font-medium text-primary">
                             {t.title} <RepeatMark repeat={t.repeat} />
                           </td>
+                          <td className="whitespace-nowrap text-secondary">{taskTypeLabel(t.taskType) ?? '—'}</td>
                           <td className="text-secondary">
                             {t.assignee?.name ?? '—'}
                             {t.assignee?.designation && (

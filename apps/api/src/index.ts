@@ -31,11 +31,13 @@ import { briefRouter } from './routes/brief.js';
 import { costsRouter } from './routes/costs.js';
 import { allocationsRouter } from './routes/allocations.js';
 import { usersRouter } from './routes/users.js';
+import { departmentsRouter } from './routes/departments.js';
 import { profileRouter } from './routes/profile.js';
 import { searchRouter } from './routes/search.js';
 import { assetsRouter } from './routes/assets.js';
 import { calendarRouter } from './routes/calendar.js';
 import { googleRouter } from './routes/google.js';
+import { usageRouter } from './routes/usage.js';
 import { startAgencyHealthScanner } from './workers/scanner.cron.js';
 import { startMonthCardScheduler } from './workers/monthCard.cron.js';
 import { startAllocationScheduler } from './workers/allocation.cron.js';
@@ -46,6 +48,7 @@ import { startApprovalChaser } from './workers/approvalChaser.cron.js';
 import { startTaskRepeatScheduler } from './workers/taskRepeat.cron.js';
 import { startEventReminders } from './workers/eventReminder.cron.js';
 import { startGoogleCalendarWorker } from './workers/googleCalendar.cron.js';
+import { startUsageCleanup } from './workers/usageCleanup.cron.js';
 
 const app = express();
 
@@ -111,6 +114,7 @@ app.use('/api/retainers', retainersRouter);
 app.use('/api/projects', projectsRouter);
 app.use('/api/team', teamRouter);
 app.use('/api/users', usersRouter);
+app.use('/api/departments', departmentsRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/stream', sseRouter);
@@ -127,6 +131,7 @@ app.use('/api/internal-projects', internalProjectsRouter);
 app.use('/api/assets', assetsRouter);
 app.use('/api/calendar', calendarRouter);
 app.use('/api/google', googleRouter);
+app.use('/api/usage', usageRouter);
 
 // Start background health rules scanner
 startAgencyHealthScanner();
@@ -158,6 +163,7 @@ startApprovalChaser();
 startTaskRepeatScheduler();
 startEventReminders();
 startGoogleCalendarWorker();
+startUsageCleanup();
 
 app.use((_req, res) => {
   res.status(404).json({ success: false, error: 'Not found' });

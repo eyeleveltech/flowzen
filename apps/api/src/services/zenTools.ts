@@ -132,7 +132,7 @@ export const ZEN_TOOLS = [
   {
     name: 'getTeamLoad',
     description:
-      'How much each person is carrying in a month: open and late task counts, by department. Never includes pay.',
+      'How much each department is carrying in a month: open, late and done task counts, by department. Never names people or includes pay.',
     parameters: {
       type: 'object',
       properties: { month: { type: 'string', description: 'As 2026-09.' } },
@@ -473,28 +473,41 @@ export async function runZenTool(
 
     case 'getTeamLoad': {
       const month = String(args.month ?? thisMonth());
-      const rows = await prisma.task.findMany({
-        where: { organizationId, deletedAt: null, monthCard: { month } },
-        select: {
-          status: true,
-          dueDate: true,
-          assignees: { select: { user: { select: { name: true, dept: true } } } },
-        },
-      });
-      const by = new Map<string, { dept: string; open: number; late: number; done: number }>();
+      const [rows, departments] = await Promise.all([
+        prisma.task.findMany({
+          where: { organizationId, deletedAt: null, monthCard: { month } },
+          select: {
+            status: true,
+            dueDate: true,
+            assignees: { select: { user: { select: { departmentId: true } } } },
+          },
+        }),
+        prisma.department.findMany({
+          where: { organizationId },
+          orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+          select: { id: true, name: true },
+        }),
+      ]);
+      // By department, as the description says — counted once per department
+      // however many of its people are on a task.
+      const by = new Map<string, { open: number; late: number; done: number }>();
       for (const t of rows) {
-        const late = t.status !== 'DONE' && t.status !== 'CANCELLED' && day(t.dueDate)! < today;
-        for (const a of t.assignees) {
-          const p = by.get(a.user.name) ?? { dept: a.user.dept, open: 0, late: 0, done: 0 };
-          if (t.status === 'DONE') p.done += 1;
-          else if (t.status !== 'CANCELLED') p.open += 1;
-          if (late) p.late += 1;
-          by.set(a.user.name, p);
+        // The app's "late": past due and not finished, and not waiting on an approver.
+        const late = !['DONE', 'CANCELLED', 'IN_REVIEW'].includes(t.status) && day(t.dueDate)! < today;
+        for (const id of new Set(t.assignees.map((a) => a.user.departmentId ?? ''))) {
+          const d = by.get(id) ?? { open: 0, late: 0, done: 0 };
+          if (t.status === 'DONE') d.done += 1;
+          else if (t.status !== 'CANCELLED') d.open += 1;
+          if (late) d.late += 1;
+          by.set(id, d);
         }
       }
+      const order = [...departments.map((d) => d.id), ''];
       return {
         month,
-        people: [...by.entries()].map(([name, v]) => ({ name, ...v })),
+        departments: [...by.entries()]
+          .sort(([a], [b]) => order.indexOf(a) - order.indexOf(b))
+          .map(([id, v]) => ({ department: departments.find((d) => d.id === id)?.name ?? 'No department', ...v })),
       };
     }
 

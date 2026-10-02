@@ -146,7 +146,7 @@ export async function authenticate(
  * permission gate by design; this is the one place that fact is not enough,
  * because here the preset IS the requirement rather than a shortcut past it.
  */
-export function requireManagement() {
+export function requireManagement(detail = 'The assistant answers with figures across the whole business.') {
   return function managementGate(req: AuthRequest, res: Response, next: NextFunction): void {
     if (!req.user) {
       res.status(401).json({ success: false, error: 'Authentication required' });
@@ -156,7 +156,7 @@ export function requireManagement() {
       res.status(403).json({
         success: false,
         error: 'This is for management only.',
-        detail: 'The assistant answers with figures across the whole business.',
+        detail,
       });
       return;
     }

@@ -328,6 +328,25 @@ async function main() {
    *   dept        which team            "Development"
    *   preset      what the app allows   EMPLOYEE
    */
+  /*
+   * The departments, as records — every person points at one, and a rename
+   * happens once. Heads are set once the people exist, below.
+   */
+  const DEPARTMENTS = [
+    'Management',
+    'Business Development',
+    'Design',
+    'Video & Production',
+    'Digital Marketing',
+    'Development',
+    'Accounts',
+  ];
+  const departmentId = new Map<string, string>();
+  for (const [i, name] of DEPARTMENTS.entries()) {
+    const d = await prisma.department.create({ data: { organizationId: org.id, name, sortOrder: i } });
+    departmentId.set(name, d.id);
+  }
+
   const mk = (data: {
     name: string; designation: string; email: string; dept: string; cost: number;
     preset: RolePreset; perms: string[]; hash?: string;
@@ -338,6 +357,7 @@ async function main() {
       designation: data.designation,
       email: data.email,
       passwordHash: data.hash ?? demoHash,
+      departmentId: departmentId.get(data.dept)!,
       dept: data.dept,
       monthlyCost: data.cost,
       preset: data.preset,
@@ -360,6 +380,11 @@ async function main() {
   // Sees every figure and enters every cost, and cannot touch the pipeline —
   // the one combination no other person on this roster has.
   const priya = await mk({ name: 'Priya', designation: 'Accounts', email: 'priya@eyelevelstudio.in', dept: 'Accounts', cost: 34000, preset: RolePreset.ACCOUNTS, perms: ACCOUNTS_PERMS });
+
+  // The three heads, each over their own department.
+  for (const [name, head] of [['Design', janani], ['Digital Marketing', dilshad], ['Video & Production', charles]] as const) {
+    await prisma.department.update({ where: { id: departmentId.get(name)! }, data: { headId: head.id } });
+  }
 
   // ──────────────────────────────────────────────────────────────────────────
   // 4. COMPANIES & CONTACTS

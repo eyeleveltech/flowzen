@@ -1,6 +1,7 @@
 import { Router, type Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
+import { listDepartments } from './departments.js';
 import { loadWorkCalendar, workingMinutesOn } from '../utils/workCalendar.js';
 import { LAST_REVIEW } from '../services/taskApprovals.js';
 import { composeApprovalsReport } from '../services/approvalsReport.js';
@@ -24,7 +25,7 @@ teamRouter.get('/members', async (req: AuthRequest, res: Response, next) => {
     const members = await prisma.user.findMany({
       where: { organizationId: orgId, active: true },
       orderBy: { name: 'asc' },
-      select: { id: true, name: true, designation: true, dept: true },
+      select: { id: true, name: true, designation: true, dept: true, departmentId: true },
     });
     res.json({ success: true, members });
   } catch (error) {
@@ -35,17 +36,20 @@ teamRouter.get('/members', async (req: AuthRequest, res: Response, next) => {
 teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const { dept } = req.query;
+    const { departmentId } = req.query;
     const canSeeSalaries = hasPermission(req.user!, 'setup.admin');
 
+    // By id, never by text: "Video & Production" survives a URL, a comma and a rename.
+    // NONE is the people nobody has placed yet.
     const where: any = { organizationId: orgId, active: true };
-    if (dept && typeof dept === 'string' && dept !== 'ALL') {
-      where.dept = dept;
+    if (typeof departmentId === 'string' && departmentId && departmentId !== 'ALL') {
+      where.departmentId = departmentId === 'NONE' ? null : departmentId;
     }
 
     const members = await prisma.user.findMany({
       where,
-      orderBy: [{ dept: 'asc' }, { name: 'asc' }],
+      // In the departments' own order, as every other screen lists them.
+      orderBy: [{ department: { sortOrder: 'asc' } }, { department: { name: 'asc' } }, { name: 'asc' }],
       select: {
         id: true,
         name: true,
@@ -56,6 +60,8 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
         designation: true,
         email: true,
         dept: true,
+        departmentId: true,
+        department: { select: { name: true } },
         preset: true,
         monthlyCost: true,
         permissions: true,
@@ -116,7 +122,8 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
         name: m.name,
         designation: m.designation,
         email: m.email,
-        dept: m.dept,
+        dept: m.department?.name ?? '',
+        departmentId: m.departmentId,
         preset: m.preset,
         monthlyCost: canSeeSalaries ? m.monthlyCost : undefined,
         permissions: canSeeSalaries ? m.permissions : undefined,
@@ -129,43 +136,17 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
     });
 
     /*
-     * The departments, from the whole team — never from `members`, which is
-     * the list AFTER the department filter has been applied.
-     *
-     * Deriving them from the filtered rows is why the filter looked broken:
-     * choosing Design narrowed `members` to three people, so the dropdown
-     * rebuilt itself with one option in it and there was no way to go from
-     * Design to Development without going back through All first. The same
-     * fault as counting a tab from the rows the tab already filtered.
+     * The departments: the organisation's own records, in their order — the
+     * same list every screen offers, whatever the filter above narrowed
+     * `members` to.
      */
-    const deptRows = await prisma.user.groupBy({
-      by: ['dept'],
-      where: { organizationId: orgId, active: true },
-      orderBy: { dept: 'asc' },
-    });
-
-    /*
-     * The organisation's list, plus anything somebody is actually in.
-     *
-     * Derived from the people alone, a department added in Settings did not
-     * exist here until somebody was moved into it — so the list Settings holds
-     * and the list this filter offers disagreed, which is exactly what the
-     * setting was added to stop. Taken from Settings alone, a person sitting in
-     * an old spelling ("Video & Production", still on four people) would be
-     * unfilterable and effectively invisible. The union is the only answer that
-     * loses nobody.
-     */
-    const org = await prisma.organization.findUnique({
-      where: { id: orgId },
-      select: { departments: true },
-    });
-    const allDepts = Array.from(new Set([...(org?.departments ?? []), ...deptRows.map((d) => d.dept)])).sort();
+    const departments = await listDepartments(orgId);
 
     if (req.query.format === 'csv') {
       const csv = toCsv(formatted, [
         { label: 'Name', value: (m) => m.name },
         { label: 'Designation', value: (m) => m.designation ?? '' },
-        { label: 'Department', value: (m) => m.dept },
+        { label: 'Department', value: (m) => m.dept || 'No department' },
         { label: 'Open tasks', value: (m) => m.openTasksCount },
         { label: 'Overdue', value: (m) => m.overdueTasksCount },
         { label: 'Waiting', value: (m) => m.waitingTasksCount },
@@ -178,7 +159,7 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
 
     res.json({
       success: true,
-      departments: allDepts,
+      departments,
       members: formatted,
     });
   } catch (error) {

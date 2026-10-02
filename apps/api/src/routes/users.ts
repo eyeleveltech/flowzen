@@ -5,6 +5,7 @@ import { prisma } from '../lib/prisma.js';
 import { changesBetween } from '../utils/activityDiff.js';
 import { emitToOrganization } from '../sse.js';
 import { authenticate, requirePermission, hasPermission, type AuthRequest } from '../middleware/auth.js';
+import { departmentFor } from './departments.js';
 import { roleForPreset } from '../utils/roles.js';
 import { hashPassword } from '../utils/password.js';
 import { sendMail } from '../utils/mailer.js';
@@ -53,7 +54,7 @@ usersRouter.get('/', async (req: AuthRequest, res: Response, next) => {
         active: true,
         inviteToken: true,
         ...(detailed
-          ? { email: true, phone: true, preset: true, dept: true, createdAt: true }
+          ? { email: true, phone: true, preset: true, createdAt: true, department: { select: { id: true, name: true } } }
           : {}),
       },
     });
@@ -73,7 +74,8 @@ usersRouter.get('/', async (req: AuthRequest, res: Response, next) => {
               email: u.email,
               phone: u.phone,
               role: roleForPreset(u.preset),
-              department: u.dept ? { id: u.dept, name: u.dept } : null,
+              // The record, not the text — its id is what filters and pickers use.
+              department: u.department ? { id: u.department.id, name: u.department.name } : null,
               joiningDate: u.createdAt.toISOString(),
             }
           : {}),
@@ -181,7 +183,8 @@ usersRouter.post('/:id/reset-link', requirePermission('setup.admin'), async (req
 const inviteSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   email: z.string().email('Invalid email address'),
-  dept: z.string().min(1, 'Department is required'),
+  /** Required: everybody is in exactly one department. Free text is gone. */
+  departmentId: z.string({ required_error: 'Choose a department.' }).min(1, 'Choose a department.'),
   preset: z.nativeEnum(RolePreset),
 });
 
@@ -196,8 +199,15 @@ usersRouter.post('/invite', requirePermission('setup.admin'), async (req: AuthRe
     }
 
     const orgId = req.user!.organizationId;
-    const { name, email, dept, preset } = parsed.data;
+    const { name, email, departmentId, preset } = parsed.data;
     const cleanEmail = email.toLowerCase().trim();
+
+    // This organisation's, and not archived.
+    const placed = await departmentFor(orgId, departmentId);
+    if ('error' in placed) {
+      res.status(400).json({ success: false, error: placed.error });
+      return;
+    }
 
     const existing = await prisma.user.findUnique({ where: { email: cleanEmail } });
     if (existing) {
@@ -217,7 +227,9 @@ usersRouter.post('/invite', requirePermission('setup.admin'), async (req: AuthRe
         name: name.trim(),
         email: cleanEmail,
         passwordHash: placeholderHash,
-        dept: dept.trim(),
+        departmentId: placed.department.id,
+        // Kept beside the id until Plan 4, for anything still reading text.
+        dept: placed.department.name,
         monthlyCost: 0,
         preset,
         permissions: [],
@@ -260,7 +272,15 @@ usersRouter.post('/invite', requirePermission('setup.admin'), async (req: AuthRe
     res.status(201).json({
       success: true,
       data: {
-        user: { id: user.id, name: user.name, email: user.email, dept: user.dept, preset: user.preset, active: user.active },
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          dept: user.dept,
+          departmentId: user.departmentId,
+          preset: user.preset,
+          active: user.active,
+        },
         inviteToken,
         inviteLink,
         emailed,
@@ -295,7 +315,11 @@ const updateSchema = z.object({
   preset: z.nativeEnum(RolePreset).optional(),
   permissions: z.array(z.enum(PERMISSION_KEYS)).optional(),
   monthlyCost: z.number().min(0).optional(),
-  dept: z.string().min(1).optional(),
+  /**
+   * Which department. Never cleared: once placed, somebody can only be moved —
+   * the edit form requires one, and so does this.
+   */
+  departmentId: z.string().min(1, 'Choose a department.').optional(),
   /**
    * Turning somebody off. Refused with a 409 while they are still holding
    * company equipment, unless `force` says to record it anyway — see the note
@@ -322,7 +346,18 @@ usersRouter.patch('/:id', requirePermission('setup.admin'), async (req: AuthRequ
       return;
     }
 
-    const { name, email, preset, permissions, monthlyCost, dept, active, force } = parsed.data;
+    const { name, email, preset, permissions, monthlyCost, departmentId, active, force } = parsed.data;
+
+    // This organisation's, and not archived.
+    let placed: { id: string; name: string } | null = null;
+    if (departmentId !== undefined) {
+      const found = await departmentFor(orgId, departmentId);
+      if ('error' in found) {
+        res.status(400).json({ success: false, error: found.error });
+        return;
+      }
+      placed = found.department;
+    }
 
     // ── The offboarding gate ────────────────────────────────────────────────
     //
@@ -404,7 +439,7 @@ usersRouter.patch('/:id', requirePermission('setup.admin'), async (req: AuthRequ
         ...(preset !== undefined ? { preset } : {}),
         ...(permissions !== undefined ? { permissions } : {}),
         ...(monthlyCost !== undefined ? { monthlyCost } : {}),
-        ...(dept !== undefined ? { dept: dept.trim() } : {}),
+        ...(placed ? { departmentId: placed.id, dept: placed.name } : {}),
         ...(active !== undefined ? { active } : {}),
       },
     });
@@ -441,6 +476,7 @@ usersRouter.patch('/:id', requirePermission('setup.admin'), async (req: AuthRequ
         id: updated.id,
         name: updated.name,
         dept: updated.dept,
+        departmentId: updated.departmentId,
         preset: updated.preset,
         permissions: updated.permissions,
         monthlyCost: updated.monthlyCost,

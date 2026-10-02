@@ -9,19 +9,7 @@ import { loadWorkCalendar, workingMinutesOn } from '../utils/workCalendar.js';
 import { computeTaskTypeMedians, taskTypeGroupKey } from '../utils/taskTypeMedian.js';
 import { defaultProjectId } from '../services/retainerProjects.js';
 import { TaskStatus, TaskWorkType, WaitingOn, Priority, TaskType, ReviewDecision, RepeatFrequency } from '@prisma/client';
-import {
-  approvalFlagRefusal,
-  approvalType,
-  approveRefusal,
-  addChangesRefusal,
-  approverFor,
-  approverIds,
-  elapsedEnd,
-  escalateFor,
-  escalationNamesByType,
-  TASK_TYPE_LABEL,
-  type LastReview,
-} from '../services/taskApprovals.js';
+import { approvalFlagRefusal, approvalType, approveRefusal, addChangesRefusal, approverFor, approverIds, elapsedEnd, escalateFor, escalationNamesByType, TASK_TYPE_LABEL, type LastReview } from '../services/taskApprovals.js';
 import { CHASER_RULES } from '../workers/approvalChaser.cron.js';
 
 /**
@@ -679,7 +667,7 @@ tasksRouter.get('/targets', requirePermission('work.own'), async (req: AuthReque
  * The columns All tasks can be sorted by, and the order statuses sort in: the
  * order work moves through, not the alphabet.
  */
-const ALL_SORTS = ['assigned', 'task', 'for', 'who', 'due', 'status', 'elapsed'] as const;
+const ALL_SORTS = ['assigned', 'task', 'type', 'for', 'who', 'due', 'status', 'elapsed'] as const;
 type AllSort = (typeof ALL_SORTS)[number];
 const STATUS_SORT_ORDER: string[] = [
   TaskStatus.TODO,
@@ -693,7 +681,7 @@ const STATUS_SORT_ORDER: string[] = [
 tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const { assigneeId, dept, status, overdue, q, companyId, project } = req.query;
+    const { assigneeId, departmentId, status, overdue, q, companyId, project, taskType } = req.query;
     const wantsCsv = req.query.format === 'csv';
     /*
      * Which column the list is sorted by — due date, oldest first, unless a
@@ -726,10 +714,21 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
 
     const and: any[] = [];
     const people = list(assigneeId);
-    const depts = list(dept);
+    // Departments by id: a name with a comma in it ("Design, Print") used to
+    // split into two filters that matched nothing.
+    const departments = list(departmentId);
     if (people.length > 0) and.push({ assignees: { some: { userId: { in: people } } } });
-    if (depts.length > 0) and.push({ assignees: { some: { user: { dept: { in: depts } } } } });
+    if (departments.length > 0) and.push({ assignees: { some: { user: { departmentId: { in: departments } } } } });
     if (typeof q === 'string' && q.trim()) and.push({ title: { contains: q.trim(), mode: 'insensitive' } });
+    // Type of work, with NONE for tasks nobody gave a type — "what has no type
+    // yet" is as much a question as "what is Video".
+    const types = list(taskType);
+    if (types.length > 0) {
+      const named = types.filter((t) => t !== 'NONE' && (Object.values(TaskType) as string[]).includes(t)) as TaskType[];
+      and.push({
+        OR: [...(named.length ? [{ taskType: { in: named } }] : []), ...(types.includes('NONE') ? [{ taskType: null }] : [])],
+      });
+    }
     /*
      * Clients, with `INTERNAL` among them.
      *
@@ -922,6 +921,9 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
           return t.assignedAt ? new Date(t.assignedAt).getTime() : null;
         case 'task':
           return t.title.toLowerCase();
+        case 'type':
+          // The type's name, so it sorts as read; tasks with none go last.
+          return t.taskType ? TASK_TYPE_LABEL[t.taskType].toLowerCase() : null;
         case 'for':
           return `${t.clientName} ${t.projectName ?? ''}`.toLowerCase();
         case 'who':
@@ -950,6 +952,7 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
     if (wantsCsv) {
       const csv = toCsv(rows, [
         { label: 'Task', value: (t) => t.title },
+        { label: 'Type of work', value: (t) => (t.taskType ? TASK_TYPE_LABEL[t.taskType] : '') },
         { label: 'For', value: (t) => t.clientName },
         { label: 'Project', value: (t) => t.projectName ?? '' },
         { label: 'Assigned to', value: (t) => t.assignees.map((a) => a.name).join(', ') },

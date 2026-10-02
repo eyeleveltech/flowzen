@@ -58,7 +58,7 @@ import {
   type CalendarLayer,
 } from '@/lib/api-v2';
 import { usePageHeader } from '@/hooks/usePageHeader';
-import { useConfig, useTeamMembers } from '@/hooks/queries';
+import { useConfig, useDepartments, useTeamMembers } from '@/hooks/queries';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { Drawer } from '@/components/ui/drawer';
@@ -207,6 +207,8 @@ function CalendarScreen() {
   const calendarRef = useRef<FullCalendar>(null);
   const { data: config } = useConfig();
   const team = useTeamMembers();
+  // The one department list, in Settings' order — the team layer filters by id.
+  const { departments } = useDepartments();
   const confirm = useConfirmStore((st) => st.confirm);
   const me = useAuthStore((st) => st.user);
 
@@ -282,7 +284,7 @@ function CalendarScreen() {
         to: range!.to,
         layers: layersAsked,
         person: personOn ? pickedPerson || undefined : undefined,
-        dept: teamOn ? dept || undefined : undefined,
+        departmentId: teamOn ? dept || undefined : undefined,
       }),
     enabled: Boolean(range),
     // Moving a week keeps the old items up until the new ones land, rather
@@ -622,7 +624,6 @@ function CalendarScreen() {
   }
 
   const shownLayers = LAYERS.filter((l) => available.includes(l.key));
-  const teamDepts = [...new Set(team.map((m) => m.dept).filter(Boolean))].sort();
 
   const sidebar = (
     <div className="flex flex-col gap-6">
@@ -681,7 +682,7 @@ function CalendarScreen() {
             onChange={setDept}
             placeholder="Every department"
             ariaLabel="Team tasks from which department"
-            options={[{ value: '', label: 'Every department' }, ...teamDepts.map((d) => ({ value: d, label: d }))]}
+            options={[{ value: '', label: 'Every department' }, ...departments.map((d) => ({ value: d.id, label: d.name }))]}
             className="mt-1 w-full"
           />
         )}

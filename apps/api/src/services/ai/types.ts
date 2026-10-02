@@ -64,38 +64,87 @@ export type AiToolResult = {
 /** One turn, in the order it was said. */
 export type AiTurn =
   | { role: 'user'; text: string }
-  | { role: 'assistant'; text?: string; calls?: AiToolCall[] }
-  | { role: 'tool'; results: AiToolResult[] };
+  | {
+      role: 'assistant';
+      text?: string;
+      calls?: AiToolCall[];
+      /**
+       * The provider's own content for this turn, exactly as it came back.
+       *
+       * Claude thinks before it asks for a lookup, and that thinking has to go
+       * back unchanged on the next request of the same question — rebuilt from
+       * `text` and `calls` it is simply gone. Only the adapter that produced it
+       * reads it; the others ignore it.
+       */
+      raw?: unknown;
+    }
+  | {
+      role: 'tool';
+      results: AiToolResult[];
+      /**
+       * A line sent after the results, in the same turn. The last round uses
+       * it to say the lookups are spent: told only that no tool may be called,
+       * a model that still wanted one can end its turn without a word.
+       */
+      followUp?: string;
+    };
 
 export type AiRequest = {
   apiKey: string;
   /** Where to send it. Only set when the person chose a provider that needs one. */
   baseUrl?: string;
   model: string;
+  /**
+   * The fixed rules only — byte-identical on every request, so a provider that
+   * caches can reuse it across questions and people.
+   */
   system: string;
+  /**
+   * What changes per request: the date, who is asking, the page, memories and
+   * the snapshot. Every adapter puts it at the start of the newest user turn,
+   * as its own text part before the question — never in `system`, where it
+   * would break the cache on every question.
+   */
+  context?: string;
   turns: AiTurn[];
   tools: readonly AiTool[];
+  /** `'none'` on the last round: the same tools, but the model answers from what it has. */
+  toolChoice?: 'auto' | 'none';
+  /** Anthropic never sends it — current Claude models refuse it. */
   temperature: number;
   maxOutputTokens: number;
 };
+
+/** Why a turn ended. Undefined from an adapter that does not say, which reads as `'end'`. */
+export type AiStop = 'end' | 'max_tokens' | 'refusal';
+
+/** Tokens for one request, for the log that shows whether caching works. */
+export type AiUsage = { input: number; output: number; cacheRead: number; cacheCreation: number };
 
 /**
  * One turn's worth of answer.
  *
  * Text and calls together rather than one or the other, because a single turn
  * can do both — a model often says "let me check" and asks for something in
- * the same breath.
+ * the same breath. `raw` is the provider's own content, to send back with the
+ * tool results (see `AiTurn`).
  */
-export type AiReply = { text: string; calls: AiToolCall[] };
+export type AiReply = {
+  text: string;
+  calls: AiToolCall[];
+  raw?: unknown;
+  stop?: AiStop;
+  usage?: AiUsage;
+};
 
 /**
- * A streamed turn: text as it arrives, then whatever it asked for.
+ * A streamed turn: text as it arrives, then the whole reply.
  *
- * The generator RETURNS the calls rather than yielding them, so the caller can
- * pass the text straight through to a browser and still get the calls when the
- * turn ends.
+ * The generator RETURNS the reply rather than yielding it, so the caller can
+ * pass the text straight through to a browser and still get the calls, the
+ * stop reason and the provider's content when the turn ends.
  */
-export type AiStream = AsyncGenerator<{ text: string }, AiToolCall[], unknown>;
+export type AiStream = AsyncGenerator<{ text: string }, AiReply, unknown>;
 
 export type AiProvider = {
   id: AiProviderId;
